@@ -1,0 +1,132 @@
+"use server";
+
+import { z } from "zod";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import {
+  createEngagementWithItems,
+  sendEngagement,
+  cancelEngagement,
+  deleteDraftEngagement,
+  type CreateEngagementInput,
+} from "@/lib/db/engagements";
+import type { TemplateItem, DocType } from "@/lib/db/templates";
+import { getPathname } from "@/i18n/navigation";
+
+export type CreateEngagementState = {
+  ok?: boolean;
+  engagementId?: string;
+  error?: string;
+  fieldErrors?: Record<string, string>;
+} | null;
+
+const ItemSchema = z.object({
+  label_fr: z.string().min(1),
+  label_en: z.string().min(1),
+  description_fr: z.string().nullable().optional(),
+  description_en: z.string().nullable().optional(),
+  doc_type: z.string().min(1),
+  required: z.boolean(),
+});
+
+const CreateSchema = z.object({
+  client_id: z.string().uuid(),
+  title: z.string().min(2, "min_2_chars").max(160, "too_long"),
+  type: z.enum(["t1", "t2", "bookkeeping", "custom"]),
+  due_date: z
+    .string()
+    .nullable()
+    .optional()
+    .transform((v) => (v && v !== "" ? v : null)),
+  items: z.array(ItemSchema).min(0),
+});
+
+function fieldErrorsFromZod(error: z.ZodError): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const key = issue.path.join(".");
+    if (!out[key]) out[key] = issue.message;
+  }
+  return out;
+}
+
+export async function createEngagementAction(payload: {
+  client_id: string;
+  title: string;
+  type: "t1" | "t2" | "bookkeeping" | "custom";
+  due_date: string | null;
+  items: TemplateItem[];
+  send: boolean;
+  locale: "fr" | "en";
+}): Promise<CreateEngagementState> {
+  const parsed = CreateSchema.safeParse({
+    client_id: payload.client_id,
+    title: payload.title,
+    type: payload.type,
+    due_date: payload.due_date,
+    items: payload.items,
+  });
+  if (!parsed.success) {
+    return { fieldErrors: fieldErrorsFromZod(parsed.error) };
+  }
+
+  let engagementId: string;
+  try {
+    // The Zod schema validated items as untyped doc_type strings; widen back.
+    const items: TemplateItem[] = parsed.data.items.map((i) => ({
+      label_fr: i.label_fr,
+      label_en: i.label_en,
+      description_fr: i.description_fr ?? null,
+      description_en: i.description_en ?? null,
+      doc_type: i.doc_type as DocType,
+      required: i.required,
+    }));
+    const input: CreateEngagementInput = {
+      client_id: parsed.data.client_id,
+      title: parsed.data.title,
+      type: parsed.data.type,
+      due_date: parsed.data.due_date,
+      items,
+    };
+    const created = await createEngagementWithItems(input);
+    engagementId = created.id;
+    if (payload.send) {
+      await sendEngagement(engagementId);
+    }
+  } catch {
+    return { error: "create_failed" };
+  }
+
+  revalidatePath("/", "layout");
+  redirect(
+    getPathname({
+      locale: payload.locale,
+      href: { pathname: `/engagements/${engagementId}` },
+    }),
+  );
+}
+
+export async function sendEngagementAction(formData: FormData) {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return;
+  await sendEngagement(id);
+  revalidatePath("/", "layout");
+}
+
+export async function cancelEngagementAction(formData: FormData) {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return;
+  await cancelEngagement(id);
+  revalidatePath("/", "layout");
+}
+
+export async function deleteDraftAction(formData: FormData) {
+  const id = formData.get("id");
+  const locale = (formData.get("__app_locale") === "en" ? "en" : "fr") as
+    | "fr"
+    | "en";
+  if (typeof id !== "string" || !id) return;
+  await deleteDraftEngagement(id);
+  revalidatePath("/", "layout");
+  redirect(getPathname({ locale, href: "/dashboard" }));
+}

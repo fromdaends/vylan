@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getClient } from "@/lib/db/clients";
+import { listEngagements } from "@/lib/db/engagements";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +12,7 @@ import {
   restoreClientAction,
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 
 export default async function ClientDetailPage({
   params,
@@ -25,7 +26,10 @@ export default async function ClientDetailPage({
   const client = await getClient(id);
   if (!client) notFound();
 
+  const engagements = await listEngagements({ client_id: id });
   const t = await getTranslations("Clients");
+  const tEng = await getTranslations("Engagements");
+  const tStatus = await getTranslations("Status");
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -87,31 +91,62 @@ export default async function ClientDetailPage({
         <CardContent>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
             <DetailRow label={t("col_email")} value={client.email} />
-            <DetailRow
-              label={t("col_phone")}
-              value={client.phone}
-              mono
-            />
+            <DetailRow label={t("col_phone")} value={client.phone} mono />
             <DetailRow
               label={t("field_external_ref")}
               value={client.external_ref}
               mono
             />
-            <DetailRow
-              label={t("field_notes")}
-              value={client.notes}
-              wide
-            />
+            <DetailRow label={t("field_notes")} value={client.notes} wide />
           </dl>
         </CardContent>
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("engagements")}</CardTitle>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-base">
+            {t("engagements")}{" "}
+            <span className="text-muted-foreground font-normal">
+              ({engagements.length})
+            </span>
+          </CardTitle>
+          {!client.archived_at && (
+            <Link href={`/engagements/new?client=${client.id}`}>
+              <Button size="sm">
+                <Plus className="size-4" />
+                {tEng("new")}
+              </Button>
+            </Link>
+          )}
         </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          {t("engagements_empty")}
+        <CardContent>
+          {engagements.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-4">
+              {t("engagements_empty")}
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {engagements.map((e) => (
+                <li key={e.id} className="py-3">
+                  <Link
+                    href={`/engagements/${e.id}`}
+                    className="flex items-center justify-between gap-3 hover:text-foreground"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{e.title}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {e.type.toUpperCase()}
+                        {e.due_date && ` · ${e.due_date}`}
+                      </div>
+                    </div>
+                    <Badge variant={statusVariant(e.status)}>
+                      {tStatus(e.status)}
+                    </Badge>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -145,4 +180,13 @@ function DetailRow({
       </dd>
     </div>
   );
+}
+
+function statusVariant(
+  status: string,
+): "default" | "secondary" | "outline" | "destructive" {
+  if (status === "complete") return "default";
+  if (status === "cancelled") return "destructive";
+  if (status === "draft") return "outline";
+  return "secondary";
 }
