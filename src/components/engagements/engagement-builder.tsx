@@ -17,6 +17,22 @@ import {
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 
+type KnownErrorKey =
+  | "missing_client"
+  | "missing_template"
+  | "missing_title"
+  | "create_failed"
+  | "min_2_chars"
+  | "too_long";
+const KNOWN_ERRORS = new Set<string>([
+  "missing_client",
+  "missing_template",
+  "missing_title",
+  "create_failed",
+  "min_2_chars",
+  "too_long",
+]);
+
 const DOC_TYPES: DocType[] = [
   "t4", "rl1", "t5", "rl3", "t3", "rl16", "noa",
   "bank_statement", "credit_card_statement", "receipt",
@@ -126,7 +142,7 @@ export function EngagementBuilder({
 
     startTransition(async () => {
       try {
-        await createEngagementAction({
+        const result = await createEngagementAction({
           client_id: clientId,
           title: effectiveTitle.trim(),
           type: selectedTemplate.type,
@@ -135,15 +151,19 @@ export function EngagementBuilder({
           send,
           locale,
         });
+        // If the action redirected, this code never runs.
+        if (result?.error) {
+          setError(result.error);
+        } else if (result?.fieldErrors) {
+          const first = Object.entries(result.fieldErrors)[0];
+          setError(first ? `${first[0]}: ${first[1]}` : "create_failed");
+        }
       } catch (e) {
-        // Server `redirect` throws a special error — let it bubble.
-        // Anything else is a real failure.
-        if (
-          (e as { digest?: string })?.digest?.startsWith("NEXT_REDIRECT") ===
-          true
-        ) {
+        const digest = (e as { digest?: string })?.digest;
+        if (typeof digest === "string" && digest.startsWith("NEXT_REDIRECT")) {
           throw e;
         }
+        console.error("createEngagement threw:", e);
         setError("create_failed");
       }
     });
@@ -153,7 +173,13 @@ export function EngagementBuilder({
     <div className="space-y-6">
       {error && (
         <Alert variant="destructive">
-          <AlertDescription>{t(`errors.${error}`)}</AlertDescription>
+          <AlertDescription>
+            {/* Known i18n keys translate; everything else (e.g. server-side
+                field errors like "client_id: invalid_uuid") shows raw. */}
+            {KNOWN_ERRORS.has(error)
+              ? t(`errors.${error}` as KnownErrorKey)
+              : error}
+          </AlertDescription>
         </Alert>
       )}
 

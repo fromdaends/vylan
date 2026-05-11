@@ -29,8 +29,13 @@ const ItemSchema = z.object({
   required: z.boolean(),
 });
 
+// Postgres accepts any 8-4-4-4-12 hex string as uuid; Zod 4's strict .uuid()
+// requires RFC 4122 version bits which our seed data doesn't honor. Use the
+// permissive format check.
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const CreateSchema = z.object({
-  client_id: z.string().uuid(),
+  client_id: z.string().regex(UUID_REGEX, "invalid_uuid"),
   title: z.string().min(2, "min_2_chars").max(160, "too_long"),
   type: z.enum(["t1", "t2", "bookkeeping", "custom"]),
   due_date: z
