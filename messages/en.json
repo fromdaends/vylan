@@ -1,0 +1,46 @@
+{
+  "Brand": {
+    "name": "Relai",
+    "tagline": "Client paperwork, automated."
+  },
+  "Landing": {
+    "headline": "Stop chasing your clients for documents.",
+    "subhead": "A simple, bilingual client portal built for small Canadian accounting and bookkeeping firms.",
+    "cta_primary": "Start free 14-day trial",
+    "cta_secondary": "See how it works",
+    "feature_1_title": "One-click request checklists",
+    "feature_1_body": "Pick a template (T1, T2, bookkeeping), send a magic link. Your clients log in to nothing.",
+    "feature_2_title": "Smart reminders",
+    "feature_2_body": "We nudge your clients on your behalf, at the right time, in French or English.",
+    "feature_3_title": "AI document checks",
+    "feature_3_body": "Catch when a client uploads the wrong slip before it costs you an hour of email back-and-forth."
+  },
+  "Common": {
+    "loading": "Loading…",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "back": "Back",
+    "next": "Next",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "Status": {
+    "pending": "Pending",
+    "submitted": "Submitted",
+    "approved": "Approved",
+    "rejected": "Rejected",
+    "na": "N/A",
+    "draft": "Draft",
+    "sent": "Sent",
+    "in_progress": "In progress",
+    "complete": "Complete",
+    "cancelled": "Cancelled",
+    "overdue": "Overdue"
+  },
+  "Errors": {
+    "generic": "Something went wrong. Please try again.",
+    "not_found": "Page not found.",
+    "unauthorized": "You don’t have access to this page."
+  }
+}
