@@ -8,9 +8,13 @@ import {
   sendEngagement,
   cancelEngagement,
   deleteDraftEngagement,
+  getEngagement,
   type CreateEngagementInput,
 } from "@/lib/db/engagements";
 import type { TemplateItem, DocType } from "@/lib/db/templates";
+import { getClient } from "@/lib/db/clients";
+import { getCurrentFirm } from "@/lib/db/firms";
+import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
 import { getPathname } from "@/i18n/navigation";
 
 export type CreateEngagementState = {
@@ -97,6 +101,7 @@ export async function createEngagementAction(payload: {
     engagementId = created.id;
     if (payload.send) {
       await sendEngagement(engagementId);
+      await deliverInviteEmail(engagementId);
     }
   } catch {
     return { error: "create_failed" };
@@ -115,7 +120,35 @@ export async function sendEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
   await sendEngagement(id);
+  await deliverInviteEmail(id);
   revalidatePath("/", "layout");
+}
+
+async function deliverInviteEmail(engagementId: string): Promise<void> {
+  try {
+    const engagement = await getEngagement(engagementId);
+    if (!engagement || !engagement.magic_token) return;
+    const [client, firm] = await Promise.all([
+      getClient(engagement.client_id),
+      getCurrentFirm(),
+    ]);
+    if (!client || !firm || !client.email) return;
+
+    const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+    const url = `${appUrl}/r/${engagement.magic_token}`;
+    const { subject, html, text } = buildEngagementInviteEmail({
+      clientName: client.display_name,
+      firmName: firm.name,
+      engagementTitle: engagement.title,
+      url,
+      dueDate: engagement.due_date,
+      locale: client.locale,
+    });
+    await sendEmail({ to: client.email, subject, html, text });
+  } catch (e) {
+    // Email is best-effort; never block the send flow on email failure.
+    console.error("[deliverInviteEmail] failed:", e);
+  }
 }
 
 export async function cancelEngagementAction(formData: FormData) {

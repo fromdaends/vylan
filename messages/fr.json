@@ -240,5 +240,37 @@
     "generic": "Quelque chose a mal tourné. Veuillez réessayer.",
     "not_found": "Page introuvable.",
     "unauthorized": "Vous n’avez pas accès à cette page."
+  },
+  "Portal": {
+    "greeting": "Bonjour {name},",
+    "subhead": "Voici les documents dont {firm} a besoin.",
+    "progress": "{done} sur {total} documents fournis",
+    "required": "Requis",
+    "upload": "Téléverser",
+    "uploading": "Téléversement…",
+    "add_more": "Ajouter un autre",
+    "mark_na": "Non applicable",
+    "undo_na": "Annuler « Non applicable »",
+    "uploaded_count": "{count, plural, one {# fichier téléversé} other {# fichiers téléversés}}",
+    "status_submitted": "Soumis",
+    "status_approved": "Approuvé",
+    "status_rejected": "Refusé — à reprendre",
+    "status_na": "Non applicable",
+    "help_intro": "Une question ?",
+    "help_link": "Écrire à votre comptable",
+    "powered_by": "Propulsé par",
+    "errors": {
+      "bad_request": "Requête invalide.",
+      "missing_file": "Aucun fichier sélectionné.",
+      "empty_file": "Le fichier est vide.",
+      "too_large": "Le fichier dépasse 25 MB.",
+      "bad_mime": "Type de fichier non accepté. Utilisez PDF, JPG, PNG ou HEIC.",
+      "not_found": "Élément introuvable.",
+      "required_item": "Cet élément est obligatoire et ne peut pas être marqué comme non applicable.",
+      "upload_failed": "Échec du téléversement. Veuillez réessayer.",
+      "db_failed": "Erreur du serveur. Veuillez réessayer.",
+      "mark_na_failed": "Impossible de marquer comme non applicable.",
+      "undo_failed": "Impossible d’annuler."
+    }
   }
 }

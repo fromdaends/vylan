@@ -3,6 +3,11 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getEngagement } from "@/lib/db/engagements";
 import { getClient } from "@/lib/db/clients";
 import { listRequestItems } from "@/lib/db/request-items";
+import {
+  listUploadedFilesForEngagement,
+  signedDownloadUrl,
+  type UploadedFile,
+} from "@/lib/db/uploaded-files";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +20,7 @@ import {
 } from "@/app/actions/engagements";
 import { assertLocale } from "@/lib/locale";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
-import { ArrowLeft, Send, X, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, X, Trash2, FileText, Download } from "lucide-react";
 
 export default async function EngagementDetailPage({
   params,
@@ -30,6 +35,21 @@ export default async function EngagementDetailPage({
   if (!engagement) notFound();
   const client = await getClient(engagement.client_id);
   const items = await listRequestItems(engagement.id);
+  const uploads = await listUploadedFilesForEngagement(engagement.id);
+
+  // Pre-sign URLs server-side (15 min validity).
+  const uploadsWithUrls: (UploadedFile & { url: string })[] = await Promise.all(
+    uploads.map(async (u) => ({
+      ...u,
+      url: await signedDownloadUrl(u.storage_path, 900).catch(() => "#"),
+    })),
+  );
+  const filesByItem = new Map<string, typeof uploadsWithUrls>();
+  for (const u of uploadsWithUrls) {
+    const arr = filesByItem.get(u.request_item_id) ?? [];
+    arr.push(u);
+    filesByItem.set(u.request_item_id, arr);
+  }
 
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -137,25 +157,56 @@ export default async function EngagementDetailPage({
                   locale === "fr" && item.label_fr
                     ? item.label_fr
                     : item.label;
+                const files = filesByItem.get(item.id) ?? [];
                 return (
-                  <li
-                    key={item.id}
-                    className="py-3 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{label}</div>
-                      <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                        {item.doc_type}
-                        {item.required && (
-                          <span className="ml-2 text-warning">
-                            · {t("required")}
-                          </span>
-                        )}
+                  <li key={item.id} className="py-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{label}</div>
+                        <div className="text-xs text-muted-foreground font-mono mt-0.5">
+                          {item.doc_type}
+                          {item.required && (
+                            <span className="ml-2 text-warning">
+                              · {t("required")}
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      <Badge variant={statusVariant(item.status)}>
+                        {tStatus(item.status)}
+                      </Badge>
                     </div>
-                    <Badge variant={statusVariant(item.status)}>
-                      {tStatus(item.status)}
-                    </Badge>
+                    {files.length > 0 && (
+                      <ul className="pl-3 mt-1 space-y-1">
+                        {files.map((f) => (
+                          <li
+                            key={f.id}
+                            className="flex items-center gap-2 text-xs"
+                          >
+                            <FileText className="size-3.5 text-muted-foreground shrink-0" />
+                            <a
+                              href={f.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-foreground hover:underline truncate flex-1"
+                            >
+                              {f.original_filename}
+                            </a>
+                            <span className="font-mono text-muted-foreground shrink-0">
+                              {formatBytes(f.size_bytes)}
+                            </span>
+                            <a
+                              href={f.url}
+                              download={f.original_filename}
+                              aria-label="download"
+                              className="text-muted-foreground hover:text-foreground"
+                            >
+                              <Download className="size-3.5" />
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </li>
                 );
               })}
@@ -178,4 +229,10 @@ function statusVariant(
   if (status === "cancelled" || status === "rejected") return "destructive";
   if (status === "draft" || status === "na") return "outline";
   return "secondary";
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }

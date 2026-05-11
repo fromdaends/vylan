@@ -17,5 +17,6 @@ export default async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/(fr|en)/:path*", "/((?!api|_next|_vercel|.*\\..*).*)"],
+  // Skip /r/* — the unauthenticated client portal manages its own locale.
+  matcher: ["/", "/(fr|en)/:path*", "/((?!api|_next|_vercel|r/|.*\\..*).*)"],
 };

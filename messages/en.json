@@ -240,5 +240,37 @@
     "generic": "Something went wrong. Please try again.",
     "not_found": "Page not found.",
     "unauthorized": "You don't have access to this page."
+  },
+  "Portal": {
+    "greeting": "Hi {name},",
+    "subhead": "Here's what {firm} needs from you.",
+    "progress": "{done} of {total} documents uploaded",
+    "required": "Required",
+    "upload": "Upload",
+    "uploading": "Uploading…",
+    "add_more": "Add another",
+    "mark_na": "Not applicable",
+    "undo_na": "Undo \"Not applicable\"",
+    "uploaded_count": "{count, plural, one {# file uploaded} other {# files uploaded}}",
+    "status_submitted": "Submitted",
+    "status_approved": "Approved",
+    "status_rejected": "Rejected — please re-upload",
+    "status_na": "Not applicable",
+    "help_intro": "Question?",
+    "help_link": "Email your accountant",
+    "powered_by": "Powered by",
+    "errors": {
+      "bad_request": "Bad request.",
+      "missing_file": "No file selected.",
+      "empty_file": "The file is empty.",
+      "too_large": "The file is larger than 25 MB.",
+      "bad_mime": "Unsupported file type. Use PDF, JPG, PNG, or HEIC.",
+      "not_found": "Item not found.",
+      "required_item": "This item is required and can't be marked Not applicable.",
+      "upload_failed": "Upload failed. Please try again.",
+      "db_failed": "Server error. Please try again.",
+      "mark_na_failed": "Couldn't mark as Not applicable.",
+      "undo_failed": "Couldn't undo."
+    }
   }
 }
