@@ -1,5 +1,18 @@
 import { getServerSupabase } from "@/lib/supabase/server";
 
+async function currentFirmId(): Promise<string> {
+  const supabase = await getServerSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) throw new Error("Not authenticated");
+  const { data: u, error } = await supabase
+    .from("users")
+    .select("firm_id")
+    .eq("id", auth.user.id)
+    .single();
+  if (error || !u?.firm_id) throw new Error("No firm for user");
+  return u.firm_id as string;
+}
+
 export type Client = {
   id: string;
   firm_id: string;
@@ -66,9 +79,11 @@ export type ClientInput = {
 
 export async function createClient(input: ClientInput): Promise<Client> {
   const supabase = await getServerSupabase();
+  const firm_id = await currentFirmId();
   const { data, error } = await supabase
     .from("clients")
     .insert({
+      firm_id,
       type: input.type,
       display_name: input.display_name,
       email: input.email ?? null,
@@ -88,7 +103,9 @@ export async function bulkCreateClients(
 ): Promise<{ created: number }> {
   if (inputs.length === 0) return { created: 0 };
   const supabase = await getServerSupabase();
+  const firm_id = await currentFirmId();
   const rows = inputs.map((i) => ({
+    firm_id,
     type: i.type,
     display_name: i.display_name,
     email: i.email ?? null,
