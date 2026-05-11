@@ -49,9 +49,12 @@ double_confirm_changes = true
 enable_confirmations = false
 max_frequency = "1s"
 
-[auth.email.template.confirmation]
-subject = "Confirmez votre courriel — Relai"
-content_path = "./supabase/templates/confirmation.html"
+# Email templates are stubbed for now. When you enable confirmations or
+# wire up Resend (Phase 5), populate supabase/templates/*.html and uncomment
+# the corresponding block here.
+# [auth.email.template.confirmation]
+# subject = "Confirmez votre courriel — Relai"
+# content_path = "./supabase/templates/confirmation.html"
 
 [edge_runtime]
 enabled = false

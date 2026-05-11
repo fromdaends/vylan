@@ -66,24 +66,56 @@ values (
 on conflict (id) do nothing;
 
 -- --- CLIENTS ---------------------------------------------------------------
-insert into clients (id, firm_id, type, display_name, email, phone, locale)
+-- 15 demo clients: mix of individual/business, fr/en, with one pre-archived
+-- so the archived-toggle in /clients has something to show.
+insert into clients (
+  id, firm_id, type, display_name, email, phone, locale,
+  external_ref, notes, archived_at
+)
 values
-  (
-    '33333333-3333-3333-3333-333333333333',
-    '22222222-2222-2222-2222-222222222222',
-    'individual',
-    'Jean-François Bouchard',
-    'jf.bouchard@example.com',
-    '+15145551001',
-    'fr'
-  ),
-  (
-    '44444444-4444-4444-4444-444444444444',
-    '22222222-2222-2222-2222-222222222222',
-    'business',
-    'Boulangerie du Quartier Inc.',
-    'compta@boulangerieduquartier.example.com',
-    '+15145551002',
-    'fr'
-  )
+  ('33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222',
+   'individual', 'Jean-François Bouchard', 'jf.bouchard@example.com',
+   '+15145551001', 'fr', 'JFB-2024', 'Locataire avec deux T4', null),
+  ('33333333-3333-3333-3333-333333333334', '22222222-2222-2222-2222-222222222222',
+   'individual', 'Marie-Claude Pelletier', 'mc.pelletier@example.com',
+   '+14185551002', 'fr', null, null, null),
+  ('33333333-3333-3333-3333-333333333335', '22222222-2222-2222-2222-222222222222',
+   'individual', 'Sébastien Tremblay', 's.tremblay@example.com',
+   '+15145551003', 'fr', null, null, null),
+  ('33333333-3333-3333-3333-333333333336', '22222222-2222-2222-2222-222222222222',
+   'individual', 'Catherine Lavoie', null,
+   '+15145551004', 'fr', null, 'Pas de courriel — appeler', null),
+  ('33333333-3333-3333-3333-333333333337', '22222222-2222-2222-2222-222222222222',
+   'individual', 'Pierre Gagnon', 'p.gagnon@example.com',
+   '+14385551005', 'fr', null, null, null),
+  ('33333333-3333-3333-3333-333333333338', '22222222-2222-2222-2222-222222222222',
+   'individual', 'Anne-Sophie Dubois', 'as.dubois@example.com',
+   null, 'fr', null, null, null),
+  ('33333333-3333-3333-3333-333333333339', '22222222-2222-2222-2222-222222222222',
+   'individual', 'Mathieu Lévesque', 'm.levesque@example.com',
+   '+15145551007', 'fr', 'ML-CORP', null, null),
+  ('3333333a-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222',
+   'individual', 'Emma Wright', 'emma.wright@example.com',
+   '+15145551008', 'en', null, 'Anglophone — expat from Toronto', null),
+  ('44444444-4444-4444-4444-444444444444', '22222222-2222-2222-2222-222222222222',
+   'business', 'Boulangerie du Quartier Inc.', 'compta@boulangerie.example.com',
+   '+15145552001', 'fr', 'BQ-INC', null, null),
+  ('44444444-4444-4444-4444-444444444445', '22222222-2222-2222-2222-222222222222',
+   'business', 'Garage Plamondon Auto', 'compta@garageplamondon.example.com',
+   '+14185552002', 'fr', null, 'Tenue de livres mensuelle', null),
+  ('44444444-4444-4444-4444-444444444446', '22222222-2222-2222-2222-222222222222',
+   'business', 'Café des Arts', 'admin@cafedesarts.example.com',
+   '+15145552003', 'fr', null, null, null),
+  ('44444444-4444-4444-4444-444444444447', '22222222-2222-2222-2222-222222222222',
+   'business', 'Construction Lafleur Inc.', 'compta@lafleurconstruction.example.com',
+   '+14505552004', 'fr', 'CL-INC', null, null),
+  ('44444444-4444-4444-4444-444444444448', '22222222-2222-2222-2222-222222222222',
+   'business', 'Pâtisserie Belle-Anse', 'info@belleanse.example.com',
+   '+14185552005', 'fr', null, null, null),
+  ('44444444-4444-4444-4444-444444444449', '22222222-2222-2222-2222-222222222222',
+   'business', 'Northern Lights Bakery Inc.', 'accounts@northernlights.example.com',
+   '+15145552006', 'en', 'NL-INC', 'English-speaking owner', null),
+  ('4444444a-4444-4444-4444-444444444444', '22222222-2222-2222-2222-222222222222',
+   'business', 'Salon Coiffure Élégance (fermé)', 'ancien@elegance.example.com',
+   '+15145552007', 'fr', null, 'Fermé en 2024', now() - interval '6 months')
 on conflict (id) do nothing;
