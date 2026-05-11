@@ -23,7 +23,77 @@
     "back": "Back",
     "next": "Next",
     "yes": "Yes",
-    "no": "No"
+    "no": "No",
+    "continue": "Continue",
+    "skip_for_now": "Skip for now",
+    "saving": "Saving…",
+    "submit": "Submit"
+  },
+  "Auth": {
+    "login_title": "Log in",
+    "login_subtitle": "Access your Relai account.",
+    "signup_title": "Create an account",
+    "signup_subtitle": "Start your free 14-day trial.",
+    "forgot_title": "Forgot password",
+    "forgot_subtitle": "Enter your email and we'll send you a reset link.",
+    "reset_title": "New password",
+    "reset_subtitle": "Choose a new password for your account.",
+    "email": "Email",
+    "password": "Password",
+    "name": "Your name",
+    "submit_login": "Log in",
+    "submit_signup": "Create account",
+    "submit_forgot": "Send reset link",
+    "submit_reset": "Update password",
+    "no_account": "No account yet?",
+    "have_account": "Already have an account?",
+    "create_account": "Create account",
+    "sign_in": "Sign in",
+    "forgot_link": "Forgot password?",
+    "logout": "Log out",
+    "errors": {
+      "invalid_credentials": "Wrong email or password.",
+      "email_taken": "An account already exists with this email.",
+      "signup_failed": "Couldn't create the account. Please try again.",
+      "reset_sent": "If that email exists, a reset link is on its way.",
+      "reset_failed": "The link is invalid or expired. Please request a new one.",
+      "min_8_chars": "At least 8 characters.",
+      "min_2_chars": "At least 2 characters.",
+      "invalid_email": "Invalid email.",
+      "callback": "Invalid or expired link."
+    }
+  },
+  "Onboarding": {
+    "step_label": "Step {current} of {total}",
+    "step1_title": "Welcome to Relai",
+    "step1_subtitle": "A few details about your firm to personalize the client portal.",
+    "step1_firm_name": "Firm name",
+    "step1_firm_name_placeholder": "Tremblay & Associates",
+    "step1_brand_color": "Brand color",
+    "step2_title": "Preferences",
+    "step2_subtitle": "Timezone and default language for emails sent to your clients.",
+    "step2_timezone": "Timezone",
+    "step2_locale": "Default language",
+    "step2_locale_fr": "Français",
+    "step2_locale_en": "English",
+    "step3_title": "Invite your team",
+    "step3_subtitle": "Optional. You can also do this later in settings.",
+    "step3_emails_label": "Emails (one per line)",
+    "step3_emails_placeholder": "alice@example.com\nbob@example.com",
+    "step3_invites_pending": "Invites will be sent once that feature ships (coming soon).",
+    "finish": "Finish"
+  },
+  "App": {
+    "dashboard_title": "Dashboard",
+    "dashboard_empty": "No active engagements yet. Add your first client to get started.",
+    "nav_dashboard": "Dashboard",
+    "nav_clients": "Clients",
+    "nav_engagements": "Engagements",
+    "nav_templates": "Templates",
+    "nav_settings": "Settings",
+    "settings_title": "Firm settings",
+    "settings_subtitle": "Update your firm profile and preferences.",
+    "settings_saved": "Saved."
   },
   "Status": {
     "pending": "Pending",
@@ -41,6 +111,6 @@
   "Errors": {
     "generic": "Something went wrong. Please try again.",
     "not_found": "Page not found.",
-    "unauthorized": "You don’t have access to this page."
+    "unauthorized": "You don't have access to this page."
   }
 }

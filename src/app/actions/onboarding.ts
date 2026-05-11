@@ -1,0 +1,160 @@
+"use server";
+
+import { z } from "zod";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentFirm, updateCurrentFirm } from "@/lib/db/firms";
+import { getPathname } from "@/i18n/navigation";
+import { parseEmailList } from "@/lib/validators";
+
+export type OnboardingState = {
+  error?: string;
+  fieldErrors?: Record<string, string>;
+} | null;
+
+const Step1Schema = z.object({
+  firm_name: z.string().min(2, "min_2_chars").max(120, "too_long"),
+  brand_color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, "invalid_color")
+    .default("#1e293b"),
+});
+
+const Step2Schema = z.object({
+  timezone: z.string().min(2, "required"),
+  locale_default: z.enum(["fr", "en"]),
+});
+
+const Step3Schema = z.object({
+  emails: z.string().optional().default(""),
+});
+
+function pickLocale(formData: FormData): "fr" | "en" {
+  const v = formData.get("locale");
+  return v === "en" ? "en" : "fr";
+}
+
+function fieldErrorsFromZod(error: z.ZodError): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const key = issue.path.join(".");
+    if (!out[key]) out[key] = issue.message;
+  }
+  return out;
+}
+
+function localPath(
+  locale: "fr" | "en",
+  pathname: string,
+  query?: Record<string, string>,
+): string {
+  return getPathname({ locale, href: { pathname, query } });
+}
+
+export async function submitStep1(
+  _prev: OnboardingState,
+  formData: FormData,
+): Promise<OnboardingState> {
+  const parsed = Step1Schema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { fieldErrors: fieldErrorsFromZod(parsed.error) };
+  }
+  const locale = pickLocale(formData);
+
+  const supabase = await getServerSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return { error: "no_session" };
+
+  const userMetaName =
+    (auth.user.user_metadata?.name as string | undefined)?.trim() ||
+    auth.user.email!.split("@")[0];
+  const userMetaLocale =
+    auth.user.user_metadata?.locale === "en" ? "en" : "fr";
+
+  const existingFirm = await getCurrentFirm();
+
+  if (!existingFirm) {
+    const { data: firm, error: firmErr } = await supabase
+      .from("firms")
+      .insert({
+        name: parsed.data.firm_name,
+        brand_color: parsed.data.brand_color,
+        locale_default: userMetaLocale,
+        plan: "trial",
+      })
+      .select("id")
+      .single();
+    if (firmErr || !firm) {
+      return { error: "create_failed" };
+    }
+
+    const { error: userErr } = await supabase.from("users").insert({
+      id: auth.user.id,
+      firm_id: firm.id,
+      email: auth.user.email!,
+      name: userMetaName,
+      role: "owner",
+      locale: userMetaLocale,
+    });
+    if (userErr) {
+      return { error: "create_failed" };
+    }
+  } else {
+    await updateCurrentFirm({
+      name: parsed.data.firm_name,
+      brand_color: parsed.data.brand_color,
+    });
+  }
+
+  revalidatePath("/", "layout");
+  redirect(localPath(locale, "/onboarding", { step: "2" }));
+}
+
+export async function submitStep2(
+  _prev: OnboardingState,
+  formData: FormData,
+): Promise<OnboardingState> {
+  const parsed = Step2Schema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return { fieldErrors: fieldErrorsFromZod(parsed.error) };
+  }
+  await updateCurrentFirm({
+    timezone: parsed.data.timezone,
+    locale_default: parsed.data.locale_default,
+  });
+  const locale = pickLocale(formData);
+  redirect(localPath(locale, "/onboarding", { step: "3" }));
+}
+
+export async function submitStep3(
+  _prev: OnboardingState,
+  formData: FormData,
+): Promise<OnboardingState> {
+  const parsed = Step3Schema.safeParse({
+    emails: formData.get("emails") ?? "",
+  });
+  if (!parsed.success) {
+    return { error: "invalid" };
+  }
+  const emails = parseEmailList(parsed.data.emails);
+  await updateCurrentFirm({
+    invited_emails: emails,
+    onboarded_at: new Date().toISOString(),
+  });
+  revalidatePath("/", "layout");
+  const locale = pickLocale(formData);
+  redirect(localPath(locale, "/dashboard"));
+}
+
+export async function skipStep(formData: FormData) {
+  const step = Number(formData.get("step")) as 1 | 2 | 3;
+  const locale = pickLocale(formData);
+
+  if (step >= 3) {
+    await updateCurrentFirm({ onboarded_at: new Date().toISOString() });
+    revalidatePath("/", "layout");
+    redirect(localPath(locale, "/dashboard"));
+  }
+  redirect(localPath(locale, "/onboarding", { step: String(step + 1) }));
+}
