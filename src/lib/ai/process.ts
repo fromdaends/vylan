@@ -8,6 +8,10 @@
 
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import {
+  checkRateLimit,
+  AI_CLASSIFY_PER_FIRM_DAILY,
+} from "@/lib/rate-limit";
+import {
   classifyDocument,
   downloadStorageObject,
   isAiConfigured,
@@ -42,6 +46,23 @@ export async function processClassifyJob(
     | string
     | undefined;
   if (!expectedDocType) return { skipped: "no_expected_doc_type" };
+
+  // Cap AI spend per firm per day. We look up firm_id from the engagement
+  // before downloading the file so an attacker can't burn bandwidth on
+  // download either. If the firm is over its daily quota, defer the work
+  // (skipped) — the next day's cron run can pick it up if still needed.
+  const { data: engagementForLimit } = await sb
+    .from("engagements")
+    .select("firm_id")
+    .eq("id", file.engagement_id)
+    .single();
+  if (engagementForLimit) {
+    const rl = await checkRateLimit({
+      key: `ai:classify:firm:${engagementForLimit.firm_id}`,
+      ...AI_CLASSIFY_PER_FIRM_DAILY,
+    });
+    if (!rl.ok) return { skipped: "firm_daily_quota_exceeded" };
+  }
 
   const dl = await downloadStorageObject(file.storage_path);
   if (!dl) return { skipped: "download_failed" };

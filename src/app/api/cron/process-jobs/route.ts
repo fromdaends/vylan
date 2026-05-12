@@ -2,10 +2,10 @@
 //
 // Auth model:
 //   * In production: Vercel injects `Authorization: Bearer <CRON_SECRET>` from
-//     the env var of the same name.
-//   * In dev: pass `?secret=<CRON_SECRET>` on the URL, or omit auth entirely
-//     when CRON_SECRET is unset (so `curl localhost:3000/api/cron/...` works
-//     for local testing).
+//     the env var of the same name. Header-only — never accept the secret via
+//     query string, as URL params leak to logs/Referer.
+//   * In dev (NODE_ENV !== "production"): the ?secret= fallback is allowed
+//     so `curl localhost:3000/api/cron/...` works without forging headers.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { claimDueJobs, markJobDone, markJobFailed } from "@/lib/db/jobs";
@@ -20,9 +20,12 @@ export async function GET(request: NextRequest) {
   const expected = process.env.CRON_SECRET;
   if (expected && expected.trim() !== "") {
     const authHeader = request.headers.get("authorization") ?? "";
-    const queryToken = new URL(request.url).searchParams.get("secret") ?? "";
-    const ok =
-      authHeader === `Bearer ${expected}` || queryToken === expected;
+    let ok = authHeader === `Bearer ${expected}`;
+    if (!ok && process.env.NODE_ENV !== "production") {
+      const queryToken =
+        new URL(request.url).searchParams.get("secret") ?? "";
+      ok = queryToken === expected;
+    }
     if (!ok) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }

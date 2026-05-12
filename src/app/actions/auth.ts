@@ -3,9 +3,26 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getPathname } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
+import {
+  checkRateLimit,
+  LOGIN_LIMIT,
+  SIGNUP_LIMIT,
+  PASSWORD_RESET_LIMIT,
+} from "@/lib/rate-limit";
+
+async function clientIp(): Promise<string> {
+  const h = await headers();
+  const xff = h.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return "unknown";
+}
 
 export type AuthActionState = {
   error?: string;
@@ -58,6 +75,14 @@ export async function loginAction(
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFromZod(parsed.error) };
   }
+  const ip = await clientIp();
+  const rl = await checkRateLimit({
+    key: `login:ip:${ip}`,
+    ...LOGIN_LIMIT,
+  });
+  if (!rl.ok) {
+    return { error: "rate_limited" };
+  }
   const supabase = await getServerSupabase();
   const { error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
@@ -77,6 +102,14 @@ export async function signupAction(
   const parsed = SignupSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFromZod(parsed.error) };
+  }
+  const ip = await clientIp();
+  const rl = await checkRateLimit({
+    key: `signup:ip:${ip}`,
+    ...SIGNUP_LIMIT,
+  });
+  if (!rl.ok) {
+    return { error: "rate_limited" };
   }
   const supabase = await getServerSupabase();
   const { error } = await supabase.auth.signUp({
@@ -109,6 +142,16 @@ export async function forgotPasswordAction(
   const parsed = ForgotSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFromZod(parsed.error) };
+  }
+  const ip = await clientIp();
+  const rl = await checkRateLimit({
+    key: `pwreset:ip:${ip}`,
+    ...PASSWORD_RESET_LIMIT,
+  });
+  if (!rl.ok) {
+    // Still return reset_sent — don't reveal whether the limiter tripped or
+    // whether the email exists. The cap silently drops further attempts.
+    return { error: "reset_sent" };
   }
   const supabase = await getServerSupabase();
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";

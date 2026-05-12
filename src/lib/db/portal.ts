@@ -83,6 +83,9 @@ export async function loadPortalContext(
   };
 }
 
+// Used exclusively by write endpoints (upload, mark-na, undo-na). Blocks
+// any engagement state where further mutation shouldn't be allowed:
+// cancelled (rejected outright) or complete (work already finished).
 export async function findItemForToken(
   token: string,
   itemId: string,
@@ -94,7 +97,10 @@ export async function findItemForToken(
     .select("id, magic_expires_at, status")
     .eq("magic_token", token)
     .maybeSingle();
-  if (!engagement || engagement.status === "cancelled") return null;
+  if (!engagement) return null;
+  if (engagement.status === "cancelled" || engagement.status === "complete") {
+    return null;
+  }
   if (
     engagement.magic_expires_at &&
     new Date(engagement.magic_expires_at) < new Date()
@@ -110,15 +116,18 @@ export async function findItemForToken(
   return (item as RequestItem) ?? null;
 }
 
+// Defense in depth: scope updates to (id, engagement_id) so a stale or wrong
+// itemId can't accidentally mutate items in another engagement, even if a
+// future refactor of findItemForToken stops scoping correctly.
 export async function setItemStatus(
   itemId: string,
   status: RequestItemStatus,
+  engagementId?: string,
 ): Promise<void> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb
-    .from("request_items")
-    .update({ status })
-    .eq("id", itemId);
+  let q = sb.from("request_items").update({ status }).eq("id", itemId);
+  if (engagementId) q = q.eq("engagement_id", engagementId);
+  const { error } = await q;
   if (error) throw error;
 }
 

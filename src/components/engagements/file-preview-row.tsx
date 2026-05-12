@@ -106,6 +106,8 @@ export function FilePreviewRow({
               src={url}
               title={file.original_filename}
               className="w-full h-[520px] rounded bg-white"
+              sandbox=""
+              referrerPolicy="no-referrer"
             />
           )}
         </div>

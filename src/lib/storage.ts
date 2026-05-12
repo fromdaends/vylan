@@ -2,6 +2,24 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
 export const BUCKET = "client-uploads";
 export const MAX_BYTES = 25 * 1024 * 1024;
+// HEIC decoder allocates `width * height * 4` bytes during decode, so a small
+// file with crafted dimensions can OOM the runtime. Real iPhone HEIC photos
+// are under 5 MB; cap below the general limit as a defense.
+export const MAX_HEIC_INPUT_BYTES = 10 * 1024 * 1024;
+// Maximum filename length stored in the DB / used in storage keys. Long names
+// can break ICU message rendering and bloat rows.
+export const MAX_FILENAME_LEN = 200;
+
+export function truncateFilename(name: string): string {
+  if (name.length <= MAX_FILENAME_LEN) return name;
+  // Preserve the extension when truncating.
+  const dot = name.lastIndexOf(".");
+  if (dot > 0 && name.length - dot <= 16) {
+    const ext = name.slice(dot);
+    return name.slice(0, MAX_FILENAME_LEN - ext.length) + ext;
+  }
+  return name.slice(0, MAX_FILENAME_LEN);
+}
 
 const HEIC_MIMES = new Set([
   "image/heic",
@@ -46,11 +64,18 @@ export async function convertHeicToJpeg(
   const { default: convert } = await import("heic-convert");
   const buffer =
     input instanceof Buffer ? input : Buffer.from(new Uint8Array(input));
-  const out = (await convert({
+  // Bound the conversion time. heic-convert can hang on adversarial inputs
+  // (huge declared dimensions), and we don't want to hold the request open
+  // for the full maxDuration.
+  const convertPromise = convert({
     buffer: buffer as unknown as ArrayBufferLike,
     format: "JPEG",
     quality: 0.9,
-  })) as ArrayBufferLike | Buffer;
+  }) as Promise<ArrayBufferLike | Buffer>;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error("heic_convert_timeout")), 15_000);
+  });
+  const out = await Promise.race([convertPromise, timeoutPromise]);
   return Buffer.from(out as ArrayBufferLike);
 }
 

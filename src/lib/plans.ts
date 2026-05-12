@@ -55,3 +55,13 @@ export function priceIdFor(planId: PlanId): string | null {
   const id = process.env[env];
   return id && id.trim() !== "" ? id : null;
 }
+
+// Reverse lookup: derive plan from a Stripe price ID. The webhook MUST use
+// this rather than trust metadata.plan, since metadata can be edited via
+// the Stripe portal/API and would otherwise let users self-upgrade.
+export function planForPriceId(priceId: string): PlanId | null {
+  for (const plan of PAID_PLANS) {
+    if (priceIdFor(plan) === priceId) return plan;
+  }
+  return null;
+}
