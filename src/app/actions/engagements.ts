@@ -10,10 +10,15 @@ import {
   completeEngagement,
   reopenEngagement,
   deleteDraftEngagement,
+  setRemindersPaused,
   getEngagement,
   type CreateEngagementInput,
 } from "@/lib/db/engagements";
 import { logUserActivity } from "@/lib/db/activity";
+import {
+  scheduleEngagementReminders,
+  cancelEngagementReminders,
+} from "@/lib/reminders";
 import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -103,8 +108,15 @@ export async function createEngagementAction(payload: {
     const created = await createEngagementWithItems(input);
     engagementId = created.id;
     if (payload.send) {
-      await sendEngagement(engagementId);
+      const sent = await sendEngagement(engagementId);
       await deliverInviteEmail(engagementId);
+      if (sent.sent_at) {
+        await scheduleEngagementReminders({
+          engagementId,
+          sentAt: new Date(sent.sent_at),
+          dueDate: sent.due_date,
+        });
+      }
     }
   } catch {
     return { error: "create_failed" };
@@ -122,8 +134,15 @@ export async function createEngagementAction(payload: {
 export async function sendEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
-  await sendEngagement(id);
+  const sent = await sendEngagement(id);
   await deliverInviteEmail(id);
+  if (sent.sent_at) {
+    await scheduleEngagementReminders({
+      engagementId: id,
+      sentAt: new Date(sent.sent_at),
+      dueDate: sent.due_date,
+    });
+  }
   revalidatePath("/", "layout");
 }
 
@@ -158,6 +177,7 @@ export async function cancelEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
   await cancelEngagement(id);
+  await cancelEngagementReminders(id);
   const engagement = await getEngagement(id);
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "cancel_engagement", {});
@@ -169,6 +189,7 @@ export async function completeEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
   await completeEngagement(id);
+  await cancelEngagementReminders(id);
   const engagement = await getEngagement(id);
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "complete_engagement", {});
@@ -183,6 +204,23 @@ export async function reopenEngagementAction(formData: FormData) {
   const engagement = await getEngagement(id);
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "reopen_engagement", {});
+  }
+  revalidatePath("/", "layout");
+}
+
+export async function toggleRemindersPausedAction(formData: FormData) {
+  const id = formData.get("id");
+  const next = formData.get("paused") === "1";
+  if (typeof id !== "string" || !id) return;
+  await setRemindersPaused(id, next);
+  const engagement = await getEngagement(id);
+  if (engagement) {
+    await logUserActivity(
+      engagement.firm_id,
+      id,
+      next ? "reminders_paused" : "reminders_resumed",
+      {},
+    );
   }
   revalidatePath("/", "layout");
 }

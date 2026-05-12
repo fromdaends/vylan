@@ -218,6 +218,9 @@
     "add_item_subtitle": "The client will see this on their portal the next time they refresh.",
     "doc_type": "Document type",
     "send_reminder": "Send reminder now",
+    "pause_reminders": "Pause reminders",
+    "resume_reminders": "Resume reminders",
+    "reminders_paused_badge": "Reminders paused",
     "mark_complete": "Mark complete",
     "reopen": "Reopen",
     "open_new_tab": "Open in new tab",
@@ -261,7 +264,10 @@
     "manual_reminder": "Sent a manual reminder",
     "cancel_engagement": "Cancelled the engagement",
     "complete_engagement": "Marked engagement complete",
-    "reopen_engagement": "Reopened the engagement"
+    "reopen_engagement": "Reopened the engagement",
+    "reminders_paused": "Paused automatic reminders",
+    "reminders_resumed": "Resumed automatic reminders",
+    "reminder_fired": "Automatic reminder sent ({tone})"
   },
   "Templates": {
     "title": "Templates",

@@ -23,6 +23,7 @@ function eng(overrides: Partial<Engagement> = {}): Engagement {
     magic_token: "t",
     magic_expires_at: null,
     assigned_user_id: null,
+    reminders_paused: false,
     created_at: NOW.toISOString(),
     ...overrides,
   };

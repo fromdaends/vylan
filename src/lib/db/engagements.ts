@@ -22,8 +22,21 @@ export type Engagement = {
   magic_token: string | null;
   magic_expires_at: string | null;
   assigned_user_id: string | null;
+  reminders_paused: boolean;
   created_at: string;
 };
+
+export async function setRemindersPaused(
+  id: string,
+  paused: boolean,
+): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ reminders_paused: paused })
+    .eq("id", id);
+  if (error) throw error;
+}
 
 const tokenAlphabet =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";

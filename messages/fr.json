@@ -218,6 +218,9 @@
     "add_item_subtitle": "Le client verra ce nouvel élément à sa prochaine ouverture du portail.",
     "doc_type": "Type de document",
     "send_reminder": "Envoyer un rappel",
+    "pause_reminders": "Pauser les rappels",
+    "resume_reminders": "Reprendre les rappels",
+    "reminders_paused_badge": "Rappels en pause",
     "mark_complete": "Marquer comme complété",
     "reopen": "Rouvrir",
     "open_new_tab": "Ouvrir dans un nouvel onglet",
@@ -261,7 +264,10 @@
     "manual_reminder": "Rappel manuel envoyé",
     "cancel_engagement": "Engagement annulé",
     "complete_engagement": "Engagement marqué complété",
-    "reopen_engagement": "Engagement rouvert"
+    "reopen_engagement": "Engagement rouvert",
+    "reminders_paused": "Rappels mis en pause",
+    "reminders_resumed": "Rappels repris",
+    "reminder_fired": "Rappel automatique envoyé ({tone})"
   },
   "Templates": {
     "title": "Modèles",

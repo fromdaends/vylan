@@ -21,6 +21,7 @@ import {
   reopenEngagementAction,
   sendReminderAction,
   deleteDraftAction,
+  toggleRemindersPausedAction,
 } from "@/app/actions/engagements";
 import {
   approveItemAction,
@@ -41,6 +42,7 @@ import {
   CheckCircle2,
   RotateCcw,
   Bell,
+  BellOff,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -120,6 +122,12 @@ export default async function EngagementDetailPage({
                 · {t("due", { date: engagement.due_date })}
               </span>
             )}
+            {engagement.reminders_paused && (
+              <Badge variant="outline" className="text-xs">
+                <BellOff className="size-3" />
+                {t("reminders_paused_badge")}
+              </Badge>
+            )}
           </div>
         </div>
 
@@ -150,6 +158,27 @@ export default async function EngagementDetailPage({
                 <Button type="submit" variant="outline" size="sm">
                   <Bell className="size-4" />
                   {t("send_reminder")}
+                </Button>
+              </form>
+              <form action={toggleRemindersPausedAction}>
+                <input type="hidden" name="id" value={engagement.id} />
+                <input
+                  type="hidden"
+                  name="paused"
+                  value={engagement.reminders_paused ? "0" : "1"}
+                />
+                <Button type="submit" variant="outline" size="sm">
+                  {engagement.reminders_paused ? (
+                    <>
+                      <Bell className="size-4" />
+                      {t("resume_reminders")}
+                    </>
+                  ) : (
+                    <>
+                      <BellOff className="size-4" />
+                      {t("pause_reminders")}
+                    </>
+                  )}
                 </Button>
               </form>
               <form action={completeEngagementAction}>

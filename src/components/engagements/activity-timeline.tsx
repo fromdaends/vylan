@@ -93,6 +93,12 @@ function describe(
       return t("remove_item");
     case "manual_reminder":
       return t("manual_reminder");
+    case "reminder_fired":
+      return t("reminder_fired", { tone: meta.tone ?? "—" });
+    case "reminders_paused":
+      return t("reminders_paused");
+    case "reminders_resumed":
+      return t("reminders_resumed");
     case "cancel_engagement":
       return t("cancel_engagement");
     case "complete_engagement":
