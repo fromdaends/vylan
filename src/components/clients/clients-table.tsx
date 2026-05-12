@@ -27,11 +27,22 @@ import {
 } from "@/app/actions/clients";
 import type { Client } from "@/lib/db/clients";
 
+export type ClientEngagementSummary = {
+  draft: number;
+  sent: number;
+  in_progress: number;
+  complete: number;
+  cancelled: number;
+  total_live: number;
+};
+
 export function ClientsTable({
   clients,
+  summaries,
   locale,
 }: {
   clients: Client[];
+  summaries: Record<string, ClientEngagementSummary>;
   locale: "fr" | "en";
 }) {
   const t = useTranslations("Clients");
@@ -55,7 +66,7 @@ export function ClientsTable({
             <TableHead>{t("col_type")}</TableHead>
             <TableHead>{t("col_email")}</TableHead>
             <TableHead>{t("col_phone")}</TableHead>
-            <TableHead>{t("col_status")}</TableHead>
+            <TableHead>{t("col_engagements")}</TableHead>
             <TableHead className="w-12 text-right" />
           </TableRow>
         </TableHeader>
@@ -74,6 +85,11 @@ export function ClientsTable({
                     {c.external_ref}
                   </span>
                 )}
+                {c.archived_at && (
+                  <Badge variant="outline" className="ml-2 text-xs">
+                    {t("archived")}
+                  </Badge>
+                )}
               </TableCell>
               <TableCell>
                 <Badge variant="secondary">
@@ -89,11 +105,7 @@ export function ClientsTable({
                 {c.phone ?? "—"}
               </TableCell>
               <TableCell>
-                {c.archived_at ? (
-                  <Badge variant="outline">{t("archived")}</Badge>
-                ) : (
-                  <Badge>{t("active")}</Badge>
-                )}
+                <EngagementSummaryCell summary={summaries[c.id]} />
               </TableCell>
               <TableCell className="text-right">
                 <RowActions client={c} locale={locale} />
@@ -104,6 +116,46 @@ export function ClientsTable({
       </Table>
     </div>
   );
+}
+
+function EngagementSummaryCell({
+  summary,
+}: {
+  summary: ClientEngagementSummary | undefined;
+}) {
+  const t = useTranslations("Clients");
+  if (!summary) {
+    return <span className="text-muted-foreground text-sm">—</span>;
+  }
+  // Pick the most useful badge per priority:
+  //   in_progress > sent > draft > complete (only if nothing else) > none
+  if (summary.in_progress > 0) {
+    return (
+      <Badge variant="secondary">
+        {t("summary_in_progress", { count: summary.in_progress })}
+      </Badge>
+    );
+  }
+  if (summary.sent > 0) {
+    return (
+      <Badge variant="secondary">
+        {t("summary_sent", { count: summary.sent })}
+      </Badge>
+    );
+  }
+  if (summary.draft > 0) {
+    return (
+      <Badge variant="outline">
+        {t("summary_draft", { count: summary.draft })}
+      </Badge>
+    );
+  }
+  if (summary.complete > 0) {
+    return (
+      <Badge>{t("summary_complete", { count: summary.complete })}</Badge>
+    );
+  }
+  return <span className="text-muted-foreground text-sm">—</span>;
 }
 
 function RowActions({
