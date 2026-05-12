@@ -239,7 +239,8 @@
     "items_ready": "{count, plural, one {# item ready} other {# items ready}}",
     "overdue_by": "{days, plural, one {# day overdue} other {# days overdue}}",
     "due_in": "Due in {days, plural, one {# day} other {# days}}",
-    "stale_days": "Quiet for {days, plural, one {# day} other {# days}}"
+    "stale_days": "Quiet for {days, plural, one {# day} other {# days}}",
+    "other_engagements": "Other engagements"
   },
   "Activity": {
     "title": "Activity",

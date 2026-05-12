@@ -239,7 +239,8 @@
     "items_ready": "{count, plural, one {# élément prêt} other {# éléments prêts}}",
     "overdue_by": "{days, plural, one {# jour de retard} other {# jours de retard}}",
     "due_in": "Dû dans {days, plural, one {# jour} other {# jours}}",
-    "stale_days": "Silence depuis {days, plural, one {# jour} other {# jours}}"
+    "stale_days": "Silence depuis {days, plural, one {# jour} other {# jours}}",
+    "other_engagements": "Autres engagements"
   },
   "Activity": {
     "title": "Activité",

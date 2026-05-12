@@ -93,6 +93,12 @@ export default async function DashboardPage({
         v.engagement.status === "in_progress") &&
       isReadyToReview(v.attention),
   );
+  // All other engagements that are alive but quiet — drafts, sent-but-fresh,
+  // recently complete. Surfaced as a catch-all so nothing goes missing.
+  const flaggedIds = new Set(
+    [...needsAttention, ...readyToReview].map((v) => v.engagement.id),
+  );
+  const other = vms.filter((v) => !flaggedIds.has(v.engagement.id)).slice(0, 8);
 
   // Top metrics.
   const activeCount = vms.filter(
@@ -221,8 +227,55 @@ export default async function DashboardPage({
           )}
         </CardContent>
       </Card>
+
+      {other.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {tAttention("other_engagements")}{" "}
+              <span className="text-muted-foreground font-normal">
+                ({other.length})
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border">
+              {other.map((v) => (
+                <li key={v.engagement.id} className="py-3">
+                  <Link
+                    href={`/engagements/${v.engagement.id}`}
+                    className="flex items-center justify-between gap-3 hover:text-foreground"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">
+                        {v.engagement.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {clientsById.get(v.engagement.client_id)?.display_name ??
+                          "—"}
+                      </div>
+                    </div>
+                    <Badge variant={statusBadge(v.engagement.status)}>
+                      {tStatus(v.engagement.status)}
+                    </Badge>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
+}
+
+function statusBadge(
+  status: string,
+): "default" | "secondary" | "outline" | "destructive" {
+  if (status === "complete") return "default";
+  if (status === "cancelled") return "destructive";
+  if (status === "draft") return "outline";
+  return "secondary";
 }
 
 function Metric({
