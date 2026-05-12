@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { AiBadge } from "./ai-badge";
 import { reclassifyFileAction } from "@/app/actions/ai";
+import { formatBytes } from "@/lib/format";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
 
@@ -37,8 +38,9 @@ export function FilePreviewRow({
           <button
             type="button"
             onClick={() => setOpen((p) => !p)}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            className="flex items-center gap-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
             aria-expanded={open}
+            aria-label={open ? t("collapse_preview") : t("expand_preview")}
           >
             {open ? (
               <ChevronDown className="size-3.5" />
@@ -49,7 +51,7 @@ export function FilePreviewRow({
         ) : (
           <span className="w-[14px]" aria-hidden />
         )}
-        <FileText className="size-3.5 text-muted-foreground shrink-0" />
+        <FileText className="size-3.5 text-muted-foreground shrink-0" aria-hidden />
         <span className="truncate flex-1 font-medium">
           {file.original_filename}
         </span>
@@ -60,7 +62,7 @@ export function FilePreviewRow({
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-foreground"
+          className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
           aria-label={t("open_new_tab")}
           title={t("open_new_tab")}
         >
@@ -69,8 +71,9 @@ export function FilePreviewRow({
         <a
           href={url}
           download={file.original_filename}
-          className="text-muted-foreground hover:text-foreground"
-          aria-label="download"
+          className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          aria-label={t("download_file")}
+          title={t("download_file")}
         >
           <Download className="size-3.5" />
         </a>
@@ -78,7 +81,7 @@ export function FilePreviewRow({
           <input type="hidden" name="id" value={file.id} />
           <button
             type="submit"
-            className="text-muted-foreground hover:text-foreground"
+            className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
             aria-label={t("reclassify")}
             title={t("reclassify")}
           >
@@ -109,10 +112,4 @@ export function FilePreviewRow({
       )}
     </li>
   );
-}
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }

@@ -1,7 +1,8 @@
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Sparkles, AlertTriangle, Loader2 } from "lucide-react";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
+import { formatCurrency, type AppLocale } from "@/lib/format";
 
 type ExtractedFields = {
   extracted_year?: number | null;
@@ -18,6 +19,7 @@ export function AiBadge({
   expectedDocType: DocType;
 }) {
   const t = useTranslations("Ai");
+  const locale = useLocale() as AppLocale;
 
   if (file.ai_classification == null || file.ai_confidence == null) {
     return (
@@ -47,7 +49,7 @@ export function AiBadge({
     bits.push(String(fields.extracted_year));
   }
   if (typeof fields.extracted_amount_or_total === "number") {
-    bits.push(formatCad(fields.extracted_amount_or_total));
+    bits.push(formatCurrency(fields.extracted_amount_or_total, locale, 0));
   }
 
   // Wrong / mismatch — red alert.
@@ -109,10 +111,3 @@ export function AiBadge({
   );
 }
 
-function formatCad(n: number): string {
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-    maximumFractionDigits: 0,
-  }).format(n);
-}

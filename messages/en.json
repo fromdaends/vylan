@@ -225,6 +225,9 @@
     "reopen": "Reopen",
     "open_new_tab": "Open in new tab",
     "reclassify": "Re-classify with AI",
+    "expand_preview": "Expand preview",
+    "collapse_preview": "Collapse preview",
+    "download_file": "Download file",
     "errors": {
       "missing_client": "Pick a client.",
       "missing_template": "Pick a template.",
@@ -315,7 +318,37 @@
   "Errors": {
     "generic": "Something went wrong. Please try again.",
     "not_found": "Page not found.",
+    "not_found_body": "This page doesn't exist or has been moved.",
+    "back_home": "Back to home",
     "unauthorized": "You don't have access to this page."
+  },
+  "Help": {
+    "button": "Help",
+    "open_help": "Open help panel",
+    "title": "Help & feedback",
+    "subtitle": "Question, bug, or idea? Tell us anything.",
+    "video_title": "3-minute walkthrough",
+    "video_placeholder": "Intro video coming soon.",
+    "feedback_title": "Send feedback",
+    "feedback_subtitle": "Tell us what's working, what's broken, what you wish was here.",
+    "feedback_placeholder": "Describe your suggestion or what went wrong…",
+    "feedback_submit": "Send",
+    "feedback_thanks": "Thanks! We got your feedback.",
+    "shortcuts_title": "Keyboard shortcuts",
+    "shortcuts_subtitle": "Move faster with these.",
+    "shortcut_create": "New engagement",
+    "shortcut_search": "Search (on the Clients page)",
+    "shortcut_dash": "Dashboard",
+    "shortcut_clients": "Clients",
+    "shortcut_templates": "Templates",
+    "shortcut_settings": "Settings",
+    "shortcut_help": "Show this help",
+    "footer_email": "Prefer email?",
+    "errors": {
+      "min_3_chars": "At least 3 characters.",
+      "too_long": "Too long.",
+      "save_failed": "Couldn't save. Please try again."
+    }
   },
   "Portal": {
     "rejected_action_needed": "Your accountant asked for a different document:",

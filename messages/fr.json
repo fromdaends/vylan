@@ -225,6 +225,9 @@
     "reopen": "Rouvrir",
     "open_new_tab": "Ouvrir dans un nouvel onglet",
     "reclassify": "Reclasser avec IA",
+    "expand_preview": "Afficher l'aperçu",
+    "collapse_preview": "Masquer l'aperçu",
+    "download_file": "Télécharger le fichier",
     "errors": {
       "missing_client": "Choisissez un client.",
       "missing_template": "Choisissez un modèle.",
@@ -315,7 +318,37 @@
   "Errors": {
     "generic": "Quelque chose a mal tourné. Veuillez réessayer.",
     "not_found": "Page introuvable.",
+    "not_found_body": "Cette page n'existe pas ou a été déplacée.",
+    "back_home": "Retour à l'accueil",
     "unauthorized": "Vous n’avez pas accès à cette page."
+  },
+  "Help": {
+    "button": "Aide",
+    "open_help": "Ouvrir le panneau d'aide",
+    "title": "Aide et commentaires",
+    "subtitle": "Une question, un bogue, une idée ? Dites-nous tout.",
+    "video_title": "Démo en 3 minutes",
+    "video_placeholder": "Vidéo d'introduction à venir prochainement.",
+    "feedback_title": "Envoyer un commentaire",
+    "feedback_subtitle": "Partagez ce qui fonctionne, ce qui cloche, et ce que vous aimeriez voir.",
+    "feedback_placeholder": "Décrivez votre suggestion ou le problème rencontré…",
+    "feedback_submit": "Envoyer",
+    "feedback_thanks": "Merci ! Nous avons reçu votre commentaire.",
+    "shortcuts_title": "Raccourcis clavier",
+    "shortcuts_subtitle": "Allez plus vite avec ces raccourcis.",
+    "shortcut_create": "Nouvel engagement",
+    "shortcut_search": "Rechercher (sur la page Clients)",
+    "shortcut_dash": "Tableau de bord",
+    "shortcut_clients": "Clients",
+    "shortcut_templates": "Modèles",
+    "shortcut_settings": "Paramètres",
+    "shortcut_help": "Afficher cette aide",
+    "footer_email": "Préférez-vous écrire ?",
+    "errors": {
+      "min_3_chars": "Au moins 3 caractères.",
+      "too_long": "Trop long.",
+      "save_failed": "Impossible d'enregistrer. Veuillez réessayer."
+    }
   },
   "Portal": {
     "greeting": "Bonjour {name},",

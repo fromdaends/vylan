@@ -7,6 +7,8 @@ import { brand } from "@/lib/brand";
 import { getTranslations } from "next-intl/server";
 import { logoutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
+import { HelpSidebar } from "@/components/help/help-sidebar";
+import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 
 export default async function AppLayout({
   children,
@@ -86,6 +88,8 @@ export default async function AppLayout({
       <main className="flex-1 mx-auto w-full max-w-6xl px-6 py-8">
         {children}
       </main>
+      <HelpSidebar />
+      <KeyboardShortcuts />
     </div>
   );
 }

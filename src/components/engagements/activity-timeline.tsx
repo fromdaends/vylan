@@ -1,29 +1,14 @@
 import { getTranslations } from "next-intl/server";
 import type { ActivityEntry } from "@/lib/db/activity";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-function relativeTime(date: string, locale: "fr" | "en"): string {
-  const ms = Date.now() - new Date(date).getTime();
-  if (ms < 60 * 1000) {
-    return locale === "fr" ? "à l’instant" : "just now";
-  }
-  const fmt = new Intl.RelativeTimeFormat(locale === "fr" ? "fr-CA" : "en-CA", {
-    numeric: "auto",
-  });
-  const minutes = Math.round(-ms / 60000);
-  if (Math.abs(minutes) < 60) return fmt.format(minutes, "minute");
-  const hours = Math.round(-ms / (60 * 60000));
-  if (Math.abs(hours) < 24) return fmt.format(hours, "hour");
-  const days = Math.round(-ms / (24 * 60 * 60000));
-  return fmt.format(days, "day");
-}
+import { formatRelative, type AppLocale } from "@/lib/format";
 
 export async function ActivityTimeline({
   entries,
   locale,
 }: {
   entries: ActivityEntry[];
-  locale: "fr" | "en";
+  locale: AppLocale;
 }) {
   const t = await getTranslations("Activity");
 
@@ -47,11 +32,9 @@ export async function ActivityTimeline({
                   aria-hidden
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="leading-snug">
-                    {describe(e, t)}
-                  </div>
+                  <div className="leading-snug">{describe(e, t)}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">
-                    {relativeTime(e.created_at, locale)}
+                    {formatRelative(e.created_at, locale)}
                   </div>
                 </div>
               </li>

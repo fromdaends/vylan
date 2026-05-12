@@ -12,6 +12,7 @@ import {
   restoreClientAction,
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
+import { formatDate } from "@/lib/format";
 import { ArrowLeft, Plus } from "lucide-react";
 
 export default async function ClientDetailPage({
@@ -136,7 +137,7 @@ export default async function ClientDetailPage({
                       <div className="font-medium truncate">{e.title}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {e.type.toUpperCase()}
-                        {e.due_date && ` · ${e.due_date}`}
+                        {e.due_date && ` · ${formatDate(e.due_date, locale, "medium")}`}
                       </div>
                     </div>
                     <Badge variant={statusVariant(e.status)}>

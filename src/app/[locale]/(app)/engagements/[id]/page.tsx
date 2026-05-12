@@ -29,6 +29,7 @@ import {
   removeItemAction,
 } from "@/app/actions/items";
 import { assertLocale } from "@/lib/locale";
+import { formatDate } from "@/lib/format";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
 import { RejectModal } from "@/components/engagements/reject-modal";
@@ -119,7 +120,7 @@ export default async function EngagementDetailPage({
             )}
             {engagement.due_date && (
               <span className="text-muted-foreground">
-                · {t("due", { date: engagement.due_date })}
+                · {t("due", { date: formatDate(engagement.due_date, locale, "medium") })}
               </span>
             )}
             {engagement.reminders_paused && (
