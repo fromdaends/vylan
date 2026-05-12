@@ -25,7 +25,6 @@ export type Engagement = {
   created_at: string;
 };
 
-// 256-bit URL-safe random token.
 const tokenAlphabet =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const generateMagicToken = customAlphabet(tokenAlphabet, 43);
@@ -98,9 +97,6 @@ export async function createEngagementWithItems(
   if (engErr || !engagement) throw engErr ?? new Error("create_failed");
 
   if (input.items.length > 0) {
-    // Store the EN strings in `label`/`description` (canonical) and the
-    // FR strings in `label_fr`/`description_fr`. The client portal picks
-    // whichever matches the client's locale at render time.
     const rows = input.items.map((item, idx) => ({
       engagement_id: engagement.id,
       label: item.label_en,
@@ -148,9 +144,26 @@ export async function cancelEngagement(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function completeEngagement(id: string): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ status: "complete", completed_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function reopenEngagement(id: string): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ status: "in_progress", completed_at: null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function deleteDraftEngagement(id: string): Promise<void> {
   const supabase = await getServerSupabase();
-  // Only allow deleting drafts; sent engagements should be cancelled instead.
   const { error } = await supabase
     .from("engagements")
     .delete()

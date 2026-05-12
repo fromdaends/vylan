@@ -130,6 +130,17 @@ export function ItemCard({
             <StatusBadge status={item.status} uploadedCount={uploadedCount} />
           </div>
 
+          {item.status === "rejected" && item.rejection_reason && (
+            <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+              <div className="font-medium text-destructive">
+                {t("rejected_action_needed")}
+              </div>
+              <div className="text-foreground/80 mt-0.5">
+                {item.rejection_reason}
+              </div>
+            </div>
+          )}
+
           {error && <ErrorLine error={error} />}
 
           <div className="mt-3 flex items-center flex-wrap gap-2">

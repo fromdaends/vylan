@@ -2,12 +2,13 @@ import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getEngagement } from "@/lib/db/engagements";
 import { getClient } from "@/lib/db/clients";
-import { listRequestItems } from "@/lib/db/request-items";
+import { listRequestItems, type RequestItem } from "@/lib/db/request-items";
 import {
   listUploadedFilesForEngagement,
   signedDownloadUrl,
   type UploadedFile,
 } from "@/lib/db/uploaded-files";
+import { listActivityForEngagement } from "@/lib/db/activity";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,11 +17,31 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   sendEngagementAction,
   cancelEngagementAction,
+  completeEngagementAction,
+  reopenEngagementAction,
+  sendReminderAction,
   deleteDraftAction,
 } from "@/app/actions/engagements";
+import {
+  approveItemAction,
+  reopenItemAction,
+  removeItemAction,
+} from "@/app/actions/items";
 import { assertLocale } from "@/lib/locale";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
-import { ArrowLeft, Send, X, Trash2, FileText, Download } from "lucide-react";
+import { FilePreviewRow } from "@/components/engagements/file-preview-row";
+import { RejectModal } from "@/components/engagements/reject-modal";
+import { ActivityTimeline } from "@/components/engagements/activity-timeline";
+import { AddItemDialog } from "@/components/engagements/add-item-dialog";
+import {
+  ArrowLeft,
+  Send,
+  X,
+  Trash2,
+  CheckCircle2,
+  RotateCcw,
+  Bell,
+} from "lucide-react";
 
 export default async function EngagementDetailPage({
   params,
@@ -33,23 +54,25 @@ export default async function EngagementDetailPage({
 
   const engagement = await getEngagement(id);
   if (!engagement) notFound();
-  const client = await getClient(engagement.client_id);
-  const items = await listRequestItems(engagement.id);
-  const uploads = await listUploadedFilesForEngagement(engagement.id);
+  const [client, items, uploads, activity] = await Promise.all([
+    getClient(engagement.client_id),
+    listRequestItems(engagement.id),
+    listUploadedFilesForEngagement(engagement.id),
+    listActivityForEngagement(engagement.id),
+  ]);
 
-  // Pre-sign URLs server-side (15 min validity).
-  const uploadsWithUrls: (UploadedFile & { url: string })[] = await Promise.all(
-    uploads.map(async (u) => ({
-      ...u,
-      url: await signedDownloadUrl(u.storage_path, 900).catch(() => "#"),
-    })),
+  // Pre-sign URLs (15 min) for every upload.
+  const filesByItem = new Map<string, (UploadedFile & { url: string })[]>();
+  await Promise.all(
+    uploads.map(async (u) => {
+      const url = await signedDownloadUrl(u.storage_path, 900).catch(
+        () => "#",
+      );
+      const arr = filesByItem.get(u.request_item_id) ?? [];
+      arr.push({ ...u, url });
+      filesByItem.set(u.request_item_id, arr);
+    }),
   );
-  const filesByItem = new Map<string, typeof uploadsWithUrls>();
-  for (const u of uploadsWithUrls) {
-    const arr = filesByItem.get(u.request_item_id) ?? [];
-    arr.push(u);
-    filesByItem.set(u.request_item_id, arr);
-  }
 
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -60,8 +83,13 @@ export default async function EngagementDetailPage({
       ? `${baseUrl}/r/${engagement.magic_token}`
       : null;
 
+  const isLive =
+    engagement.status === "sent" || engagement.status === "in_progress";
+  const isDraft = engagement.status === "draft";
+  const isComplete = engagement.status === "complete";
+
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6">
       <Link
         href="/dashboard"
         className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
@@ -75,7 +103,7 @@ export default async function EngagementDetailPage({
           <h1 className="text-2xl font-semibold tracking-tight">
             {engagement.title}
           </h1>
-          <div className="flex items-center gap-2 mt-2 text-sm">
+          <div className="flex items-center gap-2 mt-2 text-sm flex-wrap">
             <Badge variant={statusVariant(engagement.status)}>
               {tStatus(engagement.status)}
             </Badge>
@@ -95,8 +123,8 @@ export default async function EngagementDetailPage({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {engagement.status === "draft" && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {isDraft && (
             <>
               <form action={sendEngagementAction}>
                 <input type="hidden" name="id" value={engagement.id} />
@@ -115,124 +143,201 @@ export default async function EngagementDetailPage({
               </form>
             </>
           )}
-          {(engagement.status === "sent" ||
-            engagement.status === "in_progress") && (
-            <form action={cancelEngagementAction}>
+          {isLive && (
+            <>
+              <form action={sendReminderAction}>
+                <input type="hidden" name="id" value={engagement.id} />
+                <Button type="submit" variant="outline" size="sm">
+                  <Bell className="size-4" />
+                  {t("send_reminder")}
+                </Button>
+              </form>
+              <form action={completeEngagementAction}>
+                <input type="hidden" name="id" value={engagement.id} />
+                <Button type="submit" size="sm">
+                  <CheckCircle2 className="size-4" />
+                  {t("mark_complete")}
+                </Button>
+              </form>
+              <form action={cancelEngagementAction}>
+                <input type="hidden" name="id" value={engagement.id} />
+                <Button type="submit" variant="ghost" size="sm">
+                  <X className="size-4" />
+                  {t("cancel")}
+                </Button>
+              </form>
+            </>
+          )}
+          {isComplete && (
+            <form action={reopenEngagementAction}>
               <input type="hidden" name="id" value={engagement.id} />
               <Button type="submit" variant="outline" size="sm">
-                <X className="size-4" />
-                {t("cancel")}
+                <RotateCcw className="size-4" />
+                {t("reopen")}
               </Button>
             </form>
           )}
         </div>
       </header>
 
-      {portalUrl && <MagicLinkPanel url={portalUrl} />}
+      {portalUrl && isLive && <MagicLinkPanel url={portalUrl} />}
 
-      {engagement.status === "draft" && (
+      {isDraft && (
         <Alert>
           <AlertDescription>{t("draft_notice")}</AlertDescription>
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            {t("checklist")}{" "}
-            <span className="text-muted-foreground font-normal">
-              ({items.length})
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {items.length === 0 ? (
-            <div className="text-sm text-muted-foreground py-4">
-              {t("checklist_empty")}
-            </div>
-          ) : (
-            <ul className="divide-y divide-border">
-              {items.map((item) => {
-                const label =
-                  locale === "fr" && item.label_fr
-                    ? item.label_fr
-                    : item.label;
-                const files = filesByItem.get(item.id) ?? [];
-                return (
-                  <li key={item.id} className="py-3 space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{label}</div>
-                        <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                          {item.doc_type}
-                          {item.required && (
-                            <span className="ml-2 text-warning">
-                              · {t("required")}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <Badge variant={statusVariant(item.status)}>
-                        {tStatus(item.status)}
-                      </Badge>
-                    </div>
-                    {files.length > 0 && (
-                      <ul className="pl-3 mt-1 space-y-1">
-                        {files.map((f) => (
-                          <li
-                            key={f.id}
-                            className="flex items-center gap-2 text-xs"
-                          >
-                            <FileText className="size-3.5 text-muted-foreground shrink-0" />
-                            <a
-                              href={f.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-foreground hover:underline truncate flex-1"
-                            >
-                              {f.original_filename}
-                            </a>
-                            <span className="font-mono text-muted-foreground shrink-0">
-                              {formatBytes(f.size_bytes)}
-                            </span>
-                            <a
-                              href={f.url}
-                              download={f.original_filename}
-                              aria-label="download"
-                              className="text-muted-foreground hover:text-foreground"
-                            >
-                              <Download className="size-3.5" />
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <section className="lg:col-span-2 space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle className="text-base">
+                {t("checklist")}{" "}
+                <span className="text-muted-foreground font-normal">
+                  ({items.length})
+                </span>
+              </CardTitle>
+              {isLive && <AddItemDialog engagementId={engagement.id} />}
+            </CardHeader>
+            <CardContent>
+              {items.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4">
+                  {t("checklist_empty")}
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {items.map((item) => (
+                    <ItemRow
+                      key={item.id}
+                      item={item}
+                      files={filesByItem.get(item.id) ?? []}
+                      locale={locale}
+                      canEdit={isLive}
+                    />
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
+        <aside className="space-y-4">
+          <ActivityTimeline entries={activity} locale={locale} />
+        </aside>
+      </div>
     </div>
+  );
+}
+
+async function ItemRow({
+  item,
+  files,
+  locale,
+  canEdit,
+}: {
+  item: RequestItem;
+  files: (UploadedFile & { url: string })[];
+  locale: "fr" | "en";
+  canEdit: boolean;
+}) {
+  const t = await getTranslations("Engagements");
+  const tStatus = await getTranslations("Status");
+  const label =
+    locale === "fr" && item.label_fr ? item.label_fr : item.label;
+  const hasSubmittedFiles = files.length > 0;
+
+  return (
+    <li className="py-3 space-y-2">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium truncate">{label}</div>
+          <div className="text-xs text-muted-foreground font-mono mt-0.5">
+            {item.doc_type}
+            {item.required && (
+              <span className="ml-2 text-warning">· {t("required")}</span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge variant={itemBadgeVariant(item.status)}>
+            {tStatus(item.status)}
+          </Badge>
+          {item.status === "submitted" && canEdit && (
+            <>
+              <form action={approveItemAction}>
+                <input type="hidden" name="id" value={item.id} />
+                <Button type="submit" size="sm">
+                  <CheckCircle2 className="size-4" />
+                  {t("approve")}
+                </Button>
+              </form>
+              <RejectModal itemId={item.id} itemLabel={label} />
+            </>
+          )}
+          {item.status === "rejected" && canEdit && (
+            <form action={reopenItemAction}>
+              <input type="hidden" name="id" value={item.id} />
+              <Button type="submit" variant="outline" size="sm">
+                <RotateCcw className="size-4" />
+                {t("reopen_item")}
+              </Button>
+            </form>
+          )}
+          {canEdit &&
+            !hasSubmittedFiles &&
+            (item.status === "pending" || item.status === "na") && (
+              <form action={removeItemAction}>
+                <input type="hidden" name="id" value={item.id} />
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("remove_item")}
+                  title={t("remove_item")}
+                >
+                  <Trash2 className="size-4 text-muted-foreground" />
+                </Button>
+              </form>
+            )}
+        </div>
+      </div>
+
+      {item.status === "rejected" && item.rejection_reason && (
+        <Alert variant="destructive">
+          <AlertDescription className="text-xs">
+            <span className="font-medium">{t("rejection_reason")}: </span>
+            {item.rejection_reason}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {files.length > 0 && (
+        <ul className="space-y-1 mt-2">
+          {files.map((f) => (
+            <FilePreviewRow key={f.id} file={f} url={f.url} />
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 
 function statusVariant(
   status: string,
-):
-  | "default"
-  | "secondary"
-  | "outline"
-  | "destructive" {
+): "default" | "secondary" | "outline" | "destructive" {
   if (status === "complete" || status === "approved") return "default";
   if (status === "cancelled" || status === "rejected") return "destructive";
   if (status === "draft" || status === "na") return "outline";
   return "secondary";
 }
 
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+function itemBadgeVariant(
+  status: string,
+): "default" | "secondary" | "outline" | "destructive" {
+  if (status === "approved") return "default";
+  if (status === "rejected") return "destructive";
+  if (status === "na") return "outline";
+  if (status === "submitted") return "secondary";
+  return "outline";
 }

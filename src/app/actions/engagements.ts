@@ -7,10 +7,13 @@ import {
   createEngagementWithItems,
   sendEngagement,
   cancelEngagement,
+  completeEngagement,
+  reopenEngagement,
   deleteDraftEngagement,
   getEngagement,
   type CreateEngagementInput,
 } from "@/lib/db/engagements";
+import { logUserActivity } from "@/lib/db/activity";
 import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -155,6 +158,46 @@ export async function cancelEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
   await cancelEngagement(id);
+  const engagement = await getEngagement(id);
+  if (engagement) {
+    await logUserActivity(engagement.firm_id, id, "cancel_engagement", {});
+  }
+  revalidatePath("/", "layout");
+}
+
+export async function completeEngagementAction(formData: FormData) {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return;
+  await completeEngagement(id);
+  const engagement = await getEngagement(id);
+  if (engagement) {
+    await logUserActivity(engagement.firm_id, id, "complete_engagement", {});
+  }
+  revalidatePath("/", "layout");
+}
+
+export async function reopenEngagementAction(formData: FormData) {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return;
+  await reopenEngagement(id);
+  const engagement = await getEngagement(id);
+  if (engagement) {
+    await logUserActivity(engagement.firm_id, id, "reopen_engagement", {});
+  }
+  revalidatePath("/", "layout");
+}
+
+export async function sendReminderAction(formData: FormData) {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return;
+  const engagement = await getEngagement(id);
+  if (!engagement || !engagement.magic_token) return;
+  try {
+    await deliverInviteEmail(id);
+    await logUserActivity(engagement.firm_id, id, "manual_reminder", {});
+  } catch (e) {
+    console.error("[sendReminderAction] failed:", e);
+  }
   revalidatePath("/", "layout");
 }
 
