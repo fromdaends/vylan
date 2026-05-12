@@ -5,6 +5,7 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { brand } from "@/lib/brand";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -44,9 +45,12 @@ export default async function LocaleLayout({
     <html
       lang={locale}
       className={`${inter.variable} ${jetBrainsMono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        <ThemeProvider>
+          <NextIntlClientProvider>{children}</NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
