@@ -1,6 +1,5 @@
 import { useTranslations } from "next-intl";
-import { Badge } from "@/components/ui/badge";
-import { Sparkles, AlertTriangle } from "lucide-react";
+import { Sparkles, AlertTriangle, Loader2 } from "lucide-react";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
 
@@ -19,12 +18,19 @@ export function AiBadge({
   expectedDocType: DocType;
 }) {
   const t = useTranslations("Ai");
+
   if (file.ai_classification == null || file.ai_confidence == null) {
     return (
-      <Badge variant="outline" className="text-xs font-normal">
-        <Sparkles className="size-3" />
-        {t("pending")}
-      </Badge>
+      <div
+        className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-muted-foreground/30 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+        title={t("pending_tooltip")}
+      >
+        <Loader2 className="size-3 animate-spin" />
+        <span className="font-medium uppercase tracking-wide text-[10px]">
+          {t("label")}
+        </span>
+        <span>{t("pending")}</span>
+      </div>
     );
   }
 
@@ -33,6 +39,7 @@ export function AiBadge({
   const conf = file.ai_confidence;
   const looksCorrect = fields.looks_correct === true;
   const mismatch = detected !== expectedDocType && detected !== "unknown";
+  const isWrong = mismatch || !looksCorrect;
   const lowConfidence = conf < 0.5;
 
   const bits: string[] = [];
@@ -42,40 +49,60 @@ export function AiBadge({
   if (typeof fields.extracted_amount_or_total === "number") {
     bits.push(formatCad(fields.extracted_amount_or_total));
   }
-  const summary = bits.length > 0 ? " — " + bits.join(" · ") : "";
 
-  if (mismatch || !looksCorrect) {
+  // Wrong / mismatch — red alert.
+  if (isWrong) {
     return (
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <Badge variant="destructive">
+      <div className="rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-xs space-y-1">
+        <div className="inline-flex items-center gap-1.5 text-destructive">
           <AlertTriangle className="size-3" />
-          {t("mismatch", {
-            expected: expectedDocType.toUpperCase(),
-            detected: detected.toUpperCase(),
-          })}
-        </Badge>
+          <span className="font-medium uppercase tracking-wide text-[10px]">
+            {t("label")}
+          </span>
+          <span className="font-medium">
+            {detected === "unknown"
+              ? t("not_a_document", { expected: expectedDocType.toUpperCase() })
+              : t("mismatch", {
+                  expected: expectedDocType.toUpperCase(),
+                  detected: detected.toUpperCase(),
+                })}
+          </span>
+          <span className="font-mono text-destructive/70 ml-auto">
+            {Math.round(conf * 100)}%
+          </span>
+        </div>
         {fields.issue_if_any && (
-          <span className="text-destructive">{fields.issue_if_any}</span>
+          <p className="text-destructive/90 leading-snug">
+            {fields.issue_if_any}
+          </p>
         )}
+        <p className="text-muted-foreground text-[11px] italic">
+          {t("advisory")}
+        </p>
       </div>
     );
   }
 
+  // Match — green (or amber if low confidence).
+  const tone = lowConfidence
+    ? "border-warning/40 bg-warning/5 text-warning"
+    : "border-success/40 bg-success/5 text-success";
   return (
-    <div className="flex items-center gap-1.5 text-xs">
-      <Badge
-        variant="secondary"
-        className={
-          lowConfidence
-            ? "bg-warning/10 text-warning"
-            : "bg-success/10 text-success"
-        }
-      >
-        <Sparkles className="size-3" />
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-md border ${tone} px-2 py-1 text-xs`}
+      title={t("advisory")}
+    >
+      <Sparkles className="size-3" />
+      <span className="font-medium uppercase tracking-wide text-[10px]">
+        {t("label")}
+      </span>
+      <span className="font-medium">
         {t("likely", { type: detected.toUpperCase() })}
-        {summary}
-      </Badge>
-      <span className="font-mono text-muted-foreground">
+      </span>
+      {bits.length > 0 && (
+        <span className="text-muted-foreground">— {bits.join(" · ")}</span>
+      )}
+      <span className="font-mono text-muted-foreground ml-1">
         {Math.round(conf * 100)}%
       </span>
     </div>

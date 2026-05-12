@@ -224,6 +224,7 @@
     "mark_complete": "Mark complete",
     "reopen": "Reopen",
     "open_new_tab": "Open in new tab",
+    "reclassify": "Re-classify with AI",
     "errors": {
       "missing_client": "Pick a client.",
       "missing_template": "Pick a template.",
@@ -251,9 +252,13 @@
     "other_engagements": "Other engagements"
   },
   "Ai": {
-    "pending": "AI analysis pending…",
-    "likely": "Likely {type}",
-    "mismatch": "Expected: {expected}, detected: {detected}"
+    "label": "AI",
+    "pending": "Analyzing…",
+    "pending_tooltip": "AI is reviewing this document. Takes a few seconds.",
+    "likely": "Looks like {type}",
+    "mismatch": "Expected {expected}, got {detected}",
+    "not_a_document": "Not a {expected}",
+    "advisory": "Suggestion only. You make the call."
   },
   "Activity": {
     "title": "Activity",

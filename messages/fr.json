@@ -252,9 +252,13 @@
     "other_engagements": "Autres engagements"
   },
   "Ai": {
-    "pending": "Analyse IA en cours…",
+    "label": "IA",
+    "pending": "Analyse en cours…",
+    "pending_tooltip": "L'IA examine ce document. Ça prend quelques secondes.",
     "likely": "Probablement {type}",
-    "mismatch": "Attendu : {expected}, détecté : {detected}"
+    "mismatch": "Attendu {expected}, détecté {detected}",
+    "not_a_document": "Ce n'est pas un {expected}",
+    "advisory": "Suggestion automatique. Vous gardez le dernier mot."
   },
   "Activity": {
     "title": "Activité",

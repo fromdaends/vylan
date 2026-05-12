@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { after } from "next/server";
 import { nanoid } from "nanoid";
 import {
   findItemForToken,
@@ -8,6 +9,7 @@ import {
 } from "@/lib/db/portal";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { enqueueJob } from "@/lib/db/jobs";
+import { processClassifyJob } from "@/lib/ai/process";
 import {
   MAX_BYTES,
   isAllowedMime,
@@ -129,11 +131,34 @@ export async function POST(request: NextRequest) {
     size_bytes: storedBytes.length,
   });
 
-  // Fire-and-forget: enqueue an AI classification job. Runs at next cron tick.
+  // Enqueue an AI classification job (durable, retryable via cron) AND fire
+  // it inline after the response goes out so the badge updates within seconds.
+  // If the inline run fails for any reason, the cron will retry the queued job.
   await enqueueJob({
     kind: "classify_document",
     payload: { uploaded_file_id: inserted.id },
     runAfter: new Date(),
+  });
+
+  after(async () => {
+    try {
+      const result = await processClassifyJob({
+        uploaded_file_id: inserted.id,
+      });
+      if (result.classified) {
+        // Mark the queued job done so cron skips it.
+        const sb = getServiceRoleSupabase();
+        await sb
+          .from("jobs")
+          .update({ status: "done", last_error: "processed_inline" })
+          .eq("kind", "classify_document")
+          .eq("status", "pending")
+          .eq("payload->>uploaded_file_id", inserted.id);
+      }
+    } catch (e) {
+      console.error("[portal/upload] inline classification failed:", e);
+      // Leave the job pending — cron handles retry.
+    }
   });
 
   return NextResponse.json({ ok: true });

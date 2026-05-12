@@ -1,8 +1,13 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { enqueueJob } from "@/lib/db/jobs";
-import { getServerSupabase } from "@/lib/supabase/server";
+import {
+  getServerSupabase,
+  getServiceRoleSupabase,
+} from "@/lib/supabase/server";
+import { processClassifyJob } from "@/lib/ai/process";
 
 export async function reclassifyFileAction(formData: FormData) {
   const id = formData.get("id");
@@ -18,10 +23,29 @@ export async function reclassifyFileAction(formData: FormData) {
     .maybeSingle();
   if (!file) return;
 
+  // Queue for durability; also run inline so the badge updates immediately.
   await enqueueJob({
     kind: "classify_document",
     payload: { uploaded_file_id: id },
     runAfter: new Date(),
   });
+
+  after(async () => {
+    try {
+      const result = await processClassifyJob({ uploaded_file_id: id });
+      if (result.classified) {
+        const root = getServiceRoleSupabase();
+        await root
+          .from("jobs")
+          .update({ status: "done", last_error: "processed_inline" })
+          .eq("kind", "classify_document")
+          .eq("status", "pending")
+          .eq("payload->>uploaded_file_id", id);
+      }
+    } catch (e) {
+      console.error("[reclassify] inline run failed:", e);
+    }
+  });
+
   revalidatePath("/", "layout");
 }
