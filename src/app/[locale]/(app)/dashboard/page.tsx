@@ -2,6 +2,9 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { listEngagements, type Engagement } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
+
+// Real-time data: dashboard reflects DB state on every visit.
+export const dynamic = "force-dynamic";
 import { listRequestItems } from "@/lib/db/request-items";
 import {
   Card,

@@ -2,6 +2,10 @@ import { Suspense } from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listClients } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
+
+// Real-time data: never serve a cached version after Mark complete /
+// archive / etc.
+export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { ClientsToolbar } from "@/components/clients/clients-toolbar";
