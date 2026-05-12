@@ -3,21 +3,21 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { listEngagements, type Engagement } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
 
-// Real-time data: dashboard reflects DB state on every visit.
 export const dynamic = "force-dynamic";
 import { listRequestItems } from "@/lib/db/request-items";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
-import { Plus, AlertTriangle, Clock, FileWarning, CheckCheck } from "lucide-react";
+import {
+  Plus,
+  AlertTriangle,
+  Clock,
+  FileWarning,
+  CheckCheck,
+  ChevronRight,
+  Inbox,
+} from "lucide-react";
 import {
   computeAttention,
   attentionScore,
@@ -46,14 +46,16 @@ export default async function DashboardPage({
     listClients({ includeArchived: false }),
   ]);
 
-  // Batch-fetch items + last-activity per engagement.
   const sb = await getServerSupabase();
   const liveIds = engagements
     .filter((e) => e.status === "sent" || e.status === "in_progress")
     .map((e) => e.id);
 
   const [allItemsResp, lastActivityResp] = await Promise.all([
-    sb.from("request_items").select("*").in("engagement_id", liveIds.length ? liveIds : [""]),
+    sb
+      .from("request_items")
+      .select("*")
+      .in("engagement_id", liveIds.length ? liveIds : [""]),
     sb
       .from("uploaded_files")
       .select("engagement_id, uploaded_at")
@@ -96,14 +98,11 @@ export default async function DashboardPage({
         v.engagement.status === "in_progress") &&
       isReadyToReview(v.attention),
   );
-  // All other engagements that are alive but quiet — drafts, sent-but-fresh,
-  // recently complete. Surfaced as a catch-all so nothing goes missing.
   const flaggedIds = new Set(
     [...needsAttention, ...readyToReview].map((v) => v.engagement.id),
   );
   const other = vms.filter((v) => !flaggedIds.has(v.engagement.id)).slice(0, 8);
 
-  // Top metrics.
   const activeCount = vms.filter(
     (v) =>
       v.engagement.status === "sent" || v.engagement.status === "in_progress",
@@ -123,23 +122,23 @@ export default async function DashboardPage({
   const clientsById = new Map(clients.map((c) => [c.id, c]));
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-8">
+      <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-3xl font-semibold tracking-tight">
             {t("dashboard_title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">{firm?.name}</p>
+          <p className="text-sm text-muted-foreground mt-1.5">{firm?.name}</p>
         </div>
         <Link href="/engagements/new">
-          <Button size="sm">
-            <Plus className="size-4" />
+          <Button>
+            <Plus className="h-4 w-4" />
             {tEng("new")}
           </Button>
         </Link>
       </header>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-in-stagger">
         <Metric label={t("metric_clients")} value={clients.length} />
         <Metric label={tAttention("metric_active")} value={activeCount} />
         <Metric label={tAttention("metric_pending")} value={pendingItemsTotal} />
@@ -150,123 +149,114 @@ export default async function DashboardPage({
         />
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <AlertTriangle className="size-4 text-warning" />
-            {tAttention("needs_attention")}{" "}
-            <span className="text-muted-foreground font-normal">
-              ({needsAttention.length})
-            </span>
-          </CardTitle>
-          <CardDescription>{tAttention("needs_attention_hint")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {needsAttention.length === 0 ? (
-            <div className="text-sm text-muted-foreground py-4">
-              {tAttention("empty_attention")}
-            </div>
-          ) : (
-            <ul className="divide-y divide-border">
-              {needsAttention.map((v) => (
-                <AttentionRow
-                  key={v.engagement.id}
-                  v={v}
-                  clientName={
-                    clientsById.get(v.engagement.client_id)?.display_name ??
-                    "—"
-                  }
-                  tStatus={tStatus}
-                  tAttention={tAttention}
-                />
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+      <Section
+        title={tAttention("needs_attention")}
+        count={needsAttention.length}
+        hint={tAttention("needs_attention_hint")}
+        icon={<AlertTriangle className="h-4 w-4 text-warning" />}
+      >
+        {needsAttention.length === 0 ? (
+          <EmptyState
+            icon={<CheckCheck className="h-5 w-5" />}
+            text={tAttention("empty_attention")}
+          />
+        ) : (
+          <ul className="divide-y divide-border/60">
+            {needsAttention.map((v) => (
+              <AttentionRow
+                key={v.engagement.id}
+                v={v}
+                clientName={
+                  clientsById.get(v.engagement.client_id)?.display_name ?? "—"
+                }
+                tStatus={tStatus}
+                tAttention={tAttention}
+              />
+            ))}
+          </ul>
+        )}
+      </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <CheckCheck className="size-4 text-success" />
-            {tAttention("ready_to_review")}{" "}
-            <span className="text-muted-foreground font-normal">
-              ({readyToReview.length})
-            </span>
-          </CardTitle>
-          <CardDescription>{tAttention("ready_to_review_hint")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {readyToReview.length === 0 ? (
-            <div className="text-sm text-muted-foreground py-4">
-              {tAttention("empty_review")}
-            </div>
-          ) : (
-            <ul className="divide-y divide-border">
-              {readyToReview.map((v) => (
-                <li key={v.engagement.id} className="py-3">
-                  <Link
-                    href={`/engagements/${v.engagement.id}`}
-                    className="flex items-center justify-between gap-3 hover:text-foreground"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">
-                        {v.engagement.title}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {clientsById.get(v.engagement.client_id)?.display_name ??
-                          "—"}
-                      </div>
+      <Section
+        title={tAttention("ready_to_review")}
+        count={readyToReview.length}
+        hint={tAttention("ready_to_review_hint")}
+        icon={<CheckCheck className="h-4 w-4 text-success" />}
+      >
+        {readyToReview.length === 0 ? (
+          <EmptyState
+            icon={<Inbox className="h-5 w-5" />}
+            text={tAttention("empty_review")}
+          />
+        ) : (
+          <ul className="divide-y divide-border/60">
+            {readyToReview.map((v) => (
+              <li key={v.engagement.id}>
+                <Link
+                  href={`/engagements/${v.engagement.id}`}
+                  className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {v.engagement.title}
                     </div>
-                    <Badge variant="secondary">
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {clientsById.get(v.engagement.client_id)?.display_name ??
+                        "—"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="secondary" className="font-normal">
                       {tAttention("items_ready", {
                         count: v.attention.itemsReadyToReview,
                       })}
                     </Badge>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
 
       {other.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              {tAttention("other_engagements")}{" "}
-              <span className="text-muted-foreground font-normal">
-                ({other.length})
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="divide-y divide-border">
-              {other.map((v) => (
-                <li key={v.engagement.id} className="py-3">
-                  <Link
-                    href={`/engagements/${v.engagement.id}`}
-                    className="flex items-center justify-between gap-3 hover:text-foreground"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">
-                        {v.engagement.title}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {clientsById.get(v.engagement.client_id)?.display_name ??
-                          "—"}
-                      </div>
+        <Section
+          title={tAttention("other_engagements")}
+          count={other.length}
+          hint=""
+          icon={null}
+        >
+          <ul className="divide-y divide-border/60">
+            {other.map((v) => (
+              <li key={v.engagement.id}>
+                <Link
+                  href={`/engagements/${v.engagement.id}`}
+                  className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {v.engagement.title}
                     </div>
-                    <Badge variant={statusBadge(v.engagement.status)}>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {clientsById.get(v.engagement.client_id)?.display_name ??
+                        "—"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge
+                      variant={statusBadge(v.engagement.status)}
+                      className="font-normal"
+                    >
                       {tStatus(v.engagement.status)}
                     </Badge>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
     </div>
   );
@@ -291,20 +281,66 @@ function Metric({
   tone?: "default" | "warning";
 }) {
   return (
-    <Card>
-      <CardContent className="py-4">
-        <div className="text-xs text-muted-foreground uppercase tracking-wide">
-          {label}
+    <div className="rounded-xl border border-border bg-card px-5 py-4 hover-lift transition-colors hover:border-foreground/20">
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
+        {label}
+      </div>
+      <div
+        className={
+          "text-3xl font-semibold tracking-tight mt-2 font-mono tabular-nums " +
+          (tone === "warning" && value > 0 ? "text-warning" : "")
+        }
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function Section({
+  title,
+  count,
+  hint,
+  icon,
+  children,
+}: {
+  title: string;
+  count: number;
+  hint: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-xl border border-border bg-card animate-in-up">
+      <header className="px-5 py-4 border-b border-border/60">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          {icon}
+          <span>{title}</span>
+          <span className="text-muted-foreground font-normal tabular-nums">
+            ({count})
+          </span>
         </div>
-        <div
-          className={`text-2xl font-semibold mt-1 ${
-            tone === "warning" && value > 0 ? "text-warning" : ""
-          }`}
-        >
-          {value}
-        </div>
-      </CardContent>
-    </Card>
+        {hint && (
+          <p className="text-xs text-muted-foreground mt-1.5">{hint}</p>
+        )}
+      </header>
+      <div className="px-5 py-2">{children}</div>
+    </section>
+  );
+}
+
+function EmptyState({
+  icon,
+  text,
+}: {
+  icon: React.ReactNode;
+  text: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-8 text-muted-foreground">
+      <div className="opacity-60">{icon}</div>
+      <p className="text-sm">{text}</p>
+    </div>
   );
 }
 
@@ -321,49 +357,57 @@ function AttentionRow({
 }) {
   const pct = Math.round(v.attention.completionPct * 100);
   return (
-    <li className="py-3">
+    <li>
       <Link
         href={`/engagements/${v.engagement.id}`}
-        className="flex items-center justify-between gap-3 hover:text-foreground"
+        className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
       >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium truncate">{v.engagement.title}</span>
+            <span className="font-medium text-sm truncate">
+              {v.engagement.title}
+            </span>
             <span className="text-xs text-muted-foreground">{clientName}</span>
           </div>
-          <div className="flex items-center gap-2 mt-1 flex-wrap text-xs">
+          <div className="flex items-center gap-2 mt-1.5 flex-wrap text-xs">
             {v.attention.reasons.includes("overdue") && (
-              <Badge variant="destructive">
-                <AlertTriangle className="size-3" />
+              <Badge variant="destructive" className="font-normal">
+                <AlertTriangle className="h-3 w-3" />
                 {tAttention("overdue_by", {
                   days: v.attention.daysOverdue ?? 0,
                 })}
               </Badge>
             )}
             {v.attention.reasons.includes("due_soon") && (
-              <Badge variant="secondary">
-                <Clock className="size-3" />
-                {tAttention("due_in", {
-                  days: v.attention.daysUntilDue ?? 0,
-                })}
+              <Badge variant="secondary" className="font-normal">
+                <Clock className="h-3 w-3" />
+                {tAttention("due_in", { days: v.attention.daysUntilDue ?? 0 })}
               </Badge>
             )}
             {v.attention.reasons.includes("stale") && (
-              <Badge variant="outline">
-                <FileWarning className="size-3" />
+              <Badge variant="outline" className="font-normal">
+                <FileWarning className="h-3 w-3" />
                 {tAttention("stale_days", {
                   days: v.attention.daysSinceClientActivity ?? 0,
                 })}
               </Badge>
             )}
-            <span className="text-muted-foreground font-mono">
+            <span className="text-muted-foreground font-mono tabular-nums">
               {pct}% · {v.attention.itemsDone}/{v.attention.itemsTotal}
             </span>
           </div>
         </div>
-        <Badge variant={v.engagement.status === "in_progress" ? "secondary" : "outline"}>
-          {tStatus(v.engagement.status)}
-        </Badge>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge
+            variant={
+              v.engagement.status === "in_progress" ? "secondary" : "outline"
+            }
+            className="font-normal"
+          >
+            {tStatus(v.engagement.status)}
+          </Badge>
+          <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+        </div>
       </Link>
     </li>
   );

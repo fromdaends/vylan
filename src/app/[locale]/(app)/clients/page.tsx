@@ -64,20 +64,20 @@ export default async function ClientsPage({
   const t = await getTranslations("Clients");
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-8">
+      <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-3xl font-semibold tracking-tight">
             {t("title")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-1.5">
             {t("count", { count: clients.length })}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/clients/import">
-            <Button variant="outline" size="sm">
-              <Upload className="size-4" />
+            <Button variant="outline">
+              <Upload className="h-4 w-4" />
               {t("import_csv")}
             </Button>
           </Link>

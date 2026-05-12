@@ -52,19 +52,26 @@ export function PortalShell({
   return (
     <div className="flex-1 flex flex-col">
       <header
-        className="border-b border-border"
+        className="relative overflow-hidden"
         style={{ background: ctx.firm.brand_color, color: "#fafaf9" }}
       >
-        <div className="mx-auto max-w-2xl px-4 sm:px-6 py-5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        {/* Subtle highlight overlay */}
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,.18),transparent_60%)]"
+        />
+        <div className="relative mx-auto max-w-2xl px-4 sm:px-6 py-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <div
-              className="size-9 rounded-full bg-white/15 flex items-center justify-center font-semibold text-sm"
+              className="size-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center font-semibold text-sm shrink-0"
               aria-hidden
             >
               {initials}
             </div>
             <div className="min-w-0">
-              <div className="font-semibold truncate">{ctx.firm.name}</div>
+              <div className="font-semibold truncate text-base">
+                {ctx.firm.name}
+              </div>
               <div className="text-xs opacity-80 truncate">
                 {ctx.engagement.title}
               </div>
@@ -72,39 +79,42 @@ export function PortalShell({
           </div>
           <a
             href={`?lang=${otherLocale}`}
-            className="text-xs underline opacity-90 hover:opacity-100 shrink-0"
+            className="text-xs font-medium px-2.5 py-1 rounded-md bg-white/15 hover:bg-white/25 transition-colors shrink-0"
           >
             {otherLocale.toUpperCase()}
           </a>
         </div>
       </header>
 
-      <main className="flex-1 mx-auto w-full max-w-2xl px-4 sm:px-6 py-6 space-y-6">
+      <main className="flex-1 mx-auto w-full max-w-2xl px-4 sm:px-6 py-8 space-y-8 animate-in-up">
         <section>
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="text-2xl font-semibold tracking-tight">
             {t("greeting", { name: ctx.client.display_name })}
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
             {t("subhead", { firm: ctx.firm.name })}
           </p>
         </section>
 
-        <section>
-          <div className="flex items-center justify-between text-sm mb-2">
-            <span className="font-medium">
-              {t("progress", { done, total })}
+        <section className="rounded-xl border border-border bg-card p-5">
+          <div className="flex items-baseline justify-between text-sm mb-3">
+            <span className="font-medium">{t("progress", { done, total })}</span>
+            <span className="text-muted-foreground font-mono tabular-nums">
+              {pct}%
             </span>
-            <span className="text-muted-foreground">{pct}%</span>
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
             <div
-              className="h-full bg-success transition-all"
-              style={{ width: `${pct}%` }}
+              className="h-full rounded-full transition-all duration-500 ease-out"
+              style={{
+                width: `${pct}%`,
+                background: ctx.firm.brand_color,
+              }}
             />
           </div>
         </section>
 
-        <section className="space-y-3">
+        <section className="space-y-3 animate-in-stagger">
           {items.map((item) => (
             <ItemCard
               key={item.id}
@@ -120,18 +130,18 @@ export function PortalShell({
           ))}
         </section>
 
-        <footer className="text-center text-sm text-muted-foreground pt-4 border-t border-border">
+        <footer className="text-center text-sm text-muted-foreground pt-6 border-t border-border/60">
           <p>
             {t("help_intro")}{" "}
             <a
               href={helpMailto}
-              className="text-foreground underline"
+              className="text-foreground font-medium underline underline-offset-4"
             >
               {t("help_link")}
             </a>
           </p>
-          <p className="mt-4 text-xs text-muted-foreground/70">
-            {t("powered_by")} <span className="font-medium">Relai</span>
+          <p className="mt-4 text-xs text-muted-foreground/70 font-mono">
+            {t("powered_by")} <span className="font-sans font-medium">Relai</span>
           </p>
         </footer>
       </main>

@@ -34,10 +34,10 @@ export default async function BillingPage({
   const stripeConfigured = isStripeConfigured();
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t("subtitle")}</p>
+    <div className="space-y-8 max-w-3xl">
+      <header className="animate-in-up">
+        <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
+        <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>
       </header>
 
       {sp.status === "success" && (

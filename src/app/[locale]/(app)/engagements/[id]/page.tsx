@@ -101,12 +101,12 @@ export default async function EngagementDetailPage({
         {t("back")}
       </Link>
 
-      <header className="flex flex-wrap items-start justify-between gap-3">
+      <header className="flex flex-wrap items-start justify-between gap-3 animate-in-up">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
+          <h1 className="text-3xl font-semibold tracking-tight">
             {engagement.title}
           </h1>
-          <div className="flex items-center gap-2 mt-2 text-sm flex-wrap">
+          <div className="flex items-center gap-2 mt-2.5 text-sm flex-wrap">
             <Badge variant={statusVariant(engagement.status)}>
               {tStatus(engagement.status)}
             </Badge>
