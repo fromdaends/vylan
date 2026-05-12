@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
-import type { PlanId } from "@/lib/plans";
+import { planForPriceId } from "@/lib/plans";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,7 +65,29 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ received: true });
 }
 
+// Locate the firm row by Stripe customer_id. This is the only trusted link
+// between a Stripe event and a firm — metadata.firm_id is mutable and not
+// safe to use as the sole identifier for upgrade-impacting mutations.
+async function findFirmForCustomer(
+  customerId: string | null,
+): Promise<{ id: string; stripe_customer_id: string | null } | null> {
+  if (!customerId) return null;
+  const sb = getServiceRoleSupabase();
+  const { data } = await sb
+    .from("firms")
+    .select("id, stripe_customer_id")
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle();
+  return data ?? null;
+}
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  // The session was just initiated by our authenticated user, so trusting
+  // metadata.firm_id at this stage is acceptable (the customer can't tamper
+  // with the session object between create and the webhook firing). We use
+  // it to bootstrap the stripe_customer_id ↔ firm link for the very first
+  // subscribe. After this, all subsequent subscription events are matched
+  // by customer ID, which can't be forged.
   const firmId = session.metadata?.firm_id;
   if (!firmId) return;
   const sb = getServiceRoleSupabase();
@@ -81,11 +103,25 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 }
 
 async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
-  const firmId = (sub.metadata?.firm_id ?? "") as string;
-  if (!firmId) return;
-  // Plan derived from the first item's price metadata. We set it in
-  // checkout's subscription_data.metadata. Fallback to existing.
-  const planFromMeta = (sub.metadata?.plan ?? "") as PlanId;
+  const customerId =
+    typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
+  const firm = await findFirmForCustomer(customerId);
+  if (!firm) {
+    console.warn(
+      "[billing/webhook] subscription update for unknown customer",
+      customerId,
+    );
+    return;
+  }
+
+  // Derive plan from the price ID on the first subscription item — NEVER
+  // from metadata. Metadata can be edited by the user (or by us in error)
+  // and trusting it would let an attacker self-upgrade for free.
+  const firstItem = sub.items.data[0];
+  const priceId =
+    typeof firstItem?.price?.id === "string" ? firstItem.price.id : null;
+  const plan = priceId ? planForPriceId(priceId) : null;
+
   const sb = getServiceRoleSupabase();
   const periodEnd = (sub as Stripe.Subscription & { current_period_end?: number })
     .current_period_end;
@@ -97,13 +133,22 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
         ? new Date(periodEnd * 1000).toISOString()
         : null,
   };
-  if (planFromMeta) updates.plan = planFromMeta;
-  await sb.from("firms").update(updates).eq("id", firmId);
+  if (plan) {
+    updates.plan = plan;
+  } else if (priceId) {
+    console.warn(
+      "[billing/webhook] unknown price_id, plan unchanged:",
+      priceId,
+    );
+  }
+  await sb.from("firms").update(updates).eq("id", firm.id);
 }
 
 async function handleSubscriptionDeleted(sub: Stripe.Subscription) {
-  const firmId = (sub.metadata?.firm_id ?? "") as string;
-  if (!firmId) return;
+  const customerId =
+    typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
+  const firm = await findFirmForCustomer(customerId);
+  if (!firm) return;
   const sb = getServiceRoleSupabase();
   await sb
     .from("firms")
@@ -111,5 +156,5 @@ async function handleSubscriptionDeleted(sub: Stripe.Subscription) {
       subscription_status: "canceled",
       plan: "trial",
     })
-    .eq("id", firmId);
+    .eq("id", firm.id);
 }

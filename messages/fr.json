@@ -74,6 +74,7 @@
       "signup_failed": "Impossible de créer le compte. Veuillez réessayer.",
       "reset_sent": "Si ce courriel existe, un lien vient d’être envoyé.",
       "reset_failed": "Le lien est invalide ou a expiré. Veuillez recommencer.",
+      "rate_limited": "Trop de tentatives. Veuillez patienter avant de réessayer.",
       "min_8_chars": "Au moins 8 caractères.",
       "min_2_chars": "Au moins 2 caractères.",
       "invalid_email": "Courriel invalide.",

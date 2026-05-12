@@ -1,0 +1,110 @@
+// Distributed rate limiting backed by Upstash Redis. The module is designed
+// to fail open when not configured: if UPSTASH_REDIS_REST_URL /
+// UPSTASH_REDIS_REST_TOKEN are missing, every check returns `{ ok: true }`
+// so local dev and staging environments without Redis still work. In
+// production these env vars MUST be set; missing values are flagged by the
+// startup probe (see env.ts).
+//
+// Usage:
+//   const r = await checkRateLimit({ key: `login:${ip}`, ...LOGIN_LIMIT });
+//   if (!r.ok) return tooMany(r.retryAfter);
+
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
+type Window = `${number} s` | `${number} m` | `${number} h` | `${number} d`;
+
+export type LimitSpec = {
+  limit: number;
+  window: Window;
+};
+
+// ---- Tunables --------------------------------------------------------------
+
+// Auth endpoints — strict against credential stuffing and signup abuse.
+export const LOGIN_LIMIT: LimitSpec = { limit: 8, window: "1 m" };
+export const SIGNUP_LIMIT: LimitSpec = { limit: 5, window: "1 h" };
+export const PASSWORD_RESET_LIMIT: LimitSpec = { limit: 5, window: "1 h" };
+
+// Portal endpoints — token-scoped (the magic token is the identity).
+export const PORTAL_UPLOAD_PER_TOKEN: LimitSpec = { limit: 30, window: "1 h" };
+export const PORTAL_UPLOAD_PER_IP: LimitSpec = { limit: 60, window: "1 h" };
+export const PORTAL_MUTATION_PER_TOKEN: LimitSpec = { limit: 120, window: "1 h" };
+
+// AI / cost-bound endpoints.
+export const AI_CLASSIFY_PER_FIRM_DAILY: LimitSpec = { limit: 500, window: "1 d" };
+
+// Misc.
+export const FEEDBACK_PER_USER: LimitSpec = { limit: 5, window: "1 h" };
+
+// ---- Internals -------------------------------------------------------------
+
+let redis: Redis | null = null;
+const limiters = new Map<string, Ratelimit>();
+
+function getRedis(): Redis | null {
+  if (redis) return redis;
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  if (!url || !token) return null;
+  redis = new Redis({ url, token });
+  return redis;
+}
+
+function getLimiter(spec: LimitSpec): Ratelimit | null {
+  const r = getRedis();
+  if (!r) return null;
+  const cacheKey = `${spec.limit}|${spec.window}`;
+  const cached = limiters.get(cacheKey);
+  if (cached) return cached;
+  const lim = new Ratelimit({
+    redis: r,
+    limiter: Ratelimit.slidingWindow(spec.limit, spec.window),
+    analytics: false,
+    prefix: "relai_rl",
+  });
+  limiters.set(cacheKey, lim);
+  return lim;
+}
+
+export type RateLimitResult = {
+  ok: boolean;
+  retryAfter?: number; // seconds
+};
+
+export async function checkRateLimit(args: {
+  key: string;
+  limit: number;
+  window: Window;
+}): Promise<RateLimitResult> {
+  const limiter = getLimiter({ limit: args.limit, window: args.window });
+  if (!limiter) return { ok: true };
+  try {
+    const res = await limiter.limit(args.key);
+    if (res.success) return { ok: true };
+    const retryAfter = Math.max(
+      1,
+      Math.ceil((res.reset - Date.now()) / 1000),
+    );
+    return { ok: false, retryAfter };
+  } catch (e) {
+    // Fail open on Redis transport errors — better to accept the request
+    // than to lock the whole app out if Upstash hiccups.
+    console.error("[rate-limit] check failed, failing open:", e);
+    return { ok: true };
+  }
+}
+
+// Convenience: pull the client IP off a NextRequest-like object. Vercel
+// sets x-forwarded-for and strips client-set overrides, so this is safe to
+// trust in production behind Vercel.
+export function ipFromRequest(req: {
+  headers: { get(name: string): string | null };
+}): string {
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  return "unknown";
+}

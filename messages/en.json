@@ -74,6 +74,7 @@
       "signup_failed": "Couldn't create the account. Please try again.",
       "reset_sent": "If that email exists, a reset link is on its way.",
       "reset_failed": "The link is invalid or expired. Please request a new one.",
+      "rate_limited": "Too many attempts. Please wait a moment and try again.",
       "min_8_chars": "At least 8 characters.",
       "min_2_chars": "At least 2 characters.",
       "invalid_email": "Invalid email.",
