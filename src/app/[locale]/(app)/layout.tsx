@@ -60,6 +60,9 @@ export default async function AppLayout({
               <Link href="/templates" className="hover:text-foreground">
                 {t("nav_templates")}
               </Link>
+              <Link href="/billing" className="hover:text-foreground">
+                {t("nav_billing")}
+              </Link>
               <Link href="/settings" className="hover:text-foreground">
                 {t("nav_settings")}
               </Link>

@@ -109,6 +109,70 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+export function buildWelcomeEmail(opts: {
+  firmName: string;
+  ownerName: string;
+  appUrl: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  if (opts.locale === "fr") {
+    const subject = `Bienvenue chez Relai, ${opts.ownerName}`;
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Bonjour ${escapeHtml(opts.ownerName)},</p>
+<p>Bienvenue chez <strong>Relai</strong> &mdash; vous voilà prêt à arrêter de courir après les documents de vos clients.</p>
+<p>Voici trois choses qui prennent moins de cinq minutes :</p>
+<ol style="padding-left:20px">
+  <li style="margin-bottom:8px"><strong>Ajouter vos clients</strong> &mdash; importez votre fichier CSV existant ou ajoutez-les un par un.</li>
+  <li style="margin-bottom:8px"><strong>Créer votre premier engagement</strong> &mdash; choisissez un modèle (T1, T2, tenue de livres) et envoyez le lien magique au client. Aucun mot de passe à créer pour eux.</li>
+  <li style="margin-bottom:8px"><strong>Laissez Relai relancer pour vous</strong> &mdash; rappels intelligents, alertes IA si le client envoie le mauvais slip.</li>
+</ol>
+<p style="margin:24px 0">
+  <a href="${opts.appUrl}/dashboard" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Ouvrir mon tableau de bord</a>
+</p>
+<p style="color:#64748b;font-size:13px">Votre essai gratuit de 14 jours est commencé. Aucun mode de paiement n'est requis avant de choisir un forfait.</p>
+<p style="color:#64748b;font-size:13px">Une question ? Répondez directement à ce courriel.</p>
+</body></html>`;
+    const text = `Bonjour ${opts.ownerName},
+
+Bienvenue chez Relai. Trois choses à faire en moins de cinq minutes :
+  1. Ajouter vos clients (CSV ou un par un)
+  2. Créer votre premier engagement
+  3. Laissez Relai relancer vos clients
+
+Ouvrez votre tableau de bord : ${opts.appUrl}/dashboard
+
+Essai gratuit de 14 jours. Aucun paiement requis avant de choisir un forfait.`;
+    return { subject, html, text };
+  }
+  const subject = `Welcome to Relai, ${opts.ownerName}`;
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Hi ${escapeHtml(opts.ownerName)},</p>
+<p>Welcome to <strong>Relai</strong> &mdash; the end of chasing your clients for documents.</p>
+<p>Three things you can do in under five minutes:</p>
+<ol style="padding-left:20px">
+  <li style="margin-bottom:8px"><strong>Add your clients</strong> &mdash; import your existing CSV or add them one by one.</li>
+  <li style="margin-bottom:8px"><strong>Create your first engagement</strong> &mdash; pick a template (T1, T2, bookkeeping) and send the magic link. Clients don't sign in to anything.</li>
+  <li style="margin-bottom:8px"><strong>Let Relai chase for you</strong> &mdash; smart reminders + AI flags when a client uploads the wrong slip.</li>
+</ol>
+<p style="margin:24px 0">
+  <a href="${opts.appUrl}/dashboard" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Open my dashboard</a>
+</p>
+<p style="color:#64748b;font-size:13px">Your 14-day free trial has started. No payment method required until you pick a plan.</p>
+<p style="color:#64748b;font-size:13px">Question? Reply directly to this email.</p>
+</body></html>`;
+  const text = `Hi ${opts.ownerName},
+
+Welcome to Relai. Three things to do in under 5 min:
+  1. Add your clients (CSV or one by one)
+  2. Create your first engagement
+  3. Let Relai chase clients for you
+
+Open your dashboard: ${opts.appUrl}/dashboard
+
+14-day free trial. No payment required to start.`;
+  return { subject, html, text };
+}
+
 export type ReminderTone = "gentle" | "firm" | "deadline" | "overdue";
 
 export function buildReminderEmail(opts: {

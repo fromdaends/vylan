@@ -8,6 +8,10 @@ export type Firm = {
   brand_color: string;
   timezone: string;
   stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  trial_ends_at: string | null;
   plan: "trial" | "solo" | "cabinet" | "cabinet_plus";
   onboarded_at: string | null;
   invited_emails: string[];

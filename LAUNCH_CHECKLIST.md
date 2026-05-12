@@ -14,12 +14,15 @@ as we find more during phase work — review before going live.
   - Sign up: <https://www.twilio.com> (pay-as-you-go; ~$1/mo for a Canadian number)
   - Buy a Canadian number with SMS capability
   - Paste `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
-- [ ] **Anthropic** — Claude API for document classification (Phase 8)
+- [x] **Anthropic** — Claude API for document classification (Phase 8)
   - Sign up: <https://console.anthropic.com>
-  - Paste `ANTHROPIC_API_KEY`
+  - Paste `ANTHROPIC_API_KEY`  *(done in dev — copy to Vercel before launch)*
 - [ ] **Stripe** — billing (Phase 10)
-  - Test mode first; switch to live mode before launch
+  - In test mode, create **three monthly recurring CAD prices** for Solo / Cabinet / Cabinet+ ($29 / $79 / $149)
+  - Copy the price IDs into `.env.local` as `STRIPE_PRICE_SOLO`, `STRIPE_PRICE_CABINET`, `STRIPE_PRICE_CABINET_PLUS`
   - Paste `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`
+  - Use Stripe CLI for local webhook testing: `stripe listen --forward-to localhost:3000/api/billing/webhook`
+  - Switch to live keys + production webhook endpoint before launch
 - [ ] **Domain registrar** — buy `relai.app` (or final name) when naming locks in
 - [ ] **Supabase Cloud project** — create in `ca-central-1` region for Quebec Law 25 data residency
 
@@ -51,8 +54,12 @@ as we find more during phase work — review before going live.
 
 ## Legal + compliance
 
-- [ ] **Privacy policy** that addresses **Quebec Law 25** + **PIPEDA** (Phase 10 generates a template; have a lawyer review)
-- [ ] **Terms of service** (Phase 10 template; lawyer review)
+- [ ] **Privacy policy** that addresses **Quebec Law 25** + **PIPEDA**
+  - [x] Template generated at `/privacy` with DRAFT banner
+  - [ ] Lawyer review + remove the DRAFT banner before launch
+- [ ] **Terms of service**
+  - [x] Template generated at `/terms` with DRAFT banner
+  - [ ] Lawyer review + remove the DRAFT banner before launch
 - [ ] **Data Processing Addendum** ready for firms that ask
 - [ ] **Confirm Supabase region is Canadian** in the project settings
 - [ ] **Breach notification procedure** documented (Law 25 requires it)

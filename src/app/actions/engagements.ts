@@ -19,6 +19,7 @@ import {
   scheduleEngagementReminders,
   cancelEngagementReminders,
 } from "@/lib/reminders";
+import { getFirmLimits } from "@/lib/plan-limits";
 import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -87,6 +88,16 @@ export async function createEngagementAction(payload: {
     return { fieldErrors: fieldErrorsFromZod(parsed.error) };
   }
 
+  // Plan limit check — only blocks the *initial send*, not the draft.
+  // Draft engagements don't count against the active cap, so the accountant
+  // can keep building a draft while they figure out billing.
+  if (payload.send) {
+    const limits = await getFirmLimits();
+    if (limits && !limits.canCreateEngagement) {
+      return { error: "plan_limit_reached" };
+    }
+  }
+
   let engagementId: string;
   try {
     // The Zod schema validated items as untyped doc_type strings; widen back.
@@ -134,6 +145,11 @@ export async function createEngagementAction(payload: {
 export async function sendEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
+  const limits = await getFirmLimits();
+  if (limits && !limits.canCreateEngagement) {
+    // Soft block — caller's UI should have prevented this anyway, but be safe.
+    return;
+  }
   const sent = await sendEngagement(id);
   await deliverInviteEmail(id);
   if (sent.sent_at) {

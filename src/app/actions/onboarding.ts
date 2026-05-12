@@ -3,10 +3,13 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm, updateCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 import { getPathname } from "@/i18n/navigation";
 import { parseEmailList } from "@/lib/validators";
+import { buildWelcomeEmail, sendEmail } from "@/lib/email";
 
 export type OnboardingState = {
   error?: string;
@@ -142,9 +145,33 @@ export async function submitStep3(
     invited_emails: emails,
     onboarded_at: new Date().toISOString(),
   });
+  await sendWelcomeEmail();
   revalidatePath("/", "layout");
   const locale = pickLocale(formData);
   redirect(localPath(locale, "/dashboard"));
+}
+
+async function sendWelcomeEmail(): Promise<void> {
+  // Fire-and-forget: don't block onboarding redirect on a slow Resend call.
+  const [user, firm] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+  ]);
+  if (!user?.email || !firm) return;
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const { subject, html, text } = buildWelcomeEmail({
+    firmName: firm.name,
+    ownerName: user.name || user.email.split("@")[0],
+    appUrl,
+    locale: firm.locale_default,
+  });
+  after(async () => {
+    try {
+      await sendEmail({ to: user.email, subject, html, text });
+    } catch (e) {
+      console.error("[welcome email] failed:", e);
+    }
+  });
 }
 
 export async function skipStep(formData: FormData) {
@@ -153,6 +180,7 @@ export async function skipStep(formData: FormData) {
 
   if (step >= 3) {
     await updateCurrentFirm({ onboarded_at: new Date().toISOString() });
+    await sendWelcomeEmail();
     revalidatePath("/", "layout");
     redirect(localPath(locale, "/dashboard"));
   }
