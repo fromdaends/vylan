@@ -40,51 +40,55 @@ export function KeyboardShortcuts() {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
 
+      // Normalize so caps lock / shift don't break the chord.
+      const k = e.key.toLowerCase();
+
       // Two-key "g <X>" chord. Track the last 'g' press, then check the next.
       const now = Date.now();
       const last = lastKeyRef.current;
       const isFresh = last && now - last.at < SHORTCUT_TIMEOUT_MS;
       if (isFresh && last?.key === "g") {
         lastKeyRef.current = null;
-        if (e.key === "d") {
+        if (k === "d") {
           e.preventDefault();
           router.push("/dashboard");
           return;
         }
-        if (e.key === "c") {
+        if (k === "c") {
           e.preventDefault();
           router.push("/clients");
           return;
         }
-        if (e.key === "t") {
+        if (k === "t") {
           e.preventDefault();
           router.push("/templates");
           return;
         }
-        if (e.key === "s") {
+        if (k === "s") {
           e.preventDefault();
           router.push("/settings");
           return;
         }
         return;
       }
-      if (e.key === "g") {
+      if (k === "g") {
         lastKeyRef.current = { key: "g", at: now };
         return;
       }
 
-      // Single-key shortcuts.
+      // Single-key shortcuts. '?' is the literal key from shift+/ on a US
+      // keyboard — we check e.key here (not k) because '?' isn't lowercased.
       if (e.key === "?") {
         e.preventDefault();
         setShowHelp((p) => !p);
         return;
       }
-      if (e.key === "c" && !isFresh) {
+      if (k === "c" && !isFresh) {
         e.preventDefault();
         router.push("/engagements/new");
         return;
       }
-      if (e.key === "/") {
+      if (k === "/") {
         // Only do something meaningful on /clients (focus search).
         if (pathname?.endsWith("/clients") || pathname === "/clients") {
           e.preventDefault();
