@@ -10,6 +10,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { claimDueJobs, markJobDone, markJobFailed } from "@/lib/db/jobs";
 import { processReminderJob } from "@/lib/reminders";
+import { processClassifyJob } from "@/lib/ai/process";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,9 @@ export async function GET(request: NextRequest) {
     try {
       if (job.kind === "send_reminder") {
         const r = await processReminderJob(job.payload);
+        results.push({ id: job.id, kind: job.kind, ok: true, detail: r });
+      } else if (job.kind === "classify_document") {
+        const r = await processClassifyJob(job.payload);
         results.push({ id: job.id, kind: job.kind, ok: true, detail: r });
       } else {
         results.push({

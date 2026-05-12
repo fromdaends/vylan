@@ -4,7 +4,7 @@
 
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
-export type JobKind = "send_reminder";
+export type JobKind = "send_reminder" | "classify_document";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {

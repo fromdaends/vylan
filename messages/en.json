@@ -250,6 +250,11 @@
     "stale_days": "Quiet for {days, plural, one {# day} other {# days}}",
     "other_engagements": "Other engagements"
   },
+  "Ai": {
+    "pending": "AI analysis pending…",
+    "likely": "Likely {type}",
+    "mismatch": "Expected: {expected}, detected: {detected}"
+  },
   "Activity": {
     "title": "Activity",
     "empty": "No activity yet.",
@@ -267,7 +272,8 @@
     "reopen_engagement": "Reopened the engagement",
     "reminders_paused": "Paused automatic reminders",
     "reminders_resumed": "Resumed automatic reminders",
-    "reminder_fired": "Automatic reminder sent ({tone})"
+    "reminder_fired": "Automatic reminder sent ({tone})",
+    "ai_classified": "AI: detected {document_type} (confidence {confidence})"
   },
   "Templates": {
     "title": "Templates",

@@ -105,6 +105,16 @@ function describe(
       return t("complete_engagement");
     case "reopen_engagement":
       return t("reopen_engagement");
+    case "ai_classified": {
+      const conf =
+        typeof meta.confidence === "number"
+          ? `${Math.round((meta.confidence as number) * 100)}%`
+          : "—";
+      return t("ai_classified", {
+        document_type: String(meta.document_type ?? "?"),
+        confidence: conf,
+      });
+    }
     default:
       return entry.action;
   }

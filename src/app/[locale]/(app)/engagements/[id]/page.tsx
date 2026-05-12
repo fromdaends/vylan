@@ -344,7 +344,12 @@ async function ItemRow({
       {files.length > 0 && (
         <ul className="space-y-1 mt-2">
           {files.map((f) => (
-            <FilePreviewRow key={f.id} file={f} url={f.url} />
+            <FilePreviewRow
+              key={f.id}
+              file={f}
+              url={f.url}
+              expectedDocType={item.doc_type}
+            />
           ))}
         </ul>
       )}

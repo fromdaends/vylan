@@ -7,6 +7,7 @@ import {
   logActivity,
 } from "@/lib/db/portal";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
+import { enqueueJob } from "@/lib/db/jobs";
 import {
   MAX_BYTES,
   isAllowedMime,
@@ -102,16 +103,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "upload_failed" }, { status: 500 });
   }
 
-  const { error: insertErr } = await sb.from("uploaded_files").insert({
-    request_item_id: item.id,
-    engagement_id: engagement.id,
-    storage_path: path,
-    original_filename: file.name,
-    mime_type: storedMime,
-    size_bytes: storedBytes.length,
-    uploaded_by_ip: ip,
-  });
-  if (insertErr) {
+  const { data: inserted, error: insertErr } = await sb
+    .from("uploaded_files")
+    .insert({
+      request_item_id: item.id,
+      engagement_id: engagement.id,
+      storage_path: path,
+      original_filename: file.name,
+      mime_type: storedMime,
+      size_bytes: storedBytes.length,
+      uploaded_by_ip: ip,
+    })
+    .select("id")
+    .single();
+  if (insertErr || !inserted) {
     console.error("[portal/upload] db insert failed:", insertErr);
     return NextResponse.json({ error: "db_failed" }, { status: 500 });
   }
@@ -122,6 +127,13 @@ export async function POST(request: NextRequest) {
     item_id: item.id,
     filename: file.name,
     size_bytes: storedBytes.length,
+  });
+
+  // Fire-and-forget: enqueue an AI classification job. Runs at next cron tick.
+  await enqueueJob({
+    kind: "classify_document",
+    payload: { uploaded_file_id: inserted.id },
+    runAfter: new Date(),
   });
 
   return NextResponse.json({ ok: true });

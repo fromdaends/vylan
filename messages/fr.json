@@ -224,6 +224,7 @@
     "mark_complete": "Marquer comme complété",
     "reopen": "Rouvrir",
     "open_new_tab": "Ouvrir dans un nouvel onglet",
+    "reclassify": "Reclasser avec IA",
     "errors": {
       "missing_client": "Choisissez un client.",
       "missing_template": "Choisissez un modèle.",
@@ -250,6 +251,11 @@
     "stale_days": "Silence depuis {days, plural, one {# jour} other {# jours}}",
     "other_engagements": "Autres engagements"
   },
+  "Ai": {
+    "pending": "Analyse IA en cours…",
+    "likely": "Probablement {type}",
+    "mismatch": "Attendu : {expected}, détecté : {detected}"
+  },
   "Activity": {
     "title": "Activité",
     "empty": "Aucune activité pour l'instant.",
@@ -267,7 +273,8 @@
     "reopen_engagement": "Engagement rouvert",
     "reminders_paused": "Rappels mis en pause",
     "reminders_resumed": "Rappels repris",
-    "reminder_fired": "Rappel automatique envoyé ({tone})"
+    "reminder_fired": "Rappel automatique envoyé ({tone})",
+    "ai_classified": "IA : détecté {document_type} (confiance {confidence})"
   },
   "Templates": {
     "title": "Modèles",
