@@ -203,6 +203,206 @@
   .hairline {
     box-shadow: inset 0 0 0 1px var(--border);
   }
+
+  /* --- Bolder utilities --- */
+
+  /* Animated gradient orb backdrop */
+  .orb {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(80px);
+    pointer-events: none;
+    animation: orb-float 14s ease-in-out infinite;
+  }
+  .orb-iris {
+    background: radial-gradient(
+      circle,
+      oklch(0.62 0.18 264 / 0.55) 0%,
+      transparent 70%
+    );
+  }
+  .orb-pink {
+    background: radial-gradient(
+      circle,
+      oklch(0.7 0.18 340 / 0.4) 0%,
+      transparent 70%
+    );
+  }
+  .orb-cyan {
+    background: radial-gradient(
+      circle,
+      oklch(0.7 0.15 220 / 0.4) 0%,
+      transparent 70%
+    );
+  }
+  .dark .orb-iris {
+    background: radial-gradient(
+      circle,
+      oklch(0.7 0.2 264 / 0.4) 0%,
+      transparent 70%
+    );
+  }
+  .dark .orb-pink {
+    background: radial-gradient(
+      circle,
+      oklch(0.75 0.2 340 / 0.3) 0%,
+      transparent 70%
+    );
+  }
+  .dark .orb-cyan {
+    background: radial-gradient(
+      circle,
+      oklch(0.75 0.16 220 / 0.3) 0%,
+      transparent 70%
+    );
+  }
+
+  /* Subtle grid pattern background */
+  .bg-grid {
+    background-image: linear-gradient(
+        to right,
+        oklch(0.92 0.006 264 / 0.4) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        oklch(0.92 0.006 264 / 0.4) 1px,
+        transparent 1px
+      );
+    background-size: 56px 56px;
+  }
+  .dark .bg-grid {
+    background-image: linear-gradient(
+        to right,
+        oklch(0.28 0.014 264 / 0.5) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        oklch(0.28 0.014 264 / 0.5) 1px,
+        transparent 1px
+      );
+  }
+
+  /* Dot pattern alternative */
+  .bg-dots {
+    background-image: radial-gradient(
+      oklch(0.85 0.01 264) 1px,
+      transparent 1px
+    );
+    background-size: 22px 22px;
+  }
+  .dark .bg-dots {
+    background-image: radial-gradient(
+      oklch(0.35 0.018 264) 1px,
+      transparent 1px
+    );
+  }
+
+  /* Glow utility — soft accent halo for CTAs/badges */
+  .glow-accent {
+    box-shadow:
+      0 0 0 1px oklch(0.62 0.18 264 / 0.2),
+      0 8px 24px -8px oklch(0.62 0.18 264 / 0.45),
+      0 2px 6px -1px oklch(0.62 0.18 264 / 0.2);
+  }
+  .dark .glow-accent {
+    box-shadow:
+      0 0 0 1px oklch(0.7 0.16 264 / 0.3),
+      0 8px 32px -6px oklch(0.7 0.16 264 / 0.55),
+      0 2px 8px -1px oklch(0.7 0.16 264 / 0.3);
+  }
+
+  /* Conic-gradient ring for featured cards */
+  .ring-conic {
+    position: relative;
+  }
+  .ring-conic::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: conic-gradient(
+      from 180deg,
+      oklch(0.62 0.18 264 / 0.6),
+      oklch(0.7 0.18 340 / 0.6),
+      oklch(0.7 0.15 220 / 0.6),
+      oklch(0.62 0.18 264 / 0.6)
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: ring-spin 8s linear infinite;
+    pointer-events: none;
+  }
+
+  /* Shimmer for hero badge */
+  .shimmer {
+    background: linear-gradient(
+      110deg,
+      transparent 30%,
+      oklch(1 0 0 / 0.6) 50%,
+      transparent 70%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 3s ease-in-out infinite;
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
+  /* Subtle floating motion */
+  .float-slow {
+    animation: float 7s ease-in-out infinite;
+  }
+  .float-slower {
+    animation: float 10s ease-in-out infinite;
+  }
+
+  /* Number "ticker" styling for big stats */
+  .num-display {
+    font-feature-settings: "tnum" 1, "ss01" 1;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.04em;
+  }
+}
+
+@keyframes orb-float {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(20px, -30px) scale(1.05);
+  }
+  66% {
+    transform: translate(-15px, 20px) scale(0.95);
+  }
+}
+
+@keyframes ring-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 @keyframes fade-in {
