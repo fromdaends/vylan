@@ -337,7 +337,7 @@ export default async function Home({
 
 function IntroPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="press inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 backdrop-blur px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-accent/50 hover:text-foreground hover:bg-accent/5">
+    <span className="press cursor-default select-none inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 backdrop-blur px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-accent/50 hover:text-foreground hover:bg-accent/5">
       <span className="h-1.5 w-1.5 rounded-full bg-accent transition-transform group-hover:scale-125" />
       {children}
     </span>
@@ -463,10 +463,14 @@ async function PlanPreview({
     plan.monthlyCadCents != null
       ? formatCurrency(plan.monthlyCadCents / 100, locale, 0)
       : "—";
+  // Whole card is a link to the signup -> Stripe checkout flow. (The
+  // actual Stripe wiring happens on the Billing page after onboarding;
+  // /signup is the right entry point for new visitors.)
   return (
-    <div
+    <Link
+      href="/signup"
       className={
-        "relative rounded-2xl border bg-card p-7 tilt " +
+        "relative block cursor-pointer rounded-2xl border bg-card p-7 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
         (featured
           ? "featured-card border-transparent"
           : "border-border hover:border-foreground/20")
@@ -503,6 +507,6 @@ async function PlanPreview({
           {t(`plan_${planId}_features`)}
         </li>
       </ul>
-    </div>
+    </Link>
   );
 }

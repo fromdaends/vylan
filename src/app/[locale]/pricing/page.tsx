@@ -76,9 +76,10 @@ async function PlanCard({
   const featured = planId === "cabinet";
 
   return (
-    <div
+    <Link
+      href="/signup"
       className={
-        "relative rounded-2xl border bg-card p-7 flex flex-col gap-5 tilt " +
+        "relative block cursor-pointer rounded-2xl border bg-card p-7 flex flex-col gap-5 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
         (featured
           ? "featured-card border-transparent"
           : "border-border hover:border-foreground/20")
@@ -117,11 +118,16 @@ async function PlanCard({
           {t(`plan_${planId}_features`)}
         </li>
       </ul>
-      <Link href="/signup" className="mt-auto">
-        <Button className="w-full" variant={featured ? "default" : "outline"}>
-          {tAuth("create_account")}
-        </Button>
-      </Link>
-    </div>
+      <div
+        className={
+          "mt-auto inline-flex items-center justify-center rounded-md text-sm font-medium px-4 py-2 transition-colors " +
+          (featured
+            ? "bg-primary text-primary-foreground"
+            : "border border-border text-foreground")
+        }
+      >
+        {tAuth("create_account")}
+      </div>
+    </Link>
   );
 }
