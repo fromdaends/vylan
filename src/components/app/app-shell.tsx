@@ -7,6 +7,14 @@ import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { logoutAction } from "@/app/actions/auth";
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import {
   LayoutDashboard,
   Users,
   FileText,
@@ -15,6 +23,7 @@ import {
   Menu,
   X,
   LogOut,
+  ChevronDown,
 } from "lucide-react";
 
 type Labels = {
@@ -47,7 +56,6 @@ export function AppShell({
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
     { href: "/billing", label: labels.billing, icon: CreditCard },
-    { href: "/settings", label: labels.settings, icon: Settings },
   ];
 
   function isActive(href: string) {
@@ -57,7 +65,6 @@ export function AppShell({
 
   return (
     <div className="flex-1 flex flex-col min-h-screen">
-      {/* Top header */}
       <header className="sticky top-0 z-30 border-b border-border/60 backdrop-blur-md bg-background/80">
         <div className="mx-auto max-w-7xl flex items-center justify-between px-4 sm:px-6 py-3">
           <div className="flex items-center gap-3">
@@ -80,7 +87,6 @@ export function AppShell({
             </Link>
           </div>
 
-          {/* Desktop nav */}
           <nav className="hidden sm:flex items-center gap-1">
             {nav.map((item) => {
               const Icon = item.icon;
@@ -104,35 +110,61 @@ export function AppShell({
           </nav>
 
           <div className="flex items-center gap-2">
-            <div className="hidden md:flex items-center gap-2.5 pr-1">
-              <div
-                className="size-7 rounded-full flex items-center justify-center font-medium text-white text-xs"
-                style={{ backgroundColor: brandColor }}
-                aria-label={firmName}
-                title={firmName}
-              >
-                {firmInitials}
-              </div>
-              <span className="text-sm text-muted-foreground max-w-[140px] truncate">
-                {firmName}
-              </span>
-            </div>
             <ThemeToggle />
-            <form action={logoutAction}>
-              <Button
-                type="submit"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={labels.logout}
-                title={labels.logout}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </form>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 rounded-md pl-1 pr-2 py-1 transition-colors hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  aria-label={firmName}
+                >
+                  <div
+                    className="size-7 rounded-full flex items-center justify-center font-medium text-white text-xs"
+                    style={{ backgroundColor: brandColor }}
+                  >
+                    {firmInitials}
+                  </div>
+                  <span className="hidden md:inline text-sm text-muted-foreground max-w-[140px] truncate">
+                    {firmName}
+                  </span>
+                  <ChevronDown className="hidden md:inline h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="text-xs text-muted-foreground">
+                    {brand.name}
+                  </div>
+                  <div className="font-medium truncate">{firmName}</div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/settings"
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Settings className="h-4 w-4" />
+                    {labels.settings}
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <form action={logoutAction}>
+                  <DropdownMenuItem asChild>
+                    <button
+                      type="submit"
+                      className="w-full flex items-center gap-2 text-destructive focus:text-destructive cursor-pointer"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      {labels.logout}
+                    </button>
+                  </DropdownMenuItem>
+                </form>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
-        {/* Mobile nav */}
         {mobileOpen && (
           <nav className="sm:hidden border-t border-border/60 px-4 py-3 animate-in-fade">
             <div className="flex flex-col gap-1">
@@ -160,6 +192,25 @@ export function AppShell({
                 );
               })}
               <div className="border-t border-border/60 my-2" />
+              <Link
+                href="/settings"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+              >
+                <Settings className="h-4 w-4" />
+                {labels.settings}
+              </Link>
+              <form action={logoutAction}>
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start gap-2 text-destructive hover:text-destructive"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {labels.logout}
+                </Button>
+              </form>
               <div className="flex items-center gap-2.5 px-3 py-2 text-sm">
                 <div
                   className="size-6 rounded-full flex items-center justify-center font-medium text-white text-[10px]"
