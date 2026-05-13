@@ -58,7 +58,7 @@ export function ClientsTable({
   }
 
   return (
-    <div className="rounded-lg border border-border overflow-hidden bg-card">
+    <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>

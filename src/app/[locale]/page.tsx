@@ -111,27 +111,19 @@ export default async function Home({
           </p>
           <div className="mt-12 flex flex-wrap gap-3 justify-center">
             <Link href="/signup">
-              <Button size="lg" className="h-12 px-6 text-base glow-accent">
+              <Button size="lg" className="press h-12 px-6 text-base glow-accent">
                 {t("cta_primary")}
-                <ArrowRight className="h-4 w-4" />
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </Button>
             </Link>
             <Link href="/pricing">
-              <Button variant="outline" size="lg" className="h-12 px-6 text-base">
+              <Button variant="outline" size="lg" className="press h-12 px-6 text-base">
                 {t("cta_secondary")}
               </Button>
             </Link>
           </div>
 
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-            <div className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-success" />
-              {t("trust_no_card")}
-            </div>
-            <div className="inline-flex items-center gap-1.5">
-              <Check className="h-3.5 w-3.5 text-success" />
-              {t("trust_setup")}
-            </div>
             <div className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-success" />
               {t("trust_cancel")}
@@ -329,7 +321,7 @@ export default async function Home({
           </p>
           <div className="mt-10 flex flex-wrap gap-3 justify-center">
             <Link href="/signup">
-              <Button size="lg" className="h-12 px-6 text-base glow-accent">
+              <Button size="lg" className="press h-12 px-6 text-base glow-accent">
                 {t("cta_primary")}
                 <ArrowRight className="h-4 w-4" />
               </Button>
@@ -345,8 +337,8 @@ export default async function Home({
 
 function IntroPill({ children }: { children: React.ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 backdrop-blur px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground">
-      <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+    <span className="press inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 backdrop-blur px-3.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-accent/50 hover:text-foreground hover:bg-accent/5">
+      <span className="h-1.5 w-1.5 rounded-full bg-accent transition-transform group-hover:scale-125" />
       {children}
     </span>
   );
@@ -421,11 +413,13 @@ function Step({
   body: string;
 }) {
   return (
-    <div className="relative reveal">
-      <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl border border-border bg-card font-mono text-lg font-medium text-foreground mb-5 shadow-sm">
+    <div className="relative reveal group">
+      <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl border border-border bg-card font-mono text-lg font-medium text-foreground mb-5 shadow-sm transition-all duration-300 group-hover:border-accent/50 group-hover:bg-accent/5 group-hover:text-accent group-hover:-translate-y-0.5 group-hover:shadow-md">
         {n}
       </div>
-      <div className="font-medium text-lg">{title}</div>
+      <div className="font-medium text-lg transition-colors group-hover:text-foreground">
+        {title}
+      </div>
       <p className="text-muted-foreground text-sm mt-2 leading-relaxed">
         {body}
       </p>
@@ -435,12 +429,14 @@ function Step({
 
 function Faq({ q, a }: { q: string; a: string }) {
   return (
-    <details className="group rounded-xl border border-border bg-card transition-colors hover:border-foreground/20">
+    <details className="group rounded-xl border border-border bg-card transition-all duration-300 hover:border-accent/40 hover:bg-card/80 open:border-accent/40">
       <summary className="flex cursor-pointer items-center justify-between gap-4 p-5 font-medium text-base list-none">
-        <span>{q}</span>
+        <span className="transition-colors group-hover:text-foreground">
+          {q}
+        </span>
         <span
           aria-hidden
-          className="text-muted-foreground transition-transform group-open:rotate-45 shrink-0"
+          className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground transition-all duration-300 group-hover:bg-accent/15 group-hover:text-accent group-open:rotate-45 group-open:bg-accent/15 group-open:text-accent shrink-0"
         >
           +
         </span>

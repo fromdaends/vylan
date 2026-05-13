@@ -189,6 +189,35 @@
     transform: translateY(-1px);
   }
 
+  /* Press-and-release feedback for CTAs / pills. */
+  .press {
+    transition:
+      transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 220ms ease,
+      background-color 220ms ease,
+      border-color 220ms ease,
+      color 220ms ease;
+  }
+  .press:hover {
+    transform: translateY(-1px);
+  }
+  .press:active {
+    transform: translateY(0);
+  }
+
+  /* Underline grow for inline-link style nav items. */
+  .link-underline {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    background-size: 0 1px;
+    transition: background-size 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      color 200ms ease;
+  }
+  .link-underline:hover {
+    background-size: 100% 1px;
+  }
+
   /* Pretty gradient text for hero headlines */
   .text-gradient {
     background: linear-gradient(
@@ -325,17 +354,31 @@
       0 2px 8px -1px oklch(0.7 0.16 264 / 0.3);
   }
 
-  /* Soft static highlight for featured cards (replaces the animated
-     conic ring, which felt too busy on the pricing grid). */
+  /* Soft static highlight for featured cards, with a noticeable
+     intensification on hover (the iris glow gets brighter and wider). */
   .featured-card {
+    position: relative;
+    transition: box-shadow 320ms cubic-bezier(0.2, 0.8, 0.2, 1);
     box-shadow:
       0 0 0 1px oklch(0.62 0.18 264 / 0.35),
-      0 18px 48px -22px oklch(0.62 0.18 264 / 0.35);
+      0 18px 48px -22px oklch(0.62 0.18 264 / 0.4);
+  }
+  .featured-card:hover {
+    box-shadow:
+      0 0 0 1px oklch(0.62 0.18 264 / 0.65),
+      0 28px 72px -18px oklch(0.62 0.18 264 / 0.75),
+      0 0 64px -8px oklch(0.62 0.18 264 / 0.55);
   }
   .dark .featured-card {
     box-shadow:
       0 0 0 1px oklch(0.7 0.16 264 / 0.45),
-      0 24px 64px -22px oklch(0.7 0.16 264 / 0.45);
+      0 24px 64px -22px oklch(0.7 0.16 264 / 0.5);
+  }
+  .dark .featured-card:hover {
+    box-shadow:
+      0 0 0 1px oklch(0.75 0.18 264 / 0.85),
+      0 32px 80px -16px oklch(0.7 0.18 264 / 0.85),
+      0 0 80px -8px oklch(0.7 0.18 264 / 0.7);
   }
 
   /* Scroll-driven reveal: elements fade + rise as they enter the
