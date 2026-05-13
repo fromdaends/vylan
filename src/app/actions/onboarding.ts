@@ -4,7 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm, updateCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { getPathname } from "@/i18n/navigation";
@@ -78,7 +78,11 @@ export async function submitStep1(
   const existingFirm = await getCurrentFirm();
 
   if (!existingFirm) {
-    const { data: firm, error: firmErr } = await supabase
+    // Use service-role client: migration 0009 removed permissive INSERT
+    // policies on `firms` and `users`, so first-time onboarding must bypass
+    // RLS through the server-side service-role path.
+    const admin = getServiceRoleSupabase();
+    const { data: firm, error: firmErr } = await admin
       .from("firms")
       .insert({
         name: parsed.data.firm_name,
@@ -92,7 +96,7 @@ export async function submitStep1(
       return { error: "create_failed" };
     }
 
-    const { error: userErr } = await supabase.from("users").insert({
+    const { error: userErr } = await admin.from("users").insert({
       id: auth.user.id,
       firm_id: firm.id,
       email: auth.user.email!,
