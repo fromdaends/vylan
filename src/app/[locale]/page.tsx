@@ -2,10 +2,20 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
-import { PLANS, type PlanId } from "@/lib/plans";
+import { PLANS, PAID_PLANS, type PlanId } from "@/lib/plans";
 import { formatCurrency } from "@/lib/format";
 import { assertLocale } from "@/lib/locale";
-import { ArrowRight, Check, Sparkles, Zap, Bell, FileCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  Sparkles,
+  Zap,
+  Bell,
+  FileCheck,
+  Clock,
+  Rocket,
+  ShieldCheck,
+} from "lucide-react";
 import { PublicFooter } from "@/components/public/public-footer";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
@@ -65,7 +75,6 @@ export default async function Home({
 
       {/* HERO */}
       <section className="relative overflow-hidden">
-        {/* Animated orbs */}
         <div
           aria-hidden
           className="absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_at_top,black,transparent_75%)]"
@@ -80,7 +89,6 @@ export default async function Home({
             style={{ animationDelay: "-7s" }}
           />
         </div>
-        {/* Grid pattern */}
         <div
           aria-hidden
           className="absolute inset-0 -z-10 bg-grid opacity-50 [mask-image:radial-gradient(ellipse_at_top,black,transparent_60%)]"
@@ -115,20 +123,82 @@ export default async function Home({
             </Link>
           </div>
 
-          {/* Trust line */}
           <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
             <div className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-success" />
-              {t("trust_no_card") || "No credit card required"}
+              {t("trust_no_card")}
             </div>
             <div className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-success" />
-              {t("trust_setup") || "Setup in 2 minutes"}
+              {t("trust_setup")}
             </div>
             <div className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-success" />
-              {t("trust_cancel") || "Cancel anytime"}
+              {t("trust_cancel")}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* INTRO — the bigger welcome / explainer */}
+      <section className="relative border-t border-border/60 overflow-hidden">
+        <div
+          aria-hidden
+          className="absolute inset-0 -z-10 bg-dots opacity-30 [mask-image:radial-gradient(ellipse_at_center,black,transparent_70%)]"
+        />
+        <div className="mx-auto max-w-4xl px-6 py-28 sm:py-36 text-center">
+          <div className="reveal-soft">
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-4">
+              {t("intro_eyebrow")}
+            </div>
+            <h2 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight leading-[1.05] text-gradient">
+              {t("intro_title")}
+            </h2>
+            <p className="mt-8 text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+              {t("intro_lede")}
+            </p>
+          </div>
+          <div className="mt-10 flex flex-wrap justify-center gap-2.5 reveal-soft">
+            <IntroPill>{t("intro_pill_1")}</IntroPill>
+            <IntroPill>{t("intro_pill_2")}</IntroPill>
+            <IntroPill>{t("intro_pill_3")}</IntroPill>
+          </div>
+        </div>
+      </section>
+
+      {/* BENEFITS — big stat cards */}
+      <section className="relative border-t border-border/60">
+        <div className="mx-auto max-w-6xl px-6 py-24">
+          <div className="text-center mb-16 reveal-soft">
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
+              {t("benefits_eyebrow")}
+            </div>
+            <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight max-w-3xl mx-auto leading-tight">
+              {t("benefits_title")}
+            </h2>
+          </div>
+          <div className="grid gap-5 md:grid-cols-3">
+            <BenefitCard
+              icon={<Clock className="h-5 w-5" />}
+              stat={t("benefit_1_stat")}
+              label={t("benefit_1_label")}
+              title={t("benefit_1_title")}
+              body={t("benefit_1_body")}
+            />
+            <BenefitCard
+              icon={<Rocket className="h-5 w-5" />}
+              stat={t("benefit_2_stat")}
+              label={t("benefit_2_label")}
+              title={t("benefit_2_title")}
+              body={t("benefit_2_body")}
+            />
+            <BenefitCard
+              icon={<ShieldCheck className="h-5 w-5" />}
+              stat={t("benefit_3_stat")}
+              label={t("benefit_3_label")}
+              title={t("benefit_3_title")}
+              body={t("benefit_3_body")}
+            />
           </div>
         </div>
       </section>
@@ -136,15 +206,15 @@ export default async function Home({
       {/* Features */}
       <section className="relative border-t border-border/60">
         <div className="mx-auto max-w-5xl px-6 py-24">
-          <div className="text-center mb-16 animate-in-up">
+          <div className="text-center mb-16 reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-              {t("features_eyebrow") || "Why Relai"}
+              {t("features_eyebrow")}
             </div>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
-              {t("features_title") || "Built for small accounting firms"}
+              {t("features_title")}
             </h2>
           </div>
-          <div className="grid gap-6 sm:grid-cols-3 animate-in-stagger">
+          <div className="grid gap-6 sm:grid-cols-3">
             <Feature
               icon={<FileCheck className="h-5 w-5" />}
               title={t("feature_1_title")}
@@ -171,15 +241,15 @@ export default async function Home({
           className="absolute inset-0 -z-10 bg-dots opacity-40"
         />
         <div className="mx-auto max-w-5xl px-6 py-24">
-          <div className="text-center mb-16 animate-in-up">
+          <div className="text-center mb-16 reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-              {t("how_eyebrow") || "How it works"}
+              {t("how_eyebrow")}
             </div>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
               {t("how_title")}
             </h2>
           </div>
-          <div className="grid gap-8 sm:grid-cols-3 animate-in-stagger">
+          <div className="grid gap-8 sm:grid-cols-3">
             <Step n={1} title={t("step_1_title")} body={t("step_1_body")} />
             <Step n={2} title={t("step_2_title")} body={t("step_2_body")} />
             <Step n={3} title={t("step_3_title")} body={t("step_3_body")} />
@@ -189,10 +259,10 @@ export default async function Home({
 
       {/* Pricing */}
       <section className="relative border-t border-border/60">
-        <div className="mx-auto max-w-5xl px-6 py-24">
-          <div className="text-center mb-16 animate-in-up">
+        <div className="mx-auto max-w-4xl px-6 py-24">
+          <div className="text-center mb-16 reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-              {t("pricing_eyebrow") || "Pricing"}
+              {t("pricing_eyebrow")}
             </div>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
               {tPricing("title")}
@@ -201,8 +271,8 @@ export default async function Home({
               {tPricing("subtitle")}
             </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3 max-w-4xl mx-auto animate-in-stagger">
-            {(["solo", "cabinet", "cabinet_plus"] as PlanId[]).map((planId) => (
+          <div className="grid gap-5 sm:grid-cols-2">
+            {PAID_PLANS.map((planId) => (
               <PlanPreview
                 key={planId}
                 planId={planId}
@@ -225,7 +295,7 @@ export default async function Home({
       {/* FAQ */}
       <section className="relative border-t border-border/60 bg-muted/30">
         <div className="mx-auto max-w-3xl px-6 py-24">
-          <div className="text-center mb-12 animate-in-up">
+          <div className="text-center mb-12 reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
               FAQ
             </div>
@@ -233,7 +303,7 @@ export default async function Home({
               {t("faq_title")}
             </h2>
           </div>
-          <dl className="space-y-2 animate-in-stagger">
+          <dl className="space-y-2">
             <Faq q={t("faq_1_q")} a={t("faq_1_a")} />
             <Faq q={t("faq_2_q")} a={t("faq_2_a")} />
             <Faq q={t("faq_3_q")} a={t("faq_3_a")} />
@@ -250,12 +320,12 @@ export default async function Home({
         >
           <div className="orb orb-iris h-[500px] w-[500px] top-[20%] left-1/2 -translate-x-1/2" />
         </div>
-        <div className="mx-auto max-w-3xl px-6 py-24 text-center">
+        <div className="mx-auto max-w-3xl px-6 py-24 text-center reveal-soft">
           <h2 className="text-4xl sm:text-5xl font-semibold tracking-tight text-gradient">
-            {t("cta_final_title") || t("headline")}
+            {t("cta_final_title")}
           </h2>
           <p className="mt-6 text-base text-muted-foreground max-w-xl mx-auto">
-            {t("cta_final_body") || t("subhead")}
+            {t("cta_final_body")}
           </p>
           <div className="mt-10 flex flex-wrap gap-3 justify-center">
             <Link href="/signup">
@@ -273,6 +343,54 @@ export default async function Home({
   );
 }
 
+function IntroPill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 backdrop-blur px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground">
+      <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+      {children}
+    </span>
+  );
+}
+
+function BenefitCard({
+  icon,
+  stat,
+  label,
+  title,
+  body,
+}: {
+  icon: React.ReactNode;
+  stat: string;
+  label: string;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="reveal tilt group relative overflow-hidden rounded-2xl border border-border bg-card p-7">
+      <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+      <div className="flex items-center justify-between">
+        <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent ring-1 ring-accent/20 transition-transform group-hover:scale-110 group-hover:rotate-3">
+          {icon}
+        </div>
+        <div className="text-right">
+          <div className="text-3xl font-semibold tracking-tight num-display text-gradient">
+            {stat}
+          </div>
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">
+            {label}
+          </div>
+        </div>
+      </div>
+      <div className="mt-7">
+        <div className="font-medium text-base">{title}</div>
+        <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+          {body}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function Feature({
   icon,
   title,
@@ -283,7 +401,7 @@ function Feature({
   body: string;
 }) {
   return (
-    <div className="group relative rounded-2xl border border-border bg-card p-6 hover-lift hover:border-foreground/20 hover:shadow-lg transition-all">
+    <div className="reveal tilt group relative rounded-2xl border border-border bg-card p-6 hover:border-foreground/20">
       <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent ring-1 ring-accent/20 mb-4 transition-transform group-hover:scale-110 group-hover:rotate-3">
         {icon}
       </div>
@@ -303,7 +421,7 @@ function Step({
   body: string;
 }) {
   return (
-    <div className="relative">
+    <div className="relative reveal">
       <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl border border-border bg-card font-mono text-lg font-medium text-foreground mb-5 shadow-sm">
         {n}
       </div>
@@ -352,19 +470,22 @@ async function PlanPreview({
   return (
     <div
       className={
-        "relative rounded-2xl border bg-card p-6 hover-lift transition-all " +
+        "relative rounded-2xl border bg-card p-7 tilt " +
         (featured
-          ? "border-transparent ring-conic shadow-xl scale-[1.03] z-10"
+          ? "featured-card border-transparent"
           : "border-border hover:border-foreground/20")
       }
     >
       {featured && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-foreground text-background text-[10px] font-semibold px-3 py-1 tracking-wider uppercase shadow-md">
+        <span className="absolute -top-3 left-7 rounded-full bg-foreground text-background text-[10px] font-semibold px-3 py-1 tracking-wider uppercase">
           {t("recommended")}
-        </div>
+        </span>
       )}
-      <div className="font-medium">{t(`plan_${planId}_name`)}</div>
-      <div className="mt-3 flex items-baseline gap-1.5">
+      <div className="font-medium text-lg">{t(`plan_${planId}_name`)}</div>
+      <p className="text-sm text-muted-foreground mt-1">
+        {t(`plan_${planId}_tagline`)}
+      </p>
+      <div className="mt-4 flex items-baseline gap-1.5">
         <span className="text-4xl font-semibold tracking-tight num-display">
           {price}
         </span>

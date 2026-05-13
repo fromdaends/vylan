@@ -2,16 +2,15 @@
 // costs, and what limits it enforces. Stripe price IDs come from env vars
 // because the actual price objects live in your Stripe dashboard.
 
+// `cabinet_plus` is retained as a legacy tier so existing DB rows still
+// resolve in PLANS[firm.plan]. New signups can only pick "solo" or
+// "cabinet" — see PAID_PLANS.
 export type PlanId = "trial" | "solo" | "cabinet" | "cabinet_plus";
 
 export type Plan = {
   id: PlanId;
-  // CAD per month. The "trial" plan has no price because users can't pick
-  // it directly — they're put on it at signup for 14 days.
   monthlyCadCents: number | null;
-  // Max active engagements (status = sent or in_progress). null = unlimited.
   maxActiveEngagements: number | null;
-  // Max users in the firm. null = unlimited.
   maxUsers: number | null;
   stripePriceEnv: string | null;
 };
@@ -26,16 +25,16 @@ export const PLANS: Record<PlanId, Plan> = {
   },
   solo: {
     id: "solo",
-    monthlyCadCents: 2900,
-    maxActiveEngagements: 25,
+    monthlyCadCents: 7900,
+    maxActiveEngagements: 50,
     maxUsers: 1,
     stripePriceEnv: "STRIPE_PRICE_SOLO",
   },
   cabinet: {
     id: "cabinet",
-    monthlyCadCents: 7900,
-    maxActiveEngagements: 200,
-    maxUsers: 5,
+    monthlyCadCents: 15900,
+    maxActiveEngagements: null,
+    maxUsers: 10,
     stripePriceEnv: "STRIPE_PRICE_CABINET",
   },
   cabinet_plus: {
@@ -43,11 +42,11 @@ export const PLANS: Record<PlanId, Plan> = {
     monthlyCadCents: 14900,
     maxActiveEngagements: null,
     maxUsers: 15,
-    stripePriceEnv: "STRIPE_PRICE_CABINET_PLUS",
+    stripePriceEnv: null,
   },
 };
 
-export const PAID_PLANS: PlanId[] = ["solo", "cabinet", "cabinet_plus"];
+export const PAID_PLANS: PlanId[] = ["solo", "cabinet"];
 
 export function priceIdFor(planId: PlanId): string | null {
   const env = PLANS[planId].stripePriceEnv;

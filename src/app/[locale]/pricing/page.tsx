@@ -2,7 +2,7 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { brand } from "@/lib/brand";
-import { PLANS, type PlanId } from "@/lib/plans";
+import { PLANS, PAID_PLANS, type PlanId } from "@/lib/plans";
 import { formatCurrency } from "@/lib/format";
 import { assertLocale } from "@/lib/locale";
 import { Check } from "lucide-react";
@@ -34,7 +34,7 @@ export default async function PricingPage({
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl px-6 py-20">
+      <section className="mx-auto max-w-4xl px-6 py-20">
         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-center">
           {t("title")}
         </h1>
@@ -42,13 +42,13 @@ export default async function PricingPage({
           {t("subtitle_long")}
         </p>
 
-        <div className="mt-12 grid gap-4 sm:grid-cols-3">
-          {(["solo", "cabinet", "cabinet_plus"] as PlanId[]).map((planId) => (
+        <div className="mt-12 grid gap-5 sm:grid-cols-2">
+          {PAID_PLANS.map((planId) => (
             <PlanCard key={planId} planId={planId} locale={locale} />
           ))}
         </div>
 
-        <div className="mt-12 max-w-2xl mx-auto text-sm text-muted-foreground space-y-3">
+        <div className="mt-12 max-w-2xl mx-auto text-sm text-muted-foreground space-y-3 text-center">
           <p>{t("trial_note")}</p>
           <p>{t("currency_note")}</p>
         </div>
@@ -73,33 +73,37 @@ async function PlanCard({
     plan.monthlyCadCents != null
       ? formatCurrency(plan.monthlyCadCents / 100, locale, 0)
       : "—";
-  const isMid = planId === "cabinet"; // Highlight the recommended one
+  const featured = planId === "cabinet";
 
   return (
     <div
       className={
-        "rounded-xl border bg-card p-6 flex flex-col gap-4 " +
-        (isMid ? "border-primary shadow-sm" : "border-border")
+        "relative rounded-2xl border bg-card p-7 flex flex-col gap-5 tilt " +
+        (featured
+          ? "featured-card border-transparent"
+          : "border-border hover:border-foreground/20")
       }
     >
+      {featured && (
+        <span className="absolute -top-3 left-7 rounded-full bg-foreground text-background text-[10px] font-semibold px-3 py-1 tracking-wider uppercase">
+          {t("recommended")}
+        </span>
+      )}
       <div>
-        <div className="flex items-center gap-2">
-          <div className="font-medium">{t(`plan_${planId}_name`)}</div>
-          {isMid && (
-            <span className="text-xs bg-primary text-primary-foreground rounded-full px-2 py-0.5">
-              {t("recommended")}
-            </span>
-          )}
-        </div>
-        <div className="mt-2 text-3xl font-semibold tracking-tight">
-          {price}
-          <span className="text-sm text-muted-foreground font-normal">
-            {" "}
+        <div className="font-medium text-lg">{t(`plan_${planId}_name`)}</div>
+        <p className="text-sm text-muted-foreground mt-1">
+          {t(`plan_${planId}_tagline`)}
+        </p>
+        <div className="mt-4 flex items-baseline gap-1.5">
+          <span className="text-4xl font-semibold tracking-tight num-display">
+            {price}
+          </span>
+          <span className="text-sm text-muted-foreground">
             / {t("per_month")}
           </span>
         </div>
       </div>
-      <ul className="text-sm space-y-2 text-muted-foreground">
+      <ul className="text-sm space-y-2.5 text-muted-foreground">
         <li className="flex items-start gap-2">
           <Check className="size-4 text-success shrink-0 mt-0.5" aria-hidden />
           {t(`plan_${planId}_engagements`)}
@@ -114,7 +118,7 @@ async function PlanCard({
         </li>
       </ul>
       <Link href="/signup" className="mt-auto">
-        <Button className="w-full" variant={isMid ? "default" : "outline"}>
+        <Button className="w-full" variant={featured ? "default" : "outline"}>
           {tAuth("create_account")}
         </Button>
       </Link>

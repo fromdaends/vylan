@@ -3,6 +3,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Cross-document view transitions — browsers that support it
+   (Chromium 126+, Safari 18+) get a smooth fade between routes. */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 :root {
   /* Linear-clean palette: cool neutrals, single subtle accent */
   --background: oklch(0.99 0.002 264);        /* near-white, hint of cool */
@@ -313,30 +325,66 @@
       0 2px 8px -1px oklch(0.7 0.16 264 / 0.3);
   }
 
-  /* Conic-gradient ring for featured cards */
-  .ring-conic {
-    position: relative;
+  /* Soft static highlight for featured cards (replaces the animated
+     conic ring, which felt too busy on the pricing grid). */
+  .featured-card {
+    box-shadow:
+      0 0 0 1px oklch(0.62 0.18 264 / 0.35),
+      0 18px 48px -22px oklch(0.62 0.18 264 / 0.35);
   }
-  .ring-conic::before {
-    content: "";
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    background: conic-gradient(
-      from 180deg,
-      oklch(0.62 0.18 264 / 0.6),
-      oklch(0.7 0.18 340 / 0.6),
-      oklch(0.7 0.15 220 / 0.6),
-      oklch(0.62 0.18 264 / 0.6)
-    );
-    -webkit-mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    animation: ring-spin 8s linear infinite;
-    pointer-events: none;
+  .dark .featured-card {
+    box-shadow:
+      0 0 0 1px oklch(0.7 0.16 264 / 0.45),
+      0 24px 64px -22px oklch(0.7 0.16 264 / 0.45);
+  }
+
+  /* Scroll-driven reveal: elements fade + rise as they enter the
+     viewport. Falls back to the final state in browsers without
+     animation-timeline support (Safari < 17, Firefox). */
+  .reveal {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: reveal-in linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 25%;
+  }
+  @supports not (animation-timeline: view()) {
+    .reveal {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .reveal-soft {
+    opacity: 0;
+    animation: reveal-fade linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 30%;
+  }
+  @supports not (animation-timeline: view()) {
+    .reveal-soft {
+      opacity: 1;
+    }
+  }
+
+  /* Tilt-on-hover for benefit cards. The :hover gives a small lift,
+     translateZ keeps the GPU compositor in play so it stays smooth. */
+  .tilt {
+    transition:
+      transform 280ms cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 280ms ease,
+      border-color 280ms ease;
+    transform: perspective(900px) translateZ(0);
+  }
+  .tilt:hover {
+    transform: perspective(900px) translateY(-4px) rotateX(2deg);
+    box-shadow:
+      0 16px 36px -18px oklch(0.18 0.018 264 / 0.25),
+      0 4px 14px -6px oklch(0.18 0.018 264 / 0.1);
+  }
+  .dark .tilt:hover {
+    box-shadow:
+      0 20px 44px -18px oklch(0 0 0 / 0.6),
+      0 6px 18px -6px oklch(0 0 0 / 0.4);
   }
 
   /* Shimmer for hero badge */
@@ -381,10 +429,19 @@
   }
 }
 
-@keyframes ring-spin {
-  to {
-    transform: rotate(1turn);
+@keyframes reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
   }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes reveal-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes shimmer {
