@@ -3,32 +3,30 @@ import { PLANS, priceIdFor, PAID_PLANS } from "./plans";
 
 describe("plan catalog", () => {
   it("locks in the spec prices in CAD cents", () => {
-    expect(PLANS.solo.monthlyCadCents).toBe(2900);
-    expect(PLANS.cabinet.monthlyCadCents).toBe(7900);
-    expect(PLANS.cabinet_plus.monthlyCadCents).toBe(14900);
+    expect(PLANS.solo.monthlyCadCents).toBe(7900);
+    expect(PLANS.cabinet.monthlyCadCents).toBe(15900);
   });
 
   it("locks in active-engagement caps per the spec", () => {
-    expect(PLANS.solo.maxActiveEngagements).toBe(25);
-    expect(PLANS.cabinet.maxActiveEngagements).toBe(200);
-    expect(PLANS.cabinet_plus.maxActiveEngagements).toBeNull();
+    expect(PLANS.solo.maxActiveEngagements).toBe(50);
+    expect(PLANS.cabinet.maxActiveEngagements).toBeNull();
   });
 
   it("locks in seat caps per the spec", () => {
     expect(PLANS.solo.maxUsers).toBe(1);
-    expect(PLANS.cabinet.maxUsers).toBe(5);
-    expect(PLANS.cabinet_plus.maxUsers).toBe(15);
+    expect(PLANS.cabinet.maxUsers).toBe(10);
   });
 
-  it("trial gets solo-equivalent engagement room + 5 seats", () => {
+  it("trial gets a soft cap + 5 seats", () => {
     expect(PLANS.trial.maxActiveEngagements).toBe(25);
     expect(PLANS.trial.maxUsers).toBe(5);
     expect(PLANS.trial.monthlyCadCents).toBeNull();
   });
 
-  it("exposes only paid plans for checkout", () => {
-    expect(PAID_PLANS).toEqual(["solo", "cabinet", "cabinet_plus"]);
+  it("exposes only the two current paid plans for checkout", () => {
+    expect(PAID_PLANS).toEqual(["solo", "cabinet"]);
     expect(PAID_PLANS).not.toContain("trial");
+    expect(PAID_PLANS).not.toContain("cabinet_plus");
   });
 
   it("priceIdFor returns null when env not configured", () => {

@@ -91,7 +91,7 @@ export default async function BillingPage({
 
       <section>
         <h2 className="text-base font-medium mb-3">{t("plans_title")}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {PAID_PLANS.map((planId) => (
             <PlanCard
               key={planId}
