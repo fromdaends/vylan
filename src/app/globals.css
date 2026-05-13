@@ -429,6 +429,22 @@
       0 20px 44px -18px oklch(0 0 0 / 0.6),
       0 6px 18px -6px oklch(0 0 0 / 0.4);
   }
+  /* When the card is both `tilt` AND `featured-card`, keep the lift but
+     use the iris glow shadow (otherwise `.tilt:hover` would override
+     `.featured-card:hover` because it appears later in source order and
+     they share the same specificity). */
+  .featured-card.tilt:hover {
+    box-shadow:
+      0 0 0 1px oklch(0.62 0.18 264 / 0.7),
+      0 32px 80px -16px oklch(0.62 0.18 264 / 0.85),
+      0 0 96px -8px oklch(0.62 0.18 264 / 0.65);
+  }
+  .dark .featured-card.tilt:hover {
+    box-shadow:
+      0 0 0 1px oklch(0.75 0.18 264 / 0.9),
+      0 36px 96px -14px oklch(0.7 0.2 264 / 0.95),
+      0 0 110px -8px oklch(0.7 0.2 264 / 0.8);
+  }
 
   /* Shimmer for hero badge */
   .shimmer {

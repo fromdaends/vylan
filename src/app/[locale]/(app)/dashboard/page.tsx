@@ -139,17 +139,31 @@ export default async function DashboardPage({
       </header>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-in-stagger">
-        <Metric label={t("metric_clients")} value={clients.length} />
-        <Metric label={tAttention("metric_active")} value={activeCount} />
-        <Metric label={tAttention("metric_pending")} value={pendingItemsTotal} />
+        <Metric
+          label={t("metric_clients")}
+          value={clients.length}
+          href="/clients"
+        />
+        <Metric
+          label={tAttention("metric_active")}
+          value={activeCount}
+          href="/clients"
+        />
+        <Metric
+          label={tAttention("metric_pending")}
+          value={pendingItemsTotal}
+          href="#needs-attention"
+        />
         <Metric
           label={tAttention("metric_overdue")}
           value={overdueCount}
           tone={overdueCount > 0 ? "warning" : "default"}
+          href="#needs-attention"
         />
       </div>
 
       <Section
+        id="needs-attention"
         title={tAttention("needs_attention")}
         count={needsAttention.length}
         hint={tAttention("needs_attention_hint")}
@@ -275,14 +289,16 @@ function Metric({
   label,
   value,
   tone = "default",
+  href,
 }: {
   label: string;
   value: number;
   tone?: "default" | "warning";
+  href?: string;
 }) {
-  return (
-    <div className="rounded-xl border border-border bg-card px-5 py-4 hover-lift transition-colors hover:border-foreground/20">
-      <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
+  const inner = (
+    <>
+      <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium transition-colors group-hover:text-foreground">
         {label}
       </div>
       <div
@@ -293,17 +309,34 @@ function Metric({
       >
         {value}
       </div>
-    </div>
+    </>
+  );
+  const base =
+    "group block rounded-xl border border-border bg-card px-5 py-4 hover-lift transition-colors hover:border-foreground/20";
+  if (!href) return <div className={base}>{inner}</div>;
+  if (href.startsWith("#")) {
+    return (
+      <a href={href} className={base + " cursor-pointer no-underline"}>
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={base + " cursor-pointer no-underline"}>
+      {inner}
+    </Link>
   );
 }
 
 function Section({
+  id,
   title,
   count,
   hint,
   icon,
   children,
 }: {
+  id?: string;
   title: string;
   count: number;
   hint: string;
@@ -311,7 +344,10 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-border bg-card animate-in-up">
+    <section
+      id={id}
+      className="scroll-mt-24 rounded-xl border border-border bg-card animate-in-up"
+    >
       <header className="px-5 py-4 border-b border-border/60">
         <div className="flex items-center gap-2 text-sm font-medium">
           {icon}
