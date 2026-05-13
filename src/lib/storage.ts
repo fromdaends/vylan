@@ -10,6 +10,15 @@ export const MAX_HEIC_INPUT_BYTES = 10 * 1024 * 1024;
 // can break ICU message rendering and bloat rows.
 export const MAX_FILENAME_LEN = 200;
 
+// Branding image uploads (firm logo, user avatar) get processed into a
+// 512×512 JPEG before storage. The pre-process cap is generous for an
+// iPhone photo; the hard cap prevents memory-bomb uploads from reaching
+// sharp/heic-convert at all.
+export const MAX_BRANDING_BYTES = 8 * 1024 * 1024;
+export const MAX_BRANDING_HARD_LIMIT = 20 * 1024 * 1024;
+export const BRANDING_OUTPUT_SIZE = 512;
+export const BRANDING_URL_TTL_SEC = 24 * 60 * 60;
+
 export function truncateFilename(name: string): string {
   if (name.length <= MAX_FILENAME_LEN) return name;
   // Preserve the extension when truncating.
@@ -56,6 +65,38 @@ export function storagePath(parts: {
     .replace(/\s+/g, "_")
     .slice(0, 120);
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/items/${parts.itemId}/${parts.uuid}-${safeName}`;
+}
+
+export type BrandingKind = "firm_logo" | "user_avatar";
+
+// Storage paths for branding images. Both sit under the firm prefix so the
+// existing `firms/{firm_id}/...` RLS on the bucket continues to apply.
+export function brandingStoragePath(parts: {
+  firmId: string;
+  kind: BrandingKind;
+  userId?: string;
+  uuid: string;
+  ext: string;
+}): string {
+  const safeExt = parts.ext.replace(/[^a-z0-9]/gi, "").slice(0, 5) || "jpg";
+  if (parts.kind === "firm_logo") {
+    return `firms/${parts.firmId}/branding/logo-${parts.uuid}.${safeExt}`;
+  }
+  // user_avatar requires userId
+  if (!parts.userId) {
+    throw new Error("brandingStoragePath: userId required for user_avatar");
+  }
+  return `firms/${parts.firmId}/users/${parts.userId}/avatar-${parts.uuid}.${safeExt}`;
+}
+
+// Branding images are referenced repeatedly (every page load), so use a
+// longer TTL than per-file downloads. 24h means we can cache the URL in
+// memory for the session without re-signing on every render.
+export async function getBrandingImageUrl(
+  path: string | null,
+): Promise<string | null> {
+  if (!path) return null;
+  return signedUrl(path, BRANDING_URL_TTL_SEC);
 }
 
 export async function convertHeicToJpeg(
