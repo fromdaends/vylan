@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local-only git worktrees (gitignored). Scanning them double-reports
+    // every issue and there's nothing actionable inside them.
+    ".claude/worktrees/**",
   ]),
 ]);
 

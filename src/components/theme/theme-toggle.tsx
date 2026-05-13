@@ -8,7 +8,12 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
+  // Standard next-themes hydration guard: theme isn't known on the server,
+  // so we render a neutral icon until after mount to avoid a hydration
+  // mismatch. The cascading-render warning doesn't apply — this fires
+  // exactly once.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
