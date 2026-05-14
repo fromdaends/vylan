@@ -2,16 +2,17 @@ import { redirect } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
 import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
 
-// /settings is now a slim "preferences" page: theme + UI language. Anything
-// firm-level (name, brand color, timezone, default client locale) lives on
-// /profile under "Your firm". This keeps the model simple — your firm info
-// is yours to edit, system preferences are just preferences.
+// /settings: personal preferences (theme + UI language) + firm-level
+// behaviour toggles (e.g. auto-reject unreadable docs). Firm identity
+// (name, brand color, timezone, default client locale) still lives on
+// /profile under "Your firm".
 export default async function SettingsPage({
   params,
 }: {
@@ -26,8 +27,11 @@ export default async function SettingsPage({
   if (!auth.user) {
     redirect(getPathname({ locale, href: "/login" }));
   }
-  const user = await getCurrentUser();
-  if (!user) {
+  const [user, firm] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+  ]);
+  if (!user || !firm) {
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
@@ -40,7 +44,10 @@ export default async function SettingsPage({
         <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>
       </header>
 
-      <SettingsForm currentLocale={user.locale} />
+      <SettingsForm
+        currentLocale={user.locale}
+        autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
+      />
     </div>
   );
 }
