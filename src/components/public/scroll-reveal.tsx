@@ -100,9 +100,19 @@ export function ScrollReveal({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  // margin is `top right bottom left`. Shrinking the effective
+  // viewport by 20% from the top + 10% from the bottom means:
+  //   - Entries fire when the element is meaningfully visible
+  //     (10% bottom buffer keeps them from firing at the very edge).
+  //   - Exits fire while the element is still 20% from the actual
+  //     top of viewport — leaving roughly ~150px of visible screen
+  //     real estate for the blur-fade exit animation to play in.
+  //     Without this, inView only flipped false once the element was
+  //     already mostly off-screen, so the exit animation ran where
+  //     the user couldn't see it.
   const inView = useInView(ref, {
     amount: 0.15,
-    margin: "0px 0px -10% 0px",
+    margin: "-20% 0px -10% 0px",
   });
 
   useEffect(() => attachSharedScrollListener(), []);
