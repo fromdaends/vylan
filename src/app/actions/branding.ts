@@ -7,7 +7,6 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import {
   BRANDING_OUTPUT_SIZE,
-  BRANDING_URL_TTL_SEC,
   MAX_BRANDING_BYTES,
   MAX_BRANDING_HARD_LIMIT,
   brandingStoragePath,
@@ -119,6 +118,3 @@ export async function uploadBrandingImage(
   if (!url) return { ok: false, error: "upload_failed" };
   return { ok: true, signedUrl: url, path };
 }
-
-// Re-exports for callers that just want to know how long URLs are valid.
-export { BRANDING_URL_TTL_SEC };

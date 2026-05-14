@@ -103,7 +103,14 @@ export default function GlobalError({
             <button
               type="button"
               onClick={() => {
-                if (typeof window !== "undefined") window.location.assign("/");
+                if (typeof window === "undefined") return;
+                // Send users back to the dashboard for their current locale.
+                // The auth gate on /[locale]/(app)/ redirects signed-out
+                // users to /login automatically, so this works in both
+                // states. Default to /fr if the URL has no locale prefix.
+                const parts = window.location.pathname.split("/").filter(Boolean);
+                const locale = parts[0] === "en" ? "en" : "fr";
+                window.location.assign(`/${locale}/dashboard`);
               }}
               style={{
                 background: "transparent",
