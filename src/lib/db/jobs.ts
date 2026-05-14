@@ -4,7 +4,13 @@
 
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
-export type JobKind = "send_reminder" | "classify_document";
+export type JobKind =
+  | "send_reminder"
+  | "classify_document"
+  // Queued by the Phase 3 router when an upload should be auto-rejected.
+  // Handler ships in Phase 4 (UnusableDocRetry email + SMS); until then
+  // the cron route will absorb these as `unknown_kind` (non-fatal).
+  | "notify_client_retry";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {
