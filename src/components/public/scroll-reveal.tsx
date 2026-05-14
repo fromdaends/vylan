@@ -6,86 +6,41 @@ import {
   useScroll,
   useTransform,
   type MotionValue,
-  type Variants,
 } from "framer-motion";
-import { useRef, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 // Reveal + parallax for the landing page, framer-motion-backed.
 //
-// ScrollReveal behavior:
-//   - Element enters viewport (scrolling DOWN) → fades + lifts in with
-//     an animation.
-//   - Element exits viewport (scrolling UP past it, or scrolling DOWN
-//     past it) → instantly snaps back to the hidden state, no reverse
-//     animation. Just disappears.
-//   - Element re-enters viewport (scrolling DOWN again after going up)
-//     → animation replays.
+// ScrollReveal behavior — direction-aware:
+//   - Element enters viewport while page scroll is moving DOWN
+//     → fades + lifts in over 0.7s.
+//   - Element enters viewport while page scroll is moving UP (i.e.,
+//     user has already seen it and is now scrolling back over it from
+//     above) → snaps straight to visible with no animation.
+//   - Element exits viewport in either direction → snaps to hidden
+//     state silently. No reverse animation.
+//   - Result: the entrance animation is a "scroll down" payoff; the
+//     element never animates while you're going back up.
 //
-// This is what we want for a marketing page: the entrance is the
-// payoff, the exit shouldn't compete for attention.
-//
-// prefers-reduced-motion is honored automatically by framer-motion via
-// its global reduced-motion handling.
+// prefers-reduced-motion is honored automatically by framer-motion.
 
 type Intensity = "soft" | "strong" | "pop";
 
-// Each variant carries its own transition. Hidden has duration: 0 so
-// the snap-back when leaving the viewport is instant rather than a
-// reverse animation.
-const VARIANTS: Record<Intensity, Variants> = {
-  soft: {
-    hidden: {
-      opacity: 0,
-      y: 28,
-      transition: { duration: 0 },
-    },
-    visible: (custom: number = 0) => ({
-      opacity: 1,
-      y: 0,
-      transition: {
-        duration: 0.55,
-        delay: custom,
-        ease: [0.16, 1, 0.3, 1],
-      },
-    }),
-  },
-  strong: {
-    hidden: {
-      opacity: 0,
-      y: 80,
-      scale: 0.92,
-      transition: { duration: 0 },
-    },
-    visible: (custom: number = 0) => ({
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: {
-        duration: 0.7,
-        delay: custom,
-        ease: [0.16, 1, 0.3, 1],
-      },
-    }),
-  },
-  pop: {
-    hidden: {
-      opacity: 0,
-      y: 60,
-      scale: 0.88,
-      transition: { duration: 0 },
-    },
-    visible: (custom: number = 0) => ({
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: {
-        duration: 0.6,
-        delay: custom,
-        ease: [0.16, 1, 0.3, 1],
-      },
-    }),
-  },
+// y + scale offsets per intensity. Hidden = the start of the entrance
+// animation, visible = the rest state.
+const INTENSITY_STATES: Record<Intensity, { y: number; scale: number }> = {
+  soft: { y: 28, scale: 1 },
+  strong: { y: 80, scale: 0.92 },
+  pop: { y: 60, scale: 0.88 },
 };
+
+const ENTRANCE_DURATION: Record<Intensity, number> = {
+  soft: 0.55,
+  strong: 0.7,
+  pop: 0.6,
+};
+
+const EASE = [0.16, 1, 0.3, 1] as const;
 
 export function ScrollReveal({
   children,
@@ -99,20 +54,57 @@ export function ScrollReveal({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  // amount: how much of the element must be in view to count as
-  // "in view". 0.15 = 15% visible.
   const inView = useInView(ref, {
     amount: 0.15,
     margin: "0px 0px -10% 0px",
   });
 
+  // Track scroll direction in a ref so we can branch the variant
+  // transition at the exact moment animation kicks off — without
+  // causing extra re-renders on every scroll event.
+  const lastScrollY = useRef(
+    typeof window !== "undefined" ? window.scrollY : 0,
+  );
+  const isScrollingDown = useRef(true);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY;
+      // ">=" so the very first scroll counts as DOWN even if delta is 0.
+      isScrollingDown.current = y >= lastScrollY.current;
+      lastScrollY.current = y;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const offsets = INTENSITY_STATES[intensity];
+  const duration = ENTRANCE_DURATION[intensity];
+
   return (
     <motion.div
       ref={ref}
-      initial="hidden"
-      animate={inView ? "visible" : "hidden"}
-      variants={VARIANTS[intensity]}
-      custom={delay}
+      initial={{ opacity: 0, y: offsets.y, scale: offsets.scale }}
+      animate={
+        inView
+          ? {
+              opacity: 1,
+              y: 0,
+              scale: 1,
+              // Only animate when entering during a DOWN scroll.
+              // Re-entering during an UP scroll snaps to visible
+              // (duration 0) so nothing happens while going up.
+              transition: isScrollingDown.current
+                ? { duration, delay, ease: EASE }
+                : { duration: 0 },
+            }
+          : {
+              opacity: 0,
+              y: offsets.y,
+              scale: offsets.scale,
+              transition: { duration: 0 },
+            }
+      }
       className={className}
     >
       {children}
@@ -122,8 +114,8 @@ export function ScrollReveal({
 
 // ─────────────────────────────────────────────────────────────────────
 // ParallaxLayer — drifts at a different speed than the page as you
-// scroll past. Always bidirectional (this stays on-screen as part of
-// the page composition, not as a one-shot entrance).
+// scroll past. Bidirectional by design (it's part of the page
+// composition, not a one-shot entrance).
 // ─────────────────────────────────────────────────────────────────────
 
 export function ParallaxLayer({
