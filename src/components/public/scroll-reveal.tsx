@@ -109,7 +109,7 @@ export function ScrollReveal({
   //     height of visible runway for the blur fade to play in.
   const inView = useInView(ref, {
     amount: 0.2,
-    margin: "0px 0px -15% 0px",
+    margin: "0px 0px -5% 0px",
   });
 
   useEffect(() => attachSharedScrollListener(), []);
