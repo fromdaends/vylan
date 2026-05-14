@@ -35,33 +35,6 @@ export default async function Home({
 
   return (
     <main className="relative flex-1 flex flex-col overflow-hidden">
-      {/* Page-level ambient layer — a small set of very soft, very large
-          orbs that drift slowly across the whole welcome page. By living
-          on <main> instead of inside each section, they cross section
-          boundaries continuously, so there's no visible "band" where one
-          backdrop ends and the next begins. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-hidden"
-        style={{ bottom: "20rem" }}
-      >
-        <div
-          className="orb orb-iris absolute h-[900px] w-[900px] -top-32 left-1/2 -translate-x-1/2 opacity-90"
-        />
-        <div
-          className="orb orb-cyan absolute h-[700px] w-[700px] top-[30%] -left-40 opacity-70"
-          style={{ animationDelay: "-3s" }}
-        />
-        <div
-          className="orb orb-pink absolute h-[700px] w-[700px] top-[60%] -right-40 opacity-60"
-          style={{ animationDelay: "-7s" }}
-        />
-        <div
-          className="orb orb-gold absolute h-[500px] w-[500px] top-[80%] left-[15%] opacity-45"
-          style={{ animationDelay: "-11s" }}
-        />
-      </div>
-
       {/* Header */}
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-background/70 border-b border-border/60">
         <div className="nav-shrink mx-auto max-w-6xl flex items-center justify-between px-6 py-3.5">
@@ -107,31 +80,34 @@ export default async function Home({
 
       {/* HERO */}
       <section className="relative overflow-hidden">
-        {/* Hero-local multi-color orb cluster — sits behind the headline
-            so it reads as a colorful halo around the main writing,
-            rather than the calmer page-level layer alone. */}
+        {/* Hero halo — a rich multi-color cluster behind the headline.
+            Bright orbs sit at the corners (pink + emerald + cyan +
+            gold) with the iris keystone overhead, so the headline
+            reads against a full-spectrum glow instead of a single
+            blue wash. Masked into a soft ellipse so the colors don't
+            bleed into the intro section below. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]"
+          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_70%_85%_at_50%_30%,black,transparent_75%)]"
         >
-          <div className="orb orb-iris h-[640px] w-[640px] top-[-160px] left-1/2 -translate-x-1/2 opacity-90" />
+          <div className="orb orb-iris h-[720px] w-[720px] top-[-180px] left-1/2 -translate-x-1/2 opacity-100" />
           <div
-            className="orb orb-cyan h-[440px] w-[440px] top-[60px] left-[8%] opacity-80"
+            className="orb orb-pink h-[520px] w-[520px] top-[40px] -left-[80px] opacity-100"
             style={{ animationDelay: "-3s" }}
           />
           <div
-            className="orb orb-pink h-[440px] w-[440px] top-[60px] right-[8%] opacity-80"
+            className="orb orb-cyan h-[520px] w-[520px] top-[40px] -right-[80px] opacity-100"
             style={{ animationDelay: "-7s" }}
           />
           <div
-            className="orb orb-gold h-[300px] w-[300px] top-[280px] left-1/2 -translate-x-1/2 opacity-60"
-            style={{ animationDelay: "-9s" }}
+            className="orb orb-emerald h-[400px] w-[400px] top-[220px] left-[12%] opacity-80"
+            style={{ animationDelay: "-11s" }}
+          />
+          <div
+            className="orb orb-gold h-[400px] w-[400px] top-[220px] right-[12%] opacity-80"
+            style={{ animationDelay: "-5s" }}
           />
         </div>
-        <div
-          aria-hidden
-          className="absolute inset-0 -z-10 bg-grid opacity-40 [mask-image:radial-gradient(ellipse_at_top,black,transparent_65%)]"
-        />
 
         <div className="mx-auto max-w-4xl px-6 pt-24 pb-24 sm:pt-32 sm:pb-32 text-center animate-in-up">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 backdrop-blur px-4 py-1.5 text-xs font-medium mb-8">
@@ -303,14 +279,6 @@ export default async function Home({
                 featured={planId === "cabinet"}
               />
             ))}
-          </div>
-          <div className="mt-12 text-center">
-            <Link href="/pricing">
-              <Button variant="ghost">
-                {tPricing("see_all")}
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
           </div>
         </div>
       </section>
@@ -488,12 +456,12 @@ async function PlanPreview({
     plan.monthlyCadCents != null
       ? formatCurrency(plan.monthlyCadCents / 100, locale, 0)
       : "—";
-  // Whole card is a link to the signup -> Stripe checkout flow. (The
-  // actual Stripe wiring happens on the Billing page after onboarding;
-  // /signup is the right entry point for new visitors.)
+  // Whole card links to the dedicated plan page (/pricing/solo or
+  // /pricing/cabinet). The plan page hands off to /signup?plan=<id>
+  // which the Stripe checkout flow will pick up once wired.
   return (
     <Link
-      href="/signup"
+      href={`/pricing/${planId}`}
       className={
         "reveal relative block cursor-pointer rounded-2xl border bg-card p-7 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
         (featured

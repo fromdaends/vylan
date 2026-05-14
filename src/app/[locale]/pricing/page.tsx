@@ -77,7 +77,7 @@ async function PlanCard({
 
   return (
     <Link
-      href="/signup"
+      href={`/pricing/${planId}`}
       className={
         "relative block cursor-pointer rounded-2xl border bg-card p-7 flex flex-col gap-5 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
         (featured
