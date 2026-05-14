@@ -2,11 +2,20 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Upload, Check, FileCheck2, X, RotateCcw } from "lucide-react";
+import { Upload, Check, FileCheck2, X, RotateCcw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
+
+// Shape returned by /api/portal/upload when the inline AI classifier ran.
+type UploadVerdict = {
+  usable: boolean;
+  primary_issue: string | null;
+  issue_summary_fr: string;
+  issue_summary_en: string;
+  auto_rejected: boolean;
+};
 
 const ACCEPT =
   "application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif";
@@ -30,6 +39,10 @@ export function ItemCard({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Surfaced when the inline AI classifier flagged the upload as the
+  // wrong document or otherwise unusable. Lets the client retry without
+  // having to wait for the email/SMS.
+  const [aiRejection, setAiRejection] = useState<string | null>(null);
   const [pendingNa, startNa] = useTransition();
 
   const label =
@@ -41,6 +54,7 @@ export function ItemCard({
 
   async function uploadFiles(files: FileList) {
     setError(null);
+    setAiRejection(null);
     for (const file of Array.from(files)) {
       setUploading(true);
       try {
@@ -58,7 +72,26 @@ export function ItemCard({
           } | null;
           throw new Error(j?.error ?? "upload_failed");
         }
+        const body = (await res.json().catch(() => null)) as {
+          ok?: boolean;
+          verdict?: UploadVerdict | null;
+        } | null;
+        // Always count the upload — the file IS saved server-side. The
+        // verdict only governs whether we surface a "try again" message
+        // on top of that.
         onUploaded();
+        if (body?.verdict?.auto_rejected) {
+          const msg =
+            locale === "fr"
+              ? body.verdict.issue_summary_fr ||
+                body.verdict.issue_summary_en
+              : body.verdict.issue_summary_en ||
+                body.verdict.issue_summary_fr;
+          setAiRejection(msg || t("ai_rejected_generic"));
+          // Stop processing further files in the batch; the client
+          // should fix this one before continuing.
+          break;
+        }
       } catch (e) {
         setError((e as Error).message);
         break;
@@ -137,6 +170,19 @@ export function ItemCard({
               </div>
               <div className="text-foreground/80 mt-0.5">
                 {item.rejection_reason}
+              </div>
+            </div>
+          )}
+
+          {aiRejection && (
+            <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
+              <div className="flex items-center gap-1.5 font-medium text-destructive">
+                <AlertTriangle className="size-4" aria-hidden />
+                {t("ai_rejected_title")}
+              </div>
+              <div className="text-foreground/80 mt-0.5">{aiRejection}</div>
+              <div className="text-xs text-muted-foreground mt-1">
+                {t("ai_rejected_help")}
               </div>
             </div>
           )}
