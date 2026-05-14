@@ -83,12 +83,11 @@ const ENTRANCE_DURATION: Record<Intensity, number> = {
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 const EASE_IN = [0.4, 0, 1, 1] as const;
-// UP-exit values: dramatic but contained drift-away effect for when
-// the user scrolls up past a section. Element fades, blurs, shrinks,
-// and drifts downward (away from the user's eye, which is moving up).
-const UP_EXIT_DURATION = 0.7;
-const UP_EXIT_BLUR_PX = 24;
-const UP_EXIT_SCALE = 0.9;
+// UP-exit values: refined drift-away when scrolling up past a section.
+// Tuned for "polished" rather than "exaggerated".
+const UP_EXIT_DURATION = 0.55;
+const UP_EXIT_BLUR_PX = 12;
+const UP_EXIT_SCALE = 0.94;
 
 export function ScrollReveal({
   children,
