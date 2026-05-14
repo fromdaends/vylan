@@ -36,7 +36,7 @@ export default async function Home({
   return (
     <main className="relative flex-1 flex flex-col overflow-hidden ambient-warm">
       {/* Header */}
-      <header className="sticky top-0 z-40 backdrop-blur-xl bg-background/70 border-b border-border/60">
+      <header className="sticky top-0 z-40 backdrop-blur-md bg-background/80 border-b border-border/60">
         <div className="nav-shrink mx-auto max-w-6xl flex items-center justify-between px-6 py-3.5">
           <Link
             href="/"
@@ -156,7 +156,11 @@ export default async function Home({
       {/* INTRO — the bigger welcome / explainer */}
       <section className="relative">
         <div className="mx-auto max-w-4xl px-6 py-28 sm:py-36 text-center">
-          <ScrollReveal intensity="strong">
+          {/* intensity="soft" (translate-only, no scale) — animating
+              scale on a parent that contains a .text-gradient child
+              triggers per-frame rasterization of background-clip:text
+              and produces visible jitter on hi-DPI displays. */}
+          <ScrollReveal intensity="soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-4">
               {t("intro_eyebrow")}
             </div>
@@ -244,7 +248,10 @@ export default async function Home({
         </ParallaxLayer>
         <div className="mx-auto max-w-6xl px-6 py-28 sm:py-32">
           <div className="grid gap-12 md:grid-cols-2 md:items-center">
-            <ScrollReveal intensity="strong">
+            {/* intensity="soft" because the title uses .text-gradient-warm —
+                scale animations on background-clip:text re-rasterize the
+                gradient every frame and jitter on hi-DPI. Translate only. */}
+            <ScrollReveal intensity="soft">
               <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
                 {t("features_eyebrow")}
               </div>
@@ -380,8 +387,11 @@ export default async function Home({
 
       {/* Final CTA */}
       <section className="relative">
+        {/* intensity="soft" because the title uses .text-gradient —
+            scale + background-clip:text triggers per-frame gradient
+            re-rasterization (jitter on hi-DPI). Translate only. */}
         <ScrollReveal
-          intensity="strong"
+          intensity="soft"
           className="mx-auto max-w-3xl px-6 py-24 text-center"
         >
           <h2 className="text-4xl sm:text-5xl font-semibold tracking-tight text-gradient">

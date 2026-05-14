@@ -254,13 +254,21 @@
 
   /* --- Bolder utilities --- */
 
-  /* Animated gradient orb backdrop */
+  /* Animated gradient orb backdrop.
+     Perf: kept as a STATIC blurred radial gradient — no per-frame
+     `orb-float` keyframe. The orbs get their motion from the
+     ParallaxLayer wrapper instead, which translates the whole layer
+     on the compositor (cheap) rather than repainting a giant
+     blur(80px) on every frame (expensive). will-change + translateZ
+     promote each orb to its own GPU layer so the parallax translate
+     is a pure compositor operation. */
   .orb {
     position: absolute;
     border-radius: 9999px;
-    filter: blur(80px);
+    filter: blur(56px);
     pointer-events: none;
-    animation: orb-float 14s ease-in-out infinite;
+    transform: translateZ(0);
+    will-change: transform, opacity;
   }
   .orb-iris {
     background: radial-gradient(
