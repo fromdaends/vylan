@@ -7,6 +7,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import type { DocType } from "@/lib/db/templates";
+import {
+  USABILITY_ISSUES,
+  USABLE_BY_DEFAULT,
+  isUsabilityIssue,
+  type UsabilityVerdict,
+} from "./usability";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -17,6 +23,7 @@ export type ClassificationResult = {
   extracted_amount_or_total: number | null;
   looks_correct: boolean;
   issue_if_any: string | null;
+  usability: UsabilityVerdict;
 };
 
 let _client: Anthropic | null = null;
@@ -80,6 +87,40 @@ const CLASSIFY_TOOL = {
         description:
           "A short bilingual-safe note explaining the mismatch if looks_correct is false, or any concern (illegible, wrong year, multiple slips in one file). Null if nothing's wrong.",
       },
+      usable: {
+        type: "boolean",
+        description:
+          "True if a real accountant would accept this document as-is. False only if it would clearly be sent back for re-upload. Borderline cases (mildly blurry but readable) must be TRUE.",
+      },
+      usability_confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+        description:
+          "How confident the usability verdict is. Use <0.80 when uncertain — Relai only auto-acts at >=0.80.",
+      },
+      primary_issue: {
+        type: ["string", "null"],
+        enum: [...USABILITY_ISSUES, null],
+        description:
+          "The single biggest reason the document is unusable. Null when usable.",
+      },
+      all_issues: {
+        type: "array",
+        items: { type: "string", enum: [...USABILITY_ISSUES] },
+        description:
+          "All issues present. Empty array when usable.",
+      },
+      issue_summary_fr: {
+        type: "string",
+        description:
+          "One short sentence in French explaining what is wrong, written for the client. Specific (e.g. 'le montant à droite est coupé') not generic ('image floue'). Empty string when usable.",
+      },
+      issue_summary_en: {
+        type: "string",
+        description:
+          "One short sentence in English explaining what is wrong, written for the client. Specific (e.g. 'the amount on the right is cut off') not generic ('blurry image'). Empty string when usable.",
+      },
     },
     required: [
       "document_type",
@@ -88,6 +129,12 @@ const CLASSIFY_TOOL = {
       "extracted_amount_or_total",
       "looks_correct",
       "issue_if_any",
+      "usable",
+      "usability_confidence",
+      "primary_issue",
+      "all_issues",
+      "issue_summary_fr",
+      "issue_summary_en",
     ],
   },
 };
@@ -119,6 +166,35 @@ Canadian tax document reference (use these exact identifiers):
 - other = anything else
 - unknown = can't tell
 
+After identifying the document type, also assess whether this document is
+USABLE for an accountant. A document is usable if all key information is
+clearly readable. Mark it unusable if ANY of the following are true:
+
+- text_unreadable: blur, low resolution, or pixelation makes key text
+  illegible
+- key_fields_obscured: important fields (amounts, names, dates, account
+  numbers) are covered, scratched out, or missing
+- partial_capture: the document is cut off — edges missing, only part
+  of a page visible
+- glare_or_shadow: reflections, bright spots, or shadows obscure
+  important content
+- wrong_document_type: the document is clearly not what was expected
+  (e.g., a screenshot of a payment app where a T4 was requested)
+- corrupt_or_blank: the file appears blank, corrupted, or contains no
+  meaningful document content
+- other: a usability issue that doesn't match the categories above
+
+If the document is borderline (mildly blurry but readable), prefer USABLE.
+Only mark UNUSABLE if a human accountant would clearly reject it.
+
+Return a usability_confidence between 0 and 1. Use <0.80 when you are
+uncertain — Relai only auto-acts above that threshold.
+
+When unusable, write issue_summary_fr and issue_summary_en as one short,
+friendly, SPECIFIC sentence written for the client. The client will read
+the exact words. Prefer "the right-side amount is cut off" over generic
+phrasing like "blurry image".
+
 Always call the classify_document tool. Never reply with prose.`;
 }
 
@@ -144,6 +220,7 @@ export async function classifyDocument(opts: {
       extracted_amount_or_total: null,
       looks_correct: false,
       issue_if_any: "Unsupported file format for AI classification.",
+      usability: USABLE_BY_DEFAULT,
     };
   }
 
@@ -223,6 +300,32 @@ export function parseClassification(
       typeof raw.issue_if_any === "string" && raw.issue_if_any.trim() !== ""
         ? raw.issue_if_any.trim()
         : null,
+    usability: parseUsability(raw),
+  };
+}
+
+// Tolerant parser for the usability sub-object. Anything malformed
+// collapses to USABLE_BY_DEFAULT so a flaky AI response can never
+// auto-reject a clean file. all_issues drops unknown values rather
+// than rejecting the whole result.
+function parseUsability(raw: Record<string, unknown>): UsabilityVerdict {
+  // Required: usable + usability_confidence. Without these we
+  // fall back to the safe default.
+  if (typeof raw.usable !== "boolean") return USABLE_BY_DEFAULT;
+  if (typeof raw.usability_confidence !== "number") return USABLE_BY_DEFAULT;
+
+  const primary = raw.primary_issue;
+  const all = raw.all_issues;
+  const summaryFr = raw.issue_summary_fr;
+  const summaryEn = raw.issue_summary_en;
+
+  return {
+    usable: raw.usable,
+    confidence: Math.max(0, Math.min(1, raw.usability_confidence)),
+    primary_issue: isUsabilityIssue(primary) ? primary : null,
+    all_issues: Array.isArray(all) ? all.filter(isUsabilityIssue) : [],
+    issue_summary_fr: typeof summaryFr === "string" ? summaryFr.trim() : "",
+    issue_summary_en: typeof summaryEn === "string" ? summaryEn.trim() : "",
   };
 }
 
