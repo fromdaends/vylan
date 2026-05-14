@@ -36,6 +36,16 @@ export function HelpSidebar() {
     queueMicrotask(() => setPageUrl(window.location.pathname));
   }, []);
 
+  // The profile dropdown's "Help" menu item dispatches this event so we can
+  // open the sheet without lifting state to a shared context.
+  useEffect(() => {
+    function onOpen() {
+      setOpen(true);
+    }
+    window.addEventListener("relai:open-help", onOpen);
+    return () => window.removeEventListener("relai:open-help", onOpen);
+  }, []);
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
