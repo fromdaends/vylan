@@ -222,8 +222,20 @@ function FirmPreferencesSection({
     const fd = new FormData();
     fd.append("enabled", next ? "true" : "false");
     startTransition(async () => {
-      const res = await setAutoRejectAction(fd);
-      if (!res.ok) {
+      // Belt-and-suspenders: the server action body is already wrapped
+      // in try/catch, but a transport-level failure (Next.js RPC, action
+      // ID mismatch on a stale deploy, network error) would otherwise
+      // bubble up through `startTransition` and trip the global
+      // error.tsx boundary — i.e. the user sees a 500 page instead of
+      // a revert. Wrap the await here so the UI always recovers.
+      try {
+        const res = await setAutoRejectAction(fd);
+        if (!res.ok) {
+          setError(t("save_failed"));
+          setEnabled(!next); // revert
+        }
+      } catch (e) {
+        console.error("[onToggle] auto-reject save failed:", e);
         setError(t("save_failed"));
         setEnabled(!next); // revert
       }
