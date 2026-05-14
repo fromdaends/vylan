@@ -17,10 +17,16 @@ import {
   isAiConfigured,
   type ClassificationResult,
 } from "./classify";
+import { shouldActOnUsability } from "./usability";
+import { decide, applyDecision, type DispatcherResult } from "./router";
 
 export async function processClassifyJob(
   payload: Record<string, unknown>,
-): Promise<{ skipped?: string; classified?: ClassificationResult }> {
+): Promise<{
+  skipped?: string;
+  classified?: ClassificationResult;
+  routed?: DispatcherResult;
+}> {
   if (!isAiConfigured()) return { skipped: "ai_not_configured" };
   const fileId = String(payload.uploaded_file_id ?? "");
   if (!fileId) return { skipped: "missing_file_id" };
@@ -92,14 +98,26 @@ export async function processClassifyJob(
     })
     .eq("id", file.id);
 
+  // Pull the firm + client locale together so we can both log the
+  // classification AND decide whether to route the AI's verdict.
   const { data: e } = await sb
     .from("engagements")
-    .select("firm_id")
+    .select("firm_id, clients!inner(locale)")
     .eq("id", file.engagement_id)
     .single();
-  if (e) {
+  type EngagementRow = {
+    firm_id: string;
+    clients: { locale: "fr" | "en" } | { locale: "fr" | "en" }[];
+  };
+  const eRow = e as unknown as EngagementRow | null;
+  const firmId = eRow?.firm_id ?? null;
+  const clientLocale = Array.isArray(eRow?.clients)
+    ? eRow?.clients[0]?.locale
+    : eRow?.clients?.locale;
+
+  if (firmId) {
     await sb.from("activity_log").insert({
-      firm_id: e.firm_id,
+      firm_id: firmId,
       engagement_id: file.engagement_id,
       actor_type: "system",
       action: "ai_classified",
@@ -115,5 +133,41 @@ export async function processClassifyJob(
     });
   }
 
-  return { classified: result };
+  // Route the verdict if (and only if) the AI is confidently unusable.
+  // The router consults the firm flag + strike counter to decide
+  // between auto-reject, escalate, and queue.
+  let routed: DispatcherResult | undefined;
+  if (firmId && shouldActOnUsability(result.usability)) {
+    const [firmRow, itemRow] = await Promise.all([
+      sb
+        .from("firms")
+        .select("auto_reject_unusable_docs")
+        .eq("id", firmId)
+        .single(),
+      sb
+        .from("request_items")
+        .select("ai_rejection_count")
+        .eq("id", file.request_item_id)
+        .single(),
+    ]);
+    const autoRejectOn = Boolean(
+      firmRow.data?.auto_reject_unusable_docs,
+    );
+    const rejectionCount = Number(
+      itemRow.data?.ai_rejection_count ?? 0,
+    );
+    const decision = decide({ autoRejectOn, rejectionCount });
+    routed = await applyDecision({
+      supabase: sb,
+      decision,
+      verdict: result.usability,
+      fileId: file.id,
+      requestItemId: file.request_item_id,
+      engagementId: file.engagement_id,
+      firmId,
+      clientLocale: clientLocale === "en" ? "en" : "fr",
+    });
+  }
+
+  return { classified: result, routed };
 }
