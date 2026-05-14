@@ -22,6 +22,10 @@ export type RequestItem = {
   approved_by: string | null;
   approved_at: string | null;
   rejection_reason: string | null;
+  // Phase 1: counts how many times the AI has auto-rejected uploads
+  // for this specific request item. Used by the Phase 3 router to
+  // escalate after 2 strikes and by Phase 5's red badge.
+  ai_rejection_count: number;
   created_at: string;
 };
 
