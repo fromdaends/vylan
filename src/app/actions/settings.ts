@@ -28,19 +28,38 @@ const AutoRejectSchema = z.object({
 export async function setAutoRejectAction(
   formData: FormData,
 ): Promise<AutoRejectActionResult> {
-  const parsed = AutoRejectSchema.safeParse({
-    enabled: formData.get("enabled"),
-  });
-  if (!parsed.success) return { ok: false, error: "invalid_input" };
+  // Outermost try/catch so the action NEVER rejects on the client.
+  // A rejected server action escapes useTransition's boundary and
+  // trips the global error.tsx (the user saw a generic 500 page).
+  // We want the Switch to revert + show "save_failed" instead.
   try {
-    await updateCurrentFirm({
-      auto_reject_unusable_docs: parsed.data.enabled,
+    const parsed = AutoRejectSchema.safeParse({
+      enabled: formData.get("enabled"),
     });
-  } catch {
+    if (!parsed.success) return { ok: false, error: "invalid_input" };
+    try {
+      await updateCurrentFirm({
+        auto_reject_unusable_docs: parsed.data.enabled,
+      });
+    } catch (e) {
+      // Most common reason this fires is a missing column in
+      // production (migration 0029_ai_usability.sql not yet
+      // applied to Supabase). Surface it as a structured error
+      // instead of a thrown exception.
+      console.error("[setAutoRejectAction] update failed:", e);
+      return { ok: false, error: "update_failed" };
+    }
+    try {
+      revalidatePath("/", "layout");
+    } catch (e) {
+      // Cache-revalidation failing shouldn't fail the save itself.
+      console.warn("[setAutoRejectAction] revalidate skipped:", e);
+    }
+    return { ok: true, value: parsed.data.enabled };
+  } catch (e) {
+    console.error("[setAutoRejectAction] unexpected:", e);
     return { ok: false, error: "update_failed" };
   }
-  revalidatePath("/", "layout");
-  return { ok: true, value: parsed.data.enabled };
 }
 
 export const SettingsSchema = z.object({
