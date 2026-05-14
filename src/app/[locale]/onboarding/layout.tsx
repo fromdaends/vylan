@@ -3,6 +3,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { Link, getPathname } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
+import { Logo } from "@/components/brand/logo";
 
 export default async function OnboardingLayout({
   children,
@@ -33,11 +34,13 @@ export default async function OnboardingLayout({
         <div className="mx-auto max-w-6xl px-6 py-3.5">
           <Link
             href="/"
-            className="flex items-center gap-2 font-semibold tracking-tight"
+            className="flex items-center gap-2 font-semibold tracking-tight group"
           >
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-foreground text-background text-[10px] font-bold">
-              R
-            </span>
+            <Logo
+              size={24}
+              priority
+              className="transition-transform group-hover:scale-110 group-hover:rotate-3"
+            />
             {brand.name}
           </Link>
         </div>

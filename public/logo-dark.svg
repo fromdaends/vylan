@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-label="Relai">
+  <defs>
+    <radialGradient id="planet-d" cx="42%" cy="38%" r="68%">
+      <stop offset="0%" stop-color="#3a4150"/>
+      <stop offset="55%" stop-color="#1f2533"/>
+      <stop offset="100%" stop-color="#10131c"/>
+    </radialGradient>
+    <linearGradient id="ring-gold-d" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#9f7a3a"/>
+      <stop offset="50%" stop-color="#f3cc7b"/>
+      <stop offset="100%" stop-color="#8c6628"/>
+    </linearGradient>
+    <linearGradient id="ring-inner-d" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#2a3140"/>
+      <stop offset="50%" stop-color="#3d4658"/>
+      <stop offset="100%" stop-color="#262c39"/>
+    </linearGradient>
+    <mask id="behind-planet-d">
+      <rect width="256" height="256" fill="white"/>
+      <circle cx="128" cy="128" r="58" fill="black"/>
+    </mask>
+  </defs>
+
+  <!-- Back half of rings -->
+  <g transform="rotate(-18 128 128)" mask="url(#behind-planet-d)">
+    <ellipse cx="128" cy="128" rx="106" ry="20" stroke="url(#ring-gold-d)" stroke-width="10" fill="none"/>
+    <ellipse cx="128" cy="128" rx="90" ry="13" stroke="url(#ring-inner-d)" stroke-width="6" fill="none"/>
+  </g>
+
+  <!-- Planet -->
+  <circle cx="128" cy="128" r="58" fill="url(#planet-d)"/>
+
+  <!-- Front half of rings -->
+  <g transform="rotate(-18 128 128)">
+    <path d="M 22 128 A 106 20 0 0 0 234 128" stroke="url(#ring-gold-d)" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <path d="M 38 128 A 90 13 0 0 0 218 128" stroke="url(#ring-inner-d)" stroke-width="6" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

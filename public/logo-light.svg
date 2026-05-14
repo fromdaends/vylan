@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-label="Relai">
+  <defs>
+    <linearGradient id="planet-l" x1="40%" y1="20%" x2="60%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e8e8ea"/>
+    </linearGradient>
+    <linearGradient id="ring-gold-l" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#caa260"/>
+      <stop offset="50%" stop-color="#e6c98f"/>
+      <stop offset="100%" stop-color="#b88a44"/>
+    </linearGradient>
+    <linearGradient id="ring-silver-l" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#bcc0c7"/>
+      <stop offset="50%" stop-color="#d9dde3"/>
+      <stop offset="100%" stop-color="#a8aeb6"/>
+    </linearGradient>
+    <mask id="behind-planet-l">
+      <rect width="256" height="256" fill="white"/>
+      <circle cx="128" cy="128" r="58" fill="black"/>
+    </mask>
+  </defs>
+
+  <!-- Back half of rings (drawn first, masked by planet) -->
+  <g transform="rotate(-18 128 128)" mask="url(#behind-planet-l)">
+    <ellipse cx="128" cy="128" rx="106" ry="20" stroke="url(#ring-gold-l)" stroke-width="10" fill="none"/>
+    <ellipse cx="128" cy="128" rx="90" ry="14" stroke="url(#ring-silver-l)" stroke-width="6" fill="none"/>
+    <ellipse cx="128" cy="128" rx="78" ry="10" stroke="#ffffff" stroke-width="5" fill="none"/>
+  </g>
+
+  <!-- Planet -->
+  <circle cx="128" cy="128" r="58" fill="url(#planet-l)" stroke="#dadde3" stroke-width="1"/>
+
+  <!-- Front half of rings (drawn last, in front of planet) -->
+  <g transform="rotate(-18 128 128)">
+    <path d="M 22 128 A 106 20 0 0 0 234 128" stroke="url(#ring-gold-l)" stroke-width="10" fill="none" stroke-linecap="round" opacity="0.95"/>
+    <path d="M 38 128 A 90 14 0 0 0 218 128" stroke="url(#ring-silver-l)" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.9"/>
+    <path d="M 50 128 A 78 10 0 0 0 206 128" stroke="#ffffff" stroke-width="5" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { PublicFooter } from "@/components/public/public-footer";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { Logo } from "@/components/brand/logo";
 
 export default async function Home({
   params,
@@ -41,9 +42,11 @@ export default async function Home({
             href="/"
             className="flex items-center gap-2 font-semibold tracking-tight text-base group"
           >
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-foreground text-background text-xs font-bold transition-transform group-hover:scale-110 group-hover:rotate-3">
-              R
-            </span>
+            <Logo
+              size={28}
+              priority
+              className="transition-transform group-hover:scale-110 group-hover:rotate-3"
+            />
             {brand.name}
           </Link>
           <nav className="flex items-center gap-1 text-sm">
