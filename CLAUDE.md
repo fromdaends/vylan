@@ -107,6 +107,7 @@ Do these autonomously. Mention them in your summary so the user knows, but don't
 - Update `docs/*` files when relevant.
 - Add `.env.example` entries for new env vars (but do NOT add to `.env.local` — see below).
 - Commit and push your own work following the multi-session rhythm.
+- Open a pull request and merge it yourself once tests + typecheck pass. Default to squash merge. The user does NOT want to be asked to "open the PR" or "click merge" — that's part of shipping. Only stop to ask if (a) tests fail, (b) CI flags a real issue, or (c) the change is in the "Ask first" list below.
 - Make UI design choices that follow the existing brand tokens and Tailwind conventions in the repo.
 - Pick reasonable copy in English and French for new UI strings (the user can edit later).
 - Choose sensible defaults for new feature behavior (timing, thresholds, limits) — document the choice in code comments so the user can adjust.
