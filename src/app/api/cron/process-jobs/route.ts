@@ -11,6 +11,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { claimDueJobs, markJobDone, markJobFailed } from "@/lib/db/jobs";
 import { processReminderJob } from "@/lib/reminders";
 import { processClassifyJob } from "@/lib/ai/process";
+import { processNotifyClientRetryJob } from "@/lib/notify-retry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,9 @@ export async function GET(request: NextRequest) {
         results.push({ id: job.id, kind: job.kind, ok: true, detail: r });
       } else if (job.kind === "classify_document") {
         const r = await processClassifyJob(job.payload);
+        results.push({ id: job.id, kind: job.kind, ok: true, detail: r });
+      } else if (job.kind === "notify_client_retry") {
+        const r = await processNotifyClientRetryJob(job.payload);
         results.push({ id: job.id, kind: job.kind, ok: true, detail: r });
       } else {
         results.push({
