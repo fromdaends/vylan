@@ -173,6 +173,94 @@ Open your dashboard: ${opts.appUrl}/dashboard
   return { subject, html, text };
 }
 
+// Client retry email — sent when the AI auto-rejects an upload. The
+// wording is intentionally friendly and SPECIFIC: the client should
+// feel the firm noticed a problem (not a robot). Phrasing here is
+// frozen from the Phase 4 spec — words "AI", "robot", "automatic" /
+// "automatique" must never appear.
+export function buildUnusableDocRetryEmail(opts: {
+  clientName: string;
+  firmName: string;
+  requestItemLabel: string;
+  issueSummary: string;
+  retryLink: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  if (opts.locale === "fr") {
+    const subject = `Action requise — un document à reprendre pour ${opts.firmName}`;
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Bonjour ${escapeHtml(opts.clientName)},</p>
+<p>Merci pour le document que vous avez téléversé pour « ${escapeHtml(opts.requestItemLabel)} ». Malheureusement, il semble difficile à utiliser parce que ${escapeHtml(opts.issueSummary)}.</p>
+<p>Pourriez-vous reprendre la photo ou téléverser une version plus claire?</p>
+<p style="margin:16px 0 8px 0"><strong>Quelques conseils&nbsp;:</strong></p>
+<ul style="margin:0 0 16px 20px;padding:0;color:#1e293b;font-size:14px;line-height:1.6">
+<li>Prenez la photo dans un endroit bien éclairé, idéalement près d'une fenêtre</li>
+<li>Posez le document à plat sur une surface unie</li>
+<li>Assurez-vous que toute la page est visible et nette</li>
+<li>Évitez les reflets et les ombres</li>
+</ul>
+<p style="margin:24px 0">
+  <a href="${opts.retryLink}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Téléverser à nouveau</a>
+</p>
+<p style="color:#64748b;font-size:13px">Ou copiez ce lien dans votre navigateur&nbsp;:<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.retryLink}</span></p>
+<p style="margin-top:32px">Merci!<br>L'équipe ${escapeHtml(opts.firmName)}</p>
+</body></html>`;
+    const text = `Bonjour ${opts.clientName},
+
+Merci pour le document que vous avez téléversé pour « ${opts.requestItemLabel} ». Malheureusement, il semble difficile à utiliser parce que ${opts.issueSummary}.
+
+Pourriez-vous reprendre la photo ou téléverser une version plus claire?
+
+Quelques conseils:
+• Prenez la photo dans un endroit bien éclairé, idéalement près d'une fenêtre
+• Posez le document à plat sur une surface unie
+• Assurez-vous que toute la page est visible et nette
+• Évitez les reflets et les ombres
+
+Pour téléverser à nouveau, cliquez ici: ${opts.retryLink}
+
+Merci!
+L'équipe ${opts.firmName}`;
+    return { subject, html, text };
+  }
+
+  const subject = `Quick fix needed — one document to re-send for ${opts.firmName}`;
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Hi ${escapeHtml(opts.clientName)},</p>
+<p>Thanks for uploading your document for "${escapeHtml(opts.requestItemLabel)}". Unfortunately, it looks like ${escapeHtml(opts.issueSummary)}, so we can't use it as-is.</p>
+<p>Could you take another photo or upload a clearer version?</p>
+<p style="margin:16px 0 8px 0"><strong>A few tips:</strong></p>
+<ul style="margin:0 0 16px 20px;padding:0;color:#1e293b;font-size:14px;line-height:1.6">
+<li>Take the photo in good lighting, ideally near a window</li>
+<li>Lay the document flat on a plain surface</li>
+<li>Make sure the whole page is visible and in focus</li>
+<li>Avoid glare and shadows</li>
+</ul>
+<p style="margin:24px 0">
+  <a href="${opts.retryLink}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Upload again</a>
+</p>
+<p style="color:#64748b;font-size:13px">Or copy this link into your browser:<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.retryLink}</span></p>
+<p style="margin-top:32px">Thanks!<br>The ${escapeHtml(opts.firmName)} team</p>
+</body></html>`;
+  const text = `Hi ${opts.clientName},
+
+Thanks for uploading your document for "${opts.requestItemLabel}". Unfortunately, it looks like ${opts.issueSummary}, so we can't use it as-is.
+
+Could you take another photo or upload a clearer version?
+
+A few tips:
+• Take the photo in good lighting, ideally near a window
+• Lay the document flat on a plain surface
+• Make sure the whole page is visible and in focus
+• Avoid glare and shadows
+
+Click here to upload again: ${opts.retryLink}
+
+Thanks!
+The ${opts.firmName} team`;
+  return { subject, html, text };
+}
+
 export type ReminderTone = "gentle" | "firm" | "deadline" | "overdue";
 
 export function buildReminderEmail(opts: {

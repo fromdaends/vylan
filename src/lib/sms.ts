@@ -51,3 +51,20 @@ export function buildReminderSms(opts: {
   }
   return `${opts.firmName} is still waiting on documents for "${opts.engagementTitle}". Upload them here: ${opts.url}`;
 }
+
+// Short retry SMS — sent when the AI auto-rejects an upload AND the
+// 30-min anti-spam window is clear AND the client has a phone on
+// file. Same friendly tone as the email; never mentions AI.
+export function buildUnusableDocRetrySms(opts: {
+  clientName: string;
+  firmName: string;
+  requestItemLabel: string;
+  issueSummary: string;
+  retryLink: string;
+  locale: "fr" | "en";
+}): string {
+  if (opts.locale === "fr") {
+    return `Bonjour ${opts.clientName}, le document ${opts.requestItemLabel} envoyé à ${opts.firmName} doit être renvoyé (${opts.issueSummary}). Lien: ${opts.retryLink}`;
+  }
+  return `Hi ${opts.clientName}, the ${opts.requestItemLabel} you sent to ${opts.firmName} needs to be re-uploaded (${opts.issueSummary}). Link: ${opts.retryLink}`;
+}
