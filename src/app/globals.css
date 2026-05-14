@@ -308,14 +308,60 @@
   .orb-gold {
     background: radial-gradient(
       circle,
-      oklch(0.8 0.16 78 / 0.45) 0%,
+      oklch(0.82 0.18 78 / 0.62) 0%,
       transparent 70%
     );
   }
   .dark .orb-gold {
     background: radial-gradient(
       circle,
-      oklch(0.82 0.16 78 / 0.32) 0%,
+      oklch(0.84 0.18 78 / 0.42) 0%,
+      transparent 70%
+    );
+  }
+  /* Coral — warm pink-orange. Replaces cyan in the warmer hero
+     palette. */
+  .orb-coral {
+    background: radial-gradient(
+      circle,
+      oklch(0.74 0.2 32 / 0.6) 0%,
+      transparent 70%
+    );
+  }
+  .dark .orb-coral {
+    background: radial-gradient(
+      circle,
+      oklch(0.74 0.22 32 / 0.42) 0%,
+      transparent 70%
+    );
+  }
+  /* Peach — softer warm light. */
+  .orb-peach {
+    background: radial-gradient(
+      circle,
+      oklch(0.85 0.13 60 / 0.6) 0%,
+      transparent 70%
+    );
+  }
+  .dark .orb-peach {
+    background: radial-gradient(
+      circle,
+      oklch(0.86 0.14 60 / 0.4) 0%,
+      transparent 70%
+    );
+  }
+  /* Rose — warm cherry tone for accents lower in the page. */
+  .orb-rose {
+    background: radial-gradient(
+      circle,
+      oklch(0.74 0.22 14 / 0.55) 0%,
+      transparent 70%
+    );
+  }
+  .dark .orb-rose {
+    background: radial-gradient(
+      circle,
+      oklch(0.76 0.24 14 / 0.4) 0%,
       transparent 70%
     );
   }
@@ -489,6 +535,138 @@
     }
   }
 
+  /* Stronger reveal: bigger movement, bigger scale, longer hold.
+     Drives the "this page is alive" feeling — fires bidirectionally
+     thanks to animation-timeline: view(), so scrolling back up
+     replays in reverse instead of leaving everything visible. */
+  .reveal-strong {
+    opacity: 0;
+    transform: translateY(96px) scale(0.9);
+    animation: reveal-strong-in cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 30%;
+  }
+  @supports not (animation-timeline: view()) {
+    .reveal-strong {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Side-in reveal — content slides in from the left as you scroll
+     down to it, and slides back out to the left when you scroll up.
+     Pair with .reveal-right for the opposite side. */
+  .reveal-left {
+    opacity: 0;
+    transform: translateX(-72px);
+    animation: reveal-left-in cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 25%;
+  }
+  @supports not (animation-timeline: view()) {
+    .reveal-left {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  .reveal-right {
+    opacity: 0;
+    transform: translateX(72px);
+    animation: reveal-right-in cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 25%;
+  }
+  @supports not (animation-timeline: view()) {
+    .reveal-right {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Parallax — element drifts at a different rate than the page as
+     you scroll, creating layered depth. Bound to the document
+     scroll timeline rather than the element's view timeline so it
+     stays in motion the entire time the element is on screen.
+     scroll() is direction-agnostic so going up and down both feel
+     correct. */
+  .parallax-up-slow {
+    animation: parallax-up-slow linear both;
+    animation-timeline: scroll(root);
+  }
+  .parallax-up-fast {
+    animation: parallax-up-fast linear both;
+    animation-timeline: scroll(root);
+  }
+  .parallax-down-slow {
+    animation: parallax-down-slow linear both;
+    animation-timeline: scroll(root);
+  }
+  @supports not (animation-timeline: scroll()) {
+    .parallax-up-slow,
+    .parallax-up-fast,
+    .parallax-down-slow {
+      animation: none;
+    }
+  }
+
+  /* Warm text gradient — alternative to .text-gradient for the hero
+     headline. Inflects through gold + rose so the title feels lit
+     from above rather than ink-on-paper. */
+  .text-gradient-warm {
+    background: linear-gradient(
+      180deg,
+      oklch(0.22 0.028 264) 0%,
+      oklch(0.45 0.13 32) 60%,
+      oklch(0.55 0.16 18) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1.1;
+    padding-bottom: 0.15em;
+  }
+  .dark .text-gradient-warm {
+    background: linear-gradient(
+      180deg,
+      oklch(0.985 0.004 264) 0%,
+      oklch(0.85 0.12 32) 70%,
+      oklch(0.78 0.16 18) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Warm ambient wash that sits behind the page above the orbs.
+     Subtle peach-to-rose vertical gradient — pulls the entire scroll
+     toward "warm" without overpowering content surfaces. */
+  .ambient-warm {
+    background-image:
+      radial-gradient(
+        ellipse 80% 50% at 50% 0%,
+        oklch(0.96 0.04 60 / 0.55) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 70% 60% at 50% 100%,
+        oklch(0.95 0.03 18 / 0.4) 0%,
+        transparent 60%
+      );
+  }
+  .dark .ambient-warm {
+    background-image:
+      radial-gradient(
+        ellipse 80% 50% at 50% 0%,
+        oklch(0.32 0.05 32 / 0.35) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 70% 60% at 50% 100%,
+        oklch(0.28 0.04 14 / 0.3) 0%,
+        transparent 60%
+      );
+  }
+
   /* Tilt-on-hover for benefit cards. The :hover gives a small lift,
      translateZ keeps the GPU compositor in play so it stays smooth. */
   .tilt {
@@ -597,6 +775,48 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+@keyframes reveal-strong-in {
+  from {
+    opacity: 0;
+    transform: translateY(96px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes reveal-left-in {
+  from {
+    opacity: 0;
+    transform: translateX(-72px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes reveal-right-in {
+  from {
+    opacity: 0;
+    transform: translateX(72px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes parallax-up-slow {
+  from { transform: translateY(40px); }
+  to   { transform: translateY(-40px); }
+}
+@keyframes parallax-up-fast {
+  from { transform: translateY(80px); }
+  to   { transform: translateY(-80px); }
+}
+@keyframes parallax-down-slow {
+  from { transform: translateY(-40px); }
+  to   { transform: translateY(40px); }
 }
 @keyframes reveal-fade {
   from { opacity: 0; }
