@@ -11,22 +11,31 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 // Reveal + parallax for the landing page, framer-motion-backed.
 //
-// ScrollReveal behavior — direction-aware:
-//   - Element enters viewport while page scroll is moving DOWN
-//     → fades + lifts in.
-//   - Element enters viewport while page scroll is moving UP (i.e.,
-//     user is scrolling back over it from above) → snaps to visible
-//     with no animation.
-//   - Element exits viewport in either direction → snaps to hidden
-//     silently, so it can animate again on the next DOWN entry.
+// ScrollReveal — direction-aware four-state machine:
+//
+//   1. Before first entry (initial mount, element below fold)
+//      → snap to initial hidden state. No mount-time animation.
+//
+//   2. Entry while scrolling DOWN
+//      → fade + lift + scale in over `duration`s.
+//
+//   3. Entry while scrolling UP (user is scrolling back over an
+//      element they've already seen, re-entering from the TOP)
+//      → snap to visible, no animation. They've seen it.
+//
+//   4. Exit while scrolling DOWN (element leaves via the TOP)
+//      → blur fade-out over 0.4s. Reads as the element "drifting
+//      out of focus" as you scroll past it.
+//
+//   5. Exit while scrolling UP (element leaves via the BOTTOM)
+//      → snap to the ready-to-enter hidden state, no animation. This
+//      resets the element so the NEXT DOWN-entry animates cleanly
+//      from its full hidden start position.
 //
 // Perf:
-//   - One shared window scroll listener for the whole page, not one
-//     per ScrollReveal instance. With ~15 instances on the landing,
-//     the naive approach would call 15 callbacks per scroll event.
+//   - One shared window scroll listener for the whole page
+//     (refcounted at module scope), not one per ScrollReveal.
 //   - useInView uses IntersectionObserver (cheap, browser-native).
-//   - Direction is tracked in a module-level ref so listeners share
-//     it without prop drilling or context.
 //
 // prefers-reduced-motion is honored automatically by framer-motion.
 
@@ -74,7 +83,10 @@ const ENTRANCE_DURATION: Record<Intensity, number> = {
   pop: 0.6,
 };
 
-const EASE = [0.16, 1, 0.3, 1] as const;
+const EASE_OUT = [0.16, 1, 0.3, 1] as const;
+const EASE_IN = [0.4, 0, 1, 1] as const;
+const EXIT_DURATION = 0.4;
+const EXIT_BLUR_PX = 12;
 
 export function ScrollReveal({
   children,
@@ -95,29 +107,67 @@ export function ScrollReveal({
 
   useEffect(() => attachSharedScrollListener(), []);
 
+  // Tracks whether the element has ever entered the viewport. Used to
+  // suppress the blur-exit animation on first mount: before first
+  // entry, an "exit" state is just "pre-entry" and shouldn't animate.
+  const hasEverEntered = useRef(false);
+  if (inView) hasEverEntered.current = true;
+
   const offsets = INTENSITY_STATES[intensity];
   const duration = ENTRANCE_DURATION[intensity];
 
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, y: offsets.y, scale: offsets.scale }}
+      initial={{
+        opacity: 0,
+        y: offsets.y,
+        scale: offsets.scale,
+        filter: "blur(0px)",
+      }}
       animate={
         inView
-          ? {
+          ? // — VISIBLE — entry, with animation only when DOWN
+            {
               opacity: 1,
               y: 0,
               scale: 1,
+              filter: "blur(0px)",
               transition: _scrollDownRef.current
-                ? { duration, delay, ease: EASE }
+                ? { duration, delay, ease: EASE_OUT }
                 : { duration: 0 },
             }
-          : {
-              opacity: 0,
-              y: offsets.y,
-              scale: offsets.scale,
-              transition: { duration: 0 },
-            }
+          : !hasEverEntered.current
+            ? // — PRE-ENTRY — initial hidden, no animation
+              {
+                opacity: 0,
+                y: offsets.y,
+                scale: offsets.scale,
+                filter: "blur(0px)",
+                transition: { duration: 0 },
+              }
+            : _scrollDownRef.current
+              ? // — DOWN-EXIT — blur fade-out as the element leaves
+                //   via the top of the viewport. Stays at y=0/scale=1
+                //   so the page scroll carries it off naturally
+                //   while the blur+fade plays.
+                {
+                  opacity: 0,
+                  y: 0,
+                  scale: 1,
+                  filter: `blur(${EXIT_BLUR_PX}px)`,
+                  transition: { duration: EXIT_DURATION, ease: EASE_IN },
+                }
+              : // — UP-EXIT — element left via the bottom while
+                //   scrolling up. Snap to the ready-to-enter state so
+                //   the next DOWN-entry animates from a clean start.
+                {
+                  opacity: 0,
+                  y: offsets.y,
+                  scale: offsets.scale,
+                  filter: "blur(0px)",
+                  transition: { duration: 0 },
+                }
       }
       className={className}
     >
