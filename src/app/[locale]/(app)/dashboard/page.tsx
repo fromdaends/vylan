@@ -115,6 +115,24 @@ export default async function DashboardPage({
     v.attention.reasons.includes("overdue"),
   ).length;
 
+  // Phase 5 — "AI-rejected this week" tile. Counts uploaded files
+  // with ai_rejected=true across all of this firm's engagements
+  // (not just live ones) over the last 7 days. Falls back to 0 on
+  // query error so the dashboard never errors because of a missing
+  // column on a fresh DB.
+  const sevenDaysAgo = new Date(
+    Date.now() - 7 * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  const allEngagementIds = engagements.map((e) => e.id);
+  const { count: aiRejectedWeekCount } = allEngagementIds.length
+    ? await sb
+        .from("uploaded_files")
+        .select("id", { count: "exact", head: true })
+        .in("engagement_id", allEngagementIds)
+        .eq("ai_rejected", true)
+        .gte("uploaded_at", sevenDaysAgo)
+    : { count: 0 };
+
   const t = await getTranslations("App");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -138,7 +156,7 @@ export default async function DashboardPage({
         </Link>
       </header>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-in-stagger">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 animate-in-stagger">
         <Metric
           label={t("metric_clients")}
           value={clients.length}
@@ -158,6 +176,11 @@ export default async function DashboardPage({
           label={tAttention("metric_overdue")}
           value={overdueCount}
           tone={overdueCount > 0 ? "warning" : "default"}
+          href="#needs-attention"
+        />
+        <Metric
+          label={tAttention("metric_ai_rejected_week")}
+          value={aiRejectedWeekCount ?? 0}
           href="#needs-attention"
         />
       </div>
