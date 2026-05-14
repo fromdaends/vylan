@@ -6,7 +6,6 @@ import { useRouter } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Moon, Sun, Monitor, Check } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
-import { setAutoRejectAction } from "@/app/actions/settings";
 import { Switch } from "@/components/ui/switch";
 
 type ThemeChoice = "light" | "dark" | "system";
@@ -219,35 +218,25 @@ function FirmPreferencesSection({
   function onToggle(next: boolean) {
     setError(null);
     setEnabled(next); // optimistic
-    const fd = new FormData();
-    fd.append("enabled", next ? "true" : "false");
     startTransition(async () => {
-      // Belt-and-suspenders: the server action body is already wrapped
-      // in try/catch, but a transport-level failure (Next.js RPC, action
-      // ID mismatch on a stale deploy, network error) would otherwise
-      // bubble up through `startTransition` and trip the global
-      // error.tsx boundary — i.e. the user sees a 500 page instead of
-      // a revert. Wrap the await here so the UI always recovers.
+      // Plain fetch instead of a Server Action: Server Actions trigger
+      // an automatic re-render of the surrounding RSC tree, and a
+      // throw anywhere in that re-render surfaces here as an opaque
+      // "Server Components render" error in production. A regular
+      // POST keeps the toggle save independent of the page render.
       try {
-        const res = await setAutoRejectAction(fd);
+        const res = await fetch("/api/firm/auto-reject", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: next }),
+        });
         if (!res.ok) {
-          // Show the DB error detail (when present) right under the
-          // save_failed line so we can diagnose why the column update
-          // is being rejected on production.
-          const base = t("save_failed");
-          setError(res.detail ? `${base} — ${res.detail}` : base);
+          setError(t("save_failed"));
           setEnabled(!next); // revert
         }
       } catch (e) {
         console.error("[onToggle] auto-reject save failed:", e);
-        const base = t("save_failed");
-        const msg =
-          e instanceof Error
-            ? `transport: ${e.message}`
-            : typeof e === "object" && e !== null
-              ? `transport: ${JSON.stringify(e)}`
-              : `transport: ${String(e)}`;
-        setError(`${base} — ${msg}`);
+        setError(t("save_failed"));
         setEnabled(!next); // revert
       }
     });
