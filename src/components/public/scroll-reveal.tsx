@@ -83,11 +83,10 @@ const ENTRANCE_DURATION: Record<Intensity, number> = {
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 const EASE_IN = [0.4, 0, 1, 1] as const;
-// UP-exit values: refined drift-away when scrolling up past a section.
-// Tuned for "polished" rather than "exaggerated".
+// UP-exit values: subtle drift-away when scrolling up past a section.
 const UP_EXIT_DURATION = 0.55;
-const UP_EXIT_BLUR_PX = 12;
-const UP_EXIT_SCALE = 0.94;
+const UP_EXIT_BLUR_PX = 8;
+const UP_EXIT_SCALE = 0.96;
 
 export function ScrollReveal({
   children,
@@ -110,7 +109,7 @@ export function ScrollReveal({
   //     height of visible runway for the blur fade to play in.
   const inView = useInView(ref, {
     amount: 0.2,
-    margin: "0px 0px -25% 0px",
+    margin: "0px 0px -15% 0px",
   });
 
   useEffect(() => attachSharedScrollListener(), []);
