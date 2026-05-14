@@ -74,6 +74,9 @@ export async function processClassifyJob(
   });
   if (!result) return { skipped: "no_classification" };
 
+  // ai_rejected is intentionally NOT set here. Phase 3's routing logic
+  // decides whether the system actually auto-rejects this upload based
+  // on the firm's auto_reject_unusable_docs flag + the strike counter.
   await sb
     .from("uploaded_files")
     .update({
@@ -85,6 +88,7 @@ export async function processClassifyJob(
         looks_correct: result.looks_correct,
         issue_if_any: result.issue_if_any,
       },
+      ai_usability: result.usability,
     })
     .eq("id", file.id);
 
@@ -104,6 +108,9 @@ export async function processClassifyJob(
         document_type: result.document_type,
         confidence: result.confidence,
         looks_correct: result.looks_correct,
+        usable: result.usability.usable,
+        usability_confidence: result.usability.confidence,
+        primary_issue: result.usability.primary_issue,
       },
     });
   }
