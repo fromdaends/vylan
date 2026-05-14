@@ -42,41 +42,40 @@ export default async function Home({
           backdrop ends and the next begins. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 overflow-hidden"
+        style={{ bottom: "20rem" }}
       >
         <div
           className="orb orb-iris absolute h-[900px] w-[900px] -top-32 left-1/2 -translate-x-1/2 opacity-90"
         />
         <div
-          className="orb orb-cyan absolute h-[700px] w-[700px] top-[28%] -left-40 opacity-70"
+          className="orb orb-cyan absolute h-[700px] w-[700px] top-[30%] -left-40 opacity-70"
           style={{ animationDelay: "-3s" }}
         />
         <div
-          className="orb orb-pink absolute h-[700px] w-[700px] top-[55%] -right-40 opacity-70"
+          className="orb orb-pink absolute h-[700px] w-[700px] top-[60%] -right-40 opacity-60"
           style={{ animationDelay: "-7s" }}
         />
         <div
-          className="orb orb-gold absolute h-[600px] w-[600px] top-[78%] left-1/3 opacity-60"
+          className="orb orb-gold absolute h-[500px] w-[500px] top-[80%] left-[15%] opacity-45"
           style={{ animationDelay: "-11s" }}
-        />
-        <div
-          className="orb orb-iris absolute h-[700px] w-[700px] bottom-[-200px] right-1/4 opacity-60"
-          style={{ animationDelay: "-5s" }}
         />
       </div>
 
       {/* Header */}
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-background/70 border-b border-border/60">
-        <div className="mx-auto max-w-6xl flex items-center justify-between px-6 py-3.5">
+        <div className="nav-shrink mx-auto max-w-6xl flex items-center justify-between px-6 py-3.5">
           <Link
             href="/"
             className="flex items-center gap-2.5 font-semibold tracking-tight text-lg group"
           >
-            <Logo
-              size={44}
-              priority
-              className="transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
-            />
+            <span className="logo-shrink inline-flex">
+              <Logo
+                size={44}
+                priority
+                className="transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
+              />
+            </span>
             {brand.name}
           </Link>
           <nav className="flex items-center gap-1 text-sm">

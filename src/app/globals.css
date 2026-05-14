@@ -218,22 +218,29 @@
     background-size: 100% 1px;
   }
 
-  /* Pretty gradient text for hero headlines */
+  /* Subtle gradient on hero headlines. The drop in lightness is small
+     on purpose — too much and the bottom of the glyphs reads as
+     washed-out / blurred against the page ambient.
+     leading-[1.1] + the inline `pb-1` we apply on usage gives the
+     descenders (y, g, p, q) room so they don't get clipped by the
+     background-clip box. */
   .text-gradient {
     background: linear-gradient(
       180deg,
       oklch(0.18 0.018 264) 0%,
-      oklch(0.42 0.05 264) 100%
+      oklch(0.3 0.03 264) 100%
     );
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
+    line-height: 1.1;
+    padding-bottom: 0.15em;
   }
   .dark .text-gradient {
     background: linear-gradient(
       180deg,
-      oklch(0.96 0.004 264) 0%,
-      oklch(0.72 0.04 264) 100%
+      oklch(0.985 0.004 264) 0%,
+      oklch(0.9 0.01 264) 100%
     );
     -webkit-background-clip: text;
     background-clip: text;
@@ -396,15 +403,39 @@
       0 0 80px -8px oklch(0.7 0.18 264 / 0.7);
   }
 
+  /* Scroll-driven header compaction. As the user scrolls past ~80px,
+     the header padding tightens and the logo shrinks a touch — a
+     calm "the page is moving with you" cue. Falls back to the
+     resting style in browsers without animation-timeline support. */
+  .nav-shrink {
+    animation: nav-shrink linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 80px;
+  }
+  .logo-shrink {
+    animation: logo-shrink linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 80px;
+  }
+  @supports not (animation-timeline: scroll()) {
+    .nav-shrink,
+    .logo-shrink {
+      animation: none;
+    }
+  }
+
   /* Scroll-driven reveal: elements fade + rise as they enter the
-     viewport. Falls back to the final state in browsers without
+     viewport. The range is intentionally short so elements snap to
+     full opacity quickly — keeping a mid-fade element visible for
+     too long reads as "blurred" instead of "animating in".
+     Falls back to the final state in browsers without
      animation-timeline support (Safari < 17, Firefox). */
   .reveal {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(16px);
     animation: reveal-in linear both;
     animation-timeline: view();
-    animation-range: entry 0% cover 25%;
+    animation-range: entry 0% entry 80%;
   }
   @supports not (animation-timeline: view()) {
     .reveal {
@@ -416,7 +447,7 @@
     opacity: 0;
     animation: reveal-fade linear both;
     animation-timeline: view();
-    animation-range: entry 0% cover 30%;
+    animation-range: entry 0% entry 70%;
   }
   @supports not (animation-timeline: view()) {
     .reveal-soft {
@@ -516,6 +547,24 @@
 @keyframes reveal-fade {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+@keyframes nav-shrink {
+  from {
+    padding-top: 0.875rem;
+    padding-bottom: 0.875rem;
+  }
+  to {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+}
+@keyframes logo-shrink {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(0.85);
+  }
 }
 
 @keyframes shimmer {
