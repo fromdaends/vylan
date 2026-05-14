@@ -1,7 +1,7 @@
 # Competitor-audit fixes — phased roadmap
 
 Source: original "Prompt B — P1 Audit Fixes + Profile/Logo Upload" planning doc
-from 2026-05-13. Phases 1 + 2 shipped. Phases 3-7 remain. This file is the
+from 2026-05-13. Phases 1 + 2 shipped. Phases 3-8 remain. This file is the
 durable memory of the plan so any future session can pick up where the last
 one left off without re-deriving scope.
 
@@ -23,6 +23,7 @@ the same migrations.
 | 5 | PII fix in `activity_log` (drop filenames) + dev-mode email/SMS log redaction | ⏳ Pending | — |
 | 6 | MFA for accountants (TOTP via Supabase) | ⏳ Pending | — |
 | 7 | Bulk file download (ZIP) + one-click firm data export | ⏳ Pending | — |
+| 8 | Perf & responsiveness (language switch, tab nav, server-action revalidation, data caching) | ⏳ Pending | — |
 
 ---
 
@@ -287,6 +288,108 @@ stream a ZIP.
 
 **Deliverable:** Both buttons work. Test the firm export on a seeded firm with
 3 clients, 5 engagements, 8 files.
+
+---
+
+## Phase 8 — Perf & responsiveness
+
+**Why:** Founder reports the app "feels laggy" — specifically when changing
+the UI language in `/settings` and when clicking between tabs in the app
+shell. For a daily-use accounting tool, perceived speed matters as much as
+features. The good news: the likely root causes are well-understood Next.js
+anti-patterns that have standard, low-risk fixes.
+
+**Before any work:** spend ~10 min collecting real numbers so we can prove
+the wins. Measure cold-load + warm-nav for `/dashboard`, `/engagements`,
+`/settings`, `/profile`, and the FR↔EN switch. Use Chrome DevTools'
+Performance + Network tabs (record a navigation, note the time-to-interactive
+and total transferred bytes). Save the numbers in this doc under a new
+"## Phase 8 baseline" subsection so we can compare after.
+
+**Scope**
+
+1. **Stop nuking the cache on every server-action save**
+   - Audit every `revalidatePath("/", "layout")` in `src/app/actions/*.ts`.
+     That call invalidates the entire RSC cache for the whole app on every
+     successful save — which is why a small toggle save can feel like a full
+     page rebuild.
+   - Replace with the narrowest valid scope:
+     - `revalidatePath("/profile")` if the change only affects the profile.
+     - `revalidatePath("/settings")` if it only affects settings.
+     - `revalidateTag("firm")` (with matching `cache: { tags: ["firm"] }` on
+       the firm fetch in `src/lib/db/firms.ts`) if the change is firm-wide
+       and shows up in multiple places (e.g., a logo update).
+   - Same audit for `revalidateTag` calls — make sure they're tagged, not
+     wildcard-busting.
+
+2. **Make the FR ↔ EN switch feel instant**
+   - Today, swapping locale changes the URL prefix (`/fr/...` → `/en/...`),
+     which Next.js treats as a full hard navigation. The whole app shell
+     re-renders server-side and re-fetches all data.
+   - Two options, pick whichever is less invasive after a quick spike:
+     - **Client-side message swap (preferred):** keep the same URL, store the
+       chosen locale in a cookie, and have `next-intl` re-render messages
+       client-side without a server round-trip. The user already has access
+       to all messages via the `NextIntlClientProvider` higher in the tree.
+     - **Soft navigation:** if URL must change, prefetch the target locale's
+       chunk on hover/focus of the language toggle so the click feels
+       instant even if it's still technically a navigation.
+   - Whichever is chosen, the visible signal to the user should be: "click,
+     instantly see new language" — no page flash, no spinner.
+
+3. **Cut the per-navigation auth/firm waterfall**
+   - Today every `(app)/*` route loads `getCurrentUser()` then
+     `getCurrentFirm()` then page-specific data, sequentially. That's 3
+     round-trips minimum per click.
+   - Wrap `getCurrentUser()` and `getCurrentFirm()` in React's `cache()` so
+     they only hit the DB once per request even if multiple components call
+     them.
+   - In `(app)/layout.tsx`, fan out the auth check, firm load, and any
+     layout-level data fetches with `Promise.all` instead of awaiting in
+     sequence.
+   - Add a single `prefetch={true}` `<Link>` for the main app-shell tabs so
+     hovering a tab starts loading the next page before the click.
+
+4. **Cache data fetches with tags (the real win)**
+   - For each main page (`/dashboard`, `/engagements`, `/clients`,
+     `/profile`, `/settings`), wrap the top-level data fetch in
+     `unstable_cache(fn, key, { tags: [...] })`.
+   - The cache tag scheme should mirror the data: `firm:${firmId}`,
+     `engagement:${engagementId}`, `client:${clientId}`, etc.
+   - Then in mutations, call `revalidateTag(...)` for ONLY the touched tags
+     — not `revalidatePath("/", "layout")`.
+   - This is the change that turns "every click hits the DB" into "every
+     click is served from cache until the underlying data actually changes."
+
+5. **Bundle audit (last, only if needed)**
+   - Run `npx @next/bundle-analyzer` and look for accidentally-large client
+     bundles. Common culprits: a charting library imported eagerly, a date
+     library not tree-shaken, a UI library with full bundles instead of
+     per-component imports.
+   - Only act if the analyzer surfaces something obvious — don't go on a
+     hunting trip.
+
+**Tests**
+- Re-measure the baseline numbers. Target: 2-4× improvement on tab nav,
+  near-instant on FR↔EN switch.
+- Smoke E2E on the main flows to make sure no cache invalidation got too
+  narrow (i.e., a save that should refresh the dashboard tile but doesn't).
+- Add a Playwright test that asserts: clicking the language toggle does NOT
+  trigger a full document navigation (no `navigation` event with
+  `type === 'navigate'` in the performance timeline).
+
+**Deliverable:** A markdown table at the top of this Phase 8 section showing
+before/after times for each measured page. The app feels snappy. No
+behavioral regressions.
+
+**Risks / things to watch**
+- Narrowing `revalidatePath` calls is the highest-risk part — if a tag is
+  missed, a saved change won't show up until the page is hard-refreshed.
+  The Playwright suite needs to cover at least one save→reflect path on
+  every main page.
+- `unstable_cache` is, well, unstable — Next.js may rename it before we
+  ship to GA. Pin the Next.js version in `package.json` and document the
+  affected files so a future bump can update the imports in one shot.
 
 ---
 
