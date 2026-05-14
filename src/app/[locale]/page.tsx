@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
@@ -34,7 +33,6 @@ export default async function Home({
     <main className="relative flex-1 flex flex-col bg-background text-foreground">
       <Header locale={locale} otherLocale={otherLocale} t={t} tAuth={tAuth} />
       <Hero t={t} tAuth={tAuth} />
-      <ProductPreview />
       <HowItWorks t={t} />
       <AiChecks t={t} />
       <Benefits t={t} />
@@ -149,31 +147,6 @@ function Hero({
             <span aria-hidden className="mx-1.5 text-border">·</span>
             {t("trust_setup")}
           </p>
-        </Reveal>
-      </div>
-    </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Product preview screenshot
-// ─────────────────────────────────────────────────────────────────────
-
-function ProductPreview() {
-  return (
-    <section aria-hidden className="relative">
-      <div className="mx-auto max-w-6xl px-6 pb-24">
-        <Reveal>
-          <div className="rounded-xl border border-border bg-card shadow-[0_12px_32px_-8px_rgba(15,18,30,0.08),0_24px_56px_-16px_rgba(15,18,30,0.06)] overflow-hidden">
-            <Image
-              src="/landing/screenshot-dashboard.svg"
-              alt=""
-              width={1280}
-              height={800}
-              priority={false}
-              className="w-full h-auto block"
-            />
-          </div>
         </Reveal>
       </div>
     </section>
