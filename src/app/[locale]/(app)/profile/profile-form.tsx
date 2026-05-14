@@ -45,7 +45,6 @@ type FirmInfo = {
   brand_color: string;
   timezone: string;
   locale_default: "fr" | "en";
-  auto_reject_unusable_docs: boolean;
 };
 
 export function ProfileForm({
@@ -539,31 +538,6 @@ function FirmSection({
             <SelectItem value="en">English</SelectItem>
           </SelectContent>
         </Select>
-      </div>
-      <div className="pt-2">
-        <h3 className="text-sm font-semibold">
-          {t("firm_doc_quality_section")}
-        </h3>
-        <label
-          htmlFor="auto_reject_unusable_docs"
-          className="mt-3 flex items-start gap-3 max-w-xl cursor-pointer select-none"
-        >
-          <input
-            id="auto_reject_unusable_docs"
-            name="auto_reject_unusable_docs"
-            type="checkbox"
-            defaultChecked={initial.auto_reject_unusable_docs}
-            className="size-4 mt-0.5 accent-foreground"
-          />
-          <div className="space-y-1">
-            <span className="text-sm font-medium">
-              {t("firm_ai_rejection_label")}
-            </span>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {t("firm_ai_rejection_help")}
-            </p>
-          </div>
-        </label>
       </div>
       <div className="flex items-center gap-3 pt-2">
         <Button type="submit" disabled={pending}>

@@ -6,13 +6,17 @@ import { useRouter } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { Moon, Sun, Monitor, Check } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
+import { setAutoRejectAction } from "@/app/actions/settings";
+import { Switch } from "@/components/ui/switch";
 
 type ThemeChoice = "light" | "dark" | "system";
 
 export function SettingsForm({
   currentLocale,
+  autoRejectUnusableDocs,
 }: {
   currentLocale: "fr" | "en";
+  autoRejectUnusableDocs: boolean;
 }) {
   const t = useTranslations("Settings");
 
@@ -20,6 +24,10 @@ export function SettingsForm({
     <div className="space-y-10">
       <AppearanceSection t={t} />
       <LanguageSection currentLocale={currentLocale} t={t} />
+      <FirmPreferencesSection
+        autoRejectUnusableDocs={autoRejectUnusableDocs}
+        t={t}
+      />
     </div>
   );
 }
@@ -189,5 +197,64 @@ function LangButton({
     >
       {label}
     </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firm preferences — currently just the AI auto-reject toggle. Optimistic
+// update on click; falls back to the previous value if the save fails.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function FirmPreferencesSection({
+  autoRejectUnusableDocs,
+  t,
+}: {
+  autoRejectUnusableDocs: boolean;
+  t: (k: string) => string;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [enabled, setEnabled] = useState(autoRejectUnusableDocs);
+  const [error, setError] = useState<string | null>(null);
+
+  function onToggle(next: boolean) {
+    setError(null);
+    setEnabled(next); // optimistic
+    const fd = new FormData();
+    fd.append("enabled", next ? "true" : "false");
+    startTransition(async () => {
+      const res = await setAutoRejectAction(fd);
+      if (!res.ok) {
+        setError(t("save_failed"));
+        setEnabled(!next); // revert
+      }
+    });
+  }
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold">{t("section_firm_prefs")}</h2>
+      <p className="text-xs text-muted-foreground mt-1">
+        {t("section_firm_prefs_hint")}
+      </p>
+      <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3 max-w-xl">
+        <div className="space-y-1">
+          <div className="text-sm font-medium">
+            {t("auto_reject_label")}
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {t("auto_reject_help")}
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={onToggle}
+          disabled={pending}
+          ariaLabel={t("auto_reject_label")}
+        />
+      </div>
+      {error && (
+        <p className="mt-2 text-xs text-destructive">{error}</p>
+      )}
+    </section>
   );
 }

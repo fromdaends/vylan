@@ -181,7 +181,7 @@
   },
   "Settings": {
     "title": "Settings",
-    "subtitle": "Display preferences. Your account and firm info live in your profile.",
+    "subtitle": "Display preferences and firm behaviour. Your account and firm info live in your profile.",
     "section_theme": "Appearance",
     "section_theme_hint": "Light, dark, or follow your system.",
     "theme_light": "Light",
@@ -189,6 +189,10 @@
     "theme_system": "System",
     "section_language": "Site language",
     "section_language_hint": "Switches the app interface immediately. Doesn't affect what your clients see.",
+    "section_firm_prefs": "Document quality",
+    "section_firm_prefs_hint": "Controls how Relai handles unreadable uploads from your clients.",
+    "auto_reject_label": "Auto-reject unreadable documents",
+    "auto_reject_help": "When on, Relai detects unreadable or incomplete documents and automatically asks the client to resubmit. When off, these documents are queued for your review.",
     "save_failed": "Couldn't save. Please try again."
   },
   "App": {
