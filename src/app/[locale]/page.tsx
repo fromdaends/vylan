@@ -106,7 +106,28 @@ export default async function Home({
       </header>
 
       {/* HERO */}
-      <section className="relative">
+      <section className="relative overflow-hidden">
+        {/* Hero-local multi-color orb cluster — sits behind the headline
+            so it reads as a colorful halo around the main writing,
+            rather than the calmer page-level layer alone. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_at_top,black,transparent_70%)]"
+        >
+          <div className="orb orb-iris h-[640px] w-[640px] top-[-160px] left-1/2 -translate-x-1/2 opacity-90" />
+          <div
+            className="orb orb-cyan h-[440px] w-[440px] top-[60px] left-[8%] opacity-80"
+            style={{ animationDelay: "-3s" }}
+          />
+          <div
+            className="orb orb-pink h-[440px] w-[440px] top-[60px] right-[8%] opacity-80"
+            style={{ animationDelay: "-7s" }}
+          />
+          <div
+            className="orb orb-gold h-[300px] w-[300px] top-[280px] left-1/2 -translate-x-1/2 opacity-60"
+            style={{ animationDelay: "-9s" }}
+          />
+        </div>
         <div
           aria-hidden
           className="absolute inset-0 -z-10 bg-grid opacity-40 [mask-image:radial-gradient(ellipse_at_top,black,transparent_65%)]"
@@ -433,7 +454,7 @@ function Step({
 
 function Faq({ q, a }: { q: string; a: string }) {
   return (
-    <details className="group rounded-xl border border-border bg-card transition-all duration-300 hover:border-accent/40 hover:bg-card/80 open:border-accent/40">
+    <details className="reveal-soft group rounded-xl border border-border bg-card transition-all duration-300 hover:border-accent/40 hover:bg-card/80 open:border-accent/40">
       <summary className="flex cursor-pointer items-center justify-between gap-4 p-5 font-medium text-base list-none">
         <span className="transition-colors group-hover:text-foreground">
           {q}
@@ -474,7 +495,7 @@ async function PlanPreview({
     <Link
       href="/signup"
       className={
-        "relative block cursor-pointer rounded-2xl border bg-card p-7 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
+        "reveal relative block cursor-pointer rounded-2xl border bg-card p-7 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
         (featured
           ? "featured-card border-transparent"
           : "border-border hover:border-foreground/20")
