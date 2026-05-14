@@ -85,8 +85,13 @@ const ENTRANCE_DURATION: Record<Intensity, number> = {
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 const EASE_IN = [0.4, 0, 1, 1] as const;
-const EXIT_DURATION = 0.4;
-const EXIT_BLUR_PX = 12;
+// Exit values tuned for a dramatic, obvious "drift away" effect:
+// slower duration + heavy blur + slight scale-down + small upward
+// translate so the element doesn't just fade, it visibly LEAVES.
+const EXIT_DURATION = 0.8;
+const EXIT_BLUR_PX = 28;
+const EXIT_SCALE = 0.9;
+const EXIT_Y = -24;
 
 export function ScrollReveal({
   children,
@@ -111,8 +116,14 @@ export function ScrollReveal({
   //     already mostly off-screen, so the exit animation ran where
   //     the user couldn't see it.
   const inView = useInView(ref, {
-    amount: 0.15,
-    margin: "-20% 0px -10% 0px",
+    // amount 0.25 = exits fire when only 25% of element remains in
+    //   the effective viewport (vs 15%) — flips earlier so the exit
+    //   animation has more visible runway.
+    // margin "-30% 0px -10% 0px" — effective viewport top sits 30%
+    //   below actual top. Exits trigger with ~30% of viewport height
+    //   of visible screen remaining for the drift-away to play in.
+    amount: 0.25,
+    margin: "-30% 0px -10% 0px",
   });
 
   useEffect(() => attachSharedScrollListener(), []);
@@ -157,14 +168,16 @@ export function ScrollReveal({
                 transition: { duration: 0 },
               }
             : _scrollDownRef.current
-              ? // — DOWN-EXIT — blur fade-out as the element leaves
-                //   via the top of the viewport. Stays at y=0/scale=1
-                //   so the page scroll carries it off naturally
-                //   while the blur+fade plays.
+              ? // — DOWN-EXIT — dramatic drift-away as the element
+                //   leaves via the top of the viewport: fade to 0,
+                //   blur out, shrink slightly, and translate up a
+                //   touch. The combined effect reads as the section
+                //   moving "into the distance" rather than just
+                //   vanishing.
                 {
                   opacity: 0,
-                  y: 0,
-                  scale: 1,
+                  y: EXIT_Y,
+                  scale: EXIT_SCALE,
                   filter: `blur(${EXIT_BLUR_PX}px)`,
                   transition: { duration: EXIT_DURATION, ease: EASE_IN },
                 }
