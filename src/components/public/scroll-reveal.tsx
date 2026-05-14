@@ -2,6 +2,7 @@
 
 import {
   motion,
+  useInView,
   useScroll,
   useTransform,
   type MotionValue,
@@ -9,33 +10,80 @@ import {
 } from "framer-motion";
 import { useRef, type ReactNode } from "react";
 
-// Framer-motion-backed reveal + parallax for the landing page.
-// Works in every browser (unlike CSS animation-timeline). Both
-// reveals and parallax are bidirectional — scrolling back up reverses
-// the animation. prefers-reduced-motion is honored automatically by
-// framer-motion when MotionConfig is set (we set reducedMotion: "user"
-// implicitly through the default behavior — framer-motion reads the
-// system setting and disables transforms).
-
-// ─────────────────────────────────────────────────────────────────────
-// Reveal — fades + lifts + scales an element as it enters the viewport.
-// Reverses on exit so scrolling up un-reveals.
-// ─────────────────────────────────────────────────────────────────────
+// Reveal + parallax for the landing page, framer-motion-backed.
+//
+// ScrollReveal behavior:
+//   - Element enters viewport (scrolling DOWN) → fades + lifts in with
+//     an animation.
+//   - Element exits viewport (scrolling UP past it, or scrolling DOWN
+//     past it) → instantly snaps back to the hidden state, no reverse
+//     animation. Just disappears.
+//   - Element re-enters viewport (scrolling DOWN again after going up)
+//     → animation replays.
+//
+// This is what we want for a marketing page: the entrance is the
+// payoff, the exit shouldn't compete for attention.
+//
+// prefers-reduced-motion is honored automatically by framer-motion via
+// its global reduced-motion handling.
 
 type Intensity = "soft" | "strong" | "pop";
 
-const INTENSITY: Record<Intensity, Variants> = {
+// Each variant carries its own transition. Hidden has duration: 0 so
+// the snap-back when leaving the viewport is instant rather than a
+// reverse animation.
+const VARIANTS: Record<Intensity, Variants> = {
   soft: {
-    hidden: { opacity: 0, y: 28 },
-    visible: { opacity: 1, y: 0 },
+    hidden: {
+      opacity: 0,
+      y: 28,
+      transition: { duration: 0 },
+    },
+    visible: (custom: number = 0) => ({
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.55,
+        delay: custom,
+        ease: [0.16, 1, 0.3, 1],
+      },
+    }),
   },
   strong: {
-    hidden: { opacity: 0, y: 80, scale: 0.92 },
-    visible: { opacity: 1, y: 0, scale: 1 },
+    hidden: {
+      opacity: 0,
+      y: 80,
+      scale: 0.92,
+      transition: { duration: 0 },
+    },
+    visible: (custom: number = 0) => ({
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        duration: 0.7,
+        delay: custom,
+        ease: [0.16, 1, 0.3, 1],
+      },
+    }),
   },
   pop: {
-    hidden: { opacity: 0, y: 60, scale: 0.88 },
-    visible: { opacity: 1, y: 0, scale: 1 },
+    hidden: {
+      opacity: 0,
+      y: 60,
+      scale: 0.88,
+      transition: { duration: 0 },
+    },
+    visible: (custom: number = 0) => ({
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        duration: 0.6,
+        delay: custom,
+        ease: [0.16, 1, 0.3, 1],
+      },
+    }),
   },
 };
 
@@ -43,31 +91,28 @@ export function ScrollReveal({
   children,
   intensity = "soft",
   delay = 0,
-  duration = 0.55,
-  once = false,
   className,
 }: {
   children: ReactNode;
   intensity?: Intensity;
   delay?: number;
-  duration?: number;
-  // Default false → bidirectional. Pass true to fire once and forget.
-  once?: boolean;
   className?: string;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // amount: how much of the element must be in view to count as
+  // "in view". 0.15 = 15% visible.
+  const inView = useInView(ref, {
+    amount: 0.15,
+    margin: "0px 0px -10% 0px",
+  });
+
   return (
     <motion.div
+      ref={ref}
       initial="hidden"
-      whileInView="visible"
-      // Margin shrinks the viewport rect so the reveal fires a bit
-      // before the element hits the edge — feels more responsive.
-      viewport={{ once, margin: "0px 0px -10% 0px", amount: 0.15 }}
-      variants={INTENSITY[intensity]}
-      transition={{
-        duration,
-        delay,
-        ease: [0.16, 1, 0.3, 1],
-      }}
+      animate={inView ? "visible" : "hidden"}
+      variants={VARIANTS[intensity]}
+      custom={delay}
       className={className}
     >
       {children}
@@ -77,9 +122,8 @@ export function ScrollReveal({
 
 // ─────────────────────────────────────────────────────────────────────
 // ParallaxLayer — drifts at a different speed than the page as you
-// scroll past. Bidirectional. Use `intensity` to control distance:
-// positive = element moves UP as you scroll DOWN (foreground feel),
-// negative = element moves DOWN as you scroll DOWN (background feel).
+// scroll past. Always bidirectional (this stays on-screen as part of
+// the page composition, not as a one-shot entrance).
 // ─────────────────────────────────────────────────────────────────────
 
 export function ParallaxLayer({
@@ -88,8 +132,6 @@ export function ParallaxLayer({
   className,
 }: {
   children: ReactNode;
-  // Pixels of drift across the element's full scroll-through. Try
-  // 40–150 for subtle, 200+ for dramatic.
   intensity?: number;
   className?: string;
 }) {
@@ -107,14 +149,8 @@ export function ParallaxLayer({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────
-// useParallax — bare hook for the rare case you want to drive the
-// transform of a non-motion element. Exported in case we need it.
-// ─────────────────────────────────────────────────────────────────────
-
 export function useParallaxY(
   intensity: number,
-  // Pass a ref pointing at the section that drives the timeline.
   target: React.RefObject<HTMLElement>,
 ): MotionValue<number> {
   const { scrollYProgress } = useScroll({

@@ -9,7 +9,6 @@ import {
   ArrowRight,
   Check,
   Sparkles,
-  Zap,
   Bell,
   FileCheck,
   Clock,
@@ -219,23 +218,57 @@ export default async function Home({
         </div>
       </section>
 
-      {/* Features */}
+      {/* AI Document Checks — dedicated centerpiece section.
+          Two-column on desktop, mock card on the right with an accent
+          glow halo behind it to draw the reader's eye. The third
+          "Features" card (AI) was removed in favor of this richer
+          treatment so the AI message lives in one prominent place. */}
       <section className="relative">
+        {/* Glow halo: large accent orb sits behind the mock card to
+            give the section a warm spotlight. Parallax-drifted so it
+            stays alive while reading. */}
         <ParallaxLayer
-          intensity={150}
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_70%_70%_at_50%_50%,black,transparent_80%)]"
+          intensity={80}
+          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_60%_70%_at_70%_50%,black,transparent_75%)]"
         >
           <div aria-hidden>
             <div
-              className="orb orb-peach h-[480px] w-[480px] top-[120px] -left-[140px] opacity-65"
-              style={{ animationDelay: "-4s" }}
+              className="orb orb-iris h-[640px] w-[640px] top-[40px] -right-[120px] opacity-90"
+              style={{ animationDelay: "-2s" }}
             />
             <div
-              className="orb orb-gold h-[480px] w-[480px] top-[120px] -right-[140px] opacity-65"
+              className="orb orb-coral h-[420px] w-[420px] top-[260px] right-[20%] opacity-70"
               style={{ animationDelay: "-8s" }}
             />
           </div>
         </ParallaxLayer>
+        <div className="mx-auto max-w-6xl px-6 py-28 sm:py-32">
+          <div className="grid gap-12 md:grid-cols-2 md:items-center">
+            <ScrollReveal intensity="strong">
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
+                {t("features_eyebrow")}
+              </div>
+              <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-[1.05] text-gradient-warm">
+                {t("feature_3_title")}
+              </h2>
+              <p className="mt-6 text-base sm:text-lg text-muted-foreground leading-relaxed">
+                {t("feature_3_body")}
+              </p>
+              <ul className="mt-8 space-y-3 text-sm">
+                <BulletItem>{t("benefit_3_body")}</BulletItem>
+                <BulletItem>{t("intro_pill_2")}</BulletItem>
+                <BulletItem>{t("intro_pill_3")}</BulletItem>
+              </ul>
+            </ScrollReveal>
+            <ScrollReveal intensity="pop" delay={0.15}>
+              <AiMockCard t={t} />
+            </ScrollReveal>
+          </div>
+        </div>
+      </section>
+
+      {/* Features */}
+      <section className="relative">
         <div className="mx-auto max-w-5xl px-6 py-24">
           <ScrollReveal intensity="strong" className="text-center mb-16">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
@@ -245,7 +278,7 @@ export default async function Home({
               {t("features_title")}
             </h2>
           </ScrollReveal>
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="grid gap-6 sm:grid-cols-2 max-w-3xl mx-auto">
             <ScrollReveal intensity="pop" delay={0}>
               <Feature
                 icon={<FileCheck className="h-5 w-5" />}
@@ -260,30 +293,12 @@ export default async function Home({
                 body={t("feature_2_body")}
               />
             </ScrollReveal>
-            <ScrollReveal intensity="pop" delay={0.2}>
-              <Feature
-                icon={<Zap className="h-5 w-5" />}
-                title={t("feature_3_title")}
-                body={t("feature_3_body")}
-              />
-            </ScrollReveal>
           </div>
         </div>
       </section>
 
       {/* How it works */}
       <section className="relative">
-        <ParallaxLayer
-          intensity={-80}
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,black,transparent_80%)]"
-        >
-          <div aria-hidden>
-            <div
-              className="orb orb-rose h-[520px] w-[520px] top-[80px] left-1/2 -translate-x-1/2 opacity-55"
-              style={{ animationDelay: "-6s" }}
-            />
-          </div>
-        </ParallaxLayer>
         <div className="mx-auto max-w-5xl px-6 py-24">
           <ScrollReveal intensity="strong" className="text-center mb-16">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
@@ -397,6 +412,53 @@ function IntroPill({ children }: { children: React.ReactNode }) {
       <span className="h-1.5 w-1.5 rounded-full bg-accent transition-transform group-hover:scale-125" />
       {children}
     </span>
+  );
+}
+
+function BulletItem({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-2.5 text-muted-foreground">
+      <Check className="h-4 w-4 mt-0.5 text-accent shrink-0" aria-hidden />
+      <span className="leading-relaxed text-foreground/85">{children}</span>
+    </li>
+  );
+}
+
+// Mock card for the AI Document Checks section. Mimics what the
+// accountant sees when the AI auto-rejects a file: filename header,
+// "right-doc detection" badge, dark preview area, and a red rejection
+// alert below explaining the issue. Sits inside a featured-card glow.
+function AiMockCard({
+  t,
+}: {
+  t: Awaited<ReturnType<typeof getTranslations<"Landing">>>;
+}) {
+  return (
+    <div className="featured-card rounded-2xl border border-border bg-card p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-medium text-foreground">T4 — 2025</p>
+        <span className="inline-flex items-center gap-1 rounded-md bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive uppercase tracking-wider">
+          {t("benefit_3_label")}
+        </span>
+      </div>
+      <div
+        className="mt-4 rounded-lg border border-border/60 bg-muted/40 aspect-[4/3] flex items-center justify-center"
+        aria-hidden
+      >
+        <FileCheck
+          className="h-10 w-10 text-muted-foreground/30"
+          aria-hidden
+        />
+      </div>
+      <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3">
+        <p className="text-xs sm:text-sm font-semibold text-destructive">
+          {t("feature_3_title")}
+        </p>
+        <p className="mt-1 text-xs sm:text-sm text-foreground/80 leading-relaxed">
+          {t("feature_3_body")}
+        </p>
+      </div>
+    </div>
   );
 }
 
