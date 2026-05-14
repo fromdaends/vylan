@@ -6,6 +6,7 @@ import { brand } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { logoutAction } from "@/app/actions/auth";
+import { Logo } from "@/components/brand/logo";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -78,11 +79,13 @@ export function AppShell({
             </button>
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 font-semibold tracking-tight"
+              className="flex items-center gap-2 font-semibold tracking-tight group"
             >
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-foreground text-background text-[10px] font-bold">
-                R
-              </span>
+              <Logo
+                size={24}
+                priority
+                className="transition-transform group-hover:scale-110 group-hover:rotate-3"
+              />
               <span className="hidden sm:inline">{brand.name}</span>
             </Link>
           </div>

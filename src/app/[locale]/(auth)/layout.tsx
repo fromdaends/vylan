@@ -1,6 +1,7 @@
 import { Link } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { Logo } from "@/components/brand/logo";
 
 export default function AuthLayout({
   children,
@@ -19,11 +20,13 @@ export default function AuthLayout({
         <div className="mx-auto max-w-6xl flex items-center justify-between px-6 py-3.5">
           <Link
             href="/"
-            className="flex items-center gap-2 font-semibold tracking-tight"
+            className="flex items-center gap-2 font-semibold tracking-tight group"
           >
-            <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-foreground text-background text-[10px] font-bold">
-              R
-            </span>
+            <Logo
+              size={24}
+              priority
+              className="transition-transform group-hover:scale-110 group-hover:rotate-3"
+            />
             {brand.name}
           </Link>
           <ThemeToggle />
