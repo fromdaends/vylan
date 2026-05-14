@@ -19,6 +19,7 @@ import {
 import { PublicFooter } from "@/components/public/public-footer";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Logo } from "@/components/brand/logo";
+import { ScrollReveal, ParallaxLayer } from "@/components/public/scroll-reveal";
 
 export default async function Home({
   params,
@@ -86,32 +87,34 @@ export default async function Home({
             so the colors don't bleed into the intro section below.
             The whole cluster drifts on the scroll timeline so the
             backdrop feels alive both directions. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_75%_90%_at_50%_30%,black,transparent_75%)] parallax-up-slow"
+        <ParallaxLayer
+          intensity={120}
+          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_75%_90%_at_50%_30%,black,transparent_75%)]"
         >
-          <div className="orb orb-iris h-[820px] w-[820px] top-[-220px] left-1/2 -translate-x-1/2 opacity-100" />
-          <div
-            className="orb orb-rose h-[560px] w-[560px] top-[20px] -left-[100px] opacity-100"
-            style={{ animationDelay: "-3s" }}
-          />
-          <div
-            className="orb orb-coral h-[560px] w-[560px] top-[20px] -right-[100px] opacity-100"
-            style={{ animationDelay: "-7s" }}
-          />
-          <div
-            className="orb orb-peach h-[440px] w-[440px] top-[200px] left-[10%] opacity-95"
-            style={{ animationDelay: "-11s" }}
-          />
-          <div
-            className="orb orb-gold h-[480px] w-[480px] top-[200px] right-[10%] opacity-95"
-            style={{ animationDelay: "-5s" }}
-          />
-          <div
-            className="orb orb-pink h-[360px] w-[360px] top-[420px] left-1/2 -translate-x-1/2 opacity-70"
-            style={{ animationDelay: "-9s" }}
-          />
-        </div>
+          <div aria-hidden>
+            <div className="orb orb-iris h-[820px] w-[820px] top-[-220px] left-1/2 -translate-x-1/2 opacity-100" />
+            <div
+              className="orb orb-rose h-[560px] w-[560px] top-[20px] -left-[100px] opacity-100"
+              style={{ animationDelay: "-3s" }}
+            />
+            <div
+              className="orb orb-coral h-[560px] w-[560px] top-[20px] -right-[100px] opacity-100"
+              style={{ animationDelay: "-7s" }}
+            />
+            <div
+              className="orb orb-peach h-[440px] w-[440px] top-[200px] left-[10%] opacity-95"
+              style={{ animationDelay: "-11s" }}
+            />
+            <div
+              className="orb orb-gold h-[480px] w-[480px] top-[200px] right-[10%] opacity-95"
+              style={{ animationDelay: "-5s" }}
+            />
+            <div
+              className="orb orb-pink h-[360px] w-[360px] top-[420px] left-1/2 -translate-x-1/2 opacity-70"
+              style={{ animationDelay: "-9s" }}
+            />
+          </div>
+        </ParallaxLayer>
 
         <div className="mx-auto max-w-4xl px-6 pt-24 pb-24 sm:pt-32 sm:pb-32 text-center animate-in-up">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 backdrop-blur px-4 py-1.5 text-xs font-medium mb-8">
@@ -154,7 +157,7 @@ export default async function Home({
       {/* INTRO — the bigger welcome / explainer */}
       <section className="relative">
         <div className="mx-auto max-w-4xl px-6 py-28 sm:py-36 text-center">
-          <div className="reveal-strong">
+          <ScrollReveal intensity="strong">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-4">
               {t("intro_eyebrow")}
             </div>
@@ -164,123 +167,142 @@ export default async function Home({
             <p className="mt-8 text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               {t("intro_lede")}
             </p>
-          </div>
-          <div className="mt-10 flex flex-wrap justify-center gap-2.5 reveal-soft">
+          </ScrollReveal>
+          <ScrollReveal delay={0.15} className="mt-10 flex flex-wrap justify-center gap-2.5">
             <IntroPill>{t("intro_pill_1")}</IntroPill>
             <IntroPill>{t("intro_pill_2")}</IntroPill>
             <IntroPill>{t("intro_pill_3")}</IntroPill>
-          </div>
+          </ScrollReveal>
         </div>
       </section>
 
       {/* BENEFITS — big stat cards */}
       <section className="relative">
         <div className="mx-auto max-w-6xl px-6 py-24">
-          <div className="text-center mb-16 reveal-strong">
+          <ScrollReveal intensity="strong" className="text-center mb-16">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
               {t("benefits_eyebrow")}
             </div>
             <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight max-w-3xl mx-auto leading-tight">
               {t("benefits_title")}
             </h2>
-          </div>
+          </ScrollReveal>
           <div className="grid gap-5 md:grid-cols-3">
-            <BenefitCard
-              icon={<Clock className="h-5 w-5" />}
-              stat={t("benefit_1_stat")}
-              label={t("benefit_1_label")}
-              title={t("benefit_1_title")}
-              body={t("benefit_1_body")}
-            />
-            <BenefitCard
-              icon={<Rocket className="h-5 w-5" />}
-              stat={t("benefit_2_stat")}
-              label={t("benefit_2_label")}
-              title={t("benefit_2_title")}
-              body={t("benefit_2_body")}
-            />
-            <BenefitCard
-              icon={<ShieldCheck className="h-5 w-5" />}
-              stat={t("benefit_3_stat")}
-              label={t("benefit_3_label")}
-              title={t("benefit_3_title")}
-              body={t("benefit_3_body")}
-            />
+            <ScrollReveal intensity="pop" delay={0}>
+              <BenefitCard
+                icon={<Clock className="h-5 w-5" />}
+                stat={t("benefit_1_stat")}
+                label={t("benefit_1_label")}
+                title={t("benefit_1_title")}
+                body={t("benefit_1_body")}
+              />
+            </ScrollReveal>
+            <ScrollReveal intensity="pop" delay={0.1}>
+              <BenefitCard
+                icon={<Rocket className="h-5 w-5" />}
+                stat={t("benefit_2_stat")}
+                label={t("benefit_2_label")}
+                title={t("benefit_2_title")}
+                body={t("benefit_2_body")}
+              />
+            </ScrollReveal>
+            <ScrollReveal intensity="pop" delay={0.2}>
+              <BenefitCard
+                icon={<ShieldCheck className="h-5 w-5" />}
+                stat={t("benefit_3_stat")}
+                label={t("benefit_3_label")}
+                title={t("benefit_3_title")}
+                body={t("benefit_3_body")}
+              />
+            </ScrollReveal>
           </div>
         </div>
       </section>
 
       {/* Features */}
       <section className="relative">
-        {/* Mid-page warm ambient — keeps the warmth carrying down
-            after the hero. Drifts on the scroll timeline for depth. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_70%_70%_at_50%_50%,black,transparent_80%)] parallax-up-fast"
+        <ParallaxLayer
+          intensity={150}
+          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_70%_70%_at_50%_50%,black,transparent_80%)]"
         >
-          <div
-            className="orb orb-peach h-[480px] w-[480px] top-[120px] -left-[140px] opacity-65"
-            style={{ animationDelay: "-4s" }}
-          />
-          <div
-            className="orb orb-gold h-[480px] w-[480px] top-[120px] -right-[140px] opacity-65"
-            style={{ animationDelay: "-8s" }}
-          />
-        </div>
+          <div aria-hidden>
+            <div
+              className="orb orb-peach h-[480px] w-[480px] top-[120px] -left-[140px] opacity-65"
+              style={{ animationDelay: "-4s" }}
+            />
+            <div
+              className="orb orb-gold h-[480px] w-[480px] top-[120px] -right-[140px] opacity-65"
+              style={{ animationDelay: "-8s" }}
+            />
+          </div>
+        </ParallaxLayer>
         <div className="mx-auto max-w-5xl px-6 py-24">
-          <div className="text-center mb-16 reveal-strong">
+          <ScrollReveal intensity="strong" className="text-center mb-16">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
               {t("features_eyebrow")}
             </div>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
               {t("features_title")}
             </h2>
-          </div>
+          </ScrollReveal>
           <div className="grid gap-6 sm:grid-cols-3">
-            <Feature
-              icon={<FileCheck className="h-5 w-5" />}
-              title={t("feature_1_title")}
-              body={t("feature_1_body")}
-            />
-            <Feature
-              icon={<Bell className="h-5 w-5" />}
-              title={t("feature_2_title")}
-              body={t("feature_2_body")}
-            />
-            <Feature
-              icon={<Zap className="h-5 w-5" />}
-              title={t("feature_3_title")}
-              body={t("feature_3_body")}
-            />
+            <ScrollReveal intensity="pop" delay={0}>
+              <Feature
+                icon={<FileCheck className="h-5 w-5" />}
+                title={t("feature_1_title")}
+                body={t("feature_1_body")}
+              />
+            </ScrollReveal>
+            <ScrollReveal intensity="pop" delay={0.1}>
+              <Feature
+                icon={<Bell className="h-5 w-5" />}
+                title={t("feature_2_title")}
+                body={t("feature_2_body")}
+              />
+            </ScrollReveal>
+            <ScrollReveal intensity="pop" delay={0.2}>
+              <Feature
+                icon={<Zap className="h-5 w-5" />}
+                title={t("feature_3_title")}
+                body={t("feature_3_body")}
+              />
+            </ScrollReveal>
           </div>
         </div>
       </section>
 
       {/* How it works */}
       <section className="relative">
-        {/* Warm rose drift behind the steps. */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,black,transparent_80%)] parallax-down-slow"
+        <ParallaxLayer
+          intensity={-80}
+          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,black,transparent_80%)]"
         >
-          <div
-            className="orb orb-rose h-[520px] w-[520px] top-[80px] left-1/2 -translate-x-1/2 opacity-55"
-            style={{ animationDelay: "-6s" }}
-          />
-        </div>
+          <div aria-hidden>
+            <div
+              className="orb orb-rose h-[520px] w-[520px] top-[80px] left-1/2 -translate-x-1/2 opacity-55"
+              style={{ animationDelay: "-6s" }}
+            />
+          </div>
+        </ParallaxLayer>
         <div className="mx-auto max-w-5xl px-6 py-24">
-          <div className="text-center mb-16 reveal-strong">
+          <ScrollReveal intensity="strong" className="text-center mb-16">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
               {t("how_eyebrow")}
             </div>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
               {t("how_title")}
             </h2>
-          </div>
+          </ScrollReveal>
           <div className="grid gap-8 sm:grid-cols-3">
-            <Step n={1} title={t("step_1_title")} body={t("step_1_body")} />
-            <Step n={2} title={t("step_2_title")} body={t("step_2_body")} />
-            <Step n={3} title={t("step_3_title")} body={t("step_3_body")} />
+            <ScrollReveal intensity="pop" delay={0}>
+              <Step n={1} title={t("step_1_title")} body={t("step_1_body")} />
+            </ScrollReveal>
+            <ScrollReveal intensity="pop" delay={0.12}>
+              <Step n={2} title={t("step_2_title")} body={t("step_2_body")} />
+            </ScrollReveal>
+            <ScrollReveal intensity="pop" delay={0.24}>
+              <Step n={3} title={t("step_3_title")} body={t("step_3_body")} />
+            </ScrollReveal>
           </div>
         </div>
       </section>
@@ -288,7 +310,7 @@ export default async function Home({
       {/* Pricing */}
       <section className="relative">
         <div className="mx-auto max-w-4xl px-6 py-24">
-          <div className="text-center mb-16 reveal-strong">
+          <ScrollReveal intensity="strong" className="text-center mb-16">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
               {t("pricing_eyebrow")}
             </div>
@@ -298,15 +320,16 @@ export default async function Home({
             <p className="text-sm text-muted-foreground mt-4 max-w-md mx-auto">
               {tPricing("subtitle")}
             </p>
-          </div>
+          </ScrollReveal>
           <div className="grid gap-5 sm:grid-cols-2">
-            {PAID_PLANS.map((planId) => (
-              <PlanPreview
-                key={planId}
-                planId={planId}
-                locale={locale}
-                featured={planId === "cabinet"}
-              />
+            {PAID_PLANS.map((planId, i) => (
+              <ScrollReveal key={planId} intensity="pop" delay={i * 0.1}>
+                <PlanPreview
+                  planId={planId}
+                  locale={locale}
+                  featured={planId === "cabinet"}
+                />
+              </ScrollReveal>
             ))}
           </div>
         </div>
@@ -315,26 +338,37 @@ export default async function Home({
       {/* FAQ */}
       <section className="relative">
         <div className="mx-auto max-w-3xl px-6 py-24">
-          <div className="text-center mb-12 reveal-strong">
+          <ScrollReveal intensity="strong" className="text-center mb-12">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
               FAQ
             </div>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
               {t("faq_title")}
             </h2>
-          </div>
+          </ScrollReveal>
           <dl className="space-y-2">
-            <Faq q={t("faq_1_q")} a={t("faq_1_a")} />
-            <Faq q={t("faq_2_q")} a={t("faq_2_a")} />
-            <Faq q={t("faq_3_q")} a={t("faq_3_a")} />
-            <Faq q={t("faq_4_q")} a={t("faq_4_a")} />
+            <ScrollReveal delay={0}>
+              <Faq q={t("faq_1_q")} a={t("faq_1_a")} />
+            </ScrollReveal>
+            <ScrollReveal delay={0.06}>
+              <Faq q={t("faq_2_q")} a={t("faq_2_a")} />
+            </ScrollReveal>
+            <ScrollReveal delay={0.12}>
+              <Faq q={t("faq_3_q")} a={t("faq_3_a")} />
+            </ScrollReveal>
+            <ScrollReveal delay={0.18}>
+              <Faq q={t("faq_4_q")} a={t("faq_4_a")} />
+            </ScrollReveal>
           </dl>
         </div>
       </section>
 
       {/* Final CTA */}
       <section className="relative">
-        <div className="mx-auto max-w-3xl px-6 py-24 text-center reveal-strong">
+        <ScrollReveal
+          intensity="strong"
+          className="mx-auto max-w-3xl px-6 py-24 text-center"
+        >
           <h2 className="text-4xl sm:text-5xl font-semibold tracking-tight text-gradient">
             {t("cta_final_title")}
           </h2>
@@ -349,7 +383,7 @@ export default async function Home({
               </Button>
             </Link>
           </div>
-        </div>
+        </ScrollReveal>
       </section>
 
       <PublicFooter />
@@ -380,7 +414,7 @@ function BenefitCard({
   body: string;
 }) {
   return (
-    <div className="reveal tilt group relative overflow-hidden rounded-2xl border border-border bg-card p-7">
+    <div className="tilt group relative overflow-hidden rounded-2xl border border-border bg-card p-7">
       <div className="absolute inset-x-0 -top-px h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
       <div className="flex items-center justify-between">
         <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent ring-1 ring-accent/20 transition-transform group-hover:scale-110 group-hover:rotate-3">
@@ -415,7 +449,7 @@ function Feature({
   body: string;
 }) {
   return (
-    <div className="reveal tilt group relative rounded-2xl border border-border bg-card p-6 hover:border-foreground/20">
+    <div className="tilt group relative rounded-2xl border border-border bg-card p-6 hover:border-foreground/20">
       <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10 text-accent ring-1 ring-accent/20 mb-4 transition-transform group-hover:scale-110 group-hover:rotate-3">
         {icon}
       </div>
@@ -435,7 +469,7 @@ function Step({
   body: string;
 }) {
   return (
-    <div className="relative reveal group">
+    <div className="relative group">
       <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl border border-border bg-card font-mono text-lg font-medium text-foreground mb-5 shadow-sm transition-all duration-300 group-hover:border-accent/50 group-hover:bg-accent/5 group-hover:text-accent group-hover:-translate-y-0.5 group-hover:shadow-md">
         {n}
       </div>
@@ -451,7 +485,7 @@ function Step({
 
 function Faq({ q, a }: { q: string; a: string }) {
   return (
-    <details className="reveal-soft group rounded-xl border border-border bg-card transition-all duration-300 hover:border-accent/40 hover:bg-card/80 open:border-accent/40">
+    <details className="group rounded-xl border border-border bg-card transition-all duration-300 hover:border-accent/40 hover:bg-card/80 open:border-accent/40">
       <summary className="flex cursor-pointer items-center justify-between gap-4 p-5 font-medium text-base list-none">
         <span className="transition-colors group-hover:text-foreground">
           {q}
@@ -492,7 +526,7 @@ async function PlanPreview({
     <Link
       href={`/pricing/${planId}`}
       className={
-        "reveal relative block cursor-pointer rounded-2xl border bg-card p-7 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
+        "relative block cursor-pointer rounded-2xl border bg-card p-7 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
         (featured
           ? "featured-card border-transparent"
           : "border-border hover:border-foreground/20")
