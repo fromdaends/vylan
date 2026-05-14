@@ -1,4 +1,5 @@
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import type { UsabilityVerdict } from "@/lib/ai/usability";
 
 export type UploadedFile = {
   id: string;
@@ -11,6 +12,13 @@ export type UploadedFile = {
   ai_classification: string | null;
   ai_confidence: number | null;
   ai_extracted_fields: Record<string, unknown> | null;
+  // Phase 1+2: structured AI usability verdict (null until classified
+  // or when the model output was malformed).
+  ai_usability: UsabilityVerdict | null;
+  // Phase 3: true if the system actually auto-rejected this upload.
+  // (Even when true, the file stays in storage — accountants can
+  // override via Phase 5's UI.)
+  ai_rejected: boolean;
   uploaded_at: string;
 };
 

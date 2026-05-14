@@ -44,6 +44,7 @@ function item(overrides: Partial<RequestItem> = {}): RequestItem {
     approved_by: null,
     approved_at: null,
     rejection_reason: null,
+    ai_rejection_count: 0,
     created_at: NOW.toISOString(),
     ...overrides,
   };

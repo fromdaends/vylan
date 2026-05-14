@@ -98,7 +98,32 @@ function describe(
         confidence: conf,
       });
     }
+    case "ai_auto_rejected": {
+      const conf = pct(meta.usability_confidence);
+      const issue = String(meta.primary_issue ?? "");
+      return t("ai_auto_rejected", { issue, confidence: conf });
+    }
+    case "ai_escalated_to_accountant": {
+      const conf = pct(meta.usability_confidence);
+      const issue = String(meta.primary_issue ?? "");
+      return t("ai_escalated_to_accountant", { issue, confidence: conf });
+    }
+    case "ai_quality_flagged": {
+      const conf = pct(meta.usability_confidence);
+      const issue = String(meta.primary_issue ?? "");
+      return t("ai_quality_flagged", { issue, confidence: conf });
+    }
+    case "ai_rejection_overridden":
+      return t("ai_rejection_overridden");
+    case "client_retry_email_sent":
+      return t("client_retry_email_sent");
+    case "client_retry_sms_sent":
+      return t("client_retry_sms_sent");
     default:
       return entry.action;
   }
+}
+
+function pct(v: unknown): string {
+  return typeof v === "number" ? `${Math.round(v * 100)}%` : "—";
 }

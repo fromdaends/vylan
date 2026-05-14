@@ -11,6 +11,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { AiBadge } from "./ai-badge";
+import { UsabilityBadge } from "./usability-badge";
 import { reclassifyFileAction } from "@/app/actions/ai";
 import { formatBytes } from "@/lib/format";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
@@ -20,10 +21,12 @@ export function FilePreviewRow({
   file,
   url,
   expectedDocType,
+  rejectionCount,
 }: {
   file: UploadedFile;
   url: string;
   expectedDocType: DocType;
+  rejectionCount: number;
 }) {
   const t = useTranslations("Engagements");
   const [open, setOpen] = useState(false);
@@ -89,7 +92,17 @@ export function FilePreviewRow({
           </button>
         </form>
       </div>
-      <div className="px-2.5 pb-1.5">
+      <div className="px-2.5 pb-1.5 space-y-1">
+        {/* Usability lives above the document-type badge — separate
+            concerns: "is this readable?" vs "is this the right slip?"
+            UsabilityBadge renders null when there's no actionable
+            verdict so well-readable files don't get extra chrome. */}
+        <UsabilityBadge
+          fileId={file.id}
+          verdict={file.ai_usability}
+          aiRejected={file.ai_rejected}
+          rejectionCount={rejectionCount}
+        />
         <AiBadge file={file} expectedDocType={expectedDocType} />
       </div>
       {open && canPreview && (

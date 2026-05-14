@@ -350,6 +350,7 @@ async function ItemRow({
               file={f}
               url={f.url}
               expectedDocType={item.doc_type}
+              rejectionCount={item.ai_rejection_count ?? 0}
             />
           ))}
         </ul>
