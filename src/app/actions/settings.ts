@@ -49,12 +49,14 @@ export async function setAutoRejectAction(
       console.error("[setAutoRejectAction] update failed:", e);
       return { ok: false, error: "update_failed" };
     }
-    try {
-      revalidatePath("/", "layout");
-    } catch (e) {
-      // Cache-revalidation failing shouldn't fail the save itself.
-      console.warn("[setAutoRejectAction] revalidate skipped:", e);
-    }
+    // Intentionally NOT calling revalidatePath here. The /settings
+    // page is already `dynamic = "force-dynamic"`, so the next visit
+    // re-reads the firm row fresh. A layout-wide revalidate triggers
+    // a server-side re-render of the entire app tree as part of the
+    // action response — and any throw in that re-render (e.g., a
+    // transient storage signed-URL failure inside AppLayout) escapes
+    // this action's try/catch and surfaces as a top-level 500 page
+    // even though the column update itself succeeded.
     return { ok: true, value: parsed.data.enabled };
   } catch (e) {
     console.error("[setAutoRejectAction] unexpected:", e);
