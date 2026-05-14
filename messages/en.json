@@ -132,9 +132,17 @@
   },
   "Profile": {
     "title": "Your profile",
-    "subtitle": "How you appear in Relai. Visible to your firm.",
+    "subtitle": "Everything about you and your firm in one place.",
     "menu_profile": "Profile",
     "menu_help": "Help",
+    "group_you": "You",
+    "group_you_hint": "Your identity in the app.",
+    "group_firm": "Your firm",
+    "group_firm_hint": "Information your clients see. Your team shares these.",
+    "firm_title": "Firm details",
+    "firm_hint": "Visible on every client portal and in your outgoing emails.",
+    "firm_client_lang": "Default language for clients",
+    "firm_client_lang_hint": "Used when a client's individual language isn't set.",
     "section_picture": "Profile picture",
     "section_picture_hint": "JPEG, PNG, WEBP, or HEIC. Up to 8 MB. We square-crop it for you.",
     "change_picture": "Change picture",
@@ -167,6 +175,18 @@
       "weak_password": "New password must be at least 8 characters.",
       "mismatch": "The two new passwords don't match."
     }
+  },
+  "Settings": {
+    "title": "Settings",
+    "subtitle": "Display preferences. Your account and firm info live in your profile.",
+    "section_theme": "Appearance",
+    "section_theme_hint": "Light, dark, or follow your system.",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "theme_system": "System",
+    "section_language": "Site language",
+    "section_language_hint": "Switches the app interface immediately. Doesn't affect what your clients see.",
+    "save_failed": "Couldn't save. Please try again."
   },
   "App": {
     "dashboard_title": "Dashboard",

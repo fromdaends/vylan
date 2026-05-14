@@ -132,9 +132,17 @@
   },
   "Profile": {
     "title": "Votre profil",
-    "subtitle": "Comment vous apparaissez dans Relai. Visible par votre cabinet.",
+    "subtitle": "Tout ce qui vous concerne — vous et votre cabinet — au même endroit.",
     "menu_profile": "Profil",
     "menu_help": "Aide",
+    "group_you": "Vous",
+    "group_you_hint": "Votre identité dans l'app.",
+    "group_firm": "Votre cabinet",
+    "group_firm_hint": "Informations visibles par vos clients. Partagées par votre équipe.",
+    "firm_title": "Détails du cabinet",
+    "firm_hint": "Visibles sur chaque portail client et dans vos courriels.",
+    "firm_client_lang": "Langue par défaut pour les clients",
+    "firm_client_lang_hint": "Utilisée quand la langue d'un client n'est pas définie.",
     "section_picture": "Photo de profil",
     "section_picture_hint": "JPEG, PNG, WEBP ou HEIC. Jusqu'à 8 Mo. On la recadre en carré.",
     "change_picture": "Changer la photo",
@@ -167,6 +175,18 @@
       "weak_password": "Le nouveau mot de passe doit contenir au moins 8 caractères.",
       "mismatch": "Les deux mots de passe ne correspondent pas."
     }
+  },
+  "Settings": {
+    "title": "Paramètres",
+    "subtitle": "Préférences d'affichage. Les infos sur vous et votre cabinet sont dans le profil.",
+    "section_theme": "Apparence",
+    "section_theme_hint": "Clair, sombre, ou suivre votre système.",
+    "theme_light": "Clair",
+    "theme_dark": "Sombre",
+    "theme_system": "Système",
+    "section_language": "Langue du site",
+    "section_language_hint": "Bascule l'interface immédiatement. N'affecte pas ce que voient vos clients.",
+    "save_failed": "Impossible d'enregistrer. Veuillez réessayer."
   },
   "App": {
     "dashboard_title": "Tableau de bord",
