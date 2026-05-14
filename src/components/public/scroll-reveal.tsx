@@ -11,33 +11,31 @@ import { useEffect, useRef, type ReactNode } from "react";
 
 // Reveal + parallax for the landing page, framer-motion-backed.
 //
-// ScrollReveal — direction-aware four-state machine:
+// ScrollReveal — direction-aware state machine, per user spec:
 //
 //   1. Before first entry (initial mount, element below fold)
 //      → snap to initial hidden state. No mount-time animation.
 //
 //   2. Entry while scrolling DOWN
-//      → fade + lift + scale in over `duration`s.
+//      → fade + lift + scale in over `duration`s. The "payoff".
 //
 //   3. Entry while scrolling UP (user is scrolling back over an
 //      element they've already seen, re-entering from the TOP)
 //      → snap to visible, no animation. They've seen it.
 //
 //   4. Exit while scrolling DOWN (element leaves via the TOP)
-//      → blur fade-out over 0.4s. Reads as the element "drifting
-//      out of focus" as you scroll past it.
+//      → NO ANIMATION. Element stays at its visible state in the
+//      DOM; page scroll carries it off naturally. The user
+//      specifically asked for zero blur effects on DOWN scrolls.
 //
 //   5. Exit while scrolling UP (element leaves via the BOTTOM)
-//      → snap to the ready-to-enter hidden state, no animation. This
-//      resets the element so the NEXT DOWN-entry animates cleanly
-//      from its full hidden start position.
+//      → blur fade-out over 0.7s — opacity to 0, blur to 24px,
+//      scale to 0.9, translate down so it drifts away. This is
+//      what the user wants: the abrupt "instant disappearance"
+//      they saw on UP-scrolls is replaced with a visible fade.
 //
-// Perf:
-//   - One shared window scroll listener for the whole page
-//     (refcounted at module scope), not one per ScrollReveal.
-//   - useInView uses IntersectionObserver (cheap, browser-native).
-//
-// prefers-reduced-motion is honored automatically by framer-motion.
+// Perf: one shared window scroll listener for the page; useInView is
+// IntersectionObserver-backed. prefers-reduced-motion honored by FM.
 
 // ─── Shared scroll-direction tracking ────────────────────────────────
 
@@ -85,13 +83,12 @@ const ENTRANCE_DURATION: Record<Intensity, number> = {
 
 const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 const EASE_IN = [0.4, 0, 1, 1] as const;
-// Exit values tuned for a dramatic, obvious "drift away" effect:
-// slower duration + heavy blur + slight scale-down + small upward
-// translate so the element doesn't just fade, it visibly LEAVES.
-const EXIT_DURATION = 0.8;
-const EXIT_BLUR_PX = 28;
-const EXIT_SCALE = 0.9;
-const EXIT_Y = -24;
+// UP-exit values: dramatic but contained drift-away effect for when
+// the user scrolls up past a section. Element fades, blurs, shrinks,
+// and drifts downward (away from the user's eye, which is moving up).
+const UP_EXIT_DURATION = 0.7;
+const UP_EXIT_BLUR_PX = 24;
+const UP_EXIT_SCALE = 0.9;
 
 export function ScrollReveal({
   children,
@@ -105,32 +102,23 @@ export function ScrollReveal({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  // margin is `top right bottom left`. Shrinking the effective
-  // viewport by 20% from the top + 10% from the bottom means:
-  //   - Entries fire when the element is meaningfully visible
-  //     (10% bottom buffer keeps them from firing at the very edge).
-  //   - Exits fire while the element is still 20% from the actual
-  //     top of viewport — leaving roughly ~150px of visible screen
-  //     real estate for the blur-fade exit animation to play in.
-  //     Without this, inView only flipped false once the element was
-  //     already mostly off-screen, so the exit animation ran where
-  //     the user couldn't see it.
+  // margin "top right bottom left". Tuned so:
+  //   - margin top 0%: DOWN exits fire at the actual viewport top.
+  //     We don't animate the DOWN exit, so visibility doesn't matter
+  //     and there's no point in a buffer that delays entries.
+  //   - margin bottom -25%: UP exits fire while the element is still
+  //     well within the actual viewport, leaving ~25% of viewport
+  //     height of visible runway for the blur fade to play in.
   const inView = useInView(ref, {
-    // amount 0.25 = exits fire when only 25% of element remains in
-    //   the effective viewport (vs 15%) — flips earlier so the exit
-    //   animation has more visible runway.
-    // margin "-30% 0px -10% 0px" — effective viewport top sits 30%
-    //   below actual top. Exits trigger with ~30% of viewport height
-    //   of visible screen remaining for the drift-away to play in.
-    amount: 0.25,
-    margin: "-30% 0px -10% 0px",
+    amount: 0.2,
+    margin: "0px 0px -25% 0px",
   });
 
   useEffect(() => attachSharedScrollListener(), []);
 
   // Tracks whether the element has ever entered the viewport. Used to
-  // suppress the blur-exit animation on first mount: before first
-  // entry, an "exit" state is just "pre-entry" and shouldn't animate.
+  // suppress the up-exit blur on first mount: before first entry, an
+  // "exit" state is really just "pre-entry" and shouldn't animate.
   const hasEverEntered = useRef(false);
   if (inView) hasEverEntered.current = true;
 
@@ -148,7 +136,7 @@ export function ScrollReveal({
       }}
       animate={
         inView
-          ? // — VISIBLE — entry, with animation only when DOWN
+          ? // — VISIBLE — entry. Animate on DOWN, snap on UP.
             {
               opacity: 1,
               y: 0,
@@ -159,7 +147,7 @@ export function ScrollReveal({
                 : { duration: 0 },
             }
           : !hasEverEntered.current
-            ? // — PRE-ENTRY — initial hidden, no animation
+            ? // — PRE-ENTRY — initial hidden, no animation.
               {
                 opacity: 0,
                 y: offsets.y,
@@ -168,28 +156,27 @@ export function ScrollReveal({
                 transition: { duration: 0 },
               }
             : _scrollDownRef.current
-              ? // — DOWN-EXIT — dramatic drift-away as the element
-                //   leaves via the top of the viewport: fade to 0,
-                //   blur out, shrink slightly, and translate up a
-                //   touch. The combined effect reads as the section
-                //   moving "into the distance" rather than just
-                //   vanishing.
+              ? // — DOWN-EXIT — no animation. Stay at the visible
+                //   target so framer-motion sees no diff and nothing
+                //   transitions. Page scroll carries the element off
+                //   the top naturally. Zero blur, zero effects.
                 {
-                  opacity: 0,
-                  y: EXIT_Y,
-                  scale: EXIT_SCALE,
-                  filter: `blur(${EXIT_BLUR_PX}px)`,
-                  transition: { duration: EXIT_DURATION, ease: EASE_IN },
+                  opacity: 1,
+                  y: 0,
+                  scale: 1,
+                  filter: "blur(0px)",
+                  transition: { duration: 0 },
                 }
-              : // — UP-EXIT — element left via the bottom while
-                //   scrolling up. Snap to the ready-to-enter state so
-                //   the next DOWN-entry animates from a clean start.
+              : // — UP-EXIT — blur drift-away. Element fades, blurs,
+                //   shrinks, and drifts DOWN as the user scrolls up
+                //   past it. Replaces the previous instant snap that
+                //   the user complained about.
                 {
                   opacity: 0,
                   y: offsets.y,
-                  scale: offsets.scale,
-                  filter: "blur(0px)",
-                  transition: { duration: 0 },
+                  scale: UP_EXIT_SCALE,
+                  filter: `blur(${UP_EXIT_BLUR_PX}px)`,
+                  transition: { duration: UP_EXIT_DURATION, ease: EASE_IN },
                 }
       }
       className={className}
