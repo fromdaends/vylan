@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 import { getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
+import { getBrandingImageUrl } from "@/lib/storage";
 import { getTranslations } from "next-intl/server";
 import { HelpSidebar } from "@/components/help/help-sidebar";
 import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
@@ -31,20 +32,17 @@ export default async function AppLayout({
 
   const t = await getTranslations("App");
   const tAuth = await getTranslations("Auth");
+  const tProfile = await getTranslations("Profile");
 
-  const initials = firm.name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
+  const avatarUrl = await getBrandingImageUrl(dbUser.avatar_path);
 
   return (
     <AppShell
       firmName={firm.name}
-      firmInitials={initials}
       brandColor={firm.brand_color}
+      userDisplayName={userDisplayLabel(dbUser)}
+      userEmail={dbUser.email}
+      userAvatarUrl={avatarUrl}
       labels={{
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),
@@ -52,6 +50,8 @@ export default async function AppLayout({
         billing: t("nav_billing"),
         settings: t("nav_settings"),
         logout: tAuth("logout"),
+        profile: tProfile("menu_profile"),
+        help: tProfile("menu_help"),
       }}
     >
       {children}
