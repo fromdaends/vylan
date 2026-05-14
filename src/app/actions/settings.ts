@@ -70,7 +70,13 @@ export async function setAutoRejectAction(
     return { ok: true, value: parsed.data.enabled };
   } catch (e) {
     console.error("[setAutoRejectAction] unexpected:", e);
-    return { ok: false, error: "update_failed" };
+    const detail =
+      e instanceof Error
+        ? `outer: ${e.message}`
+        : typeof e === "object" && e !== null
+          ? `outer: ${JSON.stringify(e)}`
+          : `outer: ${String(e)}`;
+    return { ok: false, error: "update_failed", detail };
   }
 }
 

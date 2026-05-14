@@ -240,7 +240,14 @@ function FirmPreferencesSection({
         }
       } catch (e) {
         console.error("[onToggle] auto-reject save failed:", e);
-        setError(t("save_failed"));
+        const base = t("save_failed");
+        const msg =
+          e instanceof Error
+            ? `transport: ${e.message}`
+            : typeof e === "object" && e !== null
+              ? `transport: ${JSON.stringify(e)}`
+              : `transport: ${String(e)}`;
+        setError(`${base} — ${msg}`);
         setEnabled(!next); // revert
       }
     });
