@@ -10,6 +10,39 @@ export type SettingsState = {
   fieldErrors?: Record<string, string>;
 } | null;
 
+export type AutoRejectActionResult =
+  | { ok: true; value: boolean }
+  | { ok: false; error: string };
+
+// Focused action for the Discord-style Switch on /settings — only
+// touches the one boolean column. Decoupled from the bigger
+// SettingsSchema so the Switch can fire on every click without
+// having to re-validate name / brand_color / timezone.
+const AutoRejectSchema = z.object({
+  enabled: z.preprocess(
+    (v) => v === "true" || v === "on" || v === true,
+    z.boolean(),
+  ),
+});
+
+export async function setAutoRejectAction(
+  formData: FormData,
+): Promise<AutoRejectActionResult> {
+  const parsed = AutoRejectSchema.safeParse({
+    enabled: formData.get("enabled"),
+  });
+  if (!parsed.success) return { ok: false, error: "invalid_input" };
+  try {
+    await updateCurrentFirm({
+      auto_reject_unusable_docs: parsed.data.enabled,
+    });
+  } catch {
+    return { ok: false, error: "update_failed" };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, value: parsed.data.enabled };
+}
+
 export const SettingsSchema = z.object({
   name: z.string().min(2, "min_2_chars").max(120, "too_long"),
   brand_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "invalid_color"),
