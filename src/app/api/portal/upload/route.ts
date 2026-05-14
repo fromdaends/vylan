@@ -169,6 +169,18 @@ export async function POST(request: NextRequest) {
     size_bytes: storedBytes.length,
   });
 
+  // Clear any stale AI rejection_reason from a previous bad upload BEFORE
+  // the classifier runs. After this point the column reflects the latest
+  // verdict only:
+  //   - usable → stays cleared
+  //   - auto-rejected → router sets the new bilingual summary
+  // This is what makes the portal banner correct after a reload (the
+  // server-side row is the source of truth, not React state).
+  await sb
+    .from("request_items")
+    .update({ rejection_reason: null })
+    .eq("id", item.id);
+
   // Enqueue an AI classification job as a durable fallback (cron retries).
   // Then run the same logic inline so we can return the verdict in this
   // response — the portal UI uses it to surface "wrong document, try
