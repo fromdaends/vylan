@@ -231,7 +231,11 @@ function FirmPreferencesSection({
       try {
         const res = await setAutoRejectAction(fd);
         if (!res.ok) {
-          setError(t("save_failed"));
+          // Show the DB error detail (when present) right under the
+          // save_failed line so we can diagnose why the column update
+          // is being rejected on production.
+          const base = t("save_failed");
+          setError(res.detail ? `${base} — ${res.detail}` : base);
           setEnabled(!next); // revert
         }
       } catch (e) {
