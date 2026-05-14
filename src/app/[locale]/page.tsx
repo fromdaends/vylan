@@ -34,7 +34,37 @@ export default async function Home({
   const otherLocale = locale === "fr" ? "en" : "fr";
 
   return (
-    <main className="flex-1 flex flex-col">
+    <main className="relative flex-1 flex flex-col overflow-hidden">
+      {/* Page-level ambient layer — a small set of very soft, very large
+          orbs that drift slowly across the whole welcome page. By living
+          on <main> instead of inside each section, they cross section
+          boundaries continuously, so there's no visible "band" where one
+          backdrop ends and the next begins. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+      >
+        <div
+          className="orb orb-iris absolute h-[900px] w-[900px] -top-32 left-1/2 -translate-x-1/2 opacity-90"
+        />
+        <div
+          className="orb orb-cyan absolute h-[700px] w-[700px] top-[28%] -left-40 opacity-70"
+          style={{ animationDelay: "-3s" }}
+        />
+        <div
+          className="orb orb-pink absolute h-[700px] w-[700px] top-[55%] -right-40 opacity-70"
+          style={{ animationDelay: "-7s" }}
+        />
+        <div
+          className="orb orb-gold absolute h-[600px] w-[600px] top-[78%] left-1/3 opacity-60"
+          style={{ animationDelay: "-11s" }}
+        />
+        <div
+          className="orb orb-iris absolute h-[700px] w-[700px] bottom-[-200px] right-1/4 opacity-60"
+          style={{ animationDelay: "-5s" }}
+        />
+      </div>
+
       {/* Header */}
       <header className="sticky top-0 z-40 backdrop-blur-xl bg-background/70 border-b border-border/60">
         <div className="mx-auto max-w-6xl flex items-center justify-between px-6 py-3.5">
@@ -77,24 +107,10 @@ export default async function Home({
       </header>
 
       {/* HERO */}
-      <section className="relative overflow-hidden">
+      <section className="relative">
         <div
           aria-hidden
-          className="absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_at_top,black,transparent_75%)]"
-        >
-          <div className="orb orb-iris h-[600px] w-[600px] top-[-200px] left-1/2 -translate-x-1/2" />
-          <div
-            className="orb orb-cyan h-[400px] w-[400px] top-[100px] left-[10%]"
-            style={{ animationDelay: "-3s" }}
-          />
-          <div
-            className="orb orb-pink h-[400px] w-[400px] top-[100px] right-[10%]"
-            style={{ animationDelay: "-7s" }}
-          />
-        </div>
-        <div
-          aria-hidden
-          className="absolute inset-0 -z-10 bg-grid opacity-50 [mask-image:radial-gradient(ellipse_at_top,black,transparent_60%)]"
+          className="absolute inset-0 -z-10 bg-grid opacity-40 [mask-image:radial-gradient(ellipse_at_top,black,transparent_65%)]"
         />
 
         <div className="mx-auto max-w-4xl px-6 pt-24 pb-24 sm:pt-32 sm:pb-32 text-center animate-in-up">
@@ -136,26 +152,7 @@ export default async function Home({
       </section>
 
       {/* INTRO — the bigger welcome / explainer */}
-      <section className="relative border-t border-border/60 overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 -z-10 h-72 bg-aurora [mask-image:linear-gradient(to_bottom,black,transparent)]"
-        />
-        <div
-          aria-hidden
-          className="absolute inset-0 -z-10 bg-dots opacity-30 [mask-image:radial-gradient(ellipse_at_center,black,transparent_70%)]"
-        />
-        <div
-          aria-hidden
-          className="orb orb-gold absolute -z-10 h-[420px] w-[420px] top-[40%] right-[-120px] opacity-70"
-          style={{ animationDelay: "-5s" }}
-        />
-        <div
-          aria-hidden
-          className="orb orb-iris absolute -z-10 h-[360px] w-[360px] top-[10%] left-[-80px] opacity-50"
-          style={{ animationDelay: "-9s" }}
-        />
-        <div aria-hidden className="absolute inset-0 -z-10 bg-noise" />
+      <section className="relative">
         <div className="mx-auto max-w-4xl px-6 py-28 sm:py-36 text-center">
           <div className="reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-4">
@@ -177,22 +174,7 @@ export default async function Home({
       </section>
 
       {/* BENEFITS — big stat cards */}
-      <section className="relative border-t border-border/60 overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute -z-10 bg-mesh h-[700px] w-[700px] -top-32 left-1/2 -translate-x-1/2 rounded-full opacity-80 [mask-image:radial-gradient(ellipse_at_center,black,transparent_70%)]"
-        />
-        <div
-          aria-hidden
-          className="orb orb-iris absolute -z-10 h-[420px] w-[420px] top-[10%] left-[-140px] opacity-60"
-          style={{ animationDelay: "-2s" }}
-        />
-        <div
-          aria-hidden
-          className="orb orb-pink absolute -z-10 h-[380px] w-[380px] bottom-[5%] right-[-120px] opacity-50"
-          style={{ animationDelay: "-11s" }}
-        />
-        <div aria-hidden className="absolute inset-0 -z-10 bg-noise" />
+      <section className="relative">
         <div className="mx-auto max-w-6xl px-6 py-24">
           <div className="text-center mb-16 reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
@@ -229,21 +211,7 @@ export default async function Home({
       </section>
 
       {/* Features */}
-      <section className="relative border-t border-border/60 overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute inset-0 -z-10 bg-grid opacity-40 [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]"
-        />
-        <div
-          aria-hidden
-          className="orb orb-cyan absolute -z-10 h-[400px] w-[400px] top-[20%] right-[-120px] opacity-50"
-          style={{ animationDelay: "-4s" }}
-        />
-        <div
-          aria-hidden
-          className="orb orb-gold absolute -z-10 h-[340px] w-[340px] bottom-[10%] left-[-100px] opacity-50"
-          style={{ animationDelay: "-12s" }}
-        />
+      <section className="relative">
         <div className="mx-auto max-w-5xl px-6 py-24">
           <div className="text-center mb-16 reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
@@ -274,21 +242,7 @@ export default async function Home({
       </section>
 
       {/* How it works */}
-      <section className="relative border-t border-border/60 overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute inset-0 -z-10 bg-dots opacity-40"
-        />
-        <div
-          aria-hidden
-          className="orb orb-iris absolute -z-10 h-[500px] w-[500px] top-[-100px] left-1/2 -translate-x-1/2 opacity-40"
-          style={{ animationDelay: "-6s" }}
-        />
-        <div
-          aria-hidden
-          className="orb orb-pink absolute -z-10 h-[320px] w-[320px] bottom-[-80px] right-[10%] opacity-40"
-          style={{ animationDelay: "-3s" }}
-        />
+      <section className="relative">
         <div className="mx-auto max-w-5xl px-6 py-24">
           <div className="text-center mb-16 reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
@@ -307,17 +261,7 @@ export default async function Home({
       </section>
 
       {/* Pricing */}
-      <section className="relative border-t border-border/60 overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute inset-x-0 top-0 -z-10 h-72 bg-aurora [mask-image:linear-gradient(to_bottom,black,transparent)]"
-        />
-        <div
-          aria-hidden
-          className="orb orb-iris absolute -z-10 h-[520px] w-[520px] top-[30%] left-1/2 -translate-x-1/2 opacity-50"
-          style={{ animationDelay: "-8s" }}
-        />
-        <div aria-hidden className="absolute inset-0 -z-10 bg-noise" />
+      <section className="relative">
         <div className="mx-auto max-w-4xl px-6 py-24">
           <div className="text-center mb-16 reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
@@ -352,7 +296,7 @@ export default async function Home({
       </section>
 
       {/* FAQ */}
-      <section className="relative border-t border-border/60 bg-muted/30">
+      <section className="relative">
         <div className="mx-auto max-w-3xl px-6 py-24">
           <div className="text-center mb-12 reveal-soft">
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
@@ -372,22 +316,7 @@ export default async function Home({
       </section>
 
       {/* Final CTA */}
-      <section className="relative border-t border-border/60 overflow-hidden">
-        <div
-          aria-hidden
-          className="absolute inset-0 -z-10 overflow-hidden"
-        >
-          <div className="orb orb-iris h-[520px] w-[520px] top-[15%] left-1/2 -translate-x-1/2 opacity-80" />
-          <div
-            className="orb orb-gold h-[360px] w-[360px] top-[40%] left-[8%] opacity-60"
-            style={{ animationDelay: "-7s" }}
-          />
-          <div
-            className="orb orb-pink h-[320px] w-[320px] top-[35%] right-[8%] opacity-50"
-            style={{ animationDelay: "-4s" }}
-          />
-        </div>
-        <div aria-hidden className="absolute inset-0 -z-10 bg-noise" />
+      <section className="relative">
         <div className="mx-auto max-w-3xl px-6 py-24 text-center reveal-soft">
           <h2 className="text-4xl sm:text-5xl font-semibold tracking-tight text-gradient">
             {t("cta_final_title")}
