@@ -49,10 +49,14 @@ export default async function ProfilePage({
           email: user.email,
           name: user.name,
           display_name: user.display_name,
-          locale: user.locale,
         }}
         displayLabel={userDisplayLabel(user)}
-        firmBrandColor={firm.brand_color}
+        firm={{
+          name: firm.name,
+          brand_color: firm.brand_color,
+          timezone: firm.timezone,
+          locale_default: firm.locale_default,
+        }}
         avatarUrl={avatarUrl}
       />
     </div>

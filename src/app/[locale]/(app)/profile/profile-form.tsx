@@ -1,8 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { useRouter } from "@/i18n/navigation";
-import { useLocale, useTranslations } from "next-intl";
+import { useActionState, useRef, useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -16,42 +15,61 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   updateAvatarAction,
   removeAvatarAction,
   updateDisplayNameAction,
-  updateLocaleAction,
   changePasswordAction,
   type ProfileActionResult,
 } from "@/app/actions/profile";
+import {
+  updateFirmSettings,
+  type SettingsState,
+} from "@/app/actions/settings";
 
 type ProfileUser = {
   id: string;
   email: string;
   name: string;
   display_name: string | null;
-  locale: "fr" | "en";
+};
+
+type FirmInfo = {
+  name: string;
+  brand_color: string;
+  timezone: string;
+  locale_default: "fr" | "en";
 };
 
 export function ProfileForm({
   user,
   displayLabel,
-  firmBrandColor,
+  firm,
   avatarUrl,
 }: {
   user: ProfileUser;
   displayLabel: string;
-  firmBrandColor: string;
+  firm: FirmInfo;
   avatarUrl: string | null;
 }) {
   const t = useTranslations("Profile");
   const tc = useTranslations("Common");
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-12">
+      {/* ──── You ──── */}
+      <SectionHeader title={t("group_you")} subtitle={t("group_you_hint")} />
+
       <AvatarSection
         avatarUrl={avatarUrl}
         displayLabel={displayLabel}
-        firmBrandColor={firmBrandColor}
+        firmBrandColor={firm.brand_color}
         t={t}
         tc={tc}
       />
@@ -62,10 +80,40 @@ export function ProfileForm({
         tc={tc}
       />
       <EmailSection email={user.email} t={t} />
-      <LanguageSection currentLocale={user.locale} t={t} tc={tc} />
       <PasswordSection t={t} tc={tc} />
+
+      <Divider />
+
+      {/* ──── Firm ──── */}
+      <SectionHeader title={t("group_firm")} subtitle={t("group_firm_hint")} />
+      <FirmSection initial={firm} t={t} tc={tc} />
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Layout helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SectionHeader({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground font-medium">
+        {title}
+      </div>
+      <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="border-t border-border/60" />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,9 +213,7 @@ function AvatarSection({
           onChange={onChange}
         />
       </div>
-      {error && (
-        <p className="mt-3 text-xs text-destructive">{error}</p>
-      )}
+      {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
     </section>
   );
 }
@@ -260,99 +306,6 @@ function EmailSection({
         <Input value={email} disabled readOnly />
       </div>
     </section>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Language — saving here flips the UI locale immediately.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function LanguageSection({
-  currentLocale,
-  t,
-  tc,
-}: {
-  currentLocale: "fr" | "en";
-  t: (k: string) => string;
-  tc: (k: string) => string;
-}) {
-  const router = useRouter();
-  const activeLocale = useLocale();
-  const [pending, startTransition] = useTransition();
-  const [value, setValue] = useState<"fr" | "en">(currentLocale);
-  const [error, setError] = useState<string | null>(null);
-
-  function onChange(next: "fr" | "en") {
-    if (next === value) return;
-    setValue(next);
-    setError(null);
-    const fd = new FormData();
-    fd.append("locale", next);
-    startTransition(async () => {
-      const res = await updateLocaleAction(fd);
-      if (!res.ok) {
-        setError(t(`errors.${res.error}`) || tc("loading"));
-        setValue(currentLocale);
-        return;
-      }
-      // Reroute to the same page in the new locale so the in-page UI
-      // flips immediately. The next-intl router handles the prefix swap.
-      if (next !== activeLocale) {
-        router.replace("/profile", { locale: next });
-      }
-    });
-  }
-
-  return (
-    <section>
-      <h2 className="text-sm font-semibold">{t("section_language")}</h2>
-      <p className="text-xs text-muted-foreground mt-1">
-        {t("section_language_hint")}
-      </p>
-      <div className="mt-4 inline-flex rounded-md border border-border p-0.5 bg-secondary/40">
-        <LangButton
-          label={t("lang_fr")}
-          active={value === "fr"}
-          onClick={() => onChange("fr")}
-          disabled={pending}
-        />
-        <LangButton
-          label={t("lang_en")}
-          active={value === "en"}
-          onClick={() => onChange("en")}
-          disabled={pending}
-        />
-      </div>
-      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
-    </section>
-  );
-}
-
-function LangButton({
-  label,
-  active,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  disabled: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={
-        "px-3 py-1.5 text-sm rounded-md transition-colors " +
-        (active
-          ? "bg-card text-foreground shadow-sm"
-          : "text-muted-foreground hover:text-foreground")
-      }
-    >
-      {label}
-    </button>
   );
 }
 
@@ -491,5 +444,114 @@ function PasswordDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firm — name, brand color, timezone, default language for client emails
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CA_TIMEZONES: ReadonlyArray<readonly [string, string]> = [
+  ["America/Toronto", "Toronto / Ottawa / Montréal (Eastern)"],
+  ["America/Halifax", "Halifax (Atlantic)"],
+  ["America/St_Johns", "St. John's (Newfoundland)"],
+  ["America/Winnipeg", "Winnipeg / Regina (Central)"],
+  ["America/Edmonton", "Edmonton / Calgary (Mountain)"],
+  ["America/Vancouver", "Vancouver (Pacific)"],
+];
+
+function FirmSection({
+  initial,
+  t,
+  tc,
+}: {
+  initial: FirmInfo;
+  t: (k: string) => string;
+  tc: (k: string) => string;
+}) {
+  const tOnb = useTranslations("Onboarding");
+  const [state, action, pending] = useActionState<SettingsState, FormData>(
+    updateFirmSettings,
+    null,
+  );
+
+  return (
+    <form action={action} className="space-y-5">
+      <h2 className="text-sm font-semibold">{t("firm_title")}</h2>
+      <p className="text-xs text-muted-foreground mt-1 -mt-4">
+        {t("firm_hint")}
+      </p>
+
+      <div className="space-y-2">
+        <Label htmlFor="name">{tOnb("step1_firm_name")}</Label>
+        <Input
+          id="name"
+          name="name"
+          defaultValue={initial.name}
+          required
+          minLength={2}
+          maxLength={120}
+          className="max-w-sm"
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="brand_color">{tOnb("step1_brand_color")}</Label>
+        <div className="flex items-center gap-3">
+          <Input
+            id="brand_color"
+            name="brand_color"
+            type="color"
+            defaultValue={initial.brand_color}
+            className="h-10 w-20 p-1 cursor-pointer"
+          />
+          <span className="text-xs text-muted-foreground font-mono">
+            {initial.brand_color.toUpperCase()}
+          </span>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="timezone">{tOnb("step2_timezone")}</Label>
+        <Select name="timezone" defaultValue={initial.timezone}>
+          <SelectTrigger id="timezone" className="max-w-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CA_TIMEZONES.map(([tz, label]) => (
+              <SelectItem key={tz} value={tz}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="locale_default">{t("firm_client_lang")}</Label>
+        <p className="text-xs text-muted-foreground">
+          {t("firm_client_lang_hint")}
+        </p>
+        <Select name="locale_default" defaultValue={initial.locale_default}>
+          <SelectTrigger id="locale_default" className="max-w-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fr">Français</SelectItem>
+            <SelectItem value="en">English</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex items-center gap-3 pt-2">
+        <Button type="submit" disabled={pending}>
+          {pending ? tc("saving") : tc("save")}
+        </Button>
+        {state?.ok && (
+          <span className="text-xs text-muted-foreground">{t("saved")}</span>
+        )}
+        {state?.error && (
+          <span className="text-xs text-destructive">
+            {t("errors.save_failed")}
+          </span>
+        )}
+      </div>
+    </form>
   );
 }

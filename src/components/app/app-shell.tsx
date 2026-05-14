@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { logoutAction } from "@/app/actions/auth";
 import { Logo } from "@/components/brand/logo";
 import {
@@ -122,8 +121,8 @@ export function AppShell({
           </nav>
 
           <div className="flex items-center gap-2">
-            <ThemeToggle />
-
+            {/* Theme toggle moved to /settings — there's only one preferences
+                surface now, and it lives under Settings in this dropdown. */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button

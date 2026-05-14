@@ -1,144 +1,193 @@
 "use client";
 
-import { useActionState } from "react";
-import { useTranslations } from "next-intl";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  updateFirmSettings,
-  type SettingsState,
-} from "@/app/actions/settings";
+import { useEffect, useState, useTransition } from "react";
+import { useTheme } from "next-themes";
+import { useRouter } from "@/i18n/navigation";
+import { useLocale, useTranslations } from "next-intl";
+import { Moon, Sun, Monitor, Check } from "lucide-react";
+import { updateLocaleAction } from "@/app/actions/profile";
 
-const CA_TIMEZONES = [
-  ["America/Toronto", "Toronto / Ottawa / Montréal (Eastern)"],
-  ["America/Halifax", "Halifax (Atlantic)"],
-  ["America/St_Johns", "St. John's (Newfoundland)"],
-  ["America/Winnipeg", "Winnipeg / Regina (Central)"],
-  ["America/Edmonton", "Edmonton / Calgary (Mountain)"],
-  ["America/Vancouver", "Vancouver (Pacific)"],
-] as const;
+type ThemeChoice = "light" | "dark" | "system";
 
 export function SettingsForm({
-  locale,
-  initial,
+  currentLocale,
 }: {
-  locale: "fr" | "en";
-  initial: {
-    name: string;
-    brand_color: string;
-    timezone: string;
-    locale_default: "fr" | "en";
-  };
+  currentLocale: "fr" | "en";
 }) {
-  const t = useTranslations("App");
-  const tOnb = useTranslations("Onboarding");
-  const tc = useTranslations("Common");
-  const [state, action, pending] = useActionState<SettingsState, FormData>(
-    updateFirmSettings,
-    null,
-  );
+  const t = useTranslations("Settings");
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {t("settings_title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t("settings_subtitle")}
-        </p>
-      </header>
-      <Card>
-        <CardHeader>
-          <CardTitle>{tOnb("step1_title")}</CardTitle>
-          <CardDescription>{tOnb("step1_subtitle")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action={action} className="space-y-5">
-            <input type="hidden" name="locale" value={locale} />
-            {state?.ok && (
-              <Alert>
-                <AlertDescription>{t("settings_saved")}</AlertDescription>
-              </Alert>
-            )}
-            {state?.error && (
-              <Alert variant="destructive">
-                <AlertDescription>{state.error}</AlertDescription>
-              </Alert>
-            )}
-            <div className="space-y-1.5">
-              <Label htmlFor="name">{tOnb("step1_firm_name")}</Label>
-              <Input
-                id="name"
-                name="name"
-                defaultValue={initial.name}
-                required
-                minLength={2}
-                maxLength={120}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="brand_color">{tOnb("step1_brand_color")}</Label>
-              <Input
-                id="brand_color"
-                name="brand_color"
-                type="color"
-                defaultValue={initial.brand_color}
-                className="h-10 w-20 p-1"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="timezone">{tOnb("step2_timezone")}</Label>
-              <Select name="timezone" defaultValue={initial.timezone}>
-                <SelectTrigger id="timezone" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {CA_TIMEZONES.map(([tz, label]) => (
-                    <SelectItem key={tz} value={tz}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="locale_default">{tOnb("step2_locale")}</Label>
-              <Select
-                name="locale_default"
-                defaultValue={initial.locale_default}
-              >
-                <SelectTrigger id="locale_default" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fr">{tOnb("step2_locale_fr")}</SelectItem>
-                  <SelectItem value="en">{tOnb("step2_locale_en")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button type="submit" disabled={pending}>
-              {pending ? tc("saving") : tc("save")}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="space-y-10">
+      <AppearanceSection t={t} />
+      <LanguageSection currentLocale={currentLocale} t={t} />
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Theme
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AppearanceSection({ t }: { t: (k: string) => string }) {
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // next-themes hydration guard — `theme` is undefined on the server, so
+  // we render a neutral state until after mount. Fires once.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
+
+  const active = (mounted ? theme : "system") as ThemeChoice;
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold">{t("section_theme")}</h2>
+      <p className="text-xs text-muted-foreground mt-1">
+        {t("section_theme_hint")}
+      </p>
+      <div className="mt-4 grid grid-cols-3 gap-2 max-w-sm">
+        <ThemeCard
+          icon={<Sun className="h-4 w-4" />}
+          label={t("theme_light")}
+          active={active === "light"}
+          onClick={() => setTheme("light")}
+        />
+        <ThemeCard
+          icon={<Moon className="h-4 w-4" />}
+          label={t("theme_dark")}
+          active={active === "dark"}
+          onClick={() => setTheme("dark")}
+        />
+        <ThemeCard
+          icon={<Monitor className="h-4 w-4" />}
+          label={t("theme_system")}
+          active={active === "system"}
+          onClick={() => setTheme("system")}
+        />
+      </div>
+    </section>
+  );
+}
+
+function ThemeCard({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        "relative flex flex-col items-center justify-center gap-2 rounded-lg border p-4 transition-colors " +
+        (active
+          ? "border-foreground/40 bg-secondary text-foreground"
+          : "border-border hover:border-foreground/20 text-muted-foreground hover:text-foreground")
+      }
+    >
+      {icon}
+      <span className="text-xs font-medium">{label}</span>
+      {active && (
+        <Check className="absolute top-1.5 right-1.5 h-3 w-3 text-foreground" />
+      )}
+    </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UI language (writes to users.locale + flips URL prefix)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function LanguageSection({
+  currentLocale,
+  t,
+}: {
+  currentLocale: "fr" | "en";
+  t: (k: string) => string;
+}) {
+  const router = useRouter();
+  const activeLocale = useLocale();
+  const [pending, startTransition] = useTransition();
+  const [value, setValue] = useState<"fr" | "en">(currentLocale);
+  const [error, setError] = useState<string | null>(null);
+
+  function onChange(next: "fr" | "en") {
+    if (next === value) return;
+    setValue(next);
+    setError(null);
+    const fd = new FormData();
+    fd.append("locale", next);
+    startTransition(async () => {
+      const res = await updateLocaleAction(fd);
+      if (!res.ok) {
+        setError(t("save_failed"));
+        setValue(currentLocale);
+        return;
+      }
+      if (next !== activeLocale) {
+        router.replace("/settings", { locale: next });
+      }
+    });
+  }
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold">{t("section_language")}</h2>
+      <p className="text-xs text-muted-foreground mt-1">
+        {t("section_language_hint")}
+      </p>
+      <div className="mt-4 inline-flex rounded-md border border-border p-0.5 bg-secondary/40">
+        <LangButton
+          label="Français"
+          active={value === "fr"}
+          onClick={() => onChange("fr")}
+          disabled={pending}
+        />
+        <LangButton
+          label="English"
+          active={value === "en"}
+          onClick={() => onChange("en")}
+          disabled={pending}
+        />
+      </div>
+      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+    </section>
+  );
+}
+
+function LangButton({
+  label,
+  active,
+  onClick,
+  disabled,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className={
+        "px-3 py-1.5 text-sm rounded-md transition-colors " +
+        (active
+          ? "bg-card text-foreground shadow-sm"
+          : "text-muted-foreground hover:text-foreground")
+      }
+    >
+      {label}
+    </button>
   );
 }
