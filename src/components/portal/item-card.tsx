@@ -163,24 +163,26 @@ export function ItemCard({
             <StatusBadge status={item.status} uploadedCount={uploadedCount} />
           </div>
 
-          {item.status === "rejected" && item.rejection_reason && (
-            <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
-              <div className="font-medium text-destructive">
-                {t("rejected_action_needed")}
-              </div>
-              <div className="text-foreground/80 mt-0.5">
-                {item.rejection_reason}
-              </div>
-            </div>
-          )}
-
-          {aiRejection && (
+          {/* Single rejection banner. Two sources, in priority order:
+              1. `aiRejection` — set during the current upload turn so
+                 the client sees the verdict the instant the API replies,
+                 before the parent page refetches.
+              2. `item.rejection_reason` — the persistent server-side
+                 column. This is what survives a hard reload and shows
+                 the latest AI verdict from the database. The upload
+                 route clears it on every new upload, so it never goes
+                 stale across attempts. */}
+          {(aiRejection || (item.rejection_reason && item.rejection_reason.trim())) && (
             <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
               <div className="flex items-center gap-1.5 font-medium text-destructive">
                 <AlertTriangle className="size-4" aria-hidden />
-                {t("ai_rejected_title")}
+                {item.status === "rejected"
+                  ? t("rejected_action_needed")
+                  : t("ai_rejected_title")}
               </div>
-              <div className="text-foreground/80 mt-0.5">{aiRejection}</div>
+              <div className="text-foreground/80 mt-0.5">
+                {aiRejection ?? item.rejection_reason}
+              </div>
               <div className="text-xs text-muted-foreground mt-1">
                 {t("ai_rejected_help")}
               </div>
