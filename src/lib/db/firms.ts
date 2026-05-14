@@ -16,6 +16,7 @@ export type Firm = {
   onboarded_at: string | null;
   invited_emails: string[];
   business_hours: Record<string, unknown>;
+  auto_reject_unusable_docs: boolean;
   created_at: string;
 };
 
@@ -50,6 +51,7 @@ export async function updateCurrentFirm(
       | "business_hours"
       | "invited_emails"
       | "onboarded_at"
+      | "auto_reject_unusable_docs"
     >
   >,
 ): Promise<Firm> {

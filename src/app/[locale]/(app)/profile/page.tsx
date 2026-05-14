@@ -56,6 +56,7 @@ export default async function ProfilePage({
           brand_color: firm.brand_color,
           timezone: firm.timezone,
           locale_default: firm.locale_default,
+          auto_reject_unusable_docs: firm.auto_reject_unusable_docs,
         }}
         avatarUrl={avatarUrl}
       />
