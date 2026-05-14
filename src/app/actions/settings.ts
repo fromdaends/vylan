@@ -12,7 +12,7 @@ export type SettingsState = {
 
 export type AutoRejectActionResult =
   | { ok: true; value: boolean }
-  | { ok: false; error: string };
+  | { ok: false; error: string; detail?: string };
 
 // Focused action for the Discord-style Switch on /settings — only
 // touches the one boolean column. Decoupled from the bigger
@@ -47,7 +47,17 @@ export async function setAutoRejectAction(
       // applied to Supabase). Surface it as a structured error
       // instead of a thrown exception.
       console.error("[setAutoRejectAction] update failed:", e);
-      return { ok: false, error: "update_failed" };
+      // Surface the underlying DB error message back to the client so
+      // the user can paste it into the chat for diagnosis. Safe to
+      // expose to the firm owner — it's their own row and the message
+      // never includes secrets (PostgREST/Supabase error format).
+      const detail =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e !== null
+            ? JSON.stringify(e)
+            : String(e);
+      return { ok: false, error: "update_failed", detail };
     }
     // Intentionally NOT calling revalidatePath here. The /settings
     // page is already `dynamic = "force-dynamic"`, so the next visit
