@@ -34,12 +34,12 @@ export default async function OnboardingLayout({
         <div className="mx-auto max-w-6xl px-6 py-3.5">
           <Link
             href="/"
-            className="flex items-center gap-2 font-semibold tracking-tight group"
+            className="flex items-center gap-2.5 font-semibold tracking-tight text-base group"
           >
             <Logo
-              size={24}
+              size={36}
               priority
-              className="transition-transform group-hover:scale-110 group-hover:rotate-3"
+              className="transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
             />
             {brand.name}
           </Link>

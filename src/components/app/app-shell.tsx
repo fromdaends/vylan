@@ -88,12 +88,12 @@ export function AppShell({
             </button>
             <Link
               href="/dashboard"
-              className="flex items-center gap-2 font-semibold tracking-tight group"
+              className="flex items-center gap-2.5 font-semibold tracking-tight text-base group"
             >
               <Logo
-                size={24}
+                size={36}
                 priority
-                className="transition-transform group-hover:scale-110 group-hover:rotate-3"
+                className="transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
               />
               <span className="hidden sm:inline">{brand.name}</span>
             </Link>
