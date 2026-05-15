@@ -69,25 +69,29 @@ const HELP_ITEMS = [
   { href: "/faq", labelKey: "nav_help_questions", icon: MessageCircleQuestion },
 ] as const;
 
-// Pill visual — matte bubble (no gloss).
-// User wanted off the "glass plate" look and onto "matte bubble with
-// transparency". Three changes from the previous gloss version:
-//   - Drop the bright top inset highlight (was `inset_0_1px_0_rgba(255,255,255,0.7)`)
-//     — that's what sold "polished glass"; we don't want it for matte.
-//   - Keep the outer drop shadow (still floats off the page).
-//   - Keep a barely-there bottom inset shadow (gives the rounded
-//     plate the smallest hint of depth so it doesn't read as a
-//     paper sticker — the bubble has dimension, just not gloss).
+// Pill visual — Apple-style "liquid glass".
+// Four shadow layers, all in concert with the noise-free liquid-
+// glass surface in globals.css:
+//   1. Outer drop shadow — pill floats off the page.
+//   2. Inset 1px white rim around the entire perimeter — the
+//      refractive edge of a water droplet / iOS liquid-glass widget.
+//      Higher alpha in light mode so it reads against pale glass;
+//      lower in dark so it doesn't shout.
+//   3. Inset 1px bright top edge highlight — the "specular" line
+//      where light catches the top curve of the liquid.
+//   4. Inset 1px soft bottom shadow — opposite curve, slight depth.
 //
-// The noise + gradient surface lives on .glass-nav in globals.css.
+// The border is dropped because the inset rim now does that work
+// (a separate 1px border PLUS a 1px inset white rim would compete
+// and look chunky).
 //
 // Interactive: a single, calm `hover:scale-[1.025]` with a 300 ms
 // ease-out transition. No tilt, no spotlight.
 const PILL_CLASSES =
-  "glass-nav border border-foreground/10 rounded-full " +
+  "glass-nav rounded-full " +
   "transition-transform duration-300 ease-out hover:scale-[1.025] motion-reduce:transition-none motion-reduce:hover:scale-100 " +
-  "shadow-[0_12px_40px_-10px_rgba(15,18,30,0.18),inset_0_-1px_0_rgba(0,0,0,0.04)] " +
-  "dark:shadow-[0_12px_40px_-10px_rgba(0,0,0,0.55),inset_0_-1px_0_rgba(0,0,0,0.25)]";
+  "shadow-[0_14px_44px_-10px_rgba(15,18,30,0.22),inset_0_0_0_1px_rgba(255,255,255,0.4),inset_0_1.5px_0_rgba(255,255,255,0.6),inset_0_-1px_2px_-1px_rgba(0,0,0,0.06)] " +
+  "dark:shadow-[0_14px_44px_-10px_rgba(0,0,0,0.6),inset_0_0_0_1px_rgba(255,255,255,0.18),inset_0_1.5px_0_rgba(255,255,255,0.28),inset_0_-1px_2px_-1px_rgba(0,0,0,0.3)]";
 
 export function PublicNav() {
   const t = useTranslations("Landing");
