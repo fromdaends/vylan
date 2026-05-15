@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -105,7 +105,41 @@ export function PublicNav() {
   // pen pointers get the default rest state. We bail in
   // prefers-reduced-motion too (the CSS spotlight ::before is also
   // disabled there via globals.css).
+  //
+  // PointerMove fires very rapidly (120 Hz+ on modern mice). Updating
+  // transform + two CSS variables on every event makes the browser
+  // re-evaluate the heavy `backdrop-filter: blur(40px)` over and
+  // over, which both jitters the hover-in and starves the click
+  // handler on the FAQ dropdown trigger.
+  //
+  // The fix is a requestAnimationFrame coalesce: each pointermove
+  // stashes the latest cursor coords in a ref, but we only apply
+  // them to the DOM once per frame. End result: at most one transform
+  // + variable update per paint, click handlers stay snappy.
   const pillRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const pendingCoordsRef = useRef<{ clientX: number; clientY: number } | null>(
+    null,
+  );
+
+  function applyTiltFromCoords() {
+    rafRef.current = null;
+    const coords = pendingCoordsRef.current;
+    const el = pillRef.current;
+    if (!coords || !el) return;
+    pendingCoordsRef.current = null;
+
+    const rect = el.getBoundingClientRect();
+    const px = (coords.clientX - rect.left) / rect.width;
+    const py = (coords.clientY - rect.top) / rect.height;
+    const tiltX = (0.5 - py) * 2 * MAX_TILT_DEG; // top edge tilts towards viewer
+    const tiltY = (px - 0.5) * 2 * MAX_TILT_DEG; // right edge tilts right
+    // No transition while following — needs to be frame-perfect.
+    el.style.transition = "transform 0ms";
+    el.style.transform = `perspective(1200px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale(${HOVER_SCALE})`;
+    el.style.setProperty("--mouse-x", `${px * 100}%`);
+    el.style.setProperty("--mouse-y", `${py * 100}%`);
+  }
 
   function handlePillPointerMove(e: PointerEvent<HTMLDivElement>) {
     if (e.pointerType !== "mouse") return;
@@ -115,28 +149,36 @@ export function PublicNav() {
     ) {
       return;
     }
-    const el = pillRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    // Normalize cursor 0–1 inside the pill, then bias around centre.
-    const px = (e.clientX - rect.left) / rect.width;
-    const py = (e.clientY - rect.top) / rect.height;
-    const tiltX = (0.5 - py) * 2 * MAX_TILT_DEG; // top → tilt towards viewer
-    const tiltY = (px - 0.5) * 2 * MAX_TILT_DEG; // right → tilt right
-    // No transition while following — needs to be frame-perfect.
-    el.style.transition = "transform 0ms";
-    el.style.transform = `perspective(1200px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale(${HOVER_SCALE})`;
-    el.style.setProperty("--mouse-x", `${px * 100}%`);
-    el.style.setProperty("--mouse-y", `${py * 100}%`);
+    // Capture the latest cursor position; throttle the DOM write to
+    // one update per animation frame.
+    pendingCoordsRef.current = { clientX: e.clientX, clientY: e.clientY };
+    if (rafRef.current != null) return;
+    rafRef.current = requestAnimationFrame(applyTiltFromCoords);
   }
 
   function handlePillPointerLeave() {
+    // Cancel any pending move-write so we don't snap to a stale
+    // cursor position right after the reset starts.
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    pendingCoordsRef.current = null;
     const el = pillRef.current;
     if (!el) return;
     // Restore the CSS-defined transition so the reset eases smoothly.
     el.style.transition = "";
     el.style.transform = "";
   }
+
+  // Safety: cancel any in-flight RAF when the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, []);
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex flex-col items-center px-3 sm:px-6 pt-5 sm:pt-7 pointer-events-none">
