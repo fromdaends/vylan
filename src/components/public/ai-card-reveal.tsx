@@ -1,32 +1,32 @@
 "use client";
 
 import { motion, useInView, useReducedMotion } from "framer-motion";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 // Scroll-triggered reveal + mesh-blended aurora glow for the AI
 // document checks card on the landing page.
 //
-// Direction-aware state machine — matches the page-wide pattern used
-// by <ScrollReveal>:
-//   - DOWN entry  → animate to visible (slide-from-right card,
-//                   blur-clear side text)
-//   - UP entry    → snap to visible (user has already seen it)
-//   - DOWN exit   → stay at visible, no animation (user is scrolling
-//                   past, not watching)
-//   - UP exit     → 0.55s blur-fade to a hidden exit state, mirrors
-//                   the rest of the page's "blur away on scroll-up"
-//                   behaviour. This is the bit that was previously
-//                   snapping with `duration: 0` and looking like an
-//                   instant disappearance.
+// Direction-aware state machine:
+//   - DOWN entry  → motion.div is REMOUNTED via a bumped `key`, so
+//                   it starts at `initial` and animates to `visible`.
+//                   This is the trick that makes the slide-from-right
+//                   replay on every fresh DOWN entry — without the
+//                   remount, framer-motion sees `animate=visible`
+//                   already matching the current state and doesn't
+//                   re-run the transition.
+//   - UP entry    → no key bump, state stays at `visible` (snap).
+//   - DOWN exit   → state stays at `visible`, no animation.
+//   - UP exit     → 0.55 s blur-fade to a hidden exit state. Matches
+//                   the page-wide blur-away pattern.
 //
-// First-mount safety: a `hasEverEntered` ref prevents the exit
-// animation from firing before the element has ever been in view.
+// Implementation notes:
+//   - useInView's IntersectionObserver attaches once via useEffect,
+//     so we put the `ref` on a STABLE outer <div>. Remounting the
+//     motion.div via the inner `key` would orphan the IO otherwise.
+//   - hasEverEntered prevents the up-exit animation from firing
+//     before the element has ever been in view.
 
 // --- Shared scroll-direction tracking ---------------------------------
-// One window scroll listener for everything that imports from here.
-// Refcounted on mount/unmount so it tears down cleanly. Module-scoped
-// state means the latest direction is always available synchronously
-// when framer-motion reads the animate prop.
 let _lastScrollY = typeof window !== "undefined" ? window.scrollY : 0;
 const _scrollDownRef = { current: true };
 let _listenerRefCount = 0;
@@ -73,6 +73,18 @@ export function AiCardReveal({ children }: { children: ReactNode }) {
   const hasEverEntered = useRef(false);
   if (inView) hasEverEntered.current = true;
 
+  // Bump on every fresh DOWN entry — forces the inner motion.div to
+  // remount from `initial`, which guarantees the slide-from-right
+  // plays every time the section comes into view from below.
+  const [entryKey, setEntryKey] = useState(0);
+  const wasInViewRef = useRef(false);
+  useEffect(() => {
+    if (inView && !wasInViewRef.current && _scrollDownRef.current) {
+      setEntryKey((k) => k + 1);
+    }
+    wasInViewRef.current = inView;
+  }, [inView]);
+
   const initial = reducedMotion
     ? { opacity: 0 }
     : { opacity: 0, x: 60, scale: 0.95, filter: "blur(0px)", y: 0 };
@@ -89,16 +101,14 @@ export function AiCardReveal({ children }: { children: ReactNode }) {
         filter: `blur(${UP_EXIT_BLUR_PX}px)`,
       };
 
-  // Pick the target state based on inView + scroll direction.
   const target = inView
     ? visible
     : !hasEverEntered.current
       ? initial
       : _scrollDownRef.current
-        ? visible // scrolling down past — stay (no visible change)
-        : upExit; // scrolling up past — blur fade away
+        ? visible
+        : upExit;
 
-  // Pick the matching transition.
   const transition = inView
     ? {
         duration: reducedMotion ? REDUCED_DURATION : ENTER_DURATION_CARD,
@@ -111,29 +121,27 @@ export function AiCardReveal({ children }: { children: ReactNode }) {
         : { duration: UP_EXIT_DURATION, ease: EASE_IN };
 
   return (
-    <motion.div
-      ref={ref}
-      className="relative"
-      initial={initial}
-      animate={target}
-      transition={transition}
-    >
-      <div className="ai-card-glow" aria-hidden>
-        <div className="ai-card-glow-blob blob-iris" />
-        <div className="ai-card-glow-blob blob-purple" />
-        <div className="ai-card-glow-blob blob-pink" />
-        <div className="ai-card-glow-blob blob-cyan" />
-      </div>
-      {children}
-    </motion.div>
+    <div ref={ref}>
+      <motion.div
+        key={entryKey}
+        className="relative"
+        initial={initial}
+        animate={target}
+        transition={transition}
+      >
+        <div className="ai-card-glow" aria-hidden>
+          <div className="ai-card-glow-blob blob-iris" />
+          <div className="ai-card-glow-blob blob-purple" />
+          <div className="ai-card-glow-blob blob-pink" />
+          <div className="ai-card-glow-blob blob-cyan" />
+        </div>
+        {children}
+      </motion.div>
+    </div>
   );
 }
 
 // --- Side text --------------------------------------------------------
-// Distinct from the rest of the page: blur-clear + lift over 1.1s on
-// DOWN entry, blur-fade away on UP exit (matches the page's
-// scroll-up-exit pattern). Snap on UP-entry and DOWN-exit just like
-// AiCardReveal above.
 
 export function AiSideReveal({ children }: { children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -143,6 +151,15 @@ export function AiSideReveal({ children }: { children: ReactNode }) {
 
   const hasEverEntered = useRef(false);
   if (inView) hasEverEntered.current = true;
+
+  const [entryKey, setEntryKey] = useState(0);
+  const wasInViewRef = useRef(false);
+  useEffect(() => {
+    if (inView && !wasInViewRef.current && _scrollDownRef.current) {
+      setEntryKey((k) => k + 1);
+    }
+    wasInViewRef.current = inView;
+  }, [inView]);
 
   const initial = reducedMotion
     ? { opacity: 0 }
@@ -174,13 +191,15 @@ export function AiSideReveal({ children }: { children: ReactNode }) {
         : { duration: UP_EXIT_DURATION, ease: EASE_IN };
 
   return (
-    <motion.div
-      ref={ref}
-      initial={initial}
-      animate={target}
-      transition={transition}
-    >
-      {children}
-    </motion.div>
+    <div ref={ref}>
+      <motion.div
+        key={entryKey}
+        initial={initial}
+        animate={target}
+        transition={transition}
+      >
+        {children}
+      </motion.div>
+    </div>
   );
 }
