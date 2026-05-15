@@ -55,6 +55,12 @@ function attachSharedScrollListener(): () => void {
 // --- Tuning -----------------------------------------------------------
 const ENTER_DURATION_CARD = 0.9;
 const ENTER_DURATION_SIDE = 1.1;
+// Glow opacity fade-in. Intentionally longer than the card swoop so
+// the user sees the colour ramp up softly while the underlying CSS
+// drift animations are already running — no perceptible "static
+// burst then start motion" handoff. Identical for both cards so the
+// red and green ambient backlights ease in symmetrically.
+const GLOW_FADE_IN_DURATION = 1.4;
 const UP_EXIT_DURATION = 0.55;
 // Used when `lateExit` is set. Longer fade duration paired with the
 // generous INVIEW_OPTS_LATE below — the element drifts out slowly
@@ -192,8 +198,50 @@ export function AiCardReveal({
   const glowClass =
     variant === "success" ? "ai-card-glow variant-success" : "ai-card-glow";
 
+  // Glow opacity tracks the same in-view / scroll-direction logic as
+  // the card, but with its own fade-in duration. CRITICALLY, the
+  // glow's motion.div is NOT key-bumped — it stays mounted across
+  // re-entries, so the four blob CSS animations keep drifting
+  // continuously from page load. That eliminates the "static burst
+  // then suddenly starts moving" handoff: when the section comes
+  // into view, the blobs are already mid-drift and the opacity just
+  // eases up underneath the motion.
+  const glowTarget = inView
+    ? { opacity: 1 }
+    : !hasEverEntered.current
+      ? { opacity: 0 }
+      : _scrollDownRef.current
+        ? { opacity: 1 }
+        : inViewLoose
+          ? { opacity: 1 }
+          : { opacity: 0 };
+  const glowTransition = inView
+    ? { duration: GLOW_FADE_IN_DURATION, ease: EASE_OUT }
+    : !hasEverEntered.current
+      ? { duration: 0 }
+      : _scrollDownRef.current
+        ? { duration: 0 }
+        : inViewLoose
+          ? { duration: 0 }
+          : { duration: upExitDuration, ease: EASE_IN };
+
   return (
-    <div ref={ref}>
+    <div ref={ref} className="relative">
+      {/* Ambient backlight — sibling of the card, not a child, so
+          remounting the card on entry doesn't restart the blob CSS
+          animations. */}
+      <motion.div
+        className={glowClass}
+        aria-hidden
+        initial={{ opacity: 0 }}
+        animate={glowTarget}
+        transition={glowTransition}
+      >
+        <div className="ai-card-glow-blob blob-iris" />
+        <div className="ai-card-glow-blob blob-purple" />
+        <div className="ai-card-glow-blob blob-pink" />
+        <div className="ai-card-glow-blob blob-cyan" />
+      </motion.div>
       <motion.div
         key={entryKey}
         className="relative"
@@ -201,12 +249,6 @@ export function AiCardReveal({
         animate={target}
         transition={transition}
       >
-        <div className={glowClass} aria-hidden>
-          <div className="ai-card-glow-blob blob-iris" />
-          <div className="ai-card-glow-blob blob-purple" />
-          <div className="ai-card-glow-blob blob-pink" />
-          <div className="ai-card-glow-blob blob-cyan" />
-        </div>
         {children}
       </motion.div>
     </div>

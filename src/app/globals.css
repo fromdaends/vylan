@@ -499,18 +499,18 @@
      instead of layering as discrete circles. */
   .ai-card-glow {
     position: absolute;
-    inset: -40px;
+    inset: -16px;
     z-index: -1;
     pointer-events: none;
-    filter: blur(60px);
+    filter: blur(48px);
     overflow: visible;
   }
   .ai-card-glow-blob {
     position: absolute;
-    width: 60%;
-    height: 60%;
+    width: 50%;
+    height: 50%;
     border-radius: 50%;
-    opacity: 0.7;
+    opacity: 0.42;
     will-change: transform;
   }
   /* Default ("warning") palette — red mesh for the AI rejection
@@ -546,7 +546,7 @@
     animation: ai-card-blob-4 15s ease-in-out infinite;
   }
   .dark .ai-card-glow-blob {
-    opacity: 0.5;
+    opacity: 0.3;
   }
   /* Success-state palette — mirrors the warning palette structure
      (four blobs at the same four corners, same animations, same
@@ -566,14 +566,14 @@
   }
   @media (max-width: 767px) {
     .ai-card-glow {
-      inset: -24px;
-      filter: blur(44px);
+      inset: -10px;
+      filter: blur(36px);
     }
   }
   @media (prefers-reduced-motion: reduce) {
     .ai-card-glow-blob {
       animation-duration: 40s;
-      opacity: 0.5;
+      opacity: 0.32;
     }
   }
 
