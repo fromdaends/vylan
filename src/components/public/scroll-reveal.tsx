@@ -107,9 +107,17 @@ export function ScrollReveal({
   //   - margin bottom -25%: UP exits fire while the element is still
   //     well within the actual viewport, leaving ~25% of viewport
   //     height of visible runway for the blur fade to play in.
+  // `once: true` means the observer detaches the first time the
+  // element crosses the threshold. After that, `inView` stays true
+  // forever — scrolling away and back never flips it false, so the
+  // UP-exit / DOWN-exit / re-entry branches below become unreachable
+  // and the element sits in its settled `visible` state for the rest
+  // of the session. State lives in the component, in memory; a page
+  // refresh remounts and replays fresh from the top.
   const inView = useInView(ref, {
     amount: 0.2,
     margin: "0px 0px -5% 0px",
+    once: true,
   });
 
   useEffect(() => attachSharedScrollListener(), []);

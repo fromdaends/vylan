@@ -86,14 +86,28 @@ const REDUCED_DURATION = 0.4;
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 const EASE_IN = [0.4, 0, 1, 1] as const;
 const UP_EXIT_BLUR_PX = 8;
-const INVIEW_OPTS = { amount: 0.3, margin: "0px 0px -10% 0px" } as const;
+// `once: true` makes the observer detach after the first entry — the
+// reveal plays exactly once per page load and the section then sits in
+// its `visible` state regardless of subsequent scroll direction. The
+// UP-exit / replay-cooldown / key-bump branches below become
+// unreachable after first entry but remain in place for the initial
+// scroll-down which is unchanged.
+const INVIEW_OPTS = {
+  amount: 0.3,
+  margin: "0px 0px -10% 0px",
+  once: true,
+} as const;
 // `lateExit` variant. Extends the root rectangle 35% BELOW the
 // viewport (positive bottom margin) and drops the threshold to 5%.
 // Net effect: the element stays "in view" — and therefore in its
 // `visible` state, not its up-exit state — even after the user has
 // scrolled well past it. Triggers the up-exit fade much later, so
 // the section feels like it lingers on the way back up.
-const INVIEW_OPTS_LATE = { amount: 0.05, margin: "0px 0px 35% 0px" } as const;
+const INVIEW_OPTS_LATE = {
+  amount: 0.05,
+  margin: "0px 0px 35% 0px",
+  once: true,
+} as const;
 // How long the section must have been out of view before the
 // next DOWN entry is allowed to replay the swoop. Set tight: only
 // blocks ultra-fast involuntary flicks (sub-100ms). Any deliberate
