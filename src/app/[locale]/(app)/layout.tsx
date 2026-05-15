@@ -34,12 +34,16 @@ export default async function AppLayout({
   const tAuth = await getTranslations("Auth");
   const tProfile = await getTranslations("Profile");
 
-  const avatarUrl = await getBrandingImageUrl(dbUser.avatar_path);
+  const [avatarUrl, firmLogoUrl] = await Promise.all([
+    getBrandingImageUrl(dbUser.avatar_path),
+    getBrandingImageUrl(firm.logo_url),
+  ]);
 
   return (
     <AppShell
       firmName={firm.name}
       brandColor={firm.brand_color}
+      firmLogoUrl={firmLogoUrl}
       userDisplayName={userDisplayLabel(dbUser)}
       userEmail={dbUser.email}
       userAvatarUrl={avatarUrl}

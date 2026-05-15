@@ -42,6 +42,7 @@ export function AppShell({
   children,
   firmName,
   brandColor,
+  firmLogoUrl,
   userDisplayName,
   userEmail,
   userAvatarUrl,
@@ -50,6 +51,7 @@ export function AppShell({
   children: React.ReactNode;
   firmName: string;
   brandColor: string;
+  firmLogoUrl: string | null;
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
@@ -183,12 +185,23 @@ export function AppShell({
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {/* Firm context (read-only label so the user knows which firm
-                    they're acting on; matches the previous dropdown). */}
+                    they're acting on; matches the previous dropdown). The
+                    firm logo (if uploaded on /profile) shows beside the name
+                    so multi-firm staff can recognise the active firm at a
+                    glance. */}
                 <DropdownMenuLabel className="font-normal">
                   <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     {brand.name}
                   </div>
-                  <div className="text-xs truncate">{firmName}</div>
+                  <div className="mt-1 flex items-center gap-2">
+                    <AvatarInitials
+                      src={firmLogoUrl}
+                      name={firmName}
+                      size={24}
+                      color={brandColor}
+                    />
+                    <div className="text-xs truncate">{firmName}</div>
+                  </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <form action={logoutAction}>

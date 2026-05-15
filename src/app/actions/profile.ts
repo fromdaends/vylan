@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { updateUserProfile } from "@/lib/db/users";
+import { updateCurrentFirm } from "@/lib/db/firms";
 import { uploadBrandingImage } from "@/app/actions/branding";
 
 export type ProfileActionResult =
@@ -110,6 +111,40 @@ export async function removeAvatarAction(): Promise<ProfileActionResult> {
     // underlying storage object — keeping it is cheap and useful for
     // debugging / audit. A future cleanup task can sweep orphaned avatars.
     await updateUserProfile({ avatar_path: null });
+  } catch {
+    return { ok: false, error: "save_failed" };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function updateFirmLogoAction(
+  formData: FormData,
+): Promise<ProfileActionResult> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: "unauth" };
+
+  const upload = await uploadBrandingImage(formData, "firm_logo");
+  if (!upload.ok) {
+    if (upload.error === "unauth") return { ok: false, error: "unauth" };
+    return { ok: false, error: "upload_failed" };
+  }
+
+  try {
+    await updateCurrentFirm({ logo_url: upload.path });
+  } catch {
+    return { ok: false, error: "save_failed" };
+  }
+  revalidatePath("/", "layout");
+  return { ok: true, signedUrl: upload.signedUrl };
+}
+
+export async function removeFirmLogoAction(): Promise<ProfileActionResult> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: "unauth" };
+
+  try {
+    await updateCurrentFirm({ logo_url: null });
   } catch {
     return { ok: false, error: "save_failed" };
   }
