@@ -253,7 +253,16 @@ export default async function EngagementDetailPage({
         </section>
 
         <aside className="space-y-4">
-          <ActivityTimeline entries={activity} locale={locale} />
+          <ActivityTimeline
+            entries={activity}
+            locale={locale}
+            filenamesByFileId={
+              new Map(uploads.map((u) => [u.id, u.original_filename]))
+            }
+            rejectionReasonsByItemId={
+              new Map(items.map((i) => [i.id, i.rejection_reason ?? null]))
+            }
+          />
         </aside>
       </div>
     </div>

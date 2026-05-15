@@ -91,6 +91,9 @@ export function RejectModal({
               placeholder={t("reject_reason_placeholder")}
               aria-invalid={Boolean(state?.fieldErrors?.reason)}
             />
+            <p className="text-xs text-muted-foreground">
+              {t("reject_reason_privacy_hint")}
+            </p>
             {state?.fieldErrors?.reason && (
               <p className="text-sm text-destructive">
                 {state.fieldErrors.reason}

@@ -74,9 +74,13 @@ export async function rejectItemAction(
   const ctx = await getEngagementFirm(parsed.data.id);
   await rejectItem(parsed.data.id, parsed.data.reason);
   if (ctx) {
+    // Activity-log metadata MUST NOT contain client PII (Phase 5). The
+    // rejection_reason is authoritatively stored on the request_items
+    // row already — the timeline UI looks it up at render time so the
+    // 2-year activity log doesn't duplicate any client-identifying
+    // phrasing the accountant might have typed.
     await logUserActivity(ctx.firm_id, ctx.engagement_id, "reject_item", {
       item_id: parsed.data.id,
-      reason: parsed.data.reason,
     });
   }
   revalidatePath("/", "layout");

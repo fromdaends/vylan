@@ -2,6 +2,7 @@
 // and we log to console (so dev works without Resend).
 
 import { Resend } from "resend";
+import { redactEmail } from "@/lib/redact";
 
 type SendArgs = {
   to: string;
@@ -30,8 +31,12 @@ export async function sendEmail({
   const c = client();
   const from = process.env.RESEND_FROM_EMAIL ?? "noreply@relai.app";
   if (!c) {
+    // Redact the recipient so a misconfigured prod doesn't dump client PII
+    // into the function logs. The dev-mode signal we actually need is
+    // "an email tried to go out" + the subject; the exact recipient adds
+    // nothing useful at this stage.
     console.warn(
-      `[email] Resend not configured — would send to ${to}: ${subject}`,
+      `[email] Resend not configured — would send to ${redactEmail(to)}: ${subject}`,
     );
     return { sent: false, reason: "not_configured" };
   }

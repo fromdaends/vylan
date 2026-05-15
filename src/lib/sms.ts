@@ -3,6 +3,7 @@
 // Twilio; production fills in the secrets.
 
 import twilio from "twilio";
+import { redactPhone } from "@/lib/redact";
 
 type SendArgs = {
   to: string;
@@ -28,7 +29,11 @@ export async function sendSms({
   const c = client();
   const from = process.env.TWILIO_FROM_NUMBER;
   if (!c || !from) {
-    console.warn(`[sms] Twilio not configured — would send to ${to}: ${body}`);
+    // Redact the phone number so a misconfigured prod doesn't dump
+    // client PII into the function logs. See lib/redact for the policy.
+    console.warn(
+      `[sms] Twilio not configured — would send to ${redactPhone(to)}: ${body}`,
+    );
     return { sent: false, reason: "not_configured" };
   }
   try {
