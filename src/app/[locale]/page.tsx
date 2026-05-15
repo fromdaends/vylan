@@ -28,8 +28,14 @@ export default async function Home({
   const t = await getTranslations("Landing");
   const tAuth = await getTranslations("Auth");
 
+  // No pt-* on <main> here (other public pages keep it). The hero
+  // section needs its orb halo to bleed up through the floating pill
+  // — without that, the orbs get clipped at the bottom of main's
+  // padding and paint a hard horizontal line right under the nav
+  // (the "line that blocks ambient lighting"). The hero content's
+  // own top padding (pt-28 sm:pt-36 below) handles pill clearance.
   return (
-    <main className="relative flex-1 flex flex-col overflow-hidden ambient-warm pt-24 sm:pt-28">
+    <main className="relative flex-1 flex flex-col overflow-hidden ambient-warm">
       <PublicNav />
 
       {/* HERO */}
@@ -69,7 +75,7 @@ export default async function Home({
           </div>
         </ParallaxLayer>
 
-        <div className="mx-auto max-w-4xl px-6 pt-24 sm:pt-28 pb-24 sm:pt-32 sm:pb-32 text-center animate-in-up">
+        <div className="mx-auto max-w-4xl px-6 pt-28 sm:pt-36 pb-24 sm:pb-32 text-center animate-in-up">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 backdrop-blur px-4 py-1.5 text-xs font-medium mb-8">
             <Sparkles className="h-3.5 w-3.5 text-accent" />
             <span className="text-foreground">
