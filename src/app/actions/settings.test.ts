@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { SettingsSchema } from "./settings";
+import { SettingsSchema } from "./settings.schema";
 
 const BASE = {
   name: "Cabinet Test",

@@ -30,10 +30,8 @@ import {
   removeFirmLogoAction,
   type ProfileActionResult,
 } from "@/app/actions/profile";
-import {
-  updateFirmSettings,
-  type SettingsState,
-} from "@/app/actions/settings";
+import { updateFirmSettings } from "@/app/actions/settings";
+import { type SettingsState } from "@/app/actions/settings.schema";
 
 type ProfileUser = {
   id: string;
