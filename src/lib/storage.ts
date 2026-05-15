@@ -18,6 +18,12 @@ export const MAX_BRANDING_BYTES = 8 * 1024 * 1024;
 export const MAX_BRANDING_HARD_LIMIT = 20 * 1024 * 1024;
 export const BRANDING_OUTPUT_SIZE = 512;
 export const BRANDING_URL_TTL_SEC = 24 * 60 * 60;
+// Logos embedded in outgoing emails need a TTL that outlives the reminder
+// cadence. Reminders go out up to ~30 days after the engagement is sent,
+// and clients sometimes open them later still. 90 days covers the long
+// tail; if a client opens an email older than that, the alt text takes
+// over and the rest of the email still renders.
+export const BRANDING_URL_EMAIL_TTL_SEC = 90 * 24 * 60 * 60;
 
 export function truncateFilename(name: string): string {
   if (name.length <= MAX_FILENAME_LEN) return name;
@@ -97,6 +103,15 @@ export async function getBrandingImageUrl(
 ): Promise<string | null> {
   if (!path) return null;
   return signedUrl(path, BRANDING_URL_TTL_SEC);
+}
+
+// For logos embedded in outgoing emails. Same image, but signed for the
+// long-tail email-open window — see BRANDING_URL_EMAIL_TTL_SEC.
+export async function getBrandingImageUrlForEmail(
+  path: string | null,
+): Promise<string | null> {
+  if (!path) return null;
+  return signedUrl(path, BRANDING_URL_EMAIL_TTL_SEC);
 }
 
 export async function convertHeicToJpeg(

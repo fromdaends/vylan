@@ -24,6 +24,7 @@ import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
+import { getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
 
 export type CreateEngagementState = {
@@ -174,9 +175,11 @@ async function deliverInviteEmail(engagementId: string): Promise<void> {
 
     const appUrl = process.env.APP_URL ?? "http://localhost:3000";
     const url = `${appUrl}/r/${engagement.magic_token}`;
+    const firmLogoUrl = await getBrandingImageUrlForEmail(firm.logo_url);
     const { subject, html, text } = buildEngagementInviteEmail({
       clientName: client.display_name,
       firmName: firm.name,
+      firmLogoUrl,
       engagementTitle: engagement.title,
       url,
       dueDate: engagement.due_date,

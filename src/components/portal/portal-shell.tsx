@@ -8,9 +8,11 @@ import { ItemCard } from "./item-card";
 export function PortalShell({
   ctx,
   locale,
+  firmLogoUrl,
 }: {
   ctx: PortalContext;
   locale: "fr" | "en";
+  firmLogoUrl: string | null;
 }) {
   const t = useTranslations("Portal");
   const [items, setItems] = useState(ctx.items);
@@ -62,12 +64,21 @@ export function PortalShell({
         />
         <div className="relative mx-auto max-w-2xl px-4 sm:px-6 py-6 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="size-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center font-semibold text-sm shrink-0"
-              aria-hidden
-            >
-              {initials}
-            </div>
+            {firmLogoUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={firmLogoUrl}
+                alt={ctx.firm.name}
+                className="size-10 rounded-xl object-cover bg-white/10 shrink-0"
+              />
+            ) : (
+              <div
+                className="size-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center font-semibold text-sm shrink-0"
+                aria-hidden
+              >
+                {initials}
+              </div>
+            )}
             <div className="min-w-0">
               <div className="font-semibold truncate text-base">
                 {ctx.firm.name}

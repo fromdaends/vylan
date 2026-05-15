@@ -5,6 +5,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { loadPortalContext } from "@/lib/db/portal";
 import { brand } from "@/lib/brand";
 import { PortalShell } from "@/components/portal/portal-shell";
+import { getBrandingImageUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +39,10 @@ export default async function PortalPage({
       : sp.lang === "fr"
         ? "fr"
         : ctx.client.locale;
-  const messages = await getMessages({ locale });
+  const [messages, firmLogoUrl] = await Promise.all([
+    getMessages({ locale }),
+    getBrandingImageUrl(ctx.firm.logo_url),
+  ]);
 
   return (
     <html
@@ -51,7 +55,7 @@ export default async function PortalPage({
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <NextIntlClientProvider locale={locale} messages={messages}>
-          <PortalShell ctx={ctx} locale={locale} />
+          <PortalShell ctx={ctx} locale={locale} firmLogoUrl={firmLogoUrl} />
         </NextIntlClientProvider>
       </body>
     </html>
