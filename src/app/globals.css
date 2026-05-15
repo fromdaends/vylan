@@ -247,32 +247,41 @@
     -webkit-text-fill-color: transparent;
   }
 
-  /* Floating-pill glassmorphism for the public nav — "literal soap-
-     bubble" treatment. Safari silently drops `contrast()` /
-     `brightness()` from a backdrop-filter chain in some versions, so
-     we can't rely on a filter-only contrast crush. Instead the
-     opacity itself does the heavy lifting: the pill is ~85% opaque
-     with the theme background colour, so only ~15% of the underlying
-     content (mostly hero-orb colour) bleeds through. Text behind
-     the pill is therefore mathematically unable to read crisply,
-     regardless of browser filter support.
-     - bg-color is set HERE in CSS (not via Tailwind `bg-background/85`
-       on the element) so it's universal — no dependency on
-       Tailwind's colour-mix opacity syntax landing in the user's
-       browser.
-     - blur + saturate + contrast remain in the filter chain so
-       browsers that DO honour them get extra refraction + colour
-       bleed for the "bubble" feel.
-     - inset gloss highlight + drop shadow live on the PILL_CLASSES
-       Tailwind utility in public-nav.tsx — they're what make the
-       pill read as a glossy plate. */
+  /* Floating-pill "matte bubble" treatment for the public nav.
+     Goal: text behind the pill is unreadable, but the pill is still
+     transparent — you can see warm orb colour through it, just not
+     letters. The trick is layering THREE things together:
+       1. An inline SVG fractal-noise texture (background-image #1).
+          Fine-grain noise breaks up any continuous pattern coming
+          through the pill — text glyphs disappear because their
+          edges no longer form coherent shapes against the noise.
+       2. A soft vertical gradient (background-image #2). Slightly
+          lighter at the top, darker at the bottom — gives the
+          "matte bubble surface" feel without a gloss highlight.
+       3. backdrop-filter blur + saturate. Reinforces the matte feel
+          and keeps the underlying orb colours visible through the
+          gradient.
+     Together they let the pill stay ~25-30% see-through (warm orb
+     glow bleeds through) while text behind is mathematically
+     destroyed by the noise layer.
+     The colour values are split light/dark via the .dark selector
+     since the gradient + noise tint differ between themes. */
   .glass-nav {
-    background-color: oklch(0.99 0.002 264 / 0.82);
-    backdrop-filter: blur(120px) saturate(220%) contrast(0.6) brightness(1.05);
-    -webkit-backdrop-filter: blur(120px) saturate(220%) contrast(0.6) brightness(1.05);
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+      linear-gradient(180deg,
+        oklch(0.99 0.002 264 / 0.6) 0%,
+        oklch(0.93 0.005 264 / 0.82) 100%);
+    background-repeat: repeat, no-repeat;
+    backdrop-filter: blur(40px) saturate(160%);
+    -webkit-backdrop-filter: blur(40px) saturate(160%);
   }
   .dark .glass-nav {
-    background-color: oklch(0.135 0.012 264 / 0.85);
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.18 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+      linear-gradient(180deg,
+        oklch(0.22 0.018 264 / 0.72) 0%,
+        oklch(0.135 0.012 264 / 0.88) 100%);
   }
 
 
