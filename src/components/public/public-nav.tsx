@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, type PointerEvent } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
@@ -68,10 +68,22 @@ const HELP_ITEMS = [
   { href: "/faq", labelKey: "nav_help_questions", icon: MessageCircleQuestion },
 ] as const;
 
+// Pill visual. Three shadow layers:
+//   - Outer drop shadow: makes the pill float off the page.
+//   - Inset top highlight: the gloss line that sells "polished glass".
+//   - Inset bottom shadow: a barely-there dark line at the bottom
+//     edge → adds a subtle bevel so the pill reads as a 3D plate
+//     instead of a flat sticker.
+// Dark mode swaps to deeper outer shadow + lighter gloss (so the
+// highlight pops against a dark surface) + slightly darker bottom.
 const PILL_CLASSES =
-  "glass-nav bg-background/55 border border-foreground/10 rounded-full " +
-  "shadow-[0_8px_32px_-8px_rgba(15,18,30,0.12),inset_0_1px_0_rgba(255,255,255,0.5)] " +
-  "dark:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.12)]";
+  "glass-nav glass-pill-hover bg-background/55 border border-foreground/10 rounded-full " +
+  "shadow-[0_12px_40px_-10px_rgba(15,18,30,0.15),inset_0_1px_0_rgba(255,255,255,0.7),inset_0_-1px_0_rgba(0,0,0,0.03)] " +
+  "dark:shadow-[0_12px_40px_-10px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.25)]";
+
+// Tilt feel — max 1.6° in each axis, +0.6% scale on hover. Subtle.
+const MAX_TILT_DEG = 1.6;
+const HOVER_SCALE = 1.006;
 
 export function PublicNav() {
   const t = useTranslations("Landing");
@@ -89,10 +101,52 @@ export function PublicNav() {
     setMobileOpen(false);
   }
 
+  // Cursor-following 3D tilt + spotlight. Real-mouse only — touch and
+  // pen pointers get the default rest state. We bail in
+  // prefers-reduced-motion too (the CSS spotlight ::before is also
+  // disabled there via globals.css).
+  const pillRef = useRef<HTMLDivElement>(null);
+
+  function handlePillPointerMove(e: PointerEvent<HTMLDivElement>) {
+    if (e.pointerType !== "mouse") return;
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    const el = pillRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // Normalize cursor 0–1 inside the pill, then bias around centre.
+    const px = (e.clientX - rect.left) / rect.width;
+    const py = (e.clientY - rect.top) / rect.height;
+    const tiltX = (0.5 - py) * 2 * MAX_TILT_DEG; // top → tilt towards viewer
+    const tiltY = (px - 0.5) * 2 * MAX_TILT_DEG; // right → tilt right
+    // No transition while following — needs to be frame-perfect.
+    el.style.transition = "transform 0ms";
+    el.style.transform = `perspective(1200px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) scale(${HOVER_SCALE})`;
+    el.style.setProperty("--mouse-x", `${px * 100}%`);
+    el.style.setProperty("--mouse-y", `${py * 100}%`);
+  }
+
+  function handlePillPointerLeave() {
+    const el = pillRef.current;
+    if (!el) return;
+    // Restore the CSS-defined transition so the reset eases smoothly.
+    el.style.transition = "";
+    el.style.transform = "";
+  }
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex flex-col items-center px-3 sm:px-6 pt-4 sm:pt-5 pointer-events-none">
+    <header className="fixed top-0 left-0 right-0 z-50 flex flex-col items-center px-3 sm:px-6 pt-5 sm:pt-7 pointer-events-none">
       {/* The pill itself */}
-      <div className={"pointer-events-auto w-full max-w-5xl " + PILL_CLASSES}>
+      <div
+        ref={pillRef}
+        onPointerMove={handlePillPointerMove}
+        onPointerLeave={handlePillPointerLeave}
+        className={"pointer-events-auto w-full max-w-5xl " + PILL_CLASSES}
+      >
         <div className="flex items-center justify-between gap-3 pl-3 pr-2 sm:pl-4 sm:pr-3 h-16">
           {/* Logo only — wordmark removed per design direction.
               Responsive size: 40px on mobile, 48px from md up. */}

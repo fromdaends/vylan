@@ -18,7 +18,7 @@ export default async function PricingPage({
   const t = await getTranslations("Pricing");
 
   return (
-    <main className="flex-1 flex flex-col pt-24">
+    <main className="flex-1 flex flex-col pt-24 sm:pt-28">
       <PublicNav />
 
       <section className="mx-auto max-w-4xl px-6 py-20">
