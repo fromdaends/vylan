@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCsv, parseClientCsv } from "./csv";
+import { csvDocument, csvLine, parseCsv, parseClientCsv } from "./csv";
 
 describe("parseCsv", () => {
   it("parses a simple comma-separated row", () => {
@@ -89,5 +89,54 @@ describe("parseClientCsv", () => {
     const csv = "name,zodiac\nJean,Aquarius";
     const out = parseClientCsv(csv);
     expect(out.headerWarnings).toContain("unknown_column:zodiac");
+  });
+});
+
+describe("csvLine (writer)", () => {
+  it("joins cells with commas and terminates with CRLF", () => {
+    expect(csvLine(["a", "b", "c"])).toBe("a,b,c\r\n");
+  });
+
+  it("quotes fields containing commas", () => {
+    expect(csvLine(["a", "x,y", "c"])).toBe('a,"x,y",c\r\n');
+  });
+
+  it("doubles internal double-quotes and wraps the cell in quotes", () => {
+    expect(csvLine(['she said "hi"'])).toBe('"she said ""hi"""\r\n');
+  });
+
+  it("quotes fields containing newlines", () => {
+    expect(csvLine(["a\nb"])).toBe('"a\nb"\r\n');
+  });
+
+  it("renders null and undefined as empty fields", () => {
+    expect(csvLine([null, "x", undefined])).toBe(",x,\r\n");
+  });
+
+  it("renders Date as ISO 8601", () => {
+    const d = new Date("2026-05-15T12:34:56.000Z");
+    expect(csvLine([d])).toBe("2026-05-15T12:34:56.000Z\r\n");
+  });
+
+  it("renders booleans as 'true'/'false'", () => {
+    expect(csvLine([true, false])).toBe("true,false\r\n");
+  });
+
+  it("renders finite numbers as decimals; NaN/Infinity become empty", () => {
+    expect(csvLine([1, 1.5, -2])).toBe("1,1.5,-2\r\n");
+    expect(csvLine([NaN, Infinity])).toBe(",\r\n");
+  });
+});
+
+describe("csvDocument", () => {
+  it("emits a header row followed by data rows", () => {
+    const out = csvDocument(
+      ["id", "name"],
+      [
+        [1, "Alice"],
+        [2, "Bob, Jr."],
+      ],
+    );
+    expect(out).toBe(`id,name\r\n1,Alice\r\n2,"Bob, Jr."\r\n`);
   });
 });

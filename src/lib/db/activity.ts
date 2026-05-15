@@ -30,7 +30,9 @@ export async function listActivityForEngagement(
 
 export async function logUserActivity(
   firmId: string,
-  engagementId: string,
+  // null for firm-wide events that aren't scoped to a single engagement
+  // (e.g. firm data export). The schema column is nullable.
+  engagementId: string | null,
   action: string,
   metadata: Record<string, unknown> = {},
 ) {

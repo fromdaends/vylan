@@ -268,6 +268,12 @@
     "section_billing": "Billing",
     "section_billing_hint": "Manage your plan, payment method, and invoices.",
     "billing_link_label": "Open billing",
+    "section_data_title": "Data & privacy",
+    "section_data_hint": "Your data is yours. Export everything as a ZIP, any time.",
+    "data_export_label": "Export all firm data",
+    "data_export_hint": "Clients, engagements, files, and activity log. One ZIP. May take a minute.",
+    "data_delete_label": "Delete my firm",
+    "data_delete_hint": "Sends an email to support — we'll wipe everything within 24 hours.",
     "save_failed": "Couldn't save. Please try again."
   },
   "App": {
@@ -417,6 +423,7 @@
     "expand_preview": "Expand preview",
     "collapse_preview": "Collapse preview",
     "download_file": "Download file",
+    "download_all": "Download all (ZIP)",
     "errors": {
       "missing_client": "Pick a client.",
       "missing_template": "Pick a template.",

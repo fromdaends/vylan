@@ -22,6 +22,13 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [],
   },
+  // archiver is a CommonJS module with `export = archiver` typings.
+  // Turbopack tries to statically analyse its named exports and gets
+  // confused by the namespace; treating it as a server-external
+  // package leaves bundling alone and lets Node `require()` it at
+  // runtime. The route handlers that use it (api/engagements/.../files.zip
+  // and api/firm/export.zip) are nodejs-runtime only.
+  serverExternalPackages: ["archiver"],
   experimental: {
     serverActions: {
       // Default is 1 MB — too small for phone photos (3-8 MB is normal).

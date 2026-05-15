@@ -38,6 +38,11 @@ export const PORTAL_MUTATION_PER_TOKEN: LimitSpec = { limit: 120, window: "1 h" 
 // AI / cost-bound endpoints.
 export const AI_CLASSIFY_PER_FIRM_DAILY: LimitSpec = { limit: 500, window: "1 d" };
 
+// Firm-wide data export — generates a multi-MB ZIP of every client's
+// files. Keep this tight so a stolen session can't drain the firm's
+// data on a loop.
+export const FIRM_EXPORT_LIMIT: LimitSpec = { limit: 1, window: "1 h" };
+
 // Misc.
 export const FEEDBACK_PER_USER: LimitSpec = { limit: 5, window: "1 h" };
 

@@ -44,6 +44,7 @@ import {
   RotateCcw,
   Bell,
   BellOff,
+  Download,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -206,6 +207,25 @@ export default async function EngagementDetailPage({
                 {t("reopen")}
               </Button>
             </form>
+          )}
+          {/* Bulk download of every uploaded file for this engagement.
+              Disabled in draft (nothing's been requested yet) or when
+              no files have actually been uploaded — the route would
+              404 anyway. */}
+          {uploads.length > 0 && (
+            <a
+              href={`/api/engagements/${engagement.id}/files.zip`}
+              className="inline-flex"
+              // The native <a download> hint asks the browser to save
+              // rather than navigate. Server's Content-Disposition
+              // sets the actual filename.
+              download
+            >
+              <Button type="button" variant="outline" size="sm">
+                <Download className="size-4" />
+                {t("download_all")}
+              </Button>
+            </a>
           )}
         </div>
       </header>
