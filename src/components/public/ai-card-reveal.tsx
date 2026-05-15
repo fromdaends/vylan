@@ -94,6 +94,17 @@ const INVIEW_OPTS = { amount: 0.3, margin: "0px 0px -10% 0px" } as const;
 // scrolled well past it. Triggers the up-exit fade much later, so
 // the section feels like it lingers on the way back up.
 const INVIEW_OPTS_LATE = { amount: 0.05, margin: "0px 0px 35% 0px" } as const;
+// Wider still — only used to ARM the entry-swoop replay. Element
+// has to be 200% of viewport (2 viewport heights) below the
+// viewport bottom before we consider the user to have "truly left"
+// the section. Scrolling up just one section above the AI block is
+// not enough to re-arm — the user has to scroll meaningfully far
+// past it. Prevents the swoop from re-firing on small up-and-back
+// detours within the AI region.
+const INVIEW_OPTS_VERY_LATE = {
+  amount: 0.01,
+  margin: "0px 0px 200% 0px",
+} as const;
 
 // --- Card -------------------------------------------------------------
 
@@ -142,6 +153,12 @@ export function AiCardReveal({
     ref,
     lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS,
   );
+  // `inViewVeryLate` is used ONLY to arm the entry-swoop replay.
+  // Wider root (200% below viewport) so the user has to scroll
+  // truly far past the section before the next swoop is allowed —
+  // wiggle-scrolling up to the section just above and back down
+  // doesn't re-arm the swoop, only meaningful scroll-aways do.
+  const inViewVeryLate = useInView(ref, INVIEW_OPTS_VERY_LATE);
   const reducedMotion = useReducedMotion();
   useEffect(() => attachSharedScrollListener(), []);
 
@@ -159,32 +176,30 @@ export function AiCardReveal({
   // true detection, so the user never sees a one-frame false-start
   // before the swoop.
   //
-  // Wiggle guard via `looseExitedRef`: only replay the swoop if the
-  // LOOSE observer has flipped false since the last entry. Without
-  // this, scrolling up a few pixels (so `inView` flips false but
-  // `inViewLoose` stays true) and then back down would re-trigger
-  // the swoop on every direction flip — visible as a chain of
-  // remount stutters when the user is wiggling around the
-  // section. With it, only a real exit past the extended loose
-  // root re-arms the replay. First entry still plays because the
-  // ref starts at true.
+  // Wiggle guard via `replayArmedRef`: only replay the swoop if
+  // `inViewVeryLate` (root extended 200% below viewport) has
+  // flipped false since the last entry. Scrolling up just to the
+  // section above the AI block isn't enough — the user has to
+  // scroll meaningfully far past it before the next swoop is
+  // allowed. First entry still plays because the ref starts at
+  // true.
   const [entryKey, setEntryKey] = useState(0);
   const wasInViewRef = useRef(false);
-  const looseExitedRef = useRef(true);
+  const replayArmedRef = useRef(true);
   useIsomorphicLayoutEffect(() => {
-    if (!inViewLoose) {
-      looseExitedRef.current = true;
+    if (!inViewVeryLate) {
+      replayArmedRef.current = true;
     }
-  }, [inViewLoose]);
+  }, [inViewVeryLate]);
   useIsomorphicLayoutEffect(() => {
     if (
       inView &&
       !wasInViewRef.current &&
       _scrollDownRef.current &&
-      looseExitedRef.current
+      replayArmedRef.current
     ) {
       setEntryKey((k) => k + 1);
-      looseExitedRef.current = false;
+      replayArmedRef.current = false;
     }
     wasInViewRef.current = inView;
   }, [inView]);
@@ -337,15 +352,18 @@ export function AiSideReveal({
   lateExit?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  // Same two-observer pattern as AiCardReveal: `inView` drives the
-  // entry path (strict, identical to red); `inViewLoose` only
-  // defers the up-exit when lateExit is on. See AiCardReveal for
-  // the full rationale.
+  // Three-observer pattern (same as AiCardReveal):
+  //   - inView         (strict)         — entry path + visible state
+  //   - inViewLoose    (lateExit ? +35% : strict) — defer up-exit
+  //   - inViewVeryLate (+200% root)     — arm replay only after a
+  //                                       far scroll-away
+  // See AiCardReveal for the full rationale.
   const inView = useInView(ref, INVIEW_OPTS);
   const inViewLoose = useInView(
     ref,
     lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS,
   );
+  const inViewVeryLate = useInView(ref, INVIEW_OPTS_VERY_LATE);
   const reducedMotion = useReducedMotion();
   useEffect(() => attachSharedScrollListener(), []);
 
@@ -353,24 +371,24 @@ export function AiSideReveal({
   if (inView) hasEverEntered.current = true;
 
   // Same useLayoutEffect-based key bump as AiCardReveal, including
-  // the looseExitedRef wiggle guard — see comment there.
+  // the replayArmedRef wiggle guard — see comment there.
   const [entryKey, setEntryKey] = useState(0);
   const wasInViewRef = useRef(false);
-  const looseExitedRef = useRef(true);
+  const replayArmedRef = useRef(true);
   useIsomorphicLayoutEffect(() => {
-    if (!inViewLoose) {
-      looseExitedRef.current = true;
+    if (!inViewVeryLate) {
+      replayArmedRef.current = true;
     }
-  }, [inViewLoose]);
+  }, [inViewVeryLate]);
   useIsomorphicLayoutEffect(() => {
     if (
       inView &&
       !wasInViewRef.current &&
       _scrollDownRef.current &&
-      looseExitedRef.current
+      replayArmedRef.current
     ) {
       setEntryKey((k) => k + 1);
-      looseExitedRef.current = false;
+      replayArmedRef.current = false;
     }
     wasInViewRef.current = inView;
   }, [inView]);
