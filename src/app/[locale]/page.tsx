@@ -51,47 +51,74 @@ export default async function Home({
           intensity={120}
           className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_70%_85%_at_50%_30%,black,transparent_70%)]"
         >
-          {/* Hero halo — tight central cluster. Each orb runs a slow
-              drift (`orb-drift-center` / `orb-drift-side`) with
-              co-prime durations + offset delays so the cluster
-              breathes without ever looping. The `orb-drift-center`
-              keyframe bakes `translate(-50%, 0)` into every step so
-              the animation transform doesn't fight Tailwind's
-              `-translate-x-1/2`; the Tailwind class stays as the
-              fallback for users with `prefers-reduced-motion: reduce`
-              (animation off). Orbs also use `mix-blend-mode: multiply`
-              (light) / `screen` (dark) for real colour mesh where
-              they overlap. */}
+          {/* Hero halo — dense central cluster (10 overlapping orbs).
+              Each orb runs a slow drift (`orb-drift-center` /
+              `orb-drift-side`) with co-prime durations + offset
+              delays so the cluster breathes without ever looping.
+              `orb-drift-center` bakes `translate(-50%, 0)` into
+              every step so the animation transform doesn't fight
+              Tailwind's `-translate-x-1/2`; the Tailwind class stays
+              as the fallback for `prefers-reduced-motion: reduce`.
+              Orbs use `mix-blend-mode: multiply` (light) / `screen`
+              (dark) so overlapping zones actually MESH into new
+              hues — denser stacking + bigger sizes + larger blur
+              (80px) here mean the cluster reads as one warm wash,
+              not a constellation of separate circles. */}
           <div aria-hidden>
-            {/* Iris keystone — sits above the headline. */}
+            {/* Iris keystone — large purple-blue wash above the
+                headline. Anchors the cool end of the palette. */}
             <div
-              className="orb orb-iris orb-drift-center h-[760px] w-[760px] top-[-180px] left-1/2 -translate-x-1/2 opacity-100"
+              className="orb orb-iris orb-drift-center h-[900px] w-[900px] top-[-240px] left-1/2 -translate-x-1/2 opacity-100"
               style={{ animationDuration: "47s" }}
             />
-            {/* Rose + coral flank the headline. */}
+            {/* Rose + coral flank the headline — pulled in a touch
+                from 22% to 16% so they overlap the iris keystone
+                more. */}
             <div
-              className="orb orb-rose orb-drift-side h-[440px] w-[440px] top-[100px] left-[22%] opacity-95"
+              className="orb orb-rose orb-drift-side h-[540px] w-[540px] top-[60px] left-[16%] opacity-95"
               style={{ animationDuration: "23s", animationDelay: "-3s" }}
             />
             <div
-              className="orb orb-coral orb-drift-side h-[440px] w-[440px] top-[100px] right-[22%] opacity-95"
+              className="orb orb-coral orb-drift-side h-[540px] w-[540px] top-[60px] right-[16%] opacity-95"
               style={{ animationDuration: "29s", animationDelay: "-7s" }}
             />
-            {/* Warm gold sits behind the CTA row. */}
+            {/* Peach mid-zone — fills the gap between the side
+                orbs and the centre column so there's no dark
+                "seam" left/right of the headline. */}
             <div
-              className="orb orb-gold orb-drift-center h-[400px] w-[400px] top-[300px] left-1/2 -translate-x-1/2 opacity-95"
-              style={{ animationDuration: "37s", animationDelay: "-5s" }}
-            />
-            {/* Pink lower-centre + a small iris satellite below it
-                so the cluster carries colour down past the CTAs
-                without ever drifting to the corners. */}
-            <div
-              className="orb orb-pink orb-drift-center h-[360px] w-[360px] top-[460px] left-1/2 -translate-x-1/2 opacity-85"
-              style={{ animationDuration: "41s", animationDelay: "-9s" }}
+              className="orb orb-peach orb-drift-side h-[400px] w-[400px] top-[220px] left-[30%] opacity-90"
+              style={{ animationDuration: "31s", animationDelay: "-13s" }}
             />
             <div
-              className="orb orb-iris orb-drift-center h-[300px] w-[300px] top-[540px] left-1/2 -translate-x-1/2 opacity-60"
-              style={{ animationDuration: "31s", animationDelay: "-11s" }}
+              className="orb orb-peach orb-drift-side h-[400px] w-[400px] top-[220px] right-[30%] opacity-90"
+              style={{ animationDuration: "37s", animationDelay: "-17s" }}
+            />
+            {/* Warm gold behind the CTA row. */}
+            <div
+              className="orb orb-gold orb-drift-center h-[520px] w-[520px] top-[280px] left-1/2 -translate-x-1/2 opacity-95"
+              style={{ animationDuration: "41s", animationDelay: "-5s" }}
+            />
+            {/* Pink lower-centre carries the cluster down past the
+                CTAs. */}
+            <div
+              className="orb orb-pink orb-drift-center h-[460px] w-[460px] top-[440px] left-1/2 -translate-x-1/2 opacity-90"
+              style={{ animationDuration: "43s", animationDelay: "-9s" }}
+            />
+            {/* Small rose + coral lower satellites add bottom-corner
+                warmth so the bottom of the halo isn't just iris. */}
+            <div
+              className="orb orb-rose orb-drift-side h-[280px] w-[280px] top-[460px] left-[30%] opacity-80"
+              style={{ animationDuration: "53s", animationDelay: "-19s" }}
+            />
+            <div
+              className="orb orb-coral orb-drift-side h-[280px] w-[280px] top-[460px] right-[30%] opacity-80"
+              style={{ animationDuration: "59s", animationDelay: "-23s" }}
+            />
+            {/* Iris satellite tucks under the cluster and bleeds
+                into the intro section transition. */}
+            <div
+              className="orb orb-iris orb-drift-center h-[360px] w-[360px] top-[540px] left-1/2 -translate-x-1/2 opacity-65"
+              style={{ animationDuration: "61s", animationDelay: "-11s" }}
             />
           </div>
         </ParallaxLayer>
@@ -222,12 +249,17 @@ export default async function Home({
                 {t("feature_3_title")}
               </h2>
               <p className="mt-6 text-base sm:text-lg text-muted-foreground leading-relaxed">
-                {t("feature_3_body")}
+                {t("ai_body_long")}
               </p>
+              {/* AI-specific bullets. The previous list reused the global
+                  intro pills (Bilingual by default / Quebec-hosted data),
+                  which made them appear twice on the page. These four
+                  bullets are scoped to what the AI itself does. */}
               <ul className="mt-8 space-y-3 text-sm">
-                <BulletItem>{t("benefit_3_body")}</BulletItem>
-                <BulletItem>{t("intro_pill_2")}</BulletItem>
-                <BulletItem>{t("intro_pill_3")}</BulletItem>
+                <BulletItem>{t("ai_bullet_1")}</BulletItem>
+                <BulletItem>{t("ai_bullet_2")}</BulletItem>
+                <BulletItem>{t("ai_bullet_3")}</BulletItem>
+                <BulletItem>{t("ai_bullet_4")}</BulletItem>
               </ul>
             </AiSideReveal>
             <AiCardReveal>
