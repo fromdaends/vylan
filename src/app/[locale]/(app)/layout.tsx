@@ -23,6 +23,14 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/login" }));
   }
 
+  // MFA gate: if the user enrolled MFA, the session must be at aal2 to
+  // access the app. Supabase's getAuthenticatorAssuranceLevel reports
+  // currentLevel = aal1 + nextLevel = aal2 in that case.
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+    redirect(getPathname({ locale, href: "/login/mfa" }));
+  }
+
   const dbUser = await getCurrentUser();
   const firm = await getCurrentFirm();
 

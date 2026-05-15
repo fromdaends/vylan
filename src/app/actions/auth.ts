@@ -92,6 +92,13 @@ export async function loginAction(
     return { error: "invalid_credentials" };
   }
   const locale = pickLocale(formData);
+  // If the user has MFA enrolled, send them to the challenge page first.
+  // The app layout enforces the same rule as a backstop for any other
+  // entry path (deep links, refresh on a stale aal1 cookie, etc.).
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
+    redirect(localPath(locale, "/login/mfa"));
+  }
   redirect(localPath(locale, "/dashboard"));
 }
 
