@@ -27,8 +27,9 @@ import { brand } from "@/lib/brand";
 // pages: /, /pricing, /pricing/[plan], /faq, /terms, /privacy.
 //
 // Design:
-//   - Sticky to the top of the viewport (`sticky top-0`) — content
-//     scrolls beneath it, the bar itself never moves.
+//   - Fixed to the top of the viewport (`fixed top-0`) — never in
+//     document flow. Each public page adds `pt-16` to its <main> so
+//     content doesn't slide under the nav at scroll=0.
 //   - Glass effect: `bg-background/70` (translucent tint that flips
 //     automatically between light/dark via the CSS variable) +
 //     `.glass-nav` utility (defined in globals.css) which adds the
@@ -78,22 +79,23 @@ export function PublicNav() {
   return (
     <header
       className={
-        "sticky top-0 z-50 glass-nav bg-background/70 " +
+        "fixed top-0 left-0 right-0 z-50 glass-nav bg-background/70 " +
         "border-b border-border/50 " +
         "shadow-[0_4px_24px_-12px_oklch(0.18_0.018_264/0.08)] " +
         "dark:shadow-[0_4px_24px_-12px_oklch(0_0_0/0.4)]"
       }
     >
       <div className="mx-auto max-w-6xl flex items-center justify-between gap-3 px-4 sm:px-6 h-16">
-        {/* Logo + wordmark */}
+        {/* Logo only — wordmark removed per design direction.
+            Responsive size: 40px on mobile, 48px from md up. */}
         <Link
           href="/"
-          className="flex items-center gap-2 font-semibold tracking-tight text-base shrink-0"
+          className="flex items-center shrink-0"
           aria-label={brand.name}
           onClick={closeMobile}
         >
-          <Logo size={28} priority />
-          <span>{brand.name}</span>
+          <Logo size={40} priority className="md:hidden" />
+          <Logo size={48} priority className="hidden md:inline-flex" />
         </Link>
 
         {/* Right cluster — no middle nav links; logo flushes left,
