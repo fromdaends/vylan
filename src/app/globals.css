@@ -513,26 +513,34 @@
     opacity: 0.7;
     will-change: transform;
   }
+  /* Default ("warning") palette — red mesh for the AI rejection
+     sub-section. Class names (blob-iris/purple/pink/cyan) are kept
+     for symmetry with the .variant-success overrides below; only
+     the background colours change. Lightness held in the 0.5-0.65
+     range so the cluster reads darker than the green success
+     palette (0.55-0.8) — a deliberate "warning" tone. Chroma
+     matches the success palette so visual intensity / mesh density
+     are paired. */
   .ai-card-glow-blob.blob-iris {
-    background: oklch(0.62 0.18 264);
+    background: oklch(0.55 0.2 22);
     top: -10%;
     left: -15%;
     animation: ai-card-blob-1 11s ease-in-out infinite;
   }
   .ai-card-glow-blob.blob-purple {
-    background: oklch(0.62 0.22 320);
+    background: oklch(0.5 0.22 14);
     top: -10%;
     right: -15%;
     animation: ai-card-blob-2 13s ease-in-out infinite;
   }
   .ai-card-glow-blob.blob-pink {
-    background: oklch(0.72 0.2 350);
+    background: oklch(0.65 0.2 30);
     bottom: -10%;
     right: -15%;
     animation: ai-card-blob-3 9s ease-in-out infinite;
   }
   .ai-card-glow-blob.blob-cyan {
-    background: oklch(0.72 0.16 210);
+    background: oklch(0.55 0.22 8);
     bottom: -10%;
     left: -15%;
     animation: ai-card-blob-4 15s ease-in-out infinite;
