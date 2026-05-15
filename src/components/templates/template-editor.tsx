@@ -22,7 +22,9 @@ const DOC_TYPES: DocType[] = [
   "t2202", "rrsp", "medical", "donation", "rental",
   "gst_hst_qst", "trial_balance", "gl_export", "financials",
   "shareholder_loan", "payroll_summary", "capital_asset",
-  "inventory", "invoice", "other",
+  "inventory", "invoice",
+  "t1135", "t2125",
+  "other",
 ];
 
 export function TemplateEditor({
