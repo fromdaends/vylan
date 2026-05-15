@@ -2,11 +2,11 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
-import { brand } from "@/lib/brand";
 import { PLANS, PAID_PLANS, type PlanId } from "@/lib/plans";
 import { formatCurrency } from "@/lib/format";
 import { assertLocale } from "@/lib/locale";
-import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
+import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
 
 function isPaidPlanId(value: string): value is Extract<PlanId, "solo" | "cabinet"> {
@@ -27,7 +27,6 @@ export default async function PlanPage({
   }
 
   const t = await getTranslations("Pricing");
-  const tAuth = await getTranslations("Auth");
   const tLanding = await getTranslations("Landing");
 
   const planCfg = PLANS[plan];
@@ -39,24 +38,7 @@ export default async function PlanPage({
 
   return (
     <main className="flex-1 flex flex-col">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-6xl flex items-center justify-between px-6 py-4">
-          <Link href="/" className="font-semibold tracking-tight text-lg">
-            {brand.name}
-          </Link>
-          <nav className="flex items-center gap-2 text-sm">
-            <Link href="/pricing">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="h-3.5 w-3.5" />
-                {tLanding("nav_pricing")}
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button size="sm">{tAuth("create_account")}</Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <PublicNav />
 
       <section className="mx-auto w-full max-w-3xl px-6 py-20">
         <div className="text-center">

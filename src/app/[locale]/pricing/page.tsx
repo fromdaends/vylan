@@ -1,11 +1,10 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { Button } from "@/components/ui/button";
-import { brand } from "@/lib/brand";
 import { PLANS, PAID_PLANS, type PlanId } from "@/lib/plans";
 import { formatCurrency } from "@/lib/format";
 import { assertLocale } from "@/lib/locale";
 import { Check } from "lucide-react";
+import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
 
 export default async function PricingPage({
@@ -17,22 +16,10 @@ export default async function PricingPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
   const t = await getTranslations("Pricing");
-  const tAuth = await getTranslations("Auth");
 
   return (
     <main className="flex-1 flex flex-col">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-6xl flex items-center justify-between px-6 py-4">
-          <Link href="/" className="font-semibold tracking-tight text-lg">
-            {brand.name}
-          </Link>
-          <nav className="flex items-center gap-3 text-sm">
-            <Link href="/signup">
-              <Button size="sm">{tAuth("create_account")}</Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <PublicNav />
 
       <section className="mx-auto max-w-4xl px-6 py-20">
         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-center">

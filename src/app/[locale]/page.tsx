@@ -15,9 +15,8 @@ import {
   Rocket,
   ShieldCheck,
 } from "lucide-react";
+import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { Logo } from "@/components/brand/logo";
 import { ScrollReveal, ParallaxLayer } from "@/components/public/scroll-reveal";
 
 export default async function Home({
@@ -31,52 +30,10 @@ export default async function Home({
   const t = await getTranslations("Landing");
   const tAuth = await getTranslations("Auth");
   const tPricing = await getTranslations("Pricing");
-  const otherLocale = locale === "fr" ? "en" : "fr";
 
   return (
     <main className="relative flex-1 flex flex-col overflow-hidden ambient-warm">
-      {/* Header */}
-      <header className="sticky top-0 z-40 backdrop-blur-md bg-background/80 border-b border-border/60">
-        <div className="nav-shrink mx-auto max-w-6xl flex items-center justify-between px-6 py-3.5">
-          <Link
-            href="/"
-            className="flex items-center gap-2.5 font-semibold tracking-tight text-lg group"
-          >
-            <span className="logo-shrink inline-flex">
-              <Logo
-                size={44}
-                priority
-                className="transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
-              />
-            </span>
-            {brand.name}
-          </Link>
-          <nav className="flex items-center gap-1 text-sm">
-            <Link href="/pricing" className="hidden sm:inline">
-              <Button variant="ghost" size="sm">
-                {t("nav_pricing")}
-              </Button>
-            </Link>
-            <Link href="/" locale={otherLocale}>
-              <Button variant="ghost" size="sm">
-                {otherLocale.toUpperCase()}
-              </Button>
-            </Link>
-            <ThemeToggle className="mx-1" />
-            <Link href="/login">
-              <Button variant="ghost" size="sm">
-                {tAuth("sign_in")}
-              </Button>
-            </Link>
-            <Link href="/signup">
-              <Button size="sm">
-                {tAuth("create_account")}
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <PublicNav />
 
       {/* HERO */}
       <section className="relative overflow-hidden">
