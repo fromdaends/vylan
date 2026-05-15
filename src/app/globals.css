@@ -247,41 +247,51 @@
     -webkit-text-fill-color: transparent;
   }
 
-  /* Floating-pill "matte bubble" treatment for the public nav.
-     Goal: text behind the pill is unreadable, but the pill is still
-     transparent — you can see warm orb colour through it, just not
-     letters. The trick is layering THREE things together:
-       1. An inline SVG fractal-noise texture (background-image #1).
-          Fine-grain noise breaks up any continuous pattern coming
-          through the pill — text glyphs disappear because their
-          edges no longer form coherent shapes against the noise.
-       2. A soft vertical gradient (background-image #2). Slightly
-          lighter at the top, darker at the bottom — gives the
-          "matte bubble surface" feel without a gloss highlight.
-       3. backdrop-filter blur + saturate. Reinforces the matte feel
-          and keeps the underlying orb colours visible through the
-          gradient.
-     Together they let the pill stay ~25-30% see-through (warm orb
-     glow bleeds through) while text behind is mathematically
-     destroyed by the noise layer.
-     The colour values are split light/dark via the .dark selector
-     since the gradient + noise tint differ between themes. */
+  /* Floating-pill "liquid glass" treatment — Apple iOS 26 style.
+     PREVIOUS ATTEMPTS' BUG: tinting the pill the same colour as the
+     page (dark tint on dark page / light tint on light page) lets
+     contrast text bleed straight through any transparency. Light
+     text on a dark page bleeds through ANY uniform dark tint at any
+     opacity because the contrast is mathematically preserved. The
+     fix is a MID-TONE tint that sits between page colour and text
+     colour — it neutralizes the contrast regardless of which side
+     text is on.
+     Layers (back to front):
+       1. backdrop-filter: blur(80px) saturate(200%) — heavy
+          refraction-like blur of everything behind. Warm orb glow
+          stays visible, but text edges become a soft smear.
+       2. Mid-tone base colour (~oklch 0.5 dark / 0.85 light) at
+          ~55% opacity. THIS is the contrast killer — the pill bg
+          sits halfway between page and text in lightness, so neither
+          can punch through with strong contrast.
+       3. A subtle top→down "light catching the bubble surface"
+          gradient via background-image. Brighter at the top edge,
+          fades to nothing by 25% down. This is the "liquid" specular.
+     `isolation: isolate` ensures the pill has its own stacking
+     context — defends backdrop-filter against any ancestor
+     surprises (e.g. framer-motion blur filters on scroll-reveal
+     wrappers elsewhere in the tree). */
   .glass-nav {
-    background-image:
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
-      linear-gradient(180deg,
-        oklch(0.99 0.002 264 / 0.6) 0%,
-        oklch(0.93 0.005 264 / 0.82) 100%);
-    background-repeat: repeat, no-repeat;
-    backdrop-filter: blur(40px) saturate(160%);
-    -webkit-backdrop-filter: blur(40px) saturate(160%);
+    position: relative;
+    isolation: isolate;
+    background-color: oklch(0.85 0.005 264 / 0.5);
+    background-image: linear-gradient(
+      180deg,
+      oklch(1 0 0 / 0.5) 0%,
+      oklch(1 0 0 / 0.2) 6%,
+      oklch(1 0 0 / 0) 22%
+    );
+    backdrop-filter: blur(80px) saturate(200%);
+    -webkit-backdrop-filter: blur(80px) saturate(200%);
   }
   .dark .glass-nav {
-    background-image:
-      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.18 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
-      linear-gradient(180deg,
-        oklch(0.22 0.018 264 / 0.72) 0%,
-        oklch(0.135 0.012 264 / 0.88) 100%);
+    background-color: oklch(0.5 0.015 264 / 0.55);
+    background-image: linear-gradient(
+      180deg,
+      oklch(1 0 0 / 0.28) 0%,
+      oklch(1 0 0 / 0.1) 6%,
+      oklch(1 0 0 / 0) 22%
+    );
   }
 
 
