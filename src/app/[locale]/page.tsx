@@ -242,7 +242,7 @@ export default async function Home({
                 section. Blur-clear + lift over 1.1s reads differently
                 from the standard fade-up that the rest of the page
                 uses, so this section pops. */}
-            <AiSideReveal>
+            <AiSideReveal lateExit>
               <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
                 {t("ai_eyebrow")}
               </div>
@@ -263,7 +263,7 @@ export default async function Home({
                 <BulletItem>{t("ai_bullet_4")}</BulletItem>
               </ul>
             </AiSideReveal>
-            <AiCardReveal>
+            <AiCardReveal lateExit>
               <AiMockCard t={t} />
             </AiCardReveal>
           </div>
