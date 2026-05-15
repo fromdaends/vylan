@@ -3,90 +3,34 @@
 import { useState } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import {
-  ArrowRight,
-  LifeBuoy,
-  Mail,
-  Menu,
-  MessageCircleQuestion,
-  PlayCircle,
-  X,
-} from "lucide-react";
+import { ArrowRight, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Logo } from "@/components/brand/logo";
 import { brand } from "@/lib/brand";
 
-// Floating-pill glassmorphism nav for all public (unauthenticated)
-// pages: /, /pricing, /pricing/[plan], /faq, /terms, /privacy.
+// Floating-pill nav for all public (unauthenticated) pages:
+// /, /pricing, /pricing/[plan], /faq, /terms, /privacy.
 //
 // Structure:
-//   <header>            ← fixed positioning shell, full width,
-//                         pointer-events: none so clicks fall through
-//                         on either side of the pill.
-//     <div pill>        ← the actual visual pill. Rounded-full,
-//                         glass blur, gloss inset, drop shadow.
-//                         pointer-events: auto.
-//       <div h-16>      ← flex row of nav contents.
-//     <div mobile>      ← rounded-3xl panel below the pill, only
-//                         rendered when the hamburger is open.
+//   <header>      ← fixed positioning shell, pointer-events: none so
+//                   clicks fall through on either side of the pill.
+//     <div pill>  ← matte-black pill. pointer-events: auto.
+//     <div mobile> ← rounded panel below the pill, only rendered
+//                    when the hamburger is open.
 //   </header>
 //
-// Visual stack on the pill — MATTE BLACK across both themes:
-//   1. bg-neutral-900    → fixed near-black surface (oklch ~0.205
-//                          neutral). Same colour whether the user is
-//                          in light or dark mode — the pill is
-//                          intentionally theme-independent.
-//   2. `dark` wrapper    → applied to the pill itself so every
-//                          `dark:` variant inside the pill activates,
-//                          which flips the FAQ menu / locale link /
-//                          theme toggle / sign-in button / hamburger
-//                          to their dark-theme appearance regardless
-//                          of the page's actual theme. Without this,
-//                          the buttons would render with light-mode
-//                          dark text on a black pill in light mode.
-//   3. border white/10   → faint 1px definition edge, same in both
-//                          themes since the pill itself doesn't flip.
-//   4. Outer drop shadow → diffused, makes the pill visibly float
-//                          off the page. Single (non-theme-aware)
-//                          shadow now because the pill colour no
-//                          longer flips between themes.
-// No backdrop-filter (the pill is opaque now, so a blur on the
-// backdrop would do nothing visible) — and no inset gloss highlight
-// (matte = no shiny top edge).
+// FAQ used to live inside the pill as a dropdown ("Help" → Tutorials
+// / Questions / Contact). Per founder direction the FAQ moved to a
+// small text link beneath the bottom CTA on the landing page — see
+// `cta_faq_link` in `src/app/[locale]/page.tsx`. The pill is now just
+// logo + locale + theme + sign-in, with the mobile hamburger
+// surfacing the locale/theme controls hidden on small screens.
 //
-// Active route gets a soft pill background tint on the relevant nav
-// item — no underline, calm "ghost button" feel.
-//
-// Mobile (<md): hamburger inside the pill collapses the help items
-// + sign in into a floating rounded panel that sits below the pill
-// with a small gap, matching the same glass styling.
-
-const HELP_ITEMS = [
-  { href: "/tutorials", labelKey: "nav_help_tutorials", icon: PlayCircle },
-  { href: "/faq", labelKey: "nav_help_questions", icon: MessageCircleQuestion },
-] as const;
-
-// Pill visual — matte black plate.
-//   - bg-neutral-900: solid near-black surface, no transparency, no
-//     glass blur. Matte means flat-and-opaque.
-//   - `dark` class on the pill itself: forces all `dark:` variants
-//     of the controls inside (FAQ menu, locale link, ThemeToggle,
-//     Sign in, hamburger) to activate, regardless of the page's
-//     current theme. Without this they'd render dark-on-dark in
-//     light mode.
-//   - border-white/10: faint definition line at the perimeter.
-//   - Single deep drop shadow: still floats off the page. No inset
-//     highlight on the top edge (gloss line would contradict matte).
-//
-// Interactive: a single, calm `hover:scale-[1.025]` with a 300 ms
-// ease-out transition. No tilt, no spotlight.
+// Pill visual: matte black plate (bg-neutral-900) with a `dark`
+// class wrapper so every `dark:` variant inside activates regardless
+// of the page's theme; border-white/10 + a single deep drop shadow
+// make it float.
 const PILL_CLASSES =
   "dark bg-neutral-900 border border-white/10 rounded-full " +
   "transition-transform duration-300 ease-out hover:scale-[1.025] motion-reduce:transition-none motion-reduce:hover:scale-100 " +
@@ -99,10 +43,6 @@ export function PublicNav() {
   const pathname = usePathname();
   const otherLocale = locale === "fr" ? "en" : "fr";
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  // next-intl's pathname excludes the /[locale] prefix, so a string
-  // compare against the route href is correct.
-  const isActive = (href: string) => pathname === href;
 
   function closeMobile() {
     setMobileOpen(false);
@@ -128,44 +68,6 @@ export function PublicNav() {
           {/* Right cluster — no middle nav links; logo flushes left,
               utility + sign in flush right via justify-between. */}
           <div className="flex items-center gap-1 shrink-0">
-            {/* FAQ dropdown — desktop only. Tutorials / Questions /
-                Contact us. Sits in the utility cluster alongside locale
-                + theme + sign in. */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="hidden md:inline-flex"
-                  aria-label={t("nav_faq")}
-                >
-                  <LifeBuoy className="h-3.5 w-3.5" aria-hidden />
-                  {t("nav_faq")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                {HELP_ITEMS.map(({ href, labelKey, icon: Icon }) => (
-                  <DropdownMenuItem key={href} asChild>
-                    <Link
-                      href={href}
-                      className="flex items-center gap-2 cursor-pointer"
-                    >
-                      <Icon className="h-4 w-4" aria-hidden />
-                      {t(labelKey)}
-                    </Link>
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuItem asChild>
-                  <a
-                    href={`mailto:${brand.supportEmail}`}
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <Mail className="h-4 w-4" aria-hidden />
-                    {t("nav_help_contact")}
-                  </a>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
             {/* Locale toggle — desktop only */}
             <Link
               href={pathname}
@@ -210,10 +112,9 @@ export function PublicNav() {
         </div>
       </div>
 
-      {/* Mobile panel — floats as a rounded sibling below the pill
-          with an 8px gap (mt-2). Same glass treatment as the pill so
-          they visually pair. Only rendered when the hamburger is
-          open. */}
+      {/* Mobile panel — surfaces the locale + theme controls that
+          live in the pill on desktop but are hidden on mobile. Only
+          rendered when the hamburger is open. */}
       {mobileOpen && (
         <div
           id="public-nav-mobile"
@@ -225,38 +126,7 @@ export function PublicNav() {
           }
         >
           <div className="px-4 py-3 flex flex-col gap-1">
-            <div className="px-3 pt-1 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
-              {t("nav_faq")}
-            </div>
-            {HELP_ITEMS.map(({ href, labelKey, icon: Icon }) => {
-              const active = isActive(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={closeMobile}
-                  className={
-                    "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium " +
-                    (active
-                      ? "bg-foreground/10 text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-foreground/5")
-                  }
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                  {t(labelKey)}
-                </Link>
-              );
-            })}
-            <a
-              href={`mailto:${brand.supportEmail}`}
-              onClick={closeMobile}
-              className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/5"
-            >
-              <Mail className="h-4 w-4" aria-hidden />
-              {t("nav_help_contact")}
-            </a>
-            <div className="my-2 h-px bg-border/50" />
-            {/* Highlighted Sign in CTA on mobile too. */}
+            {/* Highlighted Sign in CTA on mobile too, for thumb reach. */}
             <Link href="/login" onClick={closeMobile} className="px-1">
               <Button size="sm" className="w-full">
                 {tAuth("sign_in")}
