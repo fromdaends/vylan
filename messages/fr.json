@@ -349,6 +349,7 @@
     "reject_title": "Refuser cette soumission",
     "reject_subtitle": "Dites au client ce qui ne va pas avec « {label} ». Il verra ce message sur son portail.",
     "reject_reason_label": "Motif",
+    "reject_reason_privacy_hint": "Le client verra ce texte tel quel. Évitez d'y inclure son nom ou d'autres détails sensibles.",
     "reject_reason_placeholder": "P. ex. : « C'est votre T4 de 2023 — j'ai besoin de celui de 2024. »",
     "reject_suggestion_wrong_doc": "Mauvais document — j'ai demandé un autre slip.",
     "reject_suggestion_wrong_year": "Mauvaise année — veuillez envoyer le plus récent.",

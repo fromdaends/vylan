@@ -6,9 +6,19 @@ import { formatRelative, type AppLocale } from "@/lib/format";
 export async function ActivityTimeline({
   entries,
   locale,
+  filenamesByFileId,
+  rejectionReasonsByItemId,
 }: {
   entries: ActivityEntry[];
   locale: AppLocale;
+  // Live lookup of the current filename for an uploaded_files row. The
+  // activity row only stores `file_id` (Phase 5) so the timeline reads
+  // the filename from the parent record at render time. If the file is
+  // deleted, the filename is too — that's intentional, retention is
+  // bound to the file's lifecycle rather than the 2-year audit log.
+  filenamesByFileId?: Map<string, string>;
+  // Same shape for the live rejection_reason of a request_item.
+  rejectionReasonsByItemId?: Map<string, string | null>;
 }) {
   const t = await getTranslations("Activity");
 
@@ -32,7 +42,9 @@ export async function ActivityTimeline({
                   aria-hidden
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="leading-snug">{describe(e, t)}</div>
+                  <div className="leading-snug">
+                    {describe(e, t, filenamesByFileId, rejectionReasonsByItemId)}
+                  </div>
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {formatRelative(e.created_at, locale)}
                   </div>
@@ -55,19 +67,37 @@ function actorDot(actor: ActivityEntry["actor_type"]): string {
 function describe(
   entry: ActivityEntry,
   t: Awaited<ReturnType<typeof getTranslations<"Activity">>>,
+  filenamesByFileId?: Map<string, string>,
+  rejectionReasonsByItemId?: Map<string, string | null>,
 ): string {
   const meta = entry.metadata as Record<string, string | undefined>;
   switch (entry.action) {
-    case "client_uploaded":
-      return t("client_uploaded", { filename: meta.filename ?? "—" });
+    case "client_uploaded": {
+      // Prefer the live filename via file_id (new Phase 5 shape).
+      // Fall back to legacy `meta.filename` for rows written before
+      // Phase 5 / before the 0069 backfill ran. After backfill, both
+      // are absent for old rows → display "—".
+      const live = meta.file_id
+        ? filenamesByFileId?.get(meta.file_id)
+        : undefined;
+      const filename = live ?? meta.filename ?? "—";
+      return t("client_uploaded", { filename });
+    }
     case "client_marked_na":
       return t("client_marked_na");
     case "client_undid_na":
       return t("client_undid_na");
     case "approve_item":
       return t("approve_item");
-    case "reject_item":
-      return t("reject_item", { reason: meta.reason ?? "—" });
+    case "reject_item": {
+      // Same pattern: live rejection_reason from the request_items row,
+      // legacy fallback during the transition window.
+      const live = meta.item_id
+        ? rejectionReasonsByItemId?.get(meta.item_id)
+        : undefined;
+      const reason = live ?? meta.reason ?? "—";
+      return t("reject_item", { reason });
+    }
     case "reopen_item":
       return t("reopen_item");
     case "add_item":

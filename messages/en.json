@@ -349,6 +349,7 @@
     "reject_title": "Reject this submission",
     "reject_subtitle": "Tell {label} the client what's wrong. They'll see this message on their portal.",
     "reject_reason_label": "Reason",
+    "reject_reason_privacy_hint": "The client will see this exact text. Avoid including their name or other sensitive details.",
     "reject_reason_placeholder": "E.g. \"This is your 2023 T4 — I need 2024.\"",
     "reject_suggestion_wrong_doc": "Wrong document — I asked for a different slip.",
     "reject_suggestion_wrong_year": "Wrong year — please send the most recent one.",

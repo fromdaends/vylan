@@ -163,9 +163,15 @@ export async function POST(request: NextRequest) {
 
   await setItemStatus(item.id, "submitted", item.engagement_id);
   await markEngagementInProgress(item.engagement_id);
+  // Activity-log metadata MUST NOT contain client PII (Phase 5). The
+  // log row is retained for 2 years; filenames frequently contain
+  // client names ("Jean_Tremblay_T4_2024.pdf") and would survive the
+  // file itself. Store the uploaded_files row id instead — the
+  // timeline UI looks up the live filename at render time, so PII
+  // only lives as long as the file does.
   await logActivity(engagement.firm_id, item.engagement_id, "client_uploaded", {
     item_id: item.id,
-    filename: safeOriginalName,
+    file_id: inserted.id,
     size_bytes: storedBytes.length,
   });
 
