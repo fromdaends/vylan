@@ -420,9 +420,12 @@ function BulletItem({
   variant = "default",
 }: {
   children: React.ReactNode;
-  /** "default" = iris accent check (used everywhere except the AI
-   *  success sub-section). "success" = green check, used in the
-   *  AI-approval mirror sub-section. */
+  /** "default" = iris accent check (used in the AI rejection sub-
+   *  section). "success" = was green, now also the iris accent
+   *  blue per user request — the bullets in the AI approval
+   *  sub-section read more cleanly in blue than in green. Kept as
+   *  a separate variant so we can dial it independently later if
+   *  the success state ever needs a distinct treatment again. */
   variant?: "default" | "success";
 }) {
   return (
@@ -430,7 +433,7 @@ function BulletItem({
       <Check
         className={
           "h-4 w-4 mt-0.5 shrink-0 " +
-          (variant === "success" ? "text-success" : "text-accent")
+          (variant === "success" ? "text-accent" : "text-accent")
         }
         aria-hidden
       />
