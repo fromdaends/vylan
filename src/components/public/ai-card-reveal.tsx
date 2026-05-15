@@ -186,26 +186,42 @@ export function AiCardReveal({
         filter: `blur(${UP_EXIT_BLUR_PX}px)`,
       };
 
-  // Target state — identical to the original/rejection-card logic in
-  // every branch EXCEPT the up-exit branch, which checks `inViewLoose`
-  // first: if still in the extended root, hold at `visible` (the
-  // lateExit linger); only flip to `upExit` once even the loose
-  // observer reports out of view.
+  // Target state.
+  // The scroll-down branch is split:
+  //   - `inViewLoose && _scrollDownRef`: the user has seen this
+  //     section before, is now scrolling down toward it again, and
+  //     the LOOSE observer (extended root) has fired but the STRICT
+  //     observer has NOT. The element is approaching from below.
+  //     Hold target at `initial` so when `inView` fires next, the
+  //     swoop replays cleanly from off-screen. Without this hold,
+  //     `hasEverEntered=true` + scrollDown would snap target to
+  //     `visible` the instant the loose observer fires, which is
+  //     visible to the user as a flash before the swoop.
+  //   - `!inViewLoose && _scrollDownRef`: user has scrolled DOWN
+  //     past the section; element is now ABOVE the viewport.
+  //     Target stays at `visible` (no exit anim, element is
+  //     off-screen anyway).
+  //
+  // The up-exit branch (scrolling UP) is unchanged: still holds at
+  // `visible` while in the extended root (lateExit linger), only
+  // flipping to `upExit` once the loose observer also reports out.
   const target = inView
     ? visible
     : !hasEverEntered.current
       ? initial
       : _scrollDownRef.current
-        ? visible
+        ? inViewLoose
+          ? initial
+          : visible
         : inViewLoose
           ? visible
           : upExit;
 
   const upExitDuration = lateExit ? UP_EXIT_DURATION_LATE : UP_EXIT_DURATION;
-  // Transition — entry duration on entry, no transition on linger
-  // (target hasn't changed from `visible` so no animation fires
-  // anyway, this is just defensive), exit duration when the
-  // fade-out actually triggers.
+  // Transition — entry duration on entry, instant snap on scroll-
+  // down branches (so the new `initial` target above doesn't animate
+  // visibly when the element is below viewport), exit duration when
+  // the up-fade actually triggers.
   const transition = inView
     ? {
         duration: reducedMotion ? REDUCED_DURATION : ENTER_DURATION_CARD,
@@ -223,19 +239,26 @@ export function AiCardReveal({
     variant === "success" ? "ai-card-glow variant-success" : "ai-card-glow";
 
   // Glow opacity tracks the same in-view / scroll-direction logic as
-  // the card, but with its own fade-in duration. CRITICALLY, the
-  // glow's motion.div is NOT key-bumped — it stays mounted across
-  // re-entries, so the four blob CSS animations keep drifting
-  // continuously from page load. That eliminates the "static burst
-  // then suddenly starts moving" handoff: when the section comes
-  // into view, the blobs are already mid-drift and the opacity just
-  // eases up underneath the motion.
+  // the card, including the re-entry hold-initial fix: when the user
+  // is scrolling DOWN toward the section and the loose observer has
+  // fired but the strict one hasn't, hold glow at opacity:0 instead
+  // of snapping to 1. The opacity fade-in then plays cleanly when
+  // inView fires, matching first-entry behaviour.
+  //
+  // CRITICALLY, the glow's motion.div is NOT key-bumped — it stays
+  // mounted across re-entries, so the four blob CSS animations keep
+  // drifting continuously from page load. That eliminates the "static
+  // burst then suddenly starts moving" handoff: when the section
+  // comes into view, the blobs are already mid-drift and the opacity
+  // just eases up underneath the motion.
   const glowTarget = inView
     ? { opacity: 1 }
     : !hasEverEntered.current
       ? { opacity: 0 }
       : _scrollDownRef.current
-        ? { opacity: 1 }
+        ? inViewLoose
+          ? { opacity: 0 }
+          : { opacity: 1 }
         : inViewLoose
           ? { opacity: 1 }
           : { opacity: 0 };
@@ -330,12 +353,18 @@ export function AiSideReveal({
     ? { opacity: 0 }
     : { opacity: 0, y: 20, filter: `blur(${UP_EXIT_BLUR_PX}px)` };
 
+  // Same re-entry hold-initial logic as AiCardReveal — see comment
+  // there. When scrolling DOWN toward the section, loose observer
+  // hit but strict not yet → hold `initial` so the fade-up replays
+  // cleanly from scratch when inView fires.
   const target = inView
     ? visible
     : !hasEverEntered.current
       ? initial
       : _scrollDownRef.current
-        ? visible
+        ? inViewLoose
+          ? initial
+          : visible
         : inViewLoose
           ? visible
           : upExit;
