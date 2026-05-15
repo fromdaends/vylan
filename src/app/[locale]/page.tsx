@@ -182,29 +182,12 @@ export default async function Home({
       </section>
 
       {/* AI Document Checks — dedicated centerpiece section.
-          Two-column on desktop, mock card on the right with an accent
-          glow halo behind it to draw the reader's eye. The third
-          "Features" card (AI) was removed in favor of this richer
-          treatment so the AI message lives in one prominent place. */}
+          Two-column on desktop, mock card on the right. The card
+          carries its own animated aurora glow (via <AiCardReveal>),
+          so the section-level ParallaxLayer halo that used to sit
+          here was removed — it was leaving a stray iris orb visible
+          off to the right of the card. */}
       <section className="relative">
-        {/* Glow halo: large accent orb sits behind the mock card to
-            give the section a warm spotlight. Parallax-drifted so it
-            stays alive while reading. */}
-        <ParallaxLayer
-          intensity={80}
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_60%_70%_at_70%_50%,black,transparent_75%)]"
-        >
-          <div aria-hidden>
-            <div
-              className="orb orb-iris h-[640px] w-[640px] top-[40px] -right-[120px] opacity-90"
-              style={{ animationDelay: "-2s" }}
-            />
-            <div
-              className="orb orb-coral h-[420px] w-[420px] top-[260px] right-[20%] opacity-70"
-              style={{ animationDelay: "-8s" }}
-            />
-          </div>
-        </ParallaxLayer>
         <div className="mx-auto max-w-6xl px-6 py-28 sm:py-32">
           <div className="grid gap-12 md:grid-cols-2 md:items-center">
             {/* AiSideReveal — a distinct entrance reserved for the AI
