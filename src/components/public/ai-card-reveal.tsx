@@ -1,28 +1,36 @@
 "use client";
 
-import { motion, useReducedMotion } from "framer-motion";
-import { type ReactNode } from "react";
+import { motion, useInView, useReducedMotion } from "framer-motion";
+import { useRef, type ReactNode } from "react";
 
-// Premium scroll-triggered reveal + animated mesh-blended aurora
-// glow for the AI document checks card on the landing page.
+// Scroll-triggered reveal + mesh-blended aurora glow for the AI
+// document checks card on the landing page.
 //
-// Wraps the existing <AiMockCard /> (its content + copy stay
-// untouched). Provides:
-//   - Slide-in from the right with fade + subtle scale, 900 ms
-//     ease-out via cubic-bezier(0.22, 1, 0.36, 1). Triggered once
-//     by framer-motion's `useInView` (Intersection-Observer-backed)
-//     when ~30% of the section is in view.
-//   - Four sibling `.ai-card-glow-blob` divs (iris, purple, pink,
-//     cyan) inside a `.ai-card-glow` container behind the card.
-//     Each blob drifts independently on its own keyframe; the
-//     container's filter:blur merges them into a smooth, aurora-
-//     like mesh. No rotating element → no "cube" feel.
+// Replay behaviour
+//   The first version used `whileInView` with `once: true`, which
+//   only fired the animation a single time per page load. Users
+//   scrolling away and back saw nothing the second time.
 //
-// prefers-reduced-motion:
-//   - Wrapper drops the slide + scale (fade only).
-//   - Glow blob drifts slow to 40s + reduced opacity in globals.css.
+//   Now: `useInView` drives the animate state directly.
+//     - Element enters viewport → animate to visible over the
+//       normal duration.
+//     - Element leaves viewport → snap back to initial with
+//       duration 0. The user is scrolling away at that moment, so
+//       they never see the snap.
+//     - Next entry replays the animation from initial → visible.
+//   Re-entries from either direction replay; the snap-on-exit
+//   prevents a visible "reverse" animation while the user is
+//   scrolling past.
+
+const ENTER_DURATION_CARD = 0.9;
+const ENTER_DURATION_SIDE = 1.1;
+const REDUCED_DURATION = 0.4;
+const EASE = [0.22, 1, 0.36, 1] as const;
+const INVIEW_OPTS = { amount: 0.3, margin: "0px 0px -10% 0px" } as const;
 
 export function AiCardReveal({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, INVIEW_OPTS);
   const reducedMotion = useReducedMotion();
 
   const initial = reducedMotion
@@ -31,16 +39,21 @@ export function AiCardReveal({ children }: { children: ReactNode }) {
   const visible = reducedMotion
     ? { opacity: 1 }
     : { opacity: 1, x: 0, scale: 1 };
+  const enterDuration = reducedMotion ? REDUCED_DURATION : ENTER_DURATION_CARD;
 
   return (
     <motion.div
+      ref={ref}
       className="relative"
       initial={initial}
-      whileInView={visible}
-      viewport={{ once: true, amount: 0.3, margin: "0px 0px -10% 0px" }}
+      animate={inView ? visible : initial}
       transition={{
-        duration: reducedMotion ? 0.4 : 0.9,
-        ease: [0.22, 1, 0.36, 1],
+        // Animate IN over the normal duration. Snap back to initial
+        // with duration 0 when leaving — user's scrolling past so
+        // the snap is invisible, but it resets the element so the
+        // next entry replays cleanly.
+        duration: inView ? enterDuration : 0,
+        ease: EASE,
       }}
     >
       <div className="ai-card-glow" aria-hidden>
@@ -56,12 +69,12 @@ export function AiCardReveal({ children }: { children: ReactNode }) {
 
 // Distinct entrance for the LEFT side of the AI section
 // (eyebrow + heading + body + bullets). Differentiator vs. the rest
-// of the page's standard ScrollReveal fade-up: this one combines
-// a longer 1.1s duration with a blur-clear effect so the text
-// resolves into focus rather than just sliding in. Paired with the
-// card's slide-in from the right, the whole section reads as a
-// "lit-up" reveal vs. the calmer fade-ups elsewhere on the page.
+// of the page: 1.1s blur-clear + small lift, paired with the card's
+// slide-from-right. Same enter-on-view / snap-on-exit replay
+// behaviour as AiCardReveal.
 export function AiSideReveal({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, INVIEW_OPTS);
   const reducedMotion = useReducedMotion();
 
   const initial = reducedMotion
@@ -70,15 +83,16 @@ export function AiSideReveal({ children }: { children: ReactNode }) {
   const visible = reducedMotion
     ? { opacity: 1 }
     : { opacity: 1, y: 0, filter: "blur(0px)" };
+  const enterDuration = reducedMotion ? REDUCED_DURATION : ENTER_DURATION_SIDE;
 
   return (
     <motion.div
+      ref={ref}
       initial={initial}
-      whileInView={visible}
-      viewport={{ once: true, amount: 0.3, margin: "0px 0px -10% 0px" }}
+      animate={inView ? visible : initial}
       transition={{
-        duration: reducedMotion ? 0.4 : 1.1,
-        ease: [0.22, 1, 0.36, 1],
+        duration: inView ? enterDuration : 0,
+        ease: EASE,
       }}
     >
       {children}
