@@ -490,25 +490,25 @@
     background: oklch(0.62 0.18 264);
     top: -10%;
     left: -15%;
-    animation: ai-card-blob-1 14s ease-in-out infinite;
+    animation: ai-card-blob-1 11s ease-in-out infinite;
   }
   .ai-card-glow-blob.blob-purple {
     background: oklch(0.62 0.22 320);
     top: -10%;
     right: -15%;
-    animation: ai-card-blob-2 17s ease-in-out infinite;
+    animation: ai-card-blob-2 13s ease-in-out infinite;
   }
   .ai-card-glow-blob.blob-pink {
     background: oklch(0.72 0.2 350);
     bottom: -10%;
     right: -15%;
-    animation: ai-card-blob-3 12s ease-in-out infinite;
+    animation: ai-card-blob-3 9s ease-in-out infinite;
   }
   .ai-card-glow-blob.blob-cyan {
     background: oklch(0.72 0.16 210);
     bottom: -10%;
     left: -15%;
-    animation: ai-card-blob-4 19s ease-in-out infinite;
+    animation: ai-card-blob-4 15s ease-in-out infinite;
   }
   .dark .ai-card-glow-blob {
     opacity: 0.5;
