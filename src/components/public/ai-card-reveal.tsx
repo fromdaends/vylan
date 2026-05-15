@@ -64,7 +64,23 @@ const INVIEW_OPTS = { amount: 0.3, margin: "0px 0px -10% 0px" } as const;
 
 // --- Card -------------------------------------------------------------
 
-export function AiCardReveal({ children }: { children: ReactNode }) {
+export function AiCardReveal({
+  children,
+  direction = "right",
+  variant = "warning",
+}: {
+  children: ReactNode;
+  /** Entry-swoop direction. "right" = card slides in from the right
+   *  (default, original behaviour). "left" = mirror, for the
+   *  success-state sub-section below the original. */
+  direction?: "right" | "left";
+  /** Aurora glow palette. "warning" = original iris/purple/pink/cyan
+   *  warm-cool mesh (used by the AI-rejection sub-section).
+   *  "success" = emerald/forest/mint/teal mesh (used by the AI-
+   *  approval sub-section). Maps to the `.variant-success` selector
+   *  in globals.css which overrides each blob's background. */
+  variant?: "warning" | "success";
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, INVIEW_OPTS);
   const reducedMotion = useReducedMotion();
@@ -74,7 +90,7 @@ export function AiCardReveal({ children }: { children: ReactNode }) {
   if (inView) hasEverEntered.current = true;
 
   // Bump on every fresh DOWN entry — forces the inner motion.div to
-  // remount from `initial`, which guarantees the slide-from-right
+  // remount from `initial`, which guarantees the slide-from-edge
   // plays every time the section comes into view from below.
   const [entryKey, setEntryKey] = useState(0);
   const wasInViewRef = useRef(false);
@@ -85,9 +101,11 @@ export function AiCardReveal({ children }: { children: ReactNode }) {
     wasInViewRef.current = inView;
   }, [inView]);
 
+  const x0 = direction === "left" ? -60 : 60;
+
   const initial = reducedMotion
     ? { opacity: 0 }
-    : { opacity: 0, x: 60, scale: 0.95, filter: "blur(0px)", y: 0 };
+    : { opacity: 0, x: x0, scale: 0.95, filter: "blur(0px)", y: 0 };
   const visible = reducedMotion
     ? { opacity: 1 }
     : { opacity: 1, x: 0, scale: 1, filter: "blur(0px)", y: 0 };
@@ -120,6 +138,9 @@ export function AiCardReveal({ children }: { children: ReactNode }) {
         ? { duration: 0 }
         : { duration: UP_EXIT_DURATION, ease: EASE_IN };
 
+  const glowClass =
+    variant === "success" ? "ai-card-glow variant-success" : "ai-card-glow";
+
   return (
     <div ref={ref}>
       <motion.div
@@ -129,7 +150,7 @@ export function AiCardReveal({ children }: { children: ReactNode }) {
         animate={target}
         transition={transition}
       >
-        <div className="ai-card-glow" aria-hidden>
+        <div className={glowClass} aria-hidden>
           <div className="ai-card-glow-blob blob-iris" />
           <div className="ai-card-glow-blob blob-purple" />
           <div className="ai-card-glow-blob blob-pink" />

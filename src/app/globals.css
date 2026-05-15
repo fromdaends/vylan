@@ -540,6 +540,22 @@
   .dark .ai-card-glow-blob {
     opacity: 0.5;
   }
+  /* Success-state palette — mirrors the warning palette structure
+     (four blobs at the same four corners, same animations, same
+     opacities) but in green hues. Used by the AI-approval mirror
+     sub-section below the AI document-checks rejection one. */
+  .ai-card-glow.variant-success .ai-card-glow-blob.blob-iris {
+    background: oklch(0.7 0.18 155);
+  }
+  .ai-card-glow.variant-success .ai-card-glow-blob.blob-purple {
+    background: oklch(0.55 0.2 140);
+  }
+  .ai-card-glow.variant-success .ai-card-glow-blob.blob-pink {
+    background: oklch(0.8 0.16 165);
+  }
+  .ai-card-glow.variant-success .ai-card-glow-blob.blob-cyan {
+    background: oklch(0.72 0.16 178);
+  }
   @media (max-width: 767px) {
     .ai-card-glow {
       inset: -24px;

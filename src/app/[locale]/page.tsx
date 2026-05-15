@@ -269,6 +269,48 @@ export default async function Home({
         </div>
       </section>
 
+      {/* AI Document Checks — success-state mirror sub-section.
+          Same shell as the rejection sub-section above (max-w-6xl,
+          py-28 sm:py-32, gap-12, md:grid-cols-2, md:items-center)
+          so the two visually pair as a before/after.
+          JSX order is reversed (card first, side text second) so:
+            - on desktop the card sits in column 1 (left) and the
+              text in column 2 (right) — the mirror of the section
+              above;
+            - on mobile (single column) the card stacks first,
+              reinforcing the "result you get" framing.
+          The card swoops in from the LEFT via
+          <AiCardReveal direction="left">, mirroring the right-swoop
+          of the rejection card. The aurora glow uses variant="success"
+          which swaps the iris/purple/pink/cyan blobs for green hues
+          (see .ai-card-glow.variant-success in globals.css). */}
+      <section className="relative">
+        <div className="mx-auto max-w-6xl px-6 py-28 sm:py-32">
+          <div className="grid gap-12 md:grid-cols-2 md:items-center">
+            <AiCardReveal direction="left" variant="success">
+              <AiMockCard t={t} variant="success" />
+            </AiCardReveal>
+            <AiSideReveal>
+              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
+                {t("ai_eyebrow")}
+              </div>
+              <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-[1.05] text-gradient-warm">
+                {t("ai_v2_title")}
+              </h2>
+              <p className="mt-6 text-base sm:text-lg text-muted-foreground leading-relaxed">
+                {t("ai_v2_body")}
+              </p>
+              <ul className="mt-8 space-y-3 text-sm">
+                <BulletItem variant="success">{t("ai_v2_bullet_1")}</BulletItem>
+                <BulletItem variant="success">{t("ai_v2_bullet_2")}</BulletItem>
+                <BulletItem variant="success">{t("ai_v2_bullet_3")}</BulletItem>
+                <BulletItem variant="success">{t("ai_v2_bullet_4")}</BulletItem>
+              </ul>
+            </AiSideReveal>
+          </div>
+        </div>
+      </section>
+
       {/* Features */}
       <section className="relative">
         <div className="mx-auto max-w-5xl px-6 py-24">
@@ -372,26 +414,51 @@ function IntroPill({ children }: { children: React.ReactNode }) {
   );
 }
 
-function BulletItem({ children }: { children: React.ReactNode }) {
+function BulletItem({
+  children,
+  variant = "default",
+}: {
+  children: React.ReactNode;
+  /** "default" = iris accent check (used everywhere except the AI
+   *  success sub-section). "success" = green check, used in the
+   *  AI-approval mirror sub-section. */
+  variant?: "default" | "success";
+}) {
   return (
     <li className="flex items-start gap-2.5 text-muted-foreground">
-      <Check className="h-4 w-4 mt-0.5 text-accent shrink-0" aria-hidden />
+      <Check
+        className={
+          "h-4 w-4 mt-0.5 shrink-0 " +
+          (variant === "success" ? "text-success" : "text-accent")
+        }
+        aria-hidden
+      />
       <span className="leading-relaxed text-foreground/85">{children}</span>
     </li>
   );
 }
 
-// Mock card for the AI Document Checks section. Mimics what the
-// accountant sees when the AI auto-rejects a file: filename header,
-// "right-doc detection" badge, dark preview area, and a red rejection
-// alert below explaining the issue. The animated multi-colour glow
-// behind it comes from <AiCardReveal> (renders an .ai-card-glow
-// sibling div) — no .featured-card class on this card any more.
+// Mock card for the AI Document Checks section. Two variants share
+// the same structure (filename header, badge, file-preview area,
+// callout box at the bottom). The animated multi-colour glow behind
+// the card comes from <AiCardReveal>'s `.ai-card-glow` sibling div.
+//
+//   variant="warning"  →  the rejection / problem state (default).
+//                         Red destructive tokens, em-dash in
+//                         filename, no decoration on the file icon,
+//                         body warns about the wrong slip.
+//   variant="success"  →  the approval / mirror state. Green success
+//                         tokens, hyphen in filename, small green
+//                         check badge overlapping the file icon,
+//                         body confirms everything is filed.
 function AiMockCard({
   t,
+  variant = "warning",
 }: {
   t: Awaited<ReturnType<typeof getTranslations<"Landing">>>;
+  variant?: "warning" | "success";
 }) {
+  const isSuccess = variant === "success";
   return (
     <div
       className={
@@ -401,26 +468,61 @@ function AiMockCard({
       }
     >
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-medium text-foreground">T4 — 2025</p>
-        <span className="inline-flex items-center gap-1 rounded-md bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive uppercase tracking-wider">
-          {t("benefit_3_label")}
+        <p className="text-sm font-medium text-foreground">
+          {isSuccess ? "T4 - 2025" : "T4 — 2025"}
+        </p>
+        <span
+          className={
+            "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider " +
+            (isSuccess
+              ? "bg-success/15 text-success"
+              : "bg-destructive/15 text-destructive")
+          }
+        >
+          {isSuccess ? t("ai_v2_card_badge") : t("benefit_3_label")}
         </span>
       </div>
       <div
         className="mt-4 rounded-lg border border-border/60 bg-muted/40 aspect-[4/3] flex items-center justify-center"
         aria-hidden
       >
-        <FileCheck
-          className="h-10 w-10 text-muted-foreground/30"
-          aria-hidden
-        />
+        <div className="relative">
+          <FileCheck
+            className="h-10 w-10 text-muted-foreground/30"
+            aria-hidden
+          />
+          {isSuccess && (
+            <span
+              className={
+                "absolute -bottom-1.5 -right-1.5 inline-flex h-6 w-6 " +
+                "items-center justify-center rounded-full bg-success " +
+                "text-success-foreground ring-2 ring-card shadow-sm"
+              }
+              aria-hidden
+            >
+              <Check className="h-3.5 w-3.5" aria-hidden />
+            </span>
+          )}
+        </div>
       </div>
-      <div className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3">
-        <p className="text-xs sm:text-sm font-semibold text-destructive">
-          {t("feature_3_title")}
+      <div
+        className={
+          "mt-4 rounded-lg px-4 py-3 " +
+          (isSuccess
+            ? "border border-success/40 bg-success/5"
+            : "border border-destructive/40 bg-destructive/5")
+        }
+      >
+        <p
+          className={
+            "text-xs sm:text-sm font-semibold " +
+            (isSuccess ? "text-success" : "text-destructive")
+          }
+        >
+          {isSuccess ? t("ai_v2_card_callout_title") : t("feature_3_title")}
         </p>
         <p className="mt-1 text-xs sm:text-sm text-foreground/80 leading-relaxed">
-          {t("feature_3_body")}
+          {isSuccess ? t("ai_v2_card_callout_body") : t("feature_3_body")}
         </p>
       </div>
     </div>
