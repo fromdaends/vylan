@@ -161,6 +161,28 @@ describe("parseClassification", () => {
     expect(out?.usability.all_issues).toEqual(["text_unreadable"]);
   });
 
+  it("accepts t1135 and t2125 as valid document_type values", () => {
+    const t1135 = parseClassification({
+      document_type: "t1135",
+      confidence: 0.88,
+      extracted_year: 2024,
+      extracted_amount_or_total: null,
+      looks_correct: true,
+      issue_if_any: null,
+    });
+    expect(t1135?.document_type).toBe("t1135");
+
+    const t2125 = parseClassification({
+      document_type: "t2125",
+      confidence: 0.91,
+      extracted_year: 2024,
+      extracted_amount_or_total: 42500,
+      looks_correct: true,
+      issue_if_any: null,
+    });
+    expect(t2125?.document_type).toBe("t2125");
+  });
+
   it("clamps usability_confidence into [0,1]", () => {
     const hi = parseClassification({
       document_type: "t4",

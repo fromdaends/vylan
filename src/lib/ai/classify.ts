@@ -45,7 +45,9 @@ const KNOWN_DOC_TYPES: DocType[] = [
   "t2202", "rrsp", "medical", "donation", "rental",
   "gst_hst_qst", "trial_balance", "gl_export", "financials",
   "shareholder_loan", "payroll_summary", "capital_asset",
-  "inventory", "invoice", "other",
+  "inventory", "invoice",
+  "t1135", "t2125",
+  "other",
 ];
 
 const CLASSIFY_TOOL = {
@@ -152,6 +154,12 @@ Canadian tax document reference (use these exact identifiers):
 - t3 = T3 federal trust income slip
 - rl16 = Quebec RL-16
 - t2202 = T2202 tuition slip
+- t1135 = T1135 Foreign Income Verification Statement (required when the
+  client held more than CAD $100,000 in foreign property at any point
+  during the year — foreign stocks/ETFs in a non-registered account,
+  foreign rental property, foreign bank accounts, etc.)
+- t2125 = T2125 Statement of Business or Professional Activities
+  (self-employment / freelance / small-business income and expenses)
 - noa = Notice of Assessment from CRA
 - bank_statement = monthly bank statement
 - credit_card_statement = monthly credit card statement
