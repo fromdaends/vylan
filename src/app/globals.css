@@ -260,58 +260,6 @@
     -webkit-backdrop-filter: blur(40px) saturate(200%);
   }
 
-  /* Interactive pill: tilt-on-hover + cursor-following spotlight.
-     Stacks on top of .glass-nav. Wraps the pill so:
-       - The host element gets a smooth transition for the tilt
-         reset (the tilt itself is JS-driven and applied with
-         `transition: 0ms` so it follows the cursor frame-perfectly,
-         while mouseLeave restores the default transition for a
-         clean spring-back).
-       - A ::before layer renders a soft radial gradient ("spotlight")
-         centred on the cursor — `--mouse-x` and `--mouse-y` CSS
-         variables get updated by the same pointer handler. Visible
-         only on :hover. Skips reduced-motion users since they'll
-         already have the JS tilt disabled.
-     `transform-style: preserve-3d` keeps child content sitting
-     "inside" the tilted glass plane rather than flickering. */
-  .glass-pill-hover {
-    position: relative;
-    transition: transform 400ms cubic-bezier(0.2, 0.8, 0.2, 1);
-    will-change: transform;
-    transform-style: preserve-3d;
-  }
-  .glass-pill-hover::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    background: radial-gradient(
-      240px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      oklch(1 0 0 / 0.18) 0%,
-      transparent 60%
-    );
-    opacity: 0;
-    transition: opacity 300ms ease-out;
-  }
-  .glass-pill-hover:hover::before {
-    opacity: 1;
-  }
-  .dark .glass-pill-hover::before {
-    background: radial-gradient(
-      240px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      oklch(1 0 0 / 0.1) 0%,
-      transparent 60%
-    );
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .glass-pill-hover {
-      transition: none;
-    }
-    .glass-pill-hover::before {
-      display: none;
-    }
-  }
 
   /* --- Bolder utilities --- */
 
