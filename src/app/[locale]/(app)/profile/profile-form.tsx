@@ -32,6 +32,7 @@ import {
 } from "@/app/actions/profile";
 import { updateFirmSettings } from "@/app/actions/settings";
 import { type SettingsState } from "@/app/actions/settings.schema";
+import { MfaSection } from "@/components/profile/mfa-section";
 
 type ProfileUser = {
   id: string;
@@ -53,12 +54,14 @@ export function ProfileForm({
   firm,
   avatarUrl,
   firmLogoUrl,
+  mfaEnabled,
 }: {
   user: ProfileUser;
   displayLabel: string;
   firm: FirmInfo;
   avatarUrl: string | null;
   firmLogoUrl: string | null;
+  mfaEnabled: boolean;
 }) {
   const t = useTranslations("Profile");
   const tc = useTranslations("Common");
@@ -83,6 +86,7 @@ export function ProfileForm({
       />
       <EmailSection email={user.email} t={t} />
       <PasswordSection t={t} tc={tc} />
+      <MfaSection initialEnabled={mfaEnabled} />
 
       <Divider />
 

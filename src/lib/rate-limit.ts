@@ -25,6 +25,10 @@ export type LimitSpec = {
 export const LOGIN_LIMIT: LimitSpec = { limit: 8, window: "1 m" };
 export const SIGNUP_LIMIT: LimitSpec = { limit: 5, window: "1 h" };
 export const PASSWORD_RESET_LIMIT: LimitSpec = { limit: 5, window: "1 h" };
+// MFA verify — separate from LOGIN_LIMIT because the user is already
+// past the password gate at this point. Tighter cap because each
+// attempt is a guess at a small (6-digit / 12-hex) secret.
+export const MFA_VERIFY_LIMIT: LimitSpec = { limit: 5, window: "5 m" };
 
 // Portal endpoints — token-scoped (the magic token is the identity).
 export const PORTAL_UPLOAD_PER_TOKEN: LimitSpec = { limit: 30, window: "1 h" };

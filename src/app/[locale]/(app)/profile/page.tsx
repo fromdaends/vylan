@@ -33,10 +33,16 @@ export default async function ProfilePage({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const [avatarUrl, firmLogoUrl] = await Promise.all([
+  const [avatarUrl, firmLogoUrl, mfaFactors] = await Promise.all([
     getBrandingImageUrl(user.avatar_path),
     getBrandingImageUrl(firm.logo_url),
+    supabase.auth.mfa.listFactors(),
   ]);
+  // A user has MFA "enabled" only when they have a verified TOTP factor.
+  // Unverified factors are mid-enrollment leftovers and don't count.
+  const mfaEnabled = (mfaFactors.data?.totp ?? []).some(
+    (f) => f.status === "verified",
+  );
   const t = await getTranslations("Profile");
 
   return (
@@ -62,6 +68,7 @@ export default async function ProfilePage({
         }}
         avatarUrl={avatarUrl}
         firmLogoUrl={firmLogoUrl}
+        mfaEnabled={mfaEnabled}
       />
     </div>
   );
