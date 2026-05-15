@@ -275,7 +275,7 @@
   .orb {
     position: absolute;
     border-radius: 9999px;
-    filter: blur(60px);
+    filter: blur(80px);
     pointer-events: none;
     transform: translateZ(0);
     will-change: transform, opacity;
@@ -357,18 +357,19 @@
       transparent 70%
     );
   }
-  /* Peach — softer warm light. */
+  /* Peach — warm amber that fills the gap between the side orbs
+     and the centre column in the hero cluster. */
   .orb-peach {
     background: radial-gradient(
       circle,
-      oklch(0.85 0.13 60 / 0.6) 0%,
+      oklch(0.8 0.2 60 / 0.7) 0%,
       transparent 70%
     );
   }
   .dark .orb-peach {
     background: radial-gradient(
       circle,
-      oklch(0.86 0.14 60 / 0.4) 0%,
+      oklch(0.82 0.2 60 / 0.55) 0%,
       transparent 70%
     );
   }
