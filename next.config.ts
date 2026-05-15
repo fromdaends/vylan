@@ -39,6 +39,17 @@ const nextConfig: NextConfig = {
       // The 25 MB buffer leaves headroom for multipart-encoding overhead.
       bodySizeLimit: "25mb",
     },
+    // Client-side router cache windows. Defaults are 0s for dynamic
+    // pages, which means every tab click hits the server. Caching for
+    // 30s makes "click back to a tab I just visited" instant — no
+    // network round trip at all. Static pages (landing, /faq, /pricing)
+    // cache for 5 min. Cache invalidation from our server actions
+    // (revalidatePath) still propagates correctly; this only affects
+    // navigations that happen without an intervening mutation.
+    staleTimes: {
+      dynamic: 30,
+      static: 300,
+    },
   },
   async headers() {
     return [
