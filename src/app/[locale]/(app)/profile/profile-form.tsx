@@ -26,6 +26,8 @@ import {
   removeAvatarAction,
   updateDisplayNameAction,
   changePasswordAction,
+  updateFirmLogoAction,
+  removeFirmLogoAction,
   type ProfileActionResult,
 } from "@/app/actions/profile";
 import {
@@ -52,11 +54,13 @@ export function ProfileForm({
   displayLabel,
   firm,
   avatarUrl,
+  firmLogoUrl,
 }: {
   user: ProfileUser;
   displayLabel: string;
   firm: FirmInfo;
   avatarUrl: string | null;
+  firmLogoUrl: string | null;
 }) {
   const t = useTranslations("Profile");
   const tc = useTranslations("Common");
@@ -86,6 +90,13 @@ export function ProfileForm({
 
       {/* ──── Firm ──── */}
       <SectionHeader title={t("group_firm")} subtitle={t("group_firm_hint")} />
+      <FirmLogoSection
+        firmLogoUrl={firmLogoUrl}
+        firmName={firm.name}
+        firmBrandColor={firm.brand_color}
+        t={t}
+        tc={tc}
+      />
       <FirmSection initial={firm} t={t} tc={tc} />
     </div>
   );
@@ -202,6 +213,109 @@ function AvatarSection({
               disabled={pending}
             >
               {t("remove_picture")}
+            </Button>
+          )}
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+          className="hidden"
+          onChange={onChange}
+        />
+      </div>
+      {error && <p className="mt-3 text-xs text-destructive">{error}</p>}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firm logo — mirrors AvatarSection but writes to firms.logo_url and is
+// scoped to the whole firm (any member sees the change after refresh).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function FirmLogoSection({
+  firmLogoUrl,
+  firmName,
+  firmBrandColor,
+  t,
+  tc,
+}: {
+  firmLogoUrl: string | null;
+  firmName: string;
+  firmBrandColor: string;
+  t: (k: string) => string;
+  tc: (k: string) => string;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(firmLogoUrl);
+
+  function onPick() {
+    inputRef.current?.click();
+  }
+
+  function onChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    startTransition(async () => {
+      const res = await updateFirmLogoAction(fd);
+      if (!res.ok) {
+        setError(t(`errors.${res.error}`) || tc("loading"));
+        return;
+      }
+      if (res.signedUrl) setPreview(res.signedUrl);
+    });
+  }
+
+  function onRemove() {
+    setError(null);
+    startTransition(async () => {
+      const res = await removeFirmLogoAction();
+      if (!res.ok) {
+        setError(t(`errors.${res.error}`) || tc("loading"));
+        return;
+      }
+      setPreview(null);
+    });
+  }
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold">{t("section_firm_logo")}</h2>
+      <p className="text-xs text-muted-foreground mt-1">
+        {t("section_firm_logo_hint")}
+      </p>
+      <div className="mt-4 flex items-center gap-4">
+        <AvatarInitials
+          src={preview ?? undefined}
+          name={firmName}
+          size={64}
+          color={firmBrandColor}
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onPick}
+            disabled={pending}
+          >
+            {pending ? t("uploading") : t("change_firm_logo")}
+          </Button>
+          {preview && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={onRemove}
+              disabled={pending}
+            >
+              {t("remove_firm_logo")}
             </Button>
           )}
         </div>

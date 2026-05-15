@@ -52,6 +52,7 @@ export async function updateCurrentFirm(
       | "invited_emails"
       | "onboarded_at"
       | "auto_reject_unusable_docs"
+      | "logo_url"
     >
   >,
 ): Promise<Firm> {

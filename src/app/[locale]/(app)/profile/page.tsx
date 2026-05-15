@@ -33,7 +33,10 @@ export default async function ProfilePage({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const avatarUrl = await getBrandingImageUrl(user.avatar_path);
+  const [avatarUrl, firmLogoUrl] = await Promise.all([
+    getBrandingImageUrl(user.avatar_path),
+    getBrandingImageUrl(firm.logo_url),
+  ]);
   const t = await getTranslations("Profile");
 
   return (
@@ -58,6 +61,7 @@ export default async function ProfilePage({
           locale_default: firm.locale_default,
         }}
         avatarUrl={avatarUrl}
+        firmLogoUrl={firmLogoUrl}
       />
     </div>
   );
