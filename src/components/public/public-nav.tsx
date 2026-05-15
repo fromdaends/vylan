@@ -81,7 +81,7 @@ const HELP_ITEMS = [
 // ease-out transition. No tilt, no spotlight — the previous version
 // hammered too much. Just a subtle "expand on hover".
 const PILL_CLASSES =
-  "glass-nav bg-background/55 border border-foreground/10 rounded-full " +
+  "glass-nav bg-background/65 border border-foreground/10 rounded-full " +
   "transition-transform duration-300 ease-out hover:scale-[1.025] motion-reduce:transition-none motion-reduce:hover:scale-100 " +
   "shadow-[0_12px_40px_-10px_rgba(15,18,30,0.15),inset_0_1px_0_rgba(255,255,255,0.7),inset_0_-1px_0_rgba(0,0,0,0.03)] " +
   "dark:shadow-[0_12px_40px_-10px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.25)]";
