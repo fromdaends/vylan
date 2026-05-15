@@ -38,23 +38,28 @@ import { brand } from "@/lib/brand";
 //                         rendered when the hamburger is open.
 //   </header>
 //
-// Visual stack on the pill:
-//   1. .glass-nav    → backdrop-filter: blur(48px) saturate(200%)
-//                      with -webkit-backdrop-filter for Safari.
-//   2. bg-background/55 → 55% translucent tint; the underlying
-//                         `--background` CSS variable flips per
-//                         theme so light = pale glass, dark = dark
-//                         glass.
-//   3. border foreground/10 → hairline that flips dark↔light:
-//                             `--foreground` is dark in light mode
-//                             and light in dark mode, so a single
-//                             token gives correctly-tinted borders.
+// Visual stack on the pill — MATTE BLACK across both themes:
+//   1. bg-neutral-900    → fixed near-black surface (oklch ~0.205
+//                          neutral). Same colour whether the user is
+//                          in light or dark mode — the pill is
+//                          intentionally theme-independent.
+//   2. `dark` wrapper    → applied to the pill itself so every
+//                          `dark:` variant inside the pill activates,
+//                          which flips the FAQ menu / locale link /
+//                          theme toggle / sign-in button / hamburger
+//                          to their dark-theme appearance regardless
+//                          of the page's actual theme. Without this,
+//                          the buttons would render with light-mode
+//                          dark text on a black pill in light mode.
+//   3. border white/10   → faint 1px definition edge, same in both
+//                          themes since the pill itself doesn't flip.
 //   4. Outer drop shadow → diffused, makes the pill visibly float
-//                          off the page.
-//   5. Inset 1px top highlight → the premium gloss line at the top
-//                                edge. Higher opacity in dark mode
-//                                so it actually reads against a
-//                                dark surface.
+//                          off the page. Single (non-theme-aware)
+//                          shadow now because the pill colour no
+//                          longer flips between themes.
+// No backdrop-filter (the pill is opaque now, so a blur on the
+// backdrop would do nothing visible) — and no inset gloss highlight
+// (matte = no shiny top edge).
 //
 // Active route gets a soft pill background tint on the relevant nav
 // item — no underline, calm "ghost button" feel.
@@ -68,23 +73,24 @@ const HELP_ITEMS = [
   { href: "/faq", labelKey: "nav_help_questions", icon: MessageCircleQuestion },
 ] as const;
 
-// Pill visual. Three shadow layers:
-//   - Outer drop shadow: makes the pill float off the page.
-//   - Inset top highlight: the gloss line that sells "polished glass".
-//   - Inset bottom shadow: a barely-there dark line at the bottom
-//     edge → adds a subtle bevel so the pill reads as a 3D plate
-//     instead of a flat sticker.
-// Dark mode swaps to deeper outer shadow + lighter gloss (so the
-// highlight pops against a dark surface) + slightly darker bottom.
+// Pill visual — matte black plate.
+//   - bg-neutral-900: solid near-black surface, no transparency, no
+//     glass blur. Matte means flat-and-opaque.
+//   - `dark` class on the pill itself: forces all `dark:` variants
+//     of the controls inside (FAQ menu, locale link, ThemeToggle,
+//     Sign in, hamburger) to activate, regardless of the page's
+//     current theme. Without this they'd render dark-on-dark in
+//     light mode.
+//   - border-white/10: faint definition line at the perimeter.
+//   - Single deep drop shadow: still floats off the page. No inset
+//     highlight on the top edge (gloss line would contradict matte).
 //
-// Interactive: a single, calm `hover:scale-[1.01]` with a 250 ms
-// ease-out transition. No tilt, no spotlight — the previous version
-// hammered too much. Just a subtle "expand on hover".
+// Interactive: a single, calm `hover:scale-[1.025]` with a 300 ms
+// ease-out transition. No tilt, no spotlight.
 const PILL_CLASSES =
-  "glass-nav bg-background/55 border border-foreground/10 rounded-full " +
+  "dark bg-neutral-900 border border-white/10 rounded-full " +
   "transition-transform duration-300 ease-out hover:scale-[1.025] motion-reduce:transition-none motion-reduce:hover:scale-100 " +
-  "shadow-[0_12px_40px_-10px_rgba(15,18,30,0.15),inset_0_1px_0_rgba(255,255,255,0.7),inset_0_-1px_0_rgba(0,0,0,0.03)] " +
-  "dark:shadow-[0_12px_40px_-10px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.25)]";
+  "shadow-[0_14px_44px_-10px_rgba(0,0,0,0.55)]";
 
 export function PublicNav() {
   const t = useTranslations("Landing");
@@ -213,10 +219,9 @@ export function PublicNav() {
           id="public-nav-mobile"
           className={
             "pointer-events-auto mt-2 w-full max-w-5xl md:hidden " +
-            "glass-nav bg-background/85 " +
-            "border border-foreground/10 rounded-3xl " +
-            "shadow-[0_12px_36px_-12px_rgba(15,18,30,0.18)] " +
-            "dark:shadow-[0_12px_36px_-12px_rgba(0,0,0,0.5)]"
+            "dark bg-neutral-900 " +
+            "border border-white/10 rounded-3xl " +
+            "shadow-[0_14px_44px_-12px_rgba(0,0,0,0.55)]"
           }
         >
           <div className="px-4 py-3 flex flex-col gap-1">
