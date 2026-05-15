@@ -23,42 +23,55 @@ import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Logo } from "@/components/brand/logo";
 import { brand } from "@/lib/brand";
 
-// Shared sticky glassmorphism nav for all public (unauthenticated)
+// Floating-pill glassmorphism nav for all public (unauthenticated)
 // pages: /, /pricing, /pricing/[plan], /faq, /terms, /privacy.
 //
-// Design:
-//   - Fixed to the top of the viewport (`fixed top-0`) — never in
-//     document flow. Each public page adds `pt-16` to its <main> so
-//     content doesn't slide under the nav at scroll=0.
-//   - Glass effect: `bg-background/70` (translucent tint that flips
-//     automatically between light/dark via the CSS variable) +
-//     `.glass-nav` utility (defined in globals.css) which adds the
-//     `backdrop-filter: blur(16px) saturate(180%)` with a -webkit-
-//     prefixed fallback for older Safari.
-//   - Subtle bottom hairline + soft drop shadow so the bar reads as
-//     a discrete surface, not just a transparent strip.
-//   - Fixed height (h-16) so the bar never reflows on scroll.
+// Structure:
+//   <header>            ← fixed positioning shell, full width,
+//                         pointer-events: none so clicks fall through
+//                         on either side of the pill.
+//     <div pill>        ← the actual visual pill. Rounded-full,
+//                         glass blur, gloss inset, drop shadow.
+//                         pointer-events: auto.
+//       <div h-16>      ← flex row of nav contents.
+//     <div mobile>      ← rounded-3xl panel below the pill, only
+//                         rendered when the hamburger is open.
+//   </header>
 //
-// Active route is indicated with a soft pill background tint — no
-// underline, no color shift, matches the calm "ghost button" feel of
-// the rest of the site.
+// Visual stack on the pill:
+//   1. .glass-nav    → backdrop-filter: blur(24px) saturate(180%)
+//                      with -webkit-backdrop-filter for Safari.
+//   2. bg-background/55 → 55% translucent tint; the underlying
+//                         `--background` CSS variable flips per
+//                         theme so light = pale glass, dark = dark
+//                         glass.
+//   3. border foreground/10 → hairline that flips dark↔light:
+//                             `--foreground` is dark in light mode
+//                             and light in dark mode, so a single
+//                             token gives correctly-tinted borders.
+//   4. Outer drop shadow → diffused, makes the pill visibly float
+//                          off the page.
+//   5. Inset 1px top highlight → the premium gloss line at the top
+//                                edge. Higher opacity in dark mode
+//                                so it actually reads against a
+//                                dark surface.
 //
-// Mobile (<md / <768px): primary nav links collapse into a hamburger
-// menu. The mobile panel inherits the same glass-nav styling so the
-// blur effect is consistent between expanded/collapsed states.
+// Active route gets a soft pill background tint on the relevant nav
+// item — no underline, calm "ghost button" feel.
+//
+// Mobile (<md): hamburger inside the pill collapses the help items
+// + sign in into a floating rounded panel that sits below the pill
+// with a small gap, matching the same glass styling.
 
-// Primary nav links removed — Pricing now reachable only through the
-// hero "Start 14-day free trial" CTA per product direction. The
-// public nav is just logo + help dropdown + utility cluster + the
-// highlighted Sign in button.
-//
-// "Help" cluster — the FAQ entry in the right cluster expands into a
-// dropdown with these three options. Keys live under Landing.* in
-// messages/{en,fr}.json.
 const HELP_ITEMS = [
   { href: "/tutorials", labelKey: "nav_help_tutorials", icon: PlayCircle },
   { href: "/faq", labelKey: "nav_help_questions", icon: MessageCircleQuestion },
 ] as const;
+
+const PILL_CLASSES =
+  "glass-nav bg-background/55 border border-foreground/10 rounded-full " +
+  "shadow-[0_8px_32px_-8px_rgba(15,18,30,0.12),inset_0_1px_0_rgba(255,255,255,0.5)] " +
+  "dark:shadow-[0_8px_32px_-8px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.12)]";
 
 export function PublicNav() {
   const t = useTranslations("Landing");
@@ -77,119 +90,123 @@ export function PublicNav() {
   }
 
   return (
-    <header
-      className={
-        "fixed top-0 left-0 right-0 z-50 glass-nav bg-background/70 " +
-        "border-b border-border/50 " +
-        "shadow-[0_4px_24px_-12px_oklch(0.18_0.018_264/0.08)] " +
-        "dark:shadow-[0_4px_24px_-12px_oklch(0_0_0/0.4)]"
-      }
-    >
-      <div className="mx-auto max-w-6xl flex items-center justify-between gap-3 px-4 sm:px-6 h-16">
-        {/* Logo only — wordmark removed per design direction.
-            Responsive size: 40px on mobile, 48px from md up. */}
-        <Link
-          href="/"
-          className="flex items-center shrink-0"
-          aria-label={brand.name}
-          onClick={closeMobile}
-        >
-          <Logo size={40} priority className="md:hidden" />
-          <Logo size={48} priority className="hidden md:inline-flex" />
-        </Link>
+    <header className="fixed top-0 left-0 right-0 z-50 flex flex-col items-center px-3 sm:px-6 pt-4 sm:pt-5 pointer-events-none">
+      {/* The pill itself */}
+      <div className={"pointer-events-auto w-full max-w-5xl " + PILL_CLASSES}>
+        <div className="flex items-center justify-between gap-3 pl-3 pr-2 sm:pl-4 sm:pr-3 h-16">
+          {/* Logo only — wordmark removed per design direction.
+              Responsive size: 40px on mobile, 48px from md up. */}
+          <Link
+            href="/"
+            className="flex items-center shrink-0"
+            aria-label={brand.name}
+            onClick={closeMobile}
+          >
+            <Logo size={40} priority className="md:hidden" />
+            <Logo size={48} priority className="hidden md:inline-flex" />
+          </Link>
 
-        {/* Right cluster — no middle nav links; logo flushes left,
-            utility + sign in flush right via justify-between. */}
-        <div className="flex items-center gap-1 shrink-0">
-          {/* FAQ dropdown — desktop only. Tutorials / Questions /
-              Contact us. Sits in the utility cluster alongside locale
-              + theme + sign in. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="hidden md:inline-flex"
-                aria-label={t("nav_faq")}
-              >
-                <LifeBuoy className="h-3.5 w-3.5" aria-hidden />
-                {t("nav_faq")}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              {HELP_ITEMS.map(({ href, labelKey, icon: Icon }) => (
-                <DropdownMenuItem key={href} asChild>
-                  <Link
-                    href={href}
+          {/* Right cluster — no middle nav links; logo flushes left,
+              utility + sign in flush right via justify-between. */}
+          <div className="flex items-center gap-1 shrink-0">
+            {/* FAQ dropdown — desktop only. Tutorials / Questions /
+                Contact us. Sits in the utility cluster alongside locale
+                + theme + sign in. */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="hidden md:inline-flex"
+                  aria-label={t("nav_faq")}
+                >
+                  <LifeBuoy className="h-3.5 w-3.5" aria-hidden />
+                  {t("nav_faq")}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                {HELP_ITEMS.map(({ href, labelKey, icon: Icon }) => (
+                  <DropdownMenuItem key={href} asChild>
+                    <Link
+                      href={href}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <Icon className="h-4 w-4" aria-hidden />
+                      {t(labelKey)}
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuItem asChild>
+                  <a
+                    href={`mailto:${brand.supportEmail}`}
                     className="flex items-center gap-2 cursor-pointer"
                   >
-                    <Icon className="h-4 w-4" aria-hidden />
-                    {t(labelKey)}
-                  </Link>
+                    <Mail className="h-4 w-4" aria-hidden />
+                    {t("nav_help_contact")}
+                  </a>
                 </DropdownMenuItem>
-              ))}
-              <DropdownMenuItem asChild>
-                <a
-                  href={`mailto:${brand.supportEmail}`}
-                  className="flex items-center gap-2 cursor-pointer"
-                >
-                  <Mail className="h-4 w-4" aria-hidden />
-                  {t("nav_help_contact")}
-                </a>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          {/* Locale toggle — desktop only */}
-          <Link href={pathname} locale={otherLocale} className="hidden md:inline-flex">
-            <Button variant="ghost" size="sm">{otherLocale.toUpperCase()}</Button>
-          </Link>
-          {/* Theme toggle — desktop only */}
-          <span className="hidden md:inline-flex mx-0.5">
-            <ThemeToggle />
-          </span>
-          {/* Sign in — highlighted as the primary nav CTA now that
-              "Create account" has moved out. Uses the default Button
-              variant (filled) so it stands out from the ghost-style
-              FAQ trigger + locale toggle on either side. */}
-          <Link href="/login">
-            <Button size="sm">
-              {tAuth("sign_in")}
-              <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-            </Button>
-          </Link>
-          {/* Hamburger — mobile only */}
-          <button
-            type="button"
-            onClick={() => setMobileOpen((v) => !v)}
-            className={
-              "md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md " +
-              "text-muted-foreground hover:text-foreground hover:bg-foreground/5 " +
-              "active:scale-95 transition-all"
-            }
-            aria-label={mobileOpen ? t("nav_close_menu") : t("nav_open_menu")}
-            aria-expanded={mobileOpen}
-            aria-controls="public-nav-mobile"
-          >
-            {mobileOpen ? (
-              <X className="h-4 w-4" aria-hidden />
-            ) : (
-              <Menu className="h-4 w-4" aria-hidden />
-            )}
-          </button>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* Locale toggle — desktop only */}
+            <Link
+              href={pathname}
+              locale={otherLocale}
+              className="hidden md:inline-flex"
+            >
+              <Button variant="ghost" size="sm">
+                {otherLocale.toUpperCase()}
+              </Button>
+            </Link>
+            {/* Theme toggle — desktop only */}
+            <span className="hidden md:inline-flex mx-0.5">
+              <ThemeToggle />
+            </span>
+            {/* Sign in — highlighted as the primary nav CTA. */}
+            <Link href="/login">
+              <Button size="sm">
+                {tAuth("sign_in")}
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+              </Button>
+            </Link>
+            {/* Hamburger — mobile only */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen((v) => !v)}
+              className={
+                "md:hidden inline-flex h-9 w-9 items-center justify-center rounded-full " +
+                "text-muted-foreground hover:text-foreground hover:bg-foreground/5 " +
+                "active:scale-95 transition-all"
+              }
+              aria-label={mobileOpen ? t("nav_close_menu") : t("nav_open_menu")}
+              aria-expanded={mobileOpen}
+              aria-controls="public-nav-mobile"
+            >
+              {mobileOpen ? (
+                <X className="h-4 w-4" aria-hidden />
+              ) : (
+                <Menu className="h-4 w-4" aria-hidden />
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Mobile panel. Inherits the glass-nav styling so the blur
-          carries across the dropdown. The same items the desktop
-          dropdown exposes (Tutorials / Questions / Contact us) are
-          flattened into the panel here so mobile users don't get a
-          nested menu. */}
+      {/* Mobile panel — floats as a rounded sibling below the pill
+          with an 8px gap (mt-2). Same glass treatment as the pill so
+          they visually pair. Only rendered when the hamburger is
+          open. */}
       {mobileOpen && (
         <div
           id="public-nav-mobile"
-          className="md:hidden border-t border-border/50 glass-nav bg-background/85"
+          className={
+            "pointer-events-auto mt-2 w-full max-w-5xl md:hidden " +
+            "glass-nav bg-background/85 " +
+            "border border-foreground/10 rounded-3xl " +
+            "shadow-[0_12px_36px_-12px_rgba(15,18,30,0.18)] " +
+            "dark:shadow-[0_12px_36px_-12px_rgba(0,0,0,0.5)]"
+          }
         >
-          <div className="mx-auto max-w-6xl px-4 py-3 flex flex-col gap-1">
+          <div className="px-4 py-3 flex flex-col gap-1">
             <div className="px-3 pt-1 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
               {t("nav_faq")}
             </div>
@@ -221,8 +238,7 @@ export function PublicNav() {
               {t("nav_help_contact")}
             </a>
             <div className="my-2 h-px bg-border/50" />
-            {/* Highlighted Sign in CTA on mobile too — full-width
-                primary button to match the desktop emphasis. */}
+            {/* Highlighted Sign in CTA on mobile too. */}
             <Link href="/login" onClick={closeMobile} className="px-1">
               <Button size="sm" className="w-full">
                 {tAuth("sign_in")}
