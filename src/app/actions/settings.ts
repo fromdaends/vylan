@@ -32,6 +32,6 @@ export async function updateFirmSettings(
   } catch {
     return { error: "update_failed" };
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/profile", "layout");
   return { ok: true };
 }

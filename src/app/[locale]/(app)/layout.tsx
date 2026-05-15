@@ -23,24 +23,39 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/login" }));
   }
 
+  // Auth is good — fan out everything else this layout needs.
+  //
   // MFA gate: if the user enrolled MFA, the session must be at aal2 to
   // access the app. Supabase's getAuthenticatorAssuranceLevel reports
   // currentLevel = aal1 + nextLevel = aal2 in that case.
-  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+  //
+  // getCurrentUser / getCurrentFirm are React.cache()-wrapped, so the
+  // /profile page (which also calls them) reuses these results — no
+  // double DB hit on /profile renders.
+  const [
+    aalResult,
+    dbUser,
+    firm,
+    t,
+    tAuth,
+    tProfile,
+  ] = await Promise.all([
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    getCurrentUser(),
+    getCurrentFirm(),
+    getTranslations("App"),
+    getTranslations("Auth"),
+    getTranslations("Profile"),
+  ]);
+
+  const aal = aalResult.data;
   if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
     redirect(getPathname({ locale, href: "/login/mfa" }));
   }
 
-  const dbUser = await getCurrentUser();
-  const firm = await getCurrentFirm();
-
   if (!dbUser || !firm || !firm.onboarded_at) {
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
-
-  const t = await getTranslations("App");
-  const tAuth = await getTranslations("Auth");
-  const tProfile = await getTranslations("Profile");
 
   const [avatarUrl, firmLogoUrl] = await Promise.all([
     getBrandingImageUrl(dbUser.avatar_path),

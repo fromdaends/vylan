@@ -25,25 +25,30 @@ export default async function ProfilePage({
     redirect(getPathname({ locale, href: "/login" }));
   }
 
-  const [user, firm] = await Promise.all([
+  // Fan out everything this page needs. getCurrentUser / getCurrentFirm
+  // are React.cache()-wrapped — the (app) layout already called them
+  // and the cache returns the same result instantly here.
+  const [user, firm, mfaFactors, t] = await Promise.all([
     getCurrentUser(),
     getCurrentFirm(),
+    supabase.auth.mfa.listFactors(),
+    getTranslations("Profile"),
   ]);
   if (!user || !firm) {
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const [avatarUrl, firmLogoUrl, mfaFactors] = await Promise.all([
+  // Branding URLs can fan out alongside each other, but they need the
+  // user/firm rows from above to know which paths to sign.
+  const [avatarUrl, firmLogoUrl] = await Promise.all([
     getBrandingImageUrl(user.avatar_path),
     getBrandingImageUrl(firm.logo_url),
-    supabase.auth.mfa.listFactors(),
   ]);
   // A user has MFA "enabled" only when they have a verified TOTP factor.
   // Unverified factors are mid-enrollment leftovers and don't count.
   const mfaEnabled = (mfaFactors.data?.totp ?? []).some(
     (f) => f.status === "verified",
   );
-  const t = await getTranslations("Profile");
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 animate-in-up">

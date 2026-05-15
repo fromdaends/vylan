@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getServerSupabase } from "@/lib/supabase/server";
 
 export type Firm = {
@@ -20,7 +21,9 @@ export type Firm = {
   created_at: string;
 };
 
-export async function getCurrentFirm(): Promise<Firm | null> {
+// React.cache() so multiple layouts/pages/components only hit the
+// firms row once per render.
+export const getCurrentFirm = cache(async function _getCurrentFirm(): Promise<Firm | null> {
   const supabase = await getServerSupabase();
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) return null;
@@ -38,7 +41,7 @@ export async function getCurrentFirm(): Promise<Firm | null> {
     .eq("id", u.firm_id)
     .maybeSingle();
   return (firm as Firm) ?? null;
-}
+});
 
 export async function updateCurrentFirm(
   patch: Partial<

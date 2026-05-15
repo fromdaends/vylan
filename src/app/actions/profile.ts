@@ -58,7 +58,7 @@ export async function updateDisplayNameAction(
   } catch {
     return { ok: false, error: "save_failed" };
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/profile", "layout");
   return { ok: true };
 }
 
@@ -76,7 +76,7 @@ export async function updateLocaleAction(
   } catch {
     return { ok: false, error: "save_failed" };
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/profile", "layout");
   return { ok: true };
 }
 
@@ -98,7 +98,7 @@ export async function updateAvatarAction(
   } catch {
     return { ok: false, error: "save_failed" };
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/profile", "layout");
   return { ok: true, signedUrl: upload.signedUrl };
 }
 
@@ -114,7 +114,7 @@ export async function removeAvatarAction(): Promise<ProfileActionResult> {
   } catch {
     return { ok: false, error: "save_failed" };
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/profile", "layout");
   return { ok: true };
 }
 
@@ -135,7 +135,7 @@ export async function updateFirmLogoAction(
   } catch {
     return { ok: false, error: "save_failed" };
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/profile", "layout");
   return { ok: true, signedUrl: upload.signedUrl };
 }
 
@@ -148,7 +148,7 @@ export async function removeFirmLogoAction(): Promise<ProfileActionResult> {
   } catch {
     return { ok: false, error: "save_failed" };
   }
-  revalidatePath("/", "layout");
+  revalidatePath("/profile", "layout");
   return { ok: true };
 }
 

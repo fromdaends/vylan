@@ -1,9 +1,15 @@
+import { cache } from "react";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { serverEnv } from "@/lib/env";
 
-export async function getServerSupabase() {
+// Wrapped in React.cache() so the auth-aware Supabase client is built
+// once per request even when multiple layouts/pages/components all
+// ask for it. The Supabase SDK creates a fresh client per call by
+// default, which means each call also re-derives cookie state — a
+// real cost on dashboards that render many server components.
+export const getServerSupabase = cache(async function _getServerSupabase() {
   const cookieStore = await cookies();
   const env = serverEnv();
   return createServerClient(
@@ -26,7 +32,7 @@ export async function getServerSupabase() {
       },
     },
   );
-}
+});
 
 export function getServiceRoleSupabase() {
   const env = serverEnv();

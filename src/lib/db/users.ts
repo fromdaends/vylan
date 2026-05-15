@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { getServerSupabase } from "@/lib/supabase/server";
 
 export type AppUser = {
@@ -12,7 +13,11 @@ export type AppUser = {
   created_at: string;
 };
 
-export async function getCurrentUser(): Promise<AppUser | null> {
+// React.cache() deduplicates concurrent + repeated calls within a
+// single request. (app)/layout and a downstream page both call this;
+// without the wrapper the firm-row + auth-row queries fire twice on
+// every navigation.
+export const getCurrentUser = cache(async function _getCurrentUser(): Promise<AppUser | null> {
   const supabase = await getServerSupabase();
   const { data } = await supabase.auth.getUser();
   if (!data.user) return null;
@@ -23,7 +28,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
     .eq("id", data.user.id)
     .maybeSingle();
   return (row as AppUser) ?? null;
-}
+});
 
 export type UserProfilePatch = {
   display_name?: string | null;
