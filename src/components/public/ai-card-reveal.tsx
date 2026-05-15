@@ -94,17 +94,16 @@ const INVIEW_OPTS = { amount: 0.3, margin: "0px 0px -10% 0px" } as const;
 // scrolled well past it. Triggers the up-exit fade much later, so
 // the section feels like it lingers on the way back up.
 const INVIEW_OPTS_LATE = { amount: 0.05, margin: "0px 0px 35% 0px" } as const;
-// Wider still — only used to ARM the entry-swoop replay. Element
-// has to be 200% of viewport (2 viewport heights) below the
-// viewport bottom before we consider the user to have "truly left"
-// the section. Scrolling up just one section above the AI block is
-// not enough to re-arm — the user has to scroll meaningfully far
-// past it. Prevents the swoop from re-firing on small up-and-back
-// detours within the AI region.
-const INVIEW_OPTS_VERY_LATE = {
-  amount: 0.01,
-  margin: "0px 0px 200% 0px",
-} as const;
+// How long the section must have been out of view before the
+// next DOWN entry is allowed to replay the swoop. Tuned to
+// distinguish "fast wiggle scroll" (sub-second up-and-back, no
+// replay desired) from "intentional revisit" (user scrolled away,
+// looked at something else for a moment, came back). Time-based
+// rather than distance-based because the user's natural "scroll
+// up to nearby section, glance, scroll back" pattern doesn't
+// reliably exceed any reasonable distance threshold but always
+// takes >1 s of wall-clock time.
+const REPLAY_COOLDOWN_MS = 1000;
 
 // --- Card -------------------------------------------------------------
 
@@ -153,12 +152,6 @@ export function AiCardReveal({
     ref,
     lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS,
   );
-  // `inViewVeryLate` is used ONLY to arm the entry-swoop replay.
-  // Wider root (200% below viewport) so the user has to scroll
-  // truly far past the section before the next swoop is allowed —
-  // wiggle-scrolling up to the section just above and back down
-  // doesn't re-arm the swoop, only meaningful scroll-aways do.
-  const inViewVeryLate = useInView(ref, INVIEW_OPTS_VERY_LATE);
   const reducedMotion = useReducedMotion();
   useEffect(() => attachSharedScrollListener(), []);
 
@@ -176,30 +169,32 @@ export function AiCardReveal({
   // true detection, so the user never sees a one-frame false-start
   // before the swoop.
   //
-  // Wiggle guard via `replayArmedRef`: only replay the swoop if
-  // `inViewVeryLate` (root extended 200% below viewport) has
-  // flipped false since the last entry. Scrolling up just to the
-  // section above the AI block isn't enough — the user has to
-  // scroll meaningfully far past it before the next swoop is
-  // allowed. First entry still plays because the ref starts at
-  // true.
+  // Wiggle guard via `lastExitTimeRef`: only replay the swoop if
+  // the section has been out of view (inView=false) for longer
+  // than REPLAY_COOLDOWN_MS. A fast wiggle (scroll up + back in
+  // <1 s) doesn't replay; an intentional revisit (any scroll-away
+  // that takes >1 s of wall-clock time) does. Time-based catches
+  // the cases distance-based misses — the user can scroll a long
+  // way fast OR a short way slowly, only the latter feels like a
+  // revisit.
   const [entryKey, setEntryKey] = useState(0);
   const wasInViewRef = useRef(false);
-  const replayArmedRef = useRef(true);
+  const lastExitTimeRef = useRef(0);
   useIsomorphicLayoutEffect(() => {
-    if (!inViewVeryLate) {
-      replayArmedRef.current = true;
+    if (!inView) {
+      lastExitTimeRef.current = Date.now();
     }
-  }, [inViewVeryLate]);
+  }, [inView]);
   useIsomorphicLayoutEffect(() => {
+    const cooledDown =
+      Date.now() - lastExitTimeRef.current > REPLAY_COOLDOWN_MS;
     if (
       inView &&
       !wasInViewRef.current &&
       _scrollDownRef.current &&
-      replayArmedRef.current
+      cooledDown
     ) {
       setEntryKey((k) => k + 1);
-      replayArmedRef.current = false;
     }
     wasInViewRef.current = inView;
   }, [inView]);
@@ -222,30 +217,30 @@ export function AiCardReveal({
         filter: `blur(${UP_EXIT_BLUR_PX}px)`,
       };
 
+  // Whether enough wall-clock time has passed since the last exit
+  // to allow a swoop replay. Read at render time so the target
+  // ternary below uses the freshest value.
+  const cooledDown =
+    Date.now() - lastExitTimeRef.current > REPLAY_COOLDOWN_MS;
+
   // Target state.
-  // The scroll-down branch needs to distinguish three sub-cases
-  // because `inViewLoose=true` alone is ambiguous:
-  //   (a) Approaching from below for a fresh swoop (replay armed
-  //       + not just-exited). Snap target to `initial` so the
-  //       swoop replays cleanly from off-screen.
+  // The scroll-down branch distinguishes three sub-cases because
+  // `inViewLoose=true` alone is ambiguous:
+  //   (a) Approaching from below for a fresh swoop (cooldown
+  //       elapsed + not just-exited). Snap target to `initial` so
+  //       the swoop replays cleanly from off-screen.
   //   (b) Just exited via the TOP of the viewport, still grazing
   //       the loose root (wasInViewRef still true because the
   //       effect hasn't committed the new value yet). Stay at
-  //       `visible` — element is scrolling off the top naturally,
-  //       no animation needed.
-  //   (c) Wiggle-revisit without replay armed (user scrolled up
-  //       and back down but didn't go past the very-late
-  //       threshold). Stay at `visible` so when `inView` flips
-  //       true again, the motion is already at `visible` and no
-  //       animation plays.
+  //       `visible`.
+  //   (c) Wiggle-revisit before cooldown elapsed (user scrolled up
+  //       and back down within <1 s). Stay at `visible` so when
+  //       `inView` flips true again, motion is already at visible
+  //       and no animation plays.
   //
   // Only (a) gets `initial`; (b) and (c) stay at `visible`. The
-  // gating triple — `inViewLoose && !wasInViewRef && replayArmedRef`
-  // — is what tells (a) apart from (b) and (c). Without the latter
-  // two conditions, fast wiggle scrolls would snap to `initial`
-  // and then animate to `visible` when `inView` fired, replaying
-  // the swoop AGAINST what the replay-arm guard was meant to
-  // prevent.
+  // gating triple — `inViewLoose && !wasInViewRef && cooledDown` —
+  // tells (a) apart from (b) and (c).
   //
   // The up-exit branch (scrolling UP) is unchanged.
   const target = inView
@@ -253,7 +248,7 @@ export function AiCardReveal({
     : !hasEverEntered.current
       ? initial
       : _scrollDownRef.current
-        ? inViewLoose && !wasInViewRef.current && replayArmedRef.current
+        ? inViewLoose && !wasInViewRef.current && cooledDown
           ? initial
           : visible
         : inViewLoose
@@ -284,8 +279,8 @@ export function AiCardReveal({
   // Glow opacity tracks the same logic as the card target — same
   // gating triple in the scroll-down branch so glow only resets to
   // opacity:0 when the section is truly approaching from below for
-  // a fresh swoop. On wiggle revisits (no replay armed) or top-of-
-  // viewport exits (just-exited), glow stays at 1.
+  // a fresh swoop. On wiggle revisits (cooldown not elapsed) or
+  // top-of-viewport exits (just-exited), glow stays at 1.
   //
   // CRITICALLY, the glow's motion.div is NOT key-bumped — it stays
   // mounted across re-entries, so the four blob CSS animations keep
@@ -298,7 +293,7 @@ export function AiCardReveal({
     : !hasEverEntered.current
       ? { opacity: 0 }
       : _scrollDownRef.current
-        ? inViewLoose && !wasInViewRef.current && replayArmedRef.current
+        ? inViewLoose && !wasInViewRef.current && cooledDown
           ? { opacity: 0 }
           : { opacity: 1 }
         : inViewLoose
@@ -358,43 +353,40 @@ export function AiSideReveal({
   lateExit?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  // Three-observer pattern (same as AiCardReveal):
-  //   - inView         (strict)         — entry path + visible state
-  //   - inViewLoose    (lateExit ? +35% : strict) — defer up-exit
-  //   - inViewVeryLate (+200% root)     — arm replay only after a
-  //                                       far scroll-away
-  // See AiCardReveal for the full rationale.
+  // Two-observer pattern (same as AiCardReveal):
+  //   - inView      (strict)                    — entry path + visible state
+  //   - inViewLoose (lateExit ? +35% : strict)  — defer up-exit
+  // Replay arming is time-based (`lastExitTimeRef`), see AiCardReveal.
   const inView = useInView(ref, INVIEW_OPTS);
   const inViewLoose = useInView(
     ref,
     lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS,
   );
-  const inViewVeryLate = useInView(ref, INVIEW_OPTS_VERY_LATE);
   const reducedMotion = useReducedMotion();
   useEffect(() => attachSharedScrollListener(), []);
 
   const hasEverEntered = useRef(false);
   if (inView) hasEverEntered.current = true;
 
-  // Same useLayoutEffect-based key bump as AiCardReveal, including
-  // the replayArmedRef wiggle guard — see comment there.
+  // Same time-based key-bump as AiCardReveal — see comment there.
   const [entryKey, setEntryKey] = useState(0);
   const wasInViewRef = useRef(false);
-  const replayArmedRef = useRef(true);
+  const lastExitTimeRef = useRef(0);
   useIsomorphicLayoutEffect(() => {
-    if (!inViewVeryLate) {
-      replayArmedRef.current = true;
+    if (!inView) {
+      lastExitTimeRef.current = Date.now();
     }
-  }, [inViewVeryLate]);
+  }, [inView]);
   useIsomorphicLayoutEffect(() => {
+    const cooledDown =
+      Date.now() - lastExitTimeRef.current > REPLAY_COOLDOWN_MS;
     if (
       inView &&
       !wasInViewRef.current &&
       _scrollDownRef.current &&
-      replayArmedRef.current
+      cooledDown
     ) {
       setEntryKey((k) => k + 1);
-      replayArmedRef.current = false;
     }
     wasInViewRef.current = inView;
   }, [inView]);
@@ -411,13 +403,15 @@ export function AiSideReveal({
 
   // Same triple-gated hold-initial logic as AiCardReveal — see
   // comment there. Only set target=initial when approaching from
-  // below for a fresh swoop (replay armed + not just-exited).
+  // below for a fresh swoop (cooldown elapsed + not just-exited).
+  const cooledDown =
+    Date.now() - lastExitTimeRef.current > REPLAY_COOLDOWN_MS;
   const target = inView
     ? visible
     : !hasEverEntered.current
       ? initial
       : _scrollDownRef.current
-        ? inViewLoose && !wasInViewRef.current && replayArmedRef.current
+        ? inViewLoose && !wasInViewRef.current && cooledDown
           ? initial
           : visible
         : inViewLoose
