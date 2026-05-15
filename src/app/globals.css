@@ -267,13 +267,14 @@
        3. A subtle top→down "light catching the bubble surface"
           gradient via background-image. Brighter at the top edge,
           fades to nothing by 25% down. This is the "liquid" specular.
-     `isolation: isolate` ensures the pill has its own stacking
-     context — defends backdrop-filter against any ancestor
-     surprises (e.g. framer-motion blur filters on scroll-reveal
-     wrappers elsewhere in the tree). */
+     WARNING: do NOT add `isolation: isolate` to this rule.
+     `backdrop-filter` requires the element NOT to start its own
+     isolation context — isolate cuts the filter off from the
+     painted page content it needs to sample, which silently kills
+     the blur (the rule still parses, the bg shows, but nothing
+     gets blurred). Previous PRs that added isolate produced the
+     "tint shows, blur doesn't" behaviour reported in the issue. */
   .glass-nav {
-    position: relative;
-    isolation: isolate;
     background-color: oklch(0.85 0.005 264 / 0.5);
     background-image: linear-gradient(
       180deg,
@@ -281,8 +282,8 @@
       oklch(1 0 0 / 0.2) 6%,
       oklch(1 0 0 / 0) 22%
     );
-    backdrop-filter: blur(80px) saturate(200%);
-    -webkit-backdrop-filter: blur(80px) saturate(200%);
+    backdrop-filter: blur(120px) saturate(220%);
+    -webkit-backdrop-filter: blur(120px) saturate(220%);
   }
   .dark .glass-nav {
     background-color: oklch(0.5 0.015 264 / 0.55);
