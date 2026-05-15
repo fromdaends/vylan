@@ -152,18 +152,37 @@ export function AiCardReveal({
   //
   // useLayoutEffect (via the isomorphic shim above) runs
   // SYNCHRONOUSLY after render commits but BEFORE the browser
-  // paints. By bumping the key here we ensure the remount-with-
-  // fresh-initial-state happens in the same paint cycle as the
-  // inView=true detection, so the user never sees the brief frame
-  // where the old motion.div is mid-animation before the remount.
-  // That false-start frame was the perceived "lag" on the green
-  // card swoop (the green section has an extra observer firing
-  // upstream, which made the delta more visible than on the red).
+  // paints. Doing the key bump here ensures the remount-with-fresh-
+  // initial-state happens in the same paint cycle as the inView=
+  // true detection, so the user never sees a one-frame false-start
+  // before the swoop.
+  //
+  // Wiggle guard via `looseExitedRef`: only replay the swoop if the
+  // LOOSE observer has flipped false since the last entry. Without
+  // this, scrolling up a few pixels (so `inView` flips false but
+  // `inViewLoose` stays true) and then back down would re-trigger
+  // the swoop on every direction flip — visible as a chain of
+  // remount stutters when the user is wiggling around the
+  // section. With it, only a real exit past the extended loose
+  // root re-arms the replay. First entry still plays because the
+  // ref starts at true.
   const [entryKey, setEntryKey] = useState(0);
   const wasInViewRef = useRef(false);
+  const looseExitedRef = useRef(true);
   useIsomorphicLayoutEffect(() => {
-    if (inView && !wasInViewRef.current && _scrollDownRef.current) {
+    if (!inViewLoose) {
+      looseExitedRef.current = true;
+    }
+  }, [inViewLoose]);
+  useIsomorphicLayoutEffect(() => {
+    if (
+      inView &&
+      !wasInViewRef.current &&
+      _scrollDownRef.current &&
+      looseExitedRef.current
+    ) {
       setEntryKey((k) => k + 1);
+      looseExitedRef.current = false;
     }
     wasInViewRef.current = inView;
   }, [inView]);
@@ -331,14 +350,25 @@ export function AiSideReveal({
   const hasEverEntered = useRef(false);
   if (inView) hasEverEntered.current = true;
 
-  // Same useLayoutEffect-based key bump as AiCardReveal (see comment
-  // there) — eliminates the one-frame false-start on the entry
-  // fade-up.
+  // Same useLayoutEffect-based key bump as AiCardReveal, including
+  // the looseExitedRef wiggle guard — see comment there.
   const [entryKey, setEntryKey] = useState(0);
   const wasInViewRef = useRef(false);
+  const looseExitedRef = useRef(true);
   useIsomorphicLayoutEffect(() => {
-    if (inView && !wasInViewRef.current && _scrollDownRef.current) {
+    if (!inViewLoose) {
+      looseExitedRef.current = true;
+    }
+  }, [inViewLoose]);
+  useIsomorphicLayoutEffect(() => {
+    if (
+      inView &&
+      !wasInViewRef.current &&
+      _scrollDownRef.current &&
+      looseExitedRef.current
+    ) {
       setEntryKey((k) => k + 1);
+      looseExitedRef.current = false;
     }
     wasInViewRef.current = inView;
   }, [inView]);
