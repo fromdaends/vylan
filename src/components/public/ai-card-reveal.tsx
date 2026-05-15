@@ -223,30 +223,37 @@ export function AiCardReveal({
       };
 
   // Target state.
-  // The scroll-down branch is split:
-  //   - `inViewLoose && _scrollDownRef`: the user has seen this
-  //     section before, is now scrolling down toward it again, and
-  //     the LOOSE observer (extended root) has fired but the STRICT
-  //     observer has NOT. The element is approaching from below.
-  //     Hold target at `initial` so when `inView` fires next, the
-  //     swoop replays cleanly from off-screen. Without this hold,
-  //     `hasEverEntered=true` + scrollDown would snap target to
-  //     `visible` the instant the loose observer fires, which is
-  //     visible to the user as a flash before the swoop.
-  //   - `!inViewLoose && _scrollDownRef`: user has scrolled DOWN
-  //     past the section; element is now ABOVE the viewport.
-  //     Target stays at `visible` (no exit anim, element is
-  //     off-screen anyway).
+  // The scroll-down branch needs to distinguish three sub-cases
+  // because `inViewLoose=true` alone is ambiguous:
+  //   (a) Approaching from below for a fresh swoop (replay armed
+  //       + not just-exited). Snap target to `initial` so the
+  //       swoop replays cleanly from off-screen.
+  //   (b) Just exited via the TOP of the viewport, still grazing
+  //       the loose root (wasInViewRef still true because the
+  //       effect hasn't committed the new value yet). Stay at
+  //       `visible` — element is scrolling off the top naturally,
+  //       no animation needed.
+  //   (c) Wiggle-revisit without replay armed (user scrolled up
+  //       and back down but didn't go past the very-late
+  //       threshold). Stay at `visible` so when `inView` flips
+  //       true again, the motion is already at `visible` and no
+  //       animation plays.
   //
-  // The up-exit branch (scrolling UP) is unchanged: still holds at
-  // `visible` while in the extended root (lateExit linger), only
-  // flipping to `upExit` once the loose observer also reports out.
+  // Only (a) gets `initial`; (b) and (c) stay at `visible`. The
+  // gating triple — `inViewLoose && !wasInViewRef && replayArmedRef`
+  // — is what tells (a) apart from (b) and (c). Without the latter
+  // two conditions, fast wiggle scrolls would snap to `initial`
+  // and then animate to `visible` when `inView` fired, replaying
+  // the swoop AGAINST what the replay-arm guard was meant to
+  // prevent.
+  //
+  // The up-exit branch (scrolling UP) is unchanged.
   const target = inView
     ? visible
     : !hasEverEntered.current
       ? initial
       : _scrollDownRef.current
-        ? inViewLoose
+        ? inViewLoose && !wasInViewRef.current && replayArmedRef.current
           ? initial
           : visible
         : inViewLoose
@@ -274,25 +281,24 @@ export function AiCardReveal({
   const glowClass =
     variant === "success" ? "ai-card-glow variant-success" : "ai-card-glow";
 
-  // Glow opacity tracks the same in-view / scroll-direction logic as
-  // the card, including the re-entry hold-initial fix: when the user
-  // is scrolling DOWN toward the section and the loose observer has
-  // fired but the strict one hasn't, hold glow at opacity:0 instead
-  // of snapping to 1. The opacity fade-in then plays cleanly when
-  // inView fires, matching first-entry behaviour.
+  // Glow opacity tracks the same logic as the card target — same
+  // gating triple in the scroll-down branch so glow only resets to
+  // opacity:0 when the section is truly approaching from below for
+  // a fresh swoop. On wiggle revisits (no replay armed) or top-of-
+  // viewport exits (just-exited), glow stays at 1.
   //
   // CRITICALLY, the glow's motion.div is NOT key-bumped — it stays
   // mounted across re-entries, so the four blob CSS animations keep
-  // drifting continuously from page load. That eliminates the "static
-  // burst then suddenly starts moving" handoff: when the section
-  // comes into view, the blobs are already mid-drift and the opacity
-  // just eases up underneath the motion.
+  // drifting continuously from page load. That eliminates the
+  // "static burst then suddenly starts moving" handoff: when the
+  // section comes into view, the blobs are already mid-drift and
+  // the opacity just eases up underneath the motion.
   const glowTarget = inView
     ? { opacity: 1 }
     : !hasEverEntered.current
       ? { opacity: 0 }
       : _scrollDownRef.current
-        ? inViewLoose
+        ? inViewLoose && !wasInViewRef.current && replayArmedRef.current
           ? { opacity: 0 }
           : { opacity: 1 }
         : inViewLoose
@@ -403,16 +409,15 @@ export function AiSideReveal({
     ? { opacity: 0 }
     : { opacity: 0, y: 20, filter: `blur(${UP_EXIT_BLUR_PX}px)` };
 
-  // Same re-entry hold-initial logic as AiCardReveal — see comment
-  // there. When scrolling DOWN toward the section, loose observer
-  // hit but strict not yet → hold `initial` so the fade-up replays
-  // cleanly from scratch when inView fires.
+  // Same triple-gated hold-initial logic as AiCardReveal — see
+  // comment there. Only set target=initial when approaching from
+  // below for a fresh swoop (replay armed + not just-exited).
   const target = inView
     ? visible
     : !hasEverEntered.current
       ? initial
       : _scrollDownRef.current
-        ? inViewLoose
+        ? inViewLoose && !wasInViewRef.current && replayArmedRef.current
           ? initial
           : visible
         : inViewLoose
