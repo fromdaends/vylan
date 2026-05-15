@@ -288,10 +288,10 @@ export default async function Home({
       <section className="relative">
         <div className="mx-auto max-w-6xl px-6 py-28 sm:py-32">
           <div className="grid gap-12 md:grid-cols-2 md:items-center">
-            <AiCardReveal direction="left" variant="success">
+            <AiCardReveal direction="left" variant="success" lateExit>
               <AiMockCard t={t} variant="success" />
             </AiCardReveal>
-            <AiSideReveal>
+            <AiSideReveal lateExit>
               <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
                 {t("ai_eyebrow")}
               </div>
