@@ -247,21 +247,25 @@
     -webkit-text-fill-color: transparent;
   }
 
-  /* Floating-pill glassmorphism for the public nav.
-     - blur(128px) is intentionally extreme — even big headline text
-       behind the pill reads as soft colour fog, not legible glyphs
-     - saturate(240%) keeps the orb colours showing through richly
-       despite the heavy blur, so the pill still reads as "lit from
-       behind" rather than dull frosted
+  /* Floating-pill glassmorphism for the public nav — "soap bubble"
+     treatment. Past ~80px of blur, more blur stops killing text
+     legibility (text just stays as a high-contrast smear). To
+     actually obliterate text we need to crush local contrast.
+     - blur(120px) — strong frost
+     - saturate(220%) — preserve warm orb colour bleed-through
+     - contrast(0.6) — KEY: flattens dark text strokes against their
+       background so they disappear into the colour fog. Without
+       this, blur alone leaves text smudges readable
+     - brightness(1.05) — small lift so contrast(0.6) doesn't pull
+       the glass slightly grey
      - prefixed -webkit- variant for iOS Safari + Safari < 18
-     - background opacity comes from a Tailwind `bg-background/65` on
-       the same element — paired with the heavy blur, the slight
-       extra tint pushes the underlying text past "blurred but
-       guessable" into "basically unreadable" while keeping the warm
-       orb colours visible through the glass. */
+     - background opacity comes from a Tailwind `bg-background/75`
+       on the same element — pairs with the filter chain to push
+       underlying text fully into "literal bubble" territory while
+       the warm orb colours still bleed through. */
   .glass-nav {
-    backdrop-filter: blur(128px) saturate(240%);
-    -webkit-backdrop-filter: blur(128px) saturate(240%);
+    backdrop-filter: blur(120px) saturate(220%) contrast(0.6) brightness(1.05);
+    -webkit-backdrop-filter: blur(120px) saturate(220%) contrast(0.6) brightness(1.05);
   }
 
 
