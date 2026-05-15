@@ -29,7 +29,7 @@ export default async function Home({
   const tAuth = await getTranslations("Auth");
 
   return (
-    <main className="relative flex-1 flex flex-col overflow-hidden ambient-warm">
+    <main className="relative flex-1 flex flex-col overflow-hidden ambient-warm pt-16">
       <PublicNav />
 
       {/* HERO */}

@@ -37,7 +37,7 @@ export default async function PlanPage({
   const featured = plan === "cabinet";
 
   return (
-    <main className="flex-1 flex flex-col">
+    <main className="flex-1 flex flex-col pt-16">
       <PublicNav />
 
       <section className="mx-auto w-full max-w-3xl px-6 py-20">
