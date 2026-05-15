@@ -50,4 +50,34 @@ describe("buildEngagementInviteEmail", () => {
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
   });
+
+  it("does not render a logo block when firmLogoUrl is null or omitted", () => {
+    const a = buildEngagementInviteEmail({ ...base, locale: "en" });
+    const b = buildEngagementInviteEmail({
+      ...base,
+      firmLogoUrl: null,
+      locale: "en",
+    });
+    expect(a.html).not.toContain("<img");
+    expect(b.html).not.toContain("<img");
+  });
+
+  it("renders the firm-logo image at the top with alt text + explicit dimensions when firmLogoUrl is provided", () => {
+    const { html } = buildEngagementInviteEmail({
+      ...base,
+      firmLogoUrl: "https://storage.example/firms/abc/branding/logo-xyz.jpg",
+      locale: "en",
+    });
+    expect(html).toContain(
+      `<img src="https://storage.example/firms/abc/branding/logo-xyz.jpg"`,
+    );
+    expect(html).toContain('alt="Cabinet Tremblay &amp; Associés"');
+    expect(html).toContain('width="48"');
+    expect(html).toContain('height="48"');
+    // Logo must precede the greeting paragraph.
+    const imgIdx = html.indexOf("<img");
+    const greetingIdx = html.indexOf("Hi Marie Tremblay");
+    expect(imgIdx).toBeGreaterThan(-1);
+    expect(imgIdx).toBeLessThan(greetingIdx);
+  });
 });

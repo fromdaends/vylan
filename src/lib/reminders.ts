@@ -24,6 +24,7 @@ import {
   type ReminderTone,
 } from "@/lib/email";
 import { buildReminderSms, sendSms } from "@/lib/sms";
+import { getBrandingImageUrlForEmail } from "@/lib/storage";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 void DAY_MS;
@@ -141,13 +142,14 @@ export async function processReminderJob(
     .single();
   const { data: firm } = await sb
     .from("firms")
-    .select("name")
+    .select("name, logo_url")
     .eq("id", engagement.firm_id)
     .single();
   if (!client || !firm) return { skipped: "client_or_firm_missing" };
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const url = `${appUrl}/r/${engagement.magic_token}`;
+  const firmLogoUrl = await getBrandingImageUrlForEmail(firm.logo_url);
 
   let emailSent = false;
   let smsSent = false;
@@ -157,6 +159,7 @@ export async function processReminderJob(
       tone,
       clientName: client.display_name,
       firmName: firm.name,
+      firmLogoUrl,
       engagementTitle: engagement.title,
       url,
       dueDate: engagement.due_date,

@@ -14,6 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { sendEmail, buildUnusableDocRetryEmail } from "@/lib/email";
 import { sendSms, buildUnusableDocRetrySms } from "@/lib/sms";
+import { getBrandingImageUrlForEmail } from "@/lib/storage";
 
 // 30 minutes. Tunable in one place if the anti-spam window changes.
 export const SMS_ANTISPAM_WINDOW_MIN = 30;
@@ -64,7 +65,7 @@ export async function processNotifyClientRetryJob(
     .single();
   const { data: firm } = await sb
     .from("firms")
-    .select("name")
+    .select("name, logo_url")
     .eq("id", engagement.firm_id)
     .single();
   if (!client || !firm) return { skipped: "client_or_firm_missing" };
@@ -89,9 +90,11 @@ export async function processNotifyClientRetryJob(
   let smsed = false;
 
   if (client.email) {
+    const firmLogoUrl = await getBrandingImageUrlForEmail(firm.logo_url);
     const { subject, html, text } = buildUnusableDocRetryEmail({
       clientName: client.display_name,
       firmName: firm.name,
+      firmLogoUrl,
       requestItemLabel: itemLabel,
       issueSummary: finalIssueSummary,
       retryLink,

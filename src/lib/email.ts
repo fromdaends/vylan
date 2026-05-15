@@ -46,18 +46,20 @@ export async function sendEmail({
 export function buildEngagementInviteEmail(opts: {
   clientName: string;
   firmName: string;
+  firmLogoUrl?: string | null;
   engagementTitle: string;
   url: string;
   dueDate: string | null;
   locale: "fr" | "en";
 }): { subject: string; html: string; text: string } {
+  const logoBlock = buildLogoBlock(opts.firmLogoUrl, opts.firmName);
   if (opts.locale === "fr") {
     const subject = `${opts.firmName} a besoin de quelques documents pour « ${opts.engagementTitle} »`;
     const dueLine = opts.dueDate
       ? `<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Échéance : ${opts.dueDate}</p>`
       : "";
     const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
-<p>Bonjour ${escapeHtml(opts.clientName)},</p>
+${logoBlock}<p>Bonjour ${escapeHtml(opts.clientName)},</p>
 <p>${escapeHtml(opts.firmName)} a préparé une liste de documents à soumettre pour <strong>${escapeHtml(opts.engagementTitle)}</strong>.</p>
 ${dueLine}
 <p style="margin:24px 0">
@@ -81,7 +83,7 @@ Aucun mot de passe à créer. Lien valide pendant 90 jours.`;
     ? `<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Due: ${opts.dueDate}</p>`
     : "";
   const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
-<p>Hi ${escapeHtml(opts.clientName)},</p>
+${logoBlock}<p>Hi ${escapeHtml(opts.clientName)},</p>
 <p>${escapeHtml(opts.firmName)} put together a list of documents they need for <strong>${escapeHtml(opts.engagementTitle)}</strong>.</p>
 ${dueLine}
 <p style="margin:24px 0">
@@ -107,6 +109,24 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+// Optional firm-logo banner rendered at the top of client-facing emails.
+// Returns an empty string when no URL is provided so the existing
+// templates stay byte-identical for firms that never uploaded a logo.
+// Image dimensions are explicit (48×48) for Outlook, which doesn't honour
+// CSS width/height alone. Alt text falls back to the firm name when the
+// recipient's email client blocks remote images (Gmail default for new
+// senders, Outlook default for everything).
+function buildLogoBlock(
+  logoUrl: string | null | undefined,
+  firmName: string,
+): string {
+  if (!logoUrl) return "";
+  return `<div style="margin:0 0 20px 0">
+  <img src="${logoUrl}" alt="${escapeHtml(firmName)}" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:8px;object-fit:cover;border:0" />
+</div>
+`;
 }
 
 export function buildWelcomeEmail(opts: {
@@ -181,15 +201,17 @@ Open your dashboard: ${opts.appUrl}/dashboard
 export function buildUnusableDocRetryEmail(opts: {
   clientName: string;
   firmName: string;
+  firmLogoUrl?: string | null;
   requestItemLabel: string;
   issueSummary: string;
   retryLink: string;
   locale: "fr" | "en";
 }): { subject: string; html: string; text: string } {
+  const logoBlock = buildLogoBlock(opts.firmLogoUrl, opts.firmName);
   if (opts.locale === "fr") {
     const subject = `Action requise — un document à reprendre pour ${opts.firmName}`;
     const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
-<p>Bonjour ${escapeHtml(opts.clientName)},</p>
+${logoBlock}<p>Bonjour ${escapeHtml(opts.clientName)},</p>
 <p>Merci pour le document que vous avez téléversé pour « ${escapeHtml(opts.requestItemLabel)} ». Malheureusement, il semble difficile à utiliser parce que ${escapeHtml(opts.issueSummary)}.</p>
 <p>Pourriez-vous reprendre la photo ou téléverser une version plus claire?</p>
 <p style="margin:16px 0 8px 0"><strong>Quelques conseils&nbsp;:</strong></p>
@@ -226,7 +248,7 @@ L'équipe ${opts.firmName}`;
 
   const subject = `Quick fix needed — one document to re-send for ${opts.firmName}`;
   const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
-<p>Hi ${escapeHtml(opts.clientName)},</p>
+${logoBlock}<p>Hi ${escapeHtml(opts.clientName)},</p>
 <p>Thanks for uploading your document for "${escapeHtml(opts.requestItemLabel)}". Unfortunately, it looks like ${escapeHtml(opts.issueSummary)}, so we can't use it as-is.</p>
 <p>Could you take another photo or upload a clearer version?</p>
 <p style="margin:16px 0 8px 0"><strong>A few tips:</strong></p>
@@ -267,6 +289,7 @@ export function buildReminderEmail(opts: {
   tone: ReminderTone;
   clientName: string;
   firmName: string;
+  firmLogoUrl?: string | null;
   engagementTitle: string;
   url: string;
   dueDate: string | null;
@@ -277,8 +300,9 @@ export function buildReminderEmail(opts: {
   const subject = copy.subject(opts);
   const body = copy.body(opts);
   const cta = opts.locale === "fr" ? "Téléverser mes documents" : "Upload my documents";
+  const logoBlock = buildLogoBlock(opts.firmLogoUrl, opts.firmName);
   const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
-<p>${escapeHtml(copy.greeting(opts))}</p>
+${logoBlock}<p>${escapeHtml(copy.greeting(opts))}</p>
 <p>${body.html}</p>
 <p style="margin:24px 0">
   <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">${cta}</a>
