@@ -2,8 +2,6 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
-import { PLANS, PAID_PLANS, type PlanId } from "@/lib/plans";
-import { formatCurrency } from "@/lib/format";
 import { assertLocale } from "@/lib/locale";
 import {
   ArrowRight,
@@ -29,7 +27,6 @@ export default async function Home({
   setRequestLocale(locale);
   const t = await getTranslations("Landing");
   const tAuth = await getTranslations("Auth");
-  const tPricing = await getTranslations("Pricing");
 
   return (
     <main className="relative flex-1 flex flex-col overflow-hidden ambient-warm">
@@ -286,61 +283,13 @@ export default async function Home({
         </div>
       </section>
 
-      {/* Pricing */}
-      <section className="relative">
-        <div className="mx-auto max-w-4xl px-6 py-24">
-          <ScrollReveal intensity="strong" className="text-center mb-16">
-            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-              {t("pricing_eyebrow")}
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
-              {tPricing("title")}
-            </h2>
-            <p className="text-sm text-muted-foreground mt-4 max-w-md mx-auto">
-              {tPricing("subtitle")}
-            </p>
-          </ScrollReveal>
-          <div className="grid gap-5 sm:grid-cols-2">
-            {PAID_PLANS.map((planId, i) => (
-              <ScrollReveal key={planId} intensity="pop" delay={i * 0.1}>
-                <PlanPreview
-                  planId={planId}
-                  locale={locale}
-                  featured={planId === "cabinet"}
-                />
-              </ScrollReveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ */}
-      <section className="relative">
-        <div className="mx-auto max-w-3xl px-6 py-24">
-          <ScrollReveal intensity="strong" className="text-center mb-12">
-            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-              FAQ
-            </div>
-            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
-              {t("faq_title")}
-            </h2>
-          </ScrollReveal>
-          <dl className="space-y-2">
-            <ScrollReveal delay={0}>
-              <Faq q={t("faq_1_q")} a={t("faq_1_a")} />
-            </ScrollReveal>
-            <ScrollReveal delay={0.06}>
-              <Faq q={t("faq_2_q")} a={t("faq_2_a")} />
-            </ScrollReveal>
-            <ScrollReveal delay={0.12}>
-              <Faq q={t("faq_3_q")} a={t("faq_3_a")} />
-            </ScrollReveal>
-            <ScrollReveal delay={0.18}>
-              <Faq q={t("faq_4_q")} a={t("faq_4_a")} />
-            </ScrollReveal>
-          </dl>
-        </div>
-      </section>
+      {/* Pricing + FAQ sections removed from the landing page. The
+          pricing content lives on its own page at /pricing (reachable
+          via the "See pricing" hero button + the nav). FAQ content
+          moves into the help-center dropdown in the nav (Tutorials /
+          Questions / Contact us). The PlanPreview + Faq helper
+          components below stay in place — they're reused on the
+          dedicated /pricing + (forthcoming) /faq pages. */}
 
       {/* Final CTA */}
       <section className="relative">
@@ -512,86 +461,8 @@ function Step({
   );
 }
 
-function Faq({ q, a }: { q: string; a: string }) {
-  return (
-    <details className="group rounded-xl border border-border bg-card transition-all duration-300 hover:border-accent/40 hover:bg-card/80 open:border-accent/40">
-      <summary className="flex cursor-pointer items-center justify-between gap-4 p-5 font-medium text-base list-none">
-        <span className="transition-colors group-hover:text-foreground">
-          {q}
-        </span>
-        <span
-          aria-hidden
-          className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-muted text-muted-foreground transition-all duration-300 group-hover:bg-accent/15 group-hover:text-accent group-open:rotate-45 group-open:bg-accent/15 group-open:text-accent shrink-0"
-        >
-          +
-        </span>
-      </summary>
-      <div className="px-5 pb-5 text-sm text-muted-foreground leading-relaxed">
-        {a}
-      </div>
-    </details>
-  );
-}
-
-async function PlanPreview({
-  planId,
-  locale,
-  featured = false,
-}: {
-  planId: PlanId;
-  locale: "fr" | "en";
-  featured?: boolean;
-}) {
-  const t = await getTranslations("Pricing");
-  const plan = PLANS[planId];
-  const price =
-    plan.monthlyCadCents != null
-      ? formatCurrency(plan.monthlyCadCents / 100, locale, 0)
-      : "—";
-  // Whole card links to the dedicated plan page (/pricing/solo or
-  // /pricing/cabinet). The plan page hands off to /signup?plan=<id>
-  // which the Stripe checkout flow will pick up once wired.
-  return (
-    <Link
-      href={`/pricing/${planId}`}
-      className={
-        "relative block cursor-pointer rounded-2xl border bg-card p-7 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
-        (featured
-          ? "featured-card border-transparent"
-          : "border-border hover:border-foreground/20")
-      }
-    >
-      {featured && (
-        <span className="absolute -top-3 left-7 rounded-full bg-foreground text-background text-[10px] font-semibold px-3 py-1 tracking-wider uppercase">
-          {t("recommended")}
-        </span>
-      )}
-      <div className="font-medium text-lg">{t(`plan_${planId}_name`)}</div>
-      <p className="text-sm text-muted-foreground mt-1">
-        {t(`plan_${planId}_tagline`)}
-      </p>
-      <div className="mt-4 flex items-baseline gap-1.5">
-        <span className="text-4xl font-semibold tracking-tight num-display">
-          {price}
-        </span>
-        <span className="text-sm text-muted-foreground">
-          / {t("per_month")}
-        </span>
-      </div>
-      <ul className="mt-6 space-y-2.5 text-sm text-muted-foreground">
-        <li className="flex items-start gap-2">
-          <Check className="h-4 w-4 text-success shrink-0 mt-0.5" aria-hidden />
-          {t(`plan_${planId}_engagements`)}
-        </li>
-        <li className="flex items-start gap-2">
-          <Check className="h-4 w-4 text-success shrink-0 mt-0.5" aria-hidden />
-          {t(`plan_${planId}_users`)}
-        </li>
-        <li className="flex items-start gap-2">
-          <Check className="h-4 w-4 text-success shrink-0 mt-0.5" aria-hidden />
-          {t(`plan_${planId}_features`)}
-        </li>
-      </ul>
-    </Link>
-  );
-}
+// Faq + PlanPreview helpers extracted to:
+//   src/components/public/faq-item.tsx
+//   src/components/public/plan-card.tsx
+// when the pricing + FAQ sections were lifted off the landing page.
+// Import from there on the dedicated /pricing + /faq pages.

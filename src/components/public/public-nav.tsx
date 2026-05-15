@@ -6,11 +6,20 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   ArrowRight,
   CreditCard,
-  HelpCircle,
+  LifeBuoy,
+  Mail,
   Menu,
+  MessageCircleQuestion,
+  PlayCircle,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Logo } from "@/components/brand/logo";
 import { brand } from "@/lib/brand";
@@ -38,9 +47,18 @@ import { brand } from "@/lib/brand";
 // menu. The mobile panel inherits the same glass-nav styling so the
 // blur effect is consistent between expanded/collapsed states.
 
+// Primary nav links (left/centre). Single source of truth — both
+// desktop and mobile render from this list.
 const NAV_ITEMS = [
   { href: "/pricing", labelKey: "nav_pricing", icon: CreditCard },
-  { href: "/faq", labelKey: "nav_faq", icon: HelpCircle },
+] as const;
+
+// "Help" cluster — the FAQ entry in the right cluster expands into a
+// dropdown with these three options. Keys live under Landing.* in
+// messages/{en,fr}.json.
+const HELP_ITEMS = [
+  { href: "/tutorials", labelKey: "nav_help_tutorials", icon: PlayCircle },
+  { href: "/faq", labelKey: "nav_help_questions", icon: MessageCircleQuestion },
 ] as const;
 
 export function PublicNav() {
@@ -95,6 +113,44 @@ export function PublicNav() {
 
         {/* Right cluster */}
         <div className="flex items-center gap-1 shrink-0">
+          {/* FAQ dropdown — desktop only. Tutorials / Questions /
+              Contact us. Sits in the utility cluster alongside locale
+              + theme + sign in. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hidden md:inline-flex"
+                aria-label={t("nav_faq")}
+              >
+                <LifeBuoy className="h-3.5 w-3.5" aria-hidden />
+                {t("nav_faq")}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              {HELP_ITEMS.map(({ href, labelKey, icon: Icon }) => (
+                <DropdownMenuItem key={href} asChild>
+                  <Link
+                    href={href}
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
+                    <Icon className="h-4 w-4" aria-hidden />
+                    {t(labelKey)}
+                  </Link>
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuItem asChild>
+                <a
+                  href={`mailto:${brand.supportEmail}`}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Mail className="h-4 w-4" aria-hidden />
+                  {t("nav_help_contact")}
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {/* Locale toggle — desktop only */}
           <Link href={pathname} locale={otherLocale} className="hidden md:inline-flex">
             <Button variant="ghost" size="sm">{otherLocale.toUpperCase()}</Button>
@@ -137,7 +193,10 @@ export function PublicNav() {
       </div>
 
       {/* Mobile panel. Inherits the glass-nav styling so the blur
-          carries across the dropdown. */}
+          carries across the dropdown. The same items the desktop
+          dropdown exposes (Tutorials / Questions / Contact us) are
+          flattened into the panel here so mobile users don't get a
+          nested menu. */}
       {mobileOpen && (
         <div
           id="public-nav-mobile"
@@ -163,6 +222,38 @@ export function PublicNav() {
                 </Link>
               );
             })}
+            <div className="my-1 h-px bg-border/50" />
+            <div className="px-3 pt-1 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
+              {t("nav_faq")}
+            </div>
+            {HELP_ITEMS.map(({ href, labelKey, icon: Icon }) => {
+              const active = isActive(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={closeMobile}
+                  className={
+                    "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium " +
+                    (active
+                      ? "bg-foreground/10 text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-foreground/5")
+                  }
+                >
+                  <Icon className="h-4 w-4" aria-hidden />
+                  {t(labelKey)}
+                </Link>
+              );
+            })}
+            <a
+              href={`mailto:${brand.supportEmail}`}
+              onClick={closeMobile}
+              className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/5"
+            >
+              <Mail className="h-4 w-4" aria-hidden />
+              {t("nav_help_contact")}
+            </a>
+            <div className="my-1 h-px bg-border/50" />
             <Link
               href="/login"
               onClick={closeMobile}
@@ -170,7 +261,6 @@ export function PublicNav() {
             >
               {tAuth("sign_in")}
             </Link>
-            <div className="my-1 h-px bg-border/50" />
             <div className="flex items-center justify-between px-3 py-2">
               <Link
                 href={pathname}
