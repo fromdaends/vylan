@@ -248,16 +248,18 @@
   }
 
   /* Floating-pill glassmorphism for the public nav.
-     - blur(40px) softens content behind heavily — premium-glass feel
-     - saturate(200%) intensifies the colors showing through, so the
-       glass reads as "lit from behind" rather than dull frosted
+     - blur(80px) is intentionally heavy — content behind the pill
+       reads as soft colour blobs, not legible text, so the pill
+       always reads as a frosted-glass plate floating above the page
+     - saturate(220%) keeps the orb colours showing through richly so
+       the glass reads as "lit from behind" rather than dull frosted
      - prefixed -webkit- variant for iOS Safari + Safari < 18
      - background opacity comes from a Tailwind `bg-background/55` on
        the same element, so the tint flips automatically with the
        light/dark theme tokens. */
   .glass-nav {
-    backdrop-filter: blur(40px) saturate(200%);
-    -webkit-backdrop-filter: blur(40px) saturate(200%);
+    backdrop-filter: blur(80px) saturate(220%);
+    -webkit-backdrop-filter: blur(80px) saturate(220%);
   }
 
 
