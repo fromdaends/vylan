@@ -455,60 +455,72 @@
       0 2px 8px -1px oklch(0.7 0.16 264 / 0.3);
   }
 
-  /* AI section card — animated multi-colour aurora glow that fades
-     in alongside the framer-motion slide-in entrance.
-     Implementation:
-       - Positioned absolutely behind the card (z-index: -1) and
-         extends 32 px past the card edges so the soft glow radiates
-         outward.
-       - A conic-gradient cycles through blue → purple → pink → cyan
-         → blue. Rotating the element on a 10s linear loop sweeps
-         the gradient; filter:blur(56px) softens the hard colour
-         stops into a smooth aurora-like cycle.
-       - GPU-friendly: only `transform: rotate()` animates. The
-         blurred layer is a static gradient that the rotation
-         carries around.
-       - Mobile (<=767px): shorter inset + lighter blur so it
-         doesn't dominate the smaller card.
-       - prefers-reduced-motion: slows the cycle to 40s and drops
-         opacity to half so the motion is far less attention-
-         grabbing without disappearing entirely. */
+  /* AI section card — mesh-blended aurora glow. Four large blurred
+     blobs drift independently on different timing curves; where
+     they overlap they mix naturally via the parent's filter:blur,
+     so the result reads like an aurora rather than a "spinning
+     cube" (which is what the previous rotating conic-gradient
+     looked like). Each blob is anchored at a corner of the glow
+     container and translates on its own keyframe.
+
+     Layout:
+       .ai-card-glow         positioned container behind the card
+       .ai-card-glow-blob    one of four child blobs (iris, purple,
+                             pink, cyan)
+     The big filter:blur(60px) sits on the parent so all four blobs
+     are blurred together — that's what makes the colours blend
+     instead of layering as discrete circles. */
   .ai-card-glow {
     position: absolute;
-    inset: -32px;
+    inset: -40px;
     z-index: -1;
-    border-radius: 28px;
-    background: conic-gradient(
-      from 0deg,
-      oklch(0.62 0.18 264 / 0.55),
-      oklch(0.62 0.22 320 / 0.55),
-      oklch(0.72 0.2 350 / 0.55),
-      oklch(0.72 0.16 210 / 0.55),
-      oklch(0.62 0.18 264 / 0.55)
-    );
-    filter: blur(56px);
-    animation: ai-card-glow-spin 10s linear infinite;
     pointer-events: none;
+    filter: blur(60px);
+    overflow: visible;
+  }
+  .ai-card-glow-blob {
+    position: absolute;
+    width: 60%;
+    height: 60%;
+    border-radius: 50%;
+    opacity: 0.7;
     will-change: transform;
   }
-  .dark .ai-card-glow {
-    background: conic-gradient(
-      from 0deg,
-      oklch(0.62 0.18 264 / 0.4),
-      oklch(0.62 0.22 320 / 0.4),
-      oklch(0.72 0.2 350 / 0.4),
-      oklch(0.72 0.16 210 / 0.4),
-      oklch(0.62 0.18 264 / 0.4)
-    );
+  .ai-card-glow-blob.blob-iris {
+    background: oklch(0.62 0.18 264);
+    top: -10%;
+    left: -15%;
+    animation: ai-card-blob-1 14s ease-in-out infinite;
+  }
+  .ai-card-glow-blob.blob-purple {
+    background: oklch(0.62 0.22 320);
+    top: -10%;
+    right: -15%;
+    animation: ai-card-blob-2 17s ease-in-out infinite;
+  }
+  .ai-card-glow-blob.blob-pink {
+    background: oklch(0.72 0.2 350);
+    bottom: -10%;
+    right: -15%;
+    animation: ai-card-blob-3 12s ease-in-out infinite;
+  }
+  .ai-card-glow-blob.blob-cyan {
+    background: oklch(0.72 0.16 210);
+    bottom: -10%;
+    left: -15%;
+    animation: ai-card-blob-4 19s ease-in-out infinite;
+  }
+  .dark .ai-card-glow-blob {
+    opacity: 0.5;
   }
   @media (max-width: 767px) {
     .ai-card-glow {
-      inset: -20px;
-      filter: blur(40px);
+      inset: -24px;
+      filter: blur(44px);
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .ai-card-glow {
+    .ai-card-glow-blob {
       animation-duration: 40s;
       opacity: 0.5;
     }
@@ -810,9 +822,54 @@
   }
 }
 
-@keyframes ai-card-glow-spin {
-  to {
-    transform: rotate(360deg);
+/* AI card glow blob drifts. Four different paths + speeds (12–19s)
+   keep the overall pattern non-periodic and aurora-like. */
+@keyframes ai-card-blob-1 {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  33% {
+    transform: translate(40%, 30%);
+  }
+  66% {
+    transform: translate(15%, 70%);
+  }
+}
+@keyframes ai-card-blob-2 {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  33% {
+    transform: translate(-35%, 25%);
+  }
+  66% {
+    transform: translate(-55%, 50%);
+  }
+}
+@keyframes ai-card-blob-3 {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  33% {
+    transform: translate(-25%, -40%);
+  }
+  66% {
+    transform: translate(-55%, -15%);
+  }
+}
+@keyframes ai-card-blob-4 {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  33% {
+    transform: translate(35%, -30%);
+  }
+  66% {
+    transform: translate(60%, -10%);
   }
 }
 

@@ -16,7 +16,7 @@ import {
 import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
 import { ScrollReveal, ParallaxLayer } from "@/components/public/scroll-reveal";
-import { AiCardReveal } from "@/components/public/ai-card-reveal";
+import { AiCardReveal, AiSideReveal } from "@/components/public/ai-card-reveal";
 
 export default async function Home({
   params,
@@ -207,10 +207,11 @@ export default async function Home({
         </ParallaxLayer>
         <div className="mx-auto max-w-6xl px-6 py-28 sm:py-32">
           <div className="grid gap-12 md:grid-cols-2 md:items-center">
-            {/* intensity="soft" because the title uses .text-gradient-warm —
-                scale animations on background-clip:text re-rasterize the
-                gradient every frame and jitter on hi-DPI. Translate only. */}
-            <ScrollReveal intensity="soft">
+            {/* AiSideReveal — a distinct entrance reserved for the AI
+                section. Blur-clear + lift over 1.1s reads differently
+                from the standard fade-up that the rest of the page
+                uses, so this section pops. */}
+            <AiSideReveal>
               <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
                 {t("features_eyebrow")}
               </div>
@@ -225,7 +226,7 @@ export default async function Home({
                 <BulletItem>{t("intro_pill_2")}</BulletItem>
                 <BulletItem>{t("intro_pill_3")}</BulletItem>
               </ul>
-            </ScrollReveal>
+            </AiSideReveal>
             <AiCardReveal>
               <AiMockCard t={t} />
             </AiCardReveal>
@@ -357,7 +358,13 @@ function AiMockCard({
   t: Awaited<ReturnType<typeof getTranslations<"Landing">>>;
 }) {
   return (
-    <div className="relative rounded-2xl border border-border bg-card p-5 sm:p-6">
+    <div
+      className={
+        "relative rounded-2xl border border-border bg-card p-5 sm:p-6 " +
+        "transition-transform duration-300 ease-out hover:scale-[1.03] " +
+        "motion-reduce:transition-none motion-reduce:hover:scale-100"
+      }
+    >
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium text-foreground">T4 — 2025</p>
         <span className="inline-flex items-center gap-1 rounded-md bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive uppercase tracking-wider">
