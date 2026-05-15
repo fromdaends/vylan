@@ -18,7 +18,7 @@ export default async function TermsPage({
   const t = await getTranslations("Terms");
 
   return (
-    <main className="flex-1 flex flex-col pt-16">
+    <main className="flex-1 flex flex-col pt-24">
       <PublicNav />
 
       <article className="mx-auto max-w-3xl px-6 py-16 space-y-6">

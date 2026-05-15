@@ -18,7 +18,7 @@ export default async function PrivacyPage({
   const t = await getTranslations("Privacy");
 
   return (
-    <main className="flex-1 flex flex-col pt-16">
+    <main className="flex-1 flex flex-col pt-24">
       <PublicNav />
 
       <article className="mx-auto max-w-3xl px-6 py-16 space-y-6">

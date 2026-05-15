@@ -247,16 +247,16 @@
     -webkit-text-fill-color: transparent;
   }
 
-  /* Subtle floating-bar glassmorphism for the public nav.
-     - blur(16px) softens the page content behind it
+  /* Floating-pill glassmorphism for the public nav.
+     - blur(24px) softens the page content behind it (premium feel)
      - saturate(180%) gives the Apple-style "richer" frosted look
      - prefixed -webkit- variant for Safari < 18 + iOS Safari
-     - background opacity comes from a Tailwind `bg-background/70` on
+     - background opacity comes from a Tailwind `bg-background/55` on
        the same element, so the tint flips automatically with the
        light/dark theme tokens. */
   .glass-nav {
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
   }
 
   /* --- Bolder utilities --- */
