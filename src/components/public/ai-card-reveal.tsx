@@ -1,7 +1,21 @@
 "use client";
 
 import { motion, useInView, useReducedMotion } from "framer-motion";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+
+// useLayoutEffect inside a "use client" component still runs during
+// SSR hydration setup on the server, which logs a warning. Fall back
+// to useEffect on the server (where it does nothing anyway) and use
+// useLayoutEffect on the client. This is the standard isomorphic
+// pattern recommended by the React team.
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 // Scroll-triggered reveal + mesh-blended aurora glow for the AI
 // document checks card on the landing page.
@@ -135,9 +149,19 @@ export function AiCardReveal({
   // Bump on every fresh DOWN entry — forces the inner motion.div to
   // remount from `initial`, which guarantees the slide-from-edge
   // plays every time the section comes into view from below.
+  //
+  // useLayoutEffect (via the isomorphic shim above) runs
+  // SYNCHRONOUSLY after render commits but BEFORE the browser
+  // paints. By bumping the key here we ensure the remount-with-
+  // fresh-initial-state happens in the same paint cycle as the
+  // inView=true detection, so the user never sees the brief frame
+  // where the old motion.div is mid-animation before the remount.
+  // That false-start frame was the perceived "lag" on the green
+  // card swoop (the green section has an extra observer firing
+  // upstream, which made the delta more visible than on the red).
   const [entryKey, setEntryKey] = useState(0);
   const wasInViewRef = useRef(false);
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (inView && !wasInViewRef.current && _scrollDownRef.current) {
       setEntryKey((k) => k + 1);
     }
@@ -284,9 +308,12 @@ export function AiSideReveal({
   const hasEverEntered = useRef(false);
   if (inView) hasEverEntered.current = true;
 
+  // Same useLayoutEffect-based key bump as AiCardReveal (see comment
+  // there) — eliminates the one-frame false-start on the entry
+  // fade-up.
   const [entryKey, setEntryKey] = useState(0);
   const wasInViewRef = useRef(false);
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (inView && !wasInViewRef.current && _scrollDownRef.current) {
       setEntryKey((k) => k + 1);
     }
