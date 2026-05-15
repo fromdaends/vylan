@@ -39,20 +39,19 @@ import { brand } from "@/lib/brand";
 //   </header>
 //
 // Visual stack on the pill:
-//   1. .glass-nav    → both the bg-color (oklch ~0.82-0.85 opacity)
-//                      AND the backdrop-filter chain (blur + saturate
-//                      + contrast + brightness) live in globals.css.
-//                      The bg is intentionally near-opaque (~15%
-//                      see-through) so content behind the pill is
-//                      reduced to soft colour hints — "literal soap-
-//                      bubble" feel, not a transparent glass plate.
-//   2. border foreground/10 → hairline that flips dark↔light:
+//   1. .glass-nav    → backdrop-filter: blur(48px) saturate(200%)
+//                      with -webkit-backdrop-filter for Safari.
+//   2. bg-background/55 → 55% translucent tint; the underlying
+//                         `--background` CSS variable flips per
+//                         theme so light = pale glass, dark = dark
+//                         glass.
+//   3. border foreground/10 → hairline that flips dark↔light:
 //                             `--foreground` is dark in light mode
 //                             and light in dark mode, so a single
 //                             token gives correctly-tinted borders.
-//   3. Outer drop shadow → diffused, makes the pill visibly float
+//   4. Outer drop shadow → diffused, makes the pill visibly float
 //                          off the page.
-//   4. Inset 1px top highlight → the premium gloss line at the top
+//   5. Inset 1px top highlight → the premium gloss line at the top
 //                                edge. Higher opacity in dark mode
 //                                so it actually reads against a
 //                                dark surface.
@@ -69,29 +68,23 @@ const HELP_ITEMS = [
   { href: "/faq", labelKey: "nav_help_questions", icon: MessageCircleQuestion },
 ] as const;
 
-// Pill visual — Apple-style "liquid glass".
-// Four shadow layers, all in concert with the noise-free liquid-
-// glass surface in globals.css:
-//   1. Outer drop shadow — pill floats off the page.
-//   2. Inset 1px white rim around the entire perimeter — the
-//      refractive edge of a water droplet / iOS liquid-glass widget.
-//      Higher alpha in light mode so it reads against pale glass;
-//      lower in dark so it doesn't shout.
-//   3. Inset 1px bright top edge highlight — the "specular" line
-//      where light catches the top curve of the liquid.
-//   4. Inset 1px soft bottom shadow — opposite curve, slight depth.
+// Pill visual. Three shadow layers:
+//   - Outer drop shadow: makes the pill float off the page.
+//   - Inset top highlight: the gloss line that sells "polished glass".
+//   - Inset bottom shadow: a barely-there dark line at the bottom
+//     edge → adds a subtle bevel so the pill reads as a 3D plate
+//     instead of a flat sticker.
+// Dark mode swaps to deeper outer shadow + lighter gloss (so the
+// highlight pops against a dark surface) + slightly darker bottom.
 //
-// The border is dropped because the inset rim now does that work
-// (a separate 1px border PLUS a 1px inset white rim would compete
-// and look chunky).
-//
-// Interactive: a single, calm `hover:scale-[1.025]` with a 300 ms
-// ease-out transition. No tilt, no spotlight.
+// Interactive: a single, calm `hover:scale-[1.01]` with a 250 ms
+// ease-out transition. No tilt, no spotlight — the previous version
+// hammered too much. Just a subtle "expand on hover".
 const PILL_CLASSES =
-  "glass-nav rounded-full " +
+  "glass-nav bg-background/55 border border-foreground/10 rounded-full " +
   "transition-transform duration-300 ease-out hover:scale-[1.025] motion-reduce:transition-none motion-reduce:hover:scale-100 " +
-  "shadow-[0_14px_44px_-10px_rgba(15,18,30,0.22),inset_0_0_0_1px_rgba(255,255,255,0.4),inset_0_1.5px_0_rgba(255,255,255,0.6),inset_0_-1px_2px_-1px_rgba(0,0,0,0.06)] " +
-  "dark:shadow-[0_14px_44px_-10px_rgba(0,0,0,0.6),inset_0_0_0_1px_rgba(255,255,255,0.18),inset_0_1.5px_0_rgba(255,255,255,0.28),inset_0_-1px_2px_-1px_rgba(0,0,0,0.3)]";
+  "shadow-[0_12px_40px_-10px_rgba(15,18,30,0.15),inset_0_1px_0_rgba(255,255,255,0.7),inset_0_-1px_0_rgba(0,0,0,0.03)] " +
+  "dark:shadow-[0_12px_40px_-10px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.25)]";
 
 export function PublicNav() {
   const t = useTranslations("Landing");
@@ -220,7 +213,7 @@ export function PublicNav() {
           id="public-nav-mobile"
           className={
             "pointer-events-auto mt-2 w-full max-w-5xl md:hidden " +
-            "glass-nav " +
+            "glass-nav bg-background/85 " +
             "border border-foreground/10 rounded-3xl " +
             "shadow-[0_12px_36px_-12px_rgba(15,18,30,0.18)] " +
             "dark:shadow-[0_12px_36px_-12px_rgba(0,0,0,0.5)]"
