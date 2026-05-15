@@ -47,7 +47,8 @@ export default async function AppLayout({
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),
         templates: t("nav_templates"),
-        billing: t("nav_billing"),
+        // `nav_billing` translation key kept for the Settings page's
+        // billing link card; no longer needed in the top-nav labels.
         settings: t("nav_settings"),
         logout: tAuth("logout"),
         profile: tProfile("menu_profile"),

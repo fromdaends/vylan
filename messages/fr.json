@@ -214,6 +214,9 @@
     "section_firm_prefs_hint": "Contrôle comment Relai gère les téléversements illisibles de vos clients.",
     "auto_reject_label": "Rejet automatique des documents illisibles",
     "auto_reject_help": "Quand activé, Relai détectera les documents flous ou incomplets et demandera automatiquement au client de les renvoyer. Quand désactivé, ces documents seront placés en file d'attente pour votre révision.",
+    "section_billing": "Facturation",
+    "section_billing_hint": "Gérez votre forfait, votre mode de paiement et vos factures.",
+    "billing_link_label": "Ouvrir la facturation",
     "save_failed": "Impossible d'enregistrer. Veuillez réessayer."
   },
   "App": {
