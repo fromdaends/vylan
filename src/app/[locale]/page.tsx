@@ -51,44 +51,47 @@ export default async function Home({
           intensity={120}
           className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_70%_85%_at_50%_30%,black,transparent_70%)]"
         >
-          {/* Hero halo — tight central cluster. The previous version
-              had rose + coral anchored at -100 px (visibly bleeding
-              into the far left/right corners) plus peach + gold at
-              10% from each side. User wanted MORE colour around the
-              headline and NONE on the far sides, so everything's
-              been pulled in toward the centre column. The mask was
-              also tightened (75% → 70% radius) so any residual
-              colour fades cleanly before reaching the viewport
-              edges. */}
+          {/* Hero halo — tight central cluster. Each orb runs a slow
+              drift (`orb-drift-center` / `orb-drift-side`) with
+              co-prime durations + offset delays so the cluster
+              breathes without ever looping. The `orb-drift-center`
+              keyframe bakes `translate(-50%, 0)` into every step so
+              the animation transform doesn't fight Tailwind's
+              `-translate-x-1/2`; the Tailwind class stays as the
+              fallback for users with `prefers-reduced-motion: reduce`
+              (animation off). Orbs also use `mix-blend-mode: multiply`
+              (light) / `screen` (dark) for real colour mesh where
+              they overlap. */}
           <div aria-hidden>
             {/* Iris keystone — sits above the headline. */}
-            <div className="orb orb-iris h-[760px] w-[760px] top-[-180px] left-1/2 -translate-x-1/2 opacity-100" />
-            {/* Rose + coral flank the headline (was -100, now 22%
-                from each edge — still off-axis but well inside the
-                visible mask). */}
             <div
-              className="orb orb-rose h-[440px] w-[440px] top-[100px] left-[22%] opacity-95"
-              style={{ animationDelay: "-3s" }}
+              className="orb orb-iris orb-drift-center h-[760px] w-[760px] top-[-180px] left-1/2 -translate-x-1/2 opacity-100"
+              style={{ animationDuration: "47s" }}
+            />
+            {/* Rose + coral flank the headline. */}
+            <div
+              className="orb orb-rose orb-drift-side h-[440px] w-[440px] top-[100px] left-[22%] opacity-95"
+              style={{ animationDuration: "23s", animationDelay: "-3s" }}
             />
             <div
-              className="orb orb-coral h-[440px] w-[440px] top-[100px] right-[22%] opacity-95"
-              style={{ animationDelay: "-7s" }}
+              className="orb orb-coral orb-drift-side h-[440px] w-[440px] top-[100px] right-[22%] opacity-95"
+              style={{ animationDuration: "29s", animationDelay: "-7s" }}
             />
             {/* Warm gold sits behind the CTA row. */}
             <div
-              className="orb orb-gold h-[400px] w-[400px] top-[300px] left-1/2 -translate-x-1/2 opacity-95"
-              style={{ animationDelay: "-5s" }}
+              className="orb orb-gold orb-drift-center h-[400px] w-[400px] top-[300px] left-1/2 -translate-x-1/2 opacity-95"
+              style={{ animationDuration: "37s", animationDelay: "-5s" }}
             />
             {/* Pink lower-centre + a small iris satellite below it
                 so the cluster carries colour down past the CTAs
                 without ever drifting to the corners. */}
             <div
-              className="orb orb-pink h-[360px] w-[360px] top-[460px] left-1/2 -translate-x-1/2 opacity-85"
-              style={{ animationDelay: "-9s" }}
+              className="orb orb-pink orb-drift-center h-[360px] w-[360px] top-[460px] left-1/2 -translate-x-1/2 opacity-85"
+              style={{ animationDuration: "41s", animationDelay: "-9s" }}
             />
             <div
-              className="orb orb-iris h-[300px] w-[300px] top-[540px] left-1/2 -translate-x-1/2 opacity-60"
-              style={{ animationDelay: "-11s" }}
+              className="orb orb-iris orb-drift-center h-[300px] w-[300px] top-[540px] left-1/2 -translate-x-1/2 opacity-60"
+              style={{ animationDuration: "31s", animationDelay: "-11s" }}
             />
           </div>
         </ParallaxLayer>
@@ -213,7 +216,7 @@ export default async function Home({
                 uses, so this section pops. */}
             <AiSideReveal>
               <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-                {t("features_eyebrow")}
+                {t("ai_eyebrow")}
               </div>
               <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-[1.05] text-gradient-warm">
                 {t("feature_3_title")}

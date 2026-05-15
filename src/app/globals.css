@@ -264,32 +264,37 @@
   /* --- Bolder utilities --- */
 
   /* Animated gradient orb backdrop.
-     Perf: kept as a STATIC blurred radial gradient — no per-frame
-     `orb-float` keyframe. The orbs get their motion from the
-     ParallaxLayer wrapper instead, which translates the whole layer
-     on the compositor (cheap) rather than repainting a giant
-     blur(80px) on every frame (expensive). will-change + translateZ
-     promote each orb to its own GPU layer so the parallax translate
-     is a pure compositor operation. */
+     Each orb is a big blurred radial gradient promoted to its own GPU
+     layer (`will-change: transform` + initial `translateZ(0)`). When
+     a `.orb-drift-*` helper class is attached, a slow transform-only
+     keyframe gives the cluster a subtle breathing motion — composited
+     by the GPU, no blur recomputation per frame.
+     `mix-blend-mode: multiply` (light) / `screen` (dark) lets the
+     orbs actually MESH where they overlap — a rose+iris overlap
+     becomes a real plum, not just two stacked translucent pucks. */
   .orb {
     position: absolute;
     border-radius: 9999px;
-    filter: blur(56px);
+    filter: blur(60px);
     pointer-events: none;
     transform: translateZ(0);
     will-change: transform, opacity;
+    mix-blend-mode: multiply;
+  }
+  .dark .orb {
+    mix-blend-mode: screen;
   }
   .orb-iris {
     background: radial-gradient(
       circle,
-      oklch(0.62 0.18 264 / 0.55) 0%,
+      oklch(0.6 0.24 264 / 0.72) 0%,
       transparent 70%
     );
   }
   .orb-pink {
     background: radial-gradient(
       circle,
-      oklch(0.72 0.2 350 / 0.55) 0%,
+      oklch(0.7 0.26 350 / 0.7) 0%,
       transparent 70%
     );
   }
@@ -303,14 +308,14 @@
   .dark .orb-iris {
     background: radial-gradient(
       circle,
-      oklch(0.7 0.22 264 / 0.4) 0%,
+      oklch(0.68 0.26 264 / 0.55) 0%,
       transparent 70%
     );
   }
   .dark .orb-pink {
     background: radial-gradient(
       circle,
-      oklch(0.75 0.22 340 / 0.4) 0%,
+      oklch(0.72 0.26 340 / 0.55) 0%,
       transparent 70%
     );
   }
@@ -325,14 +330,14 @@
   .orb-gold {
     background: radial-gradient(
       circle,
-      oklch(0.82 0.18 78 / 0.62) 0%,
+      oklch(0.78 0.22 78 / 0.75) 0%,
       transparent 70%
     );
   }
   .dark .orb-gold {
     background: radial-gradient(
       circle,
-      oklch(0.84 0.18 78 / 0.42) 0%,
+      oklch(0.82 0.22 78 / 0.58) 0%,
       transparent 70%
     );
   }
@@ -341,14 +346,14 @@
   .orb-coral {
     background: radial-gradient(
       circle,
-      oklch(0.74 0.2 32 / 0.6) 0%,
+      oklch(0.7 0.26 32 / 0.75) 0%,
       transparent 70%
     );
   }
   .dark .orb-coral {
     background: radial-gradient(
       circle,
-      oklch(0.74 0.22 32 / 0.42) 0%,
+      oklch(0.72 0.26 32 / 0.55) 0%,
       transparent 70%
     );
   }
@@ -371,16 +376,35 @@
   .orb-rose {
     background: radial-gradient(
       circle,
-      oklch(0.74 0.22 14 / 0.55) 0%,
+      oklch(0.68 0.28 14 / 0.72) 0%,
       transparent 70%
     );
   }
   .dark .orb-rose {
     background: radial-gradient(
       circle,
-      oklch(0.76 0.24 14 / 0.4) 0%,
+      oklch(0.72 0.28 14 / 0.55) 0%,
       transparent 70%
     );
+  }
+  /* Slow drift helpers for the hero orb cluster. The `-center`
+     variant bakes `translate(-50%, 0)` into every keyframe so the
+     animation transform doesn't fight Tailwind's `-translate-x-1/2`
+     on horizontally-centered orbs. The `-side` variant is for orbs
+     anchored to the left/right edge of the cluster. Apply different
+     `animation-duration` per orb (co-prime numbers) for a never-
+     repeating pattern. */
+  .orb-drift-center {
+    animation: orb-drift-center 31s ease-in-out infinite;
+  }
+  .orb-drift-side {
+    animation: orb-drift-side 29s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .orb-drift-center,
+    .orb-drift-side {
+      animation: none;
+    }
   }
   /* Cool emerald — adds a green to round out the spectrum behind the
      hero headline. */
@@ -882,6 +906,38 @@
   }
   66% {
     transform: translate(-15px, 20px) scale(0.95);
+  }
+}
+
+/* Hero orb drift — subtle breathing motion for the central cluster.
+   The `-center` variant carries `translate(-50%, 0)` through every
+   keyframe step so horizontally-centered orbs keep their anchor while
+   they drift. The `-side` variant is for orbs already anchored to a
+   specific edge. Movement is intentionally tiny (~20px) and slow
+   (29–47s per orb) so the cluster reads as "alive" without ever being
+   distracting. */
+@keyframes orb-drift-center {
+  0%,
+  100% {
+    transform: translate(-50%, 0) scale(1);
+  }
+  33% {
+    transform: translate(calc(-50% + 18px), -22px) scale(1.04);
+  }
+  66% {
+    transform: translate(calc(-50% - 14px), 18px) scale(0.97);
+  }
+}
+@keyframes orb-drift-side {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(16px, -22px) scale(1.05);
+  }
+  66% {
+    transform: translate(-12px, 16px) scale(0.96);
   }
 }
 
