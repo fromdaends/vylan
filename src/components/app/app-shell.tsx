@@ -19,7 +19,6 @@ import {
   LayoutDashboard,
   Users,
   FileText,
-  CreditCard,
   Settings,
   Menu,
   X,
@@ -33,7 +32,6 @@ type Labels = {
   dashboard: string;
   clients: string;
   templates: string;
-  billing: string;
   settings: string;
   logout: string;
   profile: string;
@@ -64,7 +62,9 @@ export function AppShell({
     { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
-    { href: "/billing", label: labels.billing, icon: CreditCard },
+    // Billing was here. It's now reached through Settings (see
+    // /settings page's Billing link card) so the top nav stays tight
+    // — Dashboard / Clients / Templates only.
   ];
 
   function isActive(href: string) {

@@ -214,6 +214,9 @@
     "section_firm_prefs_hint": "Controls how Relai handles unreadable uploads from your clients.",
     "auto_reject_label": "Auto-reject unreadable documents",
     "auto_reject_help": "When on, Relai detects unreadable or incomplete documents and automatically asks the client to resubmit. When off, these documents are queued for your review.",
+    "section_billing": "Billing",
+    "section_billing_hint": "Manage your plan, payment method, and invoices.",
+    "billing_link_label": "Open billing",
     "save_failed": "Couldn't save. Please try again."
   },
   "App": {
