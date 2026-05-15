@@ -247,25 +247,32 @@
     -webkit-text-fill-color: transparent;
   }
 
-  /* Floating-pill glassmorphism for the public nav — "soap bubble"
-     treatment. Past ~80px of blur, more blur stops killing text
-     legibility (text just stays as a high-contrast smear). To
-     actually obliterate text we need to crush local contrast.
-     - blur(120px) — strong frost
-     - saturate(220%) — preserve warm orb colour bleed-through
-     - contrast(0.6) — KEY: flattens dark text strokes against their
-       background so they disappear into the colour fog. Without
-       this, blur alone leaves text smudges readable
-     - brightness(1.05) — small lift so contrast(0.6) doesn't pull
-       the glass slightly grey
-     - prefixed -webkit- variant for iOS Safari + Safari < 18
-     - background opacity comes from a Tailwind `bg-background/75`
-       on the same element — pairs with the filter chain to push
-       underlying text fully into "literal bubble" territory while
-       the warm orb colours still bleed through. */
+  /* Floating-pill glassmorphism for the public nav — "literal soap-
+     bubble" treatment. Safari silently drops `contrast()` /
+     `brightness()` from a backdrop-filter chain in some versions, so
+     we can't rely on a filter-only contrast crush. Instead the
+     opacity itself does the heavy lifting: the pill is ~85% opaque
+     with the theme background colour, so only ~15% of the underlying
+     content (mostly hero-orb colour) bleeds through. Text behind
+     the pill is therefore mathematically unable to read crisply,
+     regardless of browser filter support.
+     - bg-color is set HERE in CSS (not via Tailwind `bg-background/85`
+       on the element) so it's universal — no dependency on
+       Tailwind's colour-mix opacity syntax landing in the user's
+       browser.
+     - blur + saturate + contrast remain in the filter chain so
+       browsers that DO honour them get extra refraction + colour
+       bleed for the "bubble" feel.
+     - inset gloss highlight + drop shadow live on the PILL_CLASSES
+       Tailwind utility in public-nav.tsx — they're what make the
+       pill read as a glossy plate. */
   .glass-nav {
+    background-color: oklch(0.99 0.002 264 / 0.82);
     backdrop-filter: blur(120px) saturate(220%) contrast(0.6) brightness(1.05);
     -webkit-backdrop-filter: blur(120px) saturate(220%) contrast(0.6) brightness(1.05);
+  }
+  .dark .glass-nav {
+    background-color: oklch(0.135 0.012 264 / 0.85);
   }
 
 

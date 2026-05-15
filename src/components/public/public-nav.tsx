@@ -39,19 +39,20 @@ import { brand } from "@/lib/brand";
 //   </header>
 //
 // Visual stack on the pill:
-//   1. .glass-nav    → backdrop-filter: blur(24px) saturate(180%)
-//                      with -webkit-backdrop-filter for Safari.
-//   2. bg-background/55 → 55% translucent tint; the underlying
-//                         `--background` CSS variable flips per
-//                         theme so light = pale glass, dark = dark
-//                         glass.
-//   3. border foreground/10 → hairline that flips dark↔light:
+//   1. .glass-nav    → both the bg-color (oklch ~0.82-0.85 opacity)
+//                      AND the backdrop-filter chain (blur + saturate
+//                      + contrast + brightness) live in globals.css.
+//                      The bg is intentionally near-opaque (~15%
+//                      see-through) so content behind the pill is
+//                      reduced to soft colour hints — "literal soap-
+//                      bubble" feel, not a transparent glass plate.
+//   2. border foreground/10 → hairline that flips dark↔light:
 //                             `--foreground` is dark in light mode
 //                             and light in dark mode, so a single
 //                             token gives correctly-tinted borders.
-//   4. Outer drop shadow → diffused, makes the pill visibly float
+//   3. Outer drop shadow → diffused, makes the pill visibly float
 //                          off the page.
-//   5. Inset 1px top highlight → the premium gloss line at the top
+//   4. Inset 1px top highlight → the premium gloss line at the top
 //                                edge. Higher opacity in dark mode
 //                                so it actually reads against a
 //                                dark surface.
@@ -81,7 +82,7 @@ const HELP_ITEMS = [
 // ease-out transition. No tilt, no spotlight — the previous version
 // hammered too much. Just a subtle "expand on hover".
 const PILL_CLASSES =
-  "glass-nav bg-background/75 border border-foreground/10 rounded-full " +
+  "glass-nav border border-foreground/10 rounded-full " +
   "transition-transform duration-300 ease-out hover:scale-[1.025] motion-reduce:transition-none motion-reduce:hover:scale-100 " +
   "shadow-[0_12px_40px_-10px_rgba(15,18,30,0.15),inset_0_1px_0_rgba(255,255,255,0.7),inset_0_-1px_0_rgba(0,0,0,0.03)] " +
   "dark:shadow-[0_12px_40px_-10px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.25)]";
@@ -213,7 +214,7 @@ export function PublicNav() {
           id="public-nav-mobile"
           className={
             "pointer-events-auto mt-2 w-full max-w-5xl md:hidden " +
-            "glass-nav bg-background/85 " +
+            "glass-nav " +
             "border border-foreground/10 rounded-3xl " +
             "shadow-[0_12px_36px_-12px_rgba(15,18,30,0.18)] " +
             "dark:shadow-[0_12px_36px_-12px_rgba(0,0,0,0.5)]"
