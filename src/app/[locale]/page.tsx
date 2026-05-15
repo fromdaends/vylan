@@ -12,6 +12,7 @@ import {
   Clock,
   Rocket,
   ShieldCheck,
+  X,
 } from "lucide-react";
 import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
@@ -491,7 +492,11 @@ function AiMockCard({
             className="h-10 w-10 text-muted-foreground/30"
             aria-hidden
           />
-          {isSuccess && (
+          {/* Status badge overlapping the bottom-right of the file
+              icon. Green check for success, red X for warning —
+              same size, same offset, same ring, only the symbol
+              and the colour token change. */}
+          {isSuccess ? (
             <span
               className={
                 "absolute -bottom-1.5 -right-1.5 inline-flex h-6 w-6 " +
@@ -501,6 +506,17 @@ function AiMockCard({
               aria-hidden
             >
               <Check className="h-3.5 w-3.5" aria-hidden />
+            </span>
+          ) : (
+            <span
+              className={
+                "absolute -bottom-1.5 -right-1.5 inline-flex h-6 w-6 " +
+                "items-center justify-center rounded-full bg-destructive " +
+                "text-destructive-foreground ring-2 ring-card shadow-sm"
+              }
+              aria-hidden
+            >
+              <X className="h-3.5 w-3.5" aria-hidden />
             </span>
           )}
         </div>
