@@ -100,24 +100,44 @@ export function AiCardReveal({
   lateExit?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS);
+  // Two observers when `lateExit` is on:
+  //   - inViewStrict (always INVIEW_OPTS) drives the entry-key bump,
+  //     so the swoop fires when the user actually sees the section,
+  //     not when the loose root rectangle (extended below the
+  //     viewport) first intersects the element.
+  //   - inViewLoose (INVIEW_OPTS_LATE when lateExit) drives the
+  //     visible/up-exit state, so the element keeps its `visible`
+  //     state much longer as the user scrolls back up past it.
+  // When `lateExit` is off, both observers use the same options
+  // and the behaviour is equivalent to the original single-observer
+  // version.
+  const inViewLoose = useInView(
+    ref,
+    lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS,
+  );
+  const inViewStrict = useInView(ref, INVIEW_OPTS);
   const reducedMotion = useReducedMotion();
   useEffect(() => attachSharedScrollListener(), []);
 
   const hasEverEntered = useRef(false);
-  if (inView) hasEverEntered.current = true;
+  if (inViewLoose) hasEverEntered.current = true;
 
-  // Bump on every fresh DOWN entry — forces the inner motion.div to
-  // remount from `initial`, which guarantees the slide-from-edge
-  // plays every time the section comes into view from below.
+  // Bump on every fresh DOWN entry through the STRICT threshold —
+  // forces the inner motion.div to remount from `initial`, which
+  // guarantees the slide-from-edge plays every time the section
+  // comes substantially into view from below.
   const [entryKey, setEntryKey] = useState(0);
-  const wasInViewRef = useRef(false);
+  const wasInViewStrictRef = useRef(false);
   useEffect(() => {
-    if (inView && !wasInViewRef.current && _scrollDownRef.current) {
+    if (
+      inViewStrict &&
+      !wasInViewStrictRef.current &&
+      _scrollDownRef.current
+    ) {
       setEntryKey((k) => k + 1);
     }
-    wasInViewRef.current = inView;
-  }, [inView]);
+    wasInViewStrictRef.current = inViewStrict;
+  }, [inViewStrict]);
 
   const x0 = direction === "left" ? -60 : 60;
 
@@ -137,7 +157,7 @@ export function AiCardReveal({
         filter: `blur(${UP_EXIT_BLUR_PX}px)`,
       };
 
-  const target = inView
+  const target = inViewLoose
     ? visible
     : !hasEverEntered.current
       ? initial
@@ -146,7 +166,7 @@ export function AiCardReveal({
         : upExit;
 
   const upExitDuration = lateExit ? UP_EXIT_DURATION_LATE : UP_EXIT_DURATION;
-  const transition = inView
+  const transition = inViewLoose
     ? {
         duration: reducedMotion ? REDUCED_DURATION : ENTER_DURATION_CARD,
         ease: EASE_OUT,
@@ -195,21 +215,30 @@ export function AiSideReveal({
   lateExit?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS);
+  // Same two-observer split as AiCardReveal — see comment there.
+  const inViewLoose = useInView(
+    ref,
+    lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS,
+  );
+  const inViewStrict = useInView(ref, INVIEW_OPTS);
   const reducedMotion = useReducedMotion();
   useEffect(() => attachSharedScrollListener(), []);
 
   const hasEverEntered = useRef(false);
-  if (inView) hasEverEntered.current = true;
+  if (inViewLoose) hasEverEntered.current = true;
 
   const [entryKey, setEntryKey] = useState(0);
-  const wasInViewRef = useRef(false);
+  const wasInViewStrictRef = useRef(false);
   useEffect(() => {
-    if (inView && !wasInViewRef.current && _scrollDownRef.current) {
+    if (
+      inViewStrict &&
+      !wasInViewStrictRef.current &&
+      _scrollDownRef.current
+    ) {
       setEntryKey((k) => k + 1);
     }
-    wasInViewRef.current = inView;
-  }, [inView]);
+    wasInViewStrictRef.current = inViewStrict;
+  }, [inViewStrict]);
 
   const initial = reducedMotion
     ? { opacity: 0 }
@@ -221,7 +250,7 @@ export function AiSideReveal({
     ? { opacity: 0 }
     : { opacity: 0, y: 20, filter: `blur(${UP_EXIT_BLUR_PX}px)` };
 
-  const target = inView
+  const target = inViewLoose
     ? visible
     : !hasEverEntered.current
       ? initial
@@ -230,7 +259,7 @@ export function AiSideReveal({
         : upExit;
 
   const upExitDuration = lateExit ? UP_EXIT_DURATION_LATE : UP_EXIT_DURATION;
-  const transition = inView
+  const transition = inViewLoose
     ? {
         duration: reducedMotion ? REDUCED_DURATION : ENTER_DURATION_SIDE,
         ease: EASE_OUT,
