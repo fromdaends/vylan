@@ -95,14 +95,13 @@ const INVIEW_OPTS = { amount: 0.3, margin: "0px 0px -10% 0px" } as const;
 // the section feels like it lingers on the way back up.
 const INVIEW_OPTS_LATE = { amount: 0.05, margin: "0px 0px 35% 0px" } as const;
 // How long the section must have been out of view before the
-// next DOWN entry is allowed to replay the swoop. Tuned to
-// distinguish "fast wiggle scroll" (~200ms up-and-back, no replay
-// desired) from "intentional revisit" (user glanced at a nearby
-// section then came back, ~400ms+). Time-based rather than
-// distance-based because the user's natural revisit pattern often
-// covers <1vh of distance — a distance threshold large enough to
-// suppress wiggles also suppresses normal revisits.
-const REPLAY_COOLDOWN_MS = 300;
+// next DOWN entry is allowed to replay the swoop. Set tight: only
+// blocks ultra-fast involuntary flicks (sub-100ms). Any deliberate
+// scroll-and-return — even a quick glance at the section above —
+// takes longer than this and arms the replay. Earlier 300ms and
+// 1000ms values were both too long for the user's natural revisit
+// patterns.
+const REPLAY_COOLDOWN_MS = 100;
 
 // --- Card -------------------------------------------------------------
 
