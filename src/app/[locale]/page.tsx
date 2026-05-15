@@ -49,29 +49,46 @@ export default async function Home({
             backdrop feels alive both directions. */}
         <ParallaxLayer
           intensity={120}
-          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_75%_90%_at_50%_30%,black,transparent_75%)]"
+          className="pointer-events-none absolute inset-0 -z-10 overflow-hidden [mask-image:radial-gradient(ellipse_70%_85%_at_50%_30%,black,transparent_70%)]"
         >
+          {/* Hero halo — tight central cluster. The previous version
+              had rose + coral anchored at -100 px (visibly bleeding
+              into the far left/right corners) plus peach + gold at
+              10% from each side. User wanted MORE colour around the
+              headline and NONE on the far sides, so everything's
+              been pulled in toward the centre column. The mask was
+              also tightened (75% → 70% radius) so any residual
+              colour fades cleanly before reaching the viewport
+              edges. */}
           <div aria-hidden>
-            <div className="orb orb-iris h-[820px] w-[820px] top-[-220px] left-1/2 -translate-x-1/2 opacity-100" />
+            {/* Iris keystone — sits above the headline. */}
+            <div className="orb orb-iris h-[760px] w-[760px] top-[-180px] left-1/2 -translate-x-1/2 opacity-100" />
+            {/* Rose + coral flank the headline (was -100, now 22%
+                from each edge — still off-axis but well inside the
+                visible mask). */}
             <div
-              className="orb orb-rose h-[560px] w-[560px] top-[20px] -left-[100px] opacity-100"
+              className="orb orb-rose h-[440px] w-[440px] top-[100px] left-[22%] opacity-95"
               style={{ animationDelay: "-3s" }}
             />
             <div
-              className="orb orb-coral h-[560px] w-[560px] top-[20px] -right-[100px] opacity-100"
+              className="orb orb-coral h-[440px] w-[440px] top-[100px] right-[22%] opacity-95"
               style={{ animationDelay: "-7s" }}
             />
+            {/* Warm gold sits behind the CTA row. */}
             <div
-              className="orb orb-peach h-[440px] w-[440px] top-[200px] left-[10%] opacity-95"
-              style={{ animationDelay: "-11s" }}
-            />
-            <div
-              className="orb orb-gold h-[480px] w-[480px] top-[200px] right-[10%] opacity-95"
+              className="orb orb-gold h-[400px] w-[400px] top-[300px] left-1/2 -translate-x-1/2 opacity-95"
               style={{ animationDelay: "-5s" }}
             />
+            {/* Pink lower-centre + a small iris satellite below it
+                so the cluster carries colour down past the CTAs
+                without ever drifting to the corners. */}
             <div
-              className="orb orb-pink h-[360px] w-[360px] top-[420px] left-1/2 -translate-x-1/2 opacity-70"
+              className="orb orb-pink h-[360px] w-[360px] top-[460px] left-1/2 -translate-x-1/2 opacity-85"
               style={{ animationDelay: "-9s" }}
+            />
+            <div
+              className="orb orb-iris h-[300px] w-[300px] top-[540px] left-1/2 -translate-x-1/2 opacity-60"
+              style={{ animationDelay: "-11s" }}
             />
           </div>
         </ParallaxLayer>
