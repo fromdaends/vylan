@@ -85,15 +85,13 @@ export default async function Home({
             {t("subhead")}
           </p>
           <div className="mt-12 flex flex-wrap gap-3 justify-center">
-            <Link href="/signup">
+            {/* Single primary CTA. Routes to /pricing so the user
+                picks a plan first; the plan page hands off to
+                /signup?plan=<id> with the 14-day trial pre-applied. */}
+            <Link href="/pricing">
               <Button size="lg" className="press h-12 px-6 text-base glow-accent">
                 {t("cta_primary")}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-              </Button>
-            </Link>
-            <Link href="/pricing">
-              <Button variant="outline" size="lg" className="press h-12 px-6 text-base">
-                {t("cta_secondary")}
               </Button>
             </Link>
           </div>
@@ -307,7 +305,7 @@ export default async function Home({
             {t("cta_final_body")}
           </p>
           <div className="mt-10 flex flex-wrap gap-3 justify-center">
-            <Link href="/signup">
+            <Link href="/pricing">
               <Button size="lg" className="press h-12 px-6 text-base glow-accent">
                 {t("cta_primary")}
                 <ArrowRight className="h-4 w-4" />

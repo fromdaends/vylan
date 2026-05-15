@@ -3,7 +3,7 @@ import { Link } from "@/i18n/navigation";
 import { PLANS, PAID_PLANS, type PlanId } from "@/lib/plans";
 import { formatCurrency } from "@/lib/format";
 import { assertLocale } from "@/lib/locale";
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
 
@@ -22,7 +22,16 @@ export default async function PricingPage({
       <PublicNav />
 
       <section className="mx-auto max-w-4xl px-6 py-20">
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-center">
+        {/* Trial banner — visible right under the heading so the
+            14-day-free promise is the first thing visitors read. */}
+        <div className="flex justify-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-xs font-medium text-foreground">
+            <Sparkles className="h-3.5 w-3.5 text-accent" aria-hidden />
+            {t("trial_banner")}
+          </span>
+        </div>
+
+        <h1 className="mt-6 text-3xl sm:text-4xl font-semibold tracking-tight text-center">
           {t("title")}
         </h1>
         <p className="mt-3 text-center text-muted-foreground max-w-2xl mx-auto">
@@ -35,10 +44,9 @@ export default async function PricingPage({
           ))}
         </div>
 
-        <div className="mt-12 max-w-2xl mx-auto text-sm text-muted-foreground space-y-3 text-center">
-          <p>{t("trial_note")}</p>
-          <p>{t("currency_note")}</p>
-        </div>
+        <p className="mt-12 max-w-2xl mx-auto text-sm text-muted-foreground text-center">
+          {t("currency_note")}
+        </p>
       </section>
 
       <PublicFooter />
@@ -92,6 +100,10 @@ async function PlanCard({
         </div>
       </div>
       <ul className="text-sm space-y-2.5 text-muted-foreground">
+        <li className="flex items-start gap-2 text-foreground font-medium">
+          <Sparkles className="size-4 text-accent shrink-0 mt-0.5" aria-hidden />
+          {t("trial_feature")}
+        </li>
         <li className="flex items-start gap-2">
           <Check className="size-4 text-success shrink-0 mt-0.5" aria-hidden />
           {t(`plan_${planId}_engagements`)}

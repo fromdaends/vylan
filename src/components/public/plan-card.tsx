@@ -2,7 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { PLANS, type PlanId } from "@/lib/plans";
 import { formatCurrency } from "@/lib/format";
-import { Check } from "lucide-react";
+import { Check, Sparkles } from "lucide-react";
 
 // Pricing plan card. Used on /pricing (and previously inline on the
 // landing). Whole card is a link to /pricing/<id>; the featured plan
@@ -51,6 +51,10 @@ export async function PlanPreview({
         </span>
       </div>
       <ul className="mt-6 space-y-2.5 text-sm text-muted-foreground">
+        <li className="flex items-start gap-2 text-foreground font-medium">
+          <Sparkles className="h-4 w-4 text-accent shrink-0 mt-0.5" aria-hidden />
+          {t("trial_feature")}
+        </li>
         <li className="flex items-start gap-2">
           <Check className="h-4 w-4 text-success shrink-0 mt-0.5" aria-hidden />
           {t(`plan_${planId}_engagements`)}
