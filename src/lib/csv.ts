@@ -188,3 +188,48 @@ export function parseClientCsv(csv: string): ImportParseResult {
 
   return { valid, invalid, headerWarnings };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CSV writer (used by /api/firm/export.zip to emit one CSV per table).
+// RFC 4180-flavored:
+//   * Fields containing comma, double-quote, CR, or LF are quoted.
+//   * Embedded double-quotes are doubled.
+//   * Line terminator is CRLF.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type CsvCell = string | number | boolean | Date | null | undefined;
+
+const NEEDS_QUOTING = /[",\r\n]/;
+
+function escapeCell(v: CsvCell): string {
+  if (v === null || v === undefined) return "";
+  let s: string;
+  if (v instanceof Date) {
+    s = v.toISOString();
+  } else if (typeof v === "boolean") {
+    s = v ? "true" : "false";
+  } else if (typeof v === "number") {
+    s = Number.isFinite(v) ? String(v) : "";
+  } else {
+    s = v;
+  }
+  if (NEEDS_QUOTING.test(s)) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+export function csvLine(cells: CsvCell[]): string {
+  return cells.map(escapeCell).join(",") + "\r\n";
+}
+
+export function csvDocument(
+  header: string[],
+  rows: CsvCell[][],
+): string {
+  let out = csvLine(header);
+  for (const row of rows) {
+    out += csvLine(row);
+  }
+  return out;
+}

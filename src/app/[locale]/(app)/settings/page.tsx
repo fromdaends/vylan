@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { ChevronRight, CreditCard } from "lucide-react";
+import { ChevronRight, CreditCard, Download, Trash2 } from "lucide-react";
 import { Link, getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
@@ -80,6 +80,67 @@ export default async function SettingsPage({
           <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
       </section>
+
+      {/* Data & Privacy — owner-only firm data export + delete request.
+          Owner role gating matches the API route. Staff members never
+          see this section. */}
+      {user.role === "owner" && (
+        <section>
+          <h2 className="text-sm font-semibold">{t("section_data_title")}</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("section_data_hint")}
+          </p>
+          <div className="mt-4 space-y-3 max-w-xl">
+            <a
+              href="/api/firm/export.zip"
+              download
+              className={
+                "group flex items-center justify-between gap-4 " +
+                "rounded-lg border border-border bg-card px-4 py-3 " +
+                "transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+              }
+            >
+              <span className="flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+                  <Download className="h-4 w-4" />
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-sm font-medium">
+                    {t("data_export_label")}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("data_export_hint")}
+                  </span>
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </a>
+            <a
+              href={`mailto:support@relai.app?subject=${encodeURIComponent(`Delete firm: ${firm.name}`)}`}
+              className={
+                "group flex items-center justify-between gap-4 " +
+                "rounded-lg border border-border/60 bg-card/50 px-4 py-3 " +
+                "transition-colors hover:border-destructive/30"
+              }
+            >
+              <span className="flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-sm font-medium">
+                    {t("data_delete_label")}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("data_delete_hint")}
+                  </span>
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </a>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
