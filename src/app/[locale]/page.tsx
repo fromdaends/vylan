@@ -398,6 +398,18 @@ export default async function Home({
               </Button>
             </Link>
           </div>
+          {/* FAQ moved out of the public nav into this small link
+              under the bottom CTA — keeps the nav pill focused on
+              sign-in while giving curious visitors a way to dig
+              deeper before they commit. */}
+          <p className="mt-6 text-sm text-muted-foreground">
+            <Link
+              href="/faq"
+              className="hover:text-foreground underline underline-offset-4 transition-colors"
+            >
+              {t("cta_faq_link")}
+            </Link>
+          </p>
         </ScrollReveal>
       </section>
 
