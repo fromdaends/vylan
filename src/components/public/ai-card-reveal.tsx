@@ -69,12 +69,14 @@ function attachSharedScrollListener(): () => void {
 // --- Tuning -----------------------------------------------------------
 const ENTER_DURATION_CARD = 0.9;
 const ENTER_DURATION_SIDE = 1.1;
-// Glow opacity fade-in. Intentionally longer than the card swoop so
-// the user sees the colour ramp up softly while the underlying CSS
-// drift animations are already running — no perceptible "static
-// burst then start motion" handoff. Identical for both cards so the
-// red and green ambient backlights ease in symmetrically.
-const GLOW_FADE_IN_DURATION = 1.4;
+// Glow opacity fade-in. Matched to ENTER_DURATION_CARD so the
+// ambient backlight lands at the same moment as the card swoop
+// instead of trailing it — the previous 1.4s value left a visible
+// ~0.5s tail of "section still settling" after the card was done,
+// which read as a lag on re-entry. The underlying CSS blob drift
+// keeps running continuously regardless of this duration, so the
+// "fade-in over a continuously moving glow" property is preserved.
+const GLOW_FADE_IN_DURATION = 0.9;
 const UP_EXIT_DURATION = 0.55;
 // Used when `lateExit` is set. Longer fade duration paired with the
 // generous INVIEW_OPTS_LATE below — the element drifts out slowly
