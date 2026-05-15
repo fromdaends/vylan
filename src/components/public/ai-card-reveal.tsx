@@ -56,11 +56,22 @@ function attachSharedScrollListener(): () => void {
 const ENTER_DURATION_CARD = 0.9;
 const ENTER_DURATION_SIDE = 1.1;
 const UP_EXIT_DURATION = 0.55;
+// Used when `lateExit` is set. Longer fade duration paired with the
+// generous INVIEW_OPTS_LATE below — the element drifts out slowly
+// after the user has scrolled well past it.
+const UP_EXIT_DURATION_LATE = 1.6;
 const REDUCED_DURATION = 0.4;
 const EASE_OUT = [0.22, 1, 0.36, 1] as const;
 const EASE_IN = [0.4, 0, 1, 1] as const;
 const UP_EXIT_BLUR_PX = 8;
 const INVIEW_OPTS = { amount: 0.3, margin: "0px 0px -10% 0px" } as const;
+// `lateExit` variant. Extends the root rectangle 35% BELOW the
+// viewport (positive bottom margin) and drops the threshold to 5%.
+// Net effect: the element stays "in view" — and therefore in its
+// `visible` state, not its up-exit state — even after the user has
+// scrolled well past it. Triggers the up-exit fade much later, so
+// the section feels like it lingers on the way back up.
+const INVIEW_OPTS_LATE = { amount: 0.05, margin: "0px 0px 35% 0px" } as const;
 
 // --- Card -------------------------------------------------------------
 
@@ -68,6 +79,7 @@ export function AiCardReveal({
   children,
   direction = "right",
   variant = "warning",
+  lateExit = false,
 }: {
   children: ReactNode;
   /** Entry-swoop direction. "right" = card slides in from the right
@@ -80,9 +92,15 @@ export function AiCardReveal({
    *  approval sub-section). Maps to the `.variant-success` selector
    *  in globals.css which overrides each blob's background. */
   variant?: "warning" | "success";
+  /** When true, uses a more lenient IntersectionObserver config
+   *  (INVIEW_OPTS_LATE) and a longer up-exit duration so the
+   *  element lingers in its `visible` state much longer when the
+   *  user scrolls back up past it. Used by the green success
+   *  sub-section per user request. */
+  lateExit?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, INVIEW_OPTS);
+  const inView = useInView(ref, lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS);
   const reducedMotion = useReducedMotion();
   useEffect(() => attachSharedScrollListener(), []);
 
@@ -127,6 +145,7 @@ export function AiCardReveal({
         ? visible
         : upExit;
 
+  const upExitDuration = lateExit ? UP_EXIT_DURATION_LATE : UP_EXIT_DURATION;
   const transition = inView
     ? {
         duration: reducedMotion ? REDUCED_DURATION : ENTER_DURATION_CARD,
@@ -136,7 +155,7 @@ export function AiCardReveal({
       ? { duration: 0 }
       : _scrollDownRef.current
         ? { duration: 0 }
-        : { duration: UP_EXIT_DURATION, ease: EASE_IN };
+        : { duration: upExitDuration, ease: EASE_IN };
 
   const glowClass =
     variant === "success" ? "ai-card-glow variant-success" : "ai-card-glow";
@@ -164,9 +183,19 @@ export function AiCardReveal({
 
 // --- Side text --------------------------------------------------------
 
-export function AiSideReveal({ children }: { children: ReactNode }) {
+export function AiSideReveal({
+  children,
+  lateExit = false,
+}: {
+  children: ReactNode;
+  /** Same semantics as AiCardReveal's `lateExit`. When true, the
+   *  side text lingers in its `visible` state much longer when the
+   *  user scrolls back up past it. Used together with the matching
+   *  prop on AiCardReveal so the whole sub-section exits as a unit. */
+  lateExit?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, INVIEW_OPTS);
+  const inView = useInView(ref, lateExit ? INVIEW_OPTS_LATE : INVIEW_OPTS);
   const reducedMotion = useReducedMotion();
   useEffect(() => attachSharedScrollListener(), []);
 
@@ -200,6 +229,7 @@ export function AiSideReveal({ children }: { children: ReactNode }) {
         ? visible
         : upExit;
 
+  const upExitDuration = lateExit ? UP_EXIT_DURATION_LATE : UP_EXIT_DURATION;
   const transition = inView
     ? {
         duration: reducedMotion ? REDUCED_DURATION : ENTER_DURATION_SIDE,
@@ -209,7 +239,7 @@ export function AiSideReveal({ children }: { children: ReactNode }) {
       ? { duration: 0 }
       : _scrollDownRef.current
         ? { duration: 0 }
-        : { duration: UP_EXIT_DURATION, ease: EASE_IN };
+        : { duration: upExitDuration, ease: EASE_IN };
 
   return (
     <div ref={ref}>
