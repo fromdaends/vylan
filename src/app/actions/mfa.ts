@@ -118,7 +118,7 @@ export async function verifyMfaEnrollAction(
     return { ok: false, error: "save_failed" };
   }
 
-  revalidatePath("/", "layout");
+  revalidatePath("/profile");
   return { ok: true, recovery_codes: plain };
 }
 
@@ -163,7 +163,7 @@ export async function disableMfaAction(
     .delete()
     .eq("user_id", auth.user.id);
 
-  revalidatePath("/", "layout");
+  revalidatePath("/profile");
   return { ok: true };
 }
 
@@ -206,7 +206,7 @@ export async function verifyMfaChallengeAction(
   });
   if (verifyErr) return { ok: false, error: "bad_code" };
 
-  revalidatePath("/", "layout");
+  revalidatePath("/profile");
   return { ok: true, recovery_used: false };
 }
 
@@ -247,7 +247,7 @@ async function tryRecoveryCode(
     .delete()
     .eq("user_id", userId);
 
-  revalidatePath("/", "layout");
+  revalidatePath("/profile");
   // We intentionally use normalizeRecoveryCode only for hashing; the
   // returned signal is just "yes, recovery path was used."
   void normalizeRecoveryCode(rawCode);

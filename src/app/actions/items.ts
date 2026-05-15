@@ -40,6 +40,15 @@ async function getEngagementFirm(
   return { engagement_id: (data as Row).engagement_id, firm_id };
 }
 
+// Helper: narrow revalidation to the engagement page that actually
+// changed + the dashboard (whose "attention" counts depend on item
+// status). Replaces the previous `revalidatePath("/", "layout")` which
+// invalidated every cache across the whole app on every approve/reject.
+function revalidateItemPaths(engagementId: string | undefined) {
+  if (engagementId) revalidatePath(`/engagements/${engagementId}`);
+  revalidatePath("/dashboard");
+}
+
 export async function approveItemAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
@@ -50,7 +59,7 @@ export async function approveItemAction(formData: FormData) {
       item_id: id,
     });
   }
-  revalidatePath("/", "layout");
+  revalidateItemPaths(ctx?.engagement_id);
 }
 
 const RejectSchema = z.object({
@@ -83,7 +92,7 @@ export async function rejectItemAction(
       item_id: parsed.data.id,
     });
   }
-  revalidatePath("/", "layout");
+  revalidateItemPaths(ctx?.engagement_id);
   return { ok: true };
 }
 
@@ -97,7 +106,7 @@ export async function reopenItemAction(formData: FormData) {
       item_id: id,
     });
   }
-  revalidatePath("/", "layout");
+  revalidateItemPaths(ctx?.engagement_id);
 }
 
 const AddItemSchema = z.object({
@@ -148,10 +157,10 @@ export async function addItemAction(
         label: input.label_fr,
       });
     }
+    revalidateItemPaths(item.engagement_id);
   } catch {
     return { error: "add_failed" };
   }
-  revalidatePath("/", "layout");
   return { ok: true };
 }
 
@@ -165,5 +174,5 @@ export async function removeItemAction(formData: FormData) {
       item_id: id,
     });
   }
-  revalidatePath("/", "layout");
+  revalidateItemPaths(ctx?.engagement_id);
 }

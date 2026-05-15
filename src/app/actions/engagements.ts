@@ -69,6 +69,16 @@ function fieldErrorsFromZod(error: z.ZodError): Record<string, string> {
   return out;
 }
 
+// Narrow revalidation: hit the engagement page that changed plus the
+// surfaces that aggregate over engagements (/dashboard counts +
+// /clients per-client engagement lists). Replaces the previous
+// `revalidatePath("/", "layout")` shotgun.
+function revalidateEngagementPaths(id: string | undefined) {
+  if (id) revalidatePath(`/engagements/${id}`);
+  revalidatePath("/dashboard");
+  revalidatePath("/clients");
+}
+
 export async function createEngagementAction(payload: {
   client_id: string;
   title: string;
@@ -134,7 +144,7 @@ export async function createEngagementAction(payload: {
     return { error: "create_failed" };
   }
 
-  revalidatePath("/", "layout");
+  revalidateEngagementPaths(engagementId);
   redirect(
     getPathname({
       locale: payload.locale,
@@ -160,7 +170,7 @@ export async function sendEngagementAction(formData: FormData) {
       dueDate: sent.due_date,
     });
   }
-  revalidatePath("/", "layout");
+  revalidateEngagementPaths(id);
 }
 
 async function deliverInviteEmail(engagementId: string): Promise<void> {
@@ -201,7 +211,7 @@ export async function cancelEngagementAction(formData: FormData) {
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "cancel_engagement", {});
   }
-  revalidatePath("/", "layout");
+  revalidateEngagementPaths(id);
 }
 
 export async function completeEngagementAction(formData: FormData) {
@@ -213,7 +223,7 @@ export async function completeEngagementAction(formData: FormData) {
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "complete_engagement", {});
   }
-  revalidatePath("/", "layout");
+  revalidateEngagementPaths(id);
 }
 
 export async function reopenEngagementAction(formData: FormData) {
@@ -224,7 +234,7 @@ export async function reopenEngagementAction(formData: FormData) {
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "reopen_engagement", {});
   }
-  revalidatePath("/", "layout");
+  revalidateEngagementPaths(id);
 }
 
 export async function toggleRemindersPausedAction(formData: FormData) {
@@ -241,7 +251,7 @@ export async function toggleRemindersPausedAction(formData: FormData) {
       {},
     );
   }
-  revalidatePath("/", "layout");
+  revalidateEngagementPaths(id);
 }
 
 export async function sendReminderAction(formData: FormData) {
@@ -255,7 +265,7 @@ export async function sendReminderAction(formData: FormData) {
   } catch (e) {
     console.error("[sendReminderAction] failed:", e);
   }
-  revalidatePath("/", "layout");
+  revalidateEngagementPaths(id);
 }
 
 export async function deleteDraftAction(formData: FormData) {
@@ -265,6 +275,6 @@ export async function deleteDraftAction(formData: FormData) {
     | "en";
   if (typeof id !== "string" || !id) return;
   await deleteDraftEngagement(id);
-  revalidatePath("/", "layout");
+  revalidateEngagementPaths(id);
   redirect(getPathname({ locale, href: "/dashboard" }));
 }
