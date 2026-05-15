@@ -98,20 +98,44 @@ export function brandingStoragePath(parts: {
 // Branding images are referenced repeatedly (every page load), so use a
 // longer TTL than per-file downloads. 24h means we can cache the URL in
 // memory for the session without re-signing on every render.
+//
+// Errors here MUST NOT throw — these helpers run inside page renders
+// (layout, /profile, /portal) and a throw cascades into a 500 page for
+// the entire route. The original 0001 schema stored URLs in
+// `firms.logo_url`, and Phase 3a started writing storage paths instead;
+// a row with a stale string from the old shape would make
+// `createSignedUrl` reject and crash the page. Returning null on any
+// signing failure falls back to the initials placeholder — exactly the
+// same fallback used when no logo has been uploaded yet.
 export async function getBrandingImageUrl(
   path: string | null,
 ): Promise<string | null> {
   if (!path) return null;
-  return signedUrl(path, BRANDING_URL_TTL_SEC);
+  try {
+    return await signedUrl(path, BRANDING_URL_TTL_SEC);
+  } catch (e) {
+    console.warn("[storage] getBrandingImageUrl failed for path:", path, e);
+    return null;
+  }
 }
 
 // For logos embedded in outgoing emails. Same image, but signed for the
 // long-tail email-open window — see BRANDING_URL_EMAIL_TTL_SEC.
+// Same fail-soft contract as getBrandingImageUrl.
 export async function getBrandingImageUrlForEmail(
   path: string | null,
 ): Promise<string | null> {
   if (!path) return null;
-  return signedUrl(path, BRANDING_URL_EMAIL_TTL_SEC);
+  try {
+    return await signedUrl(path, BRANDING_URL_EMAIL_TTL_SEC);
+  } catch (e) {
+    console.warn(
+      "[storage] getBrandingImageUrlForEmail failed for path:",
+      path,
+      e,
+    );
+    return null;
+  }
 }
 
 export async function convertHeicToJpeg(
