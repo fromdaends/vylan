@@ -200,8 +200,20 @@ function LangButton({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Firm preferences — currently just the AI auto-reject toggle. Optimistic
-// update on click; falls back to the previous value if the save fails.
+// AI — currently just the auto-reject-unusable-docs toggle. Future AI
+// settings (model preferences, confidence thresholds, etc.) go inside
+// the same section.
+//
+// Zero-lag toggle: the local `setEnabled(next)` flip happens
+// synchronously on click, so the switch visually moves before the
+// network request even leaves the browser. The Switch is
+// intentionally NOT `disabled` during the in-flight fetch — the
+// previous `disabled={pending}` triggered the component's
+// `disabled:opacity-50` style, which read as a 200-400ms lag while
+// the fetch resolved. On failure we revert the local state and show
+// an inline error; on rapid double-clicks the optimistic state
+// always tracks the user's latest click and the server applies
+// last-write-wins.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function FirmPreferencesSection({
@@ -211,42 +223,39 @@ function FirmPreferencesSection({
   autoRejectUnusableDocs: boolean;
   t: (k: string) => string;
 }) {
-  const [pending, startTransition] = useTransition();
   const [enabled, setEnabled] = useState(autoRejectUnusableDocs);
   const [error, setError] = useState<string | null>(null);
 
-  function onToggle(next: boolean) {
+  async function onToggle(next: boolean) {
     setError(null);
     setEnabled(next); // optimistic
-    startTransition(async () => {
-      // Plain fetch instead of a Server Action: Server Actions trigger
-      // an automatic re-render of the surrounding RSC tree, and a
-      // throw anywhere in that re-render surfaces here as an opaque
-      // "Server Components render" error in production. A regular
-      // POST keeps the toggle save independent of the page render.
-      try {
-        const res = await fetch("/api/firm/auto-reject", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled: next }),
-        });
-        if (!res.ok) {
-          setError(t("save_failed"));
-          setEnabled(!next); // revert
-        }
-      } catch (e) {
-        console.error("[onToggle] auto-reject save failed:", e);
+    // Plain fetch instead of a Server Action: Server Actions trigger
+    // an automatic re-render of the surrounding RSC tree, and a
+    // throw anywhere in that re-render surfaces here as an opaque
+    // "Server Components render" error in production. A regular POST
+    // keeps the toggle save independent of the page render.
+    try {
+      const res = await fetch("/api/firm/auto-reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!res.ok) {
         setError(t("save_failed"));
         setEnabled(!next); // revert
       }
-    });
+    } catch (e) {
+      console.error("[onToggle] auto-reject save failed:", e);
+      setError(t("save_failed"));
+      setEnabled(!next); // revert
+    }
   }
 
   return (
     <section>
-      <h2 className="text-sm font-semibold">{t("section_firm_prefs")}</h2>
+      <h2 className="text-sm font-semibold">{t("section_ai")}</h2>
       <p className="text-xs text-muted-foreground mt-1">
-        {t("section_firm_prefs_hint")}
+        {t("section_ai_hint")}
       </p>
       <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3 max-w-xl">
         <div className="space-y-1">
@@ -260,7 +269,6 @@ function FirmPreferencesSection({
         <Switch
           checked={enabled}
           onCheckedChange={onToggle}
-          disabled={pending}
           ariaLabel={t("auto_reject_label")}
         />
       </div>
