@@ -1,8 +1,8 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { Link } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { assertLocale } from "@/lib/locale";
+import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
 
 export const dynamic = "force-static";
@@ -19,13 +19,7 @@ export default async function PrivacyPage({
 
   return (
     <main className="flex-1 flex flex-col">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto max-w-6xl px-6 py-4">
-          <Link href="/" className="font-semibold tracking-tight text-lg">
-            {brand.name}
-          </Link>
-        </div>
-      </header>
+      <PublicNav />
 
       <article className="mx-auto max-w-3xl px-6 py-16 space-y-6">
         <Alert variant="destructive">
