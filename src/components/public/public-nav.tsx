@@ -5,7 +5,6 @@ import { Link, usePathname } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import {
   ArrowRight,
-  CreditCard,
   LifeBuoy,
   Mail,
   Menu,
@@ -47,12 +46,11 @@ import { brand } from "@/lib/brand";
 // menu. The mobile panel inherits the same glass-nav styling so the
 // blur effect is consistent between expanded/collapsed states.
 
-// Primary nav links (left/centre). Single source of truth — both
-// desktop and mobile render from this list.
-const NAV_ITEMS = [
-  { href: "/pricing", labelKey: "nav_pricing", icon: CreditCard },
-] as const;
-
+// Primary nav links removed — Pricing now reachable only through the
+// hero "Start 14-day free trial" CTA per product direction. The
+// public nav is just logo + help dropdown + utility cluster + the
+// highlighted Sign in button.
+//
 // "Help" cluster — the FAQ entry in the right cluster expands into a
 // dropdown with these three options. Keys live under Landing.* in
 // messages/{en,fr}.json.
@@ -98,20 +96,8 @@ export function PublicNav() {
           <span>{brand.name}</span>
         </Link>
 
-        {/* Desktop nav links */}
-        <nav className="hidden md:flex items-center gap-1">
-          {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => (
-            <NavLink
-              key={href}
-              href={href}
-              active={isActive(href)}
-              label={t(labelKey)}
-              icon={<Icon className="h-3.5 w-3.5" aria-hidden />}
-            />
-          ))}
-        </nav>
-
-        {/* Right cluster */}
+        {/* Right cluster — no middle nav links; logo flushes left,
+            utility + sign in flush right via justify-between. */}
         <div className="flex items-center gap-1 shrink-0">
           {/* FAQ dropdown — desktop only. Tutorials / Questions /
               Contact us. Sits in the utility cluster alongside locale
@@ -159,14 +145,13 @@ export function PublicNav() {
           <span className="hidden md:inline-flex mx-0.5">
             <ThemeToggle />
           </span>
-          {/* Sign in — desktop only */}
-          <Link href="/login" className="hidden md:inline-flex">
-            <Button variant="ghost" size="sm">{tAuth("sign_in")}</Button>
-          </Link>
-          {/* Create account — visible at all sizes (primary CTA) */}
-          <Link href="/signup">
+          {/* Sign in — highlighted as the primary nav CTA now that
+              "Create account" has moved out. Uses the default Button
+              variant (filled) so it stands out from the ghost-style
+              FAQ trigger + locale toggle on either side. */}
+          <Link href="/login">
             <Button size="sm">
-              {tAuth("create_account")}
+              {tAuth("sign_in")}
               <ArrowRight className="h-3.5 w-3.5" aria-hidden />
             </Button>
           </Link>
@@ -203,26 +188,6 @@ export function PublicNav() {
           className="md:hidden border-t border-border/50 glass-nav bg-background/85"
         >
           <div className="mx-auto max-w-6xl px-4 py-3 flex flex-col gap-1">
-            {NAV_ITEMS.map(({ href, labelKey, icon: Icon }) => {
-              const active = isActive(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  onClick={closeMobile}
-                  className={
-                    "flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium " +
-                    (active
-                      ? "bg-foreground/10 text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-foreground/5")
-                  }
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                  {t(labelKey)}
-                </Link>
-              );
-            })}
-            <div className="my-1 h-px bg-border/50" />
             <div className="px-3 pt-1 pb-0.5 text-[10px] uppercase tracking-wider text-muted-foreground/70 font-medium">
               {t("nav_faq")}
             </div>
@@ -253,15 +218,16 @@ export function PublicNav() {
               <Mail className="h-4 w-4" aria-hidden />
               {t("nav_help_contact")}
             </a>
-            <div className="my-1 h-px bg-border/50" />
-            <Link
-              href="/login"
-              onClick={closeMobile}
-              className="flex items-center gap-2.5 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-foreground/5"
-            >
-              {tAuth("sign_in")}
+            <div className="my-2 h-px bg-border/50" />
+            {/* Highlighted Sign in CTA on mobile too — full-width
+                primary button to match the desktop emphasis. */}
+            <Link href="/login" onClick={closeMobile} className="px-1">
+              <Button size="sm" className="w-full">
+                {tAuth("sign_in")}
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+              </Button>
             </Link>
-            <div className="flex items-center justify-between px-3 py-2">
+            <div className="flex items-center justify-between px-3 pt-3 pb-1">
               <Link
                 href={pathname}
                 locale={otherLocale}
@@ -276,33 +242,5 @@ export function PublicNav() {
         </div>
       )}
     </header>
-  );
-}
-
-function NavLink({
-  href,
-  active,
-  label,
-  icon,
-}: {
-  href: string;
-  active: boolean;
-  label: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      className={
-        "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors " +
-        (active
-          ? "bg-foreground/10 text-foreground"
-          : "text-muted-foreground hover:text-foreground hover:bg-foreground/5")
-      }
-      aria-current={active ? "page" : undefined}
-    >
-      {icon}
-      {label}
-    </Link>
   );
 }
