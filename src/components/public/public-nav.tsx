@@ -69,23 +69,25 @@ const HELP_ITEMS = [
   { href: "/faq", labelKey: "nav_help_questions", icon: MessageCircleQuestion },
 ] as const;
 
-// Pill visual. Three shadow layers:
-//   - Outer drop shadow: makes the pill float off the page.
-//   - Inset top highlight: the gloss line that sells "polished glass".
-//   - Inset bottom shadow: a barely-there dark line at the bottom
-//     edge → adds a subtle bevel so the pill reads as a 3D plate
-//     instead of a flat sticker.
-// Dark mode swaps to deeper outer shadow + lighter gloss (so the
-// highlight pops against a dark surface) + slightly darker bottom.
+// Pill visual — matte bubble (no gloss).
+// User wanted off the "glass plate" look and onto "matte bubble with
+// transparency". Three changes from the previous gloss version:
+//   - Drop the bright top inset highlight (was `inset_0_1px_0_rgba(255,255,255,0.7)`)
+//     — that's what sold "polished glass"; we don't want it for matte.
+//   - Keep the outer drop shadow (still floats off the page).
+//   - Keep a barely-there bottom inset shadow (gives the rounded
+//     plate the smallest hint of depth so it doesn't read as a
+//     paper sticker — the bubble has dimension, just not gloss).
 //
-// Interactive: a single, calm `hover:scale-[1.01]` with a 250 ms
-// ease-out transition. No tilt, no spotlight — the previous version
-// hammered too much. Just a subtle "expand on hover".
+// The noise + gradient surface lives on .glass-nav in globals.css.
+//
+// Interactive: a single, calm `hover:scale-[1.025]` with a 300 ms
+// ease-out transition. No tilt, no spotlight.
 const PILL_CLASSES =
   "glass-nav border border-foreground/10 rounded-full " +
   "transition-transform duration-300 ease-out hover:scale-[1.025] motion-reduce:transition-none motion-reduce:hover:scale-100 " +
-  "shadow-[0_12px_40px_-10px_rgba(15,18,30,0.15),inset_0_1px_0_rgba(255,255,255,0.7),inset_0_-1px_0_rgba(0,0,0,0.03)] " +
-  "dark:shadow-[0_12px_40px_-10px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.25)]";
+  "shadow-[0_12px_40px_-10px_rgba(15,18,30,0.18),inset_0_-1px_0_rgba(0,0,0,0.04)] " +
+  "dark:shadow-[0_12px_40px_-10px_rgba(0,0,0,0.55),inset_0_-1px_0_rgba(0,0,0,0.25)]";
 
 export function PublicNav() {
   const t = useTranslations("Landing");
