@@ -16,6 +16,7 @@ import {
 import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
 import { ScrollReveal, ParallaxLayer } from "@/components/public/scroll-reveal";
+import { AiCardReveal } from "@/components/public/ai-card-reveal";
 
 export default async function Home({
   params,
@@ -225,9 +226,9 @@ export default async function Home({
                 <BulletItem>{t("intro_pill_3")}</BulletItem>
               </ul>
             </ScrollReveal>
-            <ScrollReveal intensity="pop" delay={0.15}>
+            <AiCardReveal>
               <AiMockCard t={t} />
-            </ScrollReveal>
+            </AiCardReveal>
           </div>
         </div>
       </section>
@@ -347,14 +348,16 @@ function BulletItem({ children }: { children: React.ReactNode }) {
 // Mock card for the AI Document Checks section. Mimics what the
 // accountant sees when the AI auto-rejects a file: filename header,
 // "right-doc detection" badge, dark preview area, and a red rejection
-// alert below explaining the issue. Sits inside a featured-card glow.
+// alert below explaining the issue. The animated multi-colour glow
+// behind it comes from <AiCardReveal> (renders an .ai-card-glow
+// sibling div) — no .featured-card class on this card any more.
 function AiMockCard({
   t,
 }: {
   t: Awaited<ReturnType<typeof getTranslations<"Landing">>>;
 }) {
   return (
-    <div className="featured-card rounded-2xl border border-border bg-card p-5 sm:p-6">
+    <div className="relative rounded-2xl border border-border bg-card p-5 sm:p-6">
       <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium text-foreground">T4 — 2025</p>
         <span className="inline-flex items-center gap-1 rounded-md bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive uppercase tracking-wider">

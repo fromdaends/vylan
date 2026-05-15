@@ -455,6 +455,65 @@
       0 2px 8px -1px oklch(0.7 0.16 264 / 0.3);
   }
 
+  /* AI section card — animated multi-colour aurora glow that fades
+     in alongside the framer-motion slide-in entrance.
+     Implementation:
+       - Positioned absolutely behind the card (z-index: -1) and
+         extends 32 px past the card edges so the soft glow radiates
+         outward.
+       - A conic-gradient cycles through blue → purple → pink → cyan
+         → blue. Rotating the element on a 10s linear loop sweeps
+         the gradient; filter:blur(56px) softens the hard colour
+         stops into a smooth aurora-like cycle.
+       - GPU-friendly: only `transform: rotate()` animates. The
+         blurred layer is a static gradient that the rotation
+         carries around.
+       - Mobile (<=767px): shorter inset + lighter blur so it
+         doesn't dominate the smaller card.
+       - prefers-reduced-motion: slows the cycle to 40s and drops
+         opacity to half so the motion is far less attention-
+         grabbing without disappearing entirely. */
+  .ai-card-glow {
+    position: absolute;
+    inset: -32px;
+    z-index: -1;
+    border-radius: 28px;
+    background: conic-gradient(
+      from 0deg,
+      oklch(0.62 0.18 264 / 0.55),
+      oklch(0.62 0.22 320 / 0.55),
+      oklch(0.72 0.2 350 / 0.55),
+      oklch(0.72 0.16 210 / 0.55),
+      oklch(0.62 0.18 264 / 0.55)
+    );
+    filter: blur(56px);
+    animation: ai-card-glow-spin 10s linear infinite;
+    pointer-events: none;
+    will-change: transform;
+  }
+  .dark .ai-card-glow {
+    background: conic-gradient(
+      from 0deg,
+      oklch(0.62 0.18 264 / 0.4),
+      oklch(0.62 0.22 320 / 0.4),
+      oklch(0.72 0.2 350 / 0.4),
+      oklch(0.72 0.16 210 / 0.4),
+      oklch(0.62 0.18 264 / 0.4)
+    );
+  }
+  @media (max-width: 767px) {
+    .ai-card-glow {
+      inset: -20px;
+      filter: blur(40px);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ai-card-glow {
+      animation-duration: 40s;
+      opacity: 0.5;
+    }
+  }
+
   /* Soft static highlight for featured cards, with a noticeable
      intensification on hover (the iris glow gets brighter and wider). */
   .featured-card {
@@ -748,6 +807,12 @@
     font-feature-settings: "tnum" 1, "ss01" 1;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.04em;
+  }
+}
+
+@keyframes ai-card-glow-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
