@@ -10,12 +10,11 @@ import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
 
-// /settings: personal preferences (theme + UI language) + firm-level
-// behaviour toggles (e.g. auto-reject unreadable docs) + entry point
-// to /billing (Billing was removed from the top nav and now lives
-// here as a link card so the main nav stays tight: Dashboard,
-// Clients, Templates). Firm identity (name, brand color, timezone,
-// default client locale) still lives on /profile under "Your firm".
+// /settings: personal preferences (theme + UI language) + the firm
+// timezone (used when scheduling reminders + rendering times in
+// client comms) + firm-level behaviour toggles (e.g. auto-reject
+// unreadable docs) + entry point to /billing. Firm identity (name,
+// brand color, logo, default client locale) lives on /firm.
 export default async function SettingsPage({
   params,
 }: {
@@ -49,6 +48,7 @@ export default async function SettingsPage({
 
       <SettingsForm
         currentLocale={user.locale}
+        currentTimezone={firm.timezone}
         autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
       />
 

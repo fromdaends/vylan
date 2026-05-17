@@ -1,5 +1,6 @@
 // Firm-settings skeleton: title + the two cards on the real page
-// (firm logo, then firm-details form with 4 fields).
+// (firm logo, then firm-details form with 3 fields: name, brand color,
+// default client language). Timezone moved to /settings.
 
 export default function Loading() {
   return (
@@ -15,11 +16,7 @@ export default function Loading() {
           <div className="size-16 bg-muted/40 rounded-md" />
           <div className="h-9 w-32 bg-muted/40 rounded-md" />
         </div>
-        {/* Firm-details form rows: name, brand color, timezone, locale */}
-        <div className="space-y-2">
-          <div className="h-4 w-24 bg-muted/40 rounded-md" />
-          <div className="h-10 bg-muted/40 rounded-md max-w-sm" />
-        </div>
+        {/* Firm-details form rows: name, brand color, locale */}
         <div className="space-y-2">
           <div className="h-4 w-24 bg-muted/40 rounded-md" />
           <div className="h-10 bg-muted/40 rounded-md max-w-sm" />
