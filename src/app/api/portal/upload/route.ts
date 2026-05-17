@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { after } from "next/server";
 import { nanoid } from "nanoid";
 import {
   findItemForToken,
@@ -188,52 +189,46 @@ export async function POST(request: NextRequest) {
     .eq("id", item.id);
 
   // Enqueue an AI classification job as a durable fallback (cron retries).
-  // Then run the same logic inline so we can return the verdict in this
-  // response — the portal UI uses it to surface "wrong document, try
-  // again" inline instead of waiting for an out-of-band email.
+  // We ALSO kick off the same work via after() so the verdict lands within
+  // seconds, but the response returns to the client immediately — the
+  // browser was previously waiting for Anthropic to read the PDF before
+  // "upload complete" cleared, which felt like 5-15s of dead air. The
+  // portal UI polls /api/portal/upload-status to surface the verdict.
   await enqueueJob({
     kind: "classify_document",
     payload: { uploaded_file_id: inserted.id },
     runAfter: new Date(),
   });
 
-  let verdict: {
-    usable: boolean;
-    primary_issue: string | null;
-    issue_summary_fr: string;
-    issue_summary_en: string;
-    auto_rejected: boolean;
-  } | null = null;
+  const insertedFileId = inserted.id;
+  const bytesForAi = storedBytes;
+  const mimeForAi = storedMime;
 
-  try {
-    const result = await processClassifyJob({
-      uploaded_file_id: inserted.id,
-    });
-    if (result.classified) {
-      // Mark the queued job done so the cron skips it.
-      await sb
-        .from("jobs")
-        .update({ status: "done", last_error: "processed_inline" })
-        .eq("kind", "classify_document")
-        .eq("status", "pending")
-        .eq("payload->>uploaded_file_id", inserted.id);
-
-      const u = result.classified.usability;
-      verdict = {
-        usable: u.usable,
-        primary_issue: u.primary_issue,
-        issue_summary_fr: u.issue_summary_fr,
-        issue_summary_en: u.issue_summary_en,
-        auto_rejected:
-          result.routed?.decision === "auto_reject_and_notify_client",
-      };
+  after(async () => {
+    try {
+      const result = await processClassifyJob(
+        { uploaded_file_id: insertedFileId },
+        { bytes: bytesForAi, mimeType: mimeForAi },
+      );
+      if (result.classified) {
+        // Mark the queued job done so the cron skips it. The .eq("status",
+        // "pending") guard makes this a no-op if the cron raced us — at
+        // worst we do one duplicate classification, never lose one.
+        await sb
+          .from("jobs")
+          .update({ status: "done", last_error: "processed_inline" })
+          .eq("kind", "classify_document")
+          .eq("status", "pending")
+          .eq("payload->>uploaded_file_id", insertedFileId);
+      }
+    } catch (e) {
+      // AI failure must not break the upload — the file is already saved
+      // and the cron will retry classification later (the job row stays
+      // pending). The client's poll will hit our retry window and then
+      // time out gracefully.
+      console.error("[portal/upload] background classification failed:", e);
     }
-  } catch (e) {
-    // AI failure must not break the upload — the file is already saved
-    // and the cron will retry classification later. The client just
-    // doesn't see an inline verdict this time.
-    console.error("[portal/upload] inline classification failed:", e);
-  }
+  });
 
-  return NextResponse.json({ ok: true, verdict });
+  return NextResponse.json({ ok: true, file_id: insertedFileId });
 }

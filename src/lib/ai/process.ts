@@ -22,6 +22,10 @@ import { decide, applyDecision, type DispatcherResult } from "./router";
 
 export async function processClassifyJob(
   payload: Record<string, unknown>,
+  // Optional pre-downloaded bytes from the upload route. When present we
+  // skip the storage roundtrip (saves ~1-3s on large PDFs). The cron path
+  // never passes this — it has to fetch.
+  preDownloaded?: { bytes: Buffer; mimeType: string },
 ): Promise<{
   skipped?: string;
   classified?: ClassificationResult;
@@ -70,13 +74,22 @@ export async function processClassifyJob(
     if (!rl.ok) return { skipped: "firm_daily_quota_exceeded" };
   }
 
-  const dl = await downloadStorageObject(file.storage_path);
-  if (!dl) return { skipped: "download_failed" };
+  let bytes: Buffer;
+  let mimeType: string;
+  if (preDownloaded) {
+    bytes = preDownloaded.bytes;
+    mimeType = preDownloaded.mimeType || file.mime_type;
+  } else {
+    const dl = await downloadStorageObject(file.storage_path);
+    if (!dl) return { skipped: "download_failed" };
+    bytes = dl.bytes;
+    mimeType = dl.mimeType || file.mime_type;
+  }
 
   const result = await classifyDocument({
     expectedDocType: expectedDocType as never,
-    fileBytes: dl.bytes,
-    mimeType: dl.mimeType || file.mime_type,
+    fileBytes: bytes,
+    mimeType,
   });
   if (!result) return { skipped: "no_classification" };
 
