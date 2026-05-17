@@ -22,6 +22,7 @@ export const runtime = "nodejs";
 
 type Usability = {
   usable?: unknown;
+  confidence?: unknown;
   primary_issue?: unknown;
   issue_summary_fr?: unknown;
   issue_summary_en?: unknown;
@@ -44,6 +45,11 @@ type FileRow = {
     rejection_reason: string | null;
   }[] | null;
 };
+
+// shouldActOnUsability threshold, duplicated here so the poll endpoint
+// doesn't pull in the AI subtree. If you change USABILITY_CONFIDENCE_THRESHOLD
+// in src/lib/ai/usability.ts, change this too.
+const USABILITY_CONFIDENCE_THRESHOLD = 0.8;
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -73,10 +79,14 @@ export async function POST(request: NextRequest) {
 
   const sb = getServiceRoleSupabase();
 
-  // Resolve the engagement from the token first — one query, scoped read.
+  // Resolve the engagement + the firm's auto-reject setting in one round
+  // trip. The firm flag is needed to decide whether the router will write
+  // anything we should still wait for (see "done" logic below).
   const { data: engagement } = await sb
     .from("engagements")
-    .select("id, magic_expires_at, status")
+    .select(
+      "id, magic_expires_at, status, firm_id, firms!inner(auto_reject_unusable_docs)",
+    )
     .eq("magic_token", token)
     .maybeSingle();
   if (!engagement) {
@@ -91,6 +101,10 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+  type FirmEmbed = { auto_reject_unusable_docs: boolean | null };
+  const firmsEmbed = (engagement as { firms?: FirmEmbed | FirmEmbed[] }).firms;
+  const firmRow = Array.isArray(firmsEmbed) ? firmsEmbed[0] : firmsEmbed;
+  const firmAutoRejectOn = firmRow?.auto_reject_unusable_docs === true;
 
   // Single query that enforces file → item → engagement ownership. Anything
   // crossing the engagement boundary returns 404.
@@ -109,11 +123,27 @@ export async function POST(request: NextRequest) {
 
   const f = file as unknown as FileRow;
 
-  // The classification writes ai_classification + ai_usability in the same
-  // update. Either non-null means the AI has run.
-  const aiComplete =
-    f.ai_classification !== null || f.ai_usability !== null;
-  if (!aiComplete) {
+  // "Done" needs more than just "the classifier ran". The router runs in a
+  // separate set of writes ~10-200ms after the classification write — if the
+  // poll fires inside that gap and we declare done, the client misses the
+  // auto-reject banner and only sees it on the next page reload (the bug
+  // the user hit on the first ship of this feature).
+  //
+  // So "done" = classifier ran AND we're sure the router won't add anything
+  // we care about. The router DOES write (ai_rejected, rejection_reason)
+  // only when:  AI says unusable + confidence >= 0.80 + firm has
+  // auto_reject_unusable_docs = true. Anything else either skips the router
+  // entirely or runs queue_for_accountant which writes nothing visible to
+  // the client. So we keep polling only in that one specific combination.
+  const u = f.ai_usability ?? {};
+  const usable = u.usable !== false; // true or unknown → treat as usable
+  const confident =
+    typeof u.confidence === "number" && u.confidence >= USABILITY_CONFIDENCE_THRESHOLD;
+  const routerWillSkipWrites = usable || !confident || !firmAutoRejectOn;
+  const aiRan = f.ai_classification !== null || f.ai_usability !== null;
+  const routerStillPending =
+    !routerWillSkipWrites && f.ai_rejected !== true;
+  if (!aiRan || routerStillPending) {
     return NextResponse.json({ status: "pending" });
   }
 
@@ -132,7 +162,6 @@ export async function POST(request: NextRequest) {
     typeof rejectionReason === "string" &&
     rejectionReason.trim() !== "";
 
-  const u = f.ai_usability ?? {};
   const verdict = {
     usable: typeof u.usable === "boolean" ? u.usable : true,
     primary_issue:
