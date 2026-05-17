@@ -520,6 +520,8 @@
     "section_builtin": "Modèles intégrés",
     "section_firm": "Vos modèles",
     "firm_empty": "Vous n’avez pas encore cloné de modèle.",
+    "templates_new": "Nouveau modèle",
+    "templates_new_hint": "Créez une liste adaptée à votre cabinet. Vous pouvez aussi cloner un modèle intégré ci-dessus pour partir d'une base connue.",
     "items_count": "élément(s)",
     "clone": "Cloner",
     "use_in_new": "Utiliser",

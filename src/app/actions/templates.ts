@@ -1,13 +1,20 @@
 "use server";
 
 import { z } from "zod";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { getPathname } from "@/i18n/navigation";
 import {
   cloneTemplateToFirm,
   updateTemplate,
   deleteTemplate,
   type TemplateItem,
 } from "@/lib/db/templates";
+
+// "Personnalisé" / Custom built-in template (seeded in
+// 0005_builtin_templates.sql). Intentionally empty — used as the source
+// when a firm wants to build a template from scratch.
+const BLANK_BUILTIN_ID = "00000000-0000-0000-0000-000000000004";
 
 const ItemSchema = z.object({
   label_fr: z.string().min(1),
@@ -23,6 +30,24 @@ export async function cloneTemplateAction(formData: FormData) {
   if (typeof id !== "string" || !id) return;
   await cloneTemplateToFirm(id);
   revalidatePath("/", "layout");
+}
+
+// "Start from scratch" path: clone the empty Custom built-in and jump
+// straight into the editor for the new firm-scoped row. Replaces the
+// implicit "Clone Personnalisé then click Edit" two-step that wasn't
+// obvious to new users.
+export async function createBlankTemplateAction(formData: FormData) {
+  const locale =
+    (formData.get("__app_locale") === "en" ? "en" : "fr") as "fr" | "en";
+  const name = locale === "fr" ? "Nouveau modèle" : "New template";
+  const created = await cloneTemplateToFirm(BLANK_BUILTIN_ID, name);
+  revalidatePath("/templates");
+  redirect(
+    getPathname({
+      locale,
+      href: { pathname: `/templates/${created.id}` },
+    }),
+  );
 }
 
 export type UpdateTemplateState = {

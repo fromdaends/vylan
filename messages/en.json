@@ -520,6 +520,8 @@
     "section_builtin": "Built-in templates",
     "section_firm": "Your templates",
     "firm_empty": "You haven't cloned a template yet.",
+    "templates_new": "New template",
+    "templates_new_hint": "Build a checklist tailored to your firm. You can also clone a built-in above to start from a familiar list.",
     "items_count": "item(s)",
     "clone": "Clone",
     "use_in_new": "Use",

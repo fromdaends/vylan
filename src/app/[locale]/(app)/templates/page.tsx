@@ -4,10 +4,11 @@ import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import {
   cloneTemplateAction,
+  createBlankTemplateAction,
   deleteTemplateAction,
 } from "@/app/actions/templates";
 import { assertLocale } from "@/lib/locale";
-import { FileText, ArrowUpRight } from "lucide-react";
+import { FileText, ArrowUpRight, Plus } from "lucide-react";
 
 export default async function TemplatesPage({
   params,
@@ -58,9 +59,33 @@ export default async function TemplatesPage({
         </TemplateList>
       </Section>
 
-      <Section title={t("section_firm")} count={firm.length}>
+      <Section
+        title={t("section_firm")}
+        count={firm.length}
+        action={
+          <form action={createBlankTemplateAction}>
+            <input type="hidden" name="__app_locale" value={locale} />
+            <Button type="submit" size="sm">
+              <Plus className="h-3.5 w-3.5" />
+              {t("templates_new")}
+            </Button>
+          </form>
+        }
+      >
         {firm.length === 0 ? (
-          <EmptyRow>{t("firm_empty")}</EmptyRow>
+          <EmptyState>
+            <p className="text-sm text-muted-foreground">{t("firm_empty")}</p>
+            <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+              {t("templates_new_hint")}
+            </p>
+            <form action={createBlankTemplateAction}>
+              <input type="hidden" name="__app_locale" value={locale} />
+              <Button type="submit" size="sm">
+                <Plus className="h-3.5 w-3.5" />
+                {t("templates_new")}
+              </Button>
+            </form>
+          </EmptyState>
         ) : (
           <TemplateList>
             {firm.map((tmpl) => (
@@ -95,20 +120,28 @@ function Section({
   title,
   count,
   children,
+  action,
 }: {
   title: string;
   count: number;
   children: React.ReactNode;
+  // Optional right-aligned action (e.g. "+ New template" on the firm
+  // section). Replaces the small numeric count when present.
+  action?: React.ReactNode;
 }) {
   return (
     <section className="space-y-3">
-      <div className="flex items-baseline justify-between border-b border-border/60 pb-2">
+      <div className="flex items-center justify-between border-b border-border/60 pb-2">
         <h2 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
           {title}
         </h2>
-        <span className="text-xs font-mono tabular-nums text-muted-foreground">
-          {count}
-        </span>
+        {action ? (
+          action
+        ) : (
+          <span className="text-xs font-mono tabular-nums text-muted-foreground">
+            {count}
+          </span>
+        )}
       </div>
       {children}
     </section>
@@ -159,6 +192,14 @@ function TemplateRow({
 function EmptyRow({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-dashed border-border bg-card/40 px-5 py-10 text-center text-sm text-muted-foreground">
+      {children}
+    </div>
+  );
+}
+
+function EmptyState({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-dashed border-border bg-card/40 px-5 py-10 flex flex-col items-center justify-center gap-3 text-center">
       {children}
     </div>
   );
