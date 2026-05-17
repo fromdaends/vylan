@@ -1,0 +1,61 @@
+import { redirect } from "next/navigation";
+import { setRequestLocale, getTranslations } from "next-intl/server";
+import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
+import { getBrandingImageUrl } from "@/lib/storage";
+import { getPathname } from "@/i18n/navigation";
+import { assertLocale } from "@/lib/locale";
+import { FirmForm } from "./firm-form";
+
+export const dynamic = "force-dynamic";
+
+export default async function FirmPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: rawLocale } = await params;
+  const locale = assertLocale(rawLocale);
+  setRequestLocale(locale);
+
+  const supabase = await getServerSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) {
+    redirect(getPathname({ locale, href: "/login" }));
+  }
+
+  const [user, firm, t] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    getTranslations("Profile"),
+  ]);
+  if (!user || !firm) {
+    redirect(getPathname({ locale, href: "/onboarding" }));
+  }
+
+  const firmLogoUrl = await getBrandingImageUrl(firm.logo_url);
+
+  return (
+    <div className="max-w-2xl mx-auto space-y-8 animate-in-up">
+      <header>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          {t("firm_page_title")}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1.5">
+          {t("firm_page_subtitle")}
+        </p>
+      </header>
+
+      <FirmForm
+        firm={{
+          name: firm.name,
+          brand_color: firm.brand_color,
+          timezone: firm.timezone,
+          locale_default: firm.locale_default,
+        }}
+        firmLogoUrl={firmLogoUrl}
+      />
+    </div>
+  );
+}

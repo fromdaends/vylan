@@ -1,6 +1,6 @@
-// Profile skeleton: title + grouped form-row placeholders matching the
-// real /profile structure (You group: avatar + name + email + password
-// + MFA; Firm group: logo + name/color/timezone form).
+// Profile skeleton: title + avatar/name/email/password/MFA rows.
+// Firm settings (logo + brand color + timezone + client language) now
+// live on /firm and have their own skeleton.
 
 export default function Loading() {
   return (
@@ -11,7 +11,6 @@ export default function Loading() {
       </div>
 
       <div className="space-y-6">
-        <div className="h-3 w-16 bg-muted/40 rounded-md" />
         {/* Avatar row */}
         <div className="flex items-center gap-4">
           <div className="size-16 bg-muted/40 rounded-full" />
@@ -22,24 +21,6 @@ export default function Loading() {
         <div className="h-20 bg-muted/40 rounded-md" />
         <div className="h-12 bg-muted/40 rounded-md" />
         <div className="h-12 bg-muted/40 rounded-md" />
-      </div>
-
-      <div className="h-px bg-muted/40" />
-
-      <div className="space-y-6">
-        <div className="h-3 w-20 bg-muted/40 rounded-md" />
-        <div className="flex items-center gap-4">
-          <div className="size-16 bg-muted/40 rounded-md" />
-          <div className="h-9 w-32 bg-muted/40 rounded-md" />
-        </div>
-        <div className="space-y-2">
-          <div className="h-4 w-24 bg-muted/40 rounded-md" />
-          <div className="h-10 bg-muted/40 rounded-md max-w-sm" />
-        </div>
-        <div className="space-y-2">
-          <div className="h-4 w-24 bg-muted/40 rounded-md" />
-          <div className="h-10 bg-muted/40 rounded-md max-w-sm" />
-        </div>
       </div>
     </div>
   );
