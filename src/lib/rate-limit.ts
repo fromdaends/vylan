@@ -34,6 +34,11 @@ export const MFA_VERIFY_LIMIT: LimitSpec = { limit: 5, window: "5 m" };
 export const PORTAL_UPLOAD_PER_TOKEN: LimitSpec = { limit: 30, window: "1 h" };
 export const PORTAL_UPLOAD_PER_IP: LimitSpec = { limit: 60, window: "1 h" };
 export const PORTAL_MUTATION_PER_TOKEN: LimitSpec = { limit: 120, window: "1 h" };
+// Poll status — called by the portal after every upload at ~2s intervals
+// for up to ~30s. Generous limit so a normal upload-heavy session never
+// trips it: 30 polls × 30 uploads = 900 in the worst case, but realistic
+// usage is well under that.
+export const PORTAL_STATUS_PER_TOKEN: LimitSpec = { limit: 600, window: "1 h" };
 
 // AI / cost-bound endpoints.
 export const AI_CLASSIFY_PER_FIRM_DAILY: LimitSpec = { limit: 500, window: "1 d" };

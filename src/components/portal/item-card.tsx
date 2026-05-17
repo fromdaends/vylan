@@ -1,14 +1,15 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Upload, Check, FileCheck2, X, RotateCcw, AlertTriangle } from "lucide-react";
+import { Upload, Check, FileCheck2, X, RotateCcw, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
 
-// Shape returned by /api/portal/upload when the inline AI classifier ran.
+// Shape returned by /api/portal/upload-status once the background classifier
+// has written its verdict to the uploaded_files row.
 type UploadVerdict = {
   usable: boolean;
   primary_issue: string | null;
@@ -19,6 +20,12 @@ type UploadVerdict = {
 
 const ACCEPT =
   "application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif";
+
+// AI runs in the background after the upload response. Poll for up to
+// ~30s so even slow PDFs surface the verdict inline. If the AI takes
+// longer (rare), the cron + retry email pick it up.
+const POLL_INTERVAL_MS = 1500;
+const POLL_TIMEOUT_MS = 30_000;
 
 export function ItemCard({
   token,
@@ -39,11 +46,79 @@ export function ItemCard({
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Surfaced when the inline AI classifier flagged the upload as the
+  // Surfaced when the background AI classifier flagged the upload as the
   // wrong document or otherwise unusable. Lets the client retry without
   // having to wait for the email/SMS.
   const [aiRejection, setAiRejection] = useState<string | null>(null);
+  // True while we're polling /api/portal/upload-status for the latest
+  // upload's verdict. Shows a small "Checking…" hint so the client knows
+  // the document is being reviewed (without making them wait on the
+  // upload itself).
+  const [checking, setChecking] = useState(false);
+  const pollAbortRef = useRef<AbortController | null>(null);
   const [pendingNa, startNa] = useTransition();
+
+  // Cancel any in-flight poll when the component unmounts.
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
+
+  async function pollVerdict(fileId: string): Promise<void> {
+    pollAbortRef.current?.abort();
+    const ctl = new AbortController();
+    pollAbortRef.current = ctl;
+    setChecking(true);
+    const startedAt = Date.now();
+    try {
+      while (!ctl.signal.aborted) {
+        if (Date.now() - startedAt >= POLL_TIMEOUT_MS) break;
+        try {
+          const res = await fetch("/api/portal/upload-status", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              token,
+              item_id: item.id,
+              file_id: fileId,
+            }),
+            signal: ctl.signal,
+          });
+          if (res.ok) {
+            const body = (await res.json().catch(() => null)) as {
+              status?: "pending" | "done";
+              verdict?: UploadVerdict | null;
+            } | null;
+            if (body?.status === "done") {
+              if (body.verdict?.auto_rejected) {
+                const msg =
+                  locale === "fr"
+                    ? body.verdict.issue_summary_fr ||
+                      body.verdict.issue_summary_en
+                    : body.verdict.issue_summary_en ||
+                      body.verdict.issue_summary_fr;
+                setAiRejection(msg || t("ai_rejected_generic"));
+              }
+              break;
+            }
+          }
+          // Non-OK responses (404 on a deleted file, 429 on rate limit,
+          // etc.) just abort the poll silently — the email/SMS fallback
+          // still works.
+          else if (res.status === 404 || res.status === 429) {
+            break;
+          }
+        } catch (e) {
+          if ((e as Error).name === "AbortError") return;
+          // Network blip — wait and retry until timeout.
+        }
+        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      }
+    } finally {
+      if (!ctl.signal.aborted) setChecking(false);
+    }
+  }
 
   const label =
     locale === "fr" && item.label_fr ? item.label_fr : item.label;
@@ -55,6 +130,9 @@ export function ItemCard({
   async function uploadFiles(files: FileList) {
     setError(null);
     setAiRejection(null);
+    // Cancel any prior poll — the new upload is what we care about now.
+    pollAbortRef.current?.abort();
+    setChecking(false);
     for (const file of Array.from(files)) {
       setUploading(true);
       try {
@@ -74,23 +152,18 @@ export function ItemCard({
         }
         const body = (await res.json().catch(() => null)) as {
           ok?: boolean;
-          verdict?: UploadVerdict | null;
+          file_id?: string;
         } | null;
         // Always count the upload — the file IS saved server-side. The
         // verdict only governs whether we surface a "try again" message
         // on top of that.
         onUploaded();
-        if (body?.verdict?.auto_rejected) {
-          const msg =
-            locale === "fr"
-              ? body.verdict.issue_summary_fr ||
-                body.verdict.issue_summary_en
-              : body.verdict.issue_summary_en ||
-                body.verdict.issue_summary_fr;
-          setAiRejection(msg || t("ai_rejected_generic"));
-          // Stop processing further files in the batch; the client
-          // should fix this one before continuing.
-          break;
+        // Kick off polling for the AI verdict. We don't await it — the
+        // user gets immediate "upload complete" feedback and the verdict
+        // banner (if any) appears within a few seconds. Polling is
+        // cancelled if a new upload starts or the component unmounts.
+        if (typeof body?.file_id === "string") {
+          void pollVerdict(body.file_id);
         }
       } catch (e) {
         setError((e as Error).message);
@@ -245,6 +318,15 @@ export function ItemCard({
               <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
                 <FileCheck2 className="size-3.5" />
                 {t("uploaded_count", { count: uploadedCount })}
+              </span>
+            )}
+            {checking && (
+              <span
+                className="text-xs text-muted-foreground inline-flex items-center gap-1"
+                aria-live="polite"
+              >
+                <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                {t("checking_document")}
               </span>
             )}
           </div>

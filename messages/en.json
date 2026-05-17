@@ -703,6 +703,7 @@
     "ai_rejected_title": "This file looks wrong — please try again",
     "ai_rejected_help": "Take a fresh photo or upload the correct document, then re-upload below.",
     "ai_rejected_generic": "We couldn't read that document clearly. Please try again with a fresh photo or the correct file.",
+    "checking_document": "Checking your document…",
     "greeting": "Hi {name},",
     "subhead": "Here's what {firm} needs from you.",
     "progress": "{done} of {total} documents uploaded",
