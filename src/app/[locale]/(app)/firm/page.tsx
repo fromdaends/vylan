@@ -51,7 +51,6 @@ export default async function FirmPage({
         firm={{
           name: firm.name,
           brand_color: firm.brand_color,
-          timezone: firm.timezone,
           locale_default: firm.locale_default,
         }}
         firmLogoUrl={firmLogoUrl}

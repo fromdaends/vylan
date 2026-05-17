@@ -23,7 +23,6 @@ import { type SettingsState } from "@/app/actions/settings.schema";
 type FirmInfo = {
   name: string;
   brand_color: string;
-  timezone: string;
   locale_default: "fr" | "en";
 };
 
@@ -156,18 +155,11 @@ function FirmLogoSection({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Firm details — name, brand color, timezone, default language for client
-// emails. Saved via the existing updateFirmSettings server action.
+// Firm details — name, brand color, default language for client emails.
+// Saved via the existing updateFirmSettings server action. Timezone lives
+// on /settings now (see TimezoneSection there) and saves through its own
+// POST endpoint, so it's not part of this form anymore.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const CA_TIMEZONES: ReadonlyArray<readonly [string, string]> = [
-  ["America/Toronto", "Toronto / Ottawa / Montréal (Eastern)"],
-  ["America/Halifax", "Halifax (Atlantic)"],
-  ["America/St_Johns", "St. John's (Newfoundland)"],
-  ["America/Winnipeg", "Winnipeg / Regina (Central)"],
-  ["America/Edmonton", "Edmonton / Calgary (Mountain)"],
-  ["America/Vancouver", "Vancouver (Pacific)"],
-];
 
 function FirmSection({
   initial,
@@ -217,21 +209,6 @@ function FirmSection({
             {initial.brand_color.toUpperCase()}
           </span>
         </div>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="timezone">{tOnb("step2_timezone")}</Label>
-        <Select name="timezone" defaultValue={initial.timezone}>
-          <SelectTrigger id="timezone" className="max-w-sm">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {CA_TIMEZONES.map(([tz, label]) => (
-              <SelectItem key={tz} value={tz}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </div>
       <div className="space-y-2">
         <Label htmlFor="locale_default">{t("firm_client_lang")}</Label>

@@ -7,14 +7,35 @@ import { useLocale, useTranslations } from "next-intl";
 import { Moon, Sun, Monitor, Check } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type ThemeChoice = "light" | "dark" | "system";
 
+// Same Canadian zones that used to live in /firm. Kept in sync with the
+// server-side allow-list in /api/firm/timezone — if you add a zone here,
+// add it there too.
+const CA_TIMEZONES: ReadonlyArray<readonly [string, string]> = [
+  ["America/Toronto", "Toronto / Ottawa / Montréal (Eastern)"],
+  ["America/Halifax", "Halifax (Atlantic)"],
+  ["America/St_Johns", "St. John's (Newfoundland)"],
+  ["America/Winnipeg", "Winnipeg / Regina (Central)"],
+  ["America/Edmonton", "Edmonton / Calgary (Mountain)"],
+  ["America/Vancouver", "Vancouver (Pacific)"],
+];
+
 export function SettingsForm({
   currentLocale,
+  currentTimezone,
   autoRejectUnusableDocs,
 }: {
   currentLocale: "fr" | "en";
+  currentTimezone: string;
   autoRejectUnusableDocs: boolean;
 }) {
   const t = useTranslations("Settings");
@@ -23,6 +44,7 @@ export function SettingsForm({
     <div className="space-y-10">
       <AppearanceSection t={t} />
       <LanguageSection currentLocale={currentLocale} t={t} />
+      <TimezoneSection currentTimezone={currentTimezone} t={t} />
       <FirmPreferencesSection
         autoRejectUnusableDocs={autoRejectUnusableDocs}
         t={t}
@@ -196,6 +218,70 @@ function LangButton({
     >
       {label}
     </button>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Firm timezone — used when Relai schedules reminders and renders
+// times in client emails/SMS. Saves through POST /api/firm/timezone so
+// the surrounding RSC tree doesn't re-render mid-save (same reasoning
+// as the auto-reject toggle below). Optimistic state; revert on error.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function TimezoneSection({
+  currentTimezone,
+  t,
+}: {
+  currentTimezone: string;
+  t: (k: string) => string;
+}) {
+  const [value, setValue] = useState(currentTimezone);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onChange(next: string) {
+    if (next === value) return;
+    const prev = value;
+    setValue(next); // optimistic
+    setError(null);
+    try {
+      const res = await fetch("/api/firm/timezone", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timezone: next }),
+      });
+      if (!res.ok) {
+        setValue(prev);
+        setError(t("save_failed"));
+      }
+    } catch (e) {
+      console.error("[TimezoneSection] save failed:", e);
+      setValue(prev);
+      setError(t("save_failed"));
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold">{t("section_timezone")}</h2>
+      <p className="text-xs text-muted-foreground mt-1">
+        {t("section_timezone_hint")}
+      </p>
+      <div className="mt-4">
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="max-w-sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {CA_TIMEZONES.map(([tz, label]) => (
+              <SelectItem key={tz} value={tz}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+      </div>
+    </section>
   );
 }
 

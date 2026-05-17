@@ -266,6 +266,8 @@
     "theme_system": "Système",
     "section_language": "Langue du site",
     "section_language_hint": "Bascule l'interface immédiatement. N'affecte pas ce que voient vos clients.",
+    "section_timezone": "Fuseau horaire",
+    "section_timezone_hint": "Utilisé quand Relai planifie les rappels et affiche les heures dans les courriels et SMS aux clients.",
     "section_firm_prefs": "Qualité des documents",
     "section_firm_prefs_hint": "Contrôle comment Relai gère les téléversements illisibles de vos clients.",
     "section_ai": "IA",

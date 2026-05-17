@@ -13,7 +13,11 @@ export type SettingsState = {
 export const SettingsSchema = z.object({
   name: z.string().min(2, "min_2_chars").max(120, "too_long"),
   brand_color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "invalid_color"),
-  timezone: z.string().min(2, "required"),
+  // timezone is owned by /settings and saves via POST /api/firm/timezone.
+  // The /firm form (which uses this schema) no longer ships a timezone
+  // field, so this is optional here; updateCurrentFirm passes through
+  // whatever is in the patch.
+  timezone: z.string().min(2, "required").optional(),
   locale_default: z.enum(["fr", "en"]),
   // HTML checkboxes only send a value when checked (default "on"), so
   // an absent key means "off". Coerce that to a strict boolean so the
