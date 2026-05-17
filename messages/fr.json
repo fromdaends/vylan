@@ -452,7 +452,11 @@
     "overdue_by": "{days, plural, one {# jour de retard} other {# jours de retard}}",
     "due_in": "Dû dans {days, plural, one {# jour} other {# jours}}",
     "stale_days": "Silence depuis {days, plural, one {# jour} other {# jours}}",
-    "other_engagements": "Autres engagements"
+    "other_engagements": "Autres engagements",
+    "pending_items_section": "Éléments attendus des clients",
+    "pending_items_hint": "Documents requis que vos clients n'ont pas encore téléversés.",
+    "empty_pending": "Tous les éléments requis sont arrivés.",
+    "pending_items_more": "{count, plural, one {# élément de plus} other {# éléments de plus}} — ouvrez un engagement pour voir le reste."
   },
   "Ai": {
     "label": "IA",

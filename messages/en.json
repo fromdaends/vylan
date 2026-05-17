@@ -452,7 +452,11 @@
     "overdue_by": "{days, plural, one {# day overdue} other {# days overdue}}",
     "due_in": "Due in {days, plural, one {# day} other {# days}}",
     "stale_days": "Quiet for {days, plural, one {# day} other {# days}}",
-    "other_engagements": "Other engagements"
+    "other_engagements": "Other engagements",
+    "pending_items_section": "Items pending from clients",
+    "pending_items_hint": "Required documents your clients haven't uploaded yet.",
+    "empty_pending": "All required items are in.",
+    "pending_items_more": "{count, plural, one {# more item} other {# more items}} — open an engagement to see the rest."
   },
   "Ai": {
     "label": "AI",
