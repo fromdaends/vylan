@@ -170,7 +170,11 @@
   "Profile": {
     "title": "Your profile",
     "subtitle": "Everything about you and your firm in one place.",
+    "subtitle_v2": "Your account: avatar, name, password, and security.",
+    "firm_page_title": "Firm settings",
+    "firm_page_subtitle": "Your firm's branding and the defaults clients see.",
     "menu_profile": "Profile",
+    "menu_firm": "Firm",
     "menu_help": "Help",
     "group_you": "You",
     "group_you_hint": "Your identity in the app.",

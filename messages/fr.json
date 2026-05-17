@@ -170,7 +170,11 @@
   "Profile": {
     "title": "Votre profil",
     "subtitle": "Tout ce qui vous concerne — vous et votre cabinet — au même endroit.",
+    "subtitle_v2": "Votre compte : photo, nom, mot de passe et sécurité.",
+    "firm_page_title": "Paramètres du cabinet",
+    "firm_page_subtitle": "L'identité visuelle de votre cabinet et les réglages que vos clients voient.",
     "menu_profile": "Profil",
+    "menu_firm": "Cabinet",
     "menu_help": "Aide",
     "group_you": "Vous",
     "group_you_hint": "Votre identité dans l'app.",

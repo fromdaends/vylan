@@ -27,7 +27,9 @@ export default async function ProfilePage({
 
   // Fan out everything this page needs. getCurrentUser / getCurrentFirm
   // are React.cache()-wrapped — the (app) layout already called them
-  // and the cache returns the same result instantly here.
+  // and the cache returns the same result instantly here. We still need
+  // the firm row for the brand color used to tint the avatar fallback;
+  // firm logo + name + timezone now live on /firm.
   const [user, firm, mfaFactors, t] = await Promise.all([
     getCurrentUser(),
     getCurrentFirm(),
@@ -38,12 +40,7 @@ export default async function ProfilePage({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  // Branding URLs can fan out alongside each other, but they need the
-  // user/firm rows from above to know which paths to sign.
-  const [avatarUrl, firmLogoUrl] = await Promise.all([
-    getBrandingImageUrl(user.avatar_path),
-    getBrandingImageUrl(firm.logo_url),
-  ]);
+  const avatarUrl = await getBrandingImageUrl(user.avatar_path);
   // A user has MFA "enabled" only when they have a verified TOTP factor.
   // Unverified factors are mid-enrollment leftovers and don't count.
   const mfaEnabled = (mfaFactors.data?.totp ?? []).some(
@@ -54,7 +51,9 @@ export default async function ProfilePage({
     <div className="max-w-2xl mx-auto space-y-8 animate-in-up">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>
+        <p className="text-sm text-muted-foreground mt-1.5">
+          {t("subtitle_v2")}
+        </p>
       </header>
 
       <ProfileForm
@@ -65,14 +64,8 @@ export default async function ProfilePage({
           display_name: user.display_name,
         }}
         displayLabel={userDisplayLabel(user)}
-        firm={{
-          name: firm.name,
-          brand_color: firm.brand_color,
-          timezone: firm.timezone,
-          locale_default: firm.locale_default,
-        }}
+        brandColor={firm.brand_color}
         avatarUrl={avatarUrl}
-        firmLogoUrl={firmLogoUrl}
         mfaEnabled={mfaEnabled}
       />
     </div>

@@ -79,6 +79,7 @@ export default async function AppLayout({
         settings: t("nav_settings"),
         logout: tAuth("logout"),
         profile: tProfile("menu_profile"),
+        firm: tProfile("menu_firm"),
         help: tProfile("menu_help"),
       }}
     >
