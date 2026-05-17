@@ -4,7 +4,7 @@ import { listEngagements, type Engagement } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
 
 export const dynamic = "force-dynamic";
-import { listRequestItems, type RequestItem } from "@/lib/db/request-items";
+import { listRequestItems } from "@/lib/db/request-items";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
@@ -107,10 +107,6 @@ export default async function DashboardPage({
     (v) =>
       v.engagement.status === "sent" || v.engagement.status === "in_progress",
   ).length;
-  const pendingItemsTotal = vms.reduce(
-    (sum, v) => sum + v.attention.itemsPendingRequired,
-    0,
-  );
   const overdueCount = vms.filter((v) =>
     v.attention.reasons.includes("overdue"),
   ).length;
@@ -139,50 +135,6 @@ export default async function DashboardPage({
   const tAttention = await getTranslations("Attention");
   const clientsById = new Map(clients.map((c) => [c.id, c]));
 
-  // Flat list of every required+pending item across live engagements, so
-  // the "Pending items" metric tile can land on an actual list of what's
-  // missing instead of just scrolling to the engagement-level section.
-  // Sorted so the most urgent engagements' items appear first, with items
-  // from the same engagement grouped together.
-  const PENDING_ITEMS_CAP = 25;
-  type PendingItemRow = {
-    item: RequestItem;
-    engagement: Engagement;
-    clientName: string;
-    score: number;
-  };
-  const pendingItemsAll: PendingItemRow[] = [];
-  for (const v of vms) {
-    if (
-      v.engagement.status !== "sent" &&
-      v.engagement.status !== "in_progress"
-    ) {
-      continue;
-    }
-    const items = (itemsByEng.get(v.engagement.id) ?? []) as RequestItem[];
-    const score = attentionScore(v.attention);
-    for (const it of items) {
-      if (it.required && it.status === "pending") {
-        pendingItemsAll.push({
-          item: it,
-          engagement: v.engagement,
-          clientName:
-            clientsById.get(v.engagement.client_id)?.display_name ?? "—",
-          score,
-        });
-      }
-    }
-  }
-  pendingItemsAll.sort((a, b) => {
-    if (a.score !== b.score) return b.score - a.score;
-    if (a.engagement.id !== b.engagement.id) {
-      return a.engagement.title.localeCompare(b.engagement.title);
-    }
-    return a.item.order_index - b.item.order_index;
-  });
-  const pendingItemsToShow = pendingItemsAll.slice(0, PENDING_ITEMS_CAP);
-  const pendingItemsOverflow = pendingItemsAll.length - pendingItemsToShow.length;
-
   return (
     <div className="space-y-8">
       <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
@@ -200,7 +152,7 @@ export default async function DashboardPage({
         </Link>
       </header>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 animate-in-stagger">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-in-stagger">
         <Metric
           label={t("metric_clients")}
           value={clients.length}
@@ -210,11 +162,6 @@ export default async function DashboardPage({
           label={tAttention("metric_active")}
           value={activeCount}
           href="/clients"
-        />
-        <Metric
-          label={tAttention("metric_pending")}
-          value={pendingItemsTotal}
-          href="#pending-items"
         />
         <Metric
           label={tAttention("metric_overdue")}
@@ -228,57 +175,6 @@ export default async function DashboardPage({
           href="#needs-attention"
         />
       </div>
-
-      <Section
-        id="pending-items"
-        title={tAttention("pending_items_section")}
-        count={pendingItemsTotal}
-        hint={tAttention("pending_items_hint")}
-        icon={<Clock className="h-4 w-4 text-muted-foreground" />}
-      >
-        {pendingItemsAll.length === 0 ? (
-          <EmptyState
-            icon={<CheckCheck className="h-5 w-5" />}
-            text={tAttention("empty_pending")}
-          />
-        ) : (
-          <>
-            <ul className="divide-y divide-border/60">
-              {pendingItemsToShow.map((row) => {
-                const itemLabel =
-                  locale === "fr" && row.item.label_fr
-                    ? row.item.label_fr
-                    : row.item.label;
-                return (
-                  <li key={row.item.id}>
-                    <Link
-                      href={`/engagements/${row.engagement.id}`}
-                      className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="font-medium text-sm truncate">
-                          {itemLabel}
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                          {row.engagement.title} · {row.clientName}
-                        </div>
-                      </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors shrink-0" />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-            {pendingItemsOverflow > 0 && (
-              <p className="text-xs text-muted-foreground mt-2 px-1 py-2">
-                {tAttention("pending_items_more", {
-                  count: pendingItemsOverflow,
-                })}
-              </p>
-            )}
-          </>
-        )}
-      </Section>
 
       <Section
         id="needs-attention"
