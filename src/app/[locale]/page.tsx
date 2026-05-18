@@ -1,8 +1,10 @@
+import { redirect } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { Link } from "@/i18n/navigation";
+import { Link, getPathname } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import { assertLocale } from "@/lib/locale";
+import { getServerSupabase } from "@/lib/supabase/server";
 import {
   ArrowRight,
   Check,
@@ -27,6 +29,17 @@ export default async function Home({
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
+
+  // Signed-in users skip the marketing page and land directly on the
+  // dashboard. The (app)/layout below /dashboard handles onboarding +
+  // MFA gating, so we don't duplicate that here — one extra redirect
+  // hop is fine and keeps this file simple.
+  const supabase = await getServerSupabase();
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth.user) {
+    redirect(getPathname({ locale, href: "/dashboard" }));
+  }
+
   const t = await getTranslations("Landing");
   const tAuth = await getTranslations("Auth");
 
