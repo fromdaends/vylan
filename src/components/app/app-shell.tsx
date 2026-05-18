@@ -26,7 +26,6 @@ import {
   ChevronDown,
   UserCircle,
   HelpCircle,
-  Building2,
 } from "lucide-react";
 
 type Labels = {
@@ -36,7 +35,7 @@ type Labels = {
   settings: string;
   logout: string;
   profile: string;
-  firm: string;
+  yourFirm: string;
   help: string;
 };
 
@@ -165,15 +164,6 @@ export function AppShell({
                 </DropdownMenuItem>
                 <DropdownMenuItem asChild>
                   <Link
-                    href="/firm"
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <Building2 className="h-4 w-4" />
-                    {labels.firm}
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link
                     href="/settings"
                     className="flex items-center gap-2 cursor-pointer"
                   >
@@ -195,25 +185,27 @@ export function AppShell({
                   {labels.help}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                {/* Firm context (read-only label so the user knows which firm
-                    they're acting on; matches the previous dropdown). The
-                    firm logo (if uploaded on /profile) shows beside the name
-                    so multi-firm staff can recognise the active firm at a
-                    glance. */}
-                <DropdownMenuLabel className="font-normal">
-                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    {brand.name}
-                  </div>
-                  <div className="mt-1 flex items-center gap-2">
+                {/* Firm context tile. Doubles as the entry point to /firm
+                    so the firm logo + name in this tile IS the "firm
+                    settings" link. The standalone "Firm" menu item (briefly
+                    added above) is gone; this tile carries the navigation. */}
+                <DropdownMenuLabel className="font-normal text-[11px] uppercase tracking-wider text-muted-foreground pb-1">
+                  {labels.yourFirm}
+                </DropdownMenuLabel>
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/firm"
+                    className="flex items-center gap-2 cursor-pointer"
+                  >
                     <AvatarInitials
                       src={firmLogoUrl}
                       name={firmName}
                       size={24}
                       color={brandColor}
                     />
-                    <div className="text-xs truncate">{firmName}</div>
-                  </div>
-                </DropdownMenuLabel>
+                    <span className="text-xs truncate">{firmName}</span>
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <form action={logoutAction}>
                   <DropdownMenuItem asChild>
@@ -265,14 +257,6 @@ export function AppShell({
               >
                 <UserCircle className="h-4 w-4" />
                 {labels.profile}
-              </Link>
-              <Link
-                href="/firm"
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-              >
-                <Building2 className="h-4 w-4" />
-                {labels.firm}
               </Link>
               <Link
                 href="/settings"
