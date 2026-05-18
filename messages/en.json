@@ -369,7 +369,19 @@
     "back_to_list": "Back to list",
     "contact_info": "Contact",
     "engagements": "Engagements",
-    "engagements_empty": "No engagements for this client."
+    "engagements_empty": "No engagements for this client.",
+    "inline_placeholder_email": "name@example.com",
+    "inline_placeholder_phone": "+1 555 123 4567",
+    "inline_placeholder_external_ref": "Your internal ID for this client",
+    "inline_placeholder_notes": "Internal notes (not visible to the client).",
+    "inline_saving": "Saving…",
+    "inline_saved": "Saved",
+    "inline_error_update_failed": "Couldn't save. Try again.",
+    "inline_error_invalid_email": "That doesn't look like a valid email.",
+    "inline_error_too_long": "That's a bit too long.",
+    "inline_error_invalid_field": "Unknown field.",
+    "inline_error_invalid_value": "That value isn't allowed here.",
+    "inline_error_missing_id": "Couldn't save — client ID missing."
   },
   "Engagements": {
     "title": "Engagements",
