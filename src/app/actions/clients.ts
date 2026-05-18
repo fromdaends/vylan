@@ -94,6 +94,68 @@ export async function updateClientAction(
   return { ok: true };
 }
 
+// One-field-at-a-time update for the inline editors on the client
+// detail page. Each input on that page sends just its own value
+// through this so we don't have to round-trip the entire client
+// record on every keystroke-debounced blur.
+const INLINE_FIELDS = ["email", "phone", "external_ref", "notes"] as const;
+type InlineField = (typeof INLINE_FIELDS)[number];
+
+const InlineFieldSchemas: Record<InlineField, z.ZodTypeAny> = {
+  email: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z.union([z.string().email("invalid_email"), z.null()]),
+  ),
+  phone: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z.union([z.string().max(40, "too_long"), z.null()]),
+  ),
+  external_ref: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z.union([z.string().max(160, "too_long"), z.null()]),
+  ),
+  notes: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? null : v),
+    z.union([z.string().max(4000, "too_long"), z.null()]),
+  ),
+};
+
+export type InlineUpdateResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function updateClientFieldAction(
+  formData: FormData,
+): Promise<InlineUpdateResult> {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return { ok: false, error: "missing_id" };
+
+  const field = formData.get("field");
+  if (
+    typeof field !== "string" ||
+    !(INLINE_FIELDS as readonly string[]).includes(field)
+  ) {
+    return { ok: false, error: "invalid_field" };
+  }
+  const schema = InlineFieldSchemas[field as InlineField];
+  const parsed = schema.safeParse(formData.get("value"));
+  if (!parsed.success) {
+    const code = parsed.error.issues[0]?.message ?? "invalid_value";
+    return { ok: false, error: code };
+  }
+
+  try {
+    await updateClient(id, { [field]: parsed.data });
+  } catch {
+    return { ok: false, error: "update_failed" };
+  }
+  // Targeted revalidation — both the detail page and the clients list
+  // surface this row.
+  revalidatePath(`/clients/${id}`);
+  revalidatePath("/clients");
+  return { ok: true };
+}
+
 export async function archiveClientAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;

@@ -369,7 +369,19 @@
     "back_to_list": "Retour à la liste",
     "contact_info": "Coordonnées",
     "engagements": "Engagements",
-    "engagements_empty": "Aucun engagement pour ce client."
+    "engagements_empty": "Aucun engagement pour ce client.",
+    "inline_placeholder_email": "nom@exemple.com",
+    "inline_placeholder_phone": "+1 555 123 4567",
+    "inline_placeholder_external_ref": "Votre identifiant interne pour ce client",
+    "inline_placeholder_notes": "Notes internes (non visibles par le client).",
+    "inline_saving": "Enregistrement…",
+    "inline_saved": "Enregistré",
+    "inline_error_update_failed": "Impossible d'enregistrer. Réessayez.",
+    "inline_error_invalid_email": "Cette adresse courriel ne semble pas valide.",
+    "inline_error_too_long": "C'est un peu trop long.",
+    "inline_error_invalid_field": "Champ inconnu.",
+    "inline_error_invalid_value": "Cette valeur n'est pas permise ici.",
+    "inline_error_missing_id": "Impossible d'enregistrer — identifiant client manquant."
   },
   "Engagements": {
     "title": "Engagements",
