@@ -484,7 +484,22 @@
     "overdue_by": "{days, plural, one {# jour de retard} other {# jours de retard}}",
     "due_in": "Dû dans {days, plural, one {# jour} other {# jours}}",
     "stale_days": "Silence depuis {days, plural, one {# jour} other {# jours}}",
-    "other_engagements": "Autres engagements"
+    "other_engagements": "Autres engagements",
+    "ai_activity_section_title": "Activité de l'IA",
+    "ai_activity_section_hint": "Verdicts récents de l'IA sur les fichiers téléversés à travers tous vos engagements. Cliquez une ligne pour ouvrir l'engagement, ou voir tout.",
+    "empty_ai_activity": "Aucune activité de l'IA pour l'instant.",
+    "ai_activity_view_all": "Voir toute l'activité de l'IA",
+    "ai_action_classified": "L'IA a classé un téléversement",
+    "ai_action_auto_rejected": "L'IA a rejeté automatiquement un téléversement",
+    "ai_action_escalated": "L'IA a signalé un fichier deux fois — à réviser",
+    "ai_action_quality_flagged": "L'IA a signalé un fichier à réviser",
+    "ai_action_override": "Rejet de l'IA outrepassé"
+  },
+  "AiActivity": {
+    "title": "Activité de l'IA",
+    "subtitle": "Chaque verdict et correction de l'IA à travers les engagements de votre cabinet.",
+    "empty": "Aucune activité de l'IA pour l'instant — les téléversements apparaîtront ici dès que l'IA les aura traités.",
+    "back": "Retour au tableau de bord"
   },
   "Ai": {
     "label": "IA",
