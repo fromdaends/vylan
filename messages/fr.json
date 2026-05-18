@@ -289,6 +289,13 @@
   "App": {
     "dashboard_title": "Tableau de bord",
     "dashboard_empty": "Aucun engagement actif pour l’instant. Créez votre premier client pour commencer.",
+    "filter_all": "Tous",
+    "filter_active": "Actifs",
+    "filter_ai_flagged": "Signalés IA",
+    "filter_drafts": "Brouillons",
+    "empty_all": "Aucun engagement pour l’instant. Cliquez « Nouvel engagement » pour commencer.",
+    "empty_active": "Aucun engagement actif en ce moment.",
+    "empty_drafts": "Aucun brouillon.",
     "nav_dashboard": "Tableau de bord",
     "nav_clients": "Clients",
     "nav_engagements": "Engagements",
