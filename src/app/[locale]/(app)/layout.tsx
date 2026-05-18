@@ -79,7 +79,9 @@ export default async function AppLayout({
         settings: t("nav_settings"),
         logout: tAuth("logout"),
         profile: tProfile("menu_profile"),
-        firm: tProfile("menu_firm"),
+        // The "Your firm" tile in the dropdown — replaces the old brand-name
+        // label and now doubles as the link to /firm settings.
+        yourFirm: tProfile("your_firm_label"),
         help: tProfile("menu_help"),
       }}
     >
