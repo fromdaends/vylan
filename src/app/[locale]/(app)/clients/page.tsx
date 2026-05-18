@@ -12,6 +12,7 @@ import { ClientsToolbar } from "@/components/clients/clients-toolbar";
 import {
   ClientsTable,
   type ClientEngagementSummary,
+  type ClientEngagementRow,
 } from "@/components/clients/clients-table";
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import { assertLocale } from "@/lib/locale";
@@ -43,8 +44,12 @@ export default async function ClientsPage({
     listEngagements(),
   ]);
 
-  // Group engagement counts by client_id.
+  // Group engagement counts by client_id (for the summary badge in the
+  // row's "Engagements" column) AND group the full engagement rows by
+  // client_id so the expanded drawer can list them without another
+  // fetch. Single pass over the engagements array.
   const summaries: Record<string, ClientEngagementSummary> = {};
+  const engagementsByClient: Record<string, ClientEngagementRow[]> = {};
   for (const e of engagements) {
     const s =
       summaries[e.client_id] ??
@@ -59,6 +64,33 @@ export default async function ClientsPage({
     s[e.status] += 1;
     if (e.status === "sent" || e.status === "in_progress") s.total_live += 1;
     summaries[e.client_id] = s;
+
+    const list = engagementsByClient[e.client_id] ?? [];
+    list.push({
+      id: e.id,
+      title: e.title,
+      type: e.type,
+      status: e.status,
+      due_date: e.due_date,
+    });
+    engagementsByClient[e.client_id] = list;
+  }
+  // Sort each client's engagements: live first (sent / in_progress),
+  // then drafts, then completed, then cancelled. Within a status group,
+  // newest first by id (ids are uuids but listEngagements already
+  // returns newest first, so we just preserve insertion order in each
+  // status bucket).
+  const STATUS_RANK: Record<string, number> = {
+    in_progress: 0,
+    sent: 1,
+    draft: 2,
+    complete: 3,
+    cancelled: 4,
+  };
+  for (const id of Object.keys(engagementsByClient)) {
+    engagementsByClient[id].sort(
+      (a, b) => (STATUS_RANK[a.status] ?? 9) - (STATUS_RANK[b.status] ?? 9),
+    );
   }
 
   const t = await getTranslations("Clients");
@@ -98,6 +130,7 @@ export default async function ClientsPage({
         <ClientsTable
           clients={clients}
           summaries={summaries}
+          engagementsByClient={engagementsByClient}
           locale={locale}
         />
       </div>

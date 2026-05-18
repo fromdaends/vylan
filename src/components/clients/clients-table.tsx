@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import {
@@ -19,13 +20,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { MoreHorizontal } from "lucide-react";
+import {
+  MoreHorizontal,
+  ChevronDown,
+  ChevronRight,
+  ArrowUpRight,
+  FileText,
+} from "lucide-react";
 import { ClientFormDialog } from "./client-form-dialog";
 import {
   archiveClientAction,
   restoreClientAction,
 } from "@/app/actions/clients";
 import type { Client } from "@/lib/db/clients";
+import type { EngagementStatus } from "@/lib/db/engagements";
+import type { EngagementType } from "@/lib/db/templates";
+import { formatDate, type AppLocale } from "@/lib/format";
 
 export type ClientEngagementSummary = {
   draft: number;
@@ -36,16 +46,49 @@ export type ClientEngagementSummary = {
   total_live: number;
 };
 
+// Minimal slice of an engagement row needed to render the expanded
+// drawer beneath a client. The page picks these columns out of the
+// listEngagements result so the table component doesn't need the
+// full row shape.
+export type ClientEngagementRow = {
+  id: string;
+  title: string;
+  type: EngagementType;
+  status: EngagementStatus;
+  due_date: string | null;
+};
+
+// Column count for the expanded `colSpan` cell. Bump if the row gains
+// or loses a column.
+const TABLE_COLS = 7;
+
 export function ClientsTable({
   clients,
   summaries,
+  engagementsByClient,
   locale,
 }: {
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
-  locale: "fr" | "en";
+  engagementsByClient: Record<string, ClientEngagementRow[]>;
+  locale: AppLocale;
 }) {
   const t = useTranslations("Clients");
+  // Set of expanded client ids. Multi-expand by design — comparing two
+  // clients side-by-side is a real workflow at tax season.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggle(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   if (clients.length === 0) {
     return (
@@ -62,60 +105,216 @@ export function ClientsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>{t("col_name")}</TableHead>
-            <TableHead>{t("col_type")}</TableHead>
-            <TableHead>{t("col_email")}</TableHead>
-            <TableHead>{t("col_phone")}</TableHead>
-            <TableHead>{t("col_engagements")}</TableHead>
+            <TableHead className="w-8" />
+            <TableHead className="py-3">{t("col_name")}</TableHead>
+            <TableHead className="py-3">{t("col_type")}</TableHead>
+            <TableHead className="py-3">{t("col_email")}</TableHead>
+            <TableHead className="py-3">{t("col_phone")}</TableHead>
+            <TableHead className="py-3">{t("col_engagements")}</TableHead>
             <TableHead className="w-12 text-right" />
           </TableRow>
         </TableHeader>
         <TableBody>
-          {clients.map((c) => (
-            <TableRow key={c.id}>
-              <TableCell className="font-medium">
-                <Link
-                  href={`/clients/${c.id}`}
-                  className="hover:underline"
-                >
-                  {c.display_name}
-                </Link>
-                {c.external_ref && (
-                  <span className="ml-2 text-xs font-mono text-muted-foreground">
-                    {c.external_ref}
-                  </span>
-                )}
-                {c.archived_at && (
-                  <Badge variant="outline" className="ml-2 text-xs">
-                    {t("archived")}
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell>
-                <Badge variant="secondary">
-                  {c.type === "individual"
-                    ? t("type_individual")
-                    : t("type_business")}
-                </Badge>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {c.email ?? "—"}
-              </TableCell>
-              <TableCell className="text-muted-foreground font-mono text-xs">
-                {c.phone ?? "—"}
-              </TableCell>
-              <TableCell>
-                <EngagementSummaryCell summary={summaries[c.id]} />
-              </TableCell>
-              <TableCell className="text-right">
-                <RowActions client={c} locale={locale} />
-              </TableCell>
-            </TableRow>
-          ))}
+          {clients.map((c) => {
+            const isOpen = expanded.has(c.id);
+            const rows = engagementsByClient[c.id] ?? [];
+            return (
+              <ClientRowWithDrawer
+                key={c.id}
+                client={c}
+                summary={summaries[c.id]}
+                engagements={rows}
+                isOpen={isOpen}
+                onToggle={() => toggle(c.id)}
+                locale={locale}
+              />
+            );
+          })}
         </TableBody>
       </Table>
     </div>
   );
+}
+
+function ClientRowWithDrawer({
+  client,
+  summary,
+  engagements,
+  isOpen,
+  onToggle,
+  locale,
+}: {
+  client: Client;
+  summary: ClientEngagementSummary | undefined;
+  engagements: ClientEngagementRow[];
+  isOpen: boolean;
+  onToggle: () => void;
+  locale: AppLocale;
+}) {
+  const t = useTranslations("Clients");
+  // Stop propagation so clicking the name (Link) or the actions menu
+  // (DropdownMenu trigger) doesn't ALSO toggle the row. Without this,
+  // a single click on the name would navigate AND expand the row,
+  // leaving an expanded drawer the user didn't intend the next time
+  // they visit /clients.
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
+
+  return (
+    <>
+      <TableRow
+        onClick={onToggle}
+        className="cursor-pointer"
+        aria-expanded={isOpen}
+        data-state={isOpen ? "open" : undefined}
+      >
+        <TableCell className="py-4 pl-4 pr-0 text-muted-foreground">
+          {isOpen ? (
+            <ChevronDown className="size-4" aria-hidden />
+          ) : (
+            <ChevronRight className="size-4" aria-hidden />
+          )}
+        </TableCell>
+        <TableCell className="py-4 font-medium">
+          <Link
+            href={`/clients/${client.id}`}
+            onClick={stop}
+            className="hover:underline"
+          >
+            {client.display_name}
+          </Link>
+          {client.external_ref && (
+            <span className="ml-2 text-xs font-mono text-muted-foreground">
+              {client.external_ref}
+            </span>
+          )}
+          {client.archived_at && (
+            <Badge variant="outline" className="ml-2 text-xs">
+              {t("archived")}
+            </Badge>
+          )}
+        </TableCell>
+        <TableCell className="py-4">
+          <Badge variant="secondary">
+            {client.type === "individual"
+              ? t("type_individual")
+              : t("type_business")}
+          </Badge>
+        </TableCell>
+        <TableCell className="py-4 text-muted-foreground">
+          {client.email ?? "—"}
+        </TableCell>
+        <TableCell className="py-4 text-muted-foreground font-mono text-xs">
+          {client.phone ?? "—"}
+        </TableCell>
+        <TableCell className="py-4">
+          <EngagementSummaryCell summary={summary} />
+        </TableCell>
+        <TableCell className="py-4 pr-4 text-right" onClick={stop}>
+          <RowActions client={client} locale={locale} />
+        </TableCell>
+      </TableRow>
+      {isOpen && (
+        <TableRow className="hover:bg-transparent">
+          <TableCell colSpan={TABLE_COLS} className="bg-muted/20 px-6 py-4">
+            <ExpandedDrawer
+              clientId={client.id}
+              engagements={engagements}
+              locale={locale}
+            />
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
+function ExpandedDrawer({
+  clientId,
+  engagements,
+  locale,
+}: {
+  clientId: string;
+  engagements: ClientEngagementRow[];
+  locale: AppLocale;
+}) {
+  const t = useTranslations("Clients");
+  const tStatus = useTranslations("Status");
+
+  return (
+    <div className="space-y-3 animate-in-fade">
+      {engagements.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {t("drawer_no_engagements")}
+        </p>
+      ) : (
+        <ul className="divide-y divide-border/50 rounded-lg border border-border/60 bg-card overflow-hidden">
+          {engagements.map((e) => (
+            <li key={e.id}>
+              <Link
+                href={`/engagements/${e.id}`}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-secondary/40 transition-colors"
+              >
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-muted text-muted-foreground shrink-0">
+                  <FileText className="size-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium truncate">
+                    {e.title}
+                  </span>
+                  <span className="block text-xs text-muted-foreground mt-0.5">
+                    <span className="font-mono uppercase tracking-wider">
+                      {e.type}
+                    </span>
+                    {e.due_date && (
+                      <>
+                        <span className="mx-2 text-border">·</span>
+                        {t("drawer_due", {
+                          date: formatDate(e.due_date, locale, "medium"),
+                        })}
+                      </>
+                    )}
+                  </span>
+                </span>
+                <Badge variant={statusVariant(e.status)} className="shrink-0">
+                  {tStatus(e.status)}
+                </Badge>
+                <ArrowUpRight
+                  className="size-4 text-muted-foreground shrink-0"
+                  aria-hidden
+                />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex justify-end">
+        <Link href={`/clients/${clientId}`}>
+          <Button variant="outline" size="sm">
+            {t("drawer_view_full_page")}
+            <ArrowUpRight className="size-3.5" />
+          </Button>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+// Map engagement status to the existing Badge variant set so the
+// drawer's status pills match the rest of the app.
+function statusVariant(
+  status: EngagementStatus,
+): "default" | "secondary" | "outline" | "destructive" {
+  switch (status) {
+    case "in_progress":
+    case "sent":
+      return "secondary";
+    case "draft":
+      return "outline";
+    case "complete":
+      return "default";
+    case "cancelled":
+      return "destructive";
+  }
 }
 
 function EngagementSummaryCell({
