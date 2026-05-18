@@ -26,6 +26,7 @@ import {
 } from "@/lib/attention";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { CollapsibleSection } from "@/components/dashboard/collapsible-section";
+import { HashSectionLink } from "@/components/dashboard/hash-section-link";
 import {
   listAiActivityForFirm,
   type AiActivityEntry,
@@ -426,12 +427,12 @@ function Metric({
   }
   if (hashFilter) {
     return (
-      <a
-        href={`#${hashFilter}`}
+      <HashSectionLink
+        hash={hashFilter}
         className={base + " cursor-pointer no-underline"}
       >
         {inner}
-      </a>
+      </HashSectionLink>
     );
   }
   return <div className={base}>{inner}</div>;
