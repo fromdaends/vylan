@@ -19,16 +19,23 @@ export type AiActivityEntry = ActivityEntry & {
 // it). Each row is enriched with the parent engagement's title +
 // client display_name so the UI can show "what happened, on which
 // engagement, for which client" without a per-row roundtrip.
-export async function listAiActivityForFirm(limit = 200): Promise<
-  AiActivityEntry[]
-> {
+//
+// `sinceISO` (optional): only return rows with `created_at >= sinceISO`.
+// The dashboard passes a rolling 7-day cutoff so the section
+// auto-resets every week (no manual reset needed).
+export async function listAiActivityForFirm(
+  limit = 200,
+  sinceISO?: string,
+): Promise<AiActivityEntry[]> {
   const supabase = await getServerSupabase();
-  const { data, error } = await supabase
+  let query = supabase
     .from("activity_log")
     .select("*")
     .in("action", AI_ACTIONS as unknown as string[])
     .order("created_at", { ascending: false })
     .limit(limit);
+  if (sinceISO) query = query.gte("created_at", sinceISO);
+  const { data, error } = await query;
   if (error) throw error;
   const entries = (data ?? []) as ActivityEntry[];
   if (entries.length === 0) return [];

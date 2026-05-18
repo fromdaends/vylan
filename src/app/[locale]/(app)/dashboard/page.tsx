@@ -27,6 +27,10 @@ import {
 import { getServerSupabase } from "@/lib/supabase/server";
 import { CollapsibleSection } from "@/components/dashboard/collapsible-section";
 import { HashSectionLink } from "@/components/dashboard/hash-section-link";
+import { AiActivityList } from "@/components/dashboard/ai-activity-list";
+import {
+  aiActivityShortLabel,
+} from "@/components/dashboard/ai-activity-shared";
 import {
   listAiActivityForFirm,
   type AiActivityEntry,
@@ -128,10 +132,11 @@ export default async function DashboardPage({
         .gte("uploaded_at", sevenDaysAgo)
     : { count: 0 };
 
-  // Recent AI activity — shown inline in the dashboard's AI activity
-  // section. Capped at 25 since the section opens in place (no separate
-  // page); 25 rows feels like a full feed without flooding the viewport.
-  const recentAiActivity = await listAiActivityForFirm(25);
+  // AI activity — rolling 7-day window so the section auto-resets
+  // every week. Capped at 200 rows; with a week of activity that's
+  // plenty even for a busy firm, and the client-side "Search client"
+  // box filters within that set.
+  const recentAiActivity = await listAiActivityForFirm(200, sevenDaysAgo);
 
   const t = await getTranslations("App");
   const tEng = await getTranslations("Engagements");
@@ -305,16 +310,7 @@ export default async function DashboardPage({
             text={tAttention("empty_ai_activity")}
           />
         ) : (
-          <ul className="divide-y divide-border/60">
-            {recentAiActivity.map((e) => (
-              <AiActivityRow
-                key={e.id}
-                entry={e}
-                locale={locale}
-                tAttention={tAttention}
-              />
-            ))}
-          </ul>
+          <AiActivityList entries={recentAiActivity} locale={locale} />
         )}
       </CollapsibleSection>
 
@@ -453,29 +449,6 @@ function EmptyState({
   );
 }
 
-function aiActivityShortLabel(
-  action: string,
-  tAttention: Awaited<ReturnType<typeof getTranslations<"Attention">>>,
-): string {
-  // Short labels for the dashboard row + preview line. Avoids leaking
-  // the noisy "🤖 confidence X%" wording from the full Activity strings
-  // when space is tight.
-  switch (action) {
-    case "ai_classified":
-      return tAttention("ai_action_classified");
-    case "ai_auto_rejected":
-      return tAttention("ai_action_auto_rejected");
-    case "ai_escalated_to_accountant":
-      return tAttention("ai_action_escalated");
-    case "ai_quality_flagged":
-      return tAttention("ai_action_quality_flagged");
-    case "ai_rejection_overridden":
-      return tAttention("ai_action_override");
-    default:
-      return action;
-  }
-}
-
 function aiActivityPreview(
   entry: AiActivityEntry,
   tAttention: Awaited<ReturnType<typeof getTranslations<"Attention">>>,
@@ -486,79 +459,6 @@ function aiActivityPreview(
     entry.client_display_name ?? entry.engagement_title ?? null;
   const when = formatRelative(entry.created_at, locale);
   return context ? `${label} · ${context} · ${when}` : `${label} · ${when}`;
-}
-
-function aiActionTone(action: string): string {
-  switch (action) {
-    case "ai_auto_rejected":
-    case "ai_escalated_to_accountant":
-      return "text-warning";
-    case "ai_rejection_overridden":
-      return "text-success";
-    default:
-      return "text-primary";
-  }
-}
-
-function AiActivityRow({
-  entry,
-  locale,
-  tAttention,
-}: {
-  entry: AiActivityEntry;
-  locale: "fr" | "en";
-  tAttention: Awaited<ReturnType<typeof getTranslations<"Attention">>>;
-}) {
-  const label = aiActivityShortLabel(entry.action, tAttention);
-  const tone = aiActionTone(entry.action);
-  const href = entry.engagement_id
-    ? `/engagements/${entry.engagement_id}`
-    : null;
-  const row = (
-    <div className="flex items-start gap-3 py-3 px-1 -mx-1 rounded-md group">
-      <Sparkles className={"h-3.5 w-3.5 mt-1 shrink-0 " + tone} aria-hidden />
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium leading-snug truncate">{label}</div>
-        <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          {entry.engagement_title && (
-            <span className="truncate max-w-[18rem]">
-              {entry.engagement_title}
-            </span>
-          )}
-          {entry.client_display_name && (
-            <>
-              <span aria-hidden>·</span>
-              <span className="truncate max-w-[14rem]">
-                {entry.client_display_name}
-              </span>
-            </>
-          )}
-          <span aria-hidden>·</span>
-          <span>{formatRelative(entry.created_at, locale)}</span>
-        </div>
-      </div>
-      {href && (
-        <ChevronRight
-          className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors mt-1.5 shrink-0"
-          aria-hidden
-        />
-      )}
-    </div>
-  );
-  return (
-    <li>
-      {href ? (
-        <Link
-          href={href}
-          className="block hover:bg-secondary/40 transition-colors rounded-md"
-        >
-          {row}
-        </Link>
-      ) : (
-        row
-      )}
-    </li>
-  );
 }
 
 function AttentionRow({
