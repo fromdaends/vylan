@@ -72,8 +72,18 @@ export function CollapsibleSection({
     }
     window.addEventListener(HIGHLIGHT_EVENT, onEvent);
 
+    // Browser history back/forward: when the user navigates between
+    // hash URLs (e.g. forward to a previously-highlighted section),
+    // the component is already mounted, so the initial-mount check
+    // above doesn't re-run. Listen for hashchange too.
+    function onHashChange() {
+      if (window.location.hash.replace(/^#/, "") === id) trigger();
+    }
+    window.addEventListener("hashchange", onHashChange);
+
     return () => {
       window.removeEventListener(HIGHLIGHT_EVENT, onEvent);
+      window.removeEventListener("hashchange", onHashChange);
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
   }, [id]);
