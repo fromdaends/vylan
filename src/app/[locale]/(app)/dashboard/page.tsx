@@ -153,6 +153,43 @@ export default async function DashboardPage({
     : [];
   const aiRejectedWeekCount = aiRejectedRows.length;
 
+  // Roll up to one entry per engagement so the section reads as "which
+  // engagements have AI flags," not "every individual file." The metric
+  // tile still counts files; per-row badges add up to that number.
+  type AiRejectedGroup = {
+    engagementId: string;
+    engagementTitle: string;
+    clientName: string;
+    count: number;
+    mostRecent: string;
+  };
+  const aiRejectedByEngagement: AiRejectedGroup[] = (() => {
+    const byId = new Map<string, AiRejectedGroup>();
+    for (const r of aiRejectedRows) {
+      const c = Array.isArray(r.engagements?.clients)
+        ? r.engagements?.clients[0]
+        : r.engagements?.clients;
+      const existing = byId.get(r.engagement_id);
+      if (existing) {
+        existing.count += 1;
+        if (r.uploaded_at > existing.mostRecent) {
+          existing.mostRecent = r.uploaded_at;
+        }
+      } else {
+        byId.set(r.engagement_id, {
+          engagementId: r.engagement_id,
+          engagementTitle: r.engagements?.title ?? "—",
+          clientName: c?.display_name ?? "—",
+          count: 1,
+          mostRecent: r.uploaded_at,
+        });
+      }
+    }
+    return [...byId.values()].sort((a, b) =>
+      a.mostRecent < b.mostRecent ? 1 : -1,
+    );
+  })();
+
   const t = await getTranslations("App");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -226,70 +263,6 @@ export default async function DashboardPage({
                 tAttention={tAttention}
               />
             ))}
-          </ul>
-        )}
-      </Section>
-
-      <Section
-        id="ai-rejected"
-        title={tAttention("metric_ai_rejected_week")}
-        count={aiRejectedRows.length}
-        hint={tAttention("ai_rejected_hint")}
-        icon={<FileWarning className="h-4 w-4 text-warning" />}
-      >
-        {aiRejectedRows.length === 0 ? (
-          <EmptyState
-            icon={<CheckCheck className="h-5 w-5" />}
-            text={tAttention("empty_ai_rejected")}
-          />
-        ) : (
-          <ul className="divide-y divide-border/60">
-            {aiRejectedRows.map((row) => {
-              const c = Array.isArray(row.engagements?.clients)
-                ? row.engagements?.clients[0]
-                : row.engagements?.clients;
-              const clientName = c?.display_name ?? "—";
-              const engagementTitle = row.engagements?.title ?? "—";
-              const reason =
-                locale === "fr"
-                  ? row.ai_usability?.issue_summary_fr ||
-                    row.ai_usability?.issue_summary_en
-                  : row.ai_usability?.issue_summary_en ||
-                    row.ai_usability?.issue_summary_fr;
-              return (
-                <li key={row.id}>
-                  <Link
-                    href={`/engagements/${row.engagement_id}`}
-                    className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm truncate">
-                          {clientName}
-                        </span>
-                        <span className="text-xs text-muted-foreground truncate">
-                          · {engagementTitle}
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
-                        {row.original_filename}
-                      </div>
-                      {reason && (
-                        <div className="text-xs text-foreground/70 mt-1 line-clamp-2">
-                          {reason}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {formatRelative(row.uploaded_at, locale)}
-                      </span>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
-                    </div>
-                  </Link>
-                </li>
-              );
-            })}
           </ul>
         )}
       </Section>
@@ -375,6 +348,50 @@ export default async function DashboardPage({
           </ul>
         </Section>
       )}
+
+      <Section
+        id="ai-rejected"
+        title={tAttention("metric_ai_rejected_week")}
+        count={aiRejectedRows.length}
+        hint={tAttention("ai_rejected_hint")}
+        icon={<FileWarning className="h-4 w-4 text-warning" />}
+      >
+        {aiRejectedByEngagement.length === 0 ? (
+          <EmptyState
+            icon={<CheckCheck className="h-5 w-5" />}
+            text={tAttention("empty_ai_rejected")}
+          />
+        ) : (
+          <ul className="divide-y divide-border/60">
+            {aiRejectedByEngagement.map((g) => (
+              <li key={g.engagementId}>
+                <Link
+                  href={`/engagements/${g.engagementId}`}
+                  className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
+                >
+                  <div className="min-w-0">
+                    <div className="font-medium text-sm truncate">
+                      {g.clientName}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                      {g.engagementTitle}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Badge variant="secondary" className="font-normal">
+                      {tAttention("ai_flagged_count", { count: g.count })}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
+                      {formatRelative(g.mostRecent, locale)}
+                    </span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
     </div>
   );
 }
