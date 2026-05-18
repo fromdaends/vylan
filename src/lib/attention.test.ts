@@ -163,13 +163,67 @@ describe("isReadyToReview", () => {
     expect(isReadyToReview(r)).toBe(true);
   });
 
-  it("false when any required item is still pending", () => {
+  it("false when any required item is truly pending (no upload yet)", () => {
     const r = computeAttention({
       engagement: eng(),
       items: [item({ status: "submitted" }), item({ status: "pending" })],
       lastClientActivityAt: NOW.toISOString(),
       now: NOW,
     });
+    expect(isReadyToReview(r)).toBe(false);
+  });
+
+  it("true when an AI-bounced required item is the only thing 'pending'", () => {
+    // Client uploaded → AI rejected → item reopened (status=pending) with
+    // rejection_reason set. From the accountant's perspective there's
+    // something to look at (and possibly override), so the engagement
+    // should surface in 'Ready to review' rather than disappear.
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "submitted" }),
+        item({
+          status: "pending",
+          rejection_reason: "Image was too dark to read.",
+        }),
+      ],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(r.itemsPendingRequired).toBe(0);
+    expect(r.itemsReadyToReview).toBe(2); // submitted + ai-bounced
+    expect(isReadyToReview(r)).toBe(true);
+  });
+
+  it("true when EVERY required item was AI-bounced (no clean submit yet)", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "pending", rejection_reason: "Blurry." }),
+        item({ status: "pending", rejection_reason: "Wrong year." }),
+      ],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(r.itemsPendingRequired).toBe(0);
+    expect(r.itemsReadyToReview).toBe(2);
+    expect(isReadyToReview(r)).toBe(true);
+  });
+
+  it("false when a truly-pending required item sits alongside an AI-bounced one", () => {
+    // One item the client hasn't touched at all + one AI-bounced. The
+    // engagement isn't 'ready' because the firm is still waiting on the
+    // untouched item.
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "pending" }), // truly waiting on client
+        item({ status: "pending", rejection_reason: "Cut off." }),
+      ],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(r.itemsPendingRequired).toBe(1);
     expect(isReadyToReview(r)).toBe(false);
   });
 });
