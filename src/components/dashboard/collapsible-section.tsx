@@ -2,6 +2,10 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
+import {
+  HIGHLIGHT_EVENT,
+  type HighlightDetail,
+} from "./hash-section-link";
 
 // Collapsible card used on the dashboard. Default collapsed. The
 // header always shows: icon + title + count + a short "preview"
@@ -40,21 +44,46 @@ export function CollapsibleSection({
   useEffect(() => {
     if (!id) return;
     let timeoutId: number | undefined;
-    function check() {
-      if (typeof window === "undefined") return;
-      const hash = window.location.hash.replace(/^#/, "");
-      if (hash && hash === id) {
-        setOpen(true);
-        setHighlight(true);
-        // ~1.4s soft pulse — long enough to draw the eye, short
-        // enough that it doesn't linger once the user starts reading.
-        timeoutId = window.setTimeout(() => setHighlight(false), 1400);
-      }
+
+    function trigger() {
+      setOpen(true);
+      setHighlight(true);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      // ~1.4s soft pulse — long enough to draw the eye, short
+      // enough that it doesn't linger once the user starts reading.
+      timeoutId = window.setTimeout(() => setHighlight(false), 1400);
     }
-    check();
-    window.addEventListener("hashchange", check);
+
+    // Initial mount: page was loaded with this section already in
+    // the URL hash (direct nav / refresh / back-button).
+    if (
+      typeof window !== "undefined" &&
+      window.location.hash.replace(/^#/, "") === id
+    ) {
+      trigger();
+    }
+
+    // Per-click: HashSectionLink dispatches an explicit event so
+    // repeat clicks re-fire the highlight even when the hash hasn't
+    // changed (browsers don't emit hashchange in that case).
+    function onEvent(e: Event) {
+      const detail = (e as CustomEvent<HighlightDetail>).detail;
+      if (detail?.id === id) trigger();
+    }
+    window.addEventListener(HIGHLIGHT_EVENT, onEvent);
+
+    // Browser history back/forward: when the user navigates between
+    // hash URLs (e.g. forward to a previously-highlighted section),
+    // the component is already mounted, so the initial-mount check
+    // above doesn't re-run. Listen for hashchange too.
+    function onHashChange() {
+      if (window.location.hash.replace(/^#/, "") === id) trigger();
+    }
+    window.addEventListener("hashchange", onHashChange);
+
     return () => {
-      window.removeEventListener("hashchange", check);
+      window.removeEventListener(HIGHLIGHT_EVENT, onEvent);
+      window.removeEventListener("hashchange", onHashChange);
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
   }, [id]);
