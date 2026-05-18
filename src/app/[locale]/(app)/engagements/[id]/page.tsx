@@ -35,6 +35,7 @@ import { FilePreviewRow } from "@/components/engagements/file-preview-row";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
+import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import {
   ArrowLeft,
   Send,
@@ -94,6 +95,12 @@ export default async function EngagementDetailPage({
 
   return (
     <div className="space-y-6">
+      {/* Auto-refresh while the engagement is still active. Picks up new
+          client uploads + AI verdicts + activity-log entries without
+          requiring the accountant to hit reload. Skipped for draft /
+          complete / cancelled engagements since nothing changes there. */}
+      {isLive && <AutoRefresh intervalMs={5000} />}
+
       <Link
         href="/dashboard"
         className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
