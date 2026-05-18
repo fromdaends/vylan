@@ -326,7 +326,17 @@ async function ItemRow({
             <>
               <form action={approveItemAction}>
                 <input type="hidden" name="id" value={item.id} />
-                <Button type="submit" size="sm">
+                {/* Hover effect: flip to the success-green palette + a
+                    soft tinted shadow so the positive action reads as
+                    a clear "confirm" cue, not just a default primary
+                    button. The base button's `transition-all` +
+                    `active:scale-[0.97]` already supply the press
+                    feedback. */}
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
+                >
                   <CheckCircle2 className="size-4" />
                   {t("approve")}
                 </Button>
