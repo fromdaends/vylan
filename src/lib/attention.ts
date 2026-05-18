@@ -48,11 +48,21 @@ export function computeAttention(opts: {
   const completionPct =
     itemsTotal === 0 ? 1 : Math.min(1, itemsDone / itemsTotal);
 
+  // An item that's status="pending" with a rejection_reason set was
+  // bounced by the AI — the client uploaded something, the classifier
+  // flagged it, and it was reopened. The accountant should still be
+  // able to see it (and override) from the "Ready to review" tile;
+  // otherwise the engagement disappears from the dashboard the moment
+  // the AI says "nope" even though the firm might want to weigh in.
+  // True pending (waiting on the client to upload anything at all) is
+  // status="pending" with rejection_reason still null.
+  const isAiBounced = (i: RequestItem) =>
+    i.status === "pending" && i.rejection_reason !== null;
   const itemsPendingRequired = requiredItems.filter(
-    (i) => i.status === "pending",
+    (i) => i.status === "pending" && !isAiBounced(i),
   ).length;
   const itemsReadyToReview = items.filter(
-    (i) => i.status === "submitted",
+    (i) => i.status === "submitted" || isAiBounced(i),
   ).length;
 
   let daysOverdue: number | null = null;
