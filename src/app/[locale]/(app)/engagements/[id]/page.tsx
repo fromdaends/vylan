@@ -185,7 +185,14 @@ export default async function EngagementDetailPage({
               </form>
               <form action={completeEngagementAction}>
                 <input type="hidden" name="id" value={engagement.id} />
-                <Button type="submit" size="sm">
+                {/* Success-tinted hover — matches the Approve button on
+                    request-item rows so positive / confirm actions read
+                    consistently across the app (see PR #156). */}
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
+                >
                   <CheckCircle2 className="size-4" />
                   {t("mark_complete")}
                 </Button>
