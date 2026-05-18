@@ -25,6 +25,7 @@ import {
   type AttentionResult,
 } from "@/lib/attention";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { formatRelative } from "@/lib/format";
 
 type RowVm = {
   engagement: Engagement;
@@ -111,23 +112,46 @@ export default async function DashboardPage({
     v.attention.reasons.includes("overdue"),
   ).length;
 
-  // Phase 5 — "AI-rejected this week" tile. Counts uploaded files
-  // with ai_rejected=true across all of this firm's engagements
-  // (not just live ones) over the last 7 days. Falls back to 0 on
-  // query error so the dashboard never errors because of a missing
-  // column on a fresh DB.
+  // "AI-rejected this week" — both the metric tile count AND the rows
+  // for the section beneath it come from this one query so they can't
+  // disagree. Falls back to an empty list on query error so a fresh
+  // DB (missing the ai_rejected column, e.g.) doesn't error the page.
   const sevenDaysAgo = new Date(
     Date.now() - 7 * 24 * 60 * 60 * 1000,
   ).toISOString();
   const allEngagementIds = engagements.map((e) => e.id);
-  const { count: aiRejectedWeekCount } = allEngagementIds.length
-    ? await sb
-        .from("uploaded_files")
-        .select("id", { count: "exact", head: true })
-        .in("engagement_id", allEngagementIds)
-        .eq("ai_rejected", true)
-        .gte("uploaded_at", sevenDaysAgo)
-    : { count: 0 };
+  type AiRejectedRow = {
+    id: string;
+    engagement_id: string;
+    request_item_id: string;
+    original_filename: string;
+    mime_type: string;
+    uploaded_at: string;
+    ai_usability: {
+      issue_summary_en?: string;
+      issue_summary_fr?: string;
+      primary_issue?: string | null;
+    } | null;
+    engagements: {
+      id: string;
+      title: string;
+      clients: { display_name: string } | { display_name: string }[] | null;
+    } | null;
+  };
+  const aiRejectedRows: AiRejectedRow[] = allEngagementIds.length
+    ? ((
+        await sb
+          .from("uploaded_files")
+          .select(
+            "id, engagement_id, request_item_id, original_filename, mime_type, uploaded_at, ai_usability, engagements!inner(id, title, clients!inner(display_name))",
+          )
+          .in("engagement_id", allEngagementIds)
+          .eq("ai_rejected", true)
+          .gte("uploaded_at", sevenDaysAgo)
+          .order("uploaded_at", { ascending: false })
+      ).data as unknown as AiRejectedRow[] | null) ?? []
+    : [];
+  const aiRejectedWeekCount = aiRejectedRows.length;
 
   const t = await getTranslations("App");
   const tEng = await getTranslations("Engagements");
@@ -172,7 +196,8 @@ export default async function DashboardPage({
         <Metric
           label={tAttention("metric_ai_rejected_week")}
           value={aiRejectedWeekCount ?? 0}
-          href="#needs-attention"
+          tone={aiRejectedWeekCount > 0 ? "warning" : "default"}
+          href="#ai-rejected"
         />
       </div>
 
@@ -201,6 +226,70 @@ export default async function DashboardPage({
                 tAttention={tAttention}
               />
             ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section
+        id="ai-rejected"
+        title={tAttention("metric_ai_rejected_week")}
+        count={aiRejectedRows.length}
+        hint={tAttention("ai_rejected_hint")}
+        icon={<FileWarning className="h-4 w-4 text-warning" />}
+      >
+        {aiRejectedRows.length === 0 ? (
+          <EmptyState
+            icon={<CheckCheck className="h-5 w-5" />}
+            text={tAttention("empty_ai_rejected")}
+          />
+        ) : (
+          <ul className="divide-y divide-border/60">
+            {aiRejectedRows.map((row) => {
+              const c = Array.isArray(row.engagements?.clients)
+                ? row.engagements?.clients[0]
+                : row.engagements?.clients;
+              const clientName = c?.display_name ?? "—";
+              const engagementTitle = row.engagements?.title ?? "—";
+              const reason =
+                locale === "fr"
+                  ? row.ai_usability?.issue_summary_fr ||
+                    row.ai_usability?.issue_summary_en
+                  : row.ai_usability?.issue_summary_en ||
+                    row.ai_usability?.issue_summary_fr;
+              return (
+                <li key={row.id}>
+                  <Link
+                    href={`/engagements/${row.engagement_id}`}
+                    className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm truncate">
+                          {clientName}
+                        </span>
+                        <span className="text-xs text-muted-foreground truncate">
+                          · {engagementTitle}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5 font-mono truncate">
+                        {row.original_filename}
+                      </div>
+                      {reason && (
+                        <div className="text-xs text-foreground/70 mt-1 line-clamp-2">
+                          {reason}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {formatRelative(row.uploaded_at, locale)}
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Section>

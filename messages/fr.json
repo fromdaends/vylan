@@ -464,6 +464,8 @@
     "metric_pending": "Éléments en attente",
     "metric_overdue": "En retard",
     "metric_ai_rejected_week": "Rejets IA cette semaine",
+    "ai_rejected_hint": "Téléversements signalés comme illisibles par notre IA au cours des 7 derniers jours. Cliquez une ligne pour ouvrir l'engagement et passer outre ou relancer.",
+    "empty_ai_rejected": "Aucun document signalé par l'IA au cours des 7 derniers jours.",
     "needs_attention": "À relancer",
     "needs_attention_hint": "Engagements en retard, à échéance prochaine ou sans activité récente.",
     "empty_attention": "Rien à relancer aujourd'hui.",
