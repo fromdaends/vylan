@@ -24,7 +24,6 @@ import {
   type AttentionResult,
 } from "@/lib/attention";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { formatRelative } from "@/lib/format";
 import { CollapsibleSection } from "@/components/dashboard/collapsible-section";
 
 type RowVm = {
@@ -107,67 +106,21 @@ export default async function DashboardPage({
     v.attention.reasons.includes("overdue"),
   ).length;
 
-  // AI-rejected this week — rolled up to one row per engagement.
+  // AI-rejected this week — counter only (tile at the top). The full
+  // drill-down section was dropped per founder request; accountants
+  // find AI-flagged files via the per-engagement detail page now.
   const sevenDaysAgo = new Date(
     Date.now() - 7 * 24 * 60 * 60 * 1000,
   ).toISOString();
   const allEngagementIds = engagements.map((e) => e.id);
-  type AiRejectedRow = {
-    engagement_id: string;
-    uploaded_at: string;
-    engagements: {
-      id: string;
-      title: string;
-      clients: { display_name: string } | { display_name: string }[] | null;
-    } | null;
-  };
-  const aiRejectedRows: AiRejectedRow[] = allEngagementIds.length
-    ? ((
-        await sb
-          .from("uploaded_files")
-          .select(
-            "engagement_id, uploaded_at, engagements!inner(id, title, clients!inner(display_name))",
-          )
-          .in("engagement_id", allEngagementIds)
-          .eq("ai_rejected", true)
-          .gte("uploaded_at", sevenDaysAgo)
-          .order("uploaded_at", { ascending: false })
-      ).data as unknown as AiRejectedRow[] | null) ?? []
-    : [];
-  const aiRejectedWeekCount = aiRejectedRows.length;
-  type AiRejectedGroup = {
-    engagementId: string;
-    engagementTitle: string;
-    clientName: string;
-    count: number;
-    mostRecent: string;
-  };
-  const aiRejectedByEngagement: AiRejectedGroup[] = (() => {
-    const byId = new Map<string, AiRejectedGroup>();
-    for (const r of aiRejectedRows) {
-      const c = Array.isArray(r.engagements?.clients)
-        ? r.engagements?.clients[0]
-        : r.engagements?.clients;
-      const existing = byId.get(r.engagement_id);
-      if (existing) {
-        existing.count += 1;
-        if (r.uploaded_at > existing.mostRecent) {
-          existing.mostRecent = r.uploaded_at;
-        }
-      } else {
-        byId.set(r.engagement_id, {
-          engagementId: r.engagement_id,
-          engagementTitle: r.engagements?.title ?? "—",
-          clientName: c?.display_name ?? "—",
-          count: 1,
-          mostRecent: r.uploaded_at,
-        });
-      }
-    }
-    return [...byId.values()].sort((a, b) =>
-      a.mostRecent < b.mostRecent ? 1 : -1,
-    );
-  })();
+  const { count: aiRejectedWeekCount } = allEngagementIds.length
+    ? await sb
+        .from("uploaded_files")
+        .select("id", { count: "exact", head: true })
+        .in("engagement_id", allEngagementIds)
+        .eq("ai_rejected", true)
+        .gte("uploaded_at", sevenDaysAgo)
+    : { count: 0 };
 
   const t = await getTranslations("App");
   const tEng = await getTranslations("Engagements");
@@ -204,15 +157,6 @@ export default async function DashboardPage({
           clientsById.get(other[0].engagement.client_id)?.display_name ?? null,
           other.length - 1,
         );
-  const aiRejectedPreview =
-    aiRejectedByEngagement.length === 0
-      ? null
-      : previewLine(
-          aiRejectedByEngagement[0].engagementTitle,
-          aiRejectedByEngagement[0].clientName,
-          aiRejectedByEngagement.length - 1,
-        );
-
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
@@ -249,9 +193,10 @@ export default async function DashboardPage({
         />
         <Metric
           label={tAttention("metric_ai_rejected_week")}
-          value={aiRejectedWeekCount}
-          tone={aiRejectedWeekCount > 0 ? "warning" : "default"}
-          hashFilter="ai-rejected"
+          value={aiRejectedWeekCount ?? 0}
+          tone={
+            (aiRejectedWeekCount ?? 0) > 0 ? "warning" : "default"
+          }
         />
       </div>
 
@@ -375,50 +320,6 @@ export default async function DashboardPage({
         )}
       </CollapsibleSection>
 
-      <CollapsibleSection
-        id="ai-rejected"
-        title={tAttention("metric_ai_rejected_week")}
-        count={aiRejectedRows.length}
-        preview={aiRejectedPreview}
-        hint={tAttention("ai_rejected_hint")}
-        icon={<FileWarning className="h-4 w-4 text-warning" />}
-      >
-        {aiRejectedByEngagement.length === 0 ? (
-          <EmptyState
-            icon={<CheckCheck className="h-5 w-5" />}
-            text={tAttention("empty_ai_rejected")}
-          />
-        ) : (
-          <ul className="divide-y divide-border/60">
-            {aiRejectedByEngagement.map((g) => (
-              <li key={g.engagementId}>
-                <Link
-                  href={`/engagements/${g.engagementId}`}
-                  className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm truncate">
-                      {g.clientName}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                      {g.engagementTitle}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="secondary" className="font-normal">
-                      {tAttention("ai_flagged_count", { count: g.count })}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
-                      {formatRelative(g.mostRecent, locale)}
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CollapsibleSection>
     </div>
   );
 }
