@@ -289,6 +289,13 @@
   "App": {
     "dashboard_title": "Dashboard",
     "dashboard_empty": "No active engagements yet. Add your first client to get started.",
+    "filter_all": "All",
+    "filter_active": "Active",
+    "filter_ai_flagged": "AI-flagged",
+    "filter_drafts": "Drafts",
+    "empty_all": "No engagements yet. Click 'New engagement' to start.",
+    "empty_active": "No active engagements right now.",
+    "empty_drafts": "No drafts.",
     "nav_dashboard": "Dashboard",
     "nav_clients": "Clients",
     "nav_engagements": "Engagements",
