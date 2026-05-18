@@ -127,9 +127,10 @@ export default async function DashboardPage({
         .gte("uploaded_at", sevenDaysAgo)
     : { count: 0 };
 
-  // Recent AI activity preview — 6 most recent rows for the dashboard
-  // section. The full feed lives at /ai-activity.
-  const recentAiActivity = (await listAiActivityForFirm(50)).slice(0, 6);
+  // Recent AI activity — shown inline in the dashboard's AI activity
+  // section. Capped at 25 since the section opens in place (no separate
+  // page); 25 rows feels like a full feed without flooding the viewport.
+  const recentAiActivity = await listAiActivityForFirm(25);
 
   const t = await getTranslations("App");
   const tEng = await getTranslations("Engagements");
@@ -206,7 +207,7 @@ export default async function DashboardPage({
           tone={
             (aiRejectedWeekCount ?? 0) > 0 ? "warning" : "default"
           }
-          href="/ai-activity"
+          hashFilter="ai-activity"
         />
       </div>
 
@@ -303,27 +304,16 @@ export default async function DashboardPage({
             text={tAttention("empty_ai_activity")}
           />
         ) : (
-          <>
-            <ul className="divide-y divide-border/60">
-              {recentAiActivity.map((e) => (
-                <AiActivityRow
-                  key={e.id}
-                  entry={e}
-                  locale={locale}
-                  tAttention={tAttention}
-                />
-              ))}
-            </ul>
-            <div className="pt-3 pb-1 -mx-1 px-1">
-              <Link
-                href="/ai-activity"
-                className="text-sm font-medium text-primary hover:underline inline-flex items-center gap-1"
-              >
-                {tAttention("ai_activity_view_all")}
-                <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          </>
+          <ul className="divide-y divide-border/60">
+            {recentAiActivity.map((e) => (
+              <AiActivityRow
+                key={e.id}
+                entry={e}
+                locale={locale}
+                tAttention={tAttention}
+              />
+            ))}
+          </ul>
         )}
       </CollapsibleSection>
 

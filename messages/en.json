@@ -486,20 +486,13 @@
     "stale_days": "Quiet for {days, plural, one {# day} other {# days}}",
     "other_engagements": "Other engagements",
     "ai_activity_section_title": "AI activity",
-    "ai_activity_section_hint": "Recent AI verdicts on uploaded files across all your engagements. Click any row to open the engagement, or view all.",
+    "ai_activity_section_hint": "Recent AI verdicts on uploaded files across all your engagements. Click any row to open the engagement.",
     "empty_ai_activity": "No AI activity yet.",
-    "ai_activity_view_all": "View all AI activity",
     "ai_action_classified": "AI classified an upload",
     "ai_action_auto_rejected": "AI auto-rejected an upload",
     "ai_action_escalated": "AI flagged file twice — please review",
     "ai_action_quality_flagged": "AI flagged a file for review",
     "ai_action_override": "AI rejection overridden"
-  },
-  "AiActivity": {
-    "title": "AI activity",
-    "subtitle": "Every AI verdict and override across your firm's engagements.",
-    "empty": "No AI activity yet — uploads will show up here as soon as the AI processes them.",
-    "back": "Back to dashboard"
   },
   "Ai": {
     "label": "AI",

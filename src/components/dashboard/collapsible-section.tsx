@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 
 // Collapsible card used on the dashboard. Default collapsed. The
@@ -8,6 +8,12 @@ import { ChevronRight } from "lucide-react";
 // string so the accountant can see what's inside without expanding.
 // Empty sections (count = 0) render the same header but are not
 // expandable — clicking them does nothing.
+//
+// Hash routing: when the URL hash matches this section's `id`
+// (e.g. a KPI tile links to `#ai-activity`), the section auto-opens
+// AND briefly highlights so the click feels like "show me this", not
+// "scroll to a collapsed header". Listens to hashchange so a second
+// click from the same page re-triggers the highlight.
 export function CollapsibleSection({
   id,
   title,
@@ -28,7 +34,31 @@ export function CollapsibleSection({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const [highlight, setHighlight] = useState(false);
   const isEmpty = count === 0;
+
+  useEffect(() => {
+    if (!id) return;
+    let timeoutId: number | undefined;
+    function check() {
+      if (typeof window === "undefined") return;
+      const hash = window.location.hash.replace(/^#/, "");
+      if (hash && hash === id) {
+        setOpen(true);
+        setHighlight(true);
+        // ~1.4s soft pulse — long enough to draw the eye, short
+        // enough that it doesn't linger once the user starts reading.
+        timeoutId = window.setTimeout(() => setHighlight(false), 1400);
+      }
+    }
+    check();
+    window.addEventListener("hashchange", check);
+    return () => {
+      window.removeEventListener("hashchange", check);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
+  }, [id]);
+
   // Empty sections aren't expandable. Use a div header so the
   // affordance disappears and clicking does nothing.
   const HeaderEl = isEmpty ? "div" : "button";
@@ -36,7 +66,12 @@ export function CollapsibleSection({
   return (
     <section
       id={id}
-      className="scroll-mt-24 rounded-xl border border-border bg-card animate-in-up overflow-hidden"
+      className={
+        "scroll-mt-24 rounded-xl border bg-card animate-in-up overflow-hidden transition-[border-color,box-shadow] duration-300 " +
+        (highlight
+          ? "border-primary/60 shadow-[0_0_0_3px_rgba(99,102,241,0.18)]"
+          : "border-border")
+      }
     >
       <HeaderEl
         type={isEmpty ? undefined : "button"}
