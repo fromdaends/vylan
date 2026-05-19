@@ -8,7 +8,8 @@ import { listEngagements } from "@/lib/db/engagements";
 export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { ClientsToolbar, SORT_OPTIONS, type SortKey } from "@/components/clients/clients-toolbar";
+import { ClientsToolbar } from "@/components/clients/clients-toolbar";
+import { SORT_OPTIONS, type SortKey } from "@/components/clients/sort";
 import {
   ClientsTable,
   type ClientEngagementSummary,
