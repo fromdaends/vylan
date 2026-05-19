@@ -6,16 +6,40 @@ import { usePathname } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search, ArrowUpDown } from "lucide-react";
+
+// Sort options available in the Sort dropdown. Order here = order in
+// the menu. `recent` is the default and matches the prior behavior.
+export const SORT_OPTIONS = [
+  "recent",
+  "oldest",
+  "name_asc",
+  "name_desc",
+  "most_engagements",
+  "most_active",
+] as const;
+
+export type SortKey = (typeof SORT_OPTIONS)[number];
 
 export function ClientsToolbar({
   q,
   type,
   includeArchived,
+  sort,
+  activeOnly,
 }: {
   q: string;
   type: "all" | "individual" | "business";
   includeArchived: boolean;
+  sort: SortKey;
+  activeOnly: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -65,19 +89,52 @@ export function ClientsToolbar({
             <TabsTrigger value="business">{t("filter_business")}</TabsTrigger>
           </TabsList>
         </Tabs>
+        <Select
+          value={sort}
+          onValueChange={(v) =>
+            setParam("sort", v === "recent" ? null : v)
+          }
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-[12rem]"
+            aria-label={t("sort_label")}
+          >
+            <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />
+            <SelectValue placeholder={t("sort_label")} />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((opt) => (
+              <SelectItem key={opt} value={opt}>
+                {t(`sort_${opt}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
-      <label className="flex items-center gap-2 text-sm text-muted-foreground select-none cursor-pointer">
-        <input
-          type="checkbox"
-          checked={includeArchived}
-          onChange={(e) => setParam("archived", e.target.checked ? "1" : null)}
-          className="size-4"
-        />
-        {t("show_archived")}
-        {pending && (
-          <span className="text-xs text-muted-foreground/70">…</span>
-        )}
-      </label>
+      <div className="flex items-center gap-4 text-sm text-muted-foreground select-none">
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={activeOnly}
+            onChange={(e) => setParam("active", e.target.checked ? "1" : null)}
+            className="size-4"
+          />
+          {t("active_only")}
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={includeArchived}
+            onChange={(e) => setParam("archived", e.target.checked ? "1" : null)}
+            className="size-4"
+          />
+          {t("show_archived")}
+          {pending && (
+            <span className="text-xs text-muted-foreground/70">…</span>
+          )}
+        </label>
+      </div>
     </div>
   );
 }
