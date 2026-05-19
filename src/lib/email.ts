@@ -154,7 +154,7 @@ export function buildWelcomeEmail(opts: {
 <p style="margin:24px 0">
   <a href="${opts.appUrl}/dashboard" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Ouvrir mon tableau de bord</a>
 </p>
-<p style="color:#64748b;font-size:13px">Votre essai gratuit de 14 jours est commencé. Aucun mode de paiement n'est requis avant de choisir un forfait.</p>
+<p style="color:#64748b;font-size:13px">Vous êtes en démo. Aucun mode de paiement n'est requis — nous discuterons des tarifs ensemble quand vous serez prêts.</p>
 <p style="color:#64748b;font-size:13px">Une question ? Répondez directement à ce courriel.</p>
 </body></html>`;
     const text = `Bonjour ${opts.ownerName},
@@ -166,7 +166,7 @@ Bienvenue chez Relai. Trois choses à faire en moins de cinq minutes :
 
 Ouvrez votre tableau de bord : ${opts.appUrl}/dashboard
 
-Essai gratuit de 14 jours. Aucun paiement requis avant de choisir un forfait.`;
+Vous êtes en démo. Aucun paiement requis — nous discuterons des tarifs ensemble quand vous serez prêts.`;
     return { subject, html, text };
   }
   const subject = `Welcome to Relai, ${opts.ownerName}`;
@@ -182,7 +182,7 @@ Essai gratuit de 14 jours. Aucun paiement requis avant de choisir un forfait.`;
 <p style="margin:24px 0">
   <a href="${opts.appUrl}/dashboard" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Open my dashboard</a>
 </p>
-<p style="color:#64748b;font-size:13px">Your 14-day free trial has started. No payment method required until you pick a plan.</p>
+<p style="color:#64748b;font-size:13px">You're in demo mode. No payment method required — we'll talk pricing together when you're ready.</p>
 <p style="color:#64748b;font-size:13px">Question? Reply directly to this email.</p>
 </body></html>`;
   const text = `Hi ${opts.ownerName},
@@ -194,7 +194,7 @@ Welcome to Relai. Three things to do in under 5 min:
 
 Open your dashboard: ${opts.appUrl}/dashboard
 
-14-day free trial. No payment required to start.`;
+You're in demo mode. No payment required to start.`;
   return { subject, html, text };
 }
 

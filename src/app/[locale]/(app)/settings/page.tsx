@@ -6,6 +6,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { assertLocale } from "@/lib/locale";
+import { BILLING_ENABLED } from "@/lib/billing-mode";
 import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
@@ -52,34 +53,35 @@ export default async function SettingsPage({
         autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
       />
 
-      {/* Billing link card. Used to be a top-nav item; consolidated
-          here so the in-app top nav stays focused on day-to-day
-          workflow (Dashboard / Clients / Templates). The destination
-          /billing page is unchanged. */}
-      <section>
-        <h2 className="text-sm font-semibold">{t("section_billing")}</h2>
-        <p className="text-xs text-muted-foreground mt-1">
-          {t("section_billing_hint")}
-        </p>
-        <Link
-          href="/billing"
-          className={
-            "mt-4 group flex items-center justify-between gap-4 " +
-            "rounded-lg border border-border bg-card px-4 py-3 max-w-xl " +
-            "transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-          }
-        >
-          <span className="flex items-center gap-3">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-              <CreditCard className="h-4 w-4" />
+      {/* Billing link card. Hidden while BILLING_ENABLED is false —
+          we're acquiring first clients via direct chat, no fixed
+          plan price yet. Flip the flag to bring this back. */}
+      {BILLING_ENABLED && (
+        <section>
+          <h2 className="text-sm font-semibold">{t("section_billing")}</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("section_billing_hint")}
+          </p>
+          <Link
+            href="/billing"
+            className={
+              "mt-4 group flex items-center justify-between gap-4 " +
+              "rounded-lg border border-border bg-card px-4 py-3 max-w-xl " +
+              "transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+            }
+          >
+            <span className="flex items-center gap-3">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+                <CreditCard className="h-4 w-4" />
+              </span>
+              <span className="text-sm font-medium">
+                {t("billing_link_label")}
+              </span>
             </span>
-            <span className="text-sm font-medium">
-              {t("billing_link_label")}
-            </span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-        </Link>
-      </section>
+            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </section>
+      )}
 
       {/* Security audit log — owner-only firm-wide activity browser
           for compliance / "show the client what happened to their

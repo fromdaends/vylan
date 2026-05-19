@@ -6,6 +6,7 @@
 
 import { getServerSupabase } from "@/lib/supabase/server";
 import { PLANS, type PlanId } from "./plans";
+import { BILLING_ENABLED } from "./billing-mode";
 
 export type LimitState = {
   plan: PlanId;
@@ -50,7 +51,11 @@ export async function getFirmLimits(): Promise<LimitState | null> {
     .select("id", { count: "exact", head: true })
     .eq("firm_id", u.firm_id);
 
+  // While BILLING_ENABLED is false we're selling 1-on-1; nobody's
+  // demo should hit an expiration wall pushing them to a Stripe page
+  // that doesn't render. Force it off until billing comes back online.
   const trialExpired =
+    BILLING_ENABLED &&
     plan === "trial" &&
     firm.trial_ends_at != null &&
     new Date(firm.trial_ends_at) < new Date() &&
