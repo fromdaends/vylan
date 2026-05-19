@@ -10,6 +10,8 @@ import { PortalButton } from "@/components/billing/portal-button";
 import { isStripeConfigured } from "@/lib/stripe";
 import { assertLocale } from "@/lib/locale";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { BILLING_ENABLED } from "@/lib/billing-mode";
+import { Phone } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,47 @@ export default async function BillingPage({
   const t = await getTranslations("Billing");
 
   const stripeConfigured = isStripeConfigured();
+
+  // Billing is off while we sell our first clients 1-on-1 with
+  // custom pricing. Render a contact-us placeholder; the real plan
+  // picker + Stripe checkout come back when BILLING_ENABLED flips
+  // to true. We intentionally do NOT short-circuit the data fetches
+  // above so the page still loads quickly when billing returns.
+  if (!BILLING_ENABLED) {
+    return (
+      <div className="space-y-6 max-w-2xl">
+        <header className="animate-in-up">
+          <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
+          <p className="text-sm text-muted-foreground mt-1.5">
+            {t("placeholder_subtitle")}
+          </p>
+        </header>
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-muted-foreground shrink-0">
+                <Phone className="h-5 w-5" />
+              </span>
+              <div className="space-y-2">
+                <h2 className="text-base font-medium">
+                  {t("placeholder_heading")}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {t("placeholder_body")}
+                </p>
+                <a
+                  href="mailto:hello@relai.app?subject=Pricing%20chat"
+                  className="text-sm font-medium text-primary hover:underline inline-block"
+                >
+                  hello@relai.app
+                </a>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 max-w-3xl">
