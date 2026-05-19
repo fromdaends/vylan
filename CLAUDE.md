@@ -107,7 +107,14 @@ Do these autonomously. Mention them in your summary so the user knows, but don't
 - Update `docs/*` files when relevant.
 - Add `.env.example` entries for new env vars (but do NOT add to `.env.local` — see below).
 - Commit and push your own work following the multi-session rhythm.
-- Open a pull request and **enable auto-merge (squash) on it immediately** (`enable_pr_auto_merge` MCP call, `mergeMethod: SQUASH`). The PR merges itself the moment CI is green — the user does NOT want to be asked to "open the PR" or "click merge", that's part of shipping. If `enable_pr_auto_merge` reports "already in clean status (all checks passed)", just call `merge_pull_request` directly. Only stop to ask if (a) tests fail locally before pushing, (b) CI flags a real issue, or (c) the change is in the "Ask first" list below.
+- Open a pull request and ship it without prompting. The flow is always:
+  1. Push the branch.
+  2. `mcp__github__create_pull_request`.
+  3. Try `mcp__github__enable_pr_auto_merge` with `mergeMethod: SQUASH`.
+  4. If it says **"already in clean status"** → call `mcp__github__merge_pull_request` directly with `merge_method: squash`.
+  5. If it says **"unstable status"** (this repo's Vercel preview is `pending` at PR-open and auto-merge refuses to arm) → call `subscribe_pr_activity` and end the turn. When the webhook delivers `state: success`, call `merge_pull_request` immediately. Do NOT wait for the user to nudge, do NOT ask "should I merge?".
+  6. After merging, reply with one short line ("merged → deploying"). Skip the full ✅/🎯/🧪 template unless the user asks for it — that's for the initial implementation summary, not every follow-up commit.
+  Only stop to ask if (a) tests / typecheck / build fail locally before pushing, (b) CI flags a real issue (not just "preview deploying"), or (c) the change is in the "Ask first" list below.
 - Make UI design choices that follow the existing brand tokens and Tailwind conventions in the repo.
 - Pick reasonable copy in English and French for new UI strings (the user can edit later).
 - Choose sensible defaults for new feature behavior (timing, thresholds, limits) — document the choice in code comments so the user can adjust.
