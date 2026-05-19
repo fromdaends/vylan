@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { listClients } from "@/lib/db/clients";
+import { listClients, type Client } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
 
 // Real-time data: never serve a cached version after Mark complete /
@@ -8,7 +8,7 @@ import { listEngagements } from "@/lib/db/engagements";
 export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { ClientsToolbar } from "@/components/clients/clients-toolbar";
+import { ClientsToolbar, SORT_OPTIONS, type SortKey } from "@/components/clients/clients-toolbar";
 import {
   ClientsTable,
   type ClientEngagementSummary,
@@ -27,6 +27,8 @@ export default async function ClientsPage({
     q?: string;
     type?: string;
     archived?: string;
+    sort?: string;
+    active?: string;
   }>;
 }) {
   const { locale: rawLocale } = await params;
@@ -38,8 +40,12 @@ export default async function ClientsPage({
   const type =
     sp.type === "individual" || sp.type === "business" ? sp.type : "all";
   const includeArchived = sp.archived === "1";
+  const sort: SortKey = SORT_OPTIONS.includes(sp.sort as SortKey)
+    ? (sp.sort as SortKey)
+    : "recent";
+  const activeOnly = sp.active === "1";
 
-  const [clients, engagements] = await Promise.all([
+  const [clientsRaw, engagements] = await Promise.all([
     listClients({ search: q, type, includeArchived }),
     listEngagements(),
   ]);
@@ -93,6 +99,33 @@ export default async function ClientsPage({
     );
   }
 
+  // Last-activity timestamp per client = newest engagement created_at
+  // for that client. Used by the `most_active` sort. Engagements are
+  // already newest-first from listEngagements, so the first one wins.
+  const lastActivityByClient: Record<string, string> = {};
+  for (const e of engagements) {
+    if (!(e.client_id in lastActivityByClient)) {
+      lastActivityByClient[e.client_id] = e.created_at;
+    }
+  }
+
+  // Apply the "Active only" filter — only clients with at least one
+  // engagement in sent / in_progress (= total_live > 0).
+  let clients: Client[] = clientsRaw;
+  if (activeOnly) {
+    clients = clients.filter((c) => (summaries[c.id]?.total_live ?? 0) > 0);
+  }
+
+  // Apply sort. listClients already returns newest-first, so `recent`
+  // is a no-op pass-through.
+  clients = sortClients(
+    clients,
+    sort,
+    summaries,
+    lastActivityByClient,
+    locale,
+  );
+
   const t = await getTranslations("Clients");
 
   return (
@@ -124,6 +157,8 @@ export default async function ClientsPage({
               q={q}
               type={type}
               includeArchived={includeArchived}
+              sort={sort}
+              activeOnly={activeOnly}
             />
           </Suspense>
         </div>
@@ -136,4 +171,61 @@ export default async function ClientsPage({
       </div>
     </div>
   );
+}
+
+function sortClients(
+  clients: Client[],
+  sort: SortKey,
+  summaries: Record<string, ClientEngagementSummary>,
+  lastActivityByClient: Record<string, string>,
+  locale: "fr" | "en",
+): Client[] {
+  // localeCompare gives us a sensible alphabetical order for French
+  // accents (Étienne vs Etienne) without rebuilding the strings.
+  const collator = new Intl.Collator(locale === "fr" ? "fr-CA" : "en-CA", {
+    sensitivity: "base",
+  });
+  const out = [...clients];
+  switch (sort) {
+    case "recent":
+      // listClients already sorts by created_at desc — keep as-is.
+      break;
+    case "oldest":
+      out.sort((a, b) => a.created_at.localeCompare(b.created_at));
+      break;
+    case "name_asc":
+      out.sort((a, b) => collator.compare(a.display_name, b.display_name));
+      break;
+    case "name_desc":
+      out.sort((a, b) => collator.compare(b.display_name, a.display_name));
+      break;
+    case "most_engagements": {
+      // Sum all statuses (not just live) so a client with 5 completed
+      // engagements out-ranks one with 1 active. Tie-breaker: newest
+      // client first so freshly-imported tied clients bubble up.
+      const total = (id: string) => {
+        const s = summaries[id];
+        if (!s) return 0;
+        return s.draft + s.sent + s.in_progress + s.complete + s.cancelled;
+      };
+      out.sort((a, b) => {
+        const d = total(b.id) - total(a.id);
+        if (d !== 0) return d;
+        return b.created_at.localeCompare(a.created_at);
+      });
+      break;
+    }
+    case "most_active": {
+      // Newest engagement activity wins. Clients with no engagements at
+      // all sink to the bottom (treated as epoch).
+      const ts = (id: string) => lastActivityByClient[id] ?? "";
+      out.sort((a, b) => {
+        const d = ts(b.id).localeCompare(ts(a.id));
+        if (d !== 0) return d;
+        return b.created_at.localeCompare(a.created_at);
+      });
+      break;
+    }
+  }
+  return out;
 }
