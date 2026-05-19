@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { ChevronRight, CreditCard, Download, Trash2 } from "lucide-react";
+import { ChevronRight, CreditCard, Download, ShieldCheck, Trash2 } from "lucide-react";
 import { Link, getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
@@ -80,6 +80,37 @@ export default async function SettingsPage({
           <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
         </Link>
       </section>
+
+      {/* Security audit log — owner-only firm-wide activity browser
+          for compliance / "show the client what happened to their
+          file" use cases. Owner role gating matches the page itself
+          (which 404s for staff). */}
+      {user.role === "owner" && (
+        <section>
+          <h2 className="text-sm font-semibold">{t("section_audit_title")}</h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t("section_audit_hint")}
+          </p>
+          <Link
+            href="/settings/audit"
+            className={
+              "mt-4 group flex items-center justify-between gap-4 " +
+              "rounded-lg border border-border bg-card px-4 py-3 max-w-xl " +
+              "transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+            }
+          >
+            <span className="flex items-center gap-3">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+                <ShieldCheck className="h-4 w-4" />
+              </span>
+              <span className="text-sm font-medium">
+                {t("audit_link_label")}
+              </span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </section>
+      )}
 
       {/* Data & Privacy — owner-only firm data export + delete request.
           Owner role gating matches the API route. Staff members never
