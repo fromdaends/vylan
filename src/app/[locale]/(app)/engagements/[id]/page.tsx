@@ -36,6 +36,8 @@ import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
+import { DemoBlockButton } from "@/components/app/demo-block-modal";
+import { getCurrentFirm } from "@/lib/db/firms";
 import {
   ArrowLeft,
   Send,
@@ -59,12 +61,14 @@ export default async function EngagementDetailPage({
 
   const engagement = await getEngagement(id);
   if (!engagement) notFound();
-  const [client, items, uploads, activity] = await Promise.all([
+  const [client, items, uploads, activity, firm] = await Promise.all([
     getClient(engagement.client_id),
     listRequestItems(engagement.id),
     listUploadedFilesForEngagement(engagement.id),
     listActivityForEngagement(engagement.id),
+    getCurrentFirm(),
   ]);
+  const isDemo = firm?.is_demo === true;
 
   // Pre-sign URLs (15 min) for every upload.
   const filesByItem = new Map<string, (UploadedFile & { url: string })[]>();
@@ -143,13 +147,22 @@ export default async function EngagementDetailPage({
         <div className="flex items-center gap-2 flex-wrap">
           {isDraft && (
             <>
-              <form action={sendEngagementAction}>
-                <input type="hidden" name="id" value={engagement.id} />
-                <Button type="submit" size="sm">
-                  <Send className="size-4" />
-                  {t("send")}
-                </Button>
-              </form>
+              {isDemo ? (
+                <DemoBlockButton
+                  label={t("send")}
+                  icon={<Send className="size-4" />}
+                  reasonKey="block_send_engagement_reason"
+                  size="sm"
+                />
+              ) : (
+                <form action={sendEngagementAction}>
+                  <input type="hidden" name="id" value={engagement.id} />
+                  <Button type="submit" size="sm">
+                    <Send className="size-4" />
+                    {t("send")}
+                  </Button>
+                </form>
+              )}
               <form action={deleteDraftAction}>
                 <input type="hidden" name="id" value={engagement.id} />
                 <input type="hidden" name="__app_locale" value={locale} />
@@ -162,13 +175,23 @@ export default async function EngagementDetailPage({
           )}
           {isLive && (
             <>
-              <form action={sendReminderAction}>
-                <input type="hidden" name="id" value={engagement.id} />
-                <Button type="submit" variant="outline" size="sm">
-                  <Bell className="size-4" />
-                  {t("send_reminder")}
-                </Button>
-              </form>
+              {isDemo ? (
+                <DemoBlockButton
+                  label={t("send_reminder")}
+                  icon={<Bell className="size-4" />}
+                  reasonKey="block_send_reminder_reason"
+                  variant="outline"
+                  size="sm"
+                />
+              ) : (
+                <form action={sendReminderAction}>
+                  <input type="hidden" name="id" value={engagement.id} />
+                  <Button type="submit" variant="outline" size="sm">
+                    <Bell className="size-4" />
+                    {t("send_reminder")}
+                  </Button>
+                </form>
+              )}
               <form action={toggleRemindersPausedAction}>
                 <input type="hidden" name="id" value={engagement.id} />
                 <input

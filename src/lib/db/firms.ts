@@ -18,6 +18,7 @@ export type Firm = {
   invited_emails: string[];
   business_hours: Record<string, unknown>;
   auto_reject_unusable_docs: boolean;
+  is_demo: boolean;
   created_at: string;
 };
 
