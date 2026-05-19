@@ -12,8 +12,6 @@
 
 import { type SupabaseClient } from "@supabase/supabase-js";
 
-const DEMO_TAG = "Demo: ";
-
 type SeedClient = {
   type: "individual" | "business";
   name: string;
@@ -171,7 +169,7 @@ export async function seedDemoData(
   const clientRows = DEMO_CLIENTS.map((c) => ({
     firm_id: firmId,
     type: c.type,
-    display_name: `${DEMO_TAG}${c.name}`,
+    display_name: c.name,
     email: c.email,
     phone: c.phone,
     locale: c.locale,
