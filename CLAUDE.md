@@ -113,7 +113,9 @@ Do these autonomously. Mention them in your summary so the user knows, but don't
   3. Try `mcp__github__enable_pr_auto_merge` with `mergeMethod: SQUASH`.
   4. If it says **"already in clean status"** → call `mcp__github__merge_pull_request` directly with `merge_method: squash`.
   5. If it says **"unstable status"** (this repo's Vercel preview is `pending` at PR-open and auto-merge refuses to arm) → call `subscribe_pr_activity` and end the turn. When the webhook delivers `state: success`, call `merge_pull_request` immediately. Do NOT wait for the user to nudge, do NOT ask "should I merge?".
-  6. After merging, reply with one short line ("merged → deploying"). Skip the full ✅/🎯/🧪 template unless the user asks for it — that's for the initial implementation summary, not every follow-up commit.
+  6. **After every push to an open PR (initial OR a fix to a review comment), retry `enable_pr_auto_merge` immediately.** A push always triggers a new Vercel preview, so the previous "armed" state (if any) was wiped. Same fallbacks as steps 4/5.
+  7. After every webhook event on a watched PR, call `get_status` and `get_check_runs` — if CI is green and no unresolved blocking review threads remain, call `merge_pull_request` directly. Do NOT wait for an additional "CI green" webhook on top of an event like a review approval — review-approval events on a green PR are themselves the signal to merge.
+  8. After merging, ALWAYS reply with the full ✅ / 🎯 / 🧪 / 🤔 / ⚠️ summary template defined later in this file — for both the initial implementation AND for every follow-up fix. No exceptions unless the user explicitly asks for a shorter reply.
   Only stop to ask if (a) tests / typecheck / build fail locally before pushing, (b) CI flags a real issue (not just "preview deploying"), or (c) the change is in the "Ask first" list below.
 - Make UI design choices that follow the existing brand tokens and Tailwind conventions in the repo.
 - Pick reasonable copy in English and French for new UI strings (the user can edit later).
