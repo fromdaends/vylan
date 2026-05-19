@@ -41,6 +41,7 @@ type Labels = {
 
 export function AppShell({
   children,
+  topBar,
   firmName,
   brandColor,
   firmLogoUrl,
@@ -50,6 +51,11 @@ export function AppShell({
   labels,
 }: {
   children: React.ReactNode;
+  // Optional strip rendered flush with the top of the viewport, above
+  // the sticky logo+nav row and part of the same sticky group. Used
+  // for the demo banner so it stays pinned with the nav as the user
+  // scrolls.
+  topBar?: React.ReactNode;
   firmName: string;
   brandColor: string;
   firmLogoUrl: string | null;
@@ -78,6 +84,7 @@ export function AppShell({
   return (
     <div className="flex-1 flex flex-col min-h-screen">
       <header className="sticky top-0 z-30 border-b border-border/60 backdrop-blur-md bg-background/80">
+        {topBar}
         <div className="mx-auto max-w-7xl flex items-center justify-between px-4 sm:px-6 py-3">
           <div className="flex items-center gap-3">
             <button
