@@ -28,6 +28,138 @@ export async function listActivityForEngagement(
   return (data ?? []) as ActivityEntry[];
 }
 
+export type FirmActivityEntry = ActivityEntry & {
+  engagement_title: string | null;
+  client_id: string | null;
+  client_display_name: string | null;
+  actor_name: string | null;
+};
+
+// Firm-wide activity log for the security/audit view at /settings/audit.
+// RLS scopes activity_log to the caller's firm. Optional filters:
+//   - clientId: only rows whose engagement belongs to this client
+//   - action:   only rows with this exact action string
+//
+// Enriches each row with the parent engagement title + client display
+// name + actor user's display name so the audit table reads "who did
+// what on which engagement for which client" without per-row lookups.
+export async function listActivityForFirm(filters: {
+  clientId?: string | null;
+  action?: string | null;
+  limit?: number;
+} = {}): Promise<FirmActivityEntry[]> {
+  const supabase = await getServerSupabase();
+  const limit = filters.limit ?? 300;
+
+  let query = supabase
+    .from("activity_log")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (filters.action) query = query.eq("action", filters.action);
+  const { data, error } = await query;
+  if (error) throw error;
+  const entries = (data ?? []) as ActivityEntry[];
+  if (entries.length === 0) return [];
+
+  const engagementIds = Array.from(
+    new Set(
+      entries
+        .map((e) => e.engagement_id)
+        .filter((id): id is string => id != null),
+    ),
+  );
+  const engagementRows = engagementIds.length
+    ? (
+        await supabase
+          .from("engagements")
+          .select("id, title, client_id")
+          .in("id", engagementIds)
+      ).data ?? []
+    : [];
+  const clientIds = Array.from(
+    new Set(
+      engagementRows
+        .map((r) => r.client_id as string | null)
+        .filter((id): id is string => id != null),
+    ),
+  );
+  const clientRows = clientIds.length
+    ? (
+        await supabase
+          .from("clients")
+          .select("id, display_name")
+          .in("id", clientIds)
+      ).data ?? []
+    : [];
+  const userIds = Array.from(
+    new Set(
+      entries
+        .filter((e) => e.actor_type === "user")
+        .map((e) => e.actor_id)
+        .filter((id): id is string => id != null),
+    ),
+  );
+  const userRows = userIds.length
+    ? (
+        await supabase
+          .from("users")
+          .select("id, name, display_name, email")
+          .in("id", userIds)
+      ).data ?? []
+    : [];
+
+  const engById = new Map(
+    engagementRows.map((e) => [
+      e.id as string,
+      e as { id: string; title: string; client_id: string },
+    ]),
+  );
+  const clientById = new Map(
+    clientRows.map((c) => [
+      c.id as string,
+      c as { id: string; display_name: string },
+    ]),
+  );
+  const userById = new Map(
+    userRows.map((u) => [
+      u.id as string,
+      u as {
+        id: string;
+        name: string | null;
+        display_name: string | null;
+        email: string;
+      },
+    ]),
+  );
+
+  let enriched: FirmActivityEntry[] = entries.map((e) => {
+    const eng = e.engagement_id ? engById.get(e.engagement_id) : undefined;
+    const client = eng?.client_id ? clientById.get(eng.client_id) : undefined;
+    const actor =
+      e.actor_type === "user" && e.actor_id
+        ? userById.get(e.actor_id)
+        : undefined;
+    const actorName =
+      actor?.display_name?.trim() ||
+      actor?.name?.trim() ||
+      actor?.email ||
+      null;
+    return {
+      ...e,
+      engagement_title: eng?.title ?? null,
+      client_id: client?.id ?? null,
+      client_display_name: client?.display_name ?? null,
+      actor_name: actorName,
+    };
+  });
+
+  if (filters.clientId) {
+    enriched = enriched.filter((e) => e.client_id === filters.clientId);
+  }
+  return enriched;
+}
+
 export async function logUserActivity(
   firmId: string,
   // null for firm-wide events that aren't scoped to a single engagement
