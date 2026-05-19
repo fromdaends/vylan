@@ -71,6 +71,7 @@ export default async function AppLayout({
       userDisplayName={userDisplayLabel(dbUser)}
       userEmail={dbUser.email}
       userAvatarUrl={avatarUrl}
+      topBar={firm.is_demo ? <DemoBanner /> : undefined}
       labels={{
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),
@@ -86,7 +87,6 @@ export default async function AppLayout({
         help: tProfile("menu_help"),
       }}
     >
-      {firm.is_demo && <DemoBanner />}
       {children}
       <HelpSidebar />
       <KeyboardShortcuts />
