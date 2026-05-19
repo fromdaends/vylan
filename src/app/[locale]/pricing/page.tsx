@@ -1,12 +1,16 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { PLANS, PAID_PLANS, type PlanId } from "@/lib/plans";
-import { formatCurrency } from "@/lib/format";
 import { assertLocale } from "@/lib/locale";
-import { Check, Sparkles } from "lucide-react";
+import { Sparkles, Phone, Mail } from "lucide-react";
 import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
+import { BILLING_ENABLED } from "@/lib/billing-mode";
+import { PaidPricingSection } from "./paid-pricing";
 
+// While BILLING_ENABLED is false we replace the fixed-plan grid with
+// a "talk to us" pitch — first clients get custom pricing through a
+// direct conversation. The original grid still renders verbatim when
+// the flag flips back to true; see PaidPricingSection below.
 export default async function PricingPage({
   params,
 }: {
@@ -21,112 +25,65 @@ export default async function PricingPage({
     <main className="flex-1 flex flex-col pt-24 sm:pt-28">
       <PublicNav />
 
-      <section className="mx-auto max-w-4xl px-6 py-20">
-        {/* Trial banner — visible right under the heading so the
-            14-day-free promise is the first thing visitors read. */}
-        <div className="flex justify-center">
-          <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-xs font-medium text-foreground">
-            <Sparkles className="h-3.5 w-3.5 text-accent" aria-hidden />
-            {t("trial_banner")}
-          </span>
-        </div>
+      {BILLING_ENABLED ? (
+        <PaidPricingSection locale={locale} />
+      ) : (
+        <section className="mx-auto max-w-3xl px-6 py-20">
+          <div className="flex justify-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-xs font-medium text-foreground">
+              <Sparkles className="h-3.5 w-3.5 text-accent" aria-hidden />
+              {t("talk_banner")}
+            </span>
+          </div>
 
-        <h1 className="mt-6 text-3xl sm:text-4xl font-semibold tracking-tight text-center">
-          {t("title")}
-        </h1>
-        <p className="mt-3 text-center text-muted-foreground max-w-2xl mx-auto">
-          {t("subtitle_long")}
-        </p>
+          <h1 className="mt-6 text-3xl sm:text-4xl font-semibold tracking-tight text-center">
+            {t("talk_title")}
+          </h1>
+          <p className="mt-4 text-center text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            {t("talk_body")}
+          </p>
 
-        <div className="mt-12 grid gap-5 sm:grid-cols-2">
-          {PAID_PLANS.map((planId) => (
-            <PlanCard key={planId} planId={planId} locale={locale} />
-          ))}
-        </div>
+          <div className="mt-10 grid gap-4 sm:grid-cols-2 max-w-2xl mx-auto">
+            <a
+              href="mailto:hello@relai.app?subject=Pricing%20chat"
+              className="group rounded-2xl border border-border bg-card p-6 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+            >
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+                <Mail className="h-5 w-5" />
+              </span>
+              <h3 className="mt-3 font-medium">{t("talk_email_heading")}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("talk_email_body")}
+              </p>
+              <span className="mt-3 inline-block text-sm font-medium text-primary group-hover:underline">
+                hello@relai.app
+              </span>
+            </a>
 
-        <p className="mt-12 max-w-2xl mx-auto text-sm text-muted-foreground text-center">
-          {t("currency_note")}
-        </p>
-      </section>
+            <Link
+              href="/signup"
+              className="group rounded-2xl border border-border bg-card p-6 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+            >
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+                <Phone className="h-5 w-5" />
+              </span>
+              <h3 className="mt-3 font-medium">{t("talk_demo_heading")}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("talk_demo_body")}
+              </p>
+              <span className="mt-3 inline-block text-sm font-medium text-primary group-hover:underline">
+                {t("talk_demo_cta")}
+              </span>
+            </Link>
+          </div>
+
+          <p className="mt-12 text-center text-xs text-muted-foreground max-w-xl mx-auto">
+            {t("talk_footnote")}
+          </p>
+        </section>
+      )}
 
       <PublicFooter />
     </main>
-  );
-}
-
-async function PlanCard({
-  planId,
-  locale,
-}: {
-  planId: PlanId;
-  locale: "fr" | "en";
-}) {
-  const t = await getTranslations("Pricing");
-  const tAuth = await getTranslations("Auth");
-  const plan = PLANS[planId];
-  const price =
-    plan.monthlyCadCents != null
-      ? formatCurrency(plan.monthlyCadCents / 100, locale, 0)
-      : "—";
-  const featured = planId === "cabinet";
-
-  return (
-    <Link
-      href={`/pricing/${planId}`}
-      className={
-        "relative block cursor-pointer rounded-2xl border bg-card p-7 flex flex-col gap-5 tilt no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
-        (featured
-          ? "featured-card border-transparent"
-          : "border-border hover:border-foreground/20")
-      }
-    >
-      {featured && (
-        <span className="absolute -top-3 left-7 rounded-full bg-foreground text-background text-[10px] font-semibold px-3 py-1 tracking-wider uppercase">
-          {t("recommended")}
-        </span>
-      )}
-      <div>
-        <div className="font-medium text-lg">{t(`plan_${planId}_name`)}</div>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t(`plan_${planId}_tagline`)}
-        </p>
-        <div className="mt-4 flex items-baseline gap-1.5">
-          <span className="text-4xl font-semibold tracking-tight num-display">
-            {price}
-          </span>
-          <span className="text-sm text-muted-foreground">
-            / {t("per_month")}
-          </span>
-        </div>
-      </div>
-      <ul className="text-sm space-y-2.5 text-muted-foreground">
-        <li className="flex items-start gap-2 text-foreground font-medium">
-          <Sparkles className="size-4 text-accent shrink-0 mt-0.5" aria-hidden />
-          {t("trial_feature")}
-        </li>
-        <li className="flex items-start gap-2">
-          <Check className="size-4 text-success shrink-0 mt-0.5" aria-hidden />
-          {t(`plan_${planId}_engagements`)}
-        </li>
-        <li className="flex items-start gap-2">
-          <Check className="size-4 text-success shrink-0 mt-0.5" aria-hidden />
-          {t(`plan_${planId}_users`)}
-        </li>
-        <li className="flex items-start gap-2">
-          <Check className="size-4 text-success shrink-0 mt-0.5" aria-hidden />
-          {t(`plan_${planId}_features`)}
-        </li>
-      </ul>
-      <div
-        className={
-          "mt-auto inline-flex items-center justify-center rounded-md text-sm font-medium px-4 py-2 transition-colors " +
-          (featured
-            ? "bg-primary text-primary-foreground"
-            : "border border-border text-foreground")
-        }
-      >
-        {tAuth("create_account")}
-      </div>
-    </Link>
   );
 }

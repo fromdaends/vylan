@@ -1,6 +1,6 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { notFound } from "next/navigation";
-import { Link } from "@/i18n/navigation";
+import { notFound, redirect } from "next/navigation";
+import { Link, getPathname } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { PLANS, PAID_PLANS, type PlanId } from "@/lib/plans";
 import { formatCurrency } from "@/lib/format";
@@ -8,6 +8,7 @@ import { assertLocale } from "@/lib/locale";
 import { ArrowRight, Check } from "lucide-react";
 import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
+import { BILLING_ENABLED } from "@/lib/billing-mode";
 
 function isPaidPlanId(value: string): value is Extract<PlanId, "solo" | "cabinet"> {
   return (PAID_PLANS as string[]).includes(value);
@@ -21,6 +22,13 @@ export default async function PlanPage({
   const { locale: rawLocale, plan } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
+
+  // While BILLING_ENABLED is false the per-plan detail page would
+  // dead-end at a Stripe checkout that doesn't render — bounce visitors
+  // back to /pricing where the "talk to us" pitch lives.
+  if (!BILLING_ENABLED) {
+    redirect(getPathname({ locale, href: "/pricing" }));
+  }
 
   if (!isPaidPlanId(plan)) {
     notFound();
