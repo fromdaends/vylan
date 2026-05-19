@@ -51,12 +51,34 @@ export async function listActivityForFirm(filters: {
   const supabase = await getServerSupabase();
   const limit = filters.limit ?? 300;
 
+  // When filtering by client, resolve the client's engagements FIRST
+  // and constrain activity_log to that engagement set. Doing the
+  // client filter in-memory after the limit was wrong: a quiet client
+  // with only old events could be hidden behind the firm's 300 most
+  // recent rows and the page would show empty even though the data
+  // exists. Pre-filtering also lets us spend the full row budget on
+  // that one client.
+  let scopedEngagementIds: string[] | null = null;
+  if (filters.clientId) {
+    const { data: engForClient, error: engErr } = await supabase
+      .from("engagements")
+      .select("id")
+      .eq("client_id", filters.clientId);
+    if (engErr) throw engErr;
+    scopedEngagementIds = (engForClient ?? []).map((e) => e.id as string);
+    // No engagements for this client → no activity, short-circuit.
+    if (scopedEngagementIds.length === 0) return [];
+  }
+
   let query = supabase
     .from("activity_log")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (filters.action) query = query.eq("action", filters.action);
+  if (scopedEngagementIds) {
+    query = query.in("engagement_id", scopedEngagementIds);
+  }
   const { data, error } = await query;
   if (error) throw error;
   const entries = (data ?? []) as ActivityEntry[];
@@ -133,7 +155,7 @@ export async function listActivityForFirm(filters: {
     ]),
   );
 
-  let enriched: FirmActivityEntry[] = entries.map((e) => {
+  const enriched: FirmActivityEntry[] = entries.map((e) => {
     const eng = e.engagement_id ? engById.get(e.engagement_id) : undefined;
     const client = eng?.client_id ? clientById.get(eng.client_id) : undefined;
     const actor =
@@ -154,9 +176,6 @@ export async function listActivityForFirm(filters: {
     };
   });
 
-  if (filters.clientId) {
-    enriched = enriched.filter((e) => e.client_id === filters.clientId);
-  }
   return enriched;
 }
 
