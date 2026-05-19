@@ -8,6 +8,7 @@ import { getTranslations } from "next-intl/server";
 import { HelpSidebar } from "@/components/help/help-sidebar";
 import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 import { AppShell } from "@/components/app/app-shell";
+import { DemoBanner } from "@/components/app/demo-banner";
 
 export default async function AppLayout({
   children,
@@ -85,6 +86,7 @@ export default async function AppLayout({
         help: tProfile("menu_help"),
       }}
     >
+      {firm.is_demo && <DemoBanner />}
       {children}
       <HelpSidebar />
       <KeyboardShortcuts />

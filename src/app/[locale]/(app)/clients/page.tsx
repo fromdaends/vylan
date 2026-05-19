@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { ClientsToolbar } from "@/components/clients/clients-toolbar";
 import { SORT_OPTIONS, type SortKey } from "@/components/clients/sort";
+import { DemoBlockButton } from "@/components/app/demo-block-modal";
+import { getCurrentFirm } from "@/lib/db/firms";
 import {
   ClientsTable,
   type ClientEngagementSummary,
@@ -46,10 +48,12 @@ export default async function ClientsPage({
     : "recent";
   const activeOnly = sp.active === "1";
 
-  const [clientsRaw, engagements] = await Promise.all([
+  const [clientsRaw, engagements, firm] = await Promise.all([
     listClients({ search: q, type, includeArchived }),
     listEngagements(),
+    getCurrentFirm(),
   ]);
+  const isDemo = firm?.is_demo === true;
 
   // Group engagement counts by client_id (for the summary badge in the
   // row's "Engagements" column) AND group the full engagement rows by
@@ -141,13 +145,33 @@ export default async function ClientsPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/clients/import">
-            <Button variant="ghost" size="sm">
-              <Upload className="h-4 w-4" />
-              {t("import_csv")}
-            </Button>
-          </Link>
-          <ClientFormDialog mode="create" locale={locale} />
+          {isDemo ? (
+            <>
+              <DemoBlockButton
+                label={t("import_csv")}
+                icon={<Upload className="h-4 w-4" />}
+                reasonKey="block_import_csv_reason"
+                variant="ghost"
+                size="sm"
+              />
+              <DemoBlockButton
+                label={t("add_client")}
+                icon={<Upload className="h-4 w-4 hidden" />}
+                reasonKey="block_add_client_reason"
+                size="sm"
+              />
+            </>
+          ) : (
+            <>
+              <Link href="/clients/import">
+                <Button variant="ghost" size="sm">
+                  <Upload className="h-4 w-4" />
+                  {t("import_csv")}
+                </Button>
+              </Link>
+              <ClientFormDialog mode="create" locale={locale} />
+            </>
+          )}
         </div>
       </header>
 
