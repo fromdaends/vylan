@@ -14,19 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, ArrowUpDown } from "lucide-react";
-
-// Sort options available in the Sort dropdown. Order here = order in
-// the menu. `recent` is the default and matches the prior behavior.
-export const SORT_OPTIONS = [
-  "recent",
-  "oldest",
-  "name_asc",
-  "name_desc",
-  "most_engagements",
-  "most_active",
-] as const;
-
-export type SortKey = (typeof SORT_OPTIONS)[number];
+import { SORT_OPTIONS, type SortKey } from "./sort";
 
 export function ClientsToolbar({
   q,
