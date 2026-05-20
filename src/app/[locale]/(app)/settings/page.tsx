@@ -7,18 +7,15 @@ import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { assertLocale } from "@/lib/locale";
 import { BILLING_ENABLED } from "@/lib/billing-mode";
-import { Badge } from "@/components/ui/badge";
-import { PortalButton } from "@/components/billing/portal-button";
-import { formatDate } from "@/lib/format";
 import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
 
 // /settings: personal preferences (theme + UI language) + the firm
-// timezone (used when scheduling reminders + rendering times in
-// client comms) + firm-level behaviour toggles (e.g. auto-reject
-// unreadable docs) + entry point to /billing. Firm identity (name,
-// brand color, logo, default client locale) lives on /firm.
+// timezone + firm-level behaviour toggles (e.g. auto-reject unreadable
+// docs) + optional billing entry + a Data & Privacy bucket (audit log,
+// export, delete request — owner-only). Subscription details now live
+// on /profile.
 export default async function SettingsPage({
   params,
 }: {
@@ -56,20 +53,6 @@ export default async function SettingsPage({
         autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
       />
 
-      {/* Subscription summary — owner-only. Always rendered (unlike
-          the BILLING_ENABLED-gated link card below) so a customer
-          who paid via a Stripe-Dashboard invoice can still see what
-          plan they're on and when they'll renew. */}
-      {user.role === "owner" && (
-        <SubscriptionCard
-          plan={firm.plan}
-          subscriptionStatus={firm.subscription_status}
-          currentPeriodEnd={firm.current_period_end}
-          stripeCustomerId={firm.stripe_customer_id}
-          locale={locale}
-        />
-      )}
-
       {/* Billing link card. Hidden while BILLING_ENABLED is false —
           we're acquiring first clients via direct chat, no fixed
           plan price yet. Flip the flag to bring this back. */}
@@ -100,40 +83,12 @@ export default async function SettingsPage({
         </section>
       )}
 
-      {/* Security audit log — owner-only firm-wide activity browser
-          for compliance / "show the client what happened to their
-          file" use cases. Owner role gating matches the page itself
-          (which 404s for staff). */}
-      {user.role === "owner" && (
-        <section>
-          <h2 className="text-sm font-semibold">{t("section_audit_title")}</h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("section_audit_hint")}
-          </p>
-          <Link
-            href="/settings/audit"
-            className={
-              "mt-4 group flex items-center justify-between gap-4 " +
-              "rounded-lg border border-border bg-card px-4 py-3 max-w-xl " +
-              "transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-            }
-          >
-            <span className="flex items-center gap-3">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-                <ShieldCheck className="h-4 w-4" />
-              </span>
-              <span className="text-sm font-medium">
-                {t("audit_link_label")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </section>
-      )}
-
-      {/* Data & Privacy — owner-only firm data export + delete request.
-          Owner role gating matches the API route. Staff members never
-          see this section. */}
+      {/* Data & Privacy — owner-only bucket for everything that
+          touches firm-wide data integrity: the security audit log,
+          the firm data export, the deletion request. Every new
+          "data / privacy / compliance" surface goes inside this
+          single section instead of becoming its own top-level
+          card. Owner-only — staff never see this. */}
       {user.role === "owner" && (
         <section>
           <h2 className="text-sm font-semibold">{t("section_data_title")}</h2>
@@ -141,6 +96,31 @@ export default async function SettingsPage({
             {t("section_data_hint")}
           </p>
           <div className="mt-4 space-y-3 max-w-xl">
+            {/* Audit log */}
+            <Link
+              href="/settings/audit"
+              className={
+                "group flex items-center justify-between gap-4 " +
+                "rounded-lg border border-border bg-card px-4 py-3 " +
+                "transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+              }
+            >
+              <span className="flex items-center gap-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+                  <ShieldCheck className="h-4 w-4" />
+                </span>
+                <span className="flex flex-col">
+                  <span className="text-sm font-medium">
+                    {t("audit_link_label")}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {t("section_audit_hint")}
+                  </span>
+                </span>
+              </span>
+              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            {/* Export ZIP */}
             <a
               href="/api/firm/export.zip"
               download
@@ -165,6 +145,7 @@ export default async function SettingsPage({
               </span>
               <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
             </a>
+            {/* Delete firm */}
             <a
               href={`mailto:support@relai.app?subject=${encodeURIComponent(`Delete firm: ${firm.name}`)}`}
               className={
@@ -192,110 +173,5 @@ export default async function SettingsPage({
         </section>
       )}
     </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────
-// Subscription summary card. Shows the plan tier, subscription status,
-// and next-billing date if the firm has an active Stripe subscription.
-// The "Manage subscription" button only renders when we have a Stripe
-// customer ID on file — for firms still on trial (no Stripe customer
-// yet) we just show the trial state.
-// ─────────────────────────────────────────────────────────────────────
-
-async function SubscriptionCard({
-  plan,
-  subscriptionStatus,
-  currentPeriodEnd,
-  stripeCustomerId,
-  locale,
-}: {
-  plan: string;
-  subscriptionStatus: string | null;
-  currentPeriodEnd: string | null;
-  stripeCustomerId: string | null;
-  locale: "fr" | "en";
-}) {
-  const t = await getTranslations("Settings");
-  // Friendly status label. Maps Stripe's literal status to a phrase
-  // the founder + customer don't have to interpret.
-  const statusLabel = (() => {
-    if (!subscriptionStatus) return t("sub_status_none");
-    switch (subscriptionStatus) {
-      case "active":
-        return t("sub_status_active");
-      case "trialing":
-        return t("sub_status_trialing");
-      case "past_due":
-        return t("sub_status_past_due");
-      case "canceled":
-      case "incomplete_expired":
-        return t("sub_status_canceled");
-      case "incomplete":
-      case "unpaid":
-        return t("sub_status_incomplete");
-      case "paused":
-        return t("sub_status_paused");
-      default:
-        return subscriptionStatus;
-    }
-  })();
-  const isActive =
-    subscriptionStatus === "active" || subscriptionStatus === "trialing";
-  // Plan tier as a friendly name. Falls back to the raw plan key for
-  // unknown tiers so we surface something rather than nothing.
-  const planLabel = (() => {
-    switch (plan) {
-      case "trial":
-        return t("plan_label_trial");
-      case "solo":
-        return t("plan_label_solo");
-      case "cabinet":
-        return t("plan_label_cabinet");
-      case "cabinet_plus":
-        return t("plan_label_cabinet_plus");
-      default:
-        return plan;
-    }
-  })();
-  return (
-    <section>
-      <h2 className="text-sm font-semibold">{t("section_subscription")}</h2>
-      <p className="text-xs text-muted-foreground mt-1">
-        {t("section_subscription_hint")}
-      </p>
-      <div className="mt-4 rounded-lg border border-border bg-card p-4 max-w-xl space-y-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Badge variant={isActive ? "default" : "secondary"}>
-              {planLabel}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              · {statusLabel}
-            </span>
-          </div>
-          {stripeCustomerId && (
-            <PortalButton label={t("sub_manage")} />
-          )}
-        </div>
-        {currentPeriodEnd && isActive && (
-          <div className="text-sm">
-            <span className="text-muted-foreground">
-              {subscriptionStatus === "trialing"
-                ? t("sub_trial_ends_label")
-                : t("sub_next_billing_label")}
-            </span>{" "}
-            <span className="font-medium">
-              {formatDate(currentPeriodEnd, locale, "medium")}
-            </span>
-          </div>
-        )}
-        {!stripeCustomerId && plan === "trial" && (
-          <p className="text-xs text-muted-foreground">
-            {t("sub_no_subscription_hint")}
-          </p>
-        )}
-      </div>
-    </section>
   );
 }
