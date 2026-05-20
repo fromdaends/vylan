@@ -563,8 +563,11 @@ function AiMockCard({
             </div>
           </div>
 
-          {/* 3. Amount grid */}
-          <div className="grid grid-cols-3 gap-1.5 mt-0.5">
+          {/* 3. Amount grid — 3 rows × 3 cols so it fills the middle
+              of the preview instead of leaving a big empty band
+              underneath. Per-cell fill widths still vary so the grid
+              reads as a partially-completed real slip. */}
+          <div className="grid grid-cols-3 gap-1.5 flex-1">
             {[
               { fill: 0.75 },
               { fill: 0.6 },
@@ -572,10 +575,13 @@ function AiMockCard({
               { fill: 0.85 },
               { fill: 0.5 },
               { fill: 0 },
+              { fill: 0.4 },
+              { fill: 0 },
+              { fill: 0.7 },
             ].map((cell, i) => (
               <div
                 key={i}
-                className="rounded-sm border border-foreground/15 px-1.5 py-1 space-y-1"
+                className="rounded-sm border border-foreground/15 px-1.5 py-1 flex flex-col justify-center gap-1"
               >
                 <div className="flex items-center gap-1">
                   <div className="h-1.5 w-3 rounded-sm bg-foreground/25" />
@@ -588,21 +594,30 @@ function AiMockCard({
                       ? "bg-foreground/15"
                       : "bg-foreground/[0.03]")
                   }
-                  style={cell.fill > 0 ? { width: `${cell.fill * 100}%` } : { width: "100%" }}
+                  style={
+                    cell.fill > 0
+                      ? { width: `${cell.fill * 100}%` }
+                      : { width: "100%" }
+                  }
                 />
               </div>
             ))}
           </div>
 
-          {/* 4. Footer */}
-          <div className="mt-auto flex items-end justify-between gap-3 pt-0.5">
+          {/* 4. Footer — totals strip + signature + date. Slightly
+              thicker underlines so the bottom band reads from a
+              distance instead of disappearing. */}
+          <div className="h-px w-full bg-foreground/10" />
+          <div className="flex items-end justify-between gap-3">
             <div className="flex-1 space-y-1">
-              <div className="h-px w-3/4 bg-foreground/25" />
+              <div className="h-1 w-10 rounded-sm bg-foreground/25" />
+              <div className="h-0.5 w-3/4 bg-foreground/30" />
               <div className="h-1 w-1/3 rounded-sm bg-foreground/10" />
             </div>
             <div className="space-y-1">
-              <div className="h-px w-12 bg-foreground/25" />
-              <div className="h-1 w-8 rounded-sm bg-foreground/10" />
+              <div className="h-1 w-10 rounded-sm bg-foreground/25" />
+              <div className="h-0.5 w-16 bg-foreground/30" />
+              <div className="h-1 w-10 rounded-sm bg-foreground/10" />
             </div>
           </div>
         </div>
