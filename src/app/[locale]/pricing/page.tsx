@@ -78,6 +78,9 @@ export default async function PricingPage({
               <Mail className="inline h-3.5 w-3.5 mr-1 -mt-0.5" aria-hidden />
               hello@relai.app
             </a>
+            <span className="block mt-1 text-xs text-muted-foreground/80">
+              {t("response_time")}
+            </span>
           </p>
 
           <p className="mt-8 text-center text-xs text-muted-foreground max-w-xl mx-auto">

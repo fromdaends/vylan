@@ -84,6 +84,9 @@ export function DemoBlockButton({
               {t("block_cta_buy")}
             </a>
           </DialogFooter>
+          <p className="text-xs text-muted-foreground/80 text-center -mt-1">
+            {t("response_time")}
+          </p>
         </DialogContent>
       </Dialog>
     </>
