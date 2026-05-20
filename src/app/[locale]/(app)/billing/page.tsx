@@ -76,6 +76,9 @@ export default async function BillingPage({
                     {t("placeholder_email_link")}
                   </a>
                 </div>
+                <p className="text-xs text-muted-foreground/80">
+                  {t("response_time")}
+                </p>
               </div>
             </div>
           </CardContent>
