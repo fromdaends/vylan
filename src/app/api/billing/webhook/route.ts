@@ -92,6 +92,78 @@ async function findFirmForCustomer(
   return data ?? null;
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Locate the firm row for a subscription event. Tries the customer_id
+// link first (the normal/preferred path). If no firm is linked to that
+// customer yet — which happens for custom-priced subscriptions the
+// founder creates directly in the Stripe Dashboard, since those skip
+// our app's checkout flow that would otherwise establish the link — we
+// fall back to subscription.metadata.firm_id and bootstrap the link
+// right here.
+//
+// Security note: the fallback only fires when the firm row currently
+// has NO stripe_customer_id set. We never silently re-link a firm that
+// already has a Stripe customer attached — that would let a malicious
+// metadata.firm_id steal the link away from a paying customer. The
+// attack surface for setting metadata stays exactly the same as for
+// metadata.plan: only the Stripe account owner can author it.
+async function resolveAndLinkFirm(
+  sub: Stripe.Subscription,
+): Promise<{ id: string; stripe_customer_id: string | null } | null> {
+  const customerId =
+    typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
+  const byCustomer = await findFirmForCustomer(customerId);
+  if (byCustomer) return byCustomer;
+
+  // No firm linked yet. Try metadata.firm_id as the bootstrap.
+  const metaFirmId = sub.metadata?.firm_id;
+  if (typeof metaFirmId !== "string" || !UUID_RE.test(metaFirmId)) {
+    return null;
+  }
+  if (!customerId) {
+    console.warn(
+      "[billing/webhook] metadata.firm_id present but subscription has no customer:",
+      metaFirmId,
+    );
+    return null;
+  }
+
+  const sb = getServiceRoleSupabase();
+  const { data: firm } = await sb
+    .from("firms")
+    .select("id, stripe_customer_id")
+    .eq("id", metaFirmId)
+    .maybeSingle();
+  if (!firm) {
+    console.warn(
+      "[billing/webhook] metadata.firm_id refers to unknown firm:",
+      metaFirmId,
+    );
+    return null;
+  }
+  if (firm.stripe_customer_id && firm.stripe_customer_id !== customerId) {
+    console.warn(
+      "[billing/webhook] metadata.firm_id already linked to a different customer; refusing to re-link",
+      {
+        firm_id: metaFirmId,
+        current: firm.stripe_customer_id,
+        incoming: customerId,
+      },
+    );
+    return null;
+  }
+
+  // Bootstrap the link.
+  await sb
+    .from("firms")
+    .update({ stripe_customer_id: customerId })
+    .eq("id", metaFirmId);
+
+  return { id: firm.id, stripe_customer_id: customerId };
+}
+
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   // The session was just initiated by our authenticated user, so trusting
   // metadata.firm_id at this stage is acceptable (the customer can't tamper
@@ -114,13 +186,15 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 }
 
 async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
-  const customerId =
-    typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
-  const firm = await findFirmForCustomer(customerId);
+  const firm = await resolveAndLinkFirm(sub);
   if (!firm) {
+    const customerId =
+      typeof sub.customer === "string"
+        ? sub.customer
+        : sub.customer?.id ?? null;
     console.warn(
       "[billing/webhook] subscription update for unknown customer",
-      customerId,
+      { customerId, metaFirmId: sub.metadata?.firm_id ?? null },
     );
     return;
   }
