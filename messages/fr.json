@@ -873,6 +873,10 @@
     "ai_send_feedback_link": "Envie de partager un commentaire ? Cliquez",
     "ai_send_feedback_link_label": "ici",
     "ai_back_to_chat": "Retour au clavardage",
+    "ai_hello": "Bonjour {name}",
+    "ai_intro_sub": "Je suis votre guide intégré. Posez-moi vos questions sur Relai.",
+    "ai_kbd_hint": "Entrée pour envoyer · Maj+Entrée pour saut de ligne",
+    "ai_send_feedback_compact": "Envoyer un commentaire",
     "footer_email_or": "ou écrivez à",
     "errors": {
       "min_3_chars": "Au moins 3 caractères.",

@@ -873,6 +873,10 @@
     "ai_send_feedback_link": "Have feedback instead? Send it",
     "ai_send_feedback_link_label": "here",
     "ai_back_to_chat": "Back to chat",
+    "ai_hello": "Hi {name}",
+    "ai_intro_sub": "I'm your in-app guide. Ask me anything about how Relai works.",
+    "ai_kbd_hint": "Enter to send · Shift+Enter for new line",
+    "ai_send_feedback_compact": "Send feedback",
     "footer_email_or": "or email",
     "errors": {
       "min_3_chars": "At least 3 characters.",
