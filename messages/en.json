@@ -114,7 +114,8 @@
     "continue": "Continue",
     "skip_for_now": "Skip for now",
     "saving": "Saving…",
-    "submit": "Submit"
+    "submit": "Submit",
+    "close": "Close"
   },
   "Auth": {
     "login_title": "Log in",
@@ -221,7 +222,14 @@
     "name_placeholder": "Jane Tremblay",
     "saved": "Saved.",
     "section_email": "Email",
-    "section_email_hint": "Contact support to change your email.",
+    "section_email_hint": "We'll send a confirmation link to the new address before the change takes effect.",
+    "change_email": "Change email",
+    "email_modal_title": "Change your email",
+    "email_modal_subtitle": "We'll email a confirmation link to the new address. The change isn't applied until you click that link.",
+    "new_email": "New email",
+    "submit_email": "Send confirmation link",
+    "email_check_inbox": "Confirmation link sent to {email}.",
+    "email_check_inbox_hint": "Click the link from the new address to finalize the change. Until you click it, you keep signing in with your current email.",
     "section_language": "Preferred language",
     "section_language_hint": "Switches the UI immediately. Emails to clients use the recipient's language, not yours.",
     "lang_fr": "Français",
@@ -273,7 +281,10 @@
       "rate_limited": "Too many attempts. Please wait a few minutes and try again.",
       "enroll_failed": "Couldn't start two-factor setup. Please try again.",
       "bad_code": "That code isn't right. Try the latest one in your app.",
-      "disable_failed": "Couldn't disable two-factor. Please try again."
+      "disable_failed": "Couldn't disable two-factor. Please try again.",
+      "invalid": "That doesn't look like a valid email.",
+      "same_email": "That's already your current email.",
+      "email_taken": "That email is already used by another account."
     }
   },
   "Settings": {

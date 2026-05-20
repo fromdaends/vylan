@@ -114,7 +114,8 @@
     "continue": "Continuer",
     "skip_for_now": "Passer pour l’instant",
     "saving": "Enregistrement…",
-    "submit": "Envoyer"
+    "submit": "Envoyer",
+    "close": "Fermer"
   },
   "Auth": {
     "login_title": "Connexion",
@@ -221,7 +222,14 @@
     "name_placeholder": "Jane Tremblay",
     "saved": "Enregistré.",
     "section_email": "Courriel",
-    "section_email_hint": "Contactez le support pour changer votre courriel.",
+    "section_email_hint": "Nous enverrons un lien de confirmation à la nouvelle adresse avant que le changement prenne effet.",
+    "change_email": "Modifier le courriel",
+    "email_modal_title": "Modifier votre courriel",
+    "email_modal_subtitle": "Nous enverrons un lien de confirmation à la nouvelle adresse. Le changement n'est appliqué qu'une fois ce lien cliqué.",
+    "new_email": "Nouveau courriel",
+    "submit_email": "Envoyer le lien de confirmation",
+    "email_check_inbox": "Lien de confirmation envoyé à {email}.",
+    "email_check_inbox_hint": "Cliquez le lien depuis la nouvelle adresse pour finaliser le changement. D'ici là, vous continuez à vous connecter avec votre courriel actuel.",
     "section_language": "Langue préférée",
     "section_language_hint": "Bascule l'interface immédiatement. Les courriels aux clients utilisent la langue du destinataire, pas la vôtre.",
     "lang_fr": "Français",
@@ -273,7 +281,10 @@
       "rate_limited": "Trop de tentatives. Veuillez patienter quelques minutes avant de réessayer.",
       "enroll_failed": "Impossible de démarrer la configuration. Veuillez réessayer.",
       "bad_code": "Ce code n'est pas valide. Essayez le dernier code affiché dans votre application.",
-      "disable_failed": "Impossible de désactiver la 2FA. Veuillez réessayer."
+      "disable_failed": "Impossible de désactiver la 2FA. Veuillez réessayer.",
+      "invalid": "Cette adresse courriel ne semble pas valide.",
+      "same_email": "C'est déjà votre courriel actuel.",
+      "email_taken": "Ce courriel est déjà utilisé par un autre compte."
     }
   },
   "Settings": {
