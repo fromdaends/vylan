@@ -88,7 +88,10 @@ export default async function AppLayout({
       }}
     >
       {children}
-      <HelpSidebar />
+      <HelpSidebar
+        locale={locale === "fr" ? "fr" : "en"}
+        userDisplayName={userDisplayLabel(dbUser)}
+      />
       <KeyboardShortcuts />
     </AppShell>
   );
