@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { ArrowRight, Menu, X } from "lucide-react";
+import { ArrowRight, Menu, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { Logo } from "@/components/brand/logo";
@@ -82,6 +82,14 @@ export function PublicNav() {
             <span className="hidden md:inline-flex mx-0.5">
               <ThemeToggle />
             </span>
+            {/* Demo CTA — desktop only, sits just before Sign in to
+                surface the no-commitment way to try the product. */}
+            <Link href="/signup" className="hidden md:inline-flex">
+              <Button variant="ghost" size="sm">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                {t("nav_demo")}
+              </Button>
+            </Link>
             {/* Sign in — highlighted as the primary nav CTA. */}
             <Link href="/login">
               <Button size="sm">
@@ -126,6 +134,14 @@ export function PublicNav() {
           }
         >
           <div className="px-4 py-3 flex flex-col gap-1">
+            {/* Demo CTA above sign in — same emphasis pattern as the
+                desktop pill. */}
+            <Link href="/signup" onClick={closeMobile} className="px-1">
+              <Button variant="outline" size="sm" className="w-full">
+                <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                {t("nav_demo")}
+              </Button>
+            </Link>
             {/* Highlighted Sign in CTA on mobile too, for thumb reach. */}
             <Link href="/login" onClick={closeMobile} className="px-1">
               <Button size="sm" className="w-full">

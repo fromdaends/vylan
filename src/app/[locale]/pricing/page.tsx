@@ -1,7 +1,7 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
-import { Sparkles, Phone, Mail } from "lucide-react";
+import { Sparkles, Mail } from "lucide-react";
 import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
 import { BILLING_ENABLED } from "@/lib/billing-mode";
@@ -65,7 +65,7 @@ export default async function PricingPage({
               className="group rounded-2xl border border-border bg-card p-6 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
             >
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-                <Phone className="h-5 w-5" />
+                <Sparkles className="h-5 w-5" />
               </span>
               <h3 className="mt-3 font-medium">{t("talk_demo_heading")}</h3>
               <p className="mt-1 text-sm text-muted-foreground">
