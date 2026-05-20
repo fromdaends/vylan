@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
   useActionState,
   useCallback,
@@ -266,16 +267,16 @@ function ChatView({
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
+        className="flex-1 overflow-y-auto px-4 py-5"
       >
         {isEmpty ? (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <p className="text-sm text-muted-foreground leading-relaxed">
               {t("ai_intro", {
                 name: firstName(userDisplayName) || "👋",
               })}
             </p>
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
                 {t("ai_suggested_title")}
               </div>
@@ -285,7 +286,7 @@ function ChatView({
                     key={q}
                     type="button"
                     onClick={() => send(q)}
-                    className="text-left text-sm rounded-md border border-border/70 bg-card hover:bg-secondary/60 hover:border-border px-3 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="text-left text-sm rounded-2xl border border-border/60 bg-secondary/30 hover:bg-secondary/60 hover:border-border px-3.5 py-2.5 leading-relaxed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {q}
                   </button>
@@ -294,7 +295,7 @@ function ChatView({
             </div>
           </div>
         ) : (
-          <>
+          <div className="flex flex-col gap-5">
             {messages.map((m, i) => (
               <MessageBubble
                 key={i}
@@ -307,11 +308,11 @@ function ChatView({
                 }
               />
             ))}
-          </>
+          </div>
         )}
 
         {error && (
-          <Alert variant="destructive">
+          <Alert variant="destructive" className="mt-4">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
@@ -378,28 +379,56 @@ function MessageBubble({
   if (role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="rounded-2xl rounded-br-md bg-primary text-primary-foreground px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap break-words">
+        <div className="rounded-2xl bg-primary text-primary-foreground px-4 py-2.5 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap break-words shadow-sm">
           {content}
         </div>
       </div>
     );
   }
   const isThinking = isStreaming && content.length === 0;
-  return (
-    <div className="flex">
-      <div className="rounded-2xl rounded-bl-md bg-secondary text-foreground px-3 py-2 text-sm max-w-[85%] whitespace-pre-wrap break-words">
-        {isThinking ? (
-          <span className="inline-flex items-center gap-1 text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-current animate-pulse" />
-            <span className="size-1.5 rounded-full bg-current animate-pulse [animation-delay:120ms]" />
-            <span className="size-1.5 rounded-full bg-current animate-pulse [animation-delay:240ms]" />
-            <span className="ml-1 text-xs">{t("ai_thinking")}</span>
-          </span>
-        ) : (
-          content
-        )}
+  if (isThinking) {
+    return (
+      <div className="text-sm text-muted-foreground inline-flex items-center gap-1.5 py-1">
+        <span className="size-1.5 rounded-full bg-current animate-pulse" />
+        <span className="size-1.5 rounded-full bg-current animate-pulse [animation-delay:140ms]" />
+        <span className="size-1.5 rounded-full bg-current animate-pulse [animation-delay:280ms]" />
+        <span className="ml-1.5 text-xs">{t("ai_thinking")}</span>
       </div>
+    );
+  }
+  return (
+    <div className="text-sm leading-relaxed text-foreground break-words">
+      <AssistantContent text={content} />
     </div>
+  );
+}
+
+// Renders the assistant's reply as paragraphs separated by blank lines.
+// The system prompt strictly instructs the model to use plain prose,
+// but we still do a light \`**bold**\` pass in case it slips through —
+// that way the user sees a bold word, not literal asterisks.
+function AssistantContent({ text }: { text: string }) {
+  const paragraphs = text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+  if (paragraphs.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      {paragraphs.map((p, i) => (
+        <p key={i} className="whitespace-pre-wrap">
+          {renderInline(p)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function renderInline(text: string): ReactNode[] {
+  // Split on **bold** runs. Even indices are plain, odd are bold.
+  const parts = text.split(/\*\*([^*\n]+)\*\*/g);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? <strong key={i}>{part}</strong> : part,
   );
 }
 
