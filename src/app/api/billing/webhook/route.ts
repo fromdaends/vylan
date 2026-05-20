@@ -325,6 +325,17 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
   if (plan) {
     updates.plan = plan;
   }
+  // Auto-convert out of demo mode when a paying subscription becomes
+  // active. The firm.is_demo flag is set by the public signup flow so
+  // accountants can poke around with sample data; once they've actually
+  // paid, the demo banner + gated actions should disappear without the
+  // founder running a manual SQL update. Only flip when we actually
+  // know the plan tier (otherwise we'd be flipping firms whose plan
+  // stayed unchanged but happen to be on trial — keep their demo flag
+  // alone).
+  if (plan && sub.status === "active") {
+    updates.is_demo = false;
+  }
   await sb.from("firms").update(updates).eq("id", firm.id);
 }
 
