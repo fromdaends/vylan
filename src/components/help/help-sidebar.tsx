@@ -14,6 +14,7 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetTitle,
@@ -31,6 +32,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  X,
 } from "lucide-react";
 import {
   submitFeedbackAction,
@@ -92,6 +94,7 @@ export function HelpSidebar({ locale, userDisplayName }: Props) {
       </SheetTrigger>
       <SheetContent
         side="right"
+        showCloseButton={false}
         className="w-full sm:max-w-lg flex flex-col p-0 gap-0 border-l border-border/60"
       >
         <AnimatePresence mode="wait" initial={false}>
@@ -142,6 +145,7 @@ function ChatView({
   onSwitchToFeedback: () => void;
 }) {
   const t = useTranslations("Help");
+  const tc = useTranslations("Common");
   const pathname = usePathname();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -309,26 +313,37 @@ function ChatView({
             </SheetDescription>
           </div>
         </div>
-        <AnimatePresence>
-          {!isEmpty && (
-            <motion.button
-              key="reset"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={{ duration: 0.15 }}
-              whileHover={{ rotate: -90 }}
-              whileTap={{ scale: 0.9 }}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <AnimatePresence>
+            {!isEmpty && (
+              <motion.button
+                key="reset"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.15 }}
+                whileHover={{ rotate: -90 }}
+                whileTap={{ scale: 0.9 }}
+                type="button"
+                onClick={reset}
+                className="inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+                aria-label={t("ai_reset")}
+                title={t("ai_reset")}
+              >
+                <RefreshCw className="size-4" aria-hidden />
+              </motion.button>
+            )}
+          </AnimatePresence>
+          <SheetClose asChild>
+            <button
               type="button"
-              onClick={reset}
-              className="shrink-0 inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-              aria-label={t("ai_reset")}
-              title={t("ai_reset")}
+              className="inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+              aria-label={tc("close")}
             >
-              <RefreshCw className="size-4" aria-hidden />
-            </motion.button>
-          )}
-        </AnimatePresence>
+              <X className="size-4" aria-hidden />
+            </button>
+          </SheetClose>
+        </div>
       </header>
 
       {/* Body */}
@@ -667,25 +682,36 @@ function FeedbackView({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <header className="flex items-center gap-3 px-5 py-4 border-b border-border/40">
-        <motion.button
-          type="button"
-          whileHover={{ x: -2 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={onBack}
-          className="inline-flex items-center justify-center rounded-full size-8 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-          aria-label={t("ai_back_to_chat")}
-        >
-          <ArrowLeft className="size-4" aria-hidden />
-        </motion.button>
-        <div className="min-w-0">
-          <SheetTitle className="text-[15px] font-semibold leading-tight tracking-tight">
-            {t("feedback_title")}
-          </SheetTitle>
-          <SheetDescription className="text-xs text-muted-foreground leading-tight mt-0.5">
-            {t("feedback_subtitle")}
-          </SheetDescription>
+      <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border/40">
+        <div className="flex items-center gap-3 min-w-0">
+          <motion.button
+            type="button"
+            whileHover={{ x: -2 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onBack}
+            className="shrink-0 inline-flex items-center justify-center rounded-full size-8 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+            aria-label={t("ai_back_to_chat")}
+          >
+            <ArrowLeft className="size-4" aria-hidden />
+          </motion.button>
+          <div className="min-w-0">
+            <SheetTitle className="text-[15px] font-semibold leading-tight tracking-tight">
+              {t("feedback_title")}
+            </SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground leading-tight mt-0.5">
+              {t("feedback_subtitle")}
+            </SheetDescription>
+          </div>
         </div>
+        <SheetClose asChild>
+          <button
+            type="button"
+            className="shrink-0 inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+            aria-label={tc("close")}
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        </SheetClose>
       </header>
 
       <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5">
