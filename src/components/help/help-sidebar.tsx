@@ -5,16 +5,17 @@ import {
   useActionState,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { useTranslations } from "next-intl";
 import { usePathname } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
-  SheetHeader,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
@@ -23,14 +24,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   ArrowLeft,
+  ChevronRight,
+  Download,
+  Lock,
   RefreshCw,
   Send,
+  ShieldCheck,
   Sparkles,
 } from "lucide-react";
 import {
   submitFeedbackAction,
   type FeedbackState,
 } from "@/app/actions/feedback";
+
+// Order matches Help.ai_suggested_1..4. The icon for each suggestion is
+// chosen to telegraph what kind of help the user is about to get.
+const SUGGESTION_ICONS = [Send, ShieldCheck, Lock, Download] as const;
 
 type Props = {
   locale: "en" | "fr";
@@ -49,7 +58,8 @@ export function HelpSidebar({ locale, userDisplayName }: Props) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<View>("chat");
 
-  // Profile dropdown's "Help" menu item dispatches this event.
+  // The profile dropdown's "Help" menu item dispatches this event so
+  // we can open the sheet without lifting state to a shared context.
   useEffect(() => {
     function onOpen() {
       setOpen(true);
@@ -62,31 +72,57 @@ export function HelpSidebar({ locale, userDisplayName }: Props) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <button
+        <motion.button
           type="button"
-          className="fixed bottom-4 right-4 z-50 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          whileHover={{ scale: 1.04, y: -1 }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: "spring", stiffness: 400, damping: 28 }}
+          className="fixed bottom-6 right-6 z-50 group inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-[0_10px_30px_-10px_rgba(0,0,0,0.45)] ring-1 ring-black/5 dark:ring-white/5 hover:shadow-[0_16px_40px_-12px_rgba(0,0,0,0.5)] transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           aria-label={t("open_help")}
         >
-          <Sparkles className="size-4" aria-hidden />
-          {t("ai_button")}
-        </button>
+          <span className="relative inline-flex items-center justify-center">
+            <span
+              aria-hidden
+              className="absolute inset-0 -m-1 rounded-full bg-accent/40 blur-md opacity-0 group-hover:opacity-100 transition-opacity"
+            />
+            <Sparkles className="relative size-4" aria-hidden />
+          </span>
+          <span>{t("ai_button")}</span>
+        </motion.button>
       </SheetTrigger>
       <SheetContent
         side="right"
-        className="w-full sm:max-w-md flex flex-col p-0"
+        className="w-full sm:max-w-lg flex flex-col p-0 gap-0 border-l border-border/60"
       >
-        {view === "chat" ? (
-          <ChatView
-            locale={locale}
-            userDisplayName={userDisplayName}
-            onSwitchToFeedback={() => setView("feedback")}
-          />
-        ) : (
-          <FeedbackView
-            t={t}
-            onBack={() => setView("chat")}
-          />
-        )}
+        <AnimatePresence mode="wait" initial={false}>
+          {view === "chat" ? (
+            <motion.div
+              key="chat"
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="flex flex-col h-full"
+            >
+              <ChatView
+                locale={locale}
+                userDisplayName={userDisplayName}
+                onSwitchToFeedback={() => setView("feedback")}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="feedback"
+              initial={{ opacity: 0, x: 8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="flex flex-col h-full"
+            >
+              <FeedbackView onBack={() => setView("chat")} />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </SheetContent>
     </Sheet>
   );
@@ -117,8 +153,9 @@ function ChatView({
 
   const isEmpty = messages.length === 0;
 
-  // Auto-scroll to bottom on new content.
-  useEffect(() => {
+  // Auto-scroll to bottom on new content. useLayoutEffect so the scroll
+  // happens in the same paint as the layout update — no flicker.
+  useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
@@ -131,6 +168,22 @@ function ChatView({
       abortRef.current?.abort();
     };
   }, []);
+
+  // Auto-grow the textarea up to a cap. Reset to natural height when
+  // the field empties so the input shrinks back after a send.
+  const resizeTextarea = useCallback(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const next = Math.min(el.scrollHeight, 160);
+    el.style.height = `${next}px`;
+  }, []);
+
+  useEffect(() => {
+    if (input === "" && inputRef.current) {
+      inputRef.current.style.height = "auto";
+    }
+  }, [input]);
 
   const send = useCallback(
     async (text: string) => {
@@ -172,7 +225,6 @@ function ChatView({
           if (res.status === 401) key = "ai_unauthorized";
           if (res.status === 429) key = "ai_rate_limited";
           setError(t(key));
-          // Drop the empty placeholder assistant turn.
           setMessages((prev) => prev.slice(0, -1));
           setStreaming(false);
           return;
@@ -201,7 +253,6 @@ function ChatView({
             return copy;
           });
         }
-        // Flush any trailing buffered bytes.
         acc += decoder.decode();
         setMessages((prev) => {
           const copy = prev.slice();
@@ -229,6 +280,7 @@ function ChatView({
     abortRef.current?.abort();
     setMessages([]);
     setError(null);
+    queueMicrotask(() => inputRef.current?.focus());
   }, []);
 
   const suggestions = [
@@ -239,134 +291,255 @@ function ChatView({
   ];
 
   return (
-    <div className="flex flex-col h-full">
-      <SheetHeader className="px-4 py-3 border-b border-border/60">
-        <div className="flex items-center justify-between gap-2">
+    <>
+      {/* Header */}
+      <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border/40 bg-gradient-to-b from-accent/[0.03] to-transparent">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="relative shrink-0">
+            <div className="size-9 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center ring-1 ring-accent/20">
+              <Sparkles className="size-4 text-accent" aria-hidden />
+            </div>
+          </div>
           <div className="min-w-0">
-            <SheetTitle className="flex items-center gap-2 text-base">
-              <Sparkles className="size-4 text-primary" aria-hidden />
+            <SheetTitle className="text-[15px] font-semibold leading-tight tracking-tight">
               {t("ai_title")}
             </SheetTitle>
-            <SheetDescription className="text-xs">
+            <SheetDescription className="text-xs text-muted-foreground leading-tight mt-0.5">
               {t("ai_subtitle")}
             </SheetDescription>
           </div>
+        </div>
+        <AnimatePresence>
           {!isEmpty && (
-            <button
+            <motion.button
+              key="reset"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.15 }}
+              whileHover={{ rotate: -90 }}
+              whileTap={{ scale: 0.9 }}
               type="button"
               onClick={reset}
-              className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 rounded-md px-2 py-1 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="shrink-0 inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
               aria-label={t("ai_reset")}
+              title={t("ai_reset")}
             >
-              <RefreshCw className="size-3" aria-hidden />
-              {t("ai_reset")}
-            </button>
+              <RefreshCw className="size-4" aria-hidden />
+            </motion.button>
           )}
-        </div>
-      </SheetHeader>
+        </AnimatePresence>
+      </header>
 
+      {/* Body */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-5"
+        className="flex-1 overflow-y-auto overscroll-contain"
       >
         {isEmpty ? (
-          <div className="space-y-5">
-            <p className="text-sm text-muted-foreground leading-relaxed">
-              {t("ai_intro", {
-                name: firstName(userDisplayName) || "👋",
-              })}
-            </p>
-            <div className="space-y-2.5">
-              <div className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                {t("ai_suggested_title")}
-              </div>
-              <div className="grid gap-2">
-                {suggestions.map((q) => (
-                  <button
-                    key={q}
-                    type="button"
-                    onClick={() => send(q)}
-                    className="text-left text-sm rounded-2xl border border-border/60 bg-secondary/30 hover:bg-secondary/60 hover:border-border px-3.5 py-2.5 leading-relaxed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          <EmptyState
+            displayName={userDisplayName}
+            suggestions={suggestions}
+            onPick={send}
+          />
         ) : (
-          <div className="flex flex-col gap-5">
-            {messages.map((m, i) => (
-              <MessageBubble
-                key={i}
-                role={m.role}
-                content={m.content}
-                isStreaming={
-                  streaming &&
-                  i === messages.length - 1 &&
-                  m.role === "assistant"
-                }
-              />
-            ))}
+          <div className="px-5 py-6 flex flex-col gap-6">
+            <AnimatePresence initial={false}>
+              {messages.map((m, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                >
+                  <Message
+                    role={m.role}
+                    content={m.content}
+                    isStreaming={
+                      streaming &&
+                      i === messages.length - 1 &&
+                      m.role === "assistant"
+                    }
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              </motion.div>
+            )}
           </div>
         )}
 
-        {error && (
-          <Alert variant="destructive" className="mt-4">
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
+        {isEmpty && error && (
+          <div className="px-5 pb-4">
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          </div>
         )}
       </div>
 
-      <div className="border-t border-border/60 p-3 space-y-2 bg-background">
+      {/* Input */}
+      <div className="border-t border-border/40 px-4 pt-3 pb-4 bg-background/95 backdrop-blur-sm">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             void send(input);
           }}
-          className="flex gap-2 items-end"
+          className="relative"
         >
           <Textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              resizeTextarea();
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 void send(input);
               }
             }}
-            rows={2}
+            rows={1}
             placeholder={t("ai_input_placeholder")}
             maxLength={4000}
             disabled={streaming}
-            className="resize-none min-h-[44px]"
+            className="resize-none min-h-[48px] max-h-[160px] w-full rounded-2xl border-border/60 bg-secondary/40 focus-visible:bg-background focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/20 pr-14 py-3.5 pl-4 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground/70"
           />
-          <Button
+          <motion.button
             type="submit"
-            size="icon"
+            whileTap={{ scale: 0.9 }}
             disabled={streaming || input.trim().length === 0}
             aria-label={t("ai_send")}
+            className="absolute right-2 bottom-2 inline-flex items-center justify-center size-9 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 shadow-sm"
           >
             <Send className="size-4" aria-hidden />
-          </Button>
+          </motion.button>
         </form>
-        <p className="text-[11px] text-muted-foreground leading-snug">
-          {t("ai_disclaimer")}{" "}
+        <div className="flex items-center justify-between gap-3 mt-2.5 px-1 text-[11px] text-muted-foreground/70">
+          <span className="hidden sm:inline tabular-nums">
+            {t("ai_kbd_hint")}
+          </span>
           <button
             type="button"
             onClick={onSwitchToFeedback}
-            className="underline hover:text-foreground"
+            className="ml-auto hover:text-foreground transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
           >
-            {t("ai_send_feedback_link_label")}
+            {t("ai_send_feedback_compact")}
           </button>
-        </p>
+        </div>
       </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Empty state
+// ---------------------------------------------------------------------------
+
+function EmptyState({
+  displayName,
+  suggestions,
+  onPick,
+}: {
+  displayName: string;
+  suggestions: string[];
+  onPick: (q: string) => void;
+}) {
+  const t = useTranslations("Help");
+  return (
+    <div className="px-5 pt-8 pb-6">
+      <motion.div
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="flex flex-col items-center text-center mb-7"
+      >
+        <div className="relative mb-4">
+          <motion.div
+            aria-hidden
+            initial={{ scale: 0.6, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+            className="absolute inset-0 -m-2 rounded-full bg-accent/25 blur-2xl"
+          />
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="relative size-14 rounded-2xl bg-gradient-to-br from-accent/25 via-accent/10 to-transparent flex items-center justify-center ring-1 ring-accent/25 shadow-sm"
+          >
+            <Sparkles className="size-6 text-accent" aria-hidden />
+          </motion.div>
+        </div>
+        <h2 className="text-xl font-semibold tracking-tight">
+          {t("ai_hello", { name: firstName(displayName) || "👋" })}
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed max-w-[300px]">
+          {t("ai_intro_sub")}
+        </p>
+      </motion.div>
+
+      <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/80 font-semibold mb-2.5 px-1">
+        {t("ai_suggested_title")}
+      </div>
+      <motion.div
+        className="grid gap-2"
+        initial="hidden"
+        animate="visible"
+        variants={{
+          visible: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
+        }}
+      >
+        {suggestions.map((q, i) => {
+          const Icon = SUGGESTION_ICONS[i] ?? Sparkles;
+          return (
+            <motion.button
+              key={q}
+              variants={{
+                hidden: { opacity: 0, y: 8 },
+                visible: { opacity: 1, y: 0 },
+              }}
+              whileHover={{ x: 2 }}
+              whileTap={{ scale: 0.985 }}
+              transition={{ type: "spring", stiffness: 400, damping: 30 }}
+              type="button"
+              onClick={() => onPick(q)}
+              className="group flex items-center gap-3 text-left text-sm rounded-2xl border border-border/50 bg-card hover:border-border/80 hover:bg-secondary/40 px-3.5 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="shrink-0 size-8 rounded-xl bg-secondary/70 group-hover:bg-accent/10 flex items-center justify-center transition-colors">
+                <Icon
+                  className="size-4 text-muted-foreground group-hover:text-accent transition-colors"
+                  aria-hidden
+                />
+              </span>
+              <span className="leading-snug flex-1">{q}</span>
+              <ChevronRight
+                className="shrink-0 size-4 text-muted-foreground/40 group-hover:text-foreground/60 group-hover:translate-x-0.5 transition-all"
+                aria-hidden
+              />
+            </motion.button>
+          );
+        })}
+      </motion.div>
     </div>
   );
 }
 
-function MessageBubble({
+// ---------------------------------------------------------------------------
+// Message bubbles
+// ---------------------------------------------------------------------------
+
+function Message({
   role,
   content,
   isStreaming,
@@ -375,52 +548,88 @@ function MessageBubble({
   content: string;
   isStreaming: boolean;
 }) {
-  const t = useTranslations("Help");
   if (role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="rounded-2xl bg-primary text-primary-foreground px-4 py-2.5 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap break-words shadow-sm">
+        <div className="rounded-2xl bg-primary text-primary-foreground px-4 py-2.5 text-sm leading-relaxed max-w-[82%] whitespace-pre-wrap break-words shadow-sm">
           {content}
         </div>
       </div>
     );
   }
   const isThinking = isStreaming && content.length === 0;
-  if (isThinking) {
-    return (
-      <div className="text-sm text-muted-foreground inline-flex items-center gap-1.5 py-1">
-        <span className="size-1.5 rounded-full bg-current animate-pulse" />
-        <span className="size-1.5 rounded-full bg-current animate-pulse [animation-delay:140ms]" />
-        <span className="size-1.5 rounded-full bg-current animate-pulse [animation-delay:280ms]" />
-        <span className="ml-1.5 text-xs">{t("ai_thinking")}</span>
-      </div>
-    );
-  }
   return (
-    <div className="text-sm leading-relaxed text-foreground break-words">
-      <AssistantContent text={content} />
+    <div className="flex gap-3 items-start">
+      <div
+        aria-hidden
+        className="shrink-0 size-7 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center ring-1 ring-accent/15 mt-0.5"
+      >
+        <Sparkles className="size-3.5 text-accent" aria-hidden />
+      </div>
+      <div className="flex-1 min-w-0 pt-0.5">
+        {isThinking ? (
+          <ThinkingIndicator />
+        ) : (
+          <AssistantContent text={content} isStreaming={isStreaming} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ThinkingIndicator() {
+  const t = useTranslations("Help");
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground h-7">
+      <div className="flex gap-1">
+        <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:-280ms] [animation-duration:1.1s]" />
+        <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:-140ms] [animation-duration:1.1s]" />
+        <span className="size-1.5 rounded-full bg-current animate-bounce [animation-duration:1.1s]" />
+      </div>
+      <span className="text-xs">{t("ai_thinking")}</span>
     </div>
   );
 }
 
 // Renders the assistant's reply as paragraphs separated by blank lines.
 // The system prompt strictly instructs the model to use plain prose,
-// but we still do a light \`**bold**\` pass in case it slips through —
-// that way the user sees a bold word, not literal asterisks.
-function AssistantContent({ text }: { text: string }) {
+// but we still do a light \`**bold**\` pass in case it slips through.
+// A blinking caret trails the last paragraph while the stream is open.
+function AssistantContent({
+  text,
+  isStreaming,
+}: {
+  text: string;
+  isStreaming: boolean;
+}) {
   const paragraphs = text
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
-  if (paragraphs.length === 0) return null;
+  if (paragraphs.length === 0) {
+    return isStreaming ? <StreamingCaret /> : null;
+  }
   return (
-    <div className="space-y-3">
-      {paragraphs.map((p, i) => (
-        <p key={i} className="whitespace-pre-wrap">
-          {renderInline(p)}
-        </p>
-      ))}
+    <div className="space-y-2.5 text-sm leading-relaxed text-foreground">
+      {paragraphs.map((p, i) => {
+        const isLast = i === paragraphs.length - 1;
+        return (
+          <p key={i} className="whitespace-pre-wrap break-words">
+            {renderInline(p)}
+            {isStreaming && isLast ? <StreamingCaret /> : null}
+          </p>
+        );
+      })}
     </div>
+  );
+}
+
+function StreamingCaret() {
+  return (
+    <span
+      aria-hidden
+      className="inline-block w-[2px] h-[0.95em] align-text-bottom translate-y-[1px] bg-foreground/70 ml-0.5 animate-pulse [animation-duration:1s]"
+    />
   );
 }
 
@@ -438,16 +647,12 @@ function firstName(label: string): string {
 
 // ---------------------------------------------------------------------------
 // Feedback view (preserved from the prior Help sidebar so we don't
-// lose the existing surface — just demoted to a secondary tab).
+// lose the surface — just demoted to a secondary view reachable from
+// the chat footer link).
 // ---------------------------------------------------------------------------
 
-function FeedbackView({
-  t,
-  onBack,
-}: {
-  t: ReturnType<typeof useTranslations<"Help">>;
-  onBack: () => void;
-}) {
+function FeedbackView({ onBack }: { onBack: () => void }) {
+  const t = useTranslations("Help");
   const tc = useTranslations("Common");
   const [pageUrl, setPageUrl] = useState("");
   const [state, action, pending] = useActionState<FeedbackState, FormData>(
@@ -461,27 +666,29 @@ function FeedbackView({
   }, []);
 
   return (
-    <div className="flex flex-col h-full">
-      <SheetHeader className="px-4 py-3 border-b border-border/60">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center justify-center rounded-md h-7 w-7 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={t("ai_back_to_chat")}
-          >
-            <ArrowLeft className="size-4" aria-hidden />
-          </button>
-          <div className="min-w-0">
-            <SheetTitle className="text-base">{t("feedback_title")}</SheetTitle>
-            <SheetDescription className="text-xs">
-              {t("feedback_subtitle")}
-            </SheetDescription>
-          </div>
+    <>
+      <header className="flex items-center gap-3 px-5 py-4 border-b border-border/40">
+        <motion.button
+          type="button"
+          whileHover={{ x: -2 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={onBack}
+          className="inline-flex items-center justify-center rounded-full size-8 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+          aria-label={t("ai_back_to_chat")}
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+        </motion.button>
+        <div className="min-w-0">
+          <SheetTitle className="text-[15px] font-semibold leading-tight tracking-tight">
+            {t("feedback_title")}
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground leading-tight mt-0.5">
+            {t("feedback_subtitle")}
+          </SheetDescription>
         </div>
-      </SheetHeader>
+      </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5">
         <form action={action} className="space-y-3">
           <input type="hidden" name="page_url" value={pageUrl} />
           {state?.ok && (
@@ -505,8 +712,9 @@ function FeedbackView({
             required
             minLength={3}
             maxLength={2000}
+            className="rounded-2xl resize-none"
           />
-          <Button type="submit" disabled={pending}>
+          <Button type="submit" disabled={pending} className="rounded-full">
             <Send className="size-4" aria-hidden />
             {pending ? tc("saving") : t("feedback_submit")}
           </Button>
@@ -516,12 +724,12 @@ function FeedbackView({
           {t("footer_email_or")}{" "}
           <a
             href="mailto:support@relai.app"
-            className="text-foreground underline"
+            className="text-foreground underline underline-offset-2"
           >
             support@relai.app
           </a>
         </p>
       </div>
-    </div>
+    </>
   );
 }
