@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { planForPriceId, type PlanId } from "@/lib/plans";
+import { cleanupDemoSeedData } from "@/lib/demo-seed";
 
 // Set of valid plan tiers we'll accept from subscription metadata as a
 // fallback when the price ID isn't recognised (i.e. a custom-priced
@@ -333,10 +334,36 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
   // know the plan tier (otherwise we'd be flipping firms whose plan
   // stayed unchanged but happen to be on trial — keep their demo flag
   // alone).
+  let wasInDemo = false;
   if (plan && sub.status === "active") {
     updates.is_demo = false;
+    // Read the current value so we know whether this is the
+    // demo → paid transition (in which case we should wipe the
+    // sample data after) or just a regular subscription update on
+    // an already-paid firm (no cleanup needed).
+    const { data: pre } = await sb
+      .from("firms")
+      .select("is_demo")
+      .eq("id", firm.id)
+      .maybeSingle();
+    wasInDemo = pre?.is_demo === true;
   }
   await sb.from("firms").update(updates).eq("id", firm.id);
+
+  // After flipping out of demo, nuke the seeded sample clients +
+  // their engagements / items / activity so the customer starts
+  // their paid account from scratch. Best-effort: a cleanup
+  // failure doesn't unwind the activation.
+  if (wasInDemo) {
+    try {
+      await cleanupDemoSeedData(sb, firm.id);
+    } catch (e) {
+      console.error(
+        "[billing/webhook] demo cleanup failed, leaving stale rows in place:",
+        e,
+      );
+    }
+  }
 }
 
 async function handleSubscriptionDeleted(sub: Stripe.Subscription) {
