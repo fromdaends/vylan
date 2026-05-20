@@ -9,6 +9,11 @@
 // function runs in the same context. RLS-bypass is intentional here
 // (no auth.uid at this point — the user hasn't been issued an auth
 // row yet).
+//
+// Companion function `cleanupDemoSeedData` lives at the bottom — used
+// by the billing webhook to wipe the demo data the moment a firm
+// transitions from demo → paid. We match exact seed emails so we
+// never accidentally delete a real client a customer added themselves.
 
 import { type SupabaseClient } from "@supabase/supabase-js";
 
@@ -269,4 +274,47 @@ export async function seedDemoData(
       },
     ]);
   }
+}
+
+// Exact emails the seed inserts. Used by cleanupDemoSeedData to find
+// only the rows we ourselves wrote — never anything the customer may
+// have added on top.
+const DEMO_SEED_EMAILS: readonly string[] = DEMO_CLIENTS.map((c) => c.email);
+
+// Wipe demo seed data from a firm. Called by the billing webhook when
+// a firm transitions out of is_demo (i.e. they just paid for a real
+// subscription) so the customer doesn't start their paid journey with
+// fake Jean-François Bouchard and Boulangerie du Quartier rows
+// cluttering their dashboard.
+//
+// Strategy: delete demo clients by exact email match. Cascades on the
+// FK from engagements -> clients (and request_items / uploaded_files
+// / activity_log -> engagements) handle the rest of the seed in one
+// blow. Anything the customer added themselves while in demo mode
+// would have a different email and stays untouched.
+//
+// Best-effort: errors are logged but don't throw — we'd rather let
+// the customer enter their paid account with stale demo data than
+// fail the subscription activation entirely.
+export async function cleanupDemoSeedData(
+  admin: SupabaseClient,
+  firmId: string,
+): Promise<{ deletedClients: number }> {
+  const { data: deleted, error } = await admin
+    .from("clients")
+    .delete()
+    .eq("firm_id", firmId)
+    .in("email", DEMO_SEED_EMAILS)
+    .select("id");
+  if (error) {
+    console.error("[demo-seed] cleanup failed:", error);
+    return { deletedClients: 0 };
+  }
+  const n = deleted?.length ?? 0;
+  if (n > 0) {
+    console.info(
+      `[demo-seed] wiped ${n} demo client(s) (+ cascading engagements/items/activity) for firm ${firmId}`,
+    );
+  }
+  return { deletedClients: n };
 }
