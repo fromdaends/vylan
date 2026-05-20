@@ -7,6 +7,7 @@ import { getBrandingImageUrl } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { ProfileForm } from "./profile-form";
+import { SubscriptionCard } from "@/components/billing/subscription-card";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,18 @@ export default async function ProfilePage({
         avatarUrl={avatarUrl}
         mfaEnabled={mfaEnabled}
       />
+
+      {/* Subscription summary — owner-only. Subscription belongs here
+          on "your account" rather than under app preferences. */}
+      {user.role === "owner" && (
+        <SubscriptionCard
+          plan={firm.plan}
+          subscriptionStatus={firm.subscription_status}
+          currentPeriodEnd={firm.current_period_end}
+          stripeCustomerId={firm.stripe_customer_id}
+          locale={locale}
+        />
+      )}
     </div>
   );
 }
