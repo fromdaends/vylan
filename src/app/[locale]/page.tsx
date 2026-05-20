@@ -516,39 +516,94 @@ function AiMockCard({
         aria-hidden
       >
         {/* T4 slip skeleton — neutral grey shapes that read as a
-            form layout (header strip, 6 box cells for the labelled
-            amounts in the middle of a T4, two footer rows for the
-            employee info block) without showing any real text. Fills
-            the preview area so the card no longer reads as empty. */}
-        <div className="absolute inset-0 p-4 sm:p-5 flex flex-col gap-3">
-          {/* Header: faux company-info column + a small badge block
-              on the right (where a real slip carries the CRA logo /
-              form-number stamp). */}
+            real Canadian tax slip without showing any actual text.
+            Four bands stacked top to bottom:
+              1. Form header   — title row + small "form-number stamp"
+                                 box on the right (CRA-style).
+              2. Employer/Employee block — two columns, each with a
+                                 small section header + three info
+                                 lines.
+              3. Amount grid   — 2 rows × 3 cols of labelled boxes,
+                                 each with a "box-number marker" + a
+                                 short label, and a value bar whose
+                                 width varies per cell (some filled,
+                                 some empty) so the grid reads as a
+                                 real-world partially-filled slip.
+              4. Footer        — signature underline + a short date
+                                 underline, mimicking the bottom strip
+                                 of an official slip. */}
+        <div className="absolute inset-0 p-4 sm:p-5 flex flex-col gap-2.5">
+          {/* 1. Header */}
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1.5 flex-1">
-              <div className="h-2 w-2/3 rounded-sm bg-foreground/15" />
-              <div className="h-1.5 w-2/5 rounded-sm bg-foreground/10" />
+              <div className="h-2 w-2/5 rounded-sm bg-foreground/25" />
+              <div className="h-1.5 w-3/5 rounded-sm bg-foreground/10" />
             </div>
-            <div className="h-7 w-14 rounded-sm bg-foreground/10" />
+            <div className="flex flex-col items-end gap-1">
+              <div className="h-1 w-10 rounded-sm bg-foreground/15" />
+              <div className="h-7 w-14 rounded-sm border border-foreground/15 bg-foreground/5" />
+            </div>
           </div>
 
-          {/* Labelled amount cells — the visual centerpiece of a T4. */}
-          <div className="mt-1 grid grid-cols-3 gap-2">
-            {Array.from({ length: 6 }).map((_, i) => (
+          <div className="h-px w-full bg-foreground/10" />
+
+          {/* 2. Employer / Employee columns */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <div className="h-1 w-10 rounded-sm bg-foreground/25" />
+              <div className="h-1.5 w-full rounded-sm bg-foreground/10" />
+              <div className="h-1.5 w-4/5 rounded-sm bg-foreground/10" />
+              <div className="h-1.5 w-3/5 rounded-sm bg-foreground/10" />
+            </div>
+            <div className="space-y-1">
+              <div className="h-1 w-10 rounded-sm bg-foreground/25" />
+              <div className="h-1.5 w-full rounded-sm bg-foreground/10" />
+              <div className="h-1.5 w-3/5 rounded-sm bg-foreground/10" />
+              <div className="h-1.5 w-4/5 rounded-sm bg-foreground/10" />
+            </div>
+          </div>
+
+          {/* 3. Amount grid */}
+          <div className="grid grid-cols-3 gap-1.5 mt-0.5">
+            {[
+              { fill: 0.75 },
+              { fill: 0.6 },
+              { fill: 0 },
+              { fill: 0.85 },
+              { fill: 0.5 },
+              { fill: 0 },
+            ].map((cell, i) => (
               <div
                 key={i}
-                className="rounded-sm border border-foreground/10 p-1.5 space-y-1"
+                className="rounded-sm border border-foreground/15 px-1.5 py-1 space-y-1"
               >
-                <div className="h-1 w-1/2 rounded-sm bg-foreground/15" />
-                <div className="h-2 w-3/4 rounded-sm bg-foreground/10" />
+                <div className="flex items-center gap-1">
+                  <div className="h-1.5 w-3 rounded-sm bg-foreground/25" />
+                  <div className="h-1 w-6 rounded-sm bg-foreground/10" />
+                </div>
+                <div
+                  className={
+                    "h-2 rounded-sm " +
+                    (cell.fill > 0
+                      ? "bg-foreground/15"
+                      : "bg-foreground/[0.03]")
+                  }
+                  style={cell.fill > 0 ? { width: `${cell.fill * 100}%` } : { width: "100%" }}
+                />
               </div>
             ))}
           </div>
 
-          {/* Footer: employee info block, two muted rows. */}
-          <div className="mt-auto space-y-1.5">
-            <div className="h-1.5 w-3/4 rounded-sm bg-foreground/10" />
-            <div className="h-1.5 w-1/2 rounded-sm bg-foreground/10" />
+          {/* 4. Footer */}
+          <div className="mt-auto flex items-end justify-between gap-3 pt-0.5">
+            <div className="flex-1 space-y-1">
+              <div className="h-px w-3/4 bg-foreground/25" />
+              <div className="h-1 w-1/3 rounded-sm bg-foreground/10" />
+            </div>
+            <div className="space-y-1">
+              <div className="h-px w-12 bg-foreground/25" />
+              <div className="h-1 w-8 rounded-sm bg-foreground/10" />
+            </div>
           </div>
         </div>
 
