@@ -11,7 +11,8 @@ import { isStripeConfigured } from "@/lib/stripe";
 import { assertLocale } from "@/lib/locale";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { BILLING_ENABLED } from "@/lib/billing-mode";
-import { Phone } from "lucide-react";
+import { Calendar, Mail } from "lucide-react";
+import { BookCallButton } from "@/components/booking/book-call-button";
 
 export const dynamic = "force-dynamic";
 
@@ -53,21 +54,28 @@ export default async function BillingPage({
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-start gap-3">
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-muted-foreground shrink-0">
-                <Phone className="h-5 w-5" />
+                <Calendar className="h-5 w-5" />
               </span>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <h2 className="text-base font-medium">
                   {t("placeholder_heading")}
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   {t("placeholder_body")}
                 </p>
-                <a
-                  href="mailto:hello@relai.app?subject=Pricing%20chat"
-                  className="text-sm font-medium text-primary hover:underline inline-block"
-                >
-                  hello@relai.app
-                </a>
+                <div className="flex flex-wrap items-center gap-3 pt-1">
+                  <BookCallButton
+                    label={t("placeholder_book_cta")}
+                    icon={<Calendar className="h-4 w-4" />}
+                  />
+                  <a
+                    href="mailto:hello@relai.app?subject=Pricing%20chat"
+                    className="text-sm font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
+                  >
+                    <Mail className="h-3.5 w-3.5" />
+                    {t("placeholder_email_link")}
+                  </a>
+                </div>
               </div>
             </div>
           </CardContent>
