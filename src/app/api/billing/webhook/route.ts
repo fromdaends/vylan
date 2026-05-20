@@ -95,20 +95,27 @@ async function findFirmForCustomer(
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Locate the firm row for a subscription event. Tries the customer_id
-// link first (the normal/preferred path). If no firm is linked to that
-// customer yet — which happens for custom-priced subscriptions the
-// founder creates directly in the Stripe Dashboard, since those skip
-// our app's checkout flow that would otherwise establish the link — we
-// fall back to subscription.metadata.firm_id and bootstrap the link
-// right here.
+// Locate the firm row for a subscription event. Tries three paths in
+// priority order, all designed so the founder doesn't have to hand-set
+// metadata every time they do a deal:
 //
-// Security note: the fallback only fires when the firm row currently
+//   1. customer_id link    — the normal/preferred path for any sub that
+//                            went through our app's checkout flow.
+//   2. metadata.firm_id    — explicit override the founder can set on a
+//                            Stripe Dashboard sub; bootstraps the link.
+//   3. customer.email      — falls back to matching the Stripe Customer
+//                            object's email against users.email. Means
+//                            you only need to make sure the email on
+//                            the Stripe Customer matches the email the
+//                            user signed up with in Relai.
+//
+// Security note: paths 2 and 3 only fire when the firm row currently
 // has NO stripe_customer_id set. We never silently re-link a firm that
 // already has a Stripe customer attached — that would let a malicious
-// metadata.firm_id steal the link away from a paying customer. The
-// attack surface for setting metadata stays exactly the same as for
-// metadata.plan: only the Stripe account owner can author it.
+// metadata or email match steal the link from a paying customer. Both
+// fallbacks are also restricted to data the Stripe account owner
+// authored (subscription metadata, customer email on a customer THEY
+// created in their dashboard) — no public flow can spoof either.
 async function resolveAndLinkFirm(
   sub: Stripe.Subscription,
 ): Promise<{ id: string; stripe_customer_id: string | null } | null> {
@@ -116,52 +123,109 @@ async function resolveAndLinkFirm(
     typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
   const byCustomer = await findFirmForCustomer(customerId);
   if (byCustomer) return byCustomer;
-
-  // No firm linked yet. Try metadata.firm_id as the bootstrap.
-  const metaFirmId = sub.metadata?.firm_id;
-  if (typeof metaFirmId !== "string" || !UUID_RE.test(metaFirmId)) {
-    return null;
-  }
-  if (!customerId) {
-    console.warn(
-      "[billing/webhook] metadata.firm_id present but subscription has no customer:",
-      metaFirmId,
-    );
-    return null;
-  }
+  if (!customerId) return null;
 
   const sb = getServiceRoleSupabase();
-  const { data: firm } = await sb
-    .from("firms")
-    .select("id, stripe_customer_id")
-    .eq("id", metaFirmId)
-    .maybeSingle();
-  if (!firm) {
+
+  // Path 2 — metadata.firm_id.
+  const metaFirmId = sub.metadata?.firm_id;
+  if (typeof metaFirmId === "string" && UUID_RE.test(metaFirmId)) {
+    const { data: firm } = await sb
+      .from("firms")
+      .select("id, stripe_customer_id")
+      .eq("id", metaFirmId)
+      .maybeSingle();
+    if (firm) {
+      if (firm.stripe_customer_id && firm.stripe_customer_id !== customerId) {
+        console.warn(
+          "[billing/webhook] metadata.firm_id already linked to a different customer; refusing to re-link",
+          {
+            firm_id: metaFirmId,
+            current: firm.stripe_customer_id,
+            incoming: customerId,
+          },
+        );
+      } else {
+        await sb
+          .from("firms")
+          .update({ stripe_customer_id: customerId })
+          .eq("id", metaFirmId);
+        return { id: firm.id, stripe_customer_id: customerId };
+      }
+    } else {
+      console.warn(
+        "[billing/webhook] metadata.firm_id refers to unknown firm:",
+        metaFirmId,
+      );
+    }
+  }
+
+  // Path 3 — fall back to matching the Stripe Customer's email against
+  // users.email. Fetches the Customer object from Stripe.
+  const s = stripe();
+  if (!s) return null;
+  let customerEmail: string | null = null;
+  try {
+    const cust = await s.customers.retrieve(customerId);
+    if (!cust.deleted) {
+      customerEmail = cust.email ?? null;
+    }
+  } catch (e) {
     console.warn(
-      "[billing/webhook] metadata.firm_id refers to unknown firm:",
-      metaFirmId,
+      "[billing/webhook] couldn't fetch customer for email-fallback:",
+      e,
     );
     return null;
   }
-  if (firm.stripe_customer_id && firm.stripe_customer_id !== customerId) {
+  if (!customerEmail) {
     console.warn(
-      "[billing/webhook] metadata.firm_id already linked to a different customer; refusing to re-link",
+      "[billing/webhook] no email on Stripe customer; can't email-link",
+      { customerId },
+    );
+    return null;
+  }
+
+  // users.email is citext so the match is case-insensitive.
+  const { data: userRow } = await sb
+    .from("users")
+    .select("firm_id, firms!inner(id, stripe_customer_id)")
+    .eq("email", customerEmail)
+    .maybeSingle();
+  type EmailLinkRow = {
+    firm_id: string;
+    firms:
+      | { id: string; stripe_customer_id: string | null }
+      | { id: string; stripe_customer_id: string | null }[]
+      | null;
+  };
+  const row = userRow as EmailLinkRow | null;
+  const firmRow = Array.isArray(row?.firms) ? row?.firms[0] : row?.firms;
+  if (!row?.firm_id || !firmRow) {
+    console.warn(
+      "[billing/webhook] no Relai user found for customer email; can't link",
+      { customerEmail },
+    );
+    return null;
+  }
+  if (
+    firmRow.stripe_customer_id &&
+    firmRow.stripe_customer_id !== customerId
+  ) {
+    console.warn(
+      "[billing/webhook] email-matched firm is already linked to a different customer; refusing to re-link",
       {
-        firm_id: metaFirmId,
-        current: firm.stripe_customer_id,
+        firm_id: row.firm_id,
+        current: firmRow.stripe_customer_id,
         incoming: customerId,
       },
     );
     return null;
   }
-
-  // Bootstrap the link.
   await sb
     .from("firms")
     .update({ stripe_customer_id: customerId })
-    .eq("id", metaFirmId);
-
-  return { id: firm.id, stripe_customer_id: customerId };
+    .eq("id", row.firm_id);
+  return { id: row.firm_id, stripe_customer_id: customerId };
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
@@ -221,22 +285,41 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
     ) {
       plan = metaPlan as PlanId;
     } else {
-      console.warn(
-        "[billing/webhook] custom price with no metadata.plan, plan unchanged:",
-        { priceId, metaPlan },
+      // Custom price with no explicit metadata.plan — default to
+      // cabinet_plus (our "full access" tier). The founder can still
+      // override per-deal by setting metadata.plan to 'cabinet' or
+      // 'solo' when they want a less-than-full tier. Safe because
+      // custom prices can only be authored by the Stripe account owner.
+      plan = "cabinet_plus";
+      console.info(
+        "[billing/webhook] custom price with no metadata.plan, defaulting to cabinet_plus:",
+        { priceId },
       );
     }
   }
 
   const sb = getServiceRoleSupabase();
-  const periodEnd = (sub as Stripe.Subscription & { current_period_end?: number })
-    .current_period_end;
+  // current_period_end moved from sub.current_period_end (deprecated in
+  // newer API versions) to sub.items.data[0].current_period_end. Read
+  // the new location first; fall back to the legacy field.
+  const itemPeriodEnd = (
+    firstItem as Stripe.SubscriptionItem & { current_period_end?: number }
+  )?.current_period_end;
+  const subPeriodEnd = (
+    sub as Stripe.Subscription & { current_period_end?: number }
+  ).current_period_end;
+  const resolvedPeriodEnd =
+    typeof itemPeriodEnd === "number"
+      ? itemPeriodEnd
+      : typeof subPeriodEnd === "number"
+        ? subPeriodEnd
+        : null;
   const updates: Record<string, unknown> = {
     stripe_subscription_id: sub.id,
     subscription_status: sub.status,
     current_period_end:
-      typeof periodEnd === "number"
-        ? new Date(periodEnd * 1000).toISOString()
+      resolvedPeriodEnd != null
+        ? new Date(resolvedPeriodEnd * 1000).toISOString()
         : null,
   };
   if (plan) {
