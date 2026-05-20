@@ -18,6 +18,7 @@ import {
   updateAvatarAction,
   removeAvatarAction,
   updateDisplayNameAction,
+  updateEmailAction,
   changePasswordAction,
   type ProfileActionResult,
 } from "@/app/actions/profile";
@@ -238,7 +239,10 @@ function DisplayNameSection({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Email (read-only)
+// Email — current email shown read-only, "Change email" button opens a
+// modal. Submission triggers a Supabase-sent confirmation email to the
+// NEW address; users.email is reconciled by getCurrentUser the next
+// time the page loads after they click the confirmation link.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function EmailSection({
@@ -248,16 +252,134 @@ function EmailSection({
   email: string;
   t: (k: string) => string;
 }) {
+  const [open, setOpen] = useState(false);
   return (
     <section>
       <h2 className="text-sm font-semibold">{t("section_email")}</h2>
       <p className="text-xs text-muted-foreground mt-1">
         {t("section_email_hint")}
       </p>
-      <div className="mt-4 max-w-sm">
-        <Input value={email} disabled readOnly />
+      <div className="mt-4 max-w-sm flex items-center gap-2">
+        <Input value={email} disabled readOnly className="flex-1" />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+        >
+          {t("change_email")}
+        </Button>
       </div>
+      <EmailChangeDialog
+        open={open}
+        currentEmail={email}
+        onClose={() => setOpen(false)}
+      />
     </section>
+  );
+}
+
+function EmailChangeDialog({
+  open,
+  currentEmail,
+  onClose,
+}: {
+  open: boolean;
+  currentEmail: string;
+  onClose: () => void;
+}) {
+  // Use the typed next-intl hook directly so the success message can
+  // interpolate the {email} placeholder. The parent's `t` is narrowed
+  // to (k: string) => string for the simple-label case, which doesn't
+  // accept variables.
+  const t = useTranslations("Profile");
+  const tc = useTranslations("Common");
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+
+  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    const fd = new FormData(e.currentTarget);
+    const newEmail = String(fd.get("new_email") ?? "").trim();
+    startTransition(async () => {
+      const res = await updateEmailAction(fd);
+      if (!res.ok) {
+        setError(t(`errors.${res.error}`) || tc("loading"));
+        return;
+      }
+      setPendingEmail(newEmail);
+    });
+  }
+
+  function handleClose() {
+    setError(null);
+    setPendingEmail(null);
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("email_modal_title")}</DialogTitle>
+          <DialogDescription>{t("email_modal_subtitle")}</DialogDescription>
+        </DialogHeader>
+        {pendingEmail ? (
+          <div className="space-y-3">
+            <p className="text-sm">
+              {t("email_check_inbox", { email: pendingEmail })}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t("email_check_inbox_hint")}
+            </p>
+            <DialogFooter>
+              <Button type="button" onClick={handleClose}>
+                {tc("close")}
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="current_email">{t("section_email")}</Label>
+              <Input
+                id="current_email"
+                value={currentEmail}
+                disabled
+                readOnly
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new_email">{t("new_email")}</Label>
+              <Input
+                id="new_email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                placeholder="name@example.com"
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleClose}
+                disabled={pending}
+              >
+                {tc("cancel")}
+              </Button>
+              <Button type="submit" disabled={pending}>
+                {pending ? tc("saving") : t("submit_email")}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 

@@ -18,7 +18,9 @@ export type ProfileActionResult =
         | "missing_password"
         | "wrong_password"
         | "weak_password"
-        | "upload_failed";
+        | "upload_failed"
+        | "email_taken"
+        | "same_email";
     };
 
 const DisplayNameSchema = z.object({
@@ -27,6 +29,10 @@ const DisplayNameSchema = z.object({
 
 const LocaleSchema = z.object({
   locale: z.enum(["fr", "en"]),
+});
+
+const EmailSchema = z.object({
+  email: z.string().email().max(254),
 });
 
 const PasswordSchema = z.object({
@@ -76,6 +82,50 @@ export async function updateLocaleAction(
   } catch {
     return { ok: false, error: "save_failed" };
   }
+  revalidatePath("/profile", "layout");
+  return { ok: true };
+}
+
+// Email change goes through Supabase auth so the user gets the
+// standard "Confirm your new email" link sent to the new address.
+// Their auth.users.email only flips once they click that link;
+// our users.email is reconciled by getCurrentUser the next time
+// they hit the app post-confirmation. Until then, both rows still
+// reflect the old email and the customer keeps logging in with it.
+export async function updateEmailAction(
+  formData: FormData,
+): Promise<ProfileActionResult> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: "unauth" };
+
+  const raw = formData.get("email");
+  const parsed = EmailSchema.safeParse({
+    email: typeof raw === "string" ? raw.trim().toLowerCase() : "",
+  });
+  if (!parsed.success) return { ok: false, error: "invalid" };
+  if (parsed.data.email === user.email?.toLowerCase()) {
+    return { ok: false, error: "same_email" };
+  }
+
+  const supabase = await getServerSupabase();
+  const { error } = await supabase.auth.updateUser({ email: parsed.data.email });
+  if (error) {
+    // Supabase returns this for emails already on another account.
+    const msg = error.message?.toLowerCase() ?? "";
+    if (
+      msg.includes("already") ||
+      msg.includes("taken") ||
+      msg.includes("registered")
+    ) {
+      return { ok: false, error: "email_taken" };
+    }
+    console.error("[updateEmailAction] auth.updateUser failed:", error);
+    return { ok: false, error: "save_failed" };
+  }
+  // Don't touch users.email yet — that gets reconciled in
+  // getCurrentUser after the user confirms via the email link.
+  // revalidating /profile keeps the displayed email accurate on the
+  // next render (still the old one, until confirmed).
   revalidatePath("/profile", "layout");
   return { ok: true };
 }

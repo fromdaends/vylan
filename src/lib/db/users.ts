@@ -27,7 +27,30 @@ export const getCurrentUser = cache(async function _getCurrentUser(): Promise<Ap
     .select("*")
     .eq("id", data.user.id)
     .maybeSingle();
-  return (row as AppUser) ?? null;
+  if (!row) return null;
+
+  // Reconcile users.email with auth.users.email when they drift apart.
+  // Happens after a customer confirms a "change my email" link from
+  // Supabase: auth.users gets the new email, our row still has the
+  // old one. Sync once on the first request post-confirmation. Best-
+  // effort: a failure here just leaves the row at the old value until
+  // the next request retries (login still works either way since auth
+  // is the source of truth for sign-in).
+  const authEmail = data.user.email ?? null;
+  if (
+    typeof authEmail === "string" &&
+    authEmail.toLowerCase() !== ((row as AppUser).email ?? "").toLowerCase()
+  ) {
+    const { data: synced } = await supabase
+      .from("users")
+      .update({ email: authEmail })
+      .eq("id", data.user.id)
+      .select("*")
+      .maybeSingle();
+    if (synced) return synced as AppUser;
+  }
+
+  return row as AppUser;
 });
 
 export type UserProfilePatch = {
