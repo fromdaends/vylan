@@ -2,7 +2,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
-import { planForPriceId } from "@/lib/plans";
+import { planForPriceId, type PlanId } from "@/lib/plans";
+
+// Set of valid plan tiers we'll accept from subscription metadata as a
+// fallback when the price ID isn't recognised (i.e. a custom-priced
+// subscription created in the Stripe Dashboard for a private deal).
+// 'trial' is excluded — paying through a custom price can't downgrade
+// anyone back to trial; cancellations route through the deleted handler.
+const ALLOWED_FALLBACK_PLANS: ReadonlySet<PlanId> = new Set([
+  "solo",
+  "cabinet",
+  "cabinet_plus",
+]);
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,12 +126,33 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
   }
 
   // Derive plan from the price ID on the first subscription item — NEVER
-  // from metadata. Metadata can be edited by the user (or by us in error)
-  // and trusting it would let an attacker self-upgrade for free.
+  // from metadata when the price IS one of our published plans. Metadata
+  // is mutable; trusting it for a known-price subscription would let a
+  // self-checkout attacker upgrade themselves for free.
+  //
+  // For UNKNOWN price IDs (i.e. custom-priced subscriptions the founder
+  // created in the Stripe Dashboard for private deals), we DO consult
+  // subscription metadata.plan as a fallback. The attack surface stays
+  // the same because custom prices can only be authored by the Stripe
+  // account owner — no public flow ever creates one.
   const firstItem = sub.items.data[0];
   const priceId =
     typeof firstItem?.price?.id === "string" ? firstItem.price.id : null;
-  const plan = priceId ? planForPriceId(priceId) : null;
+  let plan: PlanId | null = priceId ? planForPriceId(priceId) : null;
+  if (!plan && priceId) {
+    const metaPlan = sub.metadata?.plan;
+    if (
+      typeof metaPlan === "string" &&
+      ALLOWED_FALLBACK_PLANS.has(metaPlan as PlanId)
+    ) {
+      plan = metaPlan as PlanId;
+    } else {
+      console.warn(
+        "[billing/webhook] custom price with no metadata.plan, plan unchanged:",
+        { priceId, metaPlan },
+      );
+    }
+  }
 
   const sb = getServiceRoleSupabase();
   const periodEnd = (sub as Stripe.Subscription & { current_period_end?: number })
@@ -135,11 +167,6 @@ async function handleSubscriptionUpdated(sub: Stripe.Subscription) {
   };
   if (plan) {
     updates.plan = plan;
-  } else if (priceId) {
-    console.warn(
-      "[billing/webhook] unknown price_id, plan unchanged:",
-      priceId,
-    );
   }
   await sb.from("firms").update(updates).eq("id", firm.id);
 }
