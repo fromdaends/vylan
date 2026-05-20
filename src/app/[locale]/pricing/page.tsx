@@ -1,11 +1,12 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
-import { Sparkles, Mail } from "lucide-react";
+import { Sparkles, Mail, Calendar } from "lucide-react";
 import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
 import { BILLING_ENABLED } from "@/lib/billing-mode";
 import { PaidPricingSection } from "./paid-pricing";
+import { BookCallCard } from "./book-call-card";
 
 // While BILLING_ENABLED is false we replace the fixed-plan grid with
 // a "talk to us" pitch — first clients get custom pricing through a
@@ -44,21 +45,12 @@ export default async function PricingPage({
           </p>
 
           <div className="mt-10 grid gap-4 sm:grid-cols-2 max-w-2xl mx-auto">
-            <a
-              href="mailto:hello@relai.app?subject=Pricing%20chat"
-              className="group rounded-2xl border border-border bg-card p-6 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-            >
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-                <Mail className="h-5 w-5" />
-              </span>
-              <h3 className="mt-3 font-medium">{t("talk_email_heading")}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {t("talk_email_body")}
-              </p>
-              <span className="mt-3 inline-block text-sm font-medium text-primary group-hover:underline">
-                hello@relai.app
-              </span>
-            </a>
+            <BookCallCard
+              icon={<Calendar className="h-5 w-5" />}
+              heading={t("talk_call_heading")}
+              body={t("talk_call_body")}
+              cta={t("talk_call_cta")}
+            />
 
             <Link
               href="/signup"
@@ -77,7 +69,18 @@ export default async function PricingPage({
             </Link>
           </div>
 
-          <p className="mt-12 text-center text-xs text-muted-foreground max-w-xl mx-auto">
+          <p className="mt-8 text-center text-sm text-muted-foreground">
+            {t("talk_or_email")}{" "}
+            <a
+              href="mailto:hello@relai.app?subject=Pricing%20chat"
+              className="font-medium text-primary hover:underline"
+            >
+              <Mail className="inline h-3.5 w-3.5 mr-1 -mt-0.5" aria-hidden />
+              hello@relai.app
+            </a>
+          </p>
+
+          <p className="mt-8 text-center text-xs text-muted-foreground max-w-xl mx-auto">
             {t("talk_footnote")}
           </p>
         </section>

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.95.2",
+    "@calcom/embed-react": "1.5.3",
     "@supabase/ssr": "0.10.3",
     "@supabase/supabase-js": "2.105.4",
     "@types/archiver": "7.0.0",

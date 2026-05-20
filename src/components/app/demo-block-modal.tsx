@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Sparkles, Lock } from "lucide-react";
+import { BookCallButton } from "@/components/booking/book-call-button";
 
 // Renders a button (same chrome as the real action's button) that
 // opens a "demo mode — talk to us" dialog instead of firing the
@@ -72,12 +73,10 @@ export function DemoBlockButton({
             </div>
           </div>
           <DialogFooter className="gap-2">
-            <a
-              href="mailto:hello@relai.app?subject=Pricing%20chat"
-              className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-secondary/30 transition-colors"
-            >
-              {t("block_cta_talk")}
-            </a>
+            <BookCallButton
+              label={t("block_cta_book")}
+              variant="outline"
+            />
             <a
               href="mailto:hello@relai.app?subject=Ready%20to%20subscribe"
               className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
