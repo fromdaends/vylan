@@ -512,42 +512,72 @@ function AiMockCard({
         </span>
       </div>
       <div
-        className="mt-4 rounded-lg border border-border/60 bg-muted/40 aspect-[4/3] flex items-center justify-center"
+        className="relative mt-4 rounded-lg border border-border/60 bg-muted/40 aspect-[4/3] overflow-hidden"
         aria-hidden
       >
-        <div className="relative">
-          <FileCheck
-            className="h-10 w-10 text-muted-foreground/30"
-            aria-hidden
-          />
-          {/* Status badge overlapping the bottom-right of the file
-              icon. Green check for success, red X for warning —
-              same size, same offset, same ring, only the symbol
-              and the colour token change. */}
-          {isSuccess ? (
-            <span
-              className={
-                "absolute -bottom-1.5 -right-1.5 inline-flex h-6 w-6 " +
-                "items-center justify-center rounded-full bg-success " +
-                "text-success-foreground ring-2 ring-card shadow-sm"
-              }
-              aria-hidden
-            >
-              <Check className="h-3.5 w-3.5" aria-hidden />
-            </span>
-          ) : (
-            <span
-              className={
-                "absolute -bottom-1.5 -right-1.5 inline-flex h-6 w-6 " +
-                "items-center justify-center rounded-full bg-destructive " +
-                "text-destructive-foreground ring-2 ring-card shadow-sm"
-              }
-              aria-hidden
-            >
-              <X className="h-3.5 w-3.5" aria-hidden />
-            </span>
-          )}
+        {/* T4 slip skeleton — neutral grey shapes that read as a
+            form layout (header strip, 6 box cells for the labelled
+            amounts in the middle of a T4, two footer rows for the
+            employee info block) without showing any real text. Fills
+            the preview area so the card no longer reads as empty. */}
+        <div className="absolute inset-0 p-4 sm:p-5 flex flex-col gap-3">
+          {/* Header: faux company-info column + a small badge block
+              on the right (where a real slip carries the CRA logo /
+              form-number stamp). */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="space-y-1.5 flex-1">
+              <div className="h-2 w-2/3 rounded-sm bg-foreground/15" />
+              <div className="h-1.5 w-2/5 rounded-sm bg-foreground/10" />
+            </div>
+            <div className="h-7 w-14 rounded-sm bg-foreground/10" />
+          </div>
+
+          {/* Labelled amount cells — the visual centerpiece of a T4. */}
+          <div className="mt-1 grid grid-cols-3 gap-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="rounded-sm border border-foreground/10 p-1.5 space-y-1"
+              >
+                <div className="h-1 w-1/2 rounded-sm bg-foreground/15" />
+                <div className="h-2 w-3/4 rounded-sm bg-foreground/10" />
+              </div>
+            ))}
+          </div>
+
+          {/* Footer: employee info block, two muted rows. */}
+          <div className="mt-auto space-y-1.5">
+            <div className="h-1.5 w-3/4 rounded-sm bg-foreground/10" />
+            <div className="h-1.5 w-1/2 rounded-sm bg-foreground/10" />
+          </div>
         </div>
+
+        {/* Status badge — pinned to the top-right corner of the
+            preview itself (was previously docked to the centered
+            file icon). Same colour/sizing tokens as before. */}
+        {isSuccess ? (
+          <span
+            className={
+              "absolute top-3 right-3 inline-flex h-7 w-7 " +
+              "items-center justify-center rounded-full bg-success " +
+              "text-success-foreground ring-2 ring-card shadow-sm"
+            }
+            aria-hidden
+          >
+            <Check className="h-4 w-4" aria-hidden />
+          </span>
+        ) : (
+          <span
+            className={
+              "absolute top-3 right-3 inline-flex h-7 w-7 " +
+              "items-center justify-center rounded-full bg-destructive " +
+              "text-destructive-foreground ring-2 ring-card shadow-sm"
+            }
+            aria-hidden
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </span>
+        )}
       </div>
       <div
         className={
