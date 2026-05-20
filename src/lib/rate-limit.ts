@@ -43,6 +43,12 @@ export const PORTAL_STATUS_PER_TOKEN: LimitSpec = { limit: 600, window: "1 h" };
 // AI / cost-bound endpoints.
 export const AI_CLASSIFY_PER_FIRM_DAILY: LimitSpec = { limit: 500, window: "1 d" };
 
+// In-app help assistant ("Ask Relai") — costed per-user. Enough for a
+// real support session (long back-and-forth = many turns) but tight
+// enough that an abusive client can't drain spend in one sitting.
+export const ASSISTANT_PER_USER: LimitSpec = { limit: 40, window: "1 h" };
+export const ASSISTANT_PER_FIRM_DAILY: LimitSpec = { limit: 400, window: "1 d" };
+
 // Firm-wide data export — generates a multi-MB ZIP of every client's
 // files. Keep this tight so a stolen session can't drain the firm's
 // data on a loop.
