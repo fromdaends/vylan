@@ -49,10 +49,10 @@ export function PublicNav() {
   }
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex flex-col items-center px-3 sm:px-6 pt-5 sm:pt-7 pointer-events-none">
+    <header className="fixed top-0 left-0 right-0 z-50 flex flex-col items-center px-3 sm:px-6 pt-3 sm:pt-7 pointer-events-none">
       {/* The pill itself */}
       <div className={"pointer-events-auto w-full max-w-5xl " + PILL_CLASSES}>
-        <div className="flex items-center justify-between gap-3 pl-3 pr-2 sm:pl-4 sm:pr-3 h-16">
+        <div className="flex items-center justify-between gap-2 sm:gap-3 pl-3 pr-2 sm:pl-4 sm:pr-3 h-14 sm:h-16">
           {/* Logo only — wordmark removed per design direction.
               Responsive size: 40px on mobile, 48px from md up. */}
           <Link
@@ -61,8 +61,15 @@ export function PublicNav() {
             aria-label={brand.name}
             onClick={closeMobile}
           >
-            <Logo size={40} priority className="md:hidden" />
-            <Logo size={48} priority className="hidden md:inline-flex" />
+            {/* Wrappers carry the responsive visibility — Tailwind's
+                `hidden` would otherwise lose to the `inline-flex` that
+                Logo applies to its own inner span. */}
+            <span className="md:hidden inline-flex">
+              <Logo size={36} priority />
+            </span>
+            <span className="hidden md:inline-flex">
+              <Logo size={48} priority />
+            </span>
           </Link>
 
           {/* Right cluster — no middle nav links; logo flushes left,
