@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import { brand } from "@/lib/brand";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 import { logoutAction } from "@/app/actions/auth";
 import { Logo } from "@/components/brand/logo";
 import {
@@ -16,16 +17,17 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
-  LayoutDashboard,
-  Users,
+  Building2,
+  ChevronUp,
   FileText,
-  Settings,
-  Menu,
-  X,
-  LogOut,
-  ChevronDown,
-  UserCircle,
   HelpCircle,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Settings,
+  UserCircle,
+  Users,
+  X,
 } from "lucide-react";
 
 type Labels = {
@@ -33,10 +35,20 @@ type Labels = {
   clients: string;
   templates: string;
   settings: string;
+  firm: string;
   logout: string;
   profile: string;
   yourFirm: string;
   help: string;
+  sectionMain: string;
+  sectionAccount: string;
+  toggleMenu: string;
+};
+
+type NavItemDef = {
+  href: string;
+  label: string;
+  icon: typeof Users;
 };
 
 export function AppShell({
@@ -51,10 +63,9 @@ export function AppShell({
   labels,
 }: {
   children: React.ReactNode;
-  // Optional strip rendered flush with the top of the viewport, above
-  // the sticky logo+nav row and part of the same sticky group. Used
-  // for the demo banner so it stays pinned with the nav as the user
-  // scrolls.
+  // Optional strip rendered above the main content area. The demo
+  // banner uses this so it pins to the top of the workspace (under
+  // the slim mobile header / next to the sidebar on desktop).
   topBar?: React.ReactNode;
   firmName: string;
   brandColor: string;
@@ -67,247 +78,372 @@ export function AppShell({
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const nav: { href: string; label: string; icon: typeof Users }[] = [
+  // Close mobile drawer on route change. We compare against a ref so
+  // we only setState when the path *actually* moved — not on the
+  // mount tick or on re-renders that happen for other reasons.
+  const lastPathRef = useRef(pathname);
+  useEffect(() => {
+    if (lastPathRef.current !== pathname) {
+      lastPathRef.current = pathname;
+      setMobileOpen(false);
+    }
+  }, [pathname]);
+
+  // Body scroll lock when the mobile drawer is open.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
+  const primaryNav: NavItemDef[] = [
     { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
-    // Billing was here. It's now reached through Settings (see
-    // /settings page's Billing link card) so the top nav stays tight
-    // — Dashboard / Clients / Templates only.
   ];
 
-  function isActive(href: string) {
-    if (href === "/dashboard") return pathname === "/dashboard";
-    return pathname.startsWith(href);
-  }
+  const accountNav: NavItemDef[] = [
+    { href: "/firm", label: labels.firm, icon: Building2 },
+    { href: "/settings", label: labels.settings, icon: Settings },
+  ];
 
   return (
-    <div className="flex-1 flex flex-col min-h-screen">
-      <header className="sticky top-0 z-30 border-b border-border/60 backdrop-blur-md bg-background/80">
-        {topBar}
-        <div className="mx-auto max-w-7xl flex items-center justify-between px-4 sm:px-6 py-3">
-          <div className="flex items-center gap-3">
+    <div className="flex min-h-screen">
+      {/* Desktop sidebar — always visible on sm+ */}
+      <aside
+        className="hidden sm:flex sm:flex-col sm:w-64 sm:fixed sm:inset-y-0 sm:left-0 sm:border-r sm:border-border/40 sm:bg-card/50 sm:backdrop-blur-sm sm:z-30"
+        aria-label="Primary navigation"
+      >
+        <SidebarBody
+          primaryNav={primaryNav}
+          accountNav={accountNav}
+          labels={labels}
+          firmName={firmName}
+          firmLogoUrl={firmLogoUrl}
+          brandColor={brandColor}
+          userDisplayName={userDisplayName}
+          userEmail={userEmail}
+          userAvatarUrl={userAvatarUrl}
+        />
+      </aside>
+
+      {/* Mobile drawer */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            <motion.div
+              key="overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="sm:hidden fixed inset-0 bg-black/50 backdrop-blur-[2px] z-40"
+              onClick={() => setMobileOpen(false)}
+              aria-hidden
+            />
+            <motion.aside
+              key="drawer"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 350, damping: 35 }}
+              className="sm:hidden fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-background border-r border-border/40 z-50 flex flex-col shadow-2xl"
+              aria-label="Primary navigation"
+            >
+              <SidebarBody
+                primaryNav={primaryNav}
+                accountNav={accountNav}
+                labels={labels}
+                firmName={firmName}
+                firmLogoUrl={firmLogoUrl}
+                brandColor={brandColor}
+                userDisplayName={userDisplayName}
+                userEmail={userEmail}
+                userAvatarUrl={userAvatarUrl}
+                onItemClick={() => setMobileOpen(false)}
+                showClose
+                onClose={() => setMobileOpen(false)}
+              />
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Main content — offset by sidebar width on desktop */}
+      <div className="flex-1 flex flex-col min-h-screen sm:ml-64">
+        {/* Sticky top group: optional banner + (on mobile only) the
+            slim header with hamburger. */}
+        <div className="sticky top-0 z-20">
+          {topBar}
+          <div className="sm:hidden flex items-center gap-3 border-b border-border/40 bg-background/80 backdrop-blur-md px-4 py-3">
             <button
               type="button"
-              onClick={() => setMobileOpen((v) => !v)}
-              className="sm:hidden inline-flex h-9 w-9 items-center justify-center rounded-md border border-border bg-card text-muted-foreground hover:text-foreground active:scale-95 transition-all"
-              aria-label="Toggle navigation"
+              onClick={() => setMobileOpen(true)}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-card text-muted-foreground hover:text-foreground active:scale-95 transition-all"
+              aria-label={labels.toggleMenu}
             >
-              {mobileOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              <Menu className="size-4" aria-hidden />
             </button>
             <Link
               href="/dashboard"
-              className="flex items-center gap-2.5 font-semibold tracking-tight text-base group"
+              className="flex items-center gap-2 font-semibold tracking-tight text-base"
             >
-              <Logo
-                size={36}
-                priority
-                className="transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
-              />
-              <span className="hidden sm:inline">{brand.name}</span>
+              <Logo size={26} priority />
+              <span>{brand.name}</span>
             </Link>
-          </div>
-
-          <nav className="hidden sm:flex items-center gap-1">
-            {nav.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(item.href);
-              return (
-                <Link key={item.href} href={item.href}>
-                  <span
-                    className={
-                      "inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors " +
-                      (active
-                        ? "bg-secondary text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/60")
-                    }
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </span>
-                </Link>
-              );
-            })}
-          </nav>
-
-          <div className="flex items-center gap-2">
-            {/* Theme toggle moved to /settings — there's only one preferences
-                surface now, and it lives under Settings in this dropdown. */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex items-center gap-2 rounded-md pl-1 pr-2 py-1 transition-colors hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-                  aria-label={userDisplayName}
-                >
-                  <AvatarInitials
-                    src={userAvatarUrl}
-                    name={userDisplayName}
-                    size={28}
-                    color={brandColor}
-                  />
-                  <span className="hidden md:inline text-sm text-muted-foreground max-w-[140px] truncate">
-                    {userDisplayName}
-                  </span>
-                  <ChevronDown className="hidden md:inline h-3.5 w-3.5 text-muted-foreground" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="font-medium truncate">{userDisplayName}</div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {userEmail}
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link
-                    href="/profile"
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <UserCircle className="h-4 w-4" />
-                    {labels.profile}
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link
-                    href="/settings"
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <Settings className="h-4 w-4" />
-                    {labels.settings}
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="flex items-center gap-2 cursor-pointer"
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    // The help sidebar listens for this event (registered in
-                    // HelpSidebar). Keeps the menu item triggering the same
-                    // sheet without lifting state to a shared context.
-                    window.dispatchEvent(new CustomEvent("vylan:open-help"));
-                  }}
-                >
-                  <HelpCircle className="h-4 w-4" />
-                  {labels.help}
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {/* Firm context tile. Doubles as the entry point to /firm
-                    so the firm logo + name in this tile IS the "firm
-                    settings" link. The standalone "Firm" menu item (briefly
-                    added above) is gone; this tile carries the navigation. */}
-                <DropdownMenuLabel className="font-normal text-[11px] uppercase tracking-wider text-muted-foreground pb-1">
-                  {labels.yourFirm}
-                </DropdownMenuLabel>
-                <DropdownMenuItem asChild>
-                  <Link
-                    href="/firm"
-                    className="flex items-center gap-2 cursor-pointer"
-                  >
-                    <AvatarInitials
-                      src={firmLogoUrl}
-                      name={firmName}
-                      size={24}
-                      color={brandColor}
-                    />
-                    <span className="text-xs truncate">{firmName}</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <form action={logoutAction}>
-                  <DropdownMenuItem asChild>
-                    <button
-                      type="submit"
-                      className="w-full flex items-center gap-2 text-destructive focus:text-destructive cursor-pointer"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      {labels.logout}
-                    </button>
-                  </DropdownMenuItem>
-                </form>
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         </div>
 
-        {mobileOpen && (
-          <nav className="sm:hidden border-t border-border/60 px-4 py-3 animate-in-fade">
-            <div className="flex flex-col gap-1">
-              {nav.map((item) => {
-                const Icon = item.icon;
-                const active = isActive(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileOpen(false)}
-                  >
-                    <span
-                      className={
-                        "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors " +
-                        (active
-                          ? "bg-secondary text-foreground"
-                          : "text-muted-foreground hover:text-foreground hover:bg-secondary/60")
-                      }
-                    >
-                      <Icon className="h-4 w-4" />
-                      {item.label}
-                    </span>
-                  </Link>
-                );
-              })}
-              <div className="border-t border-border/60 my-2" />
+        <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-8 py-8 animate-in-fade">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sidebar body (shared between desktop + mobile drawer)
+// ---------------------------------------------------------------------------
+
+function SidebarBody({
+  primaryNav,
+  accountNav,
+  labels,
+  firmName,
+  firmLogoUrl,
+  brandColor,
+  userDisplayName,
+  userEmail,
+  userAvatarUrl,
+  onItemClick,
+  showClose,
+  onClose,
+}: {
+  primaryNav: NavItemDef[];
+  accountNav: NavItemDef[];
+  labels: Labels;
+  firmName: string;
+  firmLogoUrl: string | null;
+  brandColor: string;
+  userDisplayName: string;
+  userEmail: string;
+  userAvatarUrl: string | null;
+  onItemClick?: () => void;
+  showClose?: boolean;
+  onClose?: () => void;
+}) {
+  return (
+    <div className="flex flex-col h-full min-h-0">
+      {/* Brand */}
+      <div className="flex items-center justify-between gap-2 px-5 pt-5 pb-4">
+        <Link
+          href="/dashboard"
+          onClick={onItemClick}
+          className="flex items-center gap-2.5 font-semibold tracking-tight text-base group"
+        >
+          <Logo
+            size={32}
+            priority
+            className="transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3"
+          />
+          <span>{brand.name}</span>
+        </Link>
+        {showClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+            aria-label={labels.toggleMenu}
+          >
+            <X className="size-4" aria-hidden />
+          </button>
+        )}
+      </div>
+
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto px-3 pb-4 space-y-5">
+        <NavSection label={labels.sectionMain}>
+          {primaryNav.map((item) => (
+            <NavLink
+              key={item.href}
+              href={item.href}
+              icon={item.icon}
+              label={item.label}
+              onClick={onItemClick}
+            />
+          ))}
+        </NavSection>
+        <NavSection label={labels.sectionAccount}>
+          {accountNav.map((item) => (
+            <NavLink
+              key={item.href}
+              href={item.href}
+              icon={item.icon}
+              label={item.label}
+              onClick={onItemClick}
+            />
+          ))}
+        </NavSection>
+      </nav>
+
+      {/* Profile card at bottom — opens dropdown with Profile / Help /
+          Logout. Settings + Firm already live in the nav above. */}
+      <div className="border-t border-border/40 p-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="group flex w-full items-center gap-3 rounded-xl px-2 py-2 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+              aria-label={userDisplayName}
+            >
+              <AvatarInitials
+                src={userAvatarUrl}
+                name={userDisplayName}
+                size={36}
+                color={brandColor}
+              />
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-sm font-medium leading-tight truncate">
+                  {userDisplayName}
+                </div>
+                <div className="text-xs text-muted-foreground leading-tight truncate mt-0.5">
+                  {userEmail}
+                </div>
+              </div>
+              <ChevronUp
+                className="size-3.5 text-muted-foreground/70 group-hover:text-foreground transition-colors shrink-0"
+                aria-hidden
+              />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            side="top"
+            sideOffset={8}
+            className="w-60"
+          >
+            <DropdownMenuLabel className="font-normal">
+              <div className="font-medium truncate">{userDisplayName}</div>
+              <div className="text-xs text-muted-foreground truncate">
+                {userEmail}
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
               <Link
                 href="/profile"
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                onClick={onItemClick}
+                className="flex items-center gap-2 cursor-pointer"
               >
                 <UserCircle className="h-4 w-4" />
                 {labels.profile}
               </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="flex items-center gap-2 cursor-pointer"
+              onSelect={(e) => {
+                e.preventDefault();
+                // The help sidebar listens for this event so we open
+                // the Ask Vylan sheet without lifting state.
+                window.dispatchEvent(new CustomEvent("vylan:open-help"));
+                onItemClick?.();
+              }}
+            >
+              <HelpCircle className="h-4 w-4" />
+              {labels.help}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="font-normal text-[11px] uppercase tracking-wider text-muted-foreground pb-1">
+              {labels.yourFirm}
+            </DropdownMenuLabel>
+            <DropdownMenuItem asChild>
               <Link
-                href="/settings"
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary/60"
+                href="/firm"
+                onClick={onItemClick}
+                className="flex items-center gap-2 cursor-pointer"
               >
-                <Settings className="h-4 w-4" />
-                {labels.settings}
-              </Link>
-              <form action={logoutAction}>
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="sm"
-                  className="w-full justify-start gap-2 text-destructive hover:text-destructive"
-                >
-                  <LogOut className="h-4 w-4" />
-                  {labels.logout}
-                </Button>
-              </form>
-              <div className="flex items-center gap-2.5 px-3 py-2 text-sm">
                 <AvatarInitials
-                  src={userAvatarUrl}
-                  name={userDisplayName}
+                  src={firmLogoUrl}
+                  name={firmName}
                   size={24}
                   color={brandColor}
                 />
-                <div className="min-w-0">
-                  <div className="font-medium text-foreground truncate">
-                    {userDisplayName}
-                  </div>
-                  <div className="text-xs text-muted-foreground truncate">
-                    {firmName}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </nav>
-        )}
-      </header>
-
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-6 py-8 animate-in-fade">
-        {children}
-      </main>
+                <span className="text-xs truncate">{firmName}</span>
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <form action={logoutAction}>
+              <DropdownMenuItem asChild>
+                <button
+                  type="submit"
+                  className="w-full flex items-center gap-2 text-destructive focus:text-destructive cursor-pointer"
+                >
+                  <LogOut className="h-4 w-4" />
+                  {labels.logout}
+                </button>
+              </DropdownMenuItem>
+            </form>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
+  );
+}
+
+function NavSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/70 font-semibold px-3 pb-1.5">
+        {label}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function NavLink({
+  href,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  href: string;
+  icon: typeof Users;
+  label: string;
+  onClick?: () => void;
+}) {
+  const pathname = usePathname();
+  const active =
+    href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+  return (
+    <Link href={href} onClick={onClick}>
+      <span
+        className={cn(
+          "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+          active
+            ? "bg-secondary text-foreground"
+            : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
+        )}
+      >
+        <Icon
+          className={cn(
+            "size-4 shrink-0",
+            active ? "text-foreground" : "text-muted-foreground",
+          )}
+          aria-hidden
+        />
+        <span className="truncate">{label}</span>
+      </span>
+    </Link>
   );
 }

@@ -77,12 +77,16 @@ export default async function AppLayout({
         clients: t("nav_clients"),
         templates: t("nav_templates"),
         // `nav_billing` translation key kept for the Settings page's
-        // billing link card; no longer needed in the top-nav labels.
+        // billing link card; no longer needed in the sidebar labels.
         settings: t("nav_settings"),
+        firm: t("nav_firm"),
+        sectionMain: t("nav_section_main"),
+        sectionAccount: t("nav_section_account"),
+        toggleMenu: t("toggle_menu"),
         logout: tAuth("logout"),
         profile: tProfile("menu_profile"),
-        // The "Your firm" tile in the dropdown — replaces the old brand-name
-        // label and now doubles as the link to /firm settings.
+        // The "Your firm" tile inside the profile dropdown — labels
+        // the firm-context group at the bottom of the menu.
         yourFirm: tProfile("your_firm_label"),
         help: tProfile("menu_help"),
       }}
