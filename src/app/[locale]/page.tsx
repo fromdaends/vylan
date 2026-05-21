@@ -137,34 +137,37 @@ export default async function Home({
           </div>
         </ParallaxLayer>
 
-        <div className="mx-auto max-w-4xl px-6 pt-28 sm:pt-36 pb-24 sm:pb-32 text-center animate-in-up">
-          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 backdrop-blur px-4 py-1.5 text-xs font-medium mb-8">
-            <Sparkles className="h-3.5 w-3.5 text-accent" />
-            <span className="text-foreground">
+        <div className="mx-auto max-w-4xl px-5 sm:px-6 pt-24 sm:pt-32 md:pt-36 pb-14 sm:pb-24 md:pb-32 text-center animate-in-up">
+          <div className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full border border-border bg-card/80 backdrop-blur px-3 sm:px-4 py-1 sm:py-1.5 text-[11px] sm:text-xs font-medium mb-5 sm:mb-8 max-w-[92vw]">
+            <Sparkles className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-accent shrink-0" />
+            <span className="text-foreground truncate">
               {brand.tagline[locale] ?? t("subhead")}
             </span>
-            <span className="text-muted-foreground">·</span>
-            <span className="text-muted-foreground">v1.0</span>
+            <span className="text-muted-foreground hidden sm:inline">·</span>
+            <span className="text-muted-foreground hidden sm:inline">v1.0</span>
           </div>
-          <h1 className="text-5xl sm:text-7xl md:text-8xl font-semibold tracking-tight leading-[0.95] text-gradient-warm">
+          <h1 className="text-[2.5rem] leading-[1.05] sm:text-7xl sm:leading-[0.95] md:text-8xl font-semibold tracking-tight text-gradient-warm">
             {t("headline")}
           </h1>
-          <p className="mt-8 text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="mt-5 sm:mt-8 text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed px-1">
             {t("subhead")}
           </p>
-          <div className="mt-12 flex flex-wrap gap-3 justify-center">
+          <div className="mt-7 sm:mt-12 flex flex-wrap gap-3 justify-center">
             {/* Single primary CTA. Routes to /pricing so the user
                 picks a plan first; the plan page hands off to
                 /signup?plan=<id> with the 14-day trial pre-applied. */}
-            <Link href="/pricing">
-              <Button size="lg" className="press h-12 px-6 text-base glow-accent">
+            <Link href="/pricing" className="w-full sm:w-auto max-w-xs">
+              <Button
+                size="lg"
+                className="press h-12 sm:h-12 w-full px-6 text-base glow-accent"
+              >
                 {t("cta_primary")}
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </Button>
             </Link>
           </div>
 
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+          <div className="mt-6 sm:mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
             <div className="inline-flex items-center gap-1.5">
               <Check className="h-3.5 w-3.5 text-success" />
               {t("trust_cancel")}
@@ -175,7 +178,7 @@ export default async function Home({
 
       {/* INTRO — the bigger welcome / explainer */}
       <section className="relative">
-        <div className="mx-auto max-w-4xl px-6 py-28 sm:py-36 text-center">
+        <div className="mx-auto max-w-4xl px-5 sm:px-6 py-16 sm:py-28 md:py-36 text-center">
           {/* intensity="soft" (translate-only, no scale) — animating
               scale on a parent that contains a .text-gradient child
               triggers per-frame rasterization of background-clip:text
@@ -184,10 +187,10 @@ export default async function Home({
             <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-4">
               {t("intro_eyebrow")}
             </div>
-            <h2 className="text-4xl sm:text-5xl md:text-6xl font-semibold tracking-tight leading-[1.05] text-gradient">
+            <h2 className="text-[1.85rem] leading-[1.15] sm:text-5xl sm:leading-[1.05] md:text-6xl font-semibold tracking-tight text-gradient">
               {t("intro_title")}
             </h2>
-            <p className="mt-8 text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            <p className="mt-5 sm:mt-8 text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
               {t("intro_lede")}
             </p>
           </ScrollReveal>
@@ -201,12 +204,12 @@ export default async function Home({
 
       {/* BENEFITS — big stat cards */}
       <section className="relative">
-        <div className="mx-auto max-w-6xl px-6 py-24">
-          <ScrollReveal intensity="strong" className="text-center mb-16">
-            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
+        <div className="mx-auto max-w-6xl px-5 sm:px-6 py-14 sm:py-20 md:py-24">
+          <ScrollReveal intensity="strong" className="text-center mb-10 sm:mb-16">
+            <div className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 sm:mb-3">
               {t("benefits_eyebrow")}
             </div>
-            <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight max-w-3xl mx-auto leading-tight">
+            <h2 className="text-[1.75rem] leading-[1.15] sm:text-5xl sm:leading-tight font-semibold tracking-tight max-w-3xl mx-auto">
               {t("benefits_title")}
             </h2>
           </ScrollReveal>
@@ -249,20 +252,20 @@ export default async function Home({
           here was removed — it was leaving a stray iris orb visible
           off to the right of the card. */}
       <section className="relative">
-        <div className="mx-auto max-w-6xl px-6 py-28 sm:py-32">
-          <div className="grid gap-12 md:grid-cols-2 md:items-center">
+        <div className="mx-auto max-w-6xl px-5 sm:px-6 py-14 sm:py-28 md:py-32">
+          <div className="grid gap-8 sm:gap-12 md:grid-cols-2 md:items-center">
             {/* AiSideReveal — a distinct entrance reserved for the AI
                 section. Blur-clear + lift over 1.1s reads differently
                 from the standard fade-up that the rest of the page
                 uses, so this section pops. */}
             <AiSideReveal lateExit>
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
+              <div className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 sm:mb-3">
                 {t("ai_eyebrow")}
               </div>
-              <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-[1.05] text-gradient-warm">
+              <h2 className="text-[1.75rem] leading-[1.15] sm:text-5xl sm:leading-[1.05] font-semibold tracking-tight text-gradient-warm">
                 {t("feature_3_title")}
               </h2>
-              <p className="mt-6 text-base sm:text-lg text-muted-foreground leading-relaxed">
+              <p className="mt-4 sm:mt-6 text-sm sm:text-lg text-muted-foreground leading-relaxed">
                 {t("ai_body_long")}
               </p>
               {/* AI-specific bullets. The previous list reused the global
@@ -299,22 +302,22 @@ export default async function Home({
           which swaps the iris/purple/pink/cyan blobs for green hues
           (see .ai-card-glow.variant-success in globals.css). */}
       <section className="relative">
-        <div className="mx-auto max-w-6xl px-6 py-28 sm:py-32">
-          <div className="grid gap-12 md:grid-cols-2 md:items-center">
+        <div className="mx-auto max-w-6xl px-5 sm:px-6 py-14 sm:py-28 md:py-32">
+          <div className="grid gap-8 sm:gap-12 md:grid-cols-2 md:items-center">
             <AiCardReveal direction="left" variant="success" lateExit>
               <AiMockCard t={t} variant="success" />
             </AiCardReveal>
             <AiSideReveal lateExit>
-              <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
+              <div className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 sm:mb-3">
                 {t("ai_eyebrow")}
               </div>
-              <h2 className="text-3xl sm:text-5xl font-semibold tracking-tight leading-[1.05] text-gradient-warm">
+              <h2 className="text-[1.75rem] leading-[1.15] sm:text-5xl sm:leading-[1.05] font-semibold tracking-tight text-gradient-warm">
                 {t("ai_v2_title")}
               </h2>
-              <p className="mt-6 text-base sm:text-lg text-muted-foreground leading-relaxed">
+              <p className="mt-4 sm:mt-6 text-sm sm:text-lg text-muted-foreground leading-relaxed">
                 {t("ai_v2_body")}
               </p>
-              <ul className="mt-8 space-y-3 text-sm">
+              <ul className="mt-5 sm:mt-8 space-y-2.5 sm:space-y-3 text-sm">
                 <BulletItem variant="success">{t("ai_v2_bullet_1")}</BulletItem>
                 <BulletItem variant="success">{t("ai_v2_bullet_2")}</BulletItem>
                 <BulletItem variant="success">{t("ai_v2_bullet_3")}</BulletItem>
@@ -327,16 +330,16 @@ export default async function Home({
 
       {/* Features */}
       <section className="relative">
-        <div className="mx-auto max-w-5xl px-6 py-24">
-          <ScrollReveal intensity="strong" className="text-center mb-16">
-            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
+        <div className="mx-auto max-w-5xl px-5 sm:px-6 py-14 sm:py-20 md:py-24">
+          <ScrollReveal intensity="strong" className="text-center mb-10 sm:mb-16">
+            <div className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 sm:mb-3">
               {t("features_eyebrow")}
             </div>
-            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
+            <h2 className="text-[1.75rem] sm:text-4xl font-semibold tracking-tight">
               {t("features_title")}
             </h2>
           </ScrollReveal>
-          <div className="grid gap-6 sm:grid-cols-2 max-w-3xl mx-auto">
+          <div className="grid gap-4 sm:gap-6 sm:grid-cols-2 max-w-3xl mx-auto">
             <ScrollReveal intensity="pop" delay={0}>
               <Feature
                 icon={<FileCheck className="h-5 w-5" />}
@@ -357,16 +360,16 @@ export default async function Home({
 
       {/* How it works */}
       <section className="relative">
-        <div className="mx-auto max-w-5xl px-6 py-24">
-          <ScrollReveal intensity="strong" className="text-center mb-16">
-            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
+        <div className="mx-auto max-w-5xl px-5 sm:px-6 py-14 sm:py-20 md:py-24">
+          <ScrollReveal intensity="strong" className="text-center mb-10 sm:mb-16">
+            <div className="text-[10px] sm:text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 sm:mb-3">
               {t("how_eyebrow")}
             </div>
-            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight">
+            <h2 className="text-[1.75rem] sm:text-4xl font-semibold tracking-tight">
               {t("how_title")}
             </h2>
           </ScrollReveal>
-          <div className="grid gap-8 sm:grid-cols-3">
+          <div className="grid gap-6 sm:gap-8 sm:grid-cols-3">
             <ScrollReveal intensity="pop" delay={0}>
               <Step n={1} title={t("step_1_title")} body={t("step_1_body")} />
             </ScrollReveal>
@@ -395,17 +398,17 @@ export default async function Home({
             re-rasterization (jitter on hi-DPI). Translate only. */}
         <ScrollReveal
           intensity="soft"
-          className="mx-auto max-w-3xl px-6 py-24 text-center"
+          className="mx-auto max-w-3xl px-5 sm:px-6 py-14 sm:py-20 md:py-24 text-center"
         >
-          <h2 className="text-4xl sm:text-5xl font-semibold tracking-tight text-gradient">
+          <h2 className="text-[1.85rem] sm:text-5xl font-semibold tracking-tight text-gradient leading-[1.15]">
             {t("cta_final_title")}
           </h2>
-          <p className="mt-6 text-base text-muted-foreground max-w-xl mx-auto">
+          <p className="mt-4 sm:mt-6 text-sm sm:text-base text-muted-foreground max-w-xl mx-auto">
             {t("cta_final_body")}
           </p>
-          <div className="mt-10 flex flex-wrap gap-3 justify-center">
-            <Link href="/pricing">
-              <Button size="lg" className="press h-12 px-6 text-base glow-accent">
+          <div className="mt-7 sm:mt-10 flex flex-wrap gap-3 justify-center">
+            <Link href="/pricing" className="w-full sm:w-auto max-w-xs">
+              <Button size="lg" className="press h-12 w-full px-6 text-base glow-accent">
                 {t("cta_primary")}
                 <ArrowRight className="h-4 w-4" />
               </Button>
