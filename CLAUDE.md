@@ -239,7 +239,7 @@ Examples:
 
 4. **Every instruction to the user must be a concrete, clickable action.** Bad: "Configure Stripe." Good: "Go to https://dashboard.stripe.com/test/webhooks, click 'Add endpoint', paste this URL: [exact url]."
 
-5. **Every URL the user needs to visit must be a complete URL.** Not "your Vercel dashboard" — `https://vercel.com/[your-team]/relai/settings`.
+5. **Every URL the user needs to visit must be a complete URL.** Not "your Vercel dashboard" — `https://vercel.com/[your-team]/vylan/settings`.
 
 6. **Errors get the same treatment.** If something failed, explain in plain English what failed, why, and what to do. Example:
  - BAD: "ECONNREFUSED 127.0.0.1:54322 — Supabase is unreachable. Run `supabase start`."

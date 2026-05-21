@@ -99,7 +99,7 @@ const CLASSIFY_TOOL = {
         minimum: 0,
         maximum: 1,
         description:
-          "How confident the usability verdict is. Use <0.80 when uncertain — Relai only auto-acts at >=0.80.",
+          "How confident the usability verdict is. Use <0.80 when uncertain — Vylan only auto-acts at >=0.80.",
       },
       primary_issue: {
         type: ["string", "null"],
@@ -196,7 +196,7 @@ If the document is borderline (mildly blurry but readable), prefer USABLE.
 Only mark UNUSABLE if a human accountant would clearly reject it.
 
 Return a usability_confidence between 0 and 1. Use <0.80 when you are
-uncertain — Relai only auto-acts above that threshold.
+uncertain — Vylan only auto-acts above that threshold.
 
 When unusable, write issue_summary_fr and issue_summary_en as one short,
 friendly, SPECIFIC sentence written for the client. The client will read

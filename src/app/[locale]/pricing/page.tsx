@@ -72,11 +72,11 @@ export default async function PricingPage({
           <p className="mt-8 text-center text-sm text-muted-foreground">
             {t("talk_or_email")}{" "}
             <a
-              href="mailto:hello@relai.app?subject=Pricing%20chat"
+              href="mailto:hello@vylan.app?subject=Pricing%20chat"
               className="font-medium text-primary hover:underline"
             >
               <Mail className="inline h-3.5 w-3.5 mr-1 -mt-0.5" aria-hidden />
-              hello@relai.app
+              hello@vylan.app
             </a>
             <span className="block mt-1 text-xs text-muted-foreground/80">
               {t("response_time")}

@@ -1,11 +1,11 @@
 export const brand = {
-  name: "Relai",
+  name: "Vylan",
   tagline: {
     fr: "La paperasse client, automatisée.",
     en: "Client paperwork, automated.",
   },
-  domain: "relai.app",
-  supportEmail: "support@relai.app",
+  domain: "vylan.app",
+  supportEmail: "support@vylan.app",
   colors: {
     primary: "#1e293b",
     background: "#fafaf9",

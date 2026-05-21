@@ -152,7 +152,7 @@ export function PortalShell({
             </a>
           </p>
           <p className="mt-4 text-xs text-muted-foreground/70 font-mono">
-            {t("powered_by")} <span className="font-sans font-medium">Relai</span>
+            {t("powered_by")} <span className="font-sans font-medium">Vylan</span>
           </p>
         </footer>
       </main>

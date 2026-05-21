@@ -1,4 +1,4 @@
--- Relai — row level security.
+-- Vylan — row level security.
 --
 -- Pattern: every domain table is enabled with RLS and scoped to the calling
 -- accountant's firm_id via `current_firm_id()`. Client-facing endpoints (no

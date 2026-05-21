@@ -1,4 +1,4 @@
--- Relai — initial schema.
+-- Vylan — initial schema.
 --
 -- Conventions:
 --   * Every domain table has a firm_id for tenant scoping (except `jobs`,

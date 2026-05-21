@@ -1,4 +1,4 @@
-# Relai
+# Vylan
 
 Document-collection web app for small Canadian accounting & bookkeeping firms.
 
@@ -65,7 +65,7 @@ supabase/
 ## Demo account (after `db:reset`)
 
 ```
-email:    demo@relai.app
+email:    demo@vylan.app
 password: demo1234
 firm:     Cabinet Tremblay & Associés
 ```

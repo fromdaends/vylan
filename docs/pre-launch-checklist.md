@@ -1,6 +1,6 @@
 # Pre-launch checklist
 
-Things that need to be done before Relai goes live to paying customers.
+Things that need to be done before Vylan goes live to paying customers.
 Each item explains the WHY in plain English so you remember why it
 matters. Tick the box when done; leave a note if you skipped on
 purpose.

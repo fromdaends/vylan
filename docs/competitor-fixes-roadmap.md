@@ -45,7 +45,7 @@ the same migrations.
 
 ## Phase 3 — Firm logo upload
 
-**Why:** `firms.logo_url` has existed since Phase 2 of the original Relai
+**Why:** `firms.logo_url` has existed since Phase 2 of the original Vylan
 build but nothing writes to it. The Phase 1 primitives are ready to wire in.
 
 **Scope**
@@ -129,7 +129,7 @@ Upload a sample T2125 PDF, see the AI badge classify it correctly.
 
 **Why:** Competitor-audit Finding #4. Filenames frequently contain client PII
 (e.g., `Jean_Tremblay_T4_2024.pdf`). The privacy policy commits to a 2-year
-audit-log retention, meaning Relai silently stores 2 years of client name
+audit-log retention, meaning Vylan silently stores 2 years of client name
 data tied to firm IDs.
 
 **Scope**

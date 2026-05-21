@@ -1,6 +1,6 @@
 # AI document quality
 
-When a client uploads a document to your portal, Relai's AI reviews
+When a client uploads a document to your portal, Vylan's AI reviews
 it for two things:
 
 1. **Is it the right document?** (e.g. a T4 when you asked for a T4)
@@ -50,7 +50,7 @@ exact message that went to the client (if any), and two buttons:
 ## The dashboard tile
 
 The top row of your dashboard shows "AI-rejected this week." That's
-the count of files Relai auto-rejected in the last 7 days. Watch
+the count of files Vylan auto-rejected in the last 7 days. Watch
 this — if it's higher than feels right (lots of false rejections),
 turn the switch back off or ask us to retune the AI.
 

@@ -222,7 +222,7 @@ function LangButton({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Firm timezone — used when Relai schedules reminders and renders
+// Firm timezone — used when Vylan schedules reminders and renders
 // times in client emails/SMS. Saves through POST /api/firm/timezone so
 // the surrounding RSC tree doesn't re-render mid-save (same reasoning
 // as the auto-reject toggle below). Optimistic state; revert on error.

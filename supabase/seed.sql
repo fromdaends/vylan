@@ -1,8 +1,8 @@
--- Relai — local-dev seed.
+-- Vylan — local-dev seed.
 --
 -- Runs after migrations on `supabase db reset`. Creates:
 --   * One firm (Cabinet Tremblay & Associés)
---   * One accountant user (demo@relai.app / password: demo1234)
+--   * One accountant user (demo@vylan.app / password: demo1234)
 --   * Two demo clients (one individual, one business)
 --
 -- The auth.users insert pattern below is supported on the Supabase local
@@ -19,7 +19,7 @@ insert into auth.users (
   '11111111-1111-1111-1111-111111111111',
   'authenticated',
   'authenticated',
-  'demo@relai.app',
+  'demo@vylan.app',
   crypt('demo1234', gen_salt('bf')),
   now(),
   '{"provider":"email","providers":["email"]}'::jsonb,
@@ -35,9 +35,9 @@ insert into auth.identities (
 ) values (
   gen_random_uuid(),
   '11111111-1111-1111-1111-111111111111',
-  'demo@relai.app',
+  'demo@vylan.app',
   'email',
-  jsonb_build_object('sub', '11111111-1111-1111-1111-111111111111', 'email', 'demo@relai.app'),
+  jsonb_build_object('sub', '11111111-1111-1111-1111-111111111111', 'email', 'demo@vylan.app'),
   now(), now(), now()
 )
 on conflict do nothing;
@@ -58,7 +58,7 @@ insert into users (id, firm_id, email, name, role, locale)
 values (
   '11111111-1111-1111-1111-111111111111',
   '22222222-2222-2222-2222-222222222222',
-  'demo@relai.app',
+  'demo@vylan.app',
   'Marie Tremblay',
   'owner',
   'fr'

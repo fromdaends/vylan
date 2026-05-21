@@ -10,7 +10,7 @@ import {
 describe("buildSystemPrompt", () => {
   it("includes the brand name and language directive (en)", () => {
     const s = buildSystemPrompt({ locale: "en" });
-    expect(s).toContain("Relai");
+    expect(s).toContain("Vylan");
     expect(s).toContain("Reply in English");
     expect(s).not.toContain("Reply in French");
   });

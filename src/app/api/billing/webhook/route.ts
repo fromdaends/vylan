@@ -108,7 +108,7 @@ const UUID_RE =
 //                            object's email against users.email. Means
 //                            you only need to make sure the email on
 //                            the Stripe Customer matches the email the
-//                            user signed up with in Relai.
+//                            user signed up with in Vylan.
 //
 // Security note: paths 2 and 3 only fire when the firm row currently
 // has NO stripe_customer_id set. We never silently re-link a firm that
@@ -203,7 +203,7 @@ async function resolveAndLinkFirm(
   const firmRow = Array.isArray(row?.firms) ? row?.firms[0] : row?.firms;
   if (!row?.firm_id || !firmRow) {
     console.warn(
-      "[billing/webhook] no Relai user found for customer email; can't link",
+      "[billing/webhook] no Vylan user found for customer email; can't link",
       { customerEmail },
     );
     return null;

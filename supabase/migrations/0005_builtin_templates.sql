@@ -1,4 +1,4 @@
--- Relai — built-in engagement templates.
+-- Vylan — built-in engagement templates.
 --
 -- A row with firm_id = null is a shared, built-in template. Any firm can
 -- read these (see templates_select policy in 0002). To customize, a firm

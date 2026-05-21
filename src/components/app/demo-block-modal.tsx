@@ -78,7 +78,7 @@ export function DemoBlockButton({
               variant="outline"
             />
             <a
-              href="mailto:hello@relai.app?subject=Ready%20to%20subscribe"
+              href="mailto:hello@vylan.app?subject=Ready%20to%20subscribe"
               className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 transition-opacity"
             >
               {t("block_cta_buy")}
