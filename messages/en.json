@@ -395,6 +395,8 @@
     "nav_section_main": "Workspace",
     "nav_section_account": "Account",
     "toggle_menu": "Toggle menu",
+    "collapse_sidebar": "Collapse sidebar",
+    "expand_sidebar": "Expand sidebar",
     "settings_title": "Firm settings",
     "settings_subtitle": "Update your firm profile and preferences.",
     "settings_saved": "Saved.",

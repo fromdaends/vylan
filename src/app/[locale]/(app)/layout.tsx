@@ -83,6 +83,8 @@ export default async function AppLayout({
         sectionMain: t("nav_section_main"),
         sectionAccount: t("nav_section_account"),
         toggleMenu: t("toggle_menu"),
+        collapseSidebar: t("collapse_sidebar"),
+        expandSidebar: t("expand_sidebar"),
         logout: tAuth("logout"),
         profile: tProfile("menu_profile"),
         // The "Your firm" tile inside the profile dropdown — labels
