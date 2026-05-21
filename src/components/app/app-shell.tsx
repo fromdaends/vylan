@@ -2,11 +2,16 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
-import { motion, AnimatePresence } from "framer-motion";
 import { brand } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { logoutAction } from "@/app/actions/auth";
 import { Logo } from "@/components/brand/logo";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -23,13 +28,12 @@ import {
   HelpCircle,
   LayoutDashboard,
   LogOut,
-  Menu,
   PanelLeft,
   PanelLeftClose,
   Settings,
+  Sparkles,
   UserCircle,
   Users,
-  X,
 } from "lucide-react";
 
 type Labels = {
@@ -47,6 +51,7 @@ type Labels = {
   toggleMenu: string;
   collapseSidebar: string;
   expandSidebar: string;
+  account: string;
 };
 
 type NavItemDef = {
@@ -60,7 +65,6 @@ const COLLAPSED_EVENT = "vylan:sidebar-collapsed-changed";
 
 function subscribeCollapsed(callback: () => void) {
   window.addEventListener(COLLAPSED_EVENT, callback);
-  // `storage` fires across tabs when localStorage changes elsewhere.
   window.addEventListener("storage", callback);
   return () => {
     window.removeEventListener(COLLAPSED_EVENT, callback);
@@ -77,10 +81,6 @@ function getStoredCollapsed(): boolean {
 }
 
 function getServerCollapsed(): boolean {
-  // SSR snapshot — always start expanded; the first client render
-  // matches, then useSyncExternalStore re-renders with the real
-  // value if it differs. No hydration mismatch because React handles
-  // the swap internally.
   return false;
 }
 
@@ -96,9 +96,6 @@ export function AppShell({
   labels,
 }: {
   children: React.ReactNode;
-  // Optional strip rendered above the main content area. The demo
-  // banner uses this so it pins to the top of the workspace (under
-  // the slim mobile header / next to the sidebar on desktop).
   topBar?: React.ReactNode;
   firmName: string;
   brandColor: string;
@@ -109,11 +106,8 @@ export function AppShell({
   labels: Labels;
 }) {
   const pathname = usePathname();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
 
-  // Desktop sidebar collapse — persisted in localStorage. Reads
-  // through useSyncExternalStore so React subscribes to the value
-  // instead of fighting an effect-driven hydration pattern.
   const collapsed = useSyncExternalStore(
     subscribeCollapsed,
     getStoredCollapsed,
@@ -126,33 +120,20 @@ export function AppShell({
     } catch {
       // ignore
     }
-    // Manually fire the same event we listen to — `storage` only
-    // fires in OTHER tabs, not the one that just wrote.
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event(COLLAPSED_EVENT));
     }
   };
 
-  // Close mobile drawer on route change. We compare against a ref so
-  // we only setState when the path *actually* moved — not on the
-  // mount tick or on re-renders that happen for other reasons.
+  // Close the mobile account sheet on route change (e.g. user tapped
+  // a menu link). Ref-guarded to avoid setting state on every render.
   const lastPathRef = useRef(pathname);
   useEffect(() => {
     if (lastPathRef.current !== pathname) {
       lastPathRef.current = pathname;
-      setMobileOpen(false);
+      setMobileAccountOpen(false);
     }
   }, [pathname]);
-
-  // Body scroll lock when the mobile drawer is open.
-  useEffect(() => {
-    if (!mobileOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [mobileOpen]);
 
   const primaryNav: NavItemDef[] = [
     { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
@@ -191,89 +172,304 @@ export function AppShell({
         />
       </aside>
 
-      {/* Mobile drawer — always renders the expanded body. */}
-      <AnimatePresence>
-        {mobileOpen && (
-          <>
-            <motion.div
-              key="overlay"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
-              className="sm:hidden fixed inset-0 bg-black/50 backdrop-blur-[2px] z-40"
-              onClick={() => setMobileOpen(false)}
-              aria-hidden
-            />
-            <motion.aside
-              key="drawer"
-              initial={{ x: "-100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "-100%" }}
-              transition={{ type: "spring", stiffness: 350, damping: 35 }}
-              className="sm:hidden fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-background border-r border-border/40 z-50 flex flex-col shadow-2xl"
-              aria-label="Primary navigation"
-            >
-              <SidebarBody
-                primaryNav={primaryNav}
-                accountNav={accountNav}
-                labels={labels}
-                firmName={firmName}
-                firmLogoUrl={firmLogoUrl}
-                brandColor={brandColor}
-                userDisplayName={userDisplayName}
-                userEmail={userEmail}
-                userAvatarUrl={userAvatarUrl}
-                collapsed={false}
-                onItemClick={() => setMobileOpen(false)}
-                showClose
-                onClose={() => setMobileOpen(false)}
-              />
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Main content — offset matches the sidebar width on desktop. */}
+      {/* Main content — offset matches the sidebar width on desktop.
+          Mobile gets bottom padding to clear the tab bar. */}
       <div
         className={cn(
           "flex-1 flex flex-col min-h-screen transition-[margin-left] duration-200 ease-out",
           collapsed ? "sm:ml-16" : "sm:ml-64",
         )}
       >
-        {/* Sticky top group: optional banner + (on mobile only) the
-            slim header with hamburger. */}
-        <div className="sticky top-0 z-20">
-          {topBar}
-          <div className="sm:hidden flex items-center gap-3 border-b border-border/40 bg-background/80 backdrop-blur-md px-4 py-3">
-            <button
-              type="button"
-              onClick={() => setMobileOpen(true)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-card text-muted-foreground hover:text-foreground active:scale-95 transition-all"
-              aria-label={labels.toggleMenu}
-            >
-              <Menu className="size-4" aria-hidden />
-            </button>
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-2 font-semibold tracking-tight text-base"
-            >
-              <Logo size={26} priority />
-              <span>{brand.name}</span>
-            </Link>
+        {topBar && (
+          <div className="sticky top-0 z-20">
+            {topBar}
           </div>
-        </div>
+        )}
 
-        <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-8 py-8 animate-in-fade">
+        <main className="flex-1 mx-auto w-full max-w-7xl px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8 animate-in-fade">
           {children}
         </main>
       </div>
+
+      {/* Mobile bottom tab bar — primary nav for mobile. Fixed bottom,
+          safe-area-aware. */}
+      <MobileTabBar
+        labels={labels}
+        userDisplayName={userDisplayName}
+        userAvatarUrl={userAvatarUrl}
+        brandColor={brandColor}
+        onAccountClick={() => setMobileAccountOpen(true)}
+      />
+
+      {/* Mobile account sheet — slides up from the bottom when the
+          Account tab is tapped. Holds the same secondary actions that
+          the desktop bottom-left profile dropdown carries. */}
+      <Sheet open={mobileAccountOpen} onOpenChange={setMobileAccountOpen}>
+        <SheetContent
+          side="bottom"
+          className="sm:hidden rounded-t-3xl p-0 border-t border-border/40 max-h-[88vh] gap-0"
+        >
+          <MobileAccountMenu
+            labels={labels}
+            firmName={firmName}
+            firmLogoUrl={firmLogoUrl}
+            brandColor={brandColor}
+            userDisplayName={userDisplayName}
+            userEmail={userEmail}
+            userAvatarUrl={userAvatarUrl}
+            onItemClick={() => setMobileAccountOpen(false)}
+          />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Sidebar body (shared between desktop + mobile drawer)
+// Mobile bottom tab bar
+// ---------------------------------------------------------------------------
+
+function MobileTabBar({
+  labels,
+  userDisplayName,
+  userAvatarUrl,
+  brandColor,
+  onAccountClick,
+}: {
+  labels: Labels;
+  userDisplayName: string;
+  userAvatarUrl: string | null;
+  brandColor: string;
+  onAccountClick: () => void;
+}) {
+  const pathname = usePathname();
+  const tabs: NavItemDef[] = [
+    { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
+    { href: "/clients", label: labels.clients, icon: Users },
+    { href: "/templates", label: labels.templates, icon: FileText },
+  ];
+
+  function isActive(href: string) {
+    if (href === "/dashboard") return pathname === href;
+    return pathname.startsWith(href);
+  }
+
+  return (
+    <nav
+      className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border/40 bg-background/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]"
+      aria-label="Bottom navigation"
+    >
+      <div className="flex items-stretch justify-around">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const active = isActive(tab.href);
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className={cn(
+                "flex flex-col items-center justify-center gap-1 flex-1 min-h-[60px] px-1 pt-2 pb-1.5 active:bg-secondary/40 transition-colors relative",
+              )}
+              aria-current={active ? "page" : undefined}
+            >
+              {active && (
+                <span
+                  aria-hidden
+                  className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 w-8 rounded-b-full bg-accent"
+                />
+              )}
+              <Icon
+                className={cn(
+                  "size-[22px] transition-colors",
+                  active ? "text-accent" : "text-muted-foreground",
+                )}
+                aria-hidden
+              />
+              <span
+                className={cn(
+                  "text-[10.5px] font-medium leading-none tracking-tight transition-colors",
+                  active ? "text-foreground" : "text-muted-foreground",
+                )}
+              >
+                {tab.label}
+              </span>
+            </Link>
+          );
+        })}
+        <button
+          type="button"
+          onClick={onAccountClick}
+          className="flex flex-col items-center justify-center gap-1 flex-1 min-h-[60px] px-1 pt-2 pb-1.5 active:bg-secondary/40 transition-colors text-muted-foreground"
+        >
+          <div className="relative">
+            <AvatarInitials
+              src={userAvatarUrl}
+              name={userDisplayName}
+              size={24}
+              color={brandColor}
+            />
+          </div>
+          <span className="text-[10.5px] font-medium leading-none tracking-tight">
+            {labels.account}
+          </span>
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mobile account sheet (slides up from bottom tab bar)
+// ---------------------------------------------------------------------------
+
+function MobileAccountMenu({
+  labels,
+  firmName,
+  firmLogoUrl,
+  brandColor,
+  userDisplayName,
+  userEmail,
+  userAvatarUrl,
+  onItemClick,
+}: {
+  labels: Labels;
+  firmName: string;
+  firmLogoUrl: string | null;
+  brandColor: string;
+  userDisplayName: string;
+  userEmail: string;
+  userAvatarUrl: string | null;
+  onItemClick: () => void;
+}) {
+  return (
+    <div className="flex flex-col">
+      {/* Drag handle — visual affordance for swipe-to-dismiss. */}
+      <div aria-hidden className="flex justify-center pt-3 pb-1">
+        <div className="h-1 w-10 rounded-full bg-border" />
+      </div>
+
+      {/* User header */}
+      <div className="px-5 pt-3 pb-4 border-b border-border/40 flex items-center gap-3.5">
+        <AvatarInitials
+          src={userAvatarUrl}
+          name={userDisplayName}
+          size={48}
+          color={brandColor}
+        />
+        <div className="min-w-0 flex-1">
+          <SheetTitle className="text-base font-semibold leading-tight truncate">
+            {userDisplayName}
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground leading-tight mt-0.5 truncate">
+            {userEmail}
+          </SheetDescription>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+        <div className="space-y-0.5">
+          <MobileMenuItem
+            href="/profile"
+            icon={UserCircle}
+            label={labels.profile}
+            onClick={onItemClick}
+          />
+          <MobileMenuItem
+            href="/firm"
+            icon={Building2}
+            label={labels.firm}
+            onClick={onItemClick}
+          />
+          <MobileMenuItem
+            href="/settings"
+            icon={Settings}
+            label={labels.settings}
+            onClick={onItemClick}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent("vylan:open-help"));
+              onItemClick();
+            }}
+            className="w-full flex items-center gap-3 rounded-2xl px-3 py-3.5 text-sm font-medium text-foreground hover:bg-secondary/60 active:bg-secondary transition-colors"
+          >
+            <span className="inline-flex size-9 items-center justify-center rounded-xl bg-accent/10 text-accent shrink-0">
+              <Sparkles className="size-4" aria-hidden />
+            </span>
+            <span className="flex-1 text-left">{labels.help}</span>
+          </button>
+        </div>
+
+        {/* Firm context tile — separate visual treatment to make the
+            current firm feel "anchored". Same /firm destination as the
+            menu item above but framed differently. */}
+        <div>
+          <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/70 font-semibold px-3 pb-2">
+            {labels.yourFirm}
+          </div>
+          <Link
+            href="/firm"
+            onClick={onItemClick}
+            className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card px-3 py-3 text-sm font-medium text-foreground hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
+          >
+            <AvatarInitials
+              src={firmLogoUrl}
+              name={firmName}
+              size={36}
+              color={brandColor}
+            />
+            <span className="truncate flex-1">{firmName}</span>
+          </Link>
+        </div>
+      </div>
+
+      {/* Logout pinned at the bottom — destructive, separated. */}
+      <div
+        className="border-t border-border/40 p-3"
+        style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.75rem)" }}
+      >
+        <form action={logoutAction}>
+          <button
+            type="submit"
+            className="w-full flex items-center justify-center gap-2 rounded-2xl px-3 py-3.5 text-sm font-medium text-destructive bg-destructive/[0.06] hover:bg-destructive/10 active:bg-destructive/15 transition-colors"
+          >
+            <LogOut className="size-4" aria-hidden />
+            {labels.logout}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function MobileMenuItem({
+  href,
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  href: string;
+  icon: typeof Users;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className="w-full flex items-center gap-3 rounded-2xl px-3 py-3.5 text-sm font-medium text-foreground hover:bg-secondary/60 active:bg-secondary transition-colors"
+    >
+      <span className="inline-flex size-9 items-center justify-center rounded-xl bg-secondary/70 text-muted-foreground shrink-0">
+        <Icon className="size-4" aria-hidden />
+      </span>
+      <span className="flex-1 text-left">{label}</span>
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Desktop sidebar body (icons + labels + profile card)
 // ---------------------------------------------------------------------------
 
 function SidebarBody({
@@ -288,9 +484,6 @@ function SidebarBody({
   userAvatarUrl,
   collapsed,
   onToggleCollapse,
-  onItemClick,
-  showClose,
-  onClose,
 }: {
   primaryNav: NavItemDef[];
   accountNav: NavItemDef[];
@@ -303,9 +496,6 @@ function SidebarBody({
   userAvatarUrl: string | null;
   collapsed: boolean;
   onToggleCollapse?: () => void;
-  onItemClick?: () => void;
-  showClose?: boolean;
-  onClose?: () => void;
 }) {
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
@@ -314,7 +504,6 @@ function SidebarBody({
         <div className="flex flex-col items-center gap-3 px-2 pt-4 pb-3 border-b border-border/40">
           <Link
             href="/dashboard"
-            onClick={onItemClick}
             title={brand.name}
             className="inline-flex items-center justify-center rounded-lg p-1 hover:bg-secondary/40 transition-colors"
           >
@@ -339,7 +528,6 @@ function SidebarBody({
         <div className="flex items-center justify-between gap-2 px-5 pt-5 pb-4">
           <Link
             href="/dashboard"
-            onClick={onItemClick}
             className="flex items-center gap-2.5 font-semibold tracking-tight text-base group min-w-0"
           >
             <Logo
@@ -349,16 +537,7 @@ function SidebarBody({
             />
             <span className="truncate">{brand.name}</span>
           </Link>
-          {showClose ? (
-            <button
-              type="button"
-              onClick={onClose}
-              className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-              aria-label={labels.toggleMenu}
-            >
-              <X className="size-4" aria-hidden />
-            </button>
-          ) : onToggleCollapse ? (
+          {onToggleCollapse && (
             <button
               type="button"
               onClick={onToggleCollapse}
@@ -368,7 +547,7 @@ function SidebarBody({
             >
               <PanelLeftClose className="size-4" aria-hidden />
             </button>
-          ) : null}
+          )}
         </div>
       )}
 
@@ -387,7 +566,6 @@ function SidebarBody({
               icon={item.icon}
               label={item.label}
               collapsed={collapsed}
-              onClick={onItemClick}
             />
           ))}
         </NavSection>
@@ -399,14 +577,12 @@ function SidebarBody({
               icon={item.icon}
               label={item.label}
               collapsed={collapsed}
-              onClick={onItemClick}
             />
           ))}
         </NavSection>
       </nav>
 
-      {/* Profile card at bottom — opens dropdown with Profile / Help /
-          Logout. Settings + Firm already live in the nav above. */}
+      {/* Profile card */}
       <div
         className={cn(
           "border-t border-border/40",
@@ -466,7 +642,6 @@ function SidebarBody({
             <DropdownMenuItem asChild>
               <Link
                 href="/profile"
-                onClick={onItemClick}
                 className="flex items-center gap-2 cursor-pointer"
               >
                 <UserCircle className="h-4 w-4" />
@@ -477,10 +652,7 @@ function SidebarBody({
               className="flex items-center gap-2 cursor-pointer"
               onSelect={(e) => {
                 e.preventDefault();
-                // The help sidebar listens for this event so we open
-                // the Ask Vylan sheet without lifting state.
                 window.dispatchEvent(new CustomEvent("vylan:open-help"));
-                onItemClick?.();
               }}
             >
               <HelpCircle className="h-4 w-4" />
@@ -493,7 +665,6 @@ function SidebarBody({
             <DropdownMenuItem asChild>
               <Link
                 href="/firm"
-                onClick={onItemClick}
                 className="flex items-center gap-2 cursor-pointer"
               >
                 <AvatarInitials
@@ -550,13 +721,11 @@ function NavLink({
   icon: Icon,
   label,
   collapsed,
-  onClick,
 }: {
   href: string;
   icon: typeof Users;
   label: string;
   collapsed: boolean;
-  onClick?: () => void;
 }) {
   const pathname = usePathname();
   const active =
@@ -564,16 +733,13 @@ function NavLink({
   return (
     <Link
       href={href}
-      onClick={onClick}
       title={collapsed ? label : undefined}
       aria-label={collapsed ? label : undefined}
     >
       <span
         className={cn(
           "flex items-center rounded-lg text-sm font-medium transition-colors",
-          collapsed
-            ? "justify-center h-10 w-full"
-            : "gap-2.5 px-3 py-2",
+          collapsed ? "justify-center h-10 w-full" : "gap-2.5 px-3 py-2",
           active
             ? "bg-secondary text-foreground"
             : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
