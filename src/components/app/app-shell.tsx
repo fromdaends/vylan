@@ -311,7 +311,7 @@ function SidebarBody({
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Brand row */}
       {collapsed ? (
-        <div className="flex flex-col items-center gap-1 px-2 pt-4 pb-3">
+        <div className="flex flex-col items-center gap-3 px-2 pt-4 pb-3 border-b border-border/40">
           <Link
             href="/dashboard"
             onClick={onItemClick}
@@ -324,11 +324,14 @@ function SidebarBody({
             <button
               type="button"
               onClick={onToggleCollapse}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+              className="group inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground shadow-sm hover:text-foreground hover:bg-secondary hover:border-border hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
               aria-label={labels.expandSidebar}
               title={labels.expandSidebar}
             >
-              <PanelLeft className="size-4" aria-hidden />
+              <PanelLeft
+                className="size-[18px] group-hover:translate-x-0.5 transition-transform"
+                aria-hidden
+              />
             </button>
           )}
         </div>
