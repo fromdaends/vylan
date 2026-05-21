@@ -1,14 +1,14 @@
 # Launch Checklist
 
 A running list of everything that needs to happen between now and the
-moment a real accounting firm can sign up and use Relai. I add to this
+moment a real accounting firm can sign up and use Vylan. I add to this
 as we find more during phase work — review before going live.
 
 ## External services to sign up for
 
 - [ ] **Resend** — transactional email
   - Sign up: <https://resend.com> (free tier: 3000 emails/month)
-  - Verify a sending domain (e.g. `relai.app`) with SPF + DKIM DNS records
+  - Verify a sending domain (e.g. `vylan.app`) with SPF + DKIM DNS records
   - Paste `RESEND_API_KEY` and `RESEND_FROM_EMAIL` into `.env.local` (dev) and Vercel env vars (prod)
 - [ ] **Twilio** — SMS reminders
   - Sign up: <https://www.twilio.com> (pay-as-you-go; ~$1/mo for a Canadian number)
@@ -23,7 +23,7 @@ as we find more during phase work — review before going live.
   - Paste `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`
   - Use Stripe CLI for local webhook testing: `stripe listen --forward-to localhost:3000/api/billing/webhook`
   - Switch to live keys + production webhook endpoint before launch
-- [ ] **Domain registrar** — buy `relai.app` (or final name) when naming locks in
+- [ ] **Domain registrar** — buy `vylan.app` (or final name) when naming locks in
 - [ ] **Supabase Cloud project** — create in `ca-central-1` region for Quebec Law 25 data residency
 
 ## Production deployment

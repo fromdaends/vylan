@@ -1,7 +1,7 @@
 # Supabase local-dev config.
 # See: https://supabase.com/docs/guides/cli/config
 
-project_id = "relai"
+project_id = "vylan"
 
 [api]
 enabled = true
@@ -53,7 +53,7 @@ max_frequency = "1s"
 # wire up Resend (Phase 5), populate supabase/templates/*.html and uncomment
 # the corresponding block here.
 # [auth.email.template.confirmation]
-# subject = "Confirmez votre courriel — Relai"
+# subject = "Confirmez votre courriel — Vylan"
 # content_path = "./supabase/templates/confirmation.html"
 
 [edge_runtime]

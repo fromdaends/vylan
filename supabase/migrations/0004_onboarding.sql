@@ -1,4 +1,4 @@
--- Relai — onboarding fields on firms.
+-- Vylan — onboarding fields on firms.
 --
 -- Adds the columns the onboarding wizard writes to:
 --   * onboarded_at: timestamp when the wizard was completed (any step skipped

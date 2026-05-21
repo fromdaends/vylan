@@ -1,7 +1,7 @@
 # Multi-user / firm-scoping security & correctness audit
 
 **Date:** 2026-05-13
-**Scope:** Read-only audit of the multi-user / firm-scoping infrastructure for Relai.
+**Scope:** Read-only audit of the multi-user / firm-scoping infrastructure for Vylan.
 **Branch audited:** `claude/distracted-kowalevski-7c2622` at HEAD `b7fb7d8`.
 **Migration range:** `0001_init.sql` → `0029_ai_usability.sql` (11 migrations on disk).
 **Tests:** `npm test` → `Test Files 17 passed (17) · Tests 115 passed (115)`.

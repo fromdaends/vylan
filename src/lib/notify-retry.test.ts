@@ -15,7 +15,7 @@ const EMAIL_OPTS = {
   firmName: "Cabinet Tremblay",
   requestItemLabel: "T4 — Emploi Inc.",
   issueSummary: "le côté droit du document est coupé",
-  retryLink: "https://relai.app/r/abc123",
+  retryLink: "https://vylan.app/r/abc123",
 } as const;
 
 describe("buildUnusableDocRetryEmail — French", () => {
@@ -35,8 +35,8 @@ describe("buildUnusableDocRetryEmail — French", () => {
   it("includes the request item label, the specific issue, and the retry link", () => {
     expect(out.text).toContain("T4 — Emploi Inc.");
     expect(out.text).toContain("le côté droit du document est coupé");
-    expect(out.text).toContain("https://relai.app/r/abc123");
-    expect(out.html).toContain("https://relai.app/r/abc123");
+    expect(out.text).toContain("https://vylan.app/r/abc123");
+    expect(out.html).toContain("https://vylan.app/r/abc123");
   });
 
   it("never mentions AI, robots, or 'automatic' in either flavor", () => {
@@ -82,14 +82,14 @@ describe("buildUnusableDocRetrySms", () => {
       firmName: "Cabinet Tremblay",
       requestItemLabel: "T4",
       issueSummary: "texte illisible",
-      retryLink: "https://relai.app/r/abc",
+      retryLink: "https://vylan.app/r/abc",
       locale: "fr",
     });
     expect(body).toContain("Marie");
     expect(body).toContain("Cabinet Tremblay");
     expect(body).toContain("T4");
     expect(body).toContain("texte illisible");
-    expect(body).toContain("https://relai.app/r/abc");
+    expect(body).toContain("https://vylan.app/r/abc");
   });
 
   it("English body includes name, item, firm, reason, link", () => {
@@ -98,14 +98,14 @@ describe("buildUnusableDocRetrySms", () => {
       firmName: "Tremblay & Co",
       requestItemLabel: "T4",
       issueSummary: "unreadable text",
-      retryLink: "https://relai.app/r/xyz",
+      retryLink: "https://vylan.app/r/xyz",
       locale: "en",
     });
     expect(body).toContain("Sam");
     expect(body).toContain("Tremblay & Co");
     expect(body).toContain("T4");
     expect(body).toContain("unreadable text");
-    expect(body).toContain("https://relai.app/r/xyz");
+    expect(body).toContain("https://vylan.app/r/xyz");
   });
 
   it("never mentions AI, robots, or 'automatic'", () => {

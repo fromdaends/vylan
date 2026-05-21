@@ -1,4 +1,4 @@
--- Relai — storage bucket for client uploads.
+-- Vylan — storage bucket for client uploads.
 --
 -- Bucket layout:
 --   firms/{firm_id}/engagements/{engagement_id}/items/{item_id}/{file}

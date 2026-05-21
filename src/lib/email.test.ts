@@ -6,7 +6,7 @@ describe("buildEngagementInviteEmail", () => {
     clientName: "Marie Tremblay",
     firmName: "Cabinet Tremblay & Associés",
     engagementTitle: "T1 — Particulier — 2026",
-    url: "https://relai.app/r/abcdefg",
+    url: "https://vylan.app/r/abcdefg",
     dueDate: "2026-04-30",
   } as const;
 

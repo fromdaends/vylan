@@ -69,7 +69,7 @@ export default async function BillingPage({
                     icon={<Calendar className="h-4 w-4" />}
                   />
                   <a
-                    href="mailto:hello@relai.app?subject=Pricing%20chat"
+                    href="mailto:hello@vylan.app?subject=Pricing%20chat"
                     className="text-sm font-medium text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5"
                   >
                     <Mail className="h-3.5 w-3.5" />

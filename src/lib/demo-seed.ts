@@ -1,7 +1,7 @@
 // Demo data seeded into a brand-new firm when it's created from the
 // public signup flow with `is_demo = true`. The dashboard / clients /
 // engagements list have something realistic to interact with on first
-// load so the visitor can actually see how Relai works instead of
+// load so the visitor can actually see how Vylan works instead of
 // staring at empty states.
 //
 // Service-role insert: onboarding's submitStep1 already uses the

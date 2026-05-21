@@ -1,4 +1,4 @@
--- Relai — reminders.
+-- Vylan — reminders.
 --
 -- Adds engagements.reminders_paused so the accountant can stop the
 -- automated nudges without cancelling the engagement.

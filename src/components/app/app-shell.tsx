@@ -185,7 +185,7 @@ export function AppShell({
                     // The help sidebar listens for this event (registered in
                     // HelpSidebar). Keeps the menu item triggering the same
                     // sheet without lifting state to a shared context.
-                    window.dispatchEvent(new CustomEvent("relai:open-help"));
+                    window.dispatchEvent(new CustomEvent("vylan:open-help"));
                   }}
                 >
                   <HelpCircle className="h-4 w-4" />

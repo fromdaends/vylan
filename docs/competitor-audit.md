@@ -19,6 +19,6 @@ two failed attempts on the same item. Every AI action and human
 override is logged for prompt-tuning. To our knowledge no incumbent
 in the Canadian SMB accounting space currently does end-to-end
 auto-reject on document quality — competitors flag and queue, but
-the client roundtrip is manual. This puts Relai meaningfully ahead
+the client roundtrip is manual. This puts Vylan meaningfully ahead
 on item 50 ("smart retry") and 51 ("AI learning loop") and
 substantially advances 46–49.

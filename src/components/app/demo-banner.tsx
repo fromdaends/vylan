@@ -26,7 +26,7 @@ export function DemoBanner() {
             className="h-7 px-2 text-xs"
           />
           <a
-            href="mailto:hello@relai.app?subject=Ready%20to%20subscribe"
+            href="mailto:hello@vylan.app?subject=Ready%20to%20subscribe"
             className="font-medium px-2 py-0.5 rounded bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
           >
             {t("banner_cta_buy")}

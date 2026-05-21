@@ -67,8 +67,8 @@ export function HelpSidebar({ locale, userDisplayName }: Props) {
       setOpen(true);
       setView("chat");
     }
-    window.addEventListener("relai:open-help", onOpen);
-    return () => window.removeEventListener("relai:open-help", onOpen);
+    window.addEventListener("vylan:open-help", onOpen);
+    return () => window.removeEventListener("vylan:open-help", onOpen);
   }, []);
 
   return (
@@ -749,10 +749,10 @@ function FeedbackView({ onBack }: { onBack: () => void }) {
         <p className="text-xs text-muted-foreground">
           {t("footer_email_or")}{" "}
           <a
-            href="mailto:support@relai.app"
+            href="mailto:support@vylan.app"
             className="text-foreground underline underline-offset-2"
           >
-            support@relai.app
+            support@vylan.app
           </a>
         </p>
       </div>

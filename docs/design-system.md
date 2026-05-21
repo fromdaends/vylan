@@ -1,4 +1,4 @@
-# Relai Design System
+# Vylan Design System
 
 Reference vibe: **Stripe + Linear**. Apple-grade restraint where it pays
 off (marketing, hero, modals), but kept dense and information-first
