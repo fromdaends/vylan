@@ -375,6 +375,14 @@
     "action_client_retry_email_sent": "Retry email sent to client",
     "action_client_retry_sms_sent": "Retry SMS sent to client"
   },
+  "Dashboard": {
+    "greeting_morning": "Good morning",
+    "greeting_afternoon": "Good afternoon",
+    "greeting_evening": "Good evening",
+    "greeting_night": "Working late",
+    "greeting_welcome": "Welcome back",
+    "overview_label": "Firm overview"
+  },
   "App": {
     "dashboard_title": "Dashboard",
     "dashboard_empty": "No active engagements yet. Add your first client to get started.",

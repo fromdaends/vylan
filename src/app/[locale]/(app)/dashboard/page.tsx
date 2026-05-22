@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 import { listEngagements, type Engagement } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
 
@@ -28,14 +29,13 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { CollapsibleSection } from "@/components/dashboard/collapsible-section";
 import { HashSectionLink } from "@/components/dashboard/hash-section-link";
 import { AiActivityList } from "@/components/dashboard/ai-activity-list";
-import {
-  aiActivityShortLabel,
-} from "@/components/dashboard/ai-activity-shared";
+import { aiActivityShortLabel } from "@/components/dashboard/ai-activity-shared";
+import { DashboardGreeting } from "@/components/dashboard/dashboard-greeting";
 import {
   listAiActivityForFirm,
   type AiActivityEntry,
 } from "@/lib/db/ai-activity";
-import { formatRelative } from "@/lib/format";
+import { formatDate, formatRelative } from "@/lib/format";
 
 type RowVm = {
   engagement: Engagement;
@@ -51,8 +51,9 @@ export default async function DashboardPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [firm, engagements, clients] = await Promise.all([
+  const [firm, user, engagements, clients] = await Promise.all([
     getCurrentFirm(),
+    getCurrentUser(),
     listEngagements(),
     listClients({ includeArchived: false }),
   ]);
@@ -117,8 +118,6 @@ export default async function DashboardPage({
     v.attention.reasons.includes("overdue"),
   ).length;
 
-  // AI-rejected this week — counter at the top. Clicking it now opens
-  // the /ai-activity page (full AI verdict feed across all engagements).
   const sevenDaysAgo = new Date(
     Date.now() - 7 * 24 * 60 * 60 * 1000,
   ).toISOString();
@@ -139,6 +138,7 @@ export default async function DashboardPage({
   const recentAiActivity = await listAiActivityForFirm(200, sevenDaysAgo);
 
   const t = await getTranslations("App");
+  const tDashboard = await getTranslations("Dashboard");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
   const tAttention = await getTranslations("Attention");
@@ -173,24 +173,37 @@ export default async function DashboardPage({
           clientsById.get(other[0].engagement.client_id)?.display_name ?? null,
           other.length - 1,
         );
+
+  // First name for the greeting. Display-name wins if present (the
+  // user explicitly chose it); otherwise fall back to the leading
+  // token of the legal `name`. May be null when nothing is set —
+  // the greeting component falls back to a plain "Welcome." in that
+  // case. We don't touch the user's email as a name source; emails
+  // make for uncomfortable greetings.
+  const firstName = pickFirstName(
+    user?.display_name?.trim() || user?.name || "",
+  );
+  const todayPretty = formatDate(new Date(), locale, "long");
+  const subtitle = firm?.name
+    ? `${firm.name} · ${todayPretty}`
+    : todayPretty;
+
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {t("dashboard_title")}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1.5">{firm?.name}</p>
-        </div>
-        <Link href="/engagements/new">
-          <Button>
+    <div className="space-y-10 sm:space-y-12">
+      <header className="flex flex-wrap items-end justify-between gap-6">
+        <DashboardGreeting firstName={firstName} subtitle={subtitle} />
+        <Link href="/engagements/new" className="shrink-0 animate-in-up">
+          <Button size="sm">
             <Plus className="h-4 w-4" />
             {tEng("new")}
           </Button>
         </Link>
       </header>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-in-stagger">
+      <section
+        aria-label={tDashboard("overview_label")}
+        className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 animate-in-stagger"
+      >
         <Metric
           label={t("metric_clients")}
           value={clients.length}
@@ -210,155 +223,155 @@ export default async function DashboardPage({
         <Metric
           label={tAttention("metric_ai_rejected_week")}
           value={aiRejectedWeekCount ?? 0}
-          tone={
-            (aiRejectedWeekCount ?? 0) > 0 ? "warning" : "default"
-          }
+          tone={(aiRejectedWeekCount ?? 0) > 0 ? "warning" : "default"}
           hashFilter="ai-activity"
         />
+      </section>
+
+      <div className="space-y-3">
+        <CollapsibleSection
+          id="needs-attention"
+          title={tAttention("needs_attention")}
+          count={needsAttention.length}
+          preview={needsAttentionPreview}
+          hint={tAttention("needs_attention_hint")}
+          icon={<AlertTriangle className="h-4 w-4 text-warning" />}
+        >
+          {needsAttention.length === 0 ? (
+            <EmptyState
+              icon={<CheckCheck className="h-5 w-5" />}
+              text={tAttention("empty_attention")}
+            />
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {needsAttention.map((v) => (
+                <AttentionRow
+                  key={v.engagement.id}
+                  v={v}
+                  clientName={
+                    clientsById.get(v.engagement.client_id)?.display_name ??
+                    "—"
+                  }
+                  tStatus={tStatus}
+                  tAttention={tAttention}
+                />
+              ))}
+            </ul>
+          )}
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          id="ready-to-review"
+          title={tAttention("ready_to_review")}
+          count={readyToReview.length}
+          preview={readyToReviewPreview}
+          hint={tAttention("ready_to_review_hint")}
+          icon={<CheckCheck className="h-4 w-4 text-success" />}
+        >
+          {readyToReview.length === 0 ? (
+            <EmptyState
+              icon={<Inbox className="h-5 w-5" />}
+              text={tAttention("empty_review")}
+            />
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {readyToReview.map((v) => (
+                <li key={v.engagement.id}>
+                  <Link
+                    href={`/engagements/${v.engagement.id}`}
+                    className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm truncate">
+                        {v.engagement.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {clientsById.get(v.engagement.client_id)
+                          ?.display_name ?? "—"}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant="secondary" className="font-normal">
+                        {tAttention("items_ready", {
+                          count: v.attention.itemsReadyToReview,
+                        })}
+                      </Badge>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          id="ai-activity"
+          title={tAttention("ai_activity_section_title")}
+          count={recentAiActivity.length}
+          preview={
+            recentAiActivity.length === 0
+              ? null
+              : aiActivityPreview(recentAiActivity[0], tAttention, locale)
+          }
+          hint={tAttention("ai_activity_section_hint")}
+          icon={<Sparkles className="h-4 w-4 text-primary" />}
+        >
+          {recentAiActivity.length === 0 ? (
+            <EmptyState
+              icon={<Sparkles className="h-5 w-5" />}
+              text={tAttention("empty_ai_activity")}
+            />
+          ) : (
+            <AiActivityList entries={recentAiActivity} locale={locale} />
+          )}
+        </CollapsibleSection>
+
+        <CollapsibleSection
+          id="other-engagements"
+          title={tAttention("other_engagements")}
+          count={other.length}
+          preview={otherPreview}
+          icon={null}
+        >
+          {other.length === 0 ? (
+            <EmptyState
+              icon={<Inbox className="h-5 w-5" />}
+              text={tAttention("empty_attention")}
+            />
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {other.map((v) => (
+                <li key={v.engagement.id}>
+                  <Link
+                    href={`/engagements/${v.engagement.id}`}
+                    className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium text-sm truncate">
+                        {v.engagement.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {clientsById.get(v.engagement.client_id)
+                          ?.display_name ?? "—"}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge
+                        variant={statusBadge(v.engagement.status)}
+                        className="font-normal"
+                      >
+                        {tStatus(v.engagement.status)}
+                      </Badge>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
+                    </div>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CollapsibleSection>
       </div>
-
-      <CollapsibleSection
-        id="needs-attention"
-        title={tAttention("needs_attention")}
-        count={needsAttention.length}
-        preview={needsAttentionPreview}
-        hint={tAttention("needs_attention_hint")}
-        icon={<AlertTriangle className="h-4 w-4 text-warning" />}
-      >
-        {needsAttention.length === 0 ? (
-          <EmptyState
-            icon={<CheckCheck className="h-5 w-5" />}
-            text={tAttention("empty_attention")}
-          />
-        ) : (
-          <ul className="divide-y divide-border/60">
-            {needsAttention.map((v) => (
-              <AttentionRow
-                key={v.engagement.id}
-                v={v}
-                clientName={
-                  clientsById.get(v.engagement.client_id)?.display_name ?? "—"
-                }
-                tStatus={tStatus}
-                tAttention={tAttention}
-              />
-            ))}
-          </ul>
-        )}
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        id="ready-to-review"
-        title={tAttention("ready_to_review")}
-        count={readyToReview.length}
-        preview={readyToReviewPreview}
-        hint={tAttention("ready_to_review_hint")}
-        icon={<CheckCheck className="h-4 w-4 text-success" />}
-      >
-        {readyToReview.length === 0 ? (
-          <EmptyState
-            icon={<Inbox className="h-5 w-5" />}
-            text={tAttention("empty_review")}
-          />
-        ) : (
-          <ul className="divide-y divide-border/60">
-            {readyToReview.map((v) => (
-              <li key={v.engagement.id}>
-                <Link
-                  href={`/engagements/${v.engagement.id}`}
-                  className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm truncate">
-                      {v.engagement.title}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {clientsById.get(v.engagement.client_id)?.display_name ??
-                        "—"}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge variant="secondary" className="font-normal">
-                      {tAttention("items_ready", {
-                        count: v.attention.itemsReadyToReview,
-                      })}
-                    </Badge>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        id="ai-activity"
-        title={tAttention("ai_activity_section_title")}
-        count={recentAiActivity.length}
-        preview={
-          recentAiActivity.length === 0
-            ? null
-            : aiActivityPreview(recentAiActivity[0], tAttention, locale)
-        }
-        hint={tAttention("ai_activity_section_hint")}
-        icon={<Sparkles className="h-4 w-4 text-primary" />}
-      >
-        {recentAiActivity.length === 0 ? (
-          <EmptyState
-            icon={<Sparkles className="h-5 w-5" />}
-            text={tAttention("empty_ai_activity")}
-          />
-        ) : (
-          <AiActivityList entries={recentAiActivity} locale={locale} />
-        )}
-      </CollapsibleSection>
-
-      <CollapsibleSection
-        id="other-engagements"
-        title={tAttention("other_engagements")}
-        count={other.length}
-        preview={otherPreview}
-        icon={null}
-      >
-        {other.length === 0 ? (
-          <EmptyState
-            icon={<Inbox className="h-5 w-5" />}
-            text={tAttention("empty_attention")}
-          />
-        ) : (
-          <ul className="divide-y divide-border/60">
-            {other.map((v) => (
-              <li key={v.engagement.id}>
-                <Link
-                  href={`/engagements/${v.engagement.id}`}
-                  className="flex items-center justify-between gap-3 py-3.5 px-1 -mx-1 rounded-md hover:bg-secondary/40 transition-colors group"
-                >
-                  <div className="min-w-0">
-                    <div className="font-medium text-sm truncate">
-                      {v.engagement.title}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">
-                      {clientsById.get(v.engagement.client_id)?.display_name ??
-                        "—"}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Badge
-                      variant={statusBadge(v.engagement.status)}
-                      className="font-normal"
-                    >
-                      {tStatus(v.engagement.status)}
-                    </Badge>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-foreground transition-colors" />
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </CollapsibleSection>
-
     </div>
   );
 }
@@ -384,6 +397,16 @@ function statusBadge(
   return "secondary";
 }
 
+function pickFirstName(full: string): string | null {
+  const trimmed = full.trim();
+  if (!trimmed) return null;
+  // Take everything up to the first whitespace. Handles hyphenated
+  // and accented first names cleanly (e.g. "Jean-François Roy" →
+  // "Jean-François"; "Émilie Bouchard" → "Émilie").
+  const first = trimmed.split(/\s+/)[0];
+  return first || null;
+}
+
 function Metric({
   label,
   value,
@@ -397,23 +420,36 @@ function Metric({
   href?: string;
   hashFilter?: string;
 }) {
+  const highlighted = tone === "warning" && value > 0;
   const inner = (
     <>
-      <div className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium transition-colors group-hover:text-foreground">
-        {label}
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[11px] text-muted-foreground uppercase tracking-[0.14em] font-medium transition-colors group-hover:text-foreground/90">
+          {label}
+        </span>
+        {highlighted && (
+          <span
+            className="h-1.5 w-1.5 rounded-full bg-warning shrink-0 mt-1.5"
+            aria-hidden
+          />
+        )}
       </div>
       <div
         className={
-          "text-3xl font-semibold tracking-tight mt-2 font-mono tabular-nums " +
-          (tone === "warning" && value > 0 ? "text-warning" : "")
+          "text-4xl font-semibold tracking-tight mt-3 font-mono tabular-nums leading-none " +
+          (highlighted ? "text-warning" : "text-foreground")
         }
       >
         {value}
       </div>
     </>
   );
+  // Tasteful tile: soft border, gentle hover (slight border + bg lift,
+  // no heavy shadow). Same chrome whether the tile is a link or static.
   const base =
-    "group block rounded-xl border border-border bg-card px-5 py-4 hover-lift transition-colors hover:border-foreground/20";
+    "group block rounded-xl border border-border/80 bg-card px-5 py-5 " +
+    "transition-colors hover:border-foreground/25 hover:bg-card/90 " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40";
   if (href) {
     return (
       <Link href={href} className={base + " cursor-pointer no-underline"}>
@@ -442,8 +478,13 @@ function EmptyState({
   text: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 py-6 text-muted-foreground">
-      <div className="opacity-60">{icon}</div>
+    <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
+      <div
+        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary/40 text-muted-foreground/80"
+        aria-hidden
+      >
+        {icon}
+      </div>
       <p className="text-sm">{text}</p>
     </div>
   );
