@@ -32,7 +32,7 @@ export function HomeSearch() {
         {t("search_label")}
       </label>
       <Search
-        className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/70 pointer-events-none"
+        className="absolute left-4 top-1/2 -translate-y-1/2 size-4 text-muted-foreground/70 pointer-events-none"
         aria-hidden
       />
       <Input
@@ -41,7 +41,10 @@ export function HomeSearch() {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={t("search_placeholder")}
-        className="pl-9 h-11"
+        // Anchored, prominent input. The Home page treats this as
+        // its primary surface (ChatGPT-style), so the chrome is a
+        // notch taller and softer than the standard form input.
+        className="pl-11 h-12 text-base rounded-full bg-card/60 border-border/60 shadow-sm focus-visible:border-foreground/30 focus-visible:ring-foreground/10"
         aria-label={t("search_label")}
       />
     </form>

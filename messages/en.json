@@ -397,7 +397,13 @@
     "engagements_widget_title": "Active engagements",
     "view_all_engagements": "View all",
     "empty_engagements": "No active engagements.",
-    "new_engagement": "New engagement"
+    "new_engagement": "New engagement",
+    "whats_new": "What's new",
+    "view_all": "View all",
+    "quick_links_label": "Quick links",
+    "quick_clients": "Clients",
+    "quick_engagements": "Active engagements",
+    "quick_dashboard": "Full dashboard"
   },
   "Dashboard": {
     "greeting_morning": "Good morning",

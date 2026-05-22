@@ -397,7 +397,13 @@
     "engagements_widget_title": "Engagements actifs",
     "view_all_engagements": "Voir tout",
     "empty_engagements": "Aucun engagement actif.",
-    "new_engagement": "Nouvel engagement"
+    "new_engagement": "Nouvel engagement",
+    "whats_new": "Nouveautés",
+    "view_all": "Voir tout",
+    "quick_links_label": "Raccourcis",
+    "quick_clients": "Clients",
+    "quick_engagements": "Engagements actifs",
+    "quick_dashboard": "Tableau de bord complet"
   },
   "Dashboard": {
     "greeting_morning": "Bonjour",
