@@ -16,6 +16,7 @@
 // is what matters.
 
 import { headers } from "next/headers";
+import { after } from "next/server";
 import {
   DemoStep1Schema,
   DemoStep2Schema,
@@ -136,11 +137,19 @@ export async function saveDemoStep(
   });
   if (!row) return { ok: false, error: "save_failed" };
 
-  // Fire the qualified-lead email right away. The prospect just
-  // told us they're a real lead — the founder wants to know now,
-  // not in 5 minutes.
-  void notifyFounderQualifiedLead(row).catch((e) => {
-    console.error("[saveDemoStep] notifyFounderQualifiedLead failed:", e);
+  // Fire the qualified-lead email after the response goes out. We
+  // can't `void notifyFounderQualifiedLead(row)` directly because in
+  // Vercel's serverless runtime the function terminates as soon as
+  // the action returns — which would kill the in-flight Resend
+  // request mid-fetch. `after()` keeps the function alive until the
+  // task completes while still letting the user see the choice
+  // screen immediately.
+  after(async () => {
+    try {
+      await notifyFounderQualifiedLead(row);
+    } catch (e) {
+      console.error("[saveDemoStep] notifyFounderQualifiedLead failed:", e);
+    }
   });
 
   return { ok: true, id: row.id };
@@ -169,13 +178,15 @@ export async function markDemoBooked(
     notified_at: now,
   });
   if (!row) return { ok: false, error: "save_failed" };
-  void (async () => {
+  // Same caveat as Step 3 above: use after() so the function stays
+  // alive long enough for Resend to actually receive the request.
+  after(async () => {
     try {
       const { notifyFounderDemoBooked } = await import("@/lib/demo-notify");
       await notifyFounderDemoBooked(row);
     } catch (e) {
       console.error("[markDemoBooked] notifyFounderDemoBooked failed:", e);
     }
-  })();
+  });
   return { ok: true, row };
 }
