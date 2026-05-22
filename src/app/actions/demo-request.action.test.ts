@@ -35,6 +35,7 @@ vi.mock("@/lib/db/demo-requests", () => {
         furthest_step: 1,
         booked_at: null,
         notified_at: null,
+        notion_page_id: null,
         created_at: now,
         updated_at: now,
       };
@@ -105,6 +106,12 @@ vi.mock("@/lib/demo-notify", () => ({
   notifyFounderPartialLead: () => undefined,
   notifyFounderQualifiedLead: (r: DemoRequest) => qualifiedMock(r),
   notifyFounderDemoBooked: (r: DemoRequest) => bookedMock(r),
+}));
+
+// Notion push is best-effort; tests don't care about it, so stub it
+// out entirely. (Real behaviour: if env vars unset it silently no-ops.)
+vi.mock("@/lib/notion", () => ({
+  pushLeadToNotion: () => Promise.resolve(),
 }));
 
 import { saveDemoStep, markDemoBooked } from "./demo-request";
