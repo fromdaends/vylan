@@ -375,6 +375,14 @@
     "action_client_retry_email_sent": "Courriel de reprise envoyé au client",
     "action_client_retry_sms_sent": "SMS de reprise envoyé au client"
   },
+  "Dashboard": {
+    "greeting_morning": "Bonjour",
+    "greeting_afternoon": "Bon après-midi",
+    "greeting_evening": "Bonsoir",
+    "greeting_night": "Soirée tardive",
+    "greeting_welcome": "Bon retour",
+    "overview_label": "Aperçu du cabinet"
+  },
   "App": {
     "dashboard_title": "Tableau de bord",
     "dashboard_empty": "Aucun engagement actif pour l’instant. Créez votre premier client pour commencer.",
