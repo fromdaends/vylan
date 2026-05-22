@@ -375,6 +375,18 @@
     "action_client_retry_email_sent": "Retry email sent to client",
     "action_client_retry_sms_sent": "Retry SMS sent to client"
   },
+  "Notifications": {
+    "title": "What's new",
+    "subtitle": "Everything that's happened across your firm recently — AI verdicts, ready-to-review engagements, and overdues. Click any row to jump in.",
+    "back": "Back to home",
+    "empty": "You're all caught up.",
+    "empty_hint": "Nothing needs you right now. New AI verdicts, overdue engagements, and ready-to-review work will appear here.",
+    "kind_ai_auto_rejected": "AI auto-rejected a client upload",
+    "kind_ai_escalated_to_accountant": "AI flagged a file twice — please review",
+    "kind_ai_quality_flagged": "AI flagged a file for your review",
+    "kind_ready_to_review": "Engagement is ready to review",
+    "kind_overdue": "Engagement is overdue"
+  },
   "Home": {
     "view_full_dashboard": "View full dashboard",
     "notifications_title": "Activity",

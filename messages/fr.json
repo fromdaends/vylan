@@ -375,6 +375,18 @@
     "action_client_retry_email_sent": "Courriel de reprise envoyé au client",
     "action_client_retry_sms_sent": "SMS de reprise envoyé au client"
   },
+  "Notifications": {
+    "title": "Nouveautés",
+    "subtitle": "Tout ce qui s'est passé récemment dans votre cabinet — verdicts de l'IA, engagements prêts à réviser, retards. Cliquez une ligne pour ouvrir le dossier.",
+    "back": "Retour à l'accueil",
+    "empty": "Tout est à jour.",
+    "empty_hint": "Rien ne demande votre attention pour l'instant. Les nouveaux verdicts de l'IA, engagements en retard et dossiers prêts à réviser apparaîtront ici.",
+    "kind_ai_auto_rejected": "L'IA a rejeté automatiquement un téléversement",
+    "kind_ai_escalated_to_accountant": "L'IA a signalé un fichier deux fois — à réviser",
+    "kind_ai_quality_flagged": "L'IA a signalé un fichier à votre attention",
+    "kind_ready_to_review": "Engagement prêt à réviser",
+    "kind_overdue": "Engagement en retard"
+  },
   "Home": {
     "view_full_dashboard": "Voir le tableau de bord complet",
     "notifications_title": "Activité",

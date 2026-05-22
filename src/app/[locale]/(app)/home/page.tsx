@@ -87,7 +87,7 @@ export default async function HomePage({
           </h2>
           {notifications.length > 0 && (
             <Link
-              href="/dashboard#ai-activity"
+              href="/notifications"
               className="text-xs text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-0.5"
             >
               {t("view_all")}
