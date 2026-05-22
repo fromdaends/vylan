@@ -15,6 +15,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { notifyFounderLead } from "@/lib/demo-notify";
+import { pushLeadToNotion } from "@/lib/notion";
 import type { DemoRequest } from "@/lib/db/demo-requests";
 
 export const runtime = "nodejs";
@@ -83,6 +84,13 @@ export async function GET(request: NextRequest) {
           row.id,
           res,
         );
+      }
+      // Mirror the lead into the founder's Notion database. Best-
+      // effort: if Notion is misconfigured we log and keep going.
+      try {
+        await pushLeadToNotion(row);
+      } catch (e) {
+        console.error("[cron/demo-leads] notion push failed:", row.id, e);
       }
       const { error: upErr } = await sb
         .from("demo_requests")

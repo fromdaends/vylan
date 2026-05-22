@@ -38,6 +38,7 @@ function fakeRow(extra: Partial<DemoRequest> = {}): DemoRequest {
     furthest_step: 3,
     booked_at: null,
     notified_at: null,
+    notion_page_id: null,
     created_at: "2026-05-21T20:00:00Z",
     updated_at: "2026-05-21T20:05:00Z",
     ...extra,

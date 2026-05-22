@@ -40,6 +40,7 @@ export type DemoRequest = {
   furthest_step: 1 | 2 | 3;
   booked_at: string | null;
   notified_at: string | null;
+  notion_page_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -65,6 +66,7 @@ export type UpdateDemoRequestPatch = Partial<{
   furthest_step: 1 | 2 | 3;
   booked_at: string | null;
   notified_at: string | null;
+  notion_page_id: string | null;
 }>;
 
 export async function createDemoRequest(

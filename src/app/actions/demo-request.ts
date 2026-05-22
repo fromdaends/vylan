@@ -40,6 +40,7 @@ import {
 //     by /api/cron/demo-leads, 5 min after last activity.
 //   - Booking confirmation → fires immediately from markDemoBooked.
 import { notifyFounderQualifiedLead } from "@/lib/demo-notify";
+import { pushLeadToNotion } from "@/lib/notion";
 
 export type SaveDemoStepResult =
   | { ok: true; id: string }
@@ -150,6 +151,11 @@ export async function saveDemoStep(
     } catch (e) {
       console.error("[saveDemoStep] notifyFounderQualifiedLead failed:", e);
     }
+    try {
+      await pushLeadToNotion(row);
+    } catch (e) {
+      console.error("[saveDemoStep] pushLeadToNotion failed:", e);
+    }
   });
 
   return { ok: true, id: row.id };
@@ -186,6 +192,11 @@ export async function markDemoBooked(
       await notifyFounderDemoBooked(row);
     } catch (e) {
       console.error("[markDemoBooked] notifyFounderDemoBooked failed:", e);
+    }
+    try {
+      await pushLeadToNotion(row);
+    } catch (e) {
+      console.error("[markDemoBooked] pushLeadToNotion failed:", e);
     }
   });
   return { ok: true, row };
