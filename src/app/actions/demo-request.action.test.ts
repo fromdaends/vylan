@@ -79,18 +79,16 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
+const qualifiedMock = vi.fn(async (_row: DemoRequest) => ({ id: "stub" }));
 const bookedMock = vi.fn(async (_row: DemoRequest) => ({ id: "stub" }));
 
 vi.mock("@/lib/demo-notify", () => ({
-  // Form-step submissions no longer fire emails directly — the
-  // /api/cron/demo-leads job picks them up 5 min after last activity
-  // and calls notifyFounderLead. Only the booking path still fires
-  // immediately, since founder wants real-time notice for that.
-  // The three stubs below exist so static imports don't break; the
-  // action code shouldn't actually call them.
+  // Step 1 and Step 2 submissions don't fire emails — the cron
+  // (/api/cron/demo-leads) picks those up 5 min after last activity
+  // via notifyFounderLead. Step 3 + booking fire immediately.
   notifyFounderLead: () => undefined,
   notifyFounderPartialLead: () => undefined,
-  notifyFounderQualifiedLead: () => undefined,
+  notifyFounderQualifiedLead: (r: DemoRequest) => qualifiedMock(r),
   notifyFounderDemoBooked: (r: DemoRequest) => bookedMock(r),
 }));
 
@@ -99,6 +97,7 @@ import { saveDemoStep, markDemoBooked } from "./demo-request";
 describe("saveDemoStep — funnel walk", () => {
   beforeEach(() => {
     fakeStore.clear();
+    qualifiedMock.mockClear();
     bookedMock.mockClear();
   });
 
@@ -177,9 +176,11 @@ describe("saveDemoStep — funnel walk", () => {
     expect(fakeStore.get(id)?.furthest_step).toBe(3);
     expect(fakeStore.get(id)?.marketing_opt_in).toBe(true);
     expect(fakeStore.get(id)?.province).toBe("QC");
-    // The cron handles the notify, not the action. Row is still
-    // pending-notify after step 3.
-    expect(fakeStore.get(id)?.notified_at).toBeFalsy();
+    // Step 3 fires the qualified email immediately + stamps
+    // notified_at so the cron doesn't re-send.
+    expect(fakeStore.get(id)?.notified_at).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(qualifiedMock).toHaveBeenCalledTimes(1);
   });
 
   it("step 2 with current_tool=other_software requires the free-text field", async () => {
