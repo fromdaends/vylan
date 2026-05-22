@@ -57,6 +57,11 @@ export const FIRM_EXPORT_LIMIT: LimitSpec = { limit: 1, window: "1 h" };
 // Misc.
 export const FEEDBACK_PER_USER: LimitSpec = { limit: 5, window: "1 h" };
 
+// Public demo qualifying form (/[locale]/demo). Tight enough to stop
+// scripted spam, loose enough that three real prospects on the same
+// office Wi-Fi don't trip it.
+export const DEMO_FORM_PER_IP: LimitSpec = { limit: 15, window: "1 h" };
+
 // ---- Internals -------------------------------------------------------------
 
 let redis: Redis | null = null;
