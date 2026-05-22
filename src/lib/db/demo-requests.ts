@@ -39,6 +39,7 @@ export type DemoRequest = {
   marketing_opt_in: boolean;
   furthest_step: 1 | 2 | 3;
   booked_at: string | null;
+  notified_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -63,6 +64,7 @@ export type UpdateDemoRequestPatch = Partial<{
   marketing_opt_in: boolean;
   furthest_step: 1 | 2 | 3;
   booked_at: string | null;
+  notified_at: string | null;
 }>;
 
 export async function createDemoRequest(

@@ -1,13 +1,24 @@
 // Founder notifications for the public demo qualifying form.
 //
-// Three triggers wired by the form:
-//   - notifyFounderNewLead       (step 1 submitted — prospect arrived)
-//   - notifyFounderQualifiedLead (step 3 submitted — ready to book)
+// Sender model:
+//   - The /demo form never fires emails directly. After every step
+//     submission the row just sits with `notified_at IS NULL`.
+//   - The /api/cron/demo-leads job runs every ~5 minutes, finds rows
+//     where the prospect has been inactive for 5+ minutes, calls
+//     notifyFounderLead() to send ONE consolidated email, and stamps
+//     notified_at.
+//   - When cal.com fires bookingSuccessful, markDemoBooked() calls
+//     notifyFounderDemoBooked() immediately (real-time signal) and
+//     stamps notified_at so the cron doesn't double-email.
+//
+// Exported entrypoints:
+//   - notifyFounderLead          (cron — picks Qualified vs Partial)
+//   - notifyFounderQualifiedLead (furthest_step = 3 path)
+//   - notifyFounderPartialLead   (furthest_step < 3 path)
 //   - notifyFounderDemoBooked    (cal.com booking confirmed)
 //
-// All three are best-effort: failures log and return null instead of
-// throwing, so the form submission / booking flow itself never
-// breaks because of a Resend hiccup.
+// All are best-effort: failures log and return without throwing, so
+// the form / booking flow never breaks because of a Resend hiccup.
 
 import { sendEmail } from "@/lib/email";
 import { brand } from "@/lib/brand";
@@ -49,50 +60,8 @@ function fmt(label: string | null | undefined, map?: Record<string, string>) {
 }
 
 // ---------------------------------------------------------------------------
-// Step 1 — prospect just landed in the funnel
-// ---------------------------------------------------------------------------
-
-export async function notifyFounderNewLead(row: DemoRequest) {
-  const to = founderEmail();
-  const subject = `New demo lead — ${row.firm_name ?? "(unknown firm)"}`;
-
-  const text = [
-    `A prospect just started the demo form.`,
-    ``,
-    `Contact: ${row.contact_name ?? "—"}`,
-    `Email:   ${row.email}`,
-    `Firm:    ${row.firm_name ?? "—"}`,
-    ``,
-    `They have not yet completed the qualifying questions. If they`,
-    `don't, you can still follow up at the email above.`,
-    ``,
-    `When: ${new Date(row.created_at).toLocaleString("en-CA")}`,
-    `Lead id: ${row.id}`,
-  ].join("\n");
-
-  const html = `
-    <div style="font-family:Inter,system-ui,-apple-system,sans-serif;color:#0f172a;max-width:560px">
-      <p style="margin:0 0 16px;font-size:14px;color:#475569">
-        A prospect just started the demo form.
-      </p>
-      <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px">
-        <tr><td style="padding:6px 16px 6px 0;color:#64748b;width:90px">Contact</td><td>${escapeHtml(row.contact_name ?? "—")}</td></tr>
-        <tr><td style="padding:6px 16px 6px 0;color:#64748b">Email</td><td><a href="mailto:${encodeURIComponent(row.email)}">${escapeHtml(row.email)}</a></td></tr>
-        <tr><td style="padding:6px 16px 6px 0;color:#64748b">Firm</td><td>${escapeHtml(row.firm_name ?? "—")}</td></tr>
-      </table>
-      <p style="margin:20px 0 0;font-size:12px;color:#94a3b8">
-        They have not yet completed the qualifying questions. If they don't, you can still follow up at the email above.<br/>
-        Lead id: <code>${escapeHtml(row.id)}</code>
-      </p>
-    </div>
-  `.trim();
-
-  return sendEmail({ to, subject, text, html });
-}
-
-// ---------------------------------------------------------------------------
-// Step 3 — qualified, ready to book. This email IS the founder's
-// call-prep sheet, so it lists everything we know.
+// Qualified lead — prospect made it through all 3 steps. This email
+// IS the founder's call-prep sheet, so it lists everything we know.
 // ---------------------------------------------------------------------------
 
 export async function notifyFounderQualifiedLead(row: DemoRequest) {
@@ -168,39 +137,175 @@ export async function notifyFounderQualifiedLead(row: DemoRequest) {
 }
 
 // ---------------------------------------------------------------------------
-// Booked — the lead fully converted (cal.com confirmed a slot)
+// Unified entry — the debounce cron calls this. Routes to the
+// qualified-lead email for full step-3 fills, or to a "partial lead"
+// email for prospects who bailed mid-form.
 // ---------------------------------------------------------------------------
 
-export async function notifyFounderDemoBooked(row: DemoRequest) {
+export async function notifyFounderLead(row: DemoRequest) {
+  if (row.furthest_step === 3) {
+    return notifyFounderQualifiedLead(row);
+  }
+  return notifyFounderPartialLead(row);
+}
+
+// ---------------------------------------------------------------------------
+// Partial lead — prospect started the form but didn't make it to
+// step 3. We send this 5+ minutes after their last activity so we
+// don't fire prematurely while they're still typing.
+// ---------------------------------------------------------------------------
+
+export async function notifyFounderPartialLead(row: DemoRequest) {
   const to = founderEmail();
-  const subject = `Demo booked — ${row.firm_name ?? "(unknown firm)"}`;
-  const text = [
-    `${row.contact_name ?? row.email} just booked their demo via cal.com.`,
+  const sizeLabel = row.firm_size ? fmt(row.firm_size, FIRM_SIZE_LABEL) : null;
+  const subject = sizeLabel
+    ? `Partial demo lead — ${row.firm_name ?? "(unknown firm)"} (${sizeLabel})`
+    : `Partial demo lead — ${row.firm_name ?? "(unknown firm)"}`;
+
+  const toolLabel = row.current_tool
+    ? row.current_tool === "other_software" && row.current_tool_other
+      ? `${fmt(row.current_tool, CURRENT_TOOL_LABEL)} — ${row.current_tool_other}`
+      : fmt(row.current_tool, CURRENT_TOOL_LABEL)
+    : null;
+
+  const lines = [
+    `A prospect started the demo form but didn't finish.`,
+    `They reached step ${row.furthest_step} of 3.`,
+    `Last activity: ${new Date(row.updated_at).toLocaleString("en-CA")}`,
     ``,
-    `Firm:  ${row.firm_name ?? "—"}`,
+    `── Contact ──`,
+    `Name:  ${row.contact_name ?? "—"}`,
     `Email: ${row.email}`,
-    `Phone: ${row.phone ?? "—"}`,
     ``,
-    `Check cal.com for the exact slot.`,
+    `── Firm ──`,
+    `Name:    ${row.firm_name ?? "—"}`,
+    sizeLabel ? `Size:    ${sizeLabel}` : null,
+    row.client_volume
+      ? `Clients: ${fmt(row.client_volume, CLIENT_VOLUME_LABEL)}`
+      : null,
+    toolLabel ? `Tool:    ${toolLabel}` : null,
+    ``,
+    `You can still follow up at the email above.`,
     `Lead id: ${row.id}`,
-  ].join("\n");
+  ].filter((l): l is string => l !== null);
+
+  const contactRows: Array<[string, string, boolean?]> = [
+    ["Name", row.contact_name ?? "—"],
+    [
+      "Email",
+      `<a href="mailto:${encodeURIComponent(row.email)}">${escapeHtml(row.email)}</a>`,
+      true,
+    ],
+  ];
+  const firmRows: Array<[string, string, boolean?]> = [
+    ["Name", row.firm_name ?? "—"],
+  ];
+  if (sizeLabel) firmRows.push(["Size", sizeLabel]);
+  if (row.client_volume)
+    firmRows.push(["Clients", fmt(row.client_volume, CLIENT_VOLUME_LABEL)]);
+  if (toolLabel) firmRows.push(["Tool", toolLabel]);
+
   const html = `
     <div style="font-family:Inter,system-ui,-apple-system,sans-serif;color:#0f172a;max-width:560px">
-      <p style="margin:0 0 16px;font-size:14px">
-        <strong>${escapeHtml(row.contact_name ?? row.email)}</strong>
-        just booked their demo via cal.com.
+      <p style="margin:0 0 18px;font-size:14px;color:#475569">
+        A prospect started the demo form but didn't finish. They reached step <strong>${row.furthest_step}</strong> of 3.
       </p>
-      <table cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:14px">
-        <tr><td style="padding:6px 16px 6px 0;color:#64748b;width:90px">Firm</td><td>${escapeHtml(row.firm_name ?? "—")}</td></tr>
-        <tr><td style="padding:6px 16px 6px 0;color:#64748b">Email</td><td><a href="mailto:${encodeURIComponent(row.email)}">${escapeHtml(row.email)}</a></td></tr>
-        <tr><td style="padding:6px 16px 6px 0;color:#64748b">Phone</td><td>${escapeHtml(row.phone ?? "—")}</td></tr>
-      </table>
+      ${section("Contact", contactRows)}
+      ${section("Firm", firmRows)}
       <p style="margin:18px 0 0;font-size:12px;color:#94a3b8">
-        Check cal.com for the exact slot.<br/>
+        You can still follow up at the email above.<br/>
+        Last activity: ${escapeHtml(new Date(row.updated_at).toLocaleString("en-CA"))}<br/>
         Lead id: <code>${escapeHtml(row.id)}</code>
       </p>
     </div>
   `.trim();
+
+  return sendEmail({ to, subject, text: lines.join("\n"), html });
+}
+
+// ---------------------------------------------------------------------------
+// Booked — the lead fully converted (cal.com confirmed a slot).
+// Fires immediately on booking and IS the call-prep sheet for a
+// fast-booking prospect (they may never have triggered the regular
+// qualified-lead cron email). Body is the full lead context PLUS a
+// "booking confirmed" callout.
+// ---------------------------------------------------------------------------
+
+export async function notifyFounderDemoBooked(row: DemoRequest) {
+  const to = founderEmail();
+  const sizeLabel = fmt(row.firm_size, FIRM_SIZE_LABEL);
+  const subject = `Demo BOOKED — ${row.firm_name ?? "(unknown firm)"} (${sizeLabel})`;
+
+  const toolLabel =
+    row.current_tool === "other_software" && row.current_tool_other
+      ? `${fmt(row.current_tool, CURRENT_TOOL_LABEL)} — ${row.current_tool_other}`
+      : fmt(row.current_tool, CURRENT_TOOL_LABEL);
+
+  const text = [
+    `${row.contact_name ?? row.email} booked a demo via cal.com.`,
+    `Check cal.com for the exact slot.`,
+    ``,
+    `── Contact ──`,
+    `Name:  ${row.contact_name ?? "—"}`,
+    `Email: ${row.email}`,
+    `Phone: ${row.phone ?? "—"}`,
+    `Lang:  ${row.preferred_language ?? "—"}`,
+    `Prov:  ${row.province ?? "—"}`,
+    ``,
+    `── Firm ──`,
+    `Name:    ${row.firm_name ?? "—"}`,
+    `Size:    ${sizeLabel}`,
+    `Clients: ${fmt(row.client_volume, CLIENT_VOLUME_LABEL)}`,
+    `Tool:    ${toolLabel}`,
+    ``,
+    `── Compliance ──`,
+    `Marketing opt-in: ${row.marketing_opt_in ? "YES" : "no"}`,
+    ``,
+    `Lead id: ${row.id}`,
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Inter,system-ui,-apple-system,sans-serif;color:#0f172a;max-width:560px">
+      <div style="background:#dcfce7;border-radius:10px;padding:14px 16px;margin:0 0 20px">
+        <div style="font-weight:600;font-size:15px;color:#14532d;margin-bottom:4px">
+          🎉 ${escapeHtml(row.contact_name ?? row.email)} booked a demo
+        </div>
+        <div style="font-size:13px;color:#166534">
+          Check cal.com for the exact slot.
+        </div>
+      </div>
+      ${section("Contact", [
+        ["Name", row.contact_name ?? "—"],
+        [
+          "Email",
+          `<a href="mailto:${encodeURIComponent(row.email)}">${escapeHtml(row.email)}</a>`,
+          true,
+        ],
+        ["Phone", row.phone ?? "—"],
+        ["Language", row.preferred_language ?? "—"],
+        ["Province", row.province ?? "—"],
+      ])}
+      ${section("Firm", [
+        ["Name", row.firm_name ?? "—"],
+        ["Size", sizeLabel],
+        ["Clients", fmt(row.client_volume, CLIENT_VOLUME_LABEL)],
+        ["Tool", toolLabel],
+      ])}
+      ${section("Compliance", [
+        [
+          "Marketing opt-in",
+          row.marketing_opt_in
+            ? '<span style="color:#15803d;font-weight:600">YES</span>'
+            : '<span style="color:#64748b">no</span>',
+          true,
+        ],
+      ])}
+      <p style="margin:20px 0 0;font-size:12px;color:#94a3b8">
+        Lead id: <code>${escapeHtml(row.id)}</code>
+      </p>
+    </div>
+  `.trim();
+
   return sendEmail({ to, subject, text, html });
 }
 

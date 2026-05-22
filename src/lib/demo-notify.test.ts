@@ -1,6 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const sendEmailMock = vi.fn(async () => ({ id: "fake" }));
+// Type the mock so `mock.calls[i]![0]` has known fields — without
+// this, vi.fn() with a no-arg implementation gives back a `never`
+// tuple and tests can't safely read .subject / .text on the call.
+type SendEmailArgs = Parameters<typeof import("@/lib/email").sendEmail>[0];
+const sendEmailMock = vi.fn(
+  async (_args: SendEmailArgs) => ({ sent: true as const, id: "fake" }),
+);
 
 vi.mock("@/lib/email", () => ({
   sendEmail: (args: Parameters<typeof import("@/lib/email").sendEmail>[0]) =>
@@ -8,7 +14,8 @@ vi.mock("@/lib/email", () => ({
 }));
 
 import {
-  notifyFounderNewLead,
+  notifyFounderLead,
+  notifyFounderPartialLead,
   notifyFounderQualifiedLead,
   notifyFounderDemoBooked,
 } from "./demo-notify";
@@ -30,31 +37,70 @@ function fakeRow(extra: Partial<DemoRequest> = {}): DemoRequest {
     marketing_opt_in: true,
     furthest_step: 3,
     booked_at: null,
+    notified_at: null,
     created_at: "2026-05-21T20:00:00Z",
     updated_at: "2026-05-21T20:05:00Z",
     ...extra,
   };
 }
 
-describe("notifyFounderNewLead", () => {
+describe("notifyFounderPartialLead", () => {
   beforeEach(() => {
     sendEmailMock.mockClear();
   });
 
-  it("sends an email with subject containing the firm name", async () => {
-    await notifyFounderNewLead(fakeRow());
+  it("sends with a 'Partial demo lead' subject for a step-1-only row", async () => {
+    await notifyFounderPartialLead(
+      fakeRow({
+        furthest_step: 1,
+        firm_size: null,
+        client_volume: null,
+        current_tool: null,
+        phone: null,
+        province: null,
+        preferred_language: null,
+      }),
+    );
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
     const args = sendEmailMock.mock.calls[0]![0]!;
+    expect(args.subject.toLowerCase()).toContain("partial demo lead");
     expect(args.subject).toContain("Acme CPA");
-    expect(args.subject.toLowerCase()).toContain("new demo lead");
     expect(args.text).toContain("phil@vylan.app");
-    expect(args.text).toContain("Phil Jette");
+    expect(args.text).toContain("step 1 of 3");
+  });
+
+  it("includes step-2 qualifying labels when present", async () => {
+    await notifyFounderPartialLead(fakeRow({ furthest_step: 2 }));
+    const args = sendEmailMock.mock.calls[0]![0]!;
+    expect(args.text).toContain("2-5 people");
+    expect(args.text).toContain("25-100 clients");
+    expect(args.text).toContain("TaxDome");
   });
 
   it("handles a missing firm_name gracefully", async () => {
-    await notifyFounderNewLead(fakeRow({ firm_name: null }));
+    await notifyFounderPartialLead(
+      fakeRow({ furthest_step: 1, firm_name: null }),
+    );
     const args = sendEmailMock.mock.calls[0]![0]!;
     expect(args.subject).toContain("unknown firm");
+  });
+});
+
+describe("notifyFounderLead routing", () => {
+  beforeEach(() => {
+    sendEmailMock.mockClear();
+  });
+
+  it("routes furthest_step=3 rows to the qualified-lead email", async () => {
+    await notifyFounderLead(fakeRow({ furthest_step: 3 }));
+    const args = sendEmailMock.mock.calls[0]![0]!;
+    expect(args.subject.toLowerCase()).toContain("qualified demo lead");
+  });
+
+  it("routes furthest_step<3 rows to the partial-lead email", async () => {
+    await notifyFounderLead(fakeRow({ furthest_step: 2 }));
+    const args = sendEmailMock.mock.calls[0]![0]!;
+    expect(args.subject.toLowerCase()).toContain("partial demo lead");
   });
 });
 
@@ -99,10 +145,20 @@ describe("notifyFounderDemoBooked", () => {
     sendEmailMock.mockClear();
   });
 
-  it("subject contains 'Demo booked' and the firm name", async () => {
+  it("subject calls out the booking + the firm name + size", async () => {
     await notifyFounderDemoBooked(fakeRow());
     const args = sendEmailMock.mock.calls[0]![0]!;
     expect(args.subject.toLowerCase()).toContain("demo booked");
     expect(args.subject).toContain("Acme CPA");
+    expect(args.subject).toContain("2-5 people");
+  });
+
+  it("body is the full call-prep sheet (it's the only email for fast-booking leads)", async () => {
+    await notifyFounderDemoBooked(fakeRow());
+    const args = sendEmailMock.mock.calls[0]![0]!;
+    expect(args.text).toContain("2-5 people");
+    expect(args.text).toContain("25-100 clients");
+    expect(args.text).toContain("TaxDome");
+    expect(args.text).toContain("Marketing opt-in: YES");
   });
 });

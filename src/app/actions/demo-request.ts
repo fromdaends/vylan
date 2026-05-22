@@ -32,10 +32,10 @@ import {
   ipFromRequest,
   DEMO_FORM_PER_IP,
 } from "@/lib/rate-limit";
-import {
-  notifyFounderNewLead,
-  notifyFounderQualifiedLead,
-} from "@/lib/demo-notify";
+// Founder notifications for partial + qualified leads are fired by the
+// /api/cron/demo-leads job 5 minutes after the prospect's last
+// activity. Booking confirmation still fires immediately (see
+// markDemoBooked below) because that's a time-sensitive event.
 
 export type SaveDemoStepResult =
   | { ok: true; id: string }
@@ -71,13 +71,6 @@ export async function saveDemoStep(
     }
     const row = await createDemoRequest(parsed.data);
     if (!row) return { ok: false, error: "save_failed" };
-
-    // Notify the founder asynchronously — never block the form on
-    // email delivery.
-    void notifyFounderNewLead(row).catch((e) => {
-      console.error("[saveDemoStep] notifyFounderNewLead failed:", e);
-    });
-
     return { ok: true, id: row.id };
   }
 
@@ -135,11 +128,6 @@ export async function saveDemoStep(
     furthest_step: Math.max(existing.furthest_step, 3) as 1 | 2 | 3,
   });
   if (!row) return { ok: false, error: "save_failed" };
-
-  void notifyFounderQualifiedLead(row).catch((e) => {
-    console.error("[saveDemoStep] notifyFounderQualifiedLead failed:", e);
-  });
-
   return { ok: true, id: row.id };
 }
 
@@ -152,10 +140,20 @@ export async function markDemoBooked(
   if (!id || typeof id !== "string") {
     return { ok: false, error: "missing_id" };
   }
-  const row = await updateDemoRequest(id, { booked_at: new Date().toISOString() });
+  // Booking is the founder's "this lead committed" signal and we
+  // want them to know in real time, so we both:
+  //   1. Set booked_at + notified_at on the row (the latter so the
+  //      5-min debounce cron doesn't double-email a fast-booking
+  //      prospect).
+  //   2. Fire the booking notification immediately. Its content is
+  //      the full call-prep sheet — it's the only email the founder
+  //      gets for a fast-booking lead, so it has to carry everything.
+  const now = new Date().toISOString();
+  const row = await updateDemoRequest(id, {
+    booked_at: now,
+    notified_at: now,
+  });
   if (!row) return { ok: false, error: "save_failed" };
-  // Phase 3 also notifies on booking; we wire the trigger but the
-  // content of that email lives in the notify module.
   void (async () => {
     try {
       const { notifyFounderDemoBooked } = await import("@/lib/demo-notify");
