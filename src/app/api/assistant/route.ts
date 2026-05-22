@@ -109,8 +109,8 @@ export async function POST(request: NextRequest) {
   if (!isAssistantConfigured()) {
     const stub =
       body.locale === "fr"
-        ? "L'assistant IA n'est pas encore configuré sur cet environnement. Pour des questions, écrivez-nous à support@vylan.app."
-        : "The AI assistant isn't configured in this environment yet. For questions please email support@vylan.app.";
+        ? "L'assistant IA n'est pas encore configuré sur cet environnement. Pour des questions, écrivez-nous à hello@vylan.app."
+        : "The AI assistant isn't configured in this environment yet. For questions please email hello@vylan.app.";
     return new Response(stub, {
       status: 200,
       headers: {
@@ -162,8 +162,8 @@ export async function POST(request: NextRequest) {
           controller.enqueue(
             encoder.encode(
               body.locale === "fr"
-                ? "\n\n(Désolé, une erreur est survenue. Réessayez ou écrivez à support@vylan.app.)"
-                : "\n\n(Sorry, something went wrong. Try again or email support@vylan.app.)",
+                ? "\n\n(Désolé, une erreur est survenue. Réessayez ou écrivez à hello@vylan.app.)"
+                : "\n\n(Sorry, something went wrong. Try again or email hello@vylan.app.)",
             ),
           );
         } catch {

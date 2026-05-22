@@ -5,7 +5,7 @@ export const brand = {
     en: "Client paperwork, automated.",
   },
   domain: "vylan.app",
-  supportEmail: "support@vylan.app",
+  supportEmail: "hello@vylan.app",
   colors: {
     primary: "#1e293b",
     background: "#fafaf9",

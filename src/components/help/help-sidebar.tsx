@@ -749,10 +749,10 @@ function FeedbackView({ onBack }: { onBack: () => void }) {
         <p className="text-xs text-muted-foreground">
           {t("footer_email_or")}{" "}
           <a
-            href="mailto:support@vylan.app"
+            href="mailto:hello@vylan.app"
             className="text-foreground underline underline-offset-2"
           >
-            support@vylan.app
+            hello@vylan.app
           </a>
         </p>
       </div>

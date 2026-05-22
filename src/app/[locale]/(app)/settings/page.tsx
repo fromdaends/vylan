@@ -147,7 +147,7 @@ export default async function SettingsPage({
             </a>
             {/* Delete firm */}
             <a
-              href={`mailto:support@vylan.app?subject=${encodeURIComponent(`Delete firm: ${firm.name}`)}`}
+              href={`mailto:hello@vylan.app?subject=${encodeURIComponent(`Delete firm: ${firm.name}`)}`}
               className={
                 "group flex items-center justify-between gap-4 " +
                 "rounded-lg border border-border/60 bg-card/50 px-4 py-3 " +
