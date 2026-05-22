@@ -23,7 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowLeft, ArrowRight, Sparkles, Check } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Calendar,
+  Check,
+  Sparkles,
+} from "lucide-react";
 import {
   DemoStep1Schema,
   DemoStep2Schema,
@@ -62,7 +68,15 @@ type Step3State = {
   marketing_opt_in: boolean;
 };
 
-type View = 1 | 2 | 3 | "booking" | "booked";
+// View state machine for the whole flow:
+//   1 / 2 / 3       — the three form steps
+//   "next-steps"    — the choice screen that follows step 3: try the
+//                     demo now (primary) or book a call (secondary)
+//   "booking"       — the cal.com inline embed (reached from
+//                     next-steps via "Book a meeting")
+//   "booked"        — confirmation; also nudges the prospect to try
+//                     the demo if they haven't already
+type View = 1 | 2 | 3 | "next-steps" | "booking" | "booked";
 
 const FIRM_SIZE_OPTIONS = ["solo", "2_5", "6_15", "16_plus"] as const;
 const CLIENT_VOLUME_OPTIONS = [
@@ -104,8 +118,9 @@ export function DemoFormFlow({ locale }: { locale: Locale }) {
     marketing_opt_in: false,
   });
 
-  // Show the booking view (Phase 4 cal.com embed) once we have a
-  // row + step 3 is done.
+  // Post-form views — the order is: form -> next-steps -> (booking)
+  // -> booked. "next-steps" is the choice screen between trying the
+  // seeded demo workspace and booking the founder.
   if (view === "booked") {
     return <BookedConfirmation firstName={firstName(step1.contact_name)} />;
   }
@@ -116,7 +131,16 @@ export function DemoFormFlow({ locale }: { locale: Locale }) {
         contactName={step1.contact_name}
         email={step1.email}
         locale={step3.preferred_language}
+        onBack={() => setView("next-steps")}
         onBooked={() => setView("booked")}
+      />
+    );
+  }
+  if (view === "next-steps") {
+    return (
+      <NextSteps
+        firstName={firstName(step1.contact_name)}
+        onBookMeeting={() => setView("booking")}
       />
     );
   }
@@ -229,7 +253,7 @@ export function DemoFormFlow({ locale }: { locale: Locale }) {
               setError(res.error);
               return;
             }
-            setView("booking");
+            setView("next-steps");
           }}
         />
       )}
@@ -583,6 +607,98 @@ function Step3({
         </Button>
       </div>
     </form>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Choice screen — shown right after Step 3. Two paths:
+//   1. Try the demo (primary) → /signup, which creates a demo-mode
+//      firm with seeded clients + engagements (the existing flow).
+//   2. Book a meeting (secondary) → cal.com inline embed.
+//
+// Either path is fine — the qualifying data + founder emails have
+// already gone out by the time the prospect sees this screen.
+// ---------------------------------------------------------------------------
+
+function NextSteps({
+  firstName: name,
+  onBookMeeting,
+}: {
+  firstName: string;
+  onBookMeeting: () => void;
+}) {
+  const t = useTranslations("Demo");
+  return (
+    <div className="space-y-6">
+      <div className="text-center space-y-2">
+        <div className="mx-auto inline-flex items-center justify-center size-12 rounded-2xl bg-success/15 text-success">
+          <Check className="size-6" aria-hidden />
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight leading-tight">
+          {t("next_heading", { name: name || "👋" })}
+        </h1>
+        <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
+          {t("next_body")}
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-1">
+        {/* Primary: jump into the seeded demo workspace. This is what
+            we recommend so the prospect can poke around and form an
+            opinion before the sales call. */}
+        <Link
+          href="/signup"
+          className="group rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/[0.08] to-accent/[0.02] p-5 transition-colors hover:border-accent/60 hover:from-accent/[0.12]"
+        >
+          <div className="flex items-start gap-4">
+            <span className="inline-flex shrink-0 items-center justify-center size-10 rounded-xl bg-accent/15 text-accent">
+              <Sparkles className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="font-semibold">
+                  {t("next_demo_heading")}
+                </h2>
+                <span className="text-[10px] uppercase tracking-[0.1em] font-semibold rounded-full bg-accent/15 text-accent px-2 py-0.5">
+                  {t("next_recommended")}
+                </span>
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                {t("next_demo_body")}
+              </p>
+              <div className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-foreground group-hover:gap-2 transition-all">
+                {t("next_demo_cta")}
+                <ArrowRight className="size-4" aria-hidden />
+              </div>
+            </div>
+          </div>
+        </Link>
+
+        {/* Secondary: skip straight to a meeting. Useful for buyers
+            who already know they want to talk. */}
+        <button
+          type="button"
+          onClick={onBookMeeting}
+          className="group text-left rounded-2xl border border-border/60 bg-card p-5 transition-colors hover:border-border hover:bg-secondary/30"
+        >
+          <div className="flex items-start gap-4">
+            <span className="inline-flex shrink-0 items-center justify-center size-10 rounded-xl bg-secondary/70 text-muted-foreground">
+              <Calendar className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="font-semibold">{t("next_meeting_heading")}</h2>
+              <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
+                {t("next_meeting_body")}
+              </p>
+              <div className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-muted-foreground group-hover:text-foreground group-hover:gap-2 transition-all">
+                {t("next_meeting_cta")}
+                <ArrowRight className="size-4" aria-hidden />
+              </div>
+            </div>
+          </div>
+        </button>
+      </div>
+    </div>
   );
 }
 

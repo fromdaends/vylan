@@ -20,6 +20,8 @@
 import { useEffect } from "react";
 import Cal, { getCalApi } from "@calcom/embed-react";
 import { useTranslations } from "next-intl";
+import { ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { markDemoBooked } from "@/app/actions/demo-request";
 
 const NAMESPACE = "vylan-demo";
@@ -29,12 +31,14 @@ export function DemoBookingStep({
   contactName,
   email,
   locale,
+  onBack,
   onBooked,
 }: {
   demoId: string;
   contactName: string;
   email: string;
   locale: "fr" | "en";
+  onBack?: () => void;
   onBooked: () => void;
 }) {
   const t = useTranslations("Demo");
@@ -87,6 +91,18 @@ export function DemoBookingStep({
 
   return (
     <div className="space-y-5">
+      {onBack && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={onBack}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+          {t("back")}
+        </Button>
+      )}
       <div className="space-y-2 text-center">
         <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight leading-tight">
           {t("booking_heading")}
