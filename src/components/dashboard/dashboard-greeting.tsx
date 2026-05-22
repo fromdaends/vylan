@@ -14,9 +14,14 @@ import { useTranslations } from "next-intl";
 export function DashboardGreeting({
   firstName,
   subtitle,
+  variant = "default",
 }: {
   firstName: string | null;
   subtitle: string;
+  // "default" — used on /dashboard (3xl/4xl heading).
+  // "hero"    — used on /home (4xl/5xl). Bigger focal point for the
+  //             post-login landing surface.
+  variant?: "default" | "hero";
 }) {
   const t = useTranslations("Dashboard");
   const [greeting, setGreeting] = useState<string | null>(null);
@@ -37,12 +42,19 @@ export function DashboardGreeting({
   // line reads conversationally without feeling stiff.
   const withName = firstName ? `${headline}, ${firstName}.` : `${headline}.`;
 
+  const headingClass =
+    variant === "hero"
+      ? "text-4xl sm:text-5xl lg:text-[3.25rem] font-semibold tracking-tight text-foreground leading-[1.05]"
+      : "text-3xl sm:text-4xl font-semibold tracking-tight text-foreground";
+  const subtitleClass =
+    variant === "hero"
+      ? "text-base text-muted-foreground"
+      : "text-sm text-muted-foreground";
+
   return (
     <div className="space-y-2 animate-in-up">
-      <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground">
-        {withName}
-      </h1>
-      <p className="text-sm text-muted-foreground">{subtitle}</p>
+      <h1 className={headingClass}>{withName}</h1>
+      <p className={subtitleClass}>{subtitle}</p>
     </div>
   );
 }

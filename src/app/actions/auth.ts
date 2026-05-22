@@ -99,7 +99,7 @@ export async function loginAction(
   if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
     redirect(localPath(locale, "/login/mfa"));
   }
-  redirect(localPath(locale, "/dashboard"));
+  redirect(localPath(locale, "/home"));
 }
 
 export async function signupAction(
@@ -185,5 +185,5 @@ export async function resetPasswordAction(
     return { error: "reset_failed" };
   }
   const locale = pickLocale(formData);
-  redirect(localPath(locale, "/dashboard"));
+  redirect(localPath(locale, "/home"));
 }

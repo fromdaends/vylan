@@ -26,6 +26,7 @@ import {
   ChevronUp,
   FileText,
   HelpCircle,
+  Home as HomeIcon,
   LayoutDashboard,
   LogOut,
   PanelLeft,
@@ -37,6 +38,7 @@ import {
 } from "lucide-react";
 
 type Labels = {
+  home: string;
   dashboard: string;
   clients: string;
   templates: string;
@@ -136,6 +138,7 @@ export function AppShell({
   }, [pathname]);
 
   const primaryNav: NavItemDef[] = [
+    { href: "/home", label: labels.home, icon: HomeIcon },
     { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
@@ -244,13 +247,18 @@ function MobileTabBar({
 }) {
   const pathname = usePathname();
   const tabs: NavItemDef[] = [
+    { href: "/home", label: labels.home, icon: HomeIcon },
     { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
   ];
 
   function isActive(href: string) {
-    if (href === "/dashboard") return pathname === href;
+    // /home and /dashboard are leaf routes — only match on exact path,
+    // otherwise /home would also light up on /home/anything (if we
+    // ever add sub-routes) and /dashboard wouldn't catch /dashboard
+    // root vs /dashboard/audit etc.
+    if (href === "/home" || href === "/dashboard") return pathname === href;
     return pathname.startsWith(href);
   }
 
@@ -729,7 +737,9 @@ function NavLink({
 }) {
   const pathname = usePathname();
   const active =
-    href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+    href === "/home" || href === "/dashboard"
+      ? pathname === href
+      : pathname.startsWith(href);
   return (
     <Link
       href={href}

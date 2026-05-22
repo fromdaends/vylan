@@ -31,13 +31,13 @@ export default async function Home({
   setRequestLocale(locale);
 
   // Signed-in users skip the marketing page and land directly on the
-  // dashboard. The (app)/layout below /dashboard handles onboarding +
-  // MFA gating, so we don't duplicate that here — one extra redirect
-  // hop is fine and keeps this file simple.
+  // Home (the post-login glance). The (app)/layout below /home handles
+  // onboarding + MFA gating, so we don't duplicate that here — one
+  // extra redirect hop is fine and keeps this file simple.
   const supabase = await getServerSupabase();
   const { data: auth } = await supabase.auth.getUser();
   if (auth.user) {
-    redirect(getPathname({ locale, href: "/dashboard" }));
+    redirect(getPathname({ locale, href: "/home" }));
   }
 
   const t = await getTranslations("Landing");
