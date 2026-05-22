@@ -79,6 +79,21 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
+// next/server's `after` requires a real request scope at runtime.
+// In tests we just run the callback synchronously — it stands in
+// for the post-response continuation.
+vi.mock("next/server", async () => {
+  const actual = await vi.importActual<typeof import("next/server")>(
+    "next/server",
+  );
+  return {
+    ...actual,
+    after: (fn: () => unknown | Promise<unknown>) => {
+      void Promise.resolve().then(() => fn());
+    },
+  };
+});
+
 const qualifiedMock = vi.fn(async (_row: DemoRequest) => ({ id: "stub" }));
 const bookedMock = vi.fn(async (_row: DemoRequest) => ({ id: "stub" }));
 
