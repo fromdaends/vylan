@@ -107,14 +107,19 @@ Do these autonomously. Mention them in your summary so the user knows, but don't
 - Update `docs/*` files when relevant.
 - Add `.env.example` entries for new env vars (but do NOT add to `.env.local` — see below).
 - Commit and push your own work following the multi-session rhythm.
-- Open a pull request and ship it without prompting. The flow is always:
+- **AUTO-DEPLOY IS THE DEFAULT.** Every PR you open is yours to ship without
+  the user having to say "deploy" or "merge". Merging a PR to `main` is what
+  triggers the Vercel production deploy in this repo — there's no separate
+  "deploy" step the user is asking for. If the user says "deploy on vercel"
+  it means "merge this PR" — that's the same action you should already be
+  taking on your own. The flow is always:
   1. Push the branch.
   2. `mcp__github__create_pull_request`.
   3. Try `mcp__github__enable_pr_auto_merge` with `mergeMethod: SQUASH`.
   4. If it says **"already in clean status"** → call `mcp__github__merge_pull_request` directly with `merge_method: squash`.
   5. If it says **"unstable status"** (this repo's Vercel preview is `pending` at PR-open and auto-merge refuses to arm) → call `subscribe_pr_activity` and end the turn. When the webhook delivers `state: success`, call `merge_pull_request` immediately. Do NOT wait for the user to nudge, do NOT ask "should I merge?".
   6. **After every push to an open PR (initial OR a fix to a review comment), retry `enable_pr_auto_merge` immediately.** A push always triggers a new Vercel preview, so the previous "armed" state (if any) was wiped. Same fallbacks as steps 4/5.
-  7. After every webhook event on a watched PR, call `get_status` and `get_check_runs` — if CI is green and no unresolved blocking review threads remain, call `merge_pull_request` directly. Do NOT wait for an additional "CI green" webhook on top of an event like a review approval — review-approval events on a green PR are themselves the signal to merge.
+  7. **On every webhook event for a watched PR — including Vercel "Building" / "Ready" comments, Vade review comments (including approval comments), commit pushes — call `get_status` immediately. If `state === "success"` and no unresolved blocking review threads remain, call `merge_pull_request` directly. Treat the webhook itself as the trigger; do not wait for a separate "CI green" event on top of it.** The most common failure mode is a Vade approval webhook on an already-green PR being skipped as "no action needed" — that is wrong. Approval on a green PR IS the signal to merge.
   8. After merging, ALWAYS reply with the full ✅ / 🎯 / 🧪 / 🤔 / ⚠️ summary template defined later in this file — for both the initial implementation AND for every follow-up fix. No exceptions unless the user explicitly asks for a shorter reply.
   Only stop to ask if (a) tests / typecheck / build fail locally before pushing, (b) CI flags a real issue (not just "preview deploying"), or (c) the change is in the "Ask first" list below.
 - Make UI design choices that follow the existing brand tokens and Tailwind conventions in the repo.
