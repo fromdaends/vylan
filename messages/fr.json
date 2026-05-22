@@ -838,7 +838,7 @@
     "step3_language_fr": "Français",
     "step3_language_en": "Anglais",
     "step3_marketing_label": "J'accepte de recevoir des communications de Vylan.",
-    "step3_marketing_hint": "Facultatif. Vous pouvez vous désabonner à tout moment. Consultez notre {privacyLink}.",
+    "step3_marketing_hint": "Facultatif. Vous pouvez vous désabonner à tout moment. Consultez notre <privacyLink>politique de confidentialité</privacyLink>.",
     "step3_privacy_link": "politique de confidentialité",
     "submit_step1": "Suivant",
     "submit_step2": "Suivant",
@@ -876,6 +876,9 @@
     "booking_fallback": "Ou réservez directement ici :",
     "booked_heading": "C'est confirmé !",
     "booked_body": "Vous recevrez un courriel avec les détails. À bientôt !",
+    "booked_try_demo_heading": "Envie de tester en attendant ?",
+    "booked_try_demo_body": "Lancez un espace démo gratuit, pré-rempli avec des clients et des engagements fictifs. Aucune carte requise — explorez le vrai produit avant l'appel.",
+    "booked_try_demo_cta": "Essayer la démo maintenant",
     "booked_back_home": "Retour à l'accueil"
   },
   "Privacy": {
