@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 // Founder's public Cal.com link. Bookings go to whatever calendar is
 // connected on Cal.com's side (Apple Calendar in our case). Update
 // here if the link ever changes.
-export const CAL_LINK = "tyler-mnvpka";
+export const CAL_LINK = "vylan.app";
 const CAL_NAMESPACE = "book-call";
 
 // Opens the Cal.com booking flow as a centered modal overlay on top

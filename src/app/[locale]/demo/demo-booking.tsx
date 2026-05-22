@@ -80,7 +80,7 @@ export function DemoBookingStep({
     return (
       <FallbackBooking
         firstName={firstName(contactName)}
-        href="https://cal.com/tyler-mnvpka"
+        href="https://cal.com/vylan.app"
       />
     );
   }
