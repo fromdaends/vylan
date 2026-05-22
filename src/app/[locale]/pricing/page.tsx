@@ -6,7 +6,6 @@ import { PublicNav } from "@/components/public/public-nav";
 import { PublicFooter } from "@/components/public/public-footer";
 import { BILLING_ENABLED } from "@/lib/billing-mode";
 import { PaidPricingSection } from "./paid-pricing";
-import { BookCallCard } from "./book-call-card";
 
 // While BILLING_ENABLED is false we replace the fixed-plan grid with
 // a "talk to us" pitch — first clients get custom pricing through a
@@ -45,12 +44,25 @@ export default async function PricingPage({
           </p>
 
           <div className="mt-10 grid gap-4 sm:grid-cols-2 max-w-2xl mx-auto">
-            <BookCallCard
-              icon={<Calendar className="h-5 w-5" />}
-              heading={t("talk_call_heading")}
-              body={t("talk_call_body")}
-              cta={t("talk_call_cta")}
-            />
+            {/* Was a direct cal.com modal trigger; now routes through
+                /demo so we capture firm size / volume / current tool
+                BEFORE the prospect lands on the founder's calendar.
+                See supabase/migrations/0099_demo_requests.sql. */}
+            <Link
+              href="/demo"
+              className="group rounded-2xl border border-border bg-card p-6 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+            >
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+                <Calendar className="h-5 w-5" />
+              </span>
+              <h3 className="mt-3 font-medium">{t("talk_call_heading")}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("talk_call_body")}
+              </p>
+              <span className="mt-3 inline-block text-sm font-medium text-primary group-hover:underline">
+                {t("talk_call_cta")}
+              </span>
+            </Link>
 
             <Link
               href="/signup"
