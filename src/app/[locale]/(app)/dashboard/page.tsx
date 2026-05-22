@@ -1,6 +1,4 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getCurrentFirm } from "@/lib/db/firms";
-import { getCurrentUser } from "@/lib/db/users";
 import { listEngagements, type Engagement } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
 
@@ -30,12 +28,11 @@ import { CollapsibleSection } from "@/components/dashboard/collapsible-section";
 import { HashSectionLink } from "@/components/dashboard/hash-section-link";
 import { AiActivityList } from "@/components/dashboard/ai-activity-list";
 import { aiActivityShortLabel } from "@/components/dashboard/ai-activity-shared";
-import { DashboardGreeting } from "@/components/dashboard/dashboard-greeting";
 import {
   listAiActivityForFirm,
   type AiActivityEntry,
 } from "@/lib/db/ai-activity";
-import { formatDate, formatRelative } from "@/lib/format";
+import { formatRelative } from "@/lib/format";
 
 type RowVm = {
   engagement: Engagement;
@@ -51,9 +48,7 @@ export default async function DashboardPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [firm, user, engagements, clients] = await Promise.all([
-    getCurrentFirm(),
-    getCurrentUser(),
+  const [engagements, clients] = await Promise.all([
     listEngagements(),
     listClients({ includeArchived: false }),
   ]);
@@ -174,25 +169,17 @@ export default async function DashboardPage({
           other.length - 1,
         );
 
-  // First name for the greeting. Display-name wins if present (the
-  // user explicitly chose it); otherwise fall back to the leading
-  // token of the legal `name`. May be null when nothing is set —
-  // the greeting component falls back to a plain "Welcome." in that
-  // case. We don't touch the user's email as a name source; emails
-  // make for uncomfortable greetings.
-  const firstName = pickFirstName(
-    user?.display_name?.trim() || user?.name || "",
-  );
-  const todayPretty = formatDate(new Date(), locale, "long");
-  const subtitle = firm?.name
-    ? `${firm.name} · ${todayPretty}`
-    : todayPretty;
-
   return (
     <div className="space-y-10 sm:space-y-12">
-      <header className="flex flex-wrap items-end justify-between gap-6">
-        <DashboardGreeting firstName={firstName} subtitle={subtitle} />
-        <Link href="/engagements/new" className="shrink-0 animate-in-up">
+      {/* No personalized greeting on /dashboard — that lives on /home,
+          the post-login landing page. Dashboard goes straight to the
+          metric tiles + section breakdown. Header is just a quiet
+          page title plus the New engagement CTA. */}
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground/90">
+          {t("dashboard_title")}
+        </h1>
+        <Link href="/engagements/new" className="shrink-0">
           <Button size="sm">
             <Plus className="h-4 w-4" />
             {tEng("new")}
@@ -395,16 +382,6 @@ function statusBadge(
   if (status === "cancelled") return "destructive";
   if (status === "draft") return "outline";
   return "secondary";
-}
-
-function pickFirstName(full: string): string | null {
-  const trimmed = full.trim();
-  if (!trimmed) return null;
-  // Take everything up to the first whitespace. Handles hyphenated
-  // and accented first names cleanly (e.g. "Jean-François Roy" →
-  // "Jean-François"; "Émilie Bouchard" → "Émilie").
-  const first = trimmed.split(/\s+/)[0];
-  return first || null;
 }
 
 function Metric({
