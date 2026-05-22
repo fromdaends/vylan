@@ -29,7 +29,15 @@ export async function sendEmail({
   { sent: true; id: string } | { sent: false; reason: string }
 > {
   const c = client();
-  const from = process.env.RESEND_FROM_EMAIL ?? "noreply@vylan.app";
+  // Sender address resolution. Default is hello@vylan.app (our verified
+  // Resend sending domain). RESEND_FROM_EMAIL can override — but if it
+  // accidentally still carries the resend.dev sandbox value (set during
+  // initial Resend setup and easy to forget about), ignore it: Resend
+  // 403s on resend.dev → external recipients, so honoring that value
+  // would silently break founder notifications.
+  const rawFrom = process.env.RESEND_FROM_EMAIL?.trim();
+  const from =
+    !rawFrom || /@resend\.dev$/i.test(rawFrom) ? "hello@vylan.app" : rawFrom;
   if (!c) {
     // Redact the recipient so a misconfigured prod doesn't dump client PII
     // into the function logs. The dev-mode signal we actually need is
