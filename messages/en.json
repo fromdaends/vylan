@@ -838,7 +838,7 @@
     "step3_language_fr": "French",
     "step3_language_en": "English",
     "step3_marketing_label": "I agree to receive communications from Vylan.",
-    "step3_marketing_hint": "Optional. You can unsubscribe any time. See our {privacyLink}.",
+    "step3_marketing_hint": "Optional. You can unsubscribe any time. See our <privacyLink>privacy notice</privacyLink>.",
     "step3_privacy_link": "privacy notice",
     "submit_step1": "Next",
     "submit_step2": "Next",
@@ -876,6 +876,9 @@
     "booking_fallback": "Or book directly here:",
     "booked_heading": "You're confirmed!",
     "booked_body": "We sent you an email with the details. See you soon!",
+    "booked_try_demo_heading": "Want to poke around while you wait?",
+    "booked_try_demo_body": "Spin up a free demo workspace pre-loaded with sample clients and engagements. No card required — you can play with the real product before your call.",
+    "booked_try_demo_cta": "Try the demo now",
     "booked_back_home": "Back to home"
   },
   "Privacy": {

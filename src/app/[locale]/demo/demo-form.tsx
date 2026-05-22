@@ -597,7 +597,7 @@ function BookedConfirmation({ firstName: name }: { firstName: string }) {
     [name, t],
   );
   return (
-    <div className="space-y-5 text-center py-6">
+    <div className="space-y-6 text-center py-6">
       <div className="mx-auto inline-flex items-center justify-center size-14 rounded-2xl bg-success/15 text-success">
         <Check className="size-7" aria-hidden />
       </div>
@@ -607,11 +607,24 @@ function BookedConfirmation({ firstName: name }: { firstName: string }) {
       <p className="text-sm text-muted-foreground leading-relaxed max-w-md mx-auto">
         {t("booked_body")}
       </p>
-      <div className="pt-2">
-        <Link href="/">
-          <Button variant="outline" size="lg">
-            {t("booked_back_home")}
+      <div className="rounded-2xl border border-border/60 bg-card/60 p-5 max-w-md mx-auto space-y-3 text-left">
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <Sparkles className="size-4 text-accent" aria-hidden />
+          {t("booked_try_demo_heading")}
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {t("booked_try_demo_body")}
+        </p>
+        <Link href="/signup" className="block">
+          <Button size="lg" className="w-full">
+            {t("booked_try_demo_cta")}
+            <ArrowRight className="size-4" aria-hidden />
           </Button>
+        </Link>
+      </div>
+      <div>
+        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline">
+          {t("booked_back_home")}
         </Link>
       </div>
     </div>

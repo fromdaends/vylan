@@ -91,7 +91,7 @@ export function PublicNav() {
             </span>
             {/* Demo CTA — desktop only, sits just before Sign in to
                 surface the no-commitment way to try the product. */}
-            <Link href="/signup" className="hidden md:inline-flex">
+            <Link href="/demo" className="hidden md:inline-flex">
               <Button variant="ghost" size="sm">
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
                 {t("nav_demo")}
@@ -143,7 +143,7 @@ export function PublicNav() {
           <div className="px-4 py-3 flex flex-col gap-1">
             {/* Demo CTA above sign in — same emphasis pattern as the
                 desktop pill. */}
-            <Link href="/signup" onClick={closeMobile} className="px-1">
+            <Link href="/demo" onClick={closeMobile} className="px-1">
               <Button variant="outline" size="sm" className="w-full">
                 <Sparkles className="h-3.5 w-3.5" aria-hidden />
                 {t("nav_demo")}
