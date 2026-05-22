@@ -34,6 +34,7 @@ vi.mock("@/lib/db/demo-requests", () => {
         marketing_opt_in: false,
         furthest_step: 1,
         booked_at: null,
+        notified_at: null,
         created_at: now,
         updated_at: now,
       };
@@ -78,13 +79,18 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-const newLeadMock = vi.fn(async () => ({ id: "stub" }));
-const qualifiedMock = vi.fn(async () => ({ id: "stub" }));
-const bookedMock = vi.fn(async () => ({ id: "stub" }));
+const bookedMock = vi.fn(async (_row: DemoRequest) => ({ id: "stub" }));
 
 vi.mock("@/lib/demo-notify", () => ({
-  notifyFounderNewLead: (r: DemoRequest) => newLeadMock(r),
-  notifyFounderQualifiedLead: (r: DemoRequest) => qualifiedMock(r),
+  // Form-step submissions no longer fire emails directly — the
+  // /api/cron/demo-leads job picks them up 5 min after last activity
+  // and calls notifyFounderLead. Only the booking path still fires
+  // immediately, since founder wants real-time notice for that.
+  // The three stubs below exist so static imports don't break; the
+  // action code shouldn't actually call them.
+  notifyFounderLead: () => undefined,
+  notifyFounderPartialLead: () => undefined,
+  notifyFounderQualifiedLead: () => undefined,
   notifyFounderDemoBooked: (r: DemoRequest) => bookedMock(r),
 }));
 
@@ -93,12 +99,10 @@ import { saveDemoStep, markDemoBooked } from "./demo-request";
 describe("saveDemoStep — funnel walk", () => {
   beforeEach(() => {
     fakeStore.clear();
-    newLeadMock.mockClear();
-    qualifiedMock.mockClear();
     bookedMock.mockClear();
   });
 
-  it("step 1 creates a row, returns id, fires new-lead email", async () => {
+  it("step 1 creates a row, returns id, does NOT fire an email", async () => {
     const res = await saveDemoStep({
       step: 1,
       data: {
@@ -112,11 +116,9 @@ describe("saveDemoStep — funnel walk", () => {
       const row = fakeStore.get(res.id);
       expect(row?.email).toBe("phil@vylan.app");
       expect(row?.furthest_step).toBe(1);
+      // Debounced now — cron sends the email, not the action.
+      expect(row?.notified_at).toBeFalsy();
     }
-    // notify runs async via `void` — wait one tick before assert.
-    await new Promise((r) => setTimeout(r, 0));
-    expect(newLeadMock).toHaveBeenCalledTimes(1);
-    expect(qualifiedMock).not.toHaveBeenCalled();
   });
 
   it("step 1 (partial fill) persists the email even if user bails", async () => {
@@ -175,9 +177,9 @@ describe("saveDemoStep — funnel walk", () => {
     expect(fakeStore.get(id)?.furthest_step).toBe(3);
     expect(fakeStore.get(id)?.marketing_opt_in).toBe(true);
     expect(fakeStore.get(id)?.province).toBe("QC");
-
-    await new Promise((r) => setTimeout(r, 0));
-    expect(qualifiedMock).toHaveBeenCalledTimes(1);
+    // The cron handles the notify, not the action. Row is still
+    // pending-notify after step 3.
+    expect(fakeStore.get(id)?.notified_at).toBeFalsy();
   });
 
   it("step 2 with current_tool=other_software requires the free-text field", async () => {
@@ -247,7 +249,7 @@ describe("markDemoBooked", () => {
     bookedMock.mockClear();
   });
 
-  it("stamps booked_at and fires the booked notification", async () => {
+  it("stamps booked_at + notified_at and fires the booked notification", async () => {
     const r1 = await saveDemoStep({
       step: 1,
       data: {
@@ -260,7 +262,12 @@ describe("markDemoBooked", () => {
 
     const res = await markDemoBooked(r1.id);
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.row.booked_at).toBeTruthy();
+    if (res.ok) {
+      expect(res.row.booked_at).toBeTruthy();
+      // notified_at also gets set so the debounce cron won't fire
+      // a redundant qualified-lead email for this fast-booking lead.
+      expect(res.row.notified_at).toBeTruthy();
+    }
 
     await new Promise((r) => setTimeout(r, 0));
     expect(bookedMock).toHaveBeenCalledTimes(1);
