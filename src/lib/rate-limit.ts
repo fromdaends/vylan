@@ -57,10 +57,12 @@ export const FIRM_EXPORT_LIMIT: LimitSpec = { limit: 1, window: "1 h" };
 // Misc.
 export const FEEDBACK_PER_USER: LimitSpec = { limit: 5, window: "1 h" };
 
-// Public demo qualifying form (/[locale]/demo). Tight enough to stop
-// scripted spam, loose enough that three real prospects on the same
-// office Wi-Fi don't trip it.
-export const DEMO_FORM_PER_IP: LimitSpec = { limit: 15, window: "1 h" };
+// Public demo qualifying form (/[locale]/demo). Each full form
+// completion is 3 submissions (one per step), so 60/h ≈ 20 full
+// completions per IP per hour — enough to never trip during real
+// founder testing, still well below scripted-spam volume (a bot
+// would hit hundreds per minute). Tighten later if abuse appears.
+export const DEMO_FORM_PER_IP: LimitSpec = { limit: 60, window: "1 h" };
 
 // ---- Internals -------------------------------------------------------------
 
