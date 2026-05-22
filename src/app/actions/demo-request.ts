@@ -32,10 +32,13 @@ import {
   ipFromRequest,
   DEMO_FORM_PER_IP,
 } from "@/lib/rate-limit";
-// Founder notifications for partial + qualified leads are fired by the
-// /api/cron/demo-leads job 5 minutes after the prospect's last
-// activity. Booking confirmation still fires immediately (see
-// markDemoBooked below) because that's a time-sensitive event.
+// Founder notifications:
+//   - Step 3 completion → fire immediately (they finished — fresh,
+//     committed lead, founder wants to know now).
+//   - Partial fills (step 1 or 2, never reached step 3) → debounced
+//     by /api/cron/demo-leads, 5 min after last activity.
+//   - Booking confirmation → fires immediately from markDemoBooked.
+import { notifyFounderQualifiedLead } from "@/lib/demo-notify";
 
 export type SaveDemoStepResult =
   | { ok: true; id: string }
@@ -120,14 +123,26 @@ export async function saveDemoStep(
   const existing = await getDemoRequest(args.existingId);
   if (!existing) return { ok: false, error: "not_found" };
 
+  // Mark the lead as notified at the same time we save Step 3, so
+  // the debounce cron won't re-notify if it picks the row up
+  // before our async email send completes.
   const row = await updateDemoRequest(args.existingId, {
     phone: parsed.data.phone?.trim() ? parsed.data.phone.trim() : null,
     province: parsed.data.province,
     preferred_language: parsed.data.preferred_language,
     marketing_opt_in: parsed.data.marketing_opt_in,
     furthest_step: Math.max(existing.furthest_step, 3) as 1 | 2 | 3,
+    notified_at: new Date().toISOString(),
   });
   if (!row) return { ok: false, error: "save_failed" };
+
+  // Fire the qualified-lead email right away. The prospect just
+  // told us they're a real lead — the founder wants to know now,
+  // not in 5 minutes.
+  void notifyFounderQualifiedLead(row).catch((e) => {
+    console.error("[saveDemoStep] notifyFounderQualifiedLead failed:", e);
+  });
+
   return { ok: true, id: row.id };
 }
 
