@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listClients, type Client } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
@@ -8,14 +7,13 @@ import { listEngagements } from "@/lib/db/engagements";
 export const dynamic = "force-dynamic";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
-import { ClientsToolbar } from "@/components/clients/clients-toolbar";
+import { ClientsListView } from "@/components/clients/clients-list-view";
 import { SORT_OPTIONS, type SortKey } from "@/components/clients/sort";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
-import {
-  ClientsTable,
-  type ClientEngagementSummary,
-  type ClientEngagementRow,
+import type {
+  ClientEngagementSummary,
+  ClientEngagementRow,
 } from "@/components/clients/clients-table";
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import { assertLocale } from "@/lib/locale";
@@ -26,8 +24,13 @@ export default async function ClientsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  // `q` was a server-side filter parameter; the search is now an
+  // instant client-side filter held inside <ClientsListView>, so the
+  // server doesn't read it anymore. The URL param is intentionally
+  // dropped — no point keeping a stale URL parameter the page no
+  // longer honors. Other filters (type / sort / active / archived)
+  // remain URL-driven.
   searchParams: Promise<{
-    q?: string;
     type?: string;
     archived?: string;
     sort?: string;
@@ -39,7 +42,6 @@ export default async function ClientsPage({
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  const q = (sp.q ?? "").trim();
   const type =
     sp.type === "individual" || sp.type === "business" ? sp.type : "all";
   const includeArchived = sp.archived === "1";
@@ -49,7 +51,7 @@ export default async function ClientsPage({
   const activeOnly = sp.active === "1";
 
   const [clientsRaw, engagements, firm] = await Promise.all([
-    listClients({ search: q, type, includeArchived }),
+    listClients({ type, includeArchived }),
     listEngagements(),
     getCurrentFirm(),
   ]);
@@ -175,25 +177,16 @@ export default async function ClientsPage({
         </div>
       </header>
 
-      <div className="rounded-xl border border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border/60">
-          <Suspense>
-            <ClientsToolbar
-              q={q}
-              type={type}
-              includeArchived={includeArchived}
-              sort={sort}
-              activeOnly={activeOnly}
-            />
-          </Suspense>
-        </div>
-        <ClientsTable
-          clients={clients}
-          summaries={summaries}
-          engagementsByClient={engagementsByClient}
-          locale={locale}
-        />
-      </div>
+      <ClientsListView
+        clients={clients}
+        summaries={summaries}
+        engagementsByClient={engagementsByClient}
+        locale={locale}
+        type={type}
+        includeArchived={includeArchived}
+        sort={sort}
+        activeOnly={activeOnly}
+      />
     </div>
   );
 }

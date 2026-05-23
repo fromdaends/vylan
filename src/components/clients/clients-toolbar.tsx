@@ -17,13 +17,20 @@ import { Search, ArrowUpDown } from "lucide-react";
 import { SORT_OPTIONS, type SortKey } from "./sort";
 
 export function ClientsToolbar({
-  q,
+  query,
+  onQueryChange,
   type,
   includeArchived,
   sort,
   activeOnly,
 }: {
-  q: string;
+  // Search is now a pure client-side filter held by the parent
+  // view — typing in the input updates this prop on every keystroke
+  // and the parent re-filters the rendered list in memory. No URL
+  // round-trip, no server fetch, no debounce. Other filters
+  // (type / sort / active / archived) still round-trip via the URL.
+  query: string;
+  onQueryChange: (next: string) => void;
   type: "all" | "individual" | "business";
   includeArchived: boolean;
   sort: SortKey;
@@ -59,8 +66,8 @@ export function ClientsToolbar({
           <Input
             type="search"
             placeholder={t("search_placeholder")}
-            defaultValue={q}
-            onChange={(e) => setParam("q", e.target.value)}
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
             className="pl-8 w-72"
             aria-label={t("search_label")}
           />

@@ -493,6 +493,7 @@
     "combobox_empty": "Aucun client trouvé.",
     "search_placeholder": "Rechercher par nom ou courriel…",
     "search_label": "Rechercher des clients",
+    "empty_search": "Aucun client trouvé.",
     "filter_all": "Tous",
     "filter_individual": "Particuliers",
     "filter_business": "Entreprises",
