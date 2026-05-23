@@ -145,21 +145,28 @@ export default async function SettingsPage({
               </span>
               <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
             </a>
-            {/* Delete firm */}
+          </div>
+
+          {/* Delete firm — destructive action, visually quarantined.
+              Extra top spacing pushes it away from the two non-
+              destructive rows above, and the row itself uses
+              destructive border + label colour so it can't be
+              mistaken for an everyday action. */}
+          <div className="mt-8 max-w-xl">
             <a
               href={`mailto:hello@vylan.app?subject=${encodeURIComponent(`Delete firm: ${firm.name}`)}`}
               className={
                 "group flex items-center justify-between gap-4 " +
-                "rounded-lg border border-border/60 bg-card/50 px-4 py-3 " +
-                "transition-colors hover:border-destructive/30"
+                "rounded-lg border border-destructive/50 bg-destructive/[0.04] px-4 py-3 " +
+                "transition-colors hover:border-destructive hover:bg-destructive/10"
               }
             >
               <span className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-destructive/10 text-destructive">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-destructive/15 text-destructive">
                   <Trash2 className="h-4 w-4" />
                 </span>
                 <span className="flex flex-col">
-                  <span className="text-sm font-medium">
+                  <span className="text-sm font-medium text-destructive">
                     {t("data_delete_label")}
                   </span>
                   <span className="text-xs text-muted-foreground">
@@ -167,7 +174,7 @@ export default async function SettingsPage({
                   </span>
                 </span>
               </span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              <ChevronRight className="h-4 w-4 text-destructive/60 transition-transform group-hover:translate-x-0.5" />
             </a>
           </div>
         </section>

@@ -41,14 +41,38 @@ export function SettingsForm({
   const t = useTranslations("Settings");
 
   return (
-    <div className="space-y-10">
-      <AppearanceSection t={t} />
-      <LanguageSection currentLocale={currentLocale} t={t} />
-      <TimezoneSection currentTimezone={currentTimezone} t={t} />
-      <FirmPreferencesSection
+    <div className="space-y-12">
+      {/* Preferences group — personal/firm display + locale preferences
+          live under one eyebrow so the three child sections feel like
+          a single unit instead of three loose blocks. Each child keeps
+          its own existing styling. */}
+      <SettingsGroup label={t("section_preferences")}>
+        <AppearanceSection t={t} />
+        <LanguageSection currentLocale={currentLocale} t={t} />
+        <TimezoneSection currentTimezone={currentTimezone} t={t} />
+      </SettingsGroup>
+
+      <DocumentHandlingSection
         autoRejectUnusableDocs={autoRejectUnusableDocs}
         t={t}
       />
+    </div>
+  );
+}
+
+function SettingsGroup({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <h2 className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground mb-6">
+        {label}
+      </h2>
+      <div className="space-y-10">{children}</div>
     </div>
   );
 }
@@ -286,9 +310,9 @@ function TimezoneSection({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AI — currently just the auto-reject-unusable-docs toggle. Future AI
-// settings (model preferences, confidence thresholds, etc.) go inside
-// the same section.
+// Document handling — was the "AI" section. Houses the auto-reject
+// invalid-uploads toggle (and any future firm-wide upload-handling
+// settings go here too: confidence thresholds, file-type rules, etc.).
 //
 // Zero-lag toggle: the local `setEnabled(next)` flip happens
 // synchronously on click, so the switch visually moves before the
@@ -302,7 +326,7 @@ function TimezoneSection({
 // last-write-wins.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function FirmPreferencesSection({
+function DocumentHandlingSection({
   autoRejectUnusableDocs,
   t,
 }: {
@@ -339,9 +363,9 @@ function FirmPreferencesSection({
 
   return (
     <section>
-      <h2 className="text-sm font-semibold">{t("section_ai")}</h2>
+      <h2 className="text-sm font-semibold">{t("section_doc_handling")}</h2>
       <p className="text-xs text-muted-foreground mt-1">
-        {t("section_ai_hint")}
+        {t("section_doc_handling_hint")}
       </p>
       <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3 max-w-xl">
         <div className="space-y-1">
