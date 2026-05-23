@@ -14,115 +14,118 @@ import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
 import { Search, X, Users, Briefcase } from "lucide-react";
 
-// Home-page search input with live typeahead dropdown.
+// Home-page search input with instant typeahead.
 //
-// Enter still routes to /clients?q=<query> exactly as before — that
-// flow is intentionally preserved so power-users keep their muscle
-// memory. The new behavior is layered on top: typing 2+ chars opens
-// a dropdown of matching clients and engagements pulled from
-// /api/search, debounced ~200ms. Clicking a row navigates directly
-// to that item.
+// Filters an in-memory index of the firm's clients + active
+// engagements (passed in as props by the Home page, which already
+// loaded them). No debounce, no fetch on keystroke, no loading
+// state — results appear and update on every input event with zero
+// perceptible latency.
 //
-// Keyboard nav (nice-to-have, kept simple):
+// Enter still routes to /clients?q=<query> exactly as before so
+// power-users keep their muscle memory. The new typeahead is layered
+// on top.
+//
+// Keyboard nav:
 //   - ArrowDown / ArrowUp : move highlight through the flat list
-//                            of results (clients then engagements).
+//                            (clients then engagements).
 //   - Enter on a highlighted row : navigate to that row.
-//   - Enter with nothing highlighted : fall through to the existing
-//                            /clients?q= behavior.
+//   - Enter with nothing highlighted : fall through to the
+//                            existing /clients?q= behavior.
 //   - Escape : close the dropdown.
 //
 // Outside-click and the inline (X) clear button both close the
 // dropdown and reset state.
 
-type ClientHit = {
+export type HomeSearchClient = {
   id: string;
   display_name: string;
   email: string | null;
 };
 
-type EngagementHit = {
+export type HomeSearchEngagement = {
   id: string;
   title: string;
   client_id: string;
+};
+
+type ClientHit = HomeSearchClient;
+type EngagementHit = HomeSearchEngagement & {
   client_display_name: string | null;
 };
 
-type SearchResponse = {
-  clients: ClientHit[];
-  engagements: EngagementHit[];
-};
-
 const MIN_CHARS = 2;
-const DEBOUNCE_MS = 200;
+const MAX_PER_KIND = 6;
 
-export function HomeSearch() {
+export function HomeSearch({
+  clients,
+  engagements,
+}: {
+  clients: HomeSearchClient[];
+  engagements: HomeSearchEngagement[];
+}) {
   const t = useTranslations("Home");
   const router = useRouter();
 
   const [value, setValue] = useState("");
-  const [results, setResults] = useState<SearchResponse>({
-    clients: [],
-    engagements: [],
-  });
   const [open, setOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [highlight, setHighlight] = useState<number>(-1);
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Tracks the in-flight fetch so a stale response doesn't overwrite
-  // a newer one (user types "tre" → "trem" → trem arrives first if
-  // its query is faster; the tre response is discarded).
-  const reqIdRef = useRef(0);
 
-  // Flat list the keyboard nav walks. Clients first, then engagements
-  // — same order they render. Memoized so re-renders during arrow-
-  // key movement don't rebuild it.
+  // Pre-build a client_id → display_name map once per render of
+  // the parent so engagement rows can show "Title · Client" with
+  // zero per-keystroke lookup.
+  const clientNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of clients) m.set(c.id, c.display_name);
+    return m;
+  }, [clients]);
+
+  // In-memory filter — runs on every keystroke. With a few hundred
+  // clients + engagements this is sub-millisecond.
+  const results = useMemo(() => {
+    const trimmed = value.trim().toLowerCase();
+    if (trimmed.length < MIN_CHARS) {
+      return { clients: [] as ClientHit[], engagements: [] as EngagementHit[] };
+    }
+    const matchedClients: ClientHit[] = [];
+    for (const c of clients) {
+      const inName = c.display_name.toLowerCase().includes(trimmed);
+      const inEmail =
+        c.email != null && c.email.toLowerCase().includes(trimmed);
+      if (inName || inEmail) {
+        matchedClients.push(c);
+        if (matchedClients.length >= MAX_PER_KIND) break;
+      }
+    }
+    const matchedEngagements: EngagementHit[] = [];
+    for (const e of engagements) {
+      if (e.title.toLowerCase().includes(trimmed)) {
+        matchedEngagements.push({
+          ...e,
+          client_display_name: clientNameById.get(e.client_id) ?? null,
+        });
+        if (matchedEngagements.length >= MAX_PER_KIND) break;
+      }
+    }
+    return { clients: matchedClients, engagements: matchedEngagements };
+  }, [value, clients, engagements, clientNameById]);
+
+  // Flat list the keyboard nav walks. Same order they render.
   const flat = useMemo(() => {
     const out: (
       | { kind: "client"; row: ClientHit }
       | { kind: "engagement"; row: EngagementHit }
     )[] = [];
     for (const c of results.clients) out.push({ kind: "client", row: c });
-    for (const e of results.engagements) out.push({ kind: "engagement", row: e });
+    for (const e of results.engagements)
+      out.push({ kind: "engagement", row: e });
     return out;
   }, [results]);
 
-  // Debounced fetch. Cleared on every keystroke + on unmount.
-  useEffect(() => {
-    const trimmed = value.trim();
-    if (trimmed.length < MIN_CHARS) {
-      setResults({ clients: [], engagements: [] });
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    const timer = setTimeout(async () => {
-      const myReq = ++reqIdRef.current;
-      try {
-        const res = await fetch(
-          `/api/search?q=${encodeURIComponent(trimmed)}`,
-          { cache: "no-store" },
-        );
-        if (myReq !== reqIdRef.current) return; // stale
-        if (res.ok) {
-          const data = (await res.json()) as SearchResponse;
-          setResults(data);
-        } else {
-          setResults({ clients: [], engagements: [] });
-        }
-      } catch {
-        if (myReq !== reqIdRef.current) return;
-        setResults({ clients: [], engagements: [] });
-      } finally {
-        if (myReq === reqIdRef.current) setLoading(false);
-      }
-    }, DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [value]);
-
-  // Reset the highlight whenever the result set changes so the user
-  // doesn't land on an index that no longer exists.
+  // Reset highlight whenever the result set changes.
   useEffect(() => {
     setHighlight(-1);
   }, [results]);
@@ -147,13 +150,14 @@ export function HomeSearch() {
 
   const clear = useCallback(() => {
     setValue("");
-    setResults({ clients: [], engagements: [] });
     close();
     inputRef.current?.focus();
   }, [close]);
 
   function navigateTo(
-    row: { kind: "client"; row: ClientHit } | { kind: "engagement"; row: EngagementHit },
+    row:
+      | { kind: "client"; row: ClientHit }
+      | { kind: "engagement"; row: EngagementHit },
   ) {
     if (row.kind === "client") {
       router.push(`/clients/${row.row.id}`);
@@ -165,9 +169,6 @@ export function HomeSearch() {
 
   function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    // If the user has highlighted a row with arrow keys, Enter selects
-    // that row. Otherwise fall through to the original "go to the
-    // clients page filtered by q" behavior.
     if (highlight >= 0 && flat[highlight]) {
       navigateTo(flat[highlight]);
       return;
@@ -194,8 +195,6 @@ export function HomeSearch() {
     }
   }
 
-  // The dropdown is open whenever the user is actively in the
-  // typeahead state: focused on the input AND has typed >= MIN_CHARS.
   const trimmed = value.trim();
   const canShowDropdown = trimmed.length >= MIN_CHARS && open;
   const hasResults =
@@ -227,9 +226,6 @@ export function HomeSearch() {
           onKeyDown={onKeyDown}
           placeholder={t("search_placeholder")}
           autoComplete="off"
-          // Hide the native "search input" X — we render our own to
-          // make sure it ALSO clears the dropdown state, not just the
-          // text in the input.
           className="pl-11 pr-10 h-12 text-base rounded-full bg-card/60 border-border/60 shadow-sm focus-visible:border-foreground/30 focus-visible:ring-foreground/10 [&::-webkit-search-cancel-button]:hidden"
           role="combobox"
           aria-autocomplete="list"
@@ -260,7 +256,7 @@ export function HomeSearch() {
         >
           {!hasResults ? (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-              {loading ? t("search_loading") : t("search_no_results")}
+              {t("search_no_results")}
             </div>
           ) : (
             <div className="max-h-[24rem] overflow-y-auto py-1">

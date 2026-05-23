@@ -71,8 +71,25 @@ export default async function HomePage({
       </div>
 
       {/* 2. Search — the visual anchor. Centered, prominent, pill-
-          shaped, sits directly under the greeting. */}
-      <HomeSearch />
+          shaped, sits directly under the greeting. Pre-loaded
+          clients + engagements get passed in so the typeahead
+          filters in-memory (zero-latency, no fetch per keystroke). */}
+      <HomeSearch
+        clients={clients.map((c) => ({
+          id: c.id,
+          display_name: c.display_name,
+          email: c.email,
+        }))}
+        engagements={engagements
+          .filter(
+            (e) => e.status === "sent" || e.status === "in_progress",
+          )
+          .map((e) => ({
+            id: e.id,
+            title: e.title,
+            client_id: e.client_id,
+          }))}
+      />
 
       {/* 3. What's new — minimal scannable feed. No card border on
           the section itself; rows are separated by a single hairline
