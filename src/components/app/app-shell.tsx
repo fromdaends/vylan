@@ -144,10 +144,9 @@ export function AppShell({
     { href: "/templates", label: labels.templates, icon: FileText },
   ];
 
-  const accountNav: NavItemDef[] = [
-    { href: "/firm", label: labels.firm, icon: Building2 },
-    { href: "/settings", label: labels.settings, icon: Settings },
-  ];
+  // Firm + Settings used to live in a sidebar "ACCOUNT" section; they
+  // now live in the avatar dropdown menu (and the mobile sheet's
+  // profile menu), so the sidebar nav is just primary destinations.
 
   return (
     <div className="flex min-h-screen">
@@ -162,7 +161,6 @@ export function AppShell({
       >
         <SidebarBody
           primaryNav={primaryNav}
-          accountNav={accountNav}
           labels={labels}
           firmName={firmName}
           firmLogoUrl={firmLogoUrl}
@@ -482,7 +480,6 @@ function MobileMenuItem({
 
 function SidebarBody({
   primaryNav,
-  accountNav,
   labels,
   firmName,
   firmLogoUrl,
@@ -494,7 +491,6 @@ function SidebarBody({
   onToggleCollapse,
 }: {
   primaryNav: NavItemDef[];
-  accountNav: NavItemDef[];
   labels: Labels;
   firmName: string;
   firmLogoUrl: string | null;
@@ -511,7 +507,7 @@ function SidebarBody({
       {collapsed ? (
         <div className="flex flex-col items-center gap-3 px-2 pt-4 pb-3 border-b border-border/40">
           <Link
-            href="/dashboard"
+            href="/home"
             title={brand.name}
             className="inline-flex items-center justify-center rounded-lg p-1 hover:bg-secondary/40 transition-colors"
           >
@@ -535,7 +531,7 @@ function SidebarBody({
       ) : (
         <div className="flex items-center justify-between gap-2 px-5 pt-5 pb-4">
           <Link
-            href="/dashboard"
+            href="/home"
             className="flex items-center gap-2.5 font-semibold tracking-tight text-base group min-w-0"
           >
             <Logo
@@ -568,17 +564,6 @@ function SidebarBody({
       >
         <NavSection label={labels.sectionMain} collapsed={collapsed}>
           {primaryNav.map((item) => (
-            <NavLink
-              key={item.href}
-              href={item.href}
-              icon={item.icon}
-              label={item.label}
-              collapsed={collapsed}
-            />
-          ))}
-        </NavSection>
-        <NavSection label={labels.sectionAccount} collapsed={collapsed}>
-          {accountNav.map((item) => (
             <NavLink
               key={item.href}
               href={item.href}
@@ -656,6 +641,15 @@ function SidebarBody({
                 {labels.profile}
               </Link>
             </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link
+                href="/settings"
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Settings className="h-4 w-4" />
+                {labels.settings}
+              </Link>
+            </DropdownMenuItem>
             <DropdownMenuItem
               className="flex items-center gap-2 cursor-pointer"
               onSelect={(e) => {
@@ -670,6 +664,10 @@ function SidebarBody({
             <DropdownMenuLabel className="font-normal text-[11px] uppercase tracking-wider text-muted-foreground pb-1">
               {labels.yourFirm}
             </DropdownMenuLabel>
+            {/* Firm tile doubles as the entry point to firm settings —
+                clicking it routes to /firm (the firm-settings page).
+                The avatar + firm name keep the "this is who you're
+                working as" affordance from the prior sidebar layout. */}
             <DropdownMenuItem asChild>
               <Link
                 href="/firm"
@@ -681,7 +679,11 @@ function SidebarBody({
                   size={24}
                   color={brandColor}
                 />
-                <span className="text-xs truncate">{firmName}</span>
+                <span className="text-xs truncate flex-1">{firmName}</span>
+                <Building2
+                  className="h-3.5 w-3.5 text-muted-foreground"
+                  aria-hidden
+                />
               </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
