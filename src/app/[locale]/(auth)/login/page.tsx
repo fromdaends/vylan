@@ -2,22 +2,42 @@
 
 import { useActionState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { loginAction, type AuthActionState } from "@/app/actions/auth";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { ArrowRight } from "lucide-react";
+
+// Allowlist of error codes the login page knows how to surface from
+// the URL. Anything else gets ignored so a stray ?error=whatever
+// doesn't try to render a missing translation.
+const URL_ERROR_CODES = new Set([
+  "callback",
+  "oauth_failed",
+  "rate_limited",
+]);
 
 export default function LoginPage() {
   const t = useTranslations("Auth");
   const tc = useTranslations("Common");
   const locale = useLocale();
+  const localeNarrow: "fr" | "en" = locale === "en" ? "en" : "fr";
+  const searchParams = useSearchParams();
+  const rawUrlError = searchParams.get("error");
+  const urlError =
+    rawUrlError && URL_ERROR_CODES.has(rawUrlError) ? rawUrlError : null;
   const [state, formAction, pending] = useActionState<
     AuthActionState,
     FormData
   >(loginAction, null);
+  // Form-submit error takes precedence over the URL one — the URL
+  // error is from a prior redirect (OAuth failure, expired link, etc.)
+  // and we don't want to keep showing it after the user has tried again.
+  const visibleError = state?.error ?? urlError;
 
   return (
     <div>
@@ -30,13 +50,32 @@ export default function LoginPage() {
         </p>
       </div>
 
+      <GoogleSignInButton
+        locale={localeNarrow}
+        label={t("continue_with_google")}
+      />
+
+      <div className="relative my-5" aria-hidden>
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase tracking-wider">
+          <span className="bg-background px-2 text-muted-foreground">
+            {t("or_divider")}
+          </span>
+        </div>
+      </div>
+
+      {visibleError && (
+        <Alert variant="destructive" className="animate-in-fade mb-4">
+          <AlertDescription>
+            {t(`errors.${visibleError}` as const)}
+          </AlertDescription>
+        </Alert>
+      )}
+
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="locale" value={locale} />
-        {state?.error && (
-          <Alert variant="destructive" className="animate-in-fade">
-            <AlertDescription>{t(`errors.${state.error}`)}</AlertDescription>
-          </Alert>
-        )}
         <div className="space-y-2">
           <Label htmlFor="email">{t("email")}</Label>
           <Input

@@ -140,6 +140,8 @@
     "forgot_link": "Mot de passe oublié ?",
     "remember_me": "Rester connecté",
     "remember_me_hint": "Reste connecté sur cet appareil pendant 30 jours. Décochez pour vous déconnecter à la fermeture du navigateur.",
+    "continue_with_google": "Continuer avec Google",
+    "or_divider": "ou",
     "logout": "Déconnexion",
     "mfa_challenge_title": "Entrez votre code de vérification",
     "mfa_challenge_subtitle": "Nous avons besoin d'un code à 6 chiffres provenant de votre application d'authentification pour terminer la connexion.",
@@ -166,7 +168,8 @@
       "min_8_chars": "Au moins 8 caractères.",
       "min_2_chars": "Au moins 2 caractères.",
       "invalid_email": "Courriel invalide.",
-      "callback": "Lien invalide ou expiré."
+      "callback": "Lien invalide ou expiré.",
+      "oauth_failed": "La connexion avec Google a échoué. Veuillez réessayer ou utiliser votre courriel."
     }
   },
   "Onboarding": {
