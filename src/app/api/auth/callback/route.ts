@@ -20,8 +20,9 @@ function sanitizeNext(raw: string | null): string {
   return raw;
 }
 
-// Pull the locale prefix off `next` so the error redirect lands the
-// user on the right /{locale}/login page rather than the bare /login.
+// Pull the locale prefix off `next` so the error redirect (and the
+// new-user → /demo redirect) lands on the right localized page rather
+// than the unprefixed default.
 function localeFromNext(next: string): "fr" | "en" {
   if (next.startsWith("/en/") || next === "/en") return "en";
   return "fr";
@@ -36,6 +37,32 @@ export async function GET(request: NextRequest) {
     const supabase = await getServerSupabase();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Funnel discipline: every brand-new account must go through the
+      // /demo qualification questionnaire before reaching the app. We
+      // detect "brand new" by checking whether a public.users row
+      // exists for this auth user — email signup creates that row in
+      // step1Action, so it's the canonical "have they finished
+      // onboarding their firm" signal. Google OAuth creates only an
+      // auth.users row, so first-time Google users will land here
+      // without a public.users row and get routed to /demo.
+      //
+      // Existing users (email confirm, password reset, returning OAuth)
+      // already have a public.users row → honor the requested `next`.
+      const { data: authData } = await supabase.auth.getUser();
+      const userId = authData?.user?.id;
+      const locale = localeFromNext(next);
+
+      if (userId) {
+        const { data: row } = await supabase
+          .from("users")
+          .select("id")
+          .eq("id", userId)
+          .maybeSingle();
+        if (!row) {
+          return NextResponse.redirect(`${origin}/${locale}/demo`);
+        }
+      }
+
       return NextResponse.redirect(`${origin}${next}`);
     }
   }
