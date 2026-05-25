@@ -238,8 +238,18 @@ export async function signInWithGoogleAction(formData: FormData) {
 
   const supabase = await getServerSupabase();
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const next = localPath(locale, "/home");
-  const redirectTo = `${appUrl}/api/auth/callback?next=${encodeURIComponent(next)}`;
+
+  // Mirror the email signupAction's continue-param allowlist. When set
+  // to "onboarding" the user already qualified via /demo's "Try the
+  // demo" CTA, so we skip the new-user → /demo redirect after the
+  // OAuth round-trip. Both the `next` URL and a separate `continue`
+  // query param are encoded into redirectTo so the callback handler
+  // (which is the one that actually does the routing) sees the signal.
+  const continueOk = formData.get("continue") === "onboarding";
+  const nextPath = localPath(locale, continueOk ? "/onboarding" : "/home");
+  const redirectTo =
+    `${appUrl}/api/auth/callback?next=${encodeURIComponent(nextPath)}` +
+    (continueOk ? "&continue=onboarding" : "");
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",

@@ -32,6 +32,12 @@ export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const next = sanitizeNext(searchParams.get("next"));
+  // Same allowlist trick used by /signup + signupAction: an explicit
+  // ?continue=onboarding flag means the OAuth user already qualified
+  // via /demo's "Try the demo" CTA, so we skip the new-user → /demo
+  // bounce and honour `next` (which the action sets to /onboarding
+  // in that case).
+  const continueOnboarding = searchParams.get("continue") === "onboarding";
 
   if (code) {
     const supabase = await getServerSupabase();
@@ -48,11 +54,15 @@ export async function GET(request: NextRequest) {
       //
       // Existing users (email confirm, password reset, returning OAuth)
       // already have a public.users row → honor the requested `next`.
+      //
+      // The `continueOnboarding` flag short-circuits this for users who
+      // came from /demo's "Try the demo" CTA — they already qualified,
+      // no point looping them back.
       const { data: authData } = await supabase.auth.getUser();
       const userId = authData?.user?.id;
       const locale = localeFromNext(next);
 
-      if (userId) {
+      if (userId && !continueOnboarding) {
         const { data: row } = await supabase
           .from("users")
           .select("id")
