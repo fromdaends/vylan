@@ -8,16 +8,24 @@ import { signInWithGoogleAction } from "@/app/actions/auth";
 // signInWithGoogleAction server action which redirects to Google's
 // consent screen. We pass `locale` so the action can build a
 // locale-aware `next` URL for the post-OAuth landing.
+//
+// `continueParam` is the same soft signal used by the email signup
+// flow (see /signup page + signupAction). When set to "onboarding"
+// it means the user already qualified via /demo, so we skip the
+// new-user → /demo redirect after the OAuth round-trip.
 export function GoogleSignInButton({
   locale,
   label,
+  continueParam = "",
 }: {
   locale: "fr" | "en";
   label: string;
+  continueParam?: string;
 }) {
   return (
     <form action={signInWithGoogleAction}>
       <input type="hidden" name="locale" value={locale} />
+      <input type="hidden" name="continue" value={continueParam} />
       <SubmitButton label={label} />
     </form>
   );

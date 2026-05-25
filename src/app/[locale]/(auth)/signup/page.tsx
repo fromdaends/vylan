@@ -42,6 +42,7 @@ export default function SignupPage() {
       <GoogleSignInButton
         locale={localeNarrow}
         label={t("continue_with_google")}
+        continueParam={continueParam}
       />
 
       <div className="relative my-5" aria-hidden>
