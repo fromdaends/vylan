@@ -185,7 +185,14 @@ export async function signupAction(
     }
     return { error: "signup_failed" };
   }
-  redirect(localPath(parsed.data.locale, "/onboarding"));
+  // Funnel discipline: every brand-new account flows through /demo
+  // first for qualification (firm size, current tools, etc.). The
+  // founder hand-converts qualified leads while billing is gated.
+  // This matches the OAuth callback behaviour (see PR #242). The
+  // /onboarding step1Action is still the canonical "create firm +
+  // public.users row" path — it just gets invoked AFTER the prospect
+  // completes /demo and the founder loops them in.
+  redirect(localPath(parsed.data.locale, "/demo"));
 }
 
 export async function logoutAction() {
