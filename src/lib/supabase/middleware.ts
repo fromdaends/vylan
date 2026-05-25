@@ -31,6 +31,15 @@ export async function updateSupabaseSession(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      // Override the SDK defaults of `httpOnly: false` and no `secure`
+      // flag. See src/lib/supabase/server.ts for the full rationale —
+      // both client constructions must use the same options so a token
+      // rotated through one path doesn't get rewritten with looser
+      // attributes by the other.
+      cookieOptions: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+      },
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -51,8 +60,31 @@ export async function updateSupabaseSession(
     },
   );
 
+  // Snapshot whether the browser sent any sb-* cookies *before* the
+  // refresh runs. Combined with the result below, this lets us log
+  // exactly the case we're hunting: the browser thought it had a
+  // session, but Supabase rejected it. Everything else (logged-out
+  // visitor on a public page, etc.) stays quiet.
+  const hadSessionCookie = request.cookies
+    .getAll()
+    .some((c) => c.name.startsWith("sb-"));
+
   // getUser() is what triggers the refresh-token rotation when the
   // access token is close to expiry. Without this call the cookies
   // never get rotated and the session decays silently.
-  await supabase.auth.getUser();
+  const { data, error } = await supabase.auth.getUser();
+
+  if (hadSessionCookie && (error || !data.user)) {
+    // Refresh-token rotation failed — most likely cause of the
+    // "I keep getting signed out" symptom. Log enough context to
+    // tell which failure mode hit (network, reuse-detection, expired
+    // refresh, etc.) without leaking token material.
+    console.error("[auth.middleware] session refresh failed", {
+      path: request.nextUrl.pathname,
+      errorMessage: error?.message,
+      errorStatus: (error as { status?: number } | null)?.status,
+      errorCode: (error as { code?: string } | null)?.code,
+      userAgent: request.headers.get("user-agent")?.slice(0, 120),
+    });
+  }
 }

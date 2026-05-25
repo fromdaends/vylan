@@ -16,6 +16,17 @@ export const getServerSupabase = cache(async function _getServerSupabase() {
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     {
+      // Override the SDK defaults of `httpOnly: false` and no `secure` flag.
+      // Vylan never reads sb-* cookies from the browser (no caller of
+      // getBrowserSupabase), so making them HttpOnly removes them from
+      // the "script-writeable storage" bucket that Safari's ITP and other
+      // privacy heuristics can purge or cap, and slams the door on any
+      // XSS that might try to exfiltrate the session. Secure: true on
+      // prod matches the marker-cookie session-only path in auth.ts.
+      cookieOptions: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+      },
       cookies: {
         getAll() {
           return cookieStore.getAll();
