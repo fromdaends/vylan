@@ -18,6 +18,15 @@ export async function updateSupabaseSession(
   request: NextRequest,
   response: NextResponse,
 ) {
+  // "Remember me" preference. The login action drops this marker
+  // cookie when the user unticks the box; we honour it on every
+  // token rotation by stripping maxAge / expires from outgoing
+  // sb-* cookies so they stay session-only. Without this, the SDK's
+  // persistent default would creep back in on the next refresh and
+  // the browser would keep the session past close.
+  const sessionOnly =
+    request.cookies.get("vylan-session-only")?.value === "1";
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -29,7 +38,13 @@ export async function updateSupabaseSession(
         setAll(cookiesToSet) {
           for (const { name, value, options } of cookiesToSet) {
             request.cookies.set(name, value);
-            response.cookies.set(name, value, options);
+            let opts = options;
+            if (sessionOnly && name.startsWith("sb-")) {
+              opts = { ...options };
+              delete opts.maxAge;
+              delete opts.expires;
+            }
+            response.cookies.set(name, value, opts);
           }
         },
       },

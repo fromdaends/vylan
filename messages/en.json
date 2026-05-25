@@ -138,6 +138,8 @@
     "create_account": "Create account",
     "sign_in": "Sign in",
     "forgot_link": "Forgot password?",
+    "remember_me": "Keep me signed in",
+    "remember_me_hint": "Stays logged in on this device for 30 days. Untick to sign out when you close the browser.",
     "logout": "Log out",
     "mfa_challenge_title": "Enter your two-factor code",
     "mfa_challenge_subtitle": "We need a 6-digit code from your authenticator app to finish signing you in.",
