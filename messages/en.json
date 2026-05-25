@@ -140,6 +140,8 @@
     "forgot_link": "Forgot password?",
     "remember_me": "Keep me signed in",
     "remember_me_hint": "Stays logged in on this device for 30 days. Untick to sign out when you close the browser.",
+    "continue_with_google": "Continue with Google",
+    "or_divider": "or",
     "logout": "Log out",
     "mfa_challenge_title": "Enter your two-factor code",
     "mfa_challenge_subtitle": "We need a 6-digit code from your authenticator app to finish signing you in.",
@@ -166,7 +168,8 @@
       "min_8_chars": "At least 8 characters.",
       "min_2_chars": "At least 2 characters.",
       "invalid_email": "Invalid email.",
-      "callback": "Invalid or expired link."
+      "callback": "Invalid or expired link.",
+      "oauth_failed": "We couldn't sign you in with Google. Please try again or use email."
     }
   },
   "Onboarding": {

@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { signupAction, type AuthActionState } from "@/app/actions/auth";
+import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { ArrowRight } from "lucide-react";
 
 export default function SignupPage() {
   const t = useTranslations("Auth");
   const tc = useTranslations("Common");
   const locale = useLocale();
+  const localeNarrow: "fr" | "en" = locale === "en" ? "en" : "fr";
   const [state, formAction, pending] = useActionState<
     AuthActionState,
     FormData
@@ -28,6 +30,22 @@ export default function SignupPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           {t("signup_subtitle")}
         </p>
+      </div>
+
+      <GoogleSignInButton
+        locale={localeNarrow}
+        label={t("continue_with_google")}
+      />
+
+      <div className="relative my-5" aria-hidden>
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-border" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase tracking-wider">
+          <span className="bg-background px-2 text-muted-foreground">
+            {t("or_divider")}
+          </span>
+        </div>
       </div>
 
       <form action={formAction} className="space-y-4">

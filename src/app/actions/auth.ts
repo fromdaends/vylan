@@ -195,6 +195,58 @@ export async function logoutAction() {
   redirect(localPath(routing.defaultLocale, "/login"));
 }
 
+// Google OAuth sign-in (works for both first-time signup and returning
+// sign-in — Supabase Auth treats the first OAuth call as account
+// creation). The flow:
+//   1. We call signInWithOAuth which prepares the PKCE code_verifier
+//      cookie on our domain and returns Google's consent URL.
+//   2. We redirect the user to that URL. They authenticate with Google.
+//   3. Google redirects to Supabase's callback (configured in the
+//      Supabase dashboard under Authentication → Providers → Google).
+//   4. Supabase exchanges the OAuth grant for a Supabase session and
+//      redirects to our /api/auth/callback with `?code=...&next=...`.
+//   5. Our callback handler exchanges the code (reads code_verifier
+//      cookie) and redirects the user to `next`.
+//
+// First-time Google users land on /home, where the (app)/layout sees
+// no public.users row + no firm and bounces them to /onboarding, which
+// asks for firm name + creates the public.users row from the Google
+// profile name via the existing step1Action.
+export async function signInWithGoogleAction(formData: FormData) {
+  const locale = pickLocale(formData);
+  const ip = await clientIp();
+  const rl = await checkRateLimit({
+    key: `oauth:google:ip:${ip}`,
+    ...LOGIN_LIMIT,
+  });
+  if (!rl.ok) {
+    redirect(localPath(locale, "/login?error=rate_limited"));
+  }
+
+  const supabase = await getServerSupabase();
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const next = localPath(locale, "/home");
+  const redirectTo = `${appUrl}/api/auth/callback?next=${encodeURIComponent(next)}`;
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+      // Force the Google account chooser every time. Without this, a
+      // user with a single Google session is auto-selected — which is
+      // fine for sign-in but jarring on a "create account" intent
+      // where they may want to use a different Google identity.
+      queryParams: { prompt: "select_account" },
+    },
+  });
+
+  if (error || !data?.url) {
+    redirect(localPath(locale, "/login?error=oauth_failed"));
+  }
+
+  redirect(data.url);
+}
+
 export async function forgotPasswordAction(
   _prev: AuthActionState,
   formData: FormData,
