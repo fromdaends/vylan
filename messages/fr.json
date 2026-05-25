@@ -138,6 +138,8 @@
     "create_account": "Créer un compte",
     "sign_in": "Se connecter",
     "forgot_link": "Mot de passe oublié ?",
+    "remember_me": "Rester connecté",
+    "remember_me_hint": "Reste connecté sur cet appareil pendant 30 jours. Décochez pour vous déconnecter à la fermeture du navigateur.",
     "logout": "Déconnexion",
     "mfa_challenge_title": "Entrez votre code de vérification",
     "mfa_challenge_subtitle": "Nous avons besoin d'un code à 6 chiffres provenant de votre application d'authentification pour terminer la connexion.",

@@ -79,6 +79,20 @@ export default function LoginPage() {
             </p>
           )}
         </div>
+        <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
+          <input
+            type="checkbox"
+            name="remember_me"
+            defaultChecked
+            className="mt-0.5 size-4 rounded border-input text-accent focus-visible:ring-2 focus-visible:ring-ring"
+          />
+          <span className="text-sm leading-snug">
+            {t("remember_me")}
+            <span className="block text-xs text-muted-foreground mt-0.5">
+              {t("remember_me_hint")}
+            </span>
+          </span>
+        </label>
         <Button
           type="submit"
           size="lg"

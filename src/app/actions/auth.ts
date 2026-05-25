@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getPathname } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
@@ -22,6 +22,50 @@ async function clientIp(): Promise<string> {
     if (first) return first;
   }
   return "unknown";
+}
+
+// Marker cookie that the SSR middleware reads to decide whether to
+// preserve session-only behaviour on every Supabase token rotation.
+// Itself session-only (no maxAge / expires).
+const REMEMBER_OFF_COOKIE = "vylan-session-only";
+
+async function applyRememberMePreference(remember: boolean): Promise<void> {
+  const cookieStore = await cookies();
+  const isProd = process.env.NODE_ENV === "production";
+
+  if (remember) {
+    // Remembered. Clear the marker if a prior session set it. Cookies
+    // Supabase just issued already use the SDK's persistent default —
+    // nothing to override.
+    cookieStore.delete(REMEMBER_OFF_COOKIE);
+    return;
+  }
+
+  // Not remembered. Drop the marker so the middleware strips maxAge
+  // on future rotations, then re-set the auth cookies as session-
+  // only right now.
+  cookieStore.set({
+    name: REMEMBER_OFF_COOKIE,
+    value: "1",
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    secure: isProd,
+    // no maxAge / expires → session cookie
+  });
+
+  for (const c of cookieStore.getAll()) {
+    if (!c.name.startsWith("sb-")) continue;
+    cookieStore.set({
+      name: c.name,
+      value: c.value,
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: isProd,
+      // no maxAge / expires → session cookie
+    });
+  }
 }
 
 export type AuthActionState = {
@@ -91,6 +135,15 @@ export async function loginAction(
   if (error) {
     return { error: "invalid_credentials" };
   }
+
+  // "Remember me" handling. Default = checked = persistent (Supabase's
+  // 30-day refresh). When the user unticks the box we convert the
+  // freshly-set auth cookies into session-only ones (no maxAge /
+  // expires) AND drop a marker cookie so the middleware does the same
+  // thing on every subsequent token rotation. Without the marker the
+  // next refresh would re-set the cookies as persistent again.
+  await applyRememberMePreference(formData.get("remember_me") === "on");
+
   const locale = pickLocale(formData);
   // If the user has MFA enrolled, send them to the challenge page first.
   // The app layout enforces the same rule as a backstop for any other
