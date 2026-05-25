@@ -22,31 +22,44 @@ export async function ActivityTimeline({
 }) {
   const t = await getTranslations("Activity");
 
+  // The classifier writes one `ai_classified` row for every upload as a
+  // raw debug breadcrumb (document_type + confidence). It's noise in the
+  // user-facing timeline — the downstream verdict events
+  // (ai_auto_rejected / ai_quality_flagged / ai_escalated_to_accountant)
+  // are what the accountant actually cares about. Hide classifier rows
+  // here; the audit log at /settings/audit still shows them for the
+  // compliance trail.
+  const visible = entries.filter((e) => e.action !== "ai_classified");
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">{t("title")}</CardTitle>
       </CardHeader>
       <CardContent>
-        {entries.length === 0 ? (
+        {visible.length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">{t("empty")}</p>
         ) : (
-          <ol className="space-y-3 text-sm">
-            {entries.map((e) => (
-              <li key={e.id} className="flex items-start gap-2">
+          <ol className="space-y-4 text-sm">
+            {visible.map((e) => (
+              <li key={e.id} className="flex items-start gap-3">
                 <span
                   className={
-                    "mt-1.5 size-1.5 rounded-full shrink-0 " +
+                    "mt-1.5 size-2 rounded-full shrink-0 ring-2 ring-background " +
                     actorDot(e.actor_type)
                   }
                   aria-hidden
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="leading-snug">
+                  <div className="leading-snug text-foreground">
                     {describe(e, t, filenamesByFileId, rejectionReasonsByItemId)}
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    {formatRelative(e.created_at, locale)}
+                  <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                    <span className="font-medium">
+                      {actorLabel(e.actor_type, t)}
+                    </span>
+                    <span aria-hidden>·</span>
+                    <span>{formatRelative(e.created_at, locale)}</span>
                   </div>
                 </div>
               </li>
@@ -61,7 +74,19 @@ export async function ActivityTimeline({
 function actorDot(actor: ActivityEntry["actor_type"]): string {
   if (actor === "client") return "bg-success";
   if (actor === "user") return "bg-primary";
-  return "bg-muted-foreground";
+  // System / Vylan events get a quiet muted dot so client + manual
+  // actions read as the events the accountant actually drove or
+  // received, while AI/system housekeeping recedes.
+  return "bg-muted-foreground/50";
+}
+
+function actorLabel(
+  actor: ActivityEntry["actor_type"],
+  t: Awaited<ReturnType<typeof getTranslations<"Activity">>>,
+): string {
+  if (actor === "client") return t("actor_client");
+  if (actor === "user") return t("actor_user");
+  return t("actor_system");
 }
 
 function describe(
@@ -107,7 +132,7 @@ function describe(
     case "manual_reminder":
       return t("manual_reminder");
     case "reminder_fired":
-      return t("reminder_fired", { tone: meta.tone ?? "—" });
+      return t("reminder_fired", { tone: toneLabel(meta.tone, t) });
     case "reminders_paused":
       return t("reminders_paused");
     case "reminders_resumed":
@@ -118,31 +143,24 @@ function describe(
       return t("complete_engagement");
     case "reopen_engagement":
       return t("reopen_engagement");
-    case "ai_classified": {
-      const conf =
-        typeof meta.confidence === "number"
-          ? `${Math.round((meta.confidence as number) * 100)}%`
-          : "—";
+    case "ai_classified":
+      // Filtered out above, but keep the branch so the switch stays
+      // exhaustive against future enum additions.
       return t("ai_classified", {
-        document_type: String(meta.document_type ?? "?"),
-        confidence: conf,
+        document_type: String(meta.document_type ?? "—"),
       });
-    }
-    case "ai_auto_rejected": {
-      const conf = pct(meta.usability_confidence);
-      const issue = String(meta.primary_issue ?? "");
-      return t("ai_auto_rejected", { issue, confidence: conf });
-    }
-    case "ai_escalated_to_accountant": {
-      const conf = pct(meta.usability_confidence);
-      const issue = String(meta.primary_issue ?? "");
-      return t("ai_escalated_to_accountant", { issue, confidence: conf });
-    }
-    case "ai_quality_flagged": {
-      const conf = pct(meta.usability_confidence);
-      const issue = String(meta.primary_issue ?? "");
-      return t("ai_quality_flagged", { issue, confidence: conf });
-    }
+    case "ai_auto_rejected":
+      return t("ai_auto_rejected", {
+        issue: issueLabel(meta.primary_issue, t),
+      });
+    case "ai_escalated_to_accountant":
+      return t("ai_escalated_to_accountant", {
+        issue: issueLabel(meta.primary_issue, t),
+      });
+    case "ai_quality_flagged":
+      return t("ai_quality_flagged", {
+        issue: issueLabel(meta.primary_issue, t),
+      });
     case "ai_rejection_overridden":
       return t("ai_rejection_overridden");
     case "client_retry_email_sent":
@@ -154,6 +172,52 @@ function describe(
   }
 }
 
-function pct(v: unknown): string {
-  return typeof v === "number" ? `${Math.round(v * 100)}%` : "—";
+// The classifier writes `primary_issue` as a snake_case enum
+// (see src/lib/ai/usability.ts). Map each value through a translation
+// so the timeline reads "wrong document type" instead of
+// "wrong_document_type". Unknown values fall back to the raw string
+// with underscores swapped for spaces so the row never breaks.
+const KNOWN_ISSUES: Record<string, string> = {
+  text_unreadable: "issue_text_unreadable",
+  key_fields_obscured: "issue_key_fields_obscured",
+  partial_capture: "issue_partial_capture",
+  glare_or_shadow: "issue_glare_or_shadow",
+  wrong_document_type: "issue_wrong_document_type",
+  corrupt_or_blank: "issue_corrupt_or_blank",
+  other: "issue_other",
+};
+
+function issueLabel(
+  raw: unknown,
+  t: Awaited<ReturnType<typeof getTranslations<"Activity">>>,
+): string {
+  if (typeof raw !== "string" || !raw) return "—";
+  const key = KNOWN_ISSUES[raw];
+  if (key) {
+    // next-intl t() signature is (key, values) — we know these keys
+    // exist statically so the cast is safe.
+    return t(key as Parameters<typeof t>[0]);
+  }
+  return raw.replace(/_/g, " ");
+}
+
+// `tone` is one of "gentle" | "firm" | "overdue" (see reminders.ts).
+// Translate each; fall back to the raw string for safety on any future
+// tone we haven't added a label for yet.
+const KNOWN_TONES: Record<string, string> = {
+  gentle: "tone_gentle",
+  firm: "tone_firm",
+  overdue: "tone_overdue",
+};
+
+function toneLabel(
+  raw: unknown,
+  t: Awaited<ReturnType<typeof getTranslations<"Activity">>>,
+): string {
+  if (typeof raw !== "string" || !raw) return "—";
+  const key = KNOWN_TONES[raw];
+  if (key) {
+    return t(key as Parameters<typeof t>[0]);
+  }
+  return raw;
 }
