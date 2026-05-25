@@ -645,9 +645,12 @@ function NextSteps({
       <div className="grid gap-3 sm:grid-cols-1">
         {/* Primary: jump into the seeded demo workspace. This is what
             we recommend so the prospect can poke around and form an
-            opinion before the sales call. */}
+            opinion before the sales call.
+            ?continue=onboarding tells signupAction to skip the
+            funnel-discipline redirect back to /demo — the user has
+            already qualified, no point looping them. */}
         <Link
-          href="/signup"
+          href="/signup?continue=onboarding"
           className="group rounded-2xl border border-accent/40 bg-gradient-to-br from-accent/[0.08] to-accent/[0.02] p-5 transition-colors hover:border-accent/60 hover:from-accent/[0.12]"
         >
           <div className="flex items-start gap-4">

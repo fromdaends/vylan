@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { useSearchParams } from "next/navigation";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +17,12 @@ export default function SignupPage() {
   const tc = useTranslations("Common");
   const locale = useLocale();
   const localeNarrow: "fr" | "en" = locale === "en" ? "en" : "fr";
+  // `?continue=onboarding` is a soft signal that the user already
+  // qualified via /demo, so we can skip routing them back there after
+  // signup. Validated allowlist-style server-side in signupAction so
+  // random ?continue=anything values can't bypass the funnel.
+  const searchParams = useSearchParams();
+  const continueParam = searchParams.get("continue") ?? "";
   const [state, formAction, pending] = useActionState<
     AuthActionState,
     FormData
@@ -50,6 +57,7 @@ export default function SignupPage() {
 
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="locale" value={locale} />
+        <input type="hidden" name="continue" value={continueParam} />
         {state?.error && (
           <Alert variant="destructive" className="animate-in-fade">
             <AlertDescription>{t(`errors.${state.error}`)}</AlertDescription>

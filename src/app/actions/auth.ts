@@ -188,11 +188,17 @@ export async function signupAction(
   // Funnel discipline: every brand-new account flows through /demo
   // first for qualification (firm size, current tools, etc.). The
   // founder hand-converts qualified leads while billing is gated.
-  // This matches the OAuth callback behaviour (see PR #242). The
-  // /onboarding step1Action is still the canonical "create firm +
-  // public.users row" path — it just gets invoked AFTER the prospect
-  // completes /demo and the founder loops them in.
-  redirect(localPath(parsed.data.locale, "/demo"));
+  // This matches the OAuth callback behaviour (see PR #242).
+  //
+  // Exception: `continue=onboarding` is a soft signal set by /demo's
+  // "Try the demo" button — it means the prospect already qualified
+  // via the /demo questionnaire and is now self-serving an account.
+  // Bouncing them back to /demo would loop. Allowlist a single
+  // sanctioned value so a random `?continue=evil` can't bypass.
+  const continueRaw = formData.get("continue");
+  const continueOk = continueRaw === "onboarding";
+  const destination = continueOk ? "/onboarding" : "/demo";
+  redirect(localPath(parsed.data.locale, destination));
 }
 
 export async function logoutAction() {
