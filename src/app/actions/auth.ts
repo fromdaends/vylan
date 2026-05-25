@@ -231,25 +231,9 @@ export async function signInWithGoogleAction(formData: FormData) {
   }
 
   const supabase = await getServerSupabase();
-  const appUrlRaw = process.env.APP_URL;
-  const appUrl = appUrlRaw ?? "http://localhost:3000";
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const next = localPath(locale, "/home");
   const redirectTo = `${appUrl}/api/auth/callback?next=${encodeURIComponent(next)}`;
-
-  // TEMPORARY DEBUG (remove after we confirm the OAuth fall-back issue):
-  // Founder reports Supabase still redirecting to Site URL despite the
-  // allowlist + APP_URL update. Logging the actual computed redirectTo
-  // so we can see if APP_URL is what we think it is (right value, no
-  // trailing whitespace, no quotes) and that signInWithOAuth gets the
-  // URL we expect. Compare with what Supabase shows in its function logs.
-  console.log("[oauth.google] debug", {
-    appUrlRaw,
-    appUrlRawType: typeof appUrlRaw,
-    appUrlRawLength: appUrlRaw?.length,
-    appUrlResolved: appUrl,
-    next,
-    redirectTo,
-  });
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -261,14 +245,6 @@ export async function signInWithGoogleAction(formData: FormData) {
       // where they may want to use a different Google identity.
       queryParams: { prompt: "select_account" },
     },
-  });
-
-  // TEMPORARY DEBUG: log Supabase's response so we can see what URL it
-  // actually returned (Google consent URL) and any error.
-  console.log("[oauth.google] supabase response", {
-    hasUrl: Boolean(data?.url),
-    urlPrefix: data?.url?.slice(0, 80),
-    errorMessage: error?.message,
   });
 
   if (error || !data?.url) {
