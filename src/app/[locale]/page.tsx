@@ -1,10 +1,8 @@
-import { redirect } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { Link, getPathname } from "@/i18n/navigation";
+import { Link } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
 import { Button } from "@/components/ui/button";
 import { assertLocale } from "@/lib/locale";
-import { getServerSupabase } from "@/lib/supabase/server";
 import {
   ArrowRight,
   Check,
@@ -30,16 +28,12 @@ export default async function Home({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  // Signed-in users skip the marketing page and land directly on the
-  // Home (the post-login glance). The (app)/layout below /home handles
-  // onboarding + MFA gating, so we don't duplicate that here — one
-  // extra redirect hop is fine and keeps this file simple.
-  const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (auth.user) {
-    redirect(getPathname({ locale, href: "/home" }));
-  }
-
+  // Marketing page renders for EVERYONE — signed in or not. Signed-in
+  // users can still get to their workspace via the "Sign in" link in
+  // the nav pill (it routes them into /home if they have a session)
+  // or via the user-menu in the sidebar once inside the app. We do
+  // NOT redirect anyone away from vylan.app — the marketing site is
+  // always the front door.
   const t = await getTranslations("Landing");
   const tAuth = await getTranslations("Auth");
 
