@@ -43,7 +43,11 @@ export function MfaChallengeForm({ locale }: { locale: "fr" | "en" }) {
         }, 2500);
         return;
       }
-      router.replace(`/${locale}/dashboard`);
+      // Land on /home (the post-login glance), matching every other
+      // post-auth path in the app. This used to be /dashboard but
+      // that's now a secondary destination — sending people there
+      // directly skips the home page they actually want to see.
+      router.replace(`/${locale}/home`);
     });
   }
 
