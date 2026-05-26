@@ -144,6 +144,7 @@
       "invalid_credentials": "Courriel ou mot de passe incorrect.",
       "email_taken": "Un compte existe déjà avec ce courriel.",
       "signup_failed": "Impossible de créer le compte. Veuillez réessayer.",
+      "weak_password": "Mot de passe trop faible. Essayez plus long, avec au moins une lettre et un chiffre.",
       "reset_sent": "Si ce courriel existe, un lien vient d’être envoyé.",
       "reset_failed": "Le lien est invalide ou a expiré. Veuillez recommencer.",
       "rate_limited": "Trop de tentatives. Veuillez patienter avant de réessayer.",

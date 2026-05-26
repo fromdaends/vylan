@@ -180,8 +180,30 @@ export async function signupAction(
     },
   });
   if (error) {
-    if (error.message.toLowerCase().includes("registered")) {
+    // Log enough context to debug the "Couldn't create the account"
+    // generic without leaking the password itself. Supabase Auth
+    // returns error.code (newer SDKs) plus a human-readable message;
+    // both go in for whichever the SDK supplies on the day.
+    console.error("[auth.signup] supabase.auth.signUp failed", {
+      message: error.message,
+      status: (error as { status?: number }).status,
+      code: (error as { code?: string }).code,
+      emailDomain: parsed.data.email.split("@")[1],
+    });
+    const msg = error.message.toLowerCase();
+    const code = (error as { code?: string }).code ?? "";
+    if (msg.includes("registered") || code === "user_already_exists") {
       return { error: "email_taken" };
+    }
+    // Detect password-policy rejections by keyword. Supabase returns
+    // messages like "Password should contain at least one character of
+    // each: lowercase, uppercase, digits…" — covers most variants.
+    if (
+      msg.includes("password") ||
+      code === "weak_password" ||
+      code === "validation_failed"
+    ) {
+      return { error: "weak_password" };
     }
     return { error: "signup_failed" };
   }

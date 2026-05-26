@@ -144,6 +144,7 @@
       "invalid_credentials": "Wrong email or password.",
       "email_taken": "An account already exists with this email.",
       "signup_failed": "Couldn't create the account. Please try again.",
+      "weak_password": "Password doesn't meet our policy. Try a longer one with at least one letter and one number.",
       "reset_sent": "If that email exists, a reset link is on its way.",
       "reset_failed": "The link is invalid or expired. Please request a new one.",
       "rate_limited": "Too many attempts. Please wait a moment and try again.",
