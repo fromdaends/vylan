@@ -325,7 +325,16 @@
     "section_audit_title": "Security audit log",
     "section_audit_hint": "Every action on every engagement — who did what, when. Show a client what happened to their file, or trace a question after the fact.",
     "audit_link_label": "Open audit log",
-    "save_failed": "Couldn't save. Please try again."
+    "save_failed": "Couldn't save. Please try again.",
+    "go_live_title": "You're in demo mode — emails to clients are paused.",
+    "go_live_body": "While your firm is a demo, automated reminders won't send to your clients. Switch to live mode to start sending real emails and turn on the full app — the demo banner disappears and any paused reminders resume on the next run of our cron (within 15 minutes).",
+    "go_live_cta": "Switch to live mode",
+    "go_live_pending": "Switching…",
+    "go_live_success_title": "You're live.",
+    "go_live_success_body": "{count, plural, =0 {No paused engagements needed resuming.} one {Resumed reminders on # engagement — the next cron run will send any due emails.} other {Resumed reminders on # engagements — the next cron run will send any due emails.}}",
+    "go_live_owner_only": "Only the firm owner can switch to live mode.",
+    "go_live_already_live": "Your firm is already in live mode.",
+    "go_live_failed": "Couldn't switch to live mode. Please try again."
   },
   "Audit": {
     "title": "Security audit log",

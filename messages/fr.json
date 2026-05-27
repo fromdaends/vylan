@@ -325,7 +325,16 @@
     "section_audit_title": "Journal d'audit",
     "section_audit_hint": "Chaque action sur chaque engagement — qui a fait quoi, et quand. Montrez à un client ce qui s'est passé avec son dossier, ou retracez une question après coup.",
     "audit_link_label": "Ouvrir le journal d'audit",
-    "save_failed": "Impossible d'enregistrer. Veuillez réessayer."
+    "save_failed": "Impossible d'enregistrer. Veuillez réessayer.",
+    "go_live_title": "Vous êtes en mode démo — les courriels aux clients sont en pause.",
+    "go_live_body": "Tant que votre cabinet est en démo, les rappels automatiques ne partent pas à vos clients. Passez en mode actif pour commencer à envoyer de vrais courriels et activer l'application au complet — la bannière de démo disparaît et les rappels en pause reprennent au prochain passage du cron (dans les 15 minutes).",
+    "go_live_cta": "Passer en mode actif",
+    "go_live_pending": "Activation…",
+    "go_live_success_title": "Votre cabinet est actif.",
+    "go_live_success_body": "{count, plural, =0 {Aucun engagement en pause à réactiver.} one {Rappels réactivés sur # engagement — le prochain cron enverra les courriels dus.} other {Rappels réactivés sur # engagements — le prochain cron enverra les courriels dus.}}",
+    "go_live_owner_only": "Seul le propriétaire du cabinet peut passer en mode actif.",
+    "go_live_already_live": "Votre cabinet est déjà en mode actif.",
+    "go_live_failed": "Impossible de passer en mode actif. Veuillez réessayer."
   },
   "Audit": {
     "title": "Journal d'audit",

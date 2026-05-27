@@ -8,6 +8,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { assertLocale } from "@/lib/locale";
 import { BILLING_ENABLED } from "@/lib/billing-mode";
 import { SettingsForm } from "./settings-form";
+import { GoLiveCard } from "@/components/settings/go-live-card";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +47,12 @@ export default async function SettingsPage({
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>
       </header>
+
+      {/* Go-live promotion — surfaced only while the firm is still a
+          demo. Owner-only so staff don't see a button they can't
+          press. Disappears once the action succeeds and is_demo
+          flips to false on the next render. */}
+      {firm.is_demo && user.role === "owner" && <GoLiveCard />}
 
       <SettingsForm
         currentLocale={user.locale}
