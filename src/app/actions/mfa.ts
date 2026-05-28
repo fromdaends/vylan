@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { createClient } from "@supabase/supabase-js";
 import {
   getServerSupabase,
   getServiceRoleSupabase,
@@ -140,7 +141,22 @@ export async function disableMfaAction(
 
   // Re-verify the password before destroying MFA so a hijacked aal2
   // session can't silently downgrade itself.
-  const { error: pwErr } = await supabase.auth.signInWithPassword({
+  //
+  // CRITICAL: do the password check on a DETACHED Supabase client
+  // (no cookie persistence). Calling signInWithPassword on the
+  // request-scoped `supabase` would rotate the user's auth cookies
+  // to a *new* session at aal1 — that session can't unenroll the
+  // factor (unenroll requires aal2), and the next page render would
+  // bounce the user to /login/mfa even though they just wanted to
+  // turn MFA off. The detached client validates the password
+  // server-side without touching the user's cookies, so the live
+  // aal2 session below is untouched for the unenroll calls.
+  const verifyClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+  const { error: pwErr } = await verifyClient.auth.signInWithPassword({
     email: auth.user.email,
     password: parsed.data.password,
   });
