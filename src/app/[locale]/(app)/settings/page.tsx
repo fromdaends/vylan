@@ -1,22 +1,20 @@
 import { redirect } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { ChevronRight, CreditCard, Download, ShieldCheck, Trash2 } from "lucide-react";
-import { Link, getPathname } from "@/i18n/navigation";
+import { getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { assertLocale } from "@/lib/locale";
 import { BILLING_ENABLED } from "@/lib/billing-mode";
-import { SettingsForm } from "./settings-form";
+import { SettingsShell } from "./settings-form";
 import { GoLiveCard } from "@/components/settings/go-live-card";
 
 export const dynamic = "force-dynamic";
 
-// /settings: personal preferences (theme + UI language) + the firm
-// timezone + firm-level behaviour toggles (e.g. auto-reject unreadable
-// docs) + optional billing entry + a Data & Privacy bucket (audit log,
-// export, delete request — owner-only). Subscription details now live
-// on /profile.
+// /settings: a sectioned settings surface (sub-nav on the left, the selected
+// category on the right). Categories: Appearance (mode + accent), General
+// (language + timezone), Documents (auto-reject), and an owner-only Data &
+// privacy bucket (audit log, export, delete request).
 export default async function SettingsPage({
   params,
 }: {
@@ -31,10 +29,7 @@ export default async function SettingsPage({
   if (!auth.user) {
     redirect(getPathname({ locale, href: "/login" }));
   }
-  const [user, firm] = await Promise.all([
-    getCurrentUser(),
-    getCurrentFirm(),
-  ]);
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) {
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
@@ -42,150 +37,24 @@ export default async function SettingsPage({
   const t = await getTranslations("Settings");
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8 animate-in-up">
+    <div className="max-w-3xl mx-auto space-y-8 animate-in-up">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>
       </header>
 
-      {/* Go-live promotion — surfaced only while the firm is still a
-          demo. Owner-only so staff don't see a button they can't
-          press. Disappears once the action succeeds and is_demo
-          flips to false on the next render. */}
+      {/* Go-live promotion — owner-only, only while the firm is still a demo.
+          Sits above the sectioned settings so it can't be missed. */}
       {firm.is_demo && user.role === "owner" && <GoLiveCard />}
 
-      <SettingsForm
+      <SettingsShell
         currentLocale={user.locale}
         currentTimezone={firm.timezone}
         autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
+        isOwner={user.role === "owner"}
+        billingEnabled={BILLING_ENABLED}
+        firmName={firm.name}
       />
-
-      {/* Billing link card. Hidden while BILLING_ENABLED is false —
-          we're acquiring first clients via direct chat, no fixed
-          plan price yet. Flip the flag to bring this back. */}
-      {BILLING_ENABLED && (
-        <section>
-          <h2 className="text-sm font-semibold">{t("section_billing")}</h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("section_billing_hint")}
-          </p>
-          <Link
-            href="/billing"
-            className={
-              "mt-4 group flex items-center justify-between gap-4 " +
-              "rounded-lg border border-border bg-card px-4 py-3 max-w-xl " +
-              "transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-            }
-          >
-            <span className="flex items-center gap-3">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-                <CreditCard className="h-4 w-4" />
-              </span>
-              <span className="text-sm font-medium">
-                {t("billing_link_label")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </section>
-      )}
-
-      {/* Data & Privacy — owner-only bucket for everything that
-          touches firm-wide data integrity: the security audit log,
-          the firm data export, the deletion request. Every new
-          "data / privacy / compliance" surface goes inside this
-          single section instead of becoming its own top-level
-          card. Owner-only — staff never see this. */}
-      {user.role === "owner" && (
-        <section>
-          <h2 className="text-sm font-semibold">{t("section_data_title")}</h2>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("section_data_hint")}
-          </p>
-          <div className="mt-4 space-y-3 max-w-xl">
-            {/* Audit log */}
-            <Link
-              href="/settings/audit"
-              className={
-                "group flex items-center justify-between gap-4 " +
-                "rounded-lg border border-border bg-card px-4 py-3 " +
-                "transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-              }
-            >
-              <span className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-                  <ShieldCheck className="h-4 w-4" />
-                </span>
-                <span className="flex flex-col">
-                  <span className="text-sm font-medium">
-                    {t("audit_link_label")}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("section_audit_hint")}
-                  </span>
-                </span>
-              </span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-            </Link>
-            {/* Export ZIP */}
-            <a
-              href="/api/firm/export.zip"
-              download
-              className={
-                "group flex items-center justify-between gap-4 " +
-                "rounded-lg border border-border bg-card px-4 py-3 " +
-                "transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-              }
-            >
-              <span className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-                  <Download className="h-4 w-4" />
-                </span>
-                <span className="flex flex-col">
-                  <span className="text-sm font-medium">
-                    {t("data_export_label")}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("data_export_hint")}
-                  </span>
-                </span>
-              </span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-            </a>
-          </div>
-
-          {/* Delete firm — destructive action, visually quarantined.
-              Extra top spacing pushes it away from the two non-
-              destructive rows above, and the row itself uses
-              destructive border + label colour so it can't be
-              mistaken for an everyday action. */}
-          <div className="mt-8 max-w-xl">
-            <a
-              href={`mailto:hello@vylan.app?subject=${encodeURIComponent(`Delete firm: ${firm.name}`)}`}
-              className={
-                "group flex items-center justify-between gap-4 " +
-                "rounded-lg border border-destructive/50 bg-destructive/[0.04] px-4 py-3 " +
-                "transition-colors hover:border-destructive hover:bg-destructive/10"
-              }
-            >
-              <span className="flex items-center gap-3">
-                <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-destructive/15 text-destructive">
-                  <Trash2 className="h-4 w-4" />
-                </span>
-                <span className="flex flex-col">
-                  <span className="text-sm font-medium text-destructive">
-                    {t("data_delete_label")}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {t("data_delete_hint")}
-                  </span>
-                </span>
-              </span>
-              <ChevronRight className="h-4 w-4 text-destructive/60 transition-transform group-hover:translate-x-0.5" />
-            </a>
-          </div>
-        </section>
-      )}
     </div>
   );
 }

@@ -9,7 +9,7 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
       data-theme-surface
       className={cn(
         "flex flex-col gap-6 rounded-xl border border-border bg-card py-6 text-card-foreground",
-        "transition-shadow duration-200",
+        "shadow-card transition-shadow duration-200",
         className
       )}
       {...props}
