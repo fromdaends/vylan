@@ -54,7 +54,14 @@ export default async function HomePage({
     : formatDate(new Date(), locale, "long");
 
   return (
-    <div className="mx-auto w-full max-w-2xl px-1 pt-16 sm:pt-24 pb-16 space-y-14 sm:space-y-16">
+    <div className="relative isolate">
+      {/* Accent-derived ambient aurora — Home is the showcase surface.
+          Decorative only: pointer-events:none, sits behind content (which
+          is relative z-10), tracks --accent (green accent → green glow,
+          blue → blue), AA-safe, reduced-motion aware. Defined as
+          .aurora-field in globals.css. */}
+      <div className="aurora-field" aria-hidden />
+      <div className="relative z-10 mx-auto w-full max-w-2xl px-1 pt-16 sm:pt-24 pb-16 space-y-14 sm:space-y-16">
       {/* 1. Greeting — centered, large, given real breathing room
           above it via the wrapper's pt-16/24. The hero variant of
           the greeting handles the typography scale. */}
@@ -133,6 +140,7 @@ export default async function HomePage({
           {t("quick_dashboard")}
         </Link>
       </nav>
+      </div>
     </div>
   );
 }

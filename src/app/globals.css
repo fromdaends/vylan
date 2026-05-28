@@ -22,6 +22,7 @@
 
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.18 0.018 264);
+  --surface-elevated: oklch(1 0 0);
 
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.018 264);
@@ -35,20 +36,27 @@
   --muted: oklch(0.97 0.004 264);
   --muted-foreground: oklch(0.52 0.018 264);
 
-  --accent: oklch(0.62 0.18 264);             /* iris/indigo accent */
+  /* Accent = brand color, chosen by data-accent. Blue is the default and
+     ≈ today's look; green is the flagship. Light mode pairs a medium accent
+     with a white foreground (matches the existing contrast pattern). */
+  --accent: oklch(0.58 0.176 256);            /* blue */
   --accent-foreground: oklch(0.985 0 0);
+  --accent-hover: oklch(0.53 0.182 256);
+  --accent-subtle: oklch(0.58 0.176 256 / 0.10);
 
   --destructive: oklch(0.55 0.22 27);
   --destructive-foreground: oklch(0.985 0 0);
 
-  --success: oklch(0.55 0.14 150);
+  /* Success shifted to emerald (hue 168) so it stays visually distinct from
+     a green accent (hue ~150); see [data-accent="green"] below. */
+  --success: oklch(0.55 0.13 168);
   --success-foreground: oklch(0.985 0 0);
   --warning: oklch(0.65 0.16 50);
   --warning-foreground: oklch(0.985 0 0);
 
   --border: oklch(0.92 0.006 264);
   --input: oklch(0.92 0.006 264);
-  --ring: oklch(0.62 0.18 264);
+  --ring: oklch(0.58 0.176 256);
 
   --radius: 0.625rem;
 }
@@ -59,6 +67,7 @@
 
   --card: oklch(0.175 0.014 264);
   --card-foreground: oklch(0.96 0.004 264);
+  --surface-elevated: oklch(0.21 0.015 264);
 
   --popover: oklch(0.175 0.014 264);
   --popover-foreground: oklch(0.96 0.004 264);
@@ -72,20 +81,42 @@
   --muted: oklch(0.22 0.016 264);
   --muted-foreground: oklch(0.66 0.014 264);
 
-  --accent: oklch(0.7 0.16 264);              /* slightly brighter accent in dark */
-  --accent-foreground: oklch(0.135 0.012 264);
+  /* Dark mode: brighter accent + near-black foreground for legibility. */
+  --accent: oklch(0.70 0.15 256);             /* blue */
+  --accent-foreground: oklch(0.16 0.02 256);
+  --accent-hover: oklch(0.75 0.15 256);
+  --accent-subtle: oklch(0.70 0.15 256 / 0.16);
 
   --destructive: oklch(0.68 0.2 22);
   --destructive-foreground: oklch(0.135 0.012 264);
 
-  --success: oklch(0.66 0.14 150);
+  --success: oklch(0.68 0.13 168);
   --success-foreground: oklch(0.135 0.012 264);
   --warning: oklch(0.72 0.16 60);
   --warning-foreground: oklch(0.135 0.012 264);
 
   --border: oklch(0.28 0.014 264);
   --input: oklch(0.28 0.014 264);
-  --ring: oklch(0.7 0.16 264);
+  --ring: oklch(0.70 0.15 256);
+}
+
+/* ─── Accent axis: green (flagship). Blue lives in :root/.dark as the
+   default, so only green needs explicit overrides. Specificity: a bare
+   [data-accent] (0,1,0) sits after :root and wins for light; the
+   .dark[data-accent] (0,2,0) wins for dark. --- */
+[data-accent="green"] {
+  --accent: oklch(0.56 0.135 150);
+  --accent-foreground: oklch(0.985 0 0);
+  --accent-hover: oklch(0.51 0.14 150);
+  --accent-subtle: oklch(0.56 0.135 150 / 0.10);
+  --ring: oklch(0.56 0.135 150);
+}
+.dark[data-accent="green"] {
+  --accent: oklch(0.72 0.16 150);
+  --accent-foreground: oklch(0.16 0.02 150);
+  --accent-hover: oklch(0.77 0.16 150);
+  --accent-subtle: oklch(0.72 0.16 150 / 0.16);
+  --ring: oklch(0.72 0.16 150);
 }
 
 @theme inline {
@@ -94,6 +125,7 @@
 
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-surface-elevated: var(--surface-elevated);
 
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
@@ -109,6 +141,8 @@
 
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-subtle: var(--accent-subtle);
 
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
@@ -262,6 +296,81 @@
     -webkit-backdrop-filter: blur(48px) saturate(200%);
   }
 
+
+  /* ─── Ambient aurora ────────────────────────────────────────────────
+     Accent-derived decorative glow. Pure CSS, GPU-cheap (blurred gradient
+     layers + transform-only motion), always pointer-events:none, sits
+     behind content, never affects text contrast. Color tracks --accent so
+     the glow follows the chosen accent (green accent → green glow). */
+  .aurora-field {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .aurora-field::before,
+  .aurora-field::after {
+    content: "";
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(72px);
+    transform: translateZ(0);
+    will-change: transform;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in oklch, var(--accent) 65%, transparent),
+      transparent
+    );
+  }
+  .aurora-field::before {
+    width: 62%;
+    height: 62%;
+    top: -20%;
+    left: -6%;
+    opacity: 0.16;
+    animation: aurora-drift-a 26s ease-in-out infinite alternate;
+  }
+  .aurora-field::after {
+    width: 56%;
+    height: 56%;
+    top: -26%;
+    right: -8%;
+    opacity: 0.12;
+    animation: aurora-drift-b 32s ease-in-out infinite alternate;
+  }
+  /* Light mode keeps the glow faint so white surfaces stay clean; dark
+     mode can carry more presence. */
+  .dark .aurora-field::before { opacity: 0.32; }
+  .dark .aurora-field::after { opacity: 0.24; }
+
+  @keyframes aurora-drift-a {
+    from { transform: translate3d(0, 0, 0) scale(1); }
+    to { transform: translate3d(6%, 4%, 0) scale(1.08); }
+  }
+  @keyframes aurora-drift-b {
+    from { transform: translate3d(0, 0, 0) scale(1.05); }
+    to { transform: translate3d(-5%, 6%, 0) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .aurora-field::before,
+    .aurora-field::after {
+      animation: none !important;
+    }
+  }
+
+  /* Light mode gets real elevation: near-white surfaces need a soft shadow
+     to separate cards from the page. Dark mode stays border-only (shadows
+     read as noise on near-black, where the premium flat look already
+     works). Apply `shadow-card` on elevated surfaces that want depth. */
+  .shadow-card {
+    box-shadow:
+      0 1px 2px oklch(0.2 0.02 264 / 0.06),
+      0 2px 6px oklch(0.2 0.02 264 / 0.05);
+  }
+  .dark .shadow-card {
+    box-shadow: none;
+  }
 
   /* --- Bolder utilities --- */
 
