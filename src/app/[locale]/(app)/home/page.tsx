@@ -53,10 +53,6 @@ export default async function HomePage({
     ? `${firm.name} · ${formatDate(new Date(), locale, "long")}`
     : formatDate(new Date(), locale, "long");
 
-  const activeCount = engagements.filter(
-    (e) => e.status === "sent" || e.status === "in_progress",
-  ).length;
-
   return (
     <div className="mx-auto w-full max-w-2xl px-1 pt-16 sm:pt-24 pb-16 space-y-14 sm:space-y-16">
       {/* 1. Greeting — centered, large, given real breathing room
@@ -128,32 +124,8 @@ export default async function HomePage({
           dots. Wraps on very narrow viewports. */}
       <nav
         aria-label={t("quick_links_label")}
-        className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-sm text-muted-foreground pt-4 border-t border-border/40"
+        className="flex items-center justify-center text-sm text-muted-foreground pt-4 border-t border-border/40"
       >
-        <Link
-          href="/clients"
-          className="hover:text-foreground transition-colors"
-        >
-          {t("quick_clients")}
-          <span className="ml-1.5 font-mono tabular-nums text-muted-foreground/70">
-            ({clients.length})
-          </span>
-        </Link>
-        <span className="text-muted-foreground/40" aria-hidden>
-          ·
-        </span>
-        <Link
-          href="/dashboard"
-          className="hover:text-foreground transition-colors"
-        >
-          {t("quick_engagements")}
-          <span className="ml-1.5 font-mono tabular-nums text-muted-foreground/70">
-            ({activeCount})
-          </span>
-        </Link>
-        <span className="text-muted-foreground/40" aria-hidden>
-          ·
-        </span>
         <Link
           href="/dashboard"
           className="hover:text-foreground transition-colors"
