@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import {
   useActionState,
   useCallback,
@@ -607,9 +606,11 @@ function ThinkingIndicator() {
 }
 
 // Renders the assistant's reply as paragraphs separated by blank lines.
-// The system prompt strictly instructs the model to use plain prose,
-// but we still do a light \`**bold**\` pass in case it slips through.
-// A blinking caret trails the last paragraph while the stream is open.
+// The system prompt strictly instructs the model to emit plain prose,
+// but models slip occasionally — sanitizeAssistantText strips any
+// markdown chars that leaked through so the user never sees raw
+// asterisks, hashes, backticks, or bullet dashes. A blinking caret
+// trails the last paragraph while the stream is open.
 function AssistantContent({
   text,
   isStreaming,
@@ -617,7 +618,8 @@ function AssistantContent({
   text: string;
   isStreaming: boolean;
 }) {
-  const paragraphs = text
+  const cleaned = sanitizeAssistantText(text);
+  const paragraphs = cleaned
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0);
@@ -625,12 +627,12 @@ function AssistantContent({
     return isStreaming ? <StreamingCaret /> : null;
   }
   return (
-    <div className="space-y-2.5 text-sm leading-relaxed text-foreground">
+    <div className="space-y-3 text-sm leading-relaxed text-foreground">
       {paragraphs.map((p, i) => {
         const isLast = i === paragraphs.length - 1;
         return (
-          <p key={i} className="whitespace-pre-wrap break-words">
-            {renderInline(p)}
+          <p key={i} className="break-words">
+            {p}
             {isStreaming && isLast ? <StreamingCaret /> : null}
           </p>
         );
@@ -639,20 +641,62 @@ function AssistantContent({
   );
 }
 
+// Defensive post-processing of the streamed model output. The prompt
+// forbids markdown but we cannot trust that — strip every common
+// markdown signal so users see clean prose even if the model regresses.
+// Order matters: do the inline transforms BEFORE the line-collapse
+// step so leading-line markers (- , * , #) still match at line start.
+function sanitizeAssistantText(raw: string): string {
+  let text = raw;
+
+  // Markdown links → just the visible text. [Click here](https://...) → Click here
+  text = text.replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, "$1");
+
+  // Inline code → drop the backticks, keep the content. \`foo\` → foo
+  text = text.replace(/`+([^`\n]+?)`+/g, "$1");
+
+  // Bold → keep the content but drop the asterisks. **foo** → foo.
+  text = text.replace(/\*\*([^*\n]+?)\*\*/g, "$1");
+
+  // Italic via single asterisks / underscores → drop the markers.
+  // Negative look-arounds keep us from eating ** that the pass above
+  // already handled, or stray underscores inside identifiers.
+  text = text.replace(/(?<![*\w])\*([^*\n]+?)\*(?!\w)/g, "$1");
+  text = text.replace(/(?<![_\w])_([^_\n]+?)_(?!\w)/g, "$1");
+
+  // Leading list markers at the start of a line → strip the marker,
+  // keep the content. Handles both - and * bullets.
+  text = text.replace(/^[ \t]*[-*][ \t]+/gm, "");
+
+  // Leading heading markers (#, ##, ###…) → strip, keep title text.
+  text = text.replace(/^[ \t]*#{1,6}[ \t]+/gm, "");
+
+  // Horizontal rules — full lines of ---, ***, or ___ → drop the line.
+  text = text.replace(/^[ \t]*[-*_]{3,}[ \t]*$/gm, "");
+
+  // Inside a paragraph, collapse single newlines (soft wraps from the
+  // model) into spaces so the chat panel's own wrapping is what the
+  // user sees. Paragraph breaks (2+ newlines) survive because we
+  // split on those upstream.
+  text = text.replace(/(?<!\n)\n(?!\n)/g, " ");
+
+  // Normalize any run of 3+ newlines down to exactly two so the
+  // paragraph splitter produces consistent spacing.
+  text = text.replace(/\n{3,}/g, "\n\n");
+
+  // Collapse runs of internal whitespace to single spaces (the
+  // newline-to-space pass above can leave doubles).
+  text = text.replace(/[ \t]{2,}/g, " ");
+
+  return text.trim();
+}
+
 function StreamingCaret() {
   return (
     <span
       aria-hidden
       className="inline-block w-[2px] h-[0.95em] align-text-bottom translate-y-[1px] bg-foreground/70 ml-0.5 animate-pulse [animation-duration:1s]"
     />
-  );
-}
-
-function renderInline(text: string): ReactNode[] {
-  // Split on **bold** runs. Even indices are plain, odd are bold.
-  const parts = text.split(/\*\*([^*\n]+)\*\*/g);
-  return parts.map((part, i) =>
-    i % 2 === 1 ? <strong key={i}>{part}</strong> : part,
   );
 }
 
