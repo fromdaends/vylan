@@ -6,10 +6,6 @@ import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { brand } from "@/lib/brand";
 import { ThemeProvider } from "@/components/theme/theme-provider";
-import {
-  AccentProvider,
-  ACCENT_NO_FLASH_SCRIPT,
-} from "@/components/theme/accent-provider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -52,14 +48,8 @@ export default async function LocaleLayout({
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        {/* Applies the saved accent to <html data-accent> before first paint
-            so there's no flash of the wrong accent. Mode is handled by
-            next-themes' own pre-paint script. */}
-        <script dangerouslySetInnerHTML={{ __html: ACCENT_NO_FLASH_SCRIPT }} />
         <ThemeProvider>
-          <AccentProvider>
-            <NextIntlClientProvider>{children}</NextIntlClientProvider>
-          </AccentProvider>
+          <NextIntlClientProvider>{children}</NextIntlClientProvider>
         </ThemeProvider>
       </body>
     </html>
