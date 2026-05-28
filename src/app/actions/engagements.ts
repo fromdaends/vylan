@@ -14,6 +14,7 @@ import {
   getEngagement,
   type CreateEngagementInput,
 } from "@/lib/db/engagements";
+import { listRequestItems } from "@/lib/db/request-items";
 import { logUserActivity } from "@/lib/db/activity";
 import {
   scheduleEngagementReminders,
@@ -104,6 +105,12 @@ export async function createEngagementAction(payload: {
   // Draft engagements don't count against the active cap, so the accountant
   // can keep building a draft while they figure out billing.
   if (payload.send) {
+    // Can't send an engagement with nothing to collect — the client would
+    // land on a portal with zero documents to upload. Saving as a draft is
+    // still allowed (send=false), so this only gates the send.
+    if (parsed.data.items.length === 0) {
+      return { error: "no_documents" };
+    }
     const limits = await getFirmLimits();
     if (limits && !limits.canCreateEngagement) {
       return { error: "plan_limit_reached" };
@@ -157,6 +164,12 @@ export async function createEngagementAction(payload: {
 export async function sendEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
+  // Backstop for the no-documents rule: an engagement with no requested
+  // items has nothing for the client to upload. The detail page disables
+  // the Send button in this case, but guard the action too in case it's
+  // hit directly.
+  const items = await listRequestItems(id);
+  if (items.length === 0) return;
   const limits = await getFirmLimits();
   if (limits && !limits.canCreateEngagement) {
     // Soft block — caller's UI should have prevented this anyway, but be safe.

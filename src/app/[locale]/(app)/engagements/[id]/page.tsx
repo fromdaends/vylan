@@ -154,6 +154,16 @@ export default async function EngagementDetailPage({
                   reasonKey="block_send_engagement_reason"
                   size="sm"
                 />
+              ) : items.length === 0 ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled
+                  title={t("send_no_items_hint")}
+                >
+                  <Send className="size-4" />
+                  {t("send")}
+                </Button>
               ) : (
                 <form action={sendEngagementAction}>
                   <input type="hidden" name="id" value={engagement.id} />
@@ -269,11 +279,16 @@ export default async function EngagementDetailPage({
 
       {portalUrl && isLive && <MagicLinkPanel url={portalUrl} />}
 
-      {isDraft && (
-        <Alert>
-          <AlertDescription>{t("draft_notice")}</AlertDescription>
-        </Alert>
-      )}
+      {isDraft &&
+        (items.length === 0 ? (
+          <Alert variant="destructive">
+            <AlertDescription>{t("send_no_items_blocked")}</AlertDescription>
+          </Alert>
+        ) : (
+          <Alert>
+            <AlertDescription>{t("draft_notice")}</AlertDescription>
+          </Alert>
+        ))}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <section className="lg:col-span-2 space-y-4">

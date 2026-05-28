@@ -581,6 +581,8 @@
     "delete_draft": "Supprimer",
     "cancel": "Annuler",
     "draft_notice": "Cet engagement est un brouillon. Cliquez sur « Envoyer » pour générer le lien magique du client.",
+    "send_no_items_blocked": "Cet engagement ne demande aucun document : le client n'a donc rien à téléverser. Ajoutez au moins un document avant de pouvoir l'envoyer.",
+    "send_no_items_hint": "Ajoutez au moins un document avant d'envoyer.",
     "checklist": "Liste de documents",
     "magic_link_title": "Lien client",
     "magic_link_hint": "Le courriel est envoyé automatiquement quand le lien est généré. Copiez-le ici pour le partager par un autre canal.",
@@ -624,7 +626,8 @@
       "create_failed": "Impossible de créer l’engagement. Veuillez réessayer.",
       "add_failed": "Impossible d'ajouter l'élément. Veuillez réessayer.",
       "min_2_chars": "Au moins 2 caractères.",
-      "too_long": "Trop long."
+      "too_long": "Trop long.",
+      "no_documents": "Ajoutez au moins un document avant d'envoyer — sans cela, le client n'a rien à téléverser."
     }
   },
   "Attention": {
