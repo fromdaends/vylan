@@ -133,26 +133,32 @@ export function SettingsShell({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Appearance — Mode (Light/Dark/System) + Accent (Blue/Green), each as a
-// selectable card with a live preview swatch. The accent cards preview in the
-// currently-effective mode (resolvedTheme), so System tracks the OS and
-// updates live. All options stay selectable in every mode.
+// Appearance — Mode (Light/Dark/System), each a selectable card with a small
+// static preview swatch. The System card previews the OS's prefers-color-scheme
+// (live), independent of the mode currently selected.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AppearanceSection({ t }: { t: Translate }) {
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const [systemDark, setSystemDark] = useState(false);
 
   useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => setSystemDark(mq.matches);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
+    setSystemDark(mq.matches);
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
   }, []);
 
   const activeMode = (mounted ? theme : "system") as ThemeChoice;
-  // The mode the System preview should render in. Falls back to light
-  // pre-mount; tracks the OS (and updates live) once mounted.
-  const effectiveMode: "light" | "dark" =
-    mounted && resolvedTheme === "dark" ? "dark" : "light";
+  // The System card previews the OS's prefers-color-scheme — i.e. what System
+  // would actually resolve to — independent of the mode currently selected,
+  // and updates live if the OS preference changes. (resolvedTheme would echo a
+  // manually-chosen Light/Dark instead of the real OS setting.)
+  const systemMode: "light" | "dark" = mounted && systemDark ? "dark" : "light";
 
   return (
     <section>
@@ -178,7 +184,7 @@ function AppearanceSection({ t }: { t: Translate }) {
           icon={<Monitor className="h-3.5 w-3.5" />}
           active={activeMode === "system"}
           onClick={() => setTheme("system")}
-          swatch={<ThemeSwatch mode={effectiveMode} />}
+          swatch={<ThemeSwatch mode={systemMode} />}
         />
       </div>
     </section>
