@@ -19,7 +19,6 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
-import { useAccent, type Accent } from "@/components/theme/accent-provider";
 import { cn } from "@/lib/cn";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -142,7 +141,6 @@ export function SettingsShell({
 
 function AppearanceSection({ t }: { t: Translate }) {
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const { accent, setAccent } = useAccent();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -151,72 +149,48 @@ function AppearanceSection({ t }: { t: Translate }) {
   }, []);
 
   const activeMode = (mounted ? theme : "system") as ThemeChoice;
-  // The mode the previews should render in. Falls back to light pre-mount.
+  // The mode the System preview should render in. Falls back to light
+  // pre-mount; tracks the OS (and updates live) once mounted.
   const effectiveMode: "light" | "dark" =
     mounted && resolvedTheme === "dark" ? "dark" : "light";
 
   return (
-    <div className="space-y-10">
-      <section>
-        <h2 className="text-sm font-semibold">{t("mode_label")}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">{t("mode_hint")}</p>
-        <div className="mt-4 grid max-w-lg grid-cols-3 gap-3">
-          <OptionCard
-            label={t("theme_light")}
-            icon={<Sun className="h-3.5 w-3.5" />}
-            active={activeMode === "light"}
-            onClick={() => setTheme("light")}
-            swatch={<ThemeSwatch mode="light" accent={accent} />}
-          />
-          <OptionCard
-            label={t("theme_dark")}
-            icon={<Moon className="h-3.5 w-3.5" />}
-            active={activeMode === "dark"}
-            onClick={() => setTheme("dark")}
-            swatch={<ThemeSwatch mode="dark" accent={accent} />}
-          />
-          <OptionCard
-            label={t("theme_system")}
-            icon={<Monitor className="h-3.5 w-3.5" />}
-            active={activeMode === "system"}
-            onClick={() => setTheme("system")}
-            swatch={<ThemeSwatch mode={effectiveMode} accent={accent} />}
-          />
-        </div>
-      </section>
-
-      <section>
-        <h2 className="text-sm font-semibold">{t("accent_label")}</h2>
-        <p className="mt-1 text-xs text-muted-foreground">{t("accent_hint")}</p>
-        <div className="mt-4 grid max-w-md grid-cols-2 gap-3">
-          {(["blue", "green"] as const).map((a) => (
-            <OptionCard
-              key={a}
-              label={t(`accent_${a}`)}
-              active={mounted && accent === a}
-              onClick={() => setAccent(a)}
-              swatch={<ThemeSwatch mode={effectiveMode} accent={a} />}
-            />
-          ))}
-        </div>
-      </section>
-    </div>
+    <section>
+      <h2 className="text-sm font-semibold">{t("mode_label")}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">{t("mode_hint")}</p>
+      <div className="mt-4 grid max-w-lg grid-cols-3 gap-3">
+        <OptionCard
+          label={t("theme_light")}
+          icon={<Sun className="h-3.5 w-3.5" />}
+          active={activeMode === "light"}
+          onClick={() => setTheme("light")}
+          swatch={<ThemeSwatch mode="light" />}
+        />
+        <OptionCard
+          label={t("theme_dark")}
+          icon={<Moon className="h-3.5 w-3.5" />}
+          active={activeMode === "dark"}
+          onClick={() => setTheme("dark")}
+          swatch={<ThemeSwatch mode="dark" />}
+        />
+        <OptionCard
+          label={t("theme_system")}
+          icon={<Monitor className="h-3.5 w-3.5" />}
+          active={activeMode === "system"}
+          onClick={() => setTheme("system")}
+          swatch={<ThemeSwatch mode={effectiveMode} />}
+        />
+      </div>
+    </section>
   );
 }
 
-// Self-contained themed island: applying the mode class + data-accent to this
-// wrapper makes the token-based children below render that exact combo,
-// independent of the page's current theme. This is what lets the previews be
-// honest (Step 5).
-function ThemeSwatch({
-  mode,
-  accent,
-}: {
-  mode: "light" | "dark";
-  accent: Accent;
-}) {
+// Self-contained themed island: applying the mode class to this wrapper makes
+// the token-based children below render in that mode, independent of the
+// page's current theme — so the System card can preview the OS-resolved mode.
+function ThemeSwatch({ mode }: { mode: "light" | "dark" }) {
   return (
-    <div className={mode === "dark" ? "dark" : undefined} data-accent={accent}>
+    <div className={mode === "dark" ? "dark" : undefined}>
       <div className="flex flex-col gap-1.5 rounded-md border border-border bg-background p-2.5">
         <div className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-accent" />
