@@ -275,49 +275,6 @@
   }
 
 
-  /* ─── Home ambient ──────────────────────────────────────────────────
-     One soft, full-bleed accent halo behind the centered Home content.
-     position:fixed so it spans the whole viewport edge-to-edge (no
-     container box, no seam) and fades to transparent before the edges, so
-     it reads as one continuous ambient field, never a panel. Sits behind
-     content (Home content is relative z-10), pointer-events:none, AA-safe.
-     Subtle in light, more luminous in dark. Derives from --accent (blue).
-     Motion is a slow, calm breath; static under prefers-reduced-motion. */
-  .home-ambient {
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    background: radial-gradient(
-      55% 45% at 50% 40%,
-      color-mix(in oklch, var(--accent) 9%, transparent),
-      transparent 70%
-    );
-    animation: home-ambient-breath 16s ease-in-out infinite alternate;
-  }
-  .dark .home-ambient {
-    background: radial-gradient(
-      55% 45% at 50% 40%,
-      color-mix(in oklch, var(--accent) 20%, transparent),
-      transparent 70%
-    );
-  }
-  @keyframes home-ambient-breath {
-    from {
-      transform: scale(1);
-      opacity: 0.85;
-    }
-    to {
-      transform: scale(1.05);
-      opacity: 1;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .home-ambient {
-      animation: none;
-    }
-  }
-
   /* Light mode gets real elevation: near-white surfaces need a soft shadow
      to separate cards from the page. Dark mode stays border-only (shadows
      read as noise on near-black, where the premium flat look already

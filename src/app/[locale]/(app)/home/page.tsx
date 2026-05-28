@@ -54,18 +54,7 @@ export default async function HomePage({
     : formatDate(new Date(), locale, "long");
 
   return (
-    <>
-      {/* Full-bleed ambient halo behind the centered content. Fixed to the
-          viewport (edge-to-edge, no container box or seam) and fades to
-          transparent, so it reads as one continuous field. Decorative only:
-          pointer-events:none, behind content (z-10). See .home-ambient in
-          globals.css. */}
-      <div className="home-ambient" aria-hidden />
-      {/* The whole block — greeting, search, feed, link — is centered as one
-          cohesive unit, vertically and horizontally, with balanced breathing
-          room above and below (no top-pinned content with a void beneath). */}
-      <div className="relative z-10 mx-auto flex min-h-[calc(100svh-6rem)] w-full max-w-xl flex-col justify-center px-1 py-10">
-        <div className="w-full space-y-10">
+    <div className="mx-auto w-full max-w-2xl px-1 pt-16 sm:pt-24 pb-16 space-y-14 sm:space-y-16">
       {/* 1. Greeting — centered, large, given real breathing room
           above it via the wrapper's pt-16/24. The hero variant of
           the greeting handles the typography scale. */}
@@ -144,9 +133,7 @@ export default async function HomePage({
           {t("quick_dashboard")}
         </Link>
       </nav>
-        </div>
-      </div>
-    </>
+    </div>
   );
 }
 
