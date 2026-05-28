@@ -60,6 +60,222 @@ function fmt(label: string | null | undefined, map?: Record<string, string>) {
 }
 
 // ---------------------------------------------------------------------------
+// Lead quality heuristic
+// ---------------------------------------------------------------------------
+//
+// Cheap rule-based assessment of a demo_requests row, surfaced in the
+// founder notification email so leads can be triaged from the inbox.
+// Deliberately permissive — never BLOCKS submissions, just flags.
+// False-positives are cheap (founder eyeballs and dismisses), false-
+// negatives are cheap (founder sees a fine lead and replies).
+//
+// Tiers:
+//   ok          — no concerns, treat normally
+//   suspicious  — one or two soft signals (free email, short name, etc.)
+//   likely_junk — disposable email or multiple junk signals stacked
+//
+// Heuristics are intentionally simple. When real spam volume hits, add
+// proper checks (DNS MX lookup, double opt-in email verification, etc.)
+// — see the conversation that introduced this module.
+
+type LeadQuality = {
+  tier: "ok" | "suspicious" | "likely_junk";
+  flags: string[];
+};
+
+// Known throwaway / disposable email domains. Tiny inline list — when
+// volume justifies it, swap for the `disposable-email-domains` npm
+// package (~3500 entries, well maintained).
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "mailinator.com",
+  "guerrillamail.com",
+  "guerrillamail.net",
+  "guerrillamail.org",
+  "sharklasers.com",
+  "10minutemail.com",
+  "10minutemail.net",
+  "yopmail.com",
+  "yopmail.fr",
+  "trashmail.com",
+  "trashmail.net",
+  "tempmail.com",
+  "tempmail.net",
+  "temp-mail.org",
+  "mintemail.com",
+  "throwawaymail.com",
+  "fakeinbox.com",
+  "getnada.com",
+  "maildrop.cc",
+  "moakt.com",
+  "dispostable.com",
+  "example.com",
+  "example.org",
+  "example.net",
+  "test.com",
+]);
+
+// Free consumer providers — NOT junk on their own (lots of solo
+// accountants use gmail) but combined with other signals it's weaker.
+const FREE_EMAIL_DOMAINS = new Set([
+  "gmail.com",
+  "yahoo.com",
+  "yahoo.ca",
+  "yahoo.fr",
+  "hotmail.com",
+  "hotmail.ca",
+  "hotmail.fr",
+  "outlook.com",
+  "live.com",
+  "icloud.com",
+  "me.com",
+  "aol.com",
+  "protonmail.com",
+  "proton.me",
+]);
+
+// Local parts that scream "fake" — these are the most common test /
+// keyboard-mash values. Case-insensitive exact match on the local part.
+const JUNK_LOCAL_PARTS = new Set([
+  "test",
+  "tester",
+  "test1",
+  "test2",
+  "asdf",
+  "asdfasdf",
+  "qwerty",
+  "qwertyuiop",
+  "abc",
+  "abcdef",
+  "xxx",
+  "noreply",
+  "nobody",
+  "admin",
+  "spam",
+  "fake",
+  "fakeemail",
+]);
+
+function looksLikeKeyboardMash(s: string): boolean {
+  const lower = s.toLowerCase().trim();
+  if (lower.length === 0) return false;
+  // 4+ consecutive identical characters → "aaaaaa", "11111"
+  if (/(.)\1{3,}/.test(lower)) return true;
+  // No vowels at all and 4+ chars → "qrtsfg", "zxcvbn"
+  if (lower.length >= 4 && !/[aeiouyàâéèêëîïôöùûü]/.test(lower)) return true;
+  return false;
+}
+
+export function assessLeadQuality(row: DemoRequest): LeadQuality {
+  const flags: string[] = [];
+  let weight = 0; // 0 = clean, 1-2 = suspicious, 3+ = likely junk
+
+  const email = (row.email ?? "").toLowerCase().trim();
+  const atIdx = email.lastIndexOf("@");
+  const localPart = atIdx > 0 ? email.slice(0, atIdx) : "";
+  const domain = atIdx > 0 ? email.slice(atIdx + 1) : "";
+
+  if (domain && DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
+    flags.push(`disposable email domain (${domain})`);
+    weight += 3;
+  }
+  if (localPart && JUNK_LOCAL_PARTS.has(localPart)) {
+    flags.push(`generic / placeholder email local-part ("${localPart}")`);
+    weight += 2;
+  }
+  if (localPart && looksLikeKeyboardMash(localPart)) {
+    flags.push("email local-part looks like keyboard mash");
+    weight += 2;
+  }
+  if (domain && FREE_EMAIL_DOMAINS.has(domain)) {
+    // Soft signal — common for solo accountants. Only weight if
+    // OTHER signals already exist.
+    if (weight > 0) {
+      flags.push(`free email provider (${domain})`);
+      weight += 1;
+    }
+  }
+
+  // Name checks
+  const name = (row.contact_name ?? "").trim();
+  if (name.length > 0 && name.length < 3) {
+    flags.push(`contact name very short ("${name}")`);
+    weight += 1;
+  }
+  if (name && looksLikeKeyboardMash(name)) {
+    flags.push("contact name looks like keyboard mash");
+    weight += 2;
+  }
+  // Single word name (no surname) — soft signal only
+  if (name && !name.includes(" ") && weight > 0) {
+    flags.push("contact name is a single word");
+    weight += 1;
+  }
+
+  // Firm name checks (only for full / qualified leads — partial leads
+  // might just not have got there yet)
+  if (row.furthest_step === 3) {
+    const firm = (row.firm_name ?? "").trim();
+    if (firm && firm.length < 3) {
+      flags.push(`firm name very short ("${firm}")`);
+      weight += 1;
+    }
+    if (firm && looksLikeKeyboardMash(firm)) {
+      flags.push("firm name looks like keyboard mash");
+      weight += 2;
+    }
+    // Firm name identical to contact name — sometimes legit (solo
+    // practice using own name as brand) but a flag worth seeing
+    if (firm && name && firm.toLowerCase() === name.toLowerCase()) {
+      flags.push("firm name is identical to contact name");
+      weight += 1;
+    }
+  }
+
+  const tier: LeadQuality["tier"] =
+    weight === 0 ? "ok" : weight >= 3 ? "likely_junk" : "suspicious";
+  return { tier, flags };
+}
+
+function qualityPrefix(tier: LeadQuality["tier"]): string {
+  if (tier === "likely_junk") return "[junk?] ";
+  if (tier === "suspicious") return "[?] ";
+  return "";
+}
+
+function qualityHtmlBlock(quality: LeadQuality): string {
+  if (quality.tier === "ok") return "";
+  const palette =
+    quality.tier === "likely_junk"
+      ? { bg: "#fef2f2", border: "#fecaca", text: "#991b1b", label: "#7f1d1d" }
+      : { bg: "#fef9c3", border: "#fde68a", text: "#854d0e", label: "#713f12" };
+  const label =
+    quality.tier === "likely_junk" ? "Likely junk" : "Suspicious";
+  const items = quality.flags
+    .map((f) => `<li style="margin:2px 0">${escapeHtml(f)}</li>`)
+    .join("");
+  return `
+    <div style="background:${palette.bg};border:1px solid ${palette.border};border-radius:10px;padding:12px 14px;margin:0 0 16px">
+      <div style="font-weight:600;font-size:13px;color:${palette.label};margin:0 0 6px">
+        ${label}
+      </div>
+      <ul style="margin:0;padding-left:18px;font-size:13px;color:${palette.text}">
+        ${items}
+      </ul>
+    </div>
+  `;
+}
+
+function qualityTextBlock(quality: LeadQuality): string {
+  if (quality.tier === "ok") return "";
+  const label =
+    quality.tier === "likely_junk"
+      ? "── Quality: LIKELY JUNK ──"
+      : "── Quality: SUSPICIOUS ──";
+  const items = quality.flags.map((f) => `  • ${f}`).join("\n");
+  return `${label}\n${items}\n\n`;
+}
+
+// ---------------------------------------------------------------------------
 // Qualified lead — prospect made it through all 3 steps. This email
 // IS the founder's call-prep sheet, so it lists everything we know.
 // ---------------------------------------------------------------------------
@@ -67,7 +283,8 @@ function fmt(label: string | null | undefined, map?: Record<string, string>) {
 export async function notifyFounderQualifiedLead(row: DemoRequest) {
   const to = founderEmail();
   const sizeLabel = fmt(row.firm_size, FIRM_SIZE_LABEL);
-  const subject = `Qualified demo lead — ${row.firm_name ?? "(unknown firm)"} (${sizeLabel})`;
+  const quality = assessLeadQuality(row);
+  const subject = `${qualityPrefix(quality.tier)}Qualified demo lead — ${row.firm_name ?? "(unknown firm)"} (${sizeLabel})`;
 
   const tool = fmt(row.current_tool, CURRENT_TOOL_LABEL);
   const toolDetail =
@@ -78,6 +295,7 @@ export async function notifyFounderQualifiedLead(row: DemoRequest) {
   const lines = [
     `Qualified demo lead. They have NOT booked yet — that happens next via cal.com.`,
     ``,
+    qualityTextBlock(quality),
     `── Contact ──`,
     `Name:  ${row.contact_name ?? "—"}`,
     `Email: ${row.email}`,
@@ -104,6 +322,7 @@ export async function notifyFounderQualifiedLead(row: DemoRequest) {
       <p style="margin:0 0 20px;font-size:14px;color:#475569">
         Qualified demo lead. They have <strong>not</strong> booked yet — that happens next via cal.com.
       </p>
+      ${qualityHtmlBlock(quality)}
       ${section("Contact", [
         ["Name", row.contact_name ?? "—"],
         ["Email", `<a href="mailto:${encodeURIComponent(row.email)}">${escapeHtml(row.email)}</a>`, true],
@@ -158,9 +377,11 @@ export async function notifyFounderLead(row: DemoRequest) {
 export async function notifyFounderPartialLead(row: DemoRequest) {
   const to = founderEmail();
   const sizeLabel = row.firm_size ? fmt(row.firm_size, FIRM_SIZE_LABEL) : null;
+  const quality = assessLeadQuality(row);
+  const prefix = qualityPrefix(quality.tier);
   const subject = sizeLabel
-    ? `Partial demo lead — ${row.firm_name ?? "(unknown firm)"} (${sizeLabel})`
-    : `Partial demo lead — ${row.firm_name ?? "(unknown firm)"}`;
+    ? `${prefix}Partial demo lead — ${row.firm_name ?? "(unknown firm)"} (${sizeLabel})`
+    : `${prefix}Partial demo lead — ${row.firm_name ?? "(unknown firm)"}`;
 
   const toolLabel = row.current_tool
     ? row.current_tool === "other_software" && row.current_tool_other
@@ -173,6 +394,7 @@ export async function notifyFounderPartialLead(row: DemoRequest) {
     `They reached step ${row.furthest_step} of 3.`,
     `Last activity: ${new Date(row.updated_at).toLocaleString("en-CA")}`,
     ``,
+    qualityTextBlock(quality),
     `── Contact ──`,
     `Name:  ${row.contact_name ?? "—"}`,
     `Email: ${row.email}`,
@@ -210,6 +432,7 @@ export async function notifyFounderPartialLead(row: DemoRequest) {
       <p style="margin:0 0 18px;font-size:14px;color:#475569">
         A prospect started the demo form but didn't finish. They reached step <strong>${row.furthest_step}</strong> of 3.
       </p>
+      ${qualityHtmlBlock(quality)}
       ${section("Contact", contactRows)}
       ${section("Firm", firmRows)}
       <p style="margin:18px 0 0;font-size:12px;color:#94a3b8">
