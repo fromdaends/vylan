@@ -69,6 +69,9 @@ export function EngagementBuilder({
     templates[0]?.items ?? [],
   );
   const [error, setError] = useState<string | null>(null);
+  // How many times "Create and send" was pressed with an empty checklist.
+  // From the 2nd attempt we ring the checklist so the reason is obvious.
+  const [emptyAttempts, setEmptyAttempts] = useState(0);
   const [pending, startTransition] = useTransition();
 
   const selectedTemplate = templates.find((tt) => tt.id === templateId);
@@ -80,6 +83,11 @@ export function EngagementBuilder({
     return `${selectedTemplate.name} — ${year}`;
   }, [selectedTemplate]);
   const effectiveTitle = titleTouched ? title : defaultTitle;
+
+  // After a 2nd failed "Create and send" on an empty checklist, ring the
+  // checklist section. The top-of-form error is easy to miss when the Send
+  // button sits at the bottom, right next to this section.
+  const highlightEmptyChecklist = items.length === 0 && emptyAttempts >= 2;
 
   function pickTemplate(id: string) {
     setTemplateId(id);
@@ -146,6 +154,7 @@ export function EngagementBuilder({
     // draft with an empty checklist is still allowed.
     if (send && cleanItems.length === 0) {
       setError("no_documents");
+      setEmptyAttempts((n) => n + 1);
       return;
     }
 
@@ -279,7 +288,13 @@ export function EngagementBuilder({
         </CardContent>
       </Card>
 
-      <Card>
+      <Card
+        className={
+          highlightEmptyChecklist
+            ? "ring-2 ring-destructive transition-shadow"
+            : "transition-shadow"
+        }
+      >
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base">
             {t("section_checklist")}{" "}
@@ -294,7 +309,14 @@ export function EngagementBuilder({
         </CardHeader>
         <CardContent>
           {items.length === 0 ? (
-            <div className="text-sm text-muted-foreground text-center py-8">
+            <div
+              className={
+                "text-sm text-center py-8 " +
+                (highlightEmptyChecklist
+                  ? "text-destructive font-medium"
+                  : "text-muted-foreground")
+              }
+            >
               {t("checklist_empty")}
             </div>
           ) : (
