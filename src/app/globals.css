@@ -275,121 +275,46 @@
   }
 
 
-  /* ─── Home hero composition ─────────────────────────────────────────
-     A layered abstract backdrop for the post-login landing — the one
-     "designed" surface in the app. Built only from gradients + a static
-     SVG grain (no canvas/video/image assets), GPU-promoted, behind content
-     (content is z-10), AA-safe. Light mode stays subtle and clean; dark
-     mode is richer and luminous. Motion is slow and disabled under
-     prefers-reduced-motion (the composition is complete when static).
-     Derives from --accent (blue). */
-  .home-hero-bg {
-    position: absolute;
+  /* ─── Home ambient ──────────────────────────────────────────────────
+     One soft, full-bleed accent halo behind the centered Home content.
+     position:fixed so it spans the whole viewport edge-to-edge (no
+     container box, no seam) and fades to transparent before the edges, so
+     it reads as one continuous ambient field, never a panel. Sits behind
+     content (Home content is relative z-10), pointer-events:none, AA-safe.
+     Subtle in light, more luminous in dark. Derives from --accent (blue).
+     Motion is a slow, calm breath; static under prefers-reduced-motion. */
+  .home-ambient {
+    position: fixed;
     inset: 0;
-    overflow: hidden;
-    pointer-events: none;
     z-index: 0;
-    /* Base wash: a cool accent tint up top settling into the page. */
+    pointer-events: none;
     background: radial-gradient(
-      135% 95% at 50% -12%,
-      color-mix(in oklch, var(--accent) 7%, transparent),
-      transparent 56%
+      55% 45% at 50% 40%,
+      color-mix(in oklch, var(--accent) 9%, transparent),
+      transparent 70%
     );
+    animation: home-ambient-breath 16s ease-in-out infinite alternate;
   }
-  .dark .home-hero-bg {
+  .dark .home-ambient {
     background: radial-gradient(
-      135% 95% at 50% -12%,
-      color-mix(in oklch, var(--accent) 16%, transparent),
-      transparent 56%
+      55% 45% at 50% 40%,
+      color-mix(in oklch, var(--accent) 20%, transparent),
+      transparent 70%
     );
   }
-  .home-hero-bg > span {
-    position: absolute;
-    display: block;
-    transform: translateZ(0);
-    will-change: transform;
-  }
-  /* Focal glow behind the greeting — brightest element / focal point. */
-  .home-hero-glow {
-    width: 72%;
-    height: 64%;
-    top: -16%;
-    left: 50%;
-    margin-left: -36%;
-    border-radius: 9999px;
-    filter: blur(64px);
-    opacity: 0.32;
-    background: radial-gradient(
-      closest-side,
-      color-mix(in oklch, var(--accent) 60%, transparent),
-      transparent
-    );
-    animation: hero-drift-a 32s ease-in-out infinite alternate;
-  }
-  .dark .home-hero-glow {
-    opacity: 0.8;
-  }
-  /* Offset field — fills the lower space so the page never reads empty
-     below the fold, and adds asymmetric depth. */
-  .home-hero-field {
-    width: 58%;
-    height: 58%;
-    right: -12%;
-    bottom: -20%;
-    border-radius: 9999px;
-    filter: blur(84px);
-    opacity: 0.16;
-    background: radial-gradient(
-      closest-side,
-      color-mix(in oklch, var(--accent) 42%, transparent),
-      transparent
-    );
-    animation: hero-drift-b 40s ease-in-out infinite alternate;
-  }
-  .dark .home-hero-field {
-    opacity: 0.4;
-  }
-  /* Concentric arcs radiating from behind the greeting — structure + depth.
-     Masked so they're strongest at the focal point and dissolve outward;
-     kept low-contrast so they read as texture, not a target. */
-  .home-hero-arcs {
-    inset: 0;
-    background: repeating-radial-gradient(
-      circle at 50% 15%,
-      transparent 0 56px,
-      color-mix(in oklch, var(--accent) 20%, transparent) 56px 57px,
-      transparent 57px 114px
-    );
-    -webkit-mask-image: radial-gradient(58% 52% at 50% 15%, #000, transparent 72%);
-    mask-image: radial-gradient(58% 52% at 50% 15%, #000, transparent 72%);
-    opacity: 0.22;
-  }
-  .dark .home-hero-arcs {
-    opacity: 0.5;
-  }
-  /* Fine grain — kills gradient banding + adds a premium tactile finish.
-     Static SVG turbulence as a data URI; zero runtime cost. */
-  .home-hero-grain {
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    opacity: 0.025;
-    mix-blend-mode: overlay;
-  }
-  .dark .home-hero-grain {
-    opacity: 0.05;
-  }
-  @keyframes hero-drift-a {
-    from { transform: translate3d(-2%, -1%, 0) scale(1); }
-    to { transform: translate3d(3%, 2%, 0) scale(1.06); }
-  }
-  @keyframes hero-drift-b {
-    from { transform: translate3d(0, 0, 0) scale(1.05); }
-    to { transform: translate3d(-4%, -3%, 0) scale(1); }
+  @keyframes home-ambient-breath {
+    from {
+      transform: scale(1);
+      opacity: 0.85;
+    }
+    to {
+      transform: scale(1.05);
+      opacity: 1;
+    }
   }
   @media (prefers-reduced-motion: reduce) {
-    .home-hero-glow,
-    .home-hero-field {
-      animation: none !important;
+    .home-ambient {
+      animation: none;
     }
   }
 

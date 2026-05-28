@@ -54,19 +54,18 @@ export default async function HomePage({
     : formatDate(new Date(), locale, "long");
 
   return (
-    <div className="relative isolate min-h-[calc(100dvh-7rem)]">
-      {/* Layered abstract backdrop — Home is the showcase surface. Purely
-          decorative (pointer-events:none, behind content which is z-10),
-          derives from --accent (blue), AA-safe, reduced-motion aware. The
-          composition fills the page so the lower half never reads empty.
-          See the .home-hero-* layers in globals.css. */}
-      <div className="home-hero-bg" aria-hidden>
-        <span className="home-hero-glow" />
-        <span className="home-hero-field" />
-        <span className="home-hero-arcs" />
-        <span className="home-hero-grain" />
-      </div>
-      <div className="relative z-10 mx-auto w-full max-w-2xl px-1 pt-20 sm:pt-28 pb-20 space-y-12 sm:space-y-14">
+    <>
+      {/* Full-bleed ambient halo behind the centered content. Fixed to the
+          viewport (edge-to-edge, no container box or seam) and fades to
+          transparent, so it reads as one continuous field. Decorative only:
+          pointer-events:none, behind content (z-10). See .home-ambient in
+          globals.css. */}
+      <div className="home-ambient" aria-hidden />
+      {/* The whole block — greeting, search, feed, link — is centered as one
+          cohesive unit, vertically and horizontally, with balanced breathing
+          room above and below (no top-pinned content with a void beneath). */}
+      <div className="relative z-10 mx-auto flex min-h-[calc(100svh-6rem)] w-full max-w-xl flex-col justify-center px-1 py-10">
+        <div className="w-full space-y-10">
       {/* 1. Greeting — centered, large, given real breathing room
           above it via the wrapper's pt-16/24. The hero variant of
           the greeting handles the typography scale. */}
@@ -145,8 +144,9 @@ export default async function HomePage({
           {t("quick_dashboard")}
         </Link>
       </nav>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
