@@ -142,7 +142,7 @@ export async function processReminderJob(
     .single();
   const { data: firm } = await sb
     .from("firms")
-    .select("name, logo_url")
+    .select("name, logo_url, brand_color")
     .eq("id", engagement.firm_id)
     .single();
   if (!client || !firm) return { skipped: "client_or_firm_missing" };
@@ -160,6 +160,7 @@ export async function processReminderJob(
       clientName: client.display_name,
       firmName: firm.name,
       firmLogoUrl,
+      brandColor: firm.brand_color,
       engagementTitle: engagement.title,
       url,
       dueDate: engagement.due_date,

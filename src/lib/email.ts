@@ -298,11 +298,15 @@ The ${opts.firmName} team`;
 
 export type ReminderTone = "gentle" | "firm" | "deadline" | "overdue";
 
+// Default CTA / footer slate when the firm has no brand color set.
+const DEFAULT_BRAND = "#1e293b";
+
 export function buildReminderEmail(opts: {
   tone: ReminderTone;
   clientName: string;
   firmName: string;
   firmLogoUrl?: string | null;
+  brandColor?: string | null;
   engagementTitle: string;
   url: string;
   dueDate: string | null;
@@ -310,109 +314,328 @@ export function buildReminderEmail(opts: {
   locale: "fr" | "en";
 }): { subject: string; html: string; text: string } {
   const copy = COPY[opts.locale][opts.tone];
+  const brand = sanitizeColor(opts.brandColor) ?? DEFAULT_BRAND;
   const subject = copy.subject(opts);
-  const body = copy.body(opts);
-  const cta = opts.locale === "fr" ? "Téléverser mes documents" : "Upload my documents";
-  const logoBlock = buildLogoBlock(opts.firmLogoUrl, opts.firmName);
-  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
-${logoBlock}<p>${escapeHtml(copy.greeting(opts))}</p>
-<p>${body.html}</p>
-<p style="margin:24px 0">
-  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">${cta}</a>
-</p>
-<p style="color:#64748b;font-size:13px">${escapeHtml(opts.locale === "fr" ? "Ou copiez ce lien :" : "Or copy this link:")}<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.url}</span></p>
-<p style="color:#64748b;font-size:12px;margin-top:32px">${escapeHtml(opts.firmName)}</p>
-</body></html>`;
-  const text = `${copy.greeting(opts)}
+  const lines = copy.lines(opts);
+  const greeting = copy.greeting(opts);
 
-${body.text}
+  const cta =
+    opts.locale === "fr" ? "Téléverser mes documents" : "Upload my documents";
+  const linkLabel =
+    opts.locale === "fr"
+      ? "Ou copiez ce lien dans votre navigateur :"
+      : "Or copy this link into your browser:";
+  const replyHint =
+    opts.locale === "fr"
+      ? "Une question ? Répondez simplement à ce courriel — la réponse va directement à votre comptable."
+      : "Have a question? Just reply to this email — the answer goes straight to your accountant.";
 
-${opts.locale === "fr" ? "Téléverser" : "Upload"}: ${opts.url}
+  // The deadline + overdue tones surface the due date in a small pill
+  // at the top so the date is unmissable even on a quick mobile glance.
+  const dueDatePill =
+    opts.dueDate && (opts.tone === "deadline" || opts.tone === "overdue")
+      ? renderDueDatePill(opts.dueDate, opts.tone, opts.locale, brand)
+      : "";
 
-— ${opts.firmName}`;
+  // Logo-or-firmname header band so every reminder is visibly anchored
+  // to the firm rather than feeling like a generic Vylan system email.
+  const header = renderHeader(opts.firmLogoUrl, opts.firmName);
+
+  // Body lines are joined into <p> blocks. One paragraph per line keeps
+  // the rhythm consistent across all four tones.
+  const bodyHtml = lines.html
+    .map(
+      (line) =>
+        `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#1e293b">${line}</p>`,
+    )
+    .join("");
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;color:#1e293b">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8fafc;padding:32px 16px">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;background-color:#ffffff;border-radius:12px;box-shadow:0 1px 3px rgba(15,23,42,0.06);overflow:hidden">
+          <tr>
+            <td style="padding:24px 28px 0 28px">
+              ${header}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 28px 0 28px">
+              ${dueDatePill}
+              <p style="margin:0 0 12px;font-size:15px;line-height:1.55;color:#1e293b">${escapeHtml(greeting)}</p>
+              ${bodyHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 28px 4px 28px">
+              <a href="${opts.url}" style="display:inline-block;background-color:${brand};color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;line-height:1">${cta}</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:12px 28px 0 28px">
+              <p style="margin:0;font-size:12px;line-height:1.5;color:#64748b">${escapeHtml(linkLabel)}</p>
+              <p style="margin:4px 0 0;font-family:'SF Mono',ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;color:#475569;word-break:break-all">${opts.url}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 28px 24px 28px;border-top:1px solid #e2e8f0;margin-top:24px">
+              <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#475569">${escapeHtml(replyHint)}</p>
+              <p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#0f172a;font-weight:500">— ${escapeHtml(opts.firmName)}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = [
+    greeting,
+    "",
+    ...lines.text,
+    "",
+    `${opts.locale === "fr" ? "Téléverser" : "Upload"}: ${opts.url}`,
+    "",
+    replyHint,
+    "",
+    `— ${opts.firmName}`,
+  ].join("\n");
+
   return { subject, html, text };
+}
+
+// Reject anything that isn't a 3- or 6-digit hex colour. Falls back to
+// the default slate elsewhere — keeps the firm's brand on the CTA when
+// they set one, and never lets an arbitrary string slip into inline
+// CSS and break email rendering.
+function sanitizeColor(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) return trimmed;
+  if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed;
+  return null;
+}
+
+// Header band with the firm logo (when present) + firm name. When the
+// firm has no logo we drop in just the name so the email still feels
+// anchored to a real sender rather than an unattributed system blast.
+function renderHeader(
+  logoUrl: string | null | undefined,
+  firmName: string,
+): string {
+  if (logoUrl) {
+    return `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 16px">
+        <tr>
+          <td style="padding-right:12px;vertical-align:middle">
+            <img src="${logoUrl}" alt="${escapeHtml(firmName)}" width="40" height="40" style="display:block;width:40px;height:40px;border-radius:8px;object-fit:cover;border:0" />
+          </td>
+          <td style="vertical-align:middle">
+            <div style="font-size:15px;font-weight:600;color:#0f172a">${escapeHtml(firmName)}</div>
+          </td>
+        </tr>
+      </table>`;
+  }
+  return `<div style="margin:0 0 16px;font-size:15px;font-weight:600;color:#0f172a">${escapeHtml(firmName)}</div>`;
+}
+
+// Small coloured pill at the top of deadline / overdue reminders. Uses
+// amber for "approaching" and red for "passed" so the urgency is
+// visible at-a-glance even before the subject is parsed.
+function renderDueDatePill(
+  dueDate: string,
+  tone: "deadline" | "overdue",
+  locale: "fr" | "en",
+  brand: string,
+): string {
+  void brand;
+  const palette =
+    tone === "overdue"
+      ? { bg: "#fef2f2", border: "#fecaca", text: "#991b1b" }
+      : { bg: "#fef9c3", border: "#fde68a", text: "#854d0e" };
+  const prefix =
+    tone === "overdue"
+      ? locale === "fr"
+        ? "Échéance dépassée"
+        : "Past deadline"
+      : locale === "fr"
+        ? "Échéance"
+        : "Deadline";
+  return `<div style="display:inline-block;background-color:${palette.bg};border:1px solid ${palette.border};color:${palette.text};border-radius:999px;padding:4px 10px;font-size:12px;font-weight:600;letter-spacing:0.02em;margin:0 0 12px">
+  ${escapeHtml(prefix)} · ${escapeHtml(dueDate)}
+</div>`;
 }
 
 type CopyVariant = {
   subject: (o: BuildOpts) => string;
   greeting: (o: BuildOpts) => string;
-  body: (o: BuildOpts) => { html: string; text: string };
+  lines: (o: BuildOpts) => { html: string[]; text: string[] };
 };
 
 type BuildOpts = Parameters<typeof buildReminderEmail>[0];
 
+function plural(n: number, fr: boolean): string {
+  if (fr) return n > 1 ? "documents" : "document";
+  return n > 1 ? "documents" : "document";
+}
+
 const COPY: Record<"fr" | "en", Record<ReminderTone, CopyVariant>> = {
   fr: {
     gentle: {
-      subject: (o) =>
-        `Petit rappel : ${o.firmName} attend toujours quelques documents`,
+      subject: (o) => `Petit rappel — ${o.engagementTitle}`,
       greeting: (o) => `Bonjour ${o.clientName},`,
-      body: (o) => ({
-        html: `Juste un petit rappel — votre comptable attend toujours <strong>${o.pendingRequiredCount} document${o.pendingRequiredCount > 1 ? "s" : ""}</strong> pour <strong>${escapeHtml(o.engagementTitle)}</strong>. Aucune urgence, mais plus tôt vous nous les envoyez, plus tôt nous pouvons avancer.`,
-        text: `Juste un petit rappel — votre comptable attend toujours ${o.pendingRequiredCount} document(s) pour ${o.engagementTitle}.`,
-      }),
+      lines: (o) => {
+        const n = o.pendingRequiredCount;
+        const docs = plural(n, true);
+        return {
+          html: [
+            `Petit rappel : il nous manque encore <strong>${n} ${docs}</strong> pour finaliser <strong>${escapeHtml(o.engagementTitle)}</strong>.`,
+            `Aucune urgence — dès que vous avez deux minutes, vous pouvez tout téléverser depuis votre téléphone.`,
+          ],
+          text: [
+            `Petit rappel : il nous manque encore ${n} ${docs} pour finaliser ${o.engagementTitle}.`,
+            `Aucune urgence — dès que vous avez deux minutes, vous pouvez tout téléverser depuis votre téléphone.`,
+          ],
+        };
+      },
     },
     firm: {
-      subject: (o) =>
-        `${o.firmName} attend toujours vos documents`,
+      subject: (o) => `Documents toujours attendus — ${o.engagementTitle}`,
       greeting: (o) => `Bonjour ${o.clientName},`,
-      body: (o) => ({
-        html: `Cela fait une semaine que nous attendons vos documents pour <strong>${escapeHtml(o.engagementTitle)}</strong>. Il reste ${o.pendingRequiredCount} document${o.pendingRequiredCount > 1 ? "s à téléverser" : " à téléverser"}. Pouvez-vous y jeter un œil cette semaine&nbsp;?`,
-        text: `Cela fait une semaine que nous attendons vos documents pour ${o.engagementTitle}. Il reste ${o.pendingRequiredCount} document(s) à téléverser.`,
-      }),
+      lines: (o) => {
+        const n = o.pendingRequiredCount;
+        const docs = plural(n, true);
+        return {
+          html: [
+            `Cela fait une semaine que nous attendons <strong>${n} ${docs}</strong> pour <strong>${escapeHtml(o.engagementTitle)}</strong>.`,
+            `Pourriez-vous nous les téléverser cette semaine ? Cela nous permettra d'avancer dans votre dossier sans accroc.`,
+          ],
+          text: [
+            `Cela fait une semaine que nous attendons ${n} ${docs} pour ${o.engagementTitle}.`,
+            `Pourriez-vous nous les téléverser cette semaine ? Cela nous permettra d'avancer dans votre dossier sans accroc.`,
+          ],
+        };
+      },
     },
     deadline: {
-      subject: (o) =>
-        `L'échéance approche pour « ${o.engagementTitle} »`,
+      subject: (o) => `Échéance ${o.dueDate ?? "à venir"} — ${o.engagementTitle}`,
       greeting: (o) => `Bonjour ${o.clientName},`,
-      body: (o) => ({
-        html: `Petite alerte&nbsp;: l'échéance <strong>${o.dueDate ?? ""}</strong> approche et il manque encore <strong>${o.pendingRequiredCount} document${o.pendingRequiredCount > 1 ? "s" : ""}</strong> pour <strong>${escapeHtml(o.engagementTitle)}</strong>. Pour éviter des retards, merci de les téléverser dès que possible.`,
-        text: `Échéance ${o.dueDate ?? ""} approche pour ${o.engagementTitle}. Il manque ${o.pendingRequiredCount} document(s).`,
-      }),
+      lines: (o) => {
+        const n = o.pendingRequiredCount;
+        const docs = plural(n, true);
+        return {
+          html: [
+            `L'échéance pour <strong>${escapeHtml(o.engagementTitle)}</strong> approche et il nous manque encore <strong>${n} ${docs}</strong>.`,
+            `Merci de les téléverser dès que possible pour éviter tout retard dans votre dossier.`,
+          ],
+          text: [
+            `L'échéance pour ${o.engagementTitle} approche et il nous manque encore ${n} ${docs}.`,
+            `Merci de les téléverser dès que possible pour éviter tout retard dans votre dossier.`,
+          ],
+        };
+      },
     },
     overdue: {
-      subject: (o) =>
-        `Échéance dépassée — ${o.engagementTitle}`,
+      subject: (o) => `Échéance dépassée — ${o.engagementTitle}`,
       greeting: (o) => `Bonjour ${o.clientName},`,
-      body: (o) => ({
-        html: `L'échéance du <strong>${o.dueDate ?? ""}</strong> est passée et nous attendons toujours <strong>${o.pendingRequiredCount} document${o.pendingRequiredCount > 1 ? "s" : ""}</strong> pour <strong>${escapeHtml(o.engagementTitle)}</strong>. Pouvez-vous nous les envoyer rapidement&nbsp;?`,
-        text: `Échéance ${o.dueDate ?? ""} dépassée. Il manque ${o.pendingRequiredCount} document(s) pour ${o.engagementTitle}.`,
-      }),
+      lines: (o) => {
+        const n = o.pendingRequiredCount;
+        const docs = plural(n, true);
+        return {
+          html: [
+            `L'échéance pour <strong>${escapeHtml(o.engagementTitle)}</strong> est passée et nous attendons toujours <strong>${n} ${docs}</strong>.`,
+            `Dès qu'ils sont téléversés, nous reprenons le dossier immédiatement. Si vous rencontrez un problème, répondez à ce courriel — nous sommes là pour aider.`,
+          ],
+          text: [
+            `L'échéance pour ${o.engagementTitle} est passée et nous attendons toujours ${n} ${docs}.`,
+            `Dès qu'ils sont téléversés, nous reprenons le dossier immédiatement. Si vous rencontrez un problème, répondez à ce courriel — nous sommes là pour aider.`,
+          ],
+        };
+      },
     },
   },
   en: {
     gentle: {
-      subject: (o) =>
-        `Quick reminder: ${o.firmName} is still waiting on a few documents`,
+      subject: (o) => `Quick reminder — ${o.engagementTitle}`,
       greeting: (o) => `Hi ${o.clientName},`,
-      body: (o) => ({
-        html: `Just a friendly nudge — your accountant is still waiting on <strong>${o.pendingRequiredCount} document${o.pendingRequiredCount > 1 ? "s" : ""}</strong> for <strong>${escapeHtml(o.engagementTitle)}</strong>. No rush, but the sooner we have them, the sooner we can move forward.`,
-        text: `Friendly nudge — your accountant is still waiting on ${o.pendingRequiredCount} document(s) for ${o.engagementTitle}.`,
-      }),
+      lines: (o) => {
+        const n = o.pendingRequiredCount;
+        const docs = plural(n, false);
+        return {
+          html: [
+            `Quick reminder: we're still missing <strong>${n} ${docs}</strong> to wrap up <strong>${escapeHtml(o.engagementTitle)}</strong>.`,
+            `No rush — whenever you have a couple of minutes, you can upload everything from your phone.`,
+          ],
+          text: [
+            `Quick reminder: we're still missing ${n} ${docs} to wrap up ${o.engagementTitle}.`,
+            `No rush — whenever you have a couple of minutes, you can upload everything from your phone.`,
+          ],
+        };
+      },
     },
     firm: {
-      subject: (o) => `${o.firmName} is still waiting on your documents`,
+      subject: (o) => `Still waiting on documents — ${o.engagementTitle}`,
       greeting: (o) => `Hi ${o.clientName},`,
-      body: (o) => ({
-        html: `It's been a week and we're still waiting on your documents for <strong>${escapeHtml(o.engagementTitle)}</strong>. There ${o.pendingRequiredCount > 1 ? "are" : "is"} <strong>${o.pendingRequiredCount} document${o.pendingRequiredCount > 1 ? "s" : ""}</strong> left to upload. Can you take a few minutes this week to send them in?`,
-        text: `It's been a week. ${o.pendingRequiredCount} document(s) still missing for ${o.engagementTitle}.`,
-      }),
+      lines: (o) => {
+        const n = o.pendingRequiredCount;
+        const docs = plural(n, false);
+        return {
+          html: [
+            `It's been a week and we're still waiting on <strong>${n} ${docs}</strong> for <strong>${escapeHtml(o.engagementTitle)}</strong>.`,
+            `Could you upload them this week? That keeps your file moving without delays on our side.`,
+          ],
+          text: [
+            `It's been a week and we're still waiting on ${n} ${docs} for ${o.engagementTitle}.`,
+            `Could you upload them this week? That keeps your file moving without delays on our side.`,
+          ],
+        };
+      },
     },
     deadline: {
-      subject: (o) => `Deadline approaching for "${o.engagementTitle}"`,
+      subject: (o) =>
+        `Deadline ${o.dueDate ?? "approaching"} — ${o.engagementTitle}`,
       greeting: (o) => `Hi ${o.clientName},`,
-      body: (o) => ({
-        html: `Heads up — the <strong>${o.dueDate ?? ""}</strong> deadline is coming up and you still owe us <strong>${o.pendingRequiredCount} document${o.pendingRequiredCount > 1 ? "s" : ""}</strong> for <strong>${escapeHtml(o.engagementTitle)}</strong>. Please upload them as soon as you can to avoid delays.`,
-        text: `Deadline ${o.dueDate ?? ""} coming up for ${o.engagementTitle}. ${o.pendingRequiredCount} document(s) still missing.`,
-      }),
+      lines: (o) => {
+        const n = o.pendingRequiredCount;
+        const docs = plural(n, false);
+        return {
+          html: [
+            `The deadline for <strong>${escapeHtml(o.engagementTitle)}</strong> is coming up and we're still missing <strong>${n} ${docs}</strong>.`,
+            `Please upload them as soon as you can so we have time to file on schedule.`,
+          ],
+          text: [
+            `The deadline for ${o.engagementTitle} is coming up and we're still missing ${n} ${docs}.`,
+            `Please upload them as soon as you can so we have time to file on schedule.`,
+          ],
+        };
+      },
     },
     overdue: {
-      subject: (o) => `Overdue — ${o.engagementTitle}`,
+      subject: (o) => `Past deadline — ${o.engagementTitle}`,
       greeting: (o) => `Hi ${o.clientName},`,
-      body: (o) => ({
-        html: `The <strong>${o.dueDate ?? ""}</strong> deadline has passed and we're still missing <strong>${o.pendingRequiredCount} document${o.pendingRequiredCount > 1 ? "s" : ""}</strong> for <strong>${escapeHtml(o.engagementTitle)}</strong>. Please send them in as soon as possible.`,
-        text: `Deadline ${o.dueDate ?? ""} has passed. ${o.pendingRequiredCount} document(s) still missing for ${o.engagementTitle}.`,
-      }),
+      lines: (o) => {
+        const n = o.pendingRequiredCount;
+        const docs = plural(n, false);
+        return {
+          html: [
+            `The deadline for <strong>${escapeHtml(o.engagementTitle)}</strong> has passed and we're still waiting on <strong>${n} ${docs}</strong>.`,
+            `As soon as they're uploaded we'll pick the file back up. If something's blocking you, just reply to this email — we're happy to help.`,
+          ],
+          text: [
+            `The deadline for ${o.engagementTitle} has passed and we're still waiting on ${n} ${docs}.`,
+            `As soon as they're uploaded we'll pick the file back up. If something's blocking you, just reply to this email — we're happy to help.`,
+          ],
+        };
+      },
     },
   },
 };
