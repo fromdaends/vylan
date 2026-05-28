@@ -185,25 +185,34 @@ function AppearanceSection({ t }: { t: Translate }) {
   );
 }
 
-// Self-contained themed island: applying the mode class to this wrapper makes
-// the token-based children below render in that mode, independent of the
-// page's current theme — so the System card can preview the OS-resolved mode.
+// Static mode preview. Uses explicit light/dark colors (NOT theme tokens) so a
+// card always shows its own mode regardless of the page's current theme — the
+// Light card stays white even while the app is in dark mode. Neutral + basic,
+// no accent color.
 function ThemeSwatch({ mode }: { mode: "light" | "dark" }) {
+  const dark = mode === "dark";
   return (
-    <div className={mode === "dark" ? "dark" : undefined}>
-      <div className="flex flex-col gap-1.5 rounded-md border border-border bg-background p-2.5">
-        <div className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full bg-accent" />
-          <span className="h-1.5 flex-1 rounded-full bg-card" />
-        </div>
-        <div className="h-1.5 w-3/4 rounded-full bg-muted" />
-        <div className="flex items-center gap-1.5">
-          <span className="rounded bg-accent px-1 py-0.5 text-[7px] font-semibold leading-none text-accent-foreground">
-            Aa
-          </span>
-          <span className="h-1.5 flex-1 rounded-full bg-border" />
-        </div>
-      </div>
+    <div
+      className={
+        "flex flex-col gap-1.5 rounded-md border p-2.5 " +
+        (dark ? "border-white/10 bg-zinc-950" : "border-black/10 bg-white")
+      }
+    >
+      <div
+        className={
+          "h-1.5 w-1/2 rounded-full " + (dark ? "bg-white/30" : "bg-black/20")
+        }
+      />
+      <div
+        className={
+          "h-1.5 w-4/5 rounded-full " + (dark ? "bg-white/15" : "bg-black/10")
+        }
+      />
+      <div
+        className={
+          "h-1.5 w-2/3 rounded-full " + (dark ? "bg-white/15" : "bg-black/10")
+        }
+      />
     </div>
   );
 }
