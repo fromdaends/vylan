@@ -275,64 +275,120 @@
   }
 
 
-  /* ─── Ambient aurora ────────────────────────────────────────────────
-     Accent-derived decorative glow. Pure CSS, GPU-cheap (blurred gradient
-     layers + transform-only motion), always pointer-events:none, sits
-     behind content, never affects text contrast. Color tracks --accent so
-     the glow follows the chosen accent (green accent → green glow). */
-  .aurora-field {
+  /* ─── Home hero composition ─────────────────────────────────────────
+     A layered abstract backdrop for the post-login landing — the one
+     "designed" surface in the app. Built only from gradients + a static
+     SVG grain (no canvas/video/image assets), GPU-promoted, behind content
+     (content is z-10), AA-safe. Light mode stays subtle and clean; dark
+     mode is richer and luminous. Motion is slow and disabled under
+     prefers-reduced-motion (the composition is complete when static).
+     Derives from --accent (blue). */
+  .home-hero-bg {
     position: absolute;
     inset: 0;
     overflow: hidden;
     pointer-events: none;
     z-index: 0;
-  }
-  .aurora-field::before,
-  .aurora-field::after {
-    content: "";
-    position: absolute;
-    border-radius: 9999px;
-    filter: blur(72px);
-    transform: translateZ(0);
-    will-change: transform;
+    /* Base wash: a cool accent tint up top settling into the page. */
     background: radial-gradient(
-      closest-side,
-      color-mix(in oklch, var(--accent) 65%, transparent),
-      transparent
+      135% 95% at 50% -12%,
+      color-mix(in oklch, var(--accent) 7%, transparent),
+      transparent 56%
     );
   }
-  .aurora-field::before {
-    width: 62%;
-    height: 62%;
-    top: -20%;
-    left: -6%;
+  .dark .home-hero-bg {
+    background: radial-gradient(
+      135% 95% at 50% -12%,
+      color-mix(in oklch, var(--accent) 16%, transparent),
+      transparent 56%
+    );
+  }
+  .home-hero-bg > span {
+    position: absolute;
+    display: block;
+    transform: translateZ(0);
+    will-change: transform;
+  }
+  /* Focal glow behind the greeting — brightest element / focal point. */
+  .home-hero-glow {
+    width: 72%;
+    height: 64%;
+    top: -16%;
+    left: 50%;
+    margin-left: -36%;
+    border-radius: 9999px;
+    filter: blur(64px);
+    opacity: 0.32;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in oklch, var(--accent) 60%, transparent),
+      transparent
+    );
+    animation: hero-drift-a 32s ease-in-out infinite alternate;
+  }
+  .dark .home-hero-glow {
+    opacity: 0.8;
+  }
+  /* Offset field — fills the lower space so the page never reads empty
+     below the fold, and adds asymmetric depth. */
+  .home-hero-field {
+    width: 58%;
+    height: 58%;
+    right: -12%;
+    bottom: -20%;
+    border-radius: 9999px;
+    filter: blur(84px);
     opacity: 0.16;
-    animation: aurora-drift-a 26s ease-in-out infinite alternate;
+    background: radial-gradient(
+      closest-side,
+      color-mix(in oklch, var(--accent) 42%, transparent),
+      transparent
+    );
+    animation: hero-drift-b 40s ease-in-out infinite alternate;
   }
-  .aurora-field::after {
-    width: 56%;
-    height: 56%;
-    top: -26%;
-    right: -8%;
-    opacity: 0.12;
-    animation: aurora-drift-b 32s ease-in-out infinite alternate;
+  .dark .home-hero-field {
+    opacity: 0.4;
   }
-  /* Light mode keeps the glow faint so white surfaces stay clean; dark
-     mode can carry more presence. */
-  .dark .aurora-field::before { opacity: 0.32; }
-  .dark .aurora-field::after { opacity: 0.24; }
-
-  @keyframes aurora-drift-a {
-    from { transform: translate3d(0, 0, 0) scale(1); }
-    to { transform: translate3d(6%, 4%, 0) scale(1.08); }
+  /* Concentric arcs radiating from behind the greeting — structure + depth.
+     Masked so they're strongest at the focal point and dissolve outward;
+     kept low-contrast so they read as texture, not a target. */
+  .home-hero-arcs {
+    inset: 0;
+    background: repeating-radial-gradient(
+      circle at 50% 15%,
+      transparent 0 56px,
+      color-mix(in oklch, var(--accent) 20%, transparent) 56px 57px,
+      transparent 57px 114px
+    );
+    -webkit-mask-image: radial-gradient(58% 52% at 50% 15%, #000, transparent 72%);
+    mask-image: radial-gradient(58% 52% at 50% 15%, #000, transparent 72%);
+    opacity: 0.22;
   }
-  @keyframes aurora-drift-b {
+  .dark .home-hero-arcs {
+    opacity: 0.5;
+  }
+  /* Fine grain — kills gradient banding + adds a premium tactile finish.
+     Static SVG turbulence as a data URI; zero runtime cost. */
+  .home-hero-grain {
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.025;
+    mix-blend-mode: overlay;
+  }
+  .dark .home-hero-grain {
+    opacity: 0.05;
+  }
+  @keyframes hero-drift-a {
+    from { transform: translate3d(-2%, -1%, 0) scale(1); }
+    to { transform: translate3d(3%, 2%, 0) scale(1.06); }
+  }
+  @keyframes hero-drift-b {
     from { transform: translate3d(0, 0, 0) scale(1.05); }
-    to { transform: translate3d(-5%, 6%, 0) scale(1); }
+    to { transform: translate3d(-4%, -3%, 0) scale(1); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .aurora-field::before,
-    .aurora-field::after {
+    .home-hero-glow,
+    .home-hero-field {
       animation: none !important;
     }
   }

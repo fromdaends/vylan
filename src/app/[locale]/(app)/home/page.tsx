@@ -54,14 +54,19 @@ export default async function HomePage({
     : formatDate(new Date(), locale, "long");
 
   return (
-    <div className="relative isolate">
-      {/* Accent-derived ambient aurora — Home is the showcase surface.
-          Decorative only: pointer-events:none, sits behind content (which
-          is relative z-10), tracks --accent (green accent → green glow,
-          blue → blue), AA-safe, reduced-motion aware. Defined as
-          .aurora-field in globals.css. */}
-      <div className="aurora-field" aria-hidden />
-      <div className="relative z-10 mx-auto w-full max-w-2xl px-1 pt-16 sm:pt-24 pb-16 space-y-14 sm:space-y-16">
+    <div className="relative isolate min-h-[calc(100dvh-7rem)]">
+      {/* Layered abstract backdrop — Home is the showcase surface. Purely
+          decorative (pointer-events:none, behind content which is z-10),
+          derives from --accent (blue), AA-safe, reduced-motion aware. The
+          composition fills the page so the lower half never reads empty.
+          See the .home-hero-* layers in globals.css. */}
+      <div className="home-hero-bg" aria-hidden>
+        <span className="home-hero-glow" />
+        <span className="home-hero-field" />
+        <span className="home-hero-arcs" />
+        <span className="home-hero-grain" />
+      </div>
+      <div className="relative z-10 mx-auto w-full max-w-2xl px-1 pt-20 sm:pt-28 pb-20 space-y-12 sm:space-y-14">
       {/* 1. Greeting — centered, large, given real breathing room
           above it via the wrapper's pt-16/24. The hero variant of
           the greeting handles the typography scale. */}
