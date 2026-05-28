@@ -581,6 +581,8 @@
     "delete_draft": "Delete",
     "cancel": "Cancel",
     "draft_notice": "This engagement is a draft. Click \"Send\" to generate the client's magic link.",
+    "send_no_items_blocked": "This engagement has no documents to request, so there's nothing for the client to upload. Add at least one document before you can send it.",
+    "send_no_items_hint": "Add at least one document before sending.",
     "checklist": "Checklist",
     "magic_link_title": "Client link",
     "magic_link_hint": "Email is sent automatically when the link is generated. Copy here if you want to share it via another channel.",
@@ -624,7 +626,8 @@
       "create_failed": "Couldn't create the engagement. Please try again.",
       "add_failed": "Couldn't add the item. Please try again.",
       "min_2_chars": "At least 2 characters.",
-      "too_long": "Too long."
+      "too_long": "Too long.",
+      "no_documents": "Add at least one document before sending — without one, there's nothing for the client to upload."
     }
   },
   "Attention": {

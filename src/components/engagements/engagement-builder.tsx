@@ -23,7 +23,8 @@ type KnownErrorKey =
   | "missing_title"
   | "create_failed"
   | "min_2_chars"
-  | "too_long";
+  | "too_long"
+  | "no_documents";
 const KNOWN_ERRORS = new Set<string>([
   "missing_client",
   "missing_template",
@@ -31,6 +32,7 @@ const KNOWN_ERRORS = new Set<string>([
   "create_failed",
   "min_2_chars",
   "too_long",
+  "no_documents",
 ]);
 
 const DOC_TYPES: DocType[] = [
@@ -139,6 +141,13 @@ export function EngagementBuilder({
         label_en: i.label_en.trim() || i.label_fr.trim(),
       }))
       .filter((i) => i.label_fr.length > 0);
+
+    // Sending needs at least one document for the client to upload. Saving a
+    // draft with an empty checklist is still allowed.
+    if (send && cleanItems.length === 0) {
+      setError("no_documents");
+      return;
+    }
 
     startTransition(async () => {
       try {
