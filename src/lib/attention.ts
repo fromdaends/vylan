@@ -3,7 +3,11 @@
 // The dashboard surfaces engagements that match any of:
 //   * status is sent or in_progress AND due_date <= today (overdue)
 //   * status is sent or in_progress AND due_date within 7 days AND <80% complete
-//   * status is sent or in_progress AND no client activity in 5+ days
+//   * status is sent or in_progress AND no client activity in 5+ days AND
+//     not yet fully collected (something is still outstanding from the client)
+//
+// An engagement that requests no documents (0 items) is never surfaced: there
+// is nothing for the client to act on, so none of the above can apply to it.
 //
 // Completion = (submitted + approved + na) / total required-or-submitted items
 // — i.e. required items count toward the denominator; optional items that
@@ -65,6 +69,23 @@ export function computeAttention(opts: {
     (i) => i.status === "submitted" || isAiBounced(i),
   ).length;
 
+  // No requested documents → nothing to collect, chase, or be overdue on.
+  // Bail before any reason is computed so it stays out of Needs attention
+  // entirely (the dashboard derives that section purely from reasons).
+  if (itemsTotal === 0) {
+    return {
+      reasons: [],
+      daysOverdue: null,
+      daysUntilDue: null,
+      daysSinceClientActivity: null,
+      completionPct,
+      itemsTotal,
+      itemsDone,
+      itemsPendingRequired,
+      itemsReadyToReview,
+    };
+  }
+
   let daysOverdue: number | null = null;
   let daysUntilDue: number | null = null;
   if (e.due_date) {
@@ -96,7 +117,12 @@ export function computeAttention(opts: {
   ) {
     reasons.push("due_soon");
   }
-  if (isLive && daysSinceClientActivity != null && daysSinceClientActivity >= 5) {
+  if (
+    isLive &&
+    daysSinceClientActivity != null &&
+    daysSinceClientActivity >= 5 &&
+    completionPct < 1
+  ) {
     reasons.push("stale");
   }
 

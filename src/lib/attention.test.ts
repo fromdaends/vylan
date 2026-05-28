@@ -100,6 +100,49 @@ describe("computeAttention", () => {
     expect(r.reasons).toContain("stale");
   });
 
+  it("does NOT flag stale when fully collected, even if quiet", () => {
+    const sixDaysAgo = new Date(NOW.getTime() - 6 * 24 * 60 * 60 * 1000);
+    const r = computeAttention({
+      engagement: eng({
+        sent_at: new Date(
+          NOW.getTime() - 10 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+      }),
+      items: [item({ status: "submitted" }), item({ status: "approved" })],
+      lastClientActivityAt: sixDaysAgo.toISOString(),
+      now: NOW,
+    });
+    expect(r.completionPct).toBe(1);
+    expect(r.reasons).not.toContain("stale");
+  });
+
+  it("never flags a zero-document engagement, even when quiet 10+ days", () => {
+    const r = computeAttention({
+      engagement: eng({
+        sent_at: new Date(
+          NOW.getTime() - 10 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+      }),
+      items: [],
+      lastClientActivityAt: null,
+      now: NOW,
+    });
+    expect(r.reasons).toEqual([]);
+    expect(r.itemsTotal).toBe(0);
+    expect(r.completionPct).toBe(1);
+  });
+
+  it("never flags a zero-document engagement, even when overdue", () => {
+    const r = computeAttention({
+      engagement: eng({ due_date: "2026-05-01" }), // before NOW
+      items: [],
+      lastClientActivityAt: null,
+      now: NOW,
+    });
+    expect(r.reasons).toEqual([]);
+    expect(r.daysOverdue).toBeNull();
+  });
+
   it("never flags draft / complete / cancelled engagements", () => {
     for (const status of ["draft", "complete", "cancelled"] as const) {
       const r = computeAttention({
