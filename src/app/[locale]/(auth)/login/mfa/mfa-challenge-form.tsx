@@ -64,7 +64,8 @@ export function MfaChallengeForm({ locale }: { locale: "fr" | "en" }) {
   const isTotp = mode === "totp";
 
   return (
-    <form onSubmit={submit} className="space-y-4">
+    <>
+      <form onSubmit={submit} className="space-y-4">
       {error && (
         <Alert variant="destructive" className="animate-in-fade">
           <AlertDescription>{error}</AlertDescription>
@@ -117,6 +118,12 @@ export function MfaChallengeForm({ locale }: { locale: "fr" | "en" }) {
           {isTotp ? t("mfa_use_recovery") : t("mfa_use_totp")}
         </button>
       </div>
+      </form>
+      {/* Sibling form, NOT nested — nested <form> is invalid HTML and
+          browsers ignore the inner one, which meant the "Cancel and
+          log out" button was actually submitting the outer MFA-verify
+          form with whatever (empty) code was in the field instead of
+          calling logoutAction. */}
       <form action={logoutAction}>
         <button
           type="submit"
@@ -125,6 +132,6 @@ export function MfaChallengeForm({ locale }: { locale: "fr" | "en" }) {
           {t("mfa_cancel_and_logout")}
         </button>
       </form>
-    </form>
+    </>
   );
 }
