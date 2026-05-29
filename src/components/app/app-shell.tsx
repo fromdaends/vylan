@@ -54,7 +54,6 @@ type Labels = {
   dashboard: string;
   clients: string;
   engagements: string;
-  engagementsToggle: string;
   templates: string;
   settings: string;
   firm: string;
@@ -936,44 +935,35 @@ function EngagementsNav({
 
   return (
     <div>
-      {/* Parent row: the label links to Active; the caret toggles the list.
-          Two controls in one row so clicking the name navigates while the
-          chevron just expands/collapses. */}
-      <div
+      {/* Parent row: ONE click target — the whole row (icon + label + chevron)
+          is a single Link. Clicking navigates to Active AND toggles the
+          submenu (open on first click, collapse on the next). The chevron is
+          a passive visual indicator (down = open, right = collapsed), not its
+          own control. */}
+      <Link
+        href="/engagements"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-current={pathname === "/engagements" ? "page" : undefined}
         className={cn(
-          "flex items-center rounded-lg text-sm font-medium transition-colors",
-          onEngagements
-            ? "text-foreground"
-            : "text-muted-foreground hover:text-foreground",
+          "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+          pathname === "/engagements"
+            ? "bg-secondary text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
+            : onEngagements
+              ? "text-foreground hover:bg-secondary/60"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
         )}
       >
-        <Link
-          href="/engagements"
+        <Folder className="size-4 shrink-0 text-icon-cyan" aria-hidden />
+        <span className="flex-1 truncate">{labels.engagements}</span>
+        <ChevronDown
           className={cn(
-            "flex flex-1 items-center gap-2.5 rounded-lg px-3 py-2 hover:bg-secondary/60",
-            pathname === "/engagements" &&
-              "bg-secondary shadow-[inset_0_1px_0_0_var(--color-border)]",
+            "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
+            open ? "rotate-0" : "-rotate-90",
           )}
-        >
-          <Folder className="size-4 shrink-0 text-icon-cyan" aria-hidden />
-          <span className="truncate">{labels.engagements}</span>
-        </Link>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-label={labels.engagementsToggle}
-          className="mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronDown
-            className={cn(
-              "size-4 transition-transform duration-200",
-              open ? "rotate-0" : "-rotate-90",
-            )}
-            aria-hidden
-          />
-        </button>
-      </div>
+          aria-hidden
+        />
+      </Link>
 
       {/* Sub-views — smooth grid-rows expand. */}
       <div
