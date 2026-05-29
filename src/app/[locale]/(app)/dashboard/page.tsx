@@ -1,7 +1,7 @@
 import { setRequestLocale } from "next-intl/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { listTemplates } from "@/lib/db/templates";
+import { listTemplates, BLANK_TEMPLATE_ID } from "@/lib/db/templates";
 
 export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
@@ -31,13 +31,15 @@ export default async function DashboardPage({
     listTemplates(),
   ]);
 
-  const templateCards: TemplateCard[] = templates.map((tmpl) => ({
-    id: tmpl.id,
-    name: tmpl.name,
-    type: tmpl.type,
-    itemCount: tmpl.items.length,
-    builtIn: tmpl.firm_id == null,
-  }));
+  const templateCards: TemplateCard[] = templates
+    .filter((tmpl) => tmpl.id !== BLANK_TEMPLATE_ID)
+    .map((tmpl) => ({
+      id: tmpl.id,
+      name: tmpl.name,
+      type: tmpl.type,
+      itemCount: tmpl.items.length,
+      builtIn: tmpl.firm_id == null,
+    }));
 
   // First name only — prefer the explicit display_name, fall back to the
   // account name; ignore the email local-part so an unnamed user gets the

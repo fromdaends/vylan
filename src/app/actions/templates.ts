@@ -8,13 +8,9 @@ import {
   cloneTemplateToFirm,
   updateTemplate,
   deleteTemplate,
+  BLANK_TEMPLATE_ID,
   type TemplateItem,
 } from "@/lib/db/templates";
-
-// "Personnalisé" / Custom built-in template (seeded in
-// 0005_builtin_templates.sql). Intentionally empty — used as the source
-// when a firm wants to build a template from scratch.
-const BLANK_BUILTIN_ID = "00000000-0000-0000-0000-000000000004";
 
 const ItemSchema = z.object({
   label_fr: z.string().min(1),
@@ -40,7 +36,7 @@ export async function createBlankTemplateAction(formData: FormData) {
   const locale =
     (formData.get("__app_locale") === "en" ? "en" : "fr") as "fr" | "en";
   const name = locale === "fr" ? "Nouveau modèle" : "New template";
-  const created = await cloneTemplateToFirm(BLANK_BUILTIN_ID, name);
+  const created = await cloneTemplateToFirm(BLANK_TEMPLATE_ID, name);
   revalidatePath("/templates");
   redirect(
     getPathname({

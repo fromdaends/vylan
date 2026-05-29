@@ -43,7 +43,7 @@ function renderGallery(items: TemplateCard[] = templates) {
 const blankName = new RegExp(en.Dashboard.tmpl_blank_name, "i");
 
 describe("TemplatesGallery", () => {
-  it("defaults to Recommended: a blank starter plus the built-in templates", () => {
+  it("defaults to Recommended: a blank starter plus all templates", () => {
     renderGallery();
 
     // Blank card → the from-scratch flow (no template query).
@@ -54,27 +54,16 @@ describe("TemplatesGallery", () => {
     const t1 = screen.getByRole("link", { name: /T1 Personal Return/i });
     expect(t1.getAttribute("href")).toContain("/engagements/new?template=b1");
 
-    // Firm (non-built-in) templates are hidden under Recommended.
-    expect(
-      screen.queryByRole("link", { name: /Client Onboarding/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("filters to firm custom templates when the Custom tab is selected", () => {
-    renderGallery();
-    fireEvent.click(
-      screen.getByRole("tab", { name: en.Dashboard.tmpl_cat_custom }),
-    );
-
+    // Firm templates now appear in the default view too (no separate tab).
     expect(
       screen.getByRole("link", { name: /Client Onboarding/i }),
     ).toBeInTheDocument();
+  });
+
+  it("has no Custom category tab", () => {
+    renderGallery();
     expect(
-      screen.queryByRole("link", { name: /T1 Personal Return/i }),
-    ).not.toBeInTheDocument();
-    // The blank starter only appears under Recommended.
-    expect(
-      screen.queryByRole("link", { name: blankName }),
+      screen.queryByRole("tab", { name: en.Dashboard.tmpl_cat_custom }),
     ).not.toBeInTheDocument();
   });
 
