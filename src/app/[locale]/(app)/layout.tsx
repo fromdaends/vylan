@@ -86,7 +86,6 @@ export default async function AppLayout({
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),
         engagements: t("nav_engagements"),
-        engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
         engagementViews: {
           active: tEng("view_active_label"),
