@@ -2,6 +2,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listEngagements, type Engagement } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
 import { getCurrentUser } from "@/lib/db/users";
+import { listTemplates } from "@/lib/db/templates";
 
 export const dynamic = "force-dynamic";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,10 @@ import {
 } from "@/lib/attention";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import {
+  TemplatesGallery,
+  type TemplateCard,
+} from "@/components/dashboard/templates-gallery";
 import { CollapsibleSection } from "@/components/dashboard/collapsible-section";
 import { HashSectionLink } from "@/components/dashboard/hash-section-link";
 import { AiActivityList } from "@/components/dashboard/ai-activity-list";
@@ -48,11 +53,20 @@ export default async function DashboardPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [engagements, clients, user] = await Promise.all([
+  const [engagements, clients, user, templates] = await Promise.all([
     listEngagements(),
     listClients({ includeArchived: false }),
     getCurrentUser(),
+    listTemplates(),
   ]);
+
+  const templateCards: TemplateCard[] = templates.map((tmpl) => ({
+    id: tmpl.id,
+    name: tmpl.name,
+    type: tmpl.type,
+    itemCount: tmpl.items.length,
+    builtIn: tmpl.firm_id == null,
+  }));
 
   // First name only — prefer the explicit display_name, fall back to the
   // account name; ignore the email local-part so an unnamed user gets the
@@ -181,6 +195,8 @@ export default async function DashboardPage({
         firstName={firstName}
         attentionCount={needsAttention.length}
       />
+
+      <TemplatesGallery templates={templateCards} />
 
       <section
         aria-label={tDashboard("overview_label")}
