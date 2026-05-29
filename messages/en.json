@@ -434,7 +434,11 @@
     "greeting_evening": "Good evening",
     "greeting_night": "Working late",
     "greeting_welcome": "Welcome back",
-    "overview_label": "Firm overview"
+    "overview_label": "Firm overview",
+    "welcome_name": "Welcome, {name}!",
+    "welcome_there": "there",
+    "attention_status": "You have {count, plural, one {# engagement that needs your attention.} other {# engagements that need your attention.}}",
+    "all_clear": "Everything's up to date. Nice work!"
   },
   "App": {
     "dashboard_title": "Dashboard",

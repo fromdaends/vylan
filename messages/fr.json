@@ -434,7 +434,11 @@
     "greeting_evening": "Bonsoir",
     "greeting_night": "Soirée tardive",
     "greeting_welcome": "Bon retour",
-    "overview_label": "Aperçu du cabinet"
+    "overview_label": "Aperçu du cabinet",
+    "welcome_name": "Bonjour, {name} !",
+    "welcome_there": "vous",
+    "attention_status": "Vous avez {count, plural, one {# engagement qui demande votre attention.} other {# engagements qui demandent votre attention.}}",
+    "all_clear": "Tout est à jour. Beau travail !"
   },
   "App": {
     "dashboard_title": "Tableau de bord",
