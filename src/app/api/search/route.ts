@@ -52,10 +52,6 @@ export async function GET(req: NextRequest) {
       .from("engagements")
       .select("id, title, client_id")
       .ilike("title", pattern)
-      // Hide soft-deleted (Recently Deleted only) + archived engagements from
-      // the global typeahead — it's an active-work finder.
-      .is("deleted_at", null)
-      .is("archived_at", null)
       // Live engagements first feels right on a typeahead — the
       // accountant is overwhelmingly looking for something they're
       // currently working on, not something they cancelled months ago.

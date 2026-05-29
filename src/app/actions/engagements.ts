@@ -11,10 +11,6 @@ import {
   reopenEngagement,
   deleteDraftEngagement,
   deleteEngagement,
-  archiveEngagement,
-  unarchiveEngagement,
-  softDeleteEngagement,
-  restoreEngagement,
   setRemindersPaused,
   getEngagement,
   type CreateEngagementInput,
@@ -29,8 +25,6 @@ import { getFirmLimits } from "@/lib/plan-limits";
 import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { getCurrentUser } from "@/lib/db/users";
-import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
@@ -86,9 +80,6 @@ function revalidateEngagementPaths(id: string | undefined) {
   revalidatePath("/inbox");
   revalidatePath("/dashboard");
   revalidatePath("/clients");
-  // The All-Engagements list + its state sub-pages (Active / Archived /
-  // Recently Deleted / …) all live under /engagements.
-  revalidatePath("/engagements");
 }
 
 export async function createEngagementAction(payload: {
@@ -258,55 +249,6 @@ export async function reopenEngagementAction(formData: FormData) {
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "reopen_engagement", {});
   }
-  revalidateEngagementPaths(id);
-}
-
-// --- Lifecycle actions (Phase 2 data layer; wired into the row context menu
-// + "..." button in Phase 3). Archive: owner + staff. Soft-delete / restore:
-// OWNER ONLY — the UI hides Delete from staff, and these guards are the
-// server-side backstop (RLS still permits the write at the DB level, so the
-// application-level role check is the gate). ---
-
-export async function archiveEngagementAction(formData: FormData) {
-  const id = formData.get("id");
-  if (typeof id !== "string" || !id) return;
-  const user = await getCurrentUser();
-  if (!user) return;
-  await archiveEngagement(id, user.id);
-  // Archived work shouldn't keep nagging the client.
-  await cancelEngagementReminders(id);
-  await logUserActivity(user.firm_id, id, "engagement_archived", {});
-  revalidateEngagementPaths(id);
-}
-
-export async function unarchiveEngagementAction(formData: FormData) {
-  const id = formData.get("id");
-  if (typeof id !== "string" || !id) return;
-  const user = await getCurrentUser();
-  if (!user) return;
-  await unarchiveEngagement(id);
-  await logUserActivity(user.firm_id, id, "engagement_unarchived", {});
-  revalidateEngagementPaths(id);
-}
-
-export async function softDeleteEngagementAction(formData: FormData) {
-  const id = formData.get("id");
-  if (typeof id !== "string" || !id) return;
-  const user = await getCurrentUser();
-  if (!user || !canDeleteEngagements(user.role)) return;
-  await softDeleteEngagement(id, user.id);
-  await cancelEngagementReminders(id);
-  await logUserActivity(user.firm_id, id, "engagement_deleted", {});
-  revalidateEngagementPaths(id);
-}
-
-export async function restoreEngagementAction(formData: FormData) {
-  const id = formData.get("id");
-  if (typeof id !== "string" || !id) return;
-  const user = await getCurrentUser();
-  if (!user || !canDeleteEngagements(user.role)) return;
-  await restoreEngagement(id);
-  await logUserActivity(user.firm_id, id, "engagement_restored", {});
   revalidateEngagementPaths(id);
 }
 

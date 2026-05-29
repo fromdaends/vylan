@@ -8,10 +8,6 @@
     {
       "path": "/api/cron/demo-leads",
       "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/purge-deleted-engagements",
-      "schedule": "0 4 * * *"
     }
   ]
 }
