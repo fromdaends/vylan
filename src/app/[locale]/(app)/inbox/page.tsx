@@ -8,6 +8,7 @@ import {
 import { listHomeNotifications } from "@/lib/home/notifications";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
 import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
+import { InboxSection } from "@/components/inbox/inbox-section";
 
 export const dynamic = "force-dynamic";
 
@@ -46,29 +47,27 @@ export default async function InboxPage({
         <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
       </header>
 
-      <section aria-label={tAttention("needs_attention")} className="space-y-4">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">
-          {tAttention("needs_attention")}
-        </h2>
+      {/* 1. What's new — always expanded, fixed at the top (not collapsible),
+          including its "View all" link. */}
+      <WhatsNewFeed notifications={notifications} locale={locale} />
+
+      {/* 2. Needs attention — collapsible, collapsed on load. */}
+      <InboxSection title={tAttention("needs_attention")} defaultOpen={false}>
         <WorklistTable
           rows={needsAttention}
           locale={locale}
           emptyText={t("empty_attention")}
         />
-      </section>
+      </InboxSection>
 
-      <section aria-label={tAttention("ready_to_review")} className="space-y-4">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">
-          {tAttention("ready_to_review")}
-        </h2>
+      {/* 3. Ready to review — collapsible, collapsed on load. */}
+      <InboxSection title={tAttention("ready_to_review")} defaultOpen={false}>
         <WorklistTable
           rows={readyToReview}
           locale={locale}
           emptyText={t("empty_ready")}
         />
-      </section>
-
-      <WhatsNewFeed notifications={notifications} locale={locale} />
+      </InboxSection>
     </div>
   );
 }
