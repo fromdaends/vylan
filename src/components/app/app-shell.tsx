@@ -31,11 +31,14 @@ import {
   LogOut,
   PanelLeft,
   PanelLeftClose,
+  Search,
   Settings,
   Sparkles,
   UserCircle,
   Users,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { SidebarSearch } from "@/components/app/sidebar-search";
 
 type Labels = {
   home: string;
@@ -501,6 +504,7 @@ function SidebarBody({
   collapsed: boolean;
   onToggleCollapse?: () => void;
 }) {
+  const tHome = useTranslations("Home");
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Brand row */}
@@ -552,6 +556,28 @@ function SidebarBody({
               <PanelLeftClose className="size-4" aria-hidden />
             </button>
           )}
+        </div>
+      )}
+
+      {/* Global search — full input when expanded; a Search icon that
+          expands the rail when collapsed. */}
+      {collapsed ? (
+        onToggleCollapse && (
+          <div className="px-2 pt-1 pb-2">
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="flex w-full items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+              aria-label={tHome("search_label")}
+              title={tHome("search_label")}
+            >
+              <Search className="size-[18px]" aria-hidden />
+            </button>
+          </div>
+        )
+      ) : (
+        <div className="px-3 pt-1 pb-2">
+          <SidebarSearch />
         </div>
       )}
 
