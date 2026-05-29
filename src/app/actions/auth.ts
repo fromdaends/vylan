@@ -152,7 +152,7 @@ export async function loginAction(
   if (aal && aal.nextLevel === "aal2" && aal.currentLevel !== "aal2") {
     redirect(localPath(locale, "/login/mfa"));
   }
-  redirect(localPath(locale, "/dashboard"));
+  redirect(localPath(locale, "/home"));
 }
 
 export async function signupAction(
@@ -243,7 +243,7 @@ export async function logoutAction() {
 //   5. Our callback handler exchanges the code (reads code_verifier
 //      cookie) and redirects the user to `next`.
 //
-// First-time Google users land on /dashboard, where the (app)/layout sees
+// First-time Google users land on /home, where the (app)/layout sees
 // no public.users row + no firm and bounces them to /onboarding, which
 // asks for firm name + creates the public.users row from the Google
 // profile name via the existing step1Action.
@@ -268,7 +268,7 @@ export async function signInWithGoogleAction(formData: FormData) {
   // query param are encoded into redirectTo so the callback handler
   // (which is the one that actually does the routing) sees the signal.
   const continueOk = formData.get("continue") === "onboarding";
-  const nextPath = localPath(locale, continueOk ? "/onboarding" : "/dashboard");
+  const nextPath = localPath(locale, continueOk ? "/onboarding" : "/home");
   const redirectTo =
     `${appUrl}/api/auth/callback?next=${encodeURIComponent(nextPath)}` +
     (continueOk ? "&continue=onboarding" : "");
@@ -335,5 +335,5 @@ export async function resetPasswordAction(
     return { error: "reset_failed" };
   }
   const locale = pickLocale(formData);
-  redirect(localPath(locale, "/dashboard"));
+  redirect(localPath(locale, "/home"));
 }

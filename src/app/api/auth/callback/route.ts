@@ -8,15 +8,15 @@ import { getServerSupabase } from "@/lib/supabase/server";
 //   * magic links (if we ever enable them)
 //   * OAuth (Google today, potentially others later)
 //
-// The `?next=` query param is locale-aware (e.g. "/fr/dashboard") and
+// The `?next=` query param is locale-aware (e.g. "/fr/home") and
 // strictly validated as a same-origin pathname before we'll honour it.
 function sanitizeNext(raw: string | null): string {
-  if (!raw) return "/dashboard";
+  if (!raw) return "/home";
   // Reject anything that isn't a same-origin pathname. Block protocol-relative
   // (//evil.com), schemes (javascript:, data:, https:), and backslashes that
   // some browsers normalize to forward slashes.
-  if (!raw.startsWith("/")) return "/dashboard";
-  if (raw.startsWith("//") || raw.startsWith("/\\")) return "/dashboard";
+  if (!raw.startsWith("/")) return "/home";
+  if (raw.startsWith("//") || raw.startsWith("/\\")) return "/home";
   return raw;
 }
 

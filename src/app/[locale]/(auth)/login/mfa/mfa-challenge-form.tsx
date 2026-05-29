@@ -43,10 +43,11 @@ export function MfaChallengeForm({ locale }: { locale: "fr" | "en" }) {
         }, 2500);
         return;
       }
-      // Land on /dashboard — the post-login landing. The old /home
-      // glance (greeting, global search, "What's new") was folded into
-      // the dashboard, so this is the page people actually want to see.
-      router.replace(`/${locale}/dashboard`);
+      // Land on /home (the post-login glance), matching every other
+      // post-auth path in the app. This used to be /dashboard but
+      // that's now a secondary destination — sending people there
+      // directly skips the home page they actually want to see.
+      router.replace(`/${locale}/home`);
     });
   }
 

@@ -31,7 +31,7 @@ export default async function MfaChallengePage({
     aalData.currentLevel === aalData.nextLevel ||
     aalData.nextLevel !== "aal2"
   ) {
-    redirect(getPathname({ locale, href: "/dashboard" }));
+    redirect(getPathname({ locale, href: "/home" }));
   }
 
   const t = await getTranslations("Auth");
