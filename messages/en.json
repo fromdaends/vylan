@@ -438,7 +438,18 @@
     "welcome_name": "Welcome, {name}!",
     "welcome_there": "there",
     "attention_status": "You have {count, plural, one {# engagement that needs your attention.} other {# engagements that need your attention.}}",
-    "all_clear": "Everything's up to date. Nice work!"
+    "all_clear": "Everything's up to date. Nice work!",
+    "tmpl_heading": "Start from a template",
+    "tmpl_view_all": "Browse all",
+    "tmpl_search_placeholder": "Search templates",
+    "tmpl_tablist_label": "Template categories",
+    "tmpl_cat_recommended": "Recommended",
+    "tmpl_cat_bookkeeping": "Bookkeeping",
+    "tmpl_cat_custom": "Custom",
+    "tmpl_items": "{count, plural, one {# item} other {# items}}",
+    "tmpl_blank_name": "Blank engagement",
+    "tmpl_blank_hint": "Start from scratch",
+    "tmpl_empty": "No templates here yet."
   },
   "App": {
     "dashboard_title": "Dashboard",
