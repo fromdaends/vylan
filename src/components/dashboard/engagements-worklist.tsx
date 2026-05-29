@@ -210,11 +210,15 @@ export function WorklistTable({
   locale,
   emptyText,
   canDelete = false,
+  countdownFor,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
   emptyText: string;
   canDelete?: boolean;
+  // Optional per-row caption (e.g. the Recently Deleted "deleted in N days"
+  // countdown). Returns null for rows that shouldn't show one.
+  countdownFor?: (row: WorklistRow) => string | null;
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -284,6 +288,7 @@ export function WorklistTable({
               unassignedText={t("wl_unassigned")}
               pctLabel={(pct) => t("wl_pct_complete", { pct })}
               canDelete={canDelete}
+              countdownText={countdownFor?.(r) ?? null}
             />
           ))}
         </TableBody>
@@ -312,6 +317,7 @@ function WorklistRowView({
   unassignedText,
   pctLabel,
   canDelete,
+  countdownText,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -323,6 +329,7 @@ function WorklistRowView({
   unassignedText: string;
   pctLabel: (pct: number) => string;
   canDelete: boolean;
+  countdownText: string | null;
 }) {
   const tEng = useTranslations("Engagements");
   // Completed engagements are 100% by definition; we don't fetch their
@@ -368,6 +375,13 @@ function WorklistRowView({
               <div className="mt-0.5 truncate text-xs text-muted-foreground">
                 {row.clientName}
               </div>
+              {/* Recently Deleted countdown — how long until the purge cron
+                  permanently removes this row. */}
+              {countdownText && (
+                <div className="mt-1 text-xs font-medium text-destructive">
+                  {countdownText}
+                </div>
+              )}
               {/* Urgency lives in the always-visible Engagement cell (not the
                   Due column, which is hidden on phones) so triage badges never
                   disappear on small screens. */}
