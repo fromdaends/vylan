@@ -1,4 +1,4 @@
-import { getTranslations, setRequestLocale } from "next-intl/server";
+import { setRequestLocale } from "next-intl/server";
 import { listEngagements, type Engagement } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
@@ -6,7 +6,6 @@ import { listTemplates } from "@/lib/db/templates";
 
 export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
-import { Sparkles } from "lucide-react";
 import {
   computeAttention,
   attentionScore,
@@ -15,7 +14,6 @@ import {
 } from "@/lib/attention";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
-import { HomeSearch } from "@/components/home/home-search";
 import {
   TemplatesGallery,
   type TemplateCard,
@@ -24,16 +22,6 @@ import {
   EngagementsWorklist,
   type WorklistRow,
 } from "@/components/dashboard/engagements-worklist";
-import { WhatsNew } from "@/components/dashboard/whats-new";
-import { listHomeNotifications } from "@/lib/home/notifications";
-import { CollapsibleSection } from "@/components/dashboard/collapsible-section";
-import { AiActivityList } from "@/components/dashboard/ai-activity-list";
-import { aiActivityShortLabel } from "@/components/dashboard/ai-activity-shared";
-import {
-  listAiActivityForFirm,
-  type AiActivityEntry,
-} from "@/lib/db/ai-activity";
-import { formatRelative } from "@/lib/format";
 
 type RowVm = {
   engagement: Engagement;
@@ -49,19 +37,13 @@ export default async function DashboardPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [engagements, clients, user, templates, firmUsers, notifications] =
-    await Promise.all([
-      listEngagements(),
-      listClients({ includeArchived: false }),
-      getCurrentUser(),
-      listTemplates(),
-      listFirmUsers(),
-      // The "What's new" glance, ported from the retired /home page. This
-      // recomputes from current data (it has no backing table), so it
-      // re-fetches engagements/clients internally — an accepted cost for
-      // keeping it the single source of truth for the feed.
-      listHomeNotifications(5),
-    ]);
+  const [engagements, clients, user, templates, firmUsers] = await Promise.all([
+    listEngagements(),
+    listClients({ includeArchived: false }),
+    getCurrentUser(),
+    listTemplates(),
+    listFirmUsers(),
+  ]);
 
   const templateCards: TemplateCard[] = templates.map((tmpl) => ({
     id: tmpl.id,
@@ -120,8 +102,8 @@ export default async function DashboardPage({
     }),
   }));
 
-  // The header still needs the count for its subtitle; the worklist
-  // recomputes its own from the rows so the two never drift.
+  // The header shows the count in its subtitle; the worklist recomputes
+  // its own from the rows so the two never drift.
   const attentionCount = vms.filter(
     (v) => v.attention.reasons.length > 0,
   ).length;
@@ -159,30 +141,9 @@ export default async function DashboardPage({
     recencyAt: recencyOf(e),
   }));
 
-  // AI activity — rolling 7-day window so the section auto-resets every
-  // week. Capped at 200 rows; the client-side search box filters within
-  // that set.
-  const sevenDaysAgo = new Date(
-    Date.now() - 7 * 24 * 60 * 60 * 1000,
-  ).toISOString();
-  const recentAiActivity = await listAiActivityForFirm(200, sevenDaysAgo);
-
-  const tAttention = await getTranslations("Attention");
-
   return (
     <div className="space-y-10 sm:space-y-12">
       <DashboardHeader firstName={firstName} attentionCount={attentionCount} />
-
-      <HomeSearch
-        clients={clients.map((c) => ({
-          id: c.id,
-          display_name: c.display_name,
-          email: c.email,
-        }))}
-        engagements={engagements
-          .filter((e) => e.status === "sent" || e.status === "in_progress")
-          .map((e) => ({ id: e.id, title: e.title, client_id: e.client_id }))}
-      />
 
       <TemplatesGallery templates={templateCards} />
 
@@ -191,62 +152,6 @@ export default async function DashboardPage({
         currentUserId={user?.id ?? null}
         locale={locale}
       />
-
-      <WhatsNew notifications={notifications} locale={locale} />
-
-      <CollapsibleSection
-        id="ai-activity"
-        title={tAttention("ai_activity_section_title")}
-        count={recentAiActivity.length}
-        preview={
-          recentAiActivity.length === 0
-            ? null
-            : aiActivityPreview(recentAiActivity[0], tAttention, locale)
-        }
-        hint={tAttention("ai_activity_section_hint")}
-        icon={<Sparkles className="h-4 w-4 text-primary" />}
-      >
-        {recentAiActivity.length === 0 ? (
-          <EmptyState
-            icon={<Sparkles className="h-5 w-5" />}
-            text={tAttention("empty_ai_activity")}
-          />
-        ) : (
-          <AiActivityList entries={recentAiActivity} locale={locale} />
-        )}
-      </CollapsibleSection>
     </div>
   );
-}
-
-function EmptyState({
-  icon,
-  text,
-}: {
-  icon: React.ReactNode;
-  text: string;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-10 text-muted-foreground">
-      <div
-        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-secondary/40 text-muted-foreground/80"
-        aria-hidden
-      >
-        {icon}
-      </div>
-      <p className="text-sm">{text}</p>
-    </div>
-  );
-}
-
-function aiActivityPreview(
-  entry: AiActivityEntry,
-  tAttention: Awaited<ReturnType<typeof getTranslations<"Attention">>>,
-  locale: "fr" | "en",
-): string {
-  const label = aiActivityShortLabel(entry.action, tAttention);
-  const context =
-    entry.client_display_name ?? entry.engagement_title ?? null;
-  const when = formatRelative(entry.created_at, locale);
-  return context ? `${label} · ${context} · ${when}` : `${label} · ${when}`;
 }
