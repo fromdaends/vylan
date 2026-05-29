@@ -47,13 +47,14 @@ export type WorklistRow = {
   recencyAt: string;
 };
 
-const FILTERS = ["recent", "mine", "all"] as const;
+const FILTERS = ["recent", "mine"] as const;
 type Filter = (typeof FILTERS)[number];
 
-// Word's "My documents" reimagined as a triage worklist. Three views slice
-// the same engagement set without losing it: Recent (default), Mine, All.
-// Per-engagement attention/ready badges still render inline on the rows;
-// the dedicated "Needs attention" + "Ready to review" lists live on /inbox.
+// Word's "My documents" reimagined as a triage worklist. Two quick views —
+// Recent (default) and Mine — plus a "Browse all" link out to the full
+// /engagements list (so "all" is its own page, not a tab). Per-engagement
+// attention/ready badges still render inline on the rows; the dedicated
+// "Needs attention" + "Ready to review" lists live on /inbox.
 export function EngagementsWorklist({
   rows,
   currentUserId,
@@ -83,49 +84,64 @@ export function EngagementsWorklist({
     }
 
     const set = rows.slice();
-    switch (filter) {
-      case "recent":
-        return set.sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
-      case "mine":
-        return set.filter(
-          (r) => currentUserId != null && r.assigneeUserId === currentUserId,
-        );
-      case "all":
-      default:
-        // Keep the server order (newest first) for "All".
-        return set;
+    if (filter === "mine") {
+      return set.filter(
+        (r) => currentUserId != null && r.assigneeUserId === currentUserId,
+      );
     }
+    // "recent" (default): newest first.
+    return set.sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
   }, [rows, filter, q, currentUserId]);
 
-  const pillLabel = (f: Filter): string => {
-    switch (f) {
-      case "recent":
-        return t("wl_filter_recent");
-      case "mine":
-        return t("wl_filter_mine");
-      default:
-        return t("wl_filter_all");
-    }
-  };
+  const pillLabel = (f: Filter): string =>
+    f === "mine" ? t("wl_filter_mine") : t("wl_filter_recent");
 
   const emptyText = (): string => {
     if (q !== "") return t("wl_empty_search");
-    switch (filter) {
-      case "mine":
-        return t("wl_empty_mine");
-      case "recent":
-        return t("wl_empty_recent");
-      default:
-        return t("wl_empty_all");
-    }
+    return filter === "mine" ? t("wl_empty_mine") : t("wl_empty_recent");
   };
 
   return (
     <section aria-label={t("wl_heading")} className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-end justify-between gap-4">
         <h2 className="text-lg font-semibold tracking-tight text-foreground">
           {t("wl_heading")}
         </h2>
+        <Link
+          href="/engagements"
+          className="shrink-0 text-sm font-medium text-primary hover:underline"
+        >
+          {t("wl_view_all")}
+        </Link>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          role="tablist"
+          aria-label={t("wl_filter_label")}
+          className="inline-flex items-center gap-1 self-start overflow-x-auto rounded-lg bg-muted p-[3px]"
+        >
+          {FILTERS.map((f) => {
+            const active = f === filter;
+            return (
+              <button
+                key={f}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setFilter(f)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                  active
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-foreground/60 hover:text-foreground",
+                )}
+              >
+                {pillLabel(f)}
+              </button>
+            );
+          })}
+        </div>
 
         <div className="relative sm:w-60">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -138,33 +154,6 @@ export function EngagementsWorklist({
             className="h-9 pl-9"
           />
         </div>
-      </div>
-
-      <div
-        role="tablist"
-        aria-label={t("wl_filter_label")}
-        className="inline-flex items-center gap-1 self-start overflow-x-auto rounded-lg bg-muted p-[3px]"
-      >
-        {FILTERS.map((f) => {
-          const active = f === filter;
-          return (
-            <button
-              key={f}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-colors",
-                active
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-foreground/60 hover:text-foreground",
-              )}
-            >
-              {pillLabel(f)}
-            </button>
-          );
-        })}
       </div>
 
       <WorklistTable rows={visible} locale={locale} emptyText={emptyText()} />
