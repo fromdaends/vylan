@@ -1101,6 +1101,8 @@
     "help_copy": "Copy",
     "help_copied": "Copied",
     "help_no_email": "Have a question? Reply to the invitation email your accountant sent you.",
+    "help_message": "Message your accountant",
+    "help_email_app": "Email app",
     "powered_by": "Powered by",
     "errors": {
       "bad_request": "Bad request.",

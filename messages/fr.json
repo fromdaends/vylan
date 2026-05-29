@@ -1101,6 +1101,8 @@
     "help_copy": "Copier",
     "help_copied": "Copié",
     "help_no_email": "Une question ? Répondez au courriel d'invitation que votre comptable vous a envoyé.",
+    "help_message": "Écrire à votre comptable",
+    "help_email_app": "Application de courriel",
     "powered_by": "Propulsé par",
     "errors": {
       "bad_request": "Requête invalide.",
