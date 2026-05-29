@@ -4,6 +4,7 @@ import {
   selectNeedsAttention,
   selectReadyToReview,
   selectActive,
+  selectRecent,
   selectCompleted,
 } from "./worklist-select";
 
@@ -93,7 +94,7 @@ describe("selectReadyToReview", () => {
   });
 });
 
-describe("selectActive / selectCompleted", () => {
+describe("selectActive / selectRecent / selectCompleted", () => {
   const rows = [
     row({ id: "draft", status: "draft" }),
     row({ id: "sent", status: "sent" }),
@@ -107,6 +108,15 @@ describe("selectActive / selectCompleted", () => {
       "draft",
       "sent",
       "live",
+    ]);
+  });
+
+  it("selectRecent keeps everything except complete (cancelled stays)", () => {
+    expect(selectRecent(rows).map((r) => r.id)).toEqual([
+      "draft",
+      "sent",
+      "live",
+      "killed",
     ]);
   });
 
