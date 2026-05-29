@@ -35,6 +35,7 @@ import { FilePreviewRow } from "@/components/engagements/file-preview-row";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
+import { DeleteEngagementButton } from "@/components/engagements/delete-engagement-button";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -254,6 +255,14 @@ export default async function EngagementDetailPage({
                 {t("reopen")}
               </Button>
             </form>
+          )}
+          {/* Drafts keep their instant "Delete draft" button above; every
+              other status gets the confirmed permanent delete. */}
+          {!isDraft && (
+            <DeleteEngagementButton
+              engagementId={engagement.id}
+              locale={locale}
+            />
           )}
           {/* Bulk download of every uploaded file for this engagement.
               Disabled in draft (nothing's been requested yet) or when

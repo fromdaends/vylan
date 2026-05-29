@@ -184,3 +184,13 @@ export async function deleteDraftEngagement(id: string): Promise<void> {
     .eq("status", "draft");
   if (error) throw error;
 }
+
+// Permanently delete an engagement of any status. RLS scopes the delete to
+// the caller's firm. The FK cascade on request_items / uploaded_files /
+// jobs / activity_log removes all related rows, so this can't orphan data.
+// Irreversible — callers must confirm with the user first.
+export async function deleteEngagement(id: string): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase.from("engagements").delete().eq("id", id);
+  if (error) throw error;
+}
