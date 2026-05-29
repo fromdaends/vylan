@@ -25,6 +25,10 @@ function eng(overrides: Partial<Engagement> = {}): Engagement {
     assigned_user_id: null,
     reminders_paused: false,
     created_at: NOW.toISOString(),
+    archived_at: null,
+    archived_by_user_id: null,
+    deleted_at: null,
+    deleted_by_user_id: null,
     ...overrides,
   };
 }
