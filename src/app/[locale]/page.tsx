@@ -30,17 +30,16 @@ export default async function Home({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  // Signed-in users skip the marketing page and land directly on Home.
-  // PR #231 tried "marketing is always the front door" — but in the
-  // founder's actual workflow that meant new-tab → vylan.app forced a
-  // re-login + MFA even though the session was perfectly valid. The
-  // (app)/layout below /home handles onboarding + MFA gating, so an
-  // unauthenticated /home hit still funnels into the right next step;
-  // we don't need to duplicate that here.
+  // Signed-in users skip the marketing page and land directly on the
+  // Dashboard (the post-login landing). PR #231 tried "marketing is always
+  // the front door" — but in the founder's actual workflow that meant
+  // new-tab → vylan.app forced a re-login + MFA even though the session was
+  // perfectly valid. The (app)/layout below handles onboarding + MFA gating,
+  // so the redirect still funnels into the right next step.
   const supabase = await getServerSupabase();
   const { data: auth } = await supabase.auth.getUser();
   if (auth.user) {
-    redirect(getPathname({ locale, href: "/home" }));
+    redirect(getPathname({ locale, href: "/dashboard" }));
   }
 
   const t = await getTranslations("Landing");

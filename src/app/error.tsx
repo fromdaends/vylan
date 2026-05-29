@@ -110,10 +110,10 @@ export default function GlobalError({
                 // states. Default to /fr if the URL has no locale prefix.
                 const parts = window.location.pathname.split("/").filter(Boolean);
                 const locale = parts[0] === "en" ? "en" : "fr";
-                // /home is the post-login glance; auth gate on
-                // (app)/ bounces signed-out users to /login from
-                // here automatically, so it works in either state.
-                window.location.assign(`/${locale}/home`);
+                // /dashboard is the post-login landing; the auth gate on
+                // (app)/ bounces signed-out users to /login from here
+                // automatically, so it works in either state.
+                window.location.assign(`/${locale}/dashboard`);
               }}
               style={{
                 background: "transparent",

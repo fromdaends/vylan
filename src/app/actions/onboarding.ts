@@ -168,7 +168,7 @@ export async function submitStep3(
   await sendWelcomeEmail();
   revalidatePath("/", "layout");
   const locale = pickLocale(formData);
-  redirect(localPath(locale, "/home"));
+  redirect(localPath(locale, "/dashboard"));
 }
 
 async function sendWelcomeEmail(): Promise<void> {
@@ -202,7 +202,7 @@ export async function skipStep(formData: FormData) {
     await updateCurrentFirm({ onboarded_at: new Date().toISOString() });
     await sendWelcomeEmail();
     revalidatePath("/", "layout");
-    redirect(localPath(locale, "/home"));
+    redirect(localPath(locale, "/dashboard"));
   }
   redirect(localPath(locale, "/onboarding", { step: String(step + 1) }));
 }

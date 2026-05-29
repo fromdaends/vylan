@@ -71,12 +71,12 @@ function fieldErrorsFromZod(error: z.ZodError): Record<string, string> {
 }
 
 // Narrow revalidation: hit the engagement page that changed plus the
-// surfaces that aggregate over engagements (/home + /dashboard counts
-// + /clients per-client engagement lists). Replaces the previous
+// surfaces that aggregate over engagements (/inbox triage + /dashboard
+// worklist + /clients per-client engagement lists). Replaces the previous
 // `revalidatePath("/", "layout")` shotgun.
 function revalidateEngagementPaths(id: string | undefined) {
   if (id) revalidatePath(`/engagements/${id}`);
-  revalidatePath("/home");
+  revalidatePath("/inbox");
   revalidatePath("/dashboard");
   revalidatePath("/clients");
 }
@@ -290,5 +290,5 @@ export async function deleteDraftAction(formData: FormData) {
   if (typeof id !== "string" || !id) return;
   await deleteDraftEngagement(id);
   revalidateEngagementPaths(id);
-  redirect(getPathname({ locale, href: "/home" }));
+  redirect(getPathname({ locale, href: "/dashboard" }));
 }

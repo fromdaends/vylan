@@ -393,6 +393,12 @@
     "kind_ready_to_review": "Engagement prêt à réviser",
     "kind_overdue": "Engagement en retard"
   },
+  "Inbox": {
+    "title": "Boîte de réception",
+    "subtitle": "Tout ce qui demande votre attention — à relancer, à réviser, et les nouveautés.",
+    "empty_attention": "Rien ne requiert votre attention pour l'instant.",
+    "empty_ready": "Rien n'est prêt à être révisé pour l'instant."
+  },
   "Home": {
     "view_full_dashboard": "Voir le tableau de bord complet",
     "notifications_title": "Activité",
@@ -479,8 +485,8 @@
     "empty_all": "Aucun engagement pour l’instant. Cliquez « Nouvel engagement » pour commencer.",
     "empty_active": "Aucun engagement actif en ce moment.",
     "empty_drafts": "Aucun brouillon.",
-    "nav_home": "Accueil",
     "nav_dashboard": "Tableau de bord",
+    "nav_inbox": "Boîte de réception",
     "nav_clients": "Clients",
     "nav_firm": "Cabinet",
     "nav_section_main": "Espace de travail",

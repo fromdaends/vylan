@@ -103,23 +103,26 @@ function renderWorklist(items: WorklistRow[] = rows, currentUserId = "me") {
 }
 
 describe("EngagementsWorklist", () => {
-  it("defaults to Needs attention: only flagged rows, most urgent first", () => {
+  it("defaults to Recent: every engagement, newest first", () => {
     const q = renderWorklist();
 
+    // Recent is the default tab now (Needs attention moved to /inbox).
+    expect(
+      q.getByRole("tab", { name: en.Dashboard.wl_filter_recent }),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(
+      q.queryByRole("tab", { name: /needs attention/i }),
+    ).not.toBeInTheDocument();
+
+    // Recent surfaces all engagements (clean ones included), newest first:
+    // C (Mar 20) > A (Mar 02) > B (Feb 01) > D (Jan 05).
+    const c = q.getByRole("link", { name: /Tremblay T2/i });
     const a = q.getByRole("link", { name: /Smith T1/i });
     const b = q.getByRole("link", { name: /Jones Bookkeeping/i });
-    expect(a).toHaveAttribute("href", "/engagements/a");
-    expect(b).toHaveAttribute("href", "/engagements/b");
-
-    // Clean engagements stay out of the attention view.
-    expect(q.queryByRole("link", { name: /Tremblay T2/i })).not.toBeInTheDocument();
-    expect(q.queryByRole("link", { name: /Gagnon Custom/i })).not.toBeInTheDocument();
-
-    // Higher attention score (overdue) sorts above stale.
+    const d = q.getByRole("link", { name: /Gagnon Custom/i });
+    expect(c.compareDocumentPosition(a)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(a.compareDocumentPosition(b)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-
-    // The pill carries the flagged count.
-    expect(q.getByRole("tab", { name: /needs attention/i })).toHaveTextContent("2");
+    expect(b.compareDocumentPosition(d)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("shows every engagement under All", () => {

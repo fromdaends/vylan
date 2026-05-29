@@ -15,10 +15,7 @@ vi.mock("@/i18n/navigation", () => ({
   ),
 }));
 
-function renderHeader(props: {
-  firstName: string | null;
-  attentionCount: number;
-}) {
+function renderHeader(props: { firstName: string | null; subtitle: string }) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
       <DashboardHeader {...props} />
@@ -27,17 +24,20 @@ function renderHeader(props: {
 }
 
 describe("DashboardHeader", () => {
-  it("greets the user by first name and links to the two primary actions", () => {
-    renderHeader({ firstName: "Zach", attentionCount: 3 });
+  it("greets the user by first name, shows the subtitle, and links to the two primary actions", () => {
+    renderHeader({
+      firstName: "Zach",
+      subtitle: "Acme Co · Friday, May 29, 2026",
+    });
 
-    // Personalized greeting in the heading.
-    expect(
-      screen.getByRole("heading", { name: "Welcome, Zach!" }),
-    ).toBeInTheDocument();
+    // The greeting is time-aware (the exact word depends on the clock), so we
+    // just assert the heading carries the first name.
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent ?? "").toMatch(/Zach/);
 
-    // Attention status reflects the count (plural branch).
+    // Firm name · date subtitle.
     expect(
-      screen.getByText(/3 engagements that need your attention/i),
+      screen.getByText("Acme Co · Friday, May 29, 2026"),
     ).toBeInTheDocument();
 
     // New engagement → the engagement creation flow.
@@ -53,19 +53,10 @@ describe("DashboardHeader", () => {
     );
   });
 
-  it("uses the singular status when exactly one engagement needs attention", () => {
-    renderHeader({ firstName: "Zach", attentionCount: 1 });
-    expect(
-      screen.getByText(/1 engagement that needs your attention/i),
-    ).toBeInTheDocument();
-  });
+  it("still renders a greeting + subtitle when the user has no name", () => {
+    renderHeader({ firstName: null, subtitle: "Acme Co · Friday" });
 
-  it("falls back to a friendly greeting and an all-clear line when unnamed and nothing is pending", () => {
-    renderHeader({ firstName: null, attentionCount: 0 });
-
-    expect(
-      screen.getByRole("heading", { name: "Welcome, there!" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText(en.Dashboard.all_clear)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
+    expect(screen.getByText("Acme Co · Friday")).toBeInTheDocument();
   });
 });
