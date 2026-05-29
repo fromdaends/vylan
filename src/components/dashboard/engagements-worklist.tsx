@@ -316,8 +316,23 @@ function WorklistRowView({
         <div className="mt-0.5 truncate text-xs text-muted-foreground">
           {row.clientName}
         </div>
-        {(staleText || readyText) && (
+        {/* Urgency lives in the always-visible Engagement cell (not the
+            Due column, which is hidden on phones) so triage badges never
+            disappear on small screens. */}
+        {(overdueText || dueSoonText || staleText || readyText) && (
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {overdueText && (
+              <Badge variant="destructive" className="gap-1 font-normal">
+                <AlertTriangle className="h-3 w-3" />
+                {overdueText}
+              </Badge>
+            )}
+            {dueSoonText && (
+              <Badge variant="secondary" className="gap-1 font-normal">
+                <Clock className="h-3 w-3" />
+                {dueSoonText}
+              </Badge>
+            )}
             {readyText && (
               <Badge variant="secondary" className="font-normal">
                 {readyText}
@@ -337,18 +352,6 @@ function WorklistRowView({
         <div className={cn("text-sm tabular-nums", dueTone)}>
           {formatDate(row.dueDate, locale, "medium")}
         </div>
-        {overdueText && (
-          <div className="mt-0.5 flex items-center gap-1 text-xs text-destructive">
-            <AlertTriangle className="h-3 w-3" />
-            {overdueText}
-          </div>
-        )}
-        {dueSoonText && (
-          <div className="mt-0.5 flex items-center gap-1 text-xs text-warning">
-            <Clock className="h-3 w-3" />
-            {dueSoonText}
-          </div>
-        )}
       </TableCell>
 
       <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">

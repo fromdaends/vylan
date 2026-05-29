@@ -15,6 +15,7 @@ import {
 } from "@/lib/attention";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { HomeSearch } from "@/components/home/home-search";
 import {
   TemplatesGallery,
   type TemplateCard,
@@ -23,6 +24,8 @@ import {
   EngagementsWorklist,
   type WorklistRow,
 } from "@/components/dashboard/engagements-worklist";
+import { WhatsNew } from "@/components/dashboard/whats-new";
+import { listHomeNotifications } from "@/lib/home/notifications";
 import { CollapsibleSection } from "@/components/dashboard/collapsible-section";
 import { AiActivityList } from "@/components/dashboard/ai-activity-list";
 import { aiActivityShortLabel } from "@/components/dashboard/ai-activity-shared";
@@ -46,13 +49,19 @@ export default async function DashboardPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [engagements, clients, user, templates, firmUsers] = await Promise.all([
-    listEngagements(),
-    listClients({ includeArchived: false }),
-    getCurrentUser(),
-    listTemplates(),
-    listFirmUsers(),
-  ]);
+  const [engagements, clients, user, templates, firmUsers, notifications] =
+    await Promise.all([
+      listEngagements(),
+      listClients({ includeArchived: false }),
+      getCurrentUser(),
+      listTemplates(),
+      listFirmUsers(),
+      // The "What's new" glance, ported from the retired /home page. This
+      // recomputes from current data (it has no backing table), so it
+      // re-fetches engagements/clients internally — an accepted cost for
+      // keeping it the single source of truth for the feed.
+      listHomeNotifications(5),
+    ]);
 
   const templateCards: TemplateCard[] = templates.map((tmpl) => ({
     id: tmpl.id,
@@ -164,6 +173,17 @@ export default async function DashboardPage({
     <div className="space-y-10 sm:space-y-12">
       <DashboardHeader firstName={firstName} attentionCount={attentionCount} />
 
+      <HomeSearch
+        clients={clients.map((c) => ({
+          id: c.id,
+          display_name: c.display_name,
+          email: c.email,
+        }))}
+        engagements={engagements
+          .filter((e) => e.status === "sent" || e.status === "in_progress")
+          .map((e) => ({ id: e.id, title: e.title, client_id: e.client_id }))}
+      />
+
       <TemplatesGallery templates={templateCards} />
 
       <EngagementsWorklist
@@ -171,6 +191,8 @@ export default async function DashboardPage({
         currentUserId={user?.id ?? null}
         locale={locale}
       />
+
+      <WhatsNew notifications={notifications} locale={locale} />
 
       <CollapsibleSection
         id="ai-activity"

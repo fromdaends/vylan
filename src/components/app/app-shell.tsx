@@ -26,7 +26,6 @@ import {
   ChevronUp,
   FileText,
   HelpCircle,
-  Home as HomeIcon,
   LayoutDashboard,
   LogOut,
   PanelLeft,
@@ -138,7 +137,6 @@ export function AppShell({
   }, [pathname]);
 
   const primaryNav: NavItemDef[] = [
-    { href: "/home", label: labels.home, icon: HomeIcon },
     { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
@@ -245,18 +243,15 @@ function MobileTabBar({
 }) {
   const pathname = usePathname();
   const tabs: NavItemDef[] = [
-    { href: "/home", label: labels.home, icon: HomeIcon },
     { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
   ];
 
   function isActive(href: string) {
-    // /home and /dashboard are leaf routes — only match on exact path,
-    // otherwise /home would also light up on /home/anything (if we
-    // ever add sub-routes) and /dashboard wouldn't catch /dashboard
-    // root vs /dashboard/audit etc.
-    if (href === "/home" || href === "/dashboard") return pathname === href;
+    // /dashboard is a leaf route — match on exact path so it doesn't
+    // also light up on a future /dashboard/* sub-route.
+    if (href === "/dashboard") return pathname === href;
     return pathname.startsWith(href);
   }
 
@@ -507,7 +502,7 @@ function SidebarBody({
       {collapsed ? (
         <div className="flex flex-col items-center gap-3 px-2 pt-4 pb-3 border-b border-border/40">
           <Link
-            href="/home"
+            href="/dashboard"
             title={brand.name}
             className="inline-flex items-center justify-center rounded-lg p-1 hover:bg-secondary/40 transition-colors"
           >
@@ -531,7 +526,7 @@ function SidebarBody({
       ) : (
         <div className="flex items-center justify-between gap-2 px-5 pt-5 pb-4">
           <Link
-            href="/home"
+            href="/dashboard"
             className="flex items-center gap-2.5 font-semibold tracking-tight text-base group min-w-0"
           >
             <Logo
@@ -739,7 +734,7 @@ function NavLink({
 }) {
   const pathname = usePathname();
   const active =
-    href === "/home" || href === "/dashboard"
+    href === "/dashboard"
       ? pathname === href
       : pathname.startsWith(href);
   return (
