@@ -476,7 +476,12 @@
     "wl_empty_recent": "No recent activity yet.",
     "wl_empty_mine": "Nothing is assigned to you right now.",
     "wl_empty_all": "No engagements yet. Create one to get started.",
-    "wl_empty_search": "No engagements match your search."
+    "wl_empty_search": "No engagements match your search.",
+    "wl_status_active": "Active",
+    "wl_status_completed": "Completed",
+    "wl_status_all": "All",
+    "wl_empty_active": "No active engagements.",
+    "wl_empty_completed": "No completed engagements yet."
   },
   "App": {
     "dashboard_title": "Dashboard",

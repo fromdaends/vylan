@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
+import { selectActive } from "@/lib/dashboard/worklist-select";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import {
   TemplatesGallery,
@@ -55,8 +56,10 @@ export default async function DashboardPage({
 
       <TemplatesGallery templates={templateCards} />
 
+      {/* Active work only — completed + cancelled engagements drop off the
+          dashboard and live on /engagements (Completed / All filters). */}
       <EngagementsWorklist
-        rows={worklistRows}
+        rows={selectActive(worklistRows)}
         currentUserId={user?.id ?? null}
         locale={locale}
       />
