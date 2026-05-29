@@ -476,7 +476,12 @@
     "wl_empty_recent": "Aucune activité récente.",
     "wl_empty_mine": "Rien ne vous est assigné pour l’instant.",
     "wl_empty_all": "Aucun engagement pour l’instant. Créez-en un pour commencer.",
-    "wl_empty_search": "Aucun engagement ne correspond à votre recherche."
+    "wl_empty_search": "Aucun engagement ne correspond à votre recherche.",
+    "wl_status_active": "Actifs",
+    "wl_status_completed": "Terminés",
+    "wl_status_all": "Tous",
+    "wl_empty_active": "Aucun engagement actif.",
+    "wl_empty_completed": "Aucun engagement terminé pour l’instant."
   },
   "App": {
     "dashboard_title": "Tableau de bord",

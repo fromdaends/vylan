@@ -3,6 +3,8 @@ import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 import {
   selectNeedsAttention,
   selectReadyToReview,
+  selectActive,
+  selectCompleted,
 } from "./worklist-select";
 
 function row(
@@ -88,5 +90,27 @@ describe("selectReadyToReview", () => {
     expect(selectReadyToReview([row({ id: "a" }), row({ id: "b" })])).toEqual(
       [],
     );
+  });
+});
+
+describe("selectActive / selectCompleted", () => {
+  const rows = [
+    row({ id: "draft", status: "draft" }),
+    row({ id: "sent", status: "sent" }),
+    row({ id: "live", status: "in_progress" }),
+    row({ id: "done", status: "complete" }),
+    row({ id: "killed", status: "cancelled" }),
+  ];
+
+  it("selectActive keeps draft/sent/in_progress, drops complete + cancelled", () => {
+    expect(selectActive(rows).map((r) => r.id)).toEqual([
+      "draft",
+      "sent",
+      "live",
+    ]);
+  });
+
+  it("selectCompleted keeps only complete", () => {
+    expect(selectCompleted(rows).map((r) => r.id)).toEqual(["done"]);
   });
 });
