@@ -16,85 +16,102 @@
 }
 
 :root {
-  /* Linear-clean palette: cool neutrals, single subtle accent */
-  --background: oklch(0.99 0.002 264);        /* near-white, hint of cool */
-  --foreground: oklch(0.18 0.018 264);        /* deep slate */
+  /* Navy-forward brand on clean cool-neutral light surfaces. */
+  --background: oklch(0.99 0.003 262);        /* near-white, hint of cool */
+  --foreground: oklch(0.18 0.02 262);         /* deep slate */
 
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.018 264);
+  --card-foreground: oklch(0.18 0.02 262);
   --surface-elevated: oklch(1 0 0);
 
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.018 264);
+  --popover-foreground: oklch(0.18 0.02 262);
 
-  --primary: oklch(0.22 0.028 264);           /* slate-900-ish */
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.45 0.17 262);            /* navy */
+  --primary-foreground: oklch(0.99 0 0);
 
-  --secondary: oklch(0.965 0.005 264);
-  --secondary-foreground: oklch(0.25 0.028 264);
+  --secondary: oklch(0.965 0.006 262);
+  --secondary-foreground: oklch(0.26 0.03 262);
 
-  --muted: oklch(0.97 0.004 264);
-  --muted-foreground: oklch(0.52 0.018 264);
+  --muted: oklch(0.97 0.005 262);
+  --muted-foreground: oklch(0.50 0.02 262);
 
-  /* Accent = brand color (blue). Light mode pairs a medium accent with a
-     white foreground (matches the existing contrast pattern). */
-  --accent: oklch(0.58 0.176 256);            /* blue */
-  --accent-foreground: oklch(0.985 0 0);
-  --accent-hover: oklch(0.53 0.182 256);
-  --accent-subtle: oklch(0.58 0.176 256 / 0.10);
+  /* Accent = brand blue, slightly brighter than primary navy. */
+  --accent: oklch(0.55 0.18 258);             /* blue */
+  --accent-foreground: oklch(0.99 0 0);
+  --accent-hover: oklch(0.50 0.185 258);
+  --accent-subtle: oklch(0.55 0.18 258 / 0.10);
 
   --destructive: oklch(0.55 0.22 27);
   --destructive-foreground: oklch(0.985 0 0);
 
-  --success: oklch(0.55 0.14 150);
+  --success: oklch(0.55 0.15 155);
   --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.65 0.16 50);
+  --warning: oklch(0.64 0.16 65);
   --warning-foreground: oklch(0.985 0 0);
 
-  --border: oklch(0.92 0.006 264);
-  --input: oklch(0.92 0.006 264);
-  --ring: oklch(0.58 0.176 256);
+  --border: oklch(0.91 0.008 262);
+  --input: oklch(0.91 0.008 262);
+  --ring: oklch(0.55 0.18 258);
+
+  /* Vibrant per-feature icon hues — deeper in light mode for contrast. */
+  --icon-blue: oklch(0.55 0.18 255);
+  --icon-indigo: oklch(0.52 0.2 285);
+  --icon-emerald: oklch(0.55 0.15 162);
+  --icon-amber: oklch(0.62 0.16 70);
+  --icon-cyan: oklch(0.56 0.13 215);
+  --icon-rose: oklch(0.58 0.2 14);
 
   --radius: 0.625rem;
 }
 
 .dark {
-  --background: oklch(0.135 0.012 264);       /* deep dark with cool cast */
-  --foreground: oklch(0.96 0.004 264);
+  /* Mainly black surfaces with a faint navy cast; the navy primary + bright
+     accents carry the color so it reads rich and alive, not flat grey. */
+  --background: oklch(0.12 0.012 262);        /* near-black, faint navy */
+  --foreground: oklch(0.97 0.004 262);
 
-  --card: oklch(0.175 0.014 264);
-  --card-foreground: oklch(0.96 0.004 264);
-  --surface-elevated: oklch(0.21 0.015 264);
+  --card: oklch(0.155 0.016 262);
+  --card-foreground: oklch(0.97 0.004 262);
+  --surface-elevated: oklch(0.19 0.02 262);
 
-  --popover: oklch(0.175 0.014 264);
-  --popover-foreground: oklch(0.96 0.004 264);
+  --popover: oklch(0.155 0.016 262);
+  --popover-foreground: oklch(0.97 0.004 262);
 
-  --primary: oklch(0.96 0.004 264);
-  --primary-foreground: oklch(0.175 0.014 264);
+  --primary: oklch(0.58 0.19 262);            /* vivid navy / royal blue */
+  --primary-foreground: oklch(0.99 0.004 262);
 
-  --secondary: oklch(0.235 0.018 264);
-  --secondary-foreground: oklch(0.96 0.004 264);
+  --secondary: oklch(0.225 0.022 262);
+  --secondary-foreground: oklch(0.97 0.004 262);
 
-  --muted: oklch(0.22 0.016 264);
-  --muted-foreground: oklch(0.66 0.014 264);
+  --muted: oklch(0.205 0.018 262);
+  --muted-foreground: oklch(0.70 0.022 262);
 
-  /* Dark mode: brighter accent + near-black foreground for legibility. */
-  --accent: oklch(0.70 0.15 256);             /* blue */
-  --accent-foreground: oklch(0.16 0.02 256);
-  --accent-hover: oklch(0.75 0.15 256);
-  --accent-subtle: oklch(0.70 0.15 256 / 0.16);
+  /* Bright blue accent + near-black foreground for legibility on fills. */
+  --accent: oklch(0.70 0.17 258);             /* bright blue */
+  --accent-foreground: oklch(0.14 0.02 262);
+  --accent-hover: oklch(0.76 0.16 258);
+  --accent-subtle: oklch(0.70 0.17 258 / 0.18);
 
-  --destructive: oklch(0.68 0.2 22);
-  --destructive-foreground: oklch(0.135 0.012 264);
+  --destructive: oklch(0.66 0.21 22);
+  --destructive-foreground: oklch(0.99 0 0);
 
-  --success: oklch(0.66 0.14 150);
-  --success-foreground: oklch(0.135 0.012 264);
-  --warning: oklch(0.72 0.16 60);
-  --warning-foreground: oklch(0.135 0.012 264);
+  --success: oklch(0.72 0.17 158);
+  --success-foreground: oklch(0.13 0.014 262);
+  --warning: oklch(0.80 0.16 78);
+  --warning-foreground: oklch(0.15 0.014 262);
 
-  --border: oklch(0.28 0.014 264);
-  --input: oklch(0.28 0.014 264);
-  --ring: oklch(0.70 0.15 256);
+  --border: oklch(0.27 0.022 262);
+  --input: oklch(0.27 0.022 262);
+  --ring: oklch(0.64 0.19 262);
+
+  /* Bright, saturated icon hues that pop on near-black. */
+  --icon-blue: oklch(0.70 0.17 252);
+  --icon-indigo: oklch(0.71 0.19 286);
+  --icon-emerald: oklch(0.75 0.16 162);
+  --icon-amber: oklch(0.82 0.15 80);
+  --icon-cyan: oklch(0.77 0.13 205);
+  --icon-rose: oklch(0.72 0.19 12);
 }
 
 @theme inline {
@@ -133,6 +150,13 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  --color-icon-blue: var(--icon-blue);
+  --color-icon-indigo: var(--icon-indigo);
+  --color-icon-emerald: var(--icon-emerald);
+  --color-icon-amber: var(--icon-amber);
+  --color-icon-cyan: var(--icon-cyan);
+  --color-icon-rose: var(--icon-rose);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

@@ -63,6 +63,9 @@ type NavItemDef = {
   href: string;
   label: string;
   icon: typeof Users;
+  // A vibrant per-feature icon hue (text-icon-* utility) so the rail reads
+  // colorful, not monochrome.
+  color: string;
 };
 
 const COLLAPSED_KEY = "vylan:sidebar-collapsed";
@@ -141,10 +144,20 @@ export function AppShell({
   }, [pathname]);
 
   const primaryNav: NavItemDef[] = [
-    { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
-    { href: "/inbox", label: labels.inbox, icon: Inbox },
-    { href: "/clients", label: labels.clients, icon: Users },
-    { href: "/templates", label: labels.templates, icon: FileText },
+    {
+      href: "/dashboard",
+      label: labels.dashboard,
+      icon: LayoutDashboard,
+      color: "text-icon-blue",
+    },
+    { href: "/inbox", label: labels.inbox, icon: Inbox, color: "text-icon-indigo" },
+    { href: "/clients", label: labels.clients, icon: Users, color: "text-icon-emerald" },
+    {
+      href: "/templates",
+      label: labels.templates,
+      icon: FileText,
+      color: "text-icon-amber",
+    },
   ];
 
   // Firm + Settings used to live in a sidebar "ACCOUNT" section; they
@@ -248,10 +261,20 @@ function MobileTabBar({
 }) {
   const pathname = usePathname();
   const tabs: NavItemDef[] = [
-    { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
-    { href: "/inbox", label: labels.inbox, icon: Inbox },
-    { href: "/clients", label: labels.clients, icon: Users },
-    { href: "/templates", label: labels.templates, icon: FileText },
+    {
+      href: "/dashboard",
+      label: labels.dashboard,
+      icon: LayoutDashboard,
+      color: "text-icon-blue",
+    },
+    { href: "/inbox", label: labels.inbox, icon: Inbox, color: "text-icon-indigo" },
+    { href: "/clients", label: labels.clients, icon: Users, color: "text-icon-emerald" },
+    {
+      href: "/templates",
+      label: labels.templates,
+      icon: FileText,
+      color: "text-icon-amber",
+    },
   ];
 
   function isActive(href: string) {
@@ -286,10 +309,7 @@ function MobileTabBar({
                 />
               )}
               <Icon
-                className={cn(
-                  "size-[22px] transition-colors",
-                  active ? "text-accent" : "text-muted-foreground",
-                )}
+                className={cn("size-[22px] transition-transform", tab.color)}
                 aria-hidden
               />
               <span
@@ -605,6 +625,7 @@ function SidebarBody({
               icon={item.icon}
               label={item.label}
               collapsed={collapsed}
+              color={item.color}
             />
           ))}
         </NavSection>
@@ -766,11 +787,13 @@ function NavLink({
   icon: Icon,
   label,
   collapsed,
+  color,
 }: {
   href: string;
   icon: typeof Users;
   label: string;
   collapsed: boolean;
+  color: string;
 }) {
   const pathname = usePathname();
   const active =
@@ -788,17 +811,13 @@ function NavLink({
           "flex items-center rounded-lg text-sm font-medium transition-colors",
           collapsed ? "justify-center h-10 w-full" : "gap-2.5 px-3 py-2",
           active
-            ? "bg-secondary text-foreground"
+            ? "bg-secondary text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
             : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
         )}
       >
-        <Icon
-          className={cn(
-            "size-4 shrink-0",
-            active ? "text-foreground" : "text-muted-foreground",
-          )}
-          aria-hidden
-        />
+        {/* Icon keeps its vibrant hue in every state so the rail stays
+            colorful; the active row reads via its tinted background. */}
+        <Icon className={cn("size-4 shrink-0", color)} aria-hidden />
         {!collapsed && <span className="truncate">{label}</span>}
       </span>
     </Link>
