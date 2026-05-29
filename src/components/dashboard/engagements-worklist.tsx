@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, type AppLocale } from "@/lib/format";
+import { selectActive, selectCompleted } from "@/lib/dashboard/worklist-select";
 import { cn } from "@/lib/cn";
 
 export type EngagementStatus =
@@ -47,14 +48,14 @@ export type WorklistRow = {
   recencyAt: string;
 };
 
-const FILTERS = ["recent", "mine"] as const;
+const FILTERS = ["recent", "mine", "complete"] as const;
 type Filter = (typeof FILTERS)[number];
 
-// Word's "My documents" reimagined as a triage worklist. Two quick views —
-// Recent (default) and Mine — plus a "Browse all" link out to the full
-// /engagements list (so "all" is its own page, not a tab). Per-engagement
-// attention/ready badges still render inline on the rows; the dedicated
-// "Needs attention" + "Ready to review" lists live on /inbox.
+// Word's "My documents" reimagined as a triage worklist. Recent (default) and
+// Mine show active work only; Complete surfaces finished engagements. A
+// "Browse all" link still goes to the full /engagements list. Per-engagement
+// attention/ready badges render inline; the dedicated "Needs attention" +
+// "Ready to review" lists live on /inbox.
 export function EngagementsWorklist({
   rows,
   currentUserId,
@@ -68,11 +69,13 @@ export function EngagementsWorklist({
   const [filter, setFilter] = useState<Filter>("recent");
   const [query, setQuery] = useState("");
 
+  const byRecency = (a: WorklistRow, b: WorklistRow) =>
+    b.recencyAt.localeCompare(a.recencyAt);
+
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => {
-    // An active search spans every engagement, not just the current pill, so
-    // you can always pull up any client by name. Most-recent first so the
-    // freshest match leads.
+    // An active search spans every engagement (any status), so you can always
+    // pull up any client by name. Most-recent first so the freshest match leads.
     if (q !== "") {
       return rows
         .filter(
@@ -80,25 +83,35 @@ export function EngagementsWorklist({
             r.title.toLowerCase().includes(q) ||
             r.clientName.toLowerCase().includes(q),
         )
-        .sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
+        .sort(byRecency);
     }
 
-    const set = rows.slice();
-    if (filter === "mine") {
-      return set.filter(
-        (r) => currentUserId != null && r.assigneeUserId === currentUserId,
-      );
+    if (filter === "complete") {
+      return selectCompleted(rows).sort(byRecency);
     }
-    // "recent" (default): newest first.
-    return set.sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
+    if (filter === "mine") {
+      return selectActive(rows)
+        .filter(
+          (r) => currentUserId != null && r.assigneeUserId === currentUserId,
+        )
+        .sort(byRecency);
+    }
+    // "recent" (default): active work, newest first.
+    return selectActive(rows).sort(byRecency);
   }, [rows, filter, q, currentUserId]);
 
   const pillLabel = (f: Filter): string =>
-    f === "mine" ? t("wl_filter_mine") : t("wl_filter_recent");
+    f === "mine"
+      ? t("wl_filter_mine")
+      : f === "complete"
+        ? t("wl_filter_complete")
+        : t("wl_filter_recent");
 
   const emptyText = (): string => {
     if (q !== "") return t("wl_empty_search");
-    return filter === "mine" ? t("wl_empty_mine") : t("wl_empty_recent");
+    if (filter === "mine") return t("wl_empty_mine");
+    if (filter === "complete") return t("wl_empty_completed");
+    return t("wl_empty_recent");
   };
 
   return (
