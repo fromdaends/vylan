@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { PortalContext } from "@/lib/db/portal";
 import { ItemCard } from "./item-card";
+import { PortalFooter } from "./portal-footer";
 
 export function PortalShell({
   ctx,
@@ -33,13 +34,11 @@ export function PortalShell({
     .toUpperCase();
 
   const otherLocale = locale === "fr" ? "en" : "fr";
-  const helpMailto = `mailto:?subject=${encodeURIComponent(
-    `${ctx.firm.name} — ${ctx.engagement.title}`,
-  )}&body=${encodeURIComponent(
+  const helpSubject = `${ctx.firm.name} — ${ctx.engagement.title}`;
+  const helpBody =
     locale === "fr"
       ? `Bonjour,\n\nJ'ai une question concernant les documents demandés pour « ${ctx.engagement.title} ».\n\nMerci.`
-      : `Hi,\n\nI have a question about the documents requested for "${ctx.engagement.title}".\n\nThanks.`,
-  )}`;
+      : `Hi,\n\nI have a question about the documents requested for "${ctx.engagement.title}".\n\nThanks.`;
 
   function handleItemUpdated(itemId: string, patch: Partial<typeof items[0]>) {
     setItems((prev) =>
@@ -141,20 +140,11 @@ export function PortalShell({
           ))}
         </section>
 
-        <footer className="text-center text-sm text-muted-foreground pt-6 border-t border-border/60">
-          <p>
-            {t("help_intro")}{" "}
-            <a
-              href={helpMailto}
-              className="text-foreground font-medium underline underline-offset-4"
-            >
-              {t("help_link")}
-            </a>
-          </p>
-          <p className="mt-4 text-xs text-muted-foreground/70 font-mono">
-            {t("powered_by")} <span className="font-sans font-medium">Vylan</span>
-          </p>
-        </footer>
+        <PortalFooter
+          email={ctx.accountant_email}
+          subject={helpSubject}
+          body={helpBody}
+        />
       </main>
     </div>
   );

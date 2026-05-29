@@ -25,6 +25,11 @@ export type PortalContext = {
   firm: Firm;
   items: RequestItem[];
   uploaded_count_by_item: Record<string, number>;
+  // The "your accountant" contact surfaced in the portal footer. Resolves to
+  // the user assigned to the engagement, falling back to the firm owner. Null
+  // only if neither has an email on file (shouldn't happen — users.email is
+  // NOT NULL — but the footer degrades gracefully if it ever is).
+  accountant_email: string | null;
 };
 
 export async function loadPortalContext(
@@ -74,12 +79,37 @@ export async function loadPortalContext(
     counts[u.request_item_id] = (counts[u.request_item_id] ?? 0) + 1;
   }
 
+  // Resolve the accountant contact for the footer: the user assigned to this
+  // engagement if one is set, otherwise the firm owner (earliest-created, in
+  // case of multiple owners). Service-role read — the portal is unauthenticated.
+  let accountantEmail: string | null = null;
+  if (engagement.assigned_user_id) {
+    const { data: assigned } = await sb
+      .from("users")
+      .select("email")
+      .eq("id", engagement.assigned_user_id)
+      .maybeSingle();
+    accountantEmail = (assigned?.email as string | undefined) ?? null;
+  }
+  if (!accountantEmail) {
+    const { data: owner } = await sb
+      .from("users")
+      .select("email")
+      .eq("firm_id", engagement.firm_id)
+      .eq("role", "owner")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    accountantEmail = (owner?.email as string | undefined) ?? null;
+  }
+
   return {
     engagement: engagement as Engagement,
     client: client as Client,
     firm: firm as Firm,
     items: items as RequestItem[],
     uploaded_count_by_item: counts,
+    accountant_email: accountantEmail,
   };
 }
 
