@@ -10,6 +10,7 @@ import {
   completeEngagement,
   reopenEngagement,
   deleteDraftEngagement,
+  deleteEngagement,
   setRemindersPaused,
   getEngagement,
   type CreateEngagementInput,
@@ -289,6 +290,23 @@ export async function deleteDraftAction(formData: FormData) {
     | "en";
   if (typeof id !== "string" || !id) return;
   await deleteDraftEngagement(id);
+  revalidateEngagementPaths(id);
+  redirect(getPathname({ locale, href: "/dashboard" }));
+}
+
+// Permanently delete an engagement of ANY status (drafts have their own
+// instant action above). Stops any pending reminders first; the FK cascade
+// removes request items, uploads, and jobs. Destructive — the UI gates this
+// behind a confirmation dialog. We don't write an activity-log entry: that
+// row's engagement_id FK would cascade-delete along with the engagement.
+export async function deleteEngagementAction(formData: FormData) {
+  const id = formData.get("id");
+  const locale = (formData.get("__app_locale") === "en" ? "en" : "fr") as
+    | "fr"
+    | "en";
+  if (typeof id !== "string" || !id) return;
+  await cancelEngagementReminders(id);
+  await deleteEngagement(id);
   revalidateEngagementPaths(id);
   redirect(getPathname({ locale, href: "/dashboard" }));
 }
