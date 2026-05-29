@@ -53,6 +53,23 @@ export const getCurrentUser = cache(async function _getCurrentUser(): Promise<Ap
   return row as AppUser;
 });
 
+/**
+ * All members of the caller's firm. RLS policy `users_select` (migration
+ * 0002) already scopes SELECT to `firm_id = current_firm_id()`, so this
+ * returns only same-firm rows without an explicit filter. Used to resolve
+ * an engagement's `assigned_user_id` to a display name and to power the
+ * "assigned to me" worklist filter.
+ */
+export async function listFirmUsers(): Promise<AppUser[]> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .order("name", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as AppUser[];
+}
+
 export type UserProfilePatch = {
   display_name?: string | null;
   locale?: "fr" | "en";
