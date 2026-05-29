@@ -92,6 +92,8 @@ export async function loadEngagementWorklist(): Promise<WorklistRow[]> {
       readyToReview: isReadyToReview(a),
       itemsReadyToReview: a.itemsReadyToReview,
       recencyAt: recencyOf(e),
+      archivedAt: e.archived_at,
+      deletedAt: e.deleted_at,
     } satisfies WorklistRow;
   });
 }

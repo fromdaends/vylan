@@ -7,6 +7,7 @@ import {
   daysUntilPurge,
   canDeleteEngagements,
   canArchiveEngagements,
+  rowMenuItemKeys,
   DELETED_RETENTION_DAYS,
 } from "./lifecycle";
 
@@ -123,5 +124,34 @@ describe("permission helpers", () => {
   });
   it("archive is always allowed (any role)", () => {
     expect(canArchiveEngagements()).toBe(true);
+  });
+});
+
+describe("rowMenuItemKeys", () => {
+  it("active engagement (owner): Open, Archive, Delete", () => {
+    expect(rowMenuItemKeys("active", true)).toEqual([
+      "open",
+      "archive",
+      "delete",
+    ]);
+  });
+  it("active engagement (staff): Open, Archive — no Delete", () => {
+    expect(rowMenuItemKeys("active", false)).toEqual(["open", "archive"]);
+  });
+  it("archived engagement (owner): Open, Unarchive, Delete", () => {
+    expect(rowMenuItemKeys("archived", true)).toEqual([
+      "open",
+      "unarchive",
+      "delete",
+    ]);
+  });
+  it("archived engagement (staff): Open, Unarchive — no Delete", () => {
+    expect(rowMenuItemKeys("archived", false)).toEqual(["open", "unarchive"]);
+  });
+  it("deleted engagement (owner): Open, Restore", () => {
+    expect(rowMenuItemKeys("deleted", true)).toEqual(["open", "restore"]);
+  });
+  it("deleted engagement (staff): Open only — staff can't restore", () => {
+    expect(rowMenuItemKeys("deleted", false)).toEqual(["open"]);
   });
 });

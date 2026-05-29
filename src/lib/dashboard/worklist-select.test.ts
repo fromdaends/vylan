@@ -29,6 +29,8 @@ function row(
     readyToReview: false,
     itemsReadyToReview: 0,
     recencyAt: "2026-01-01T00:00:00.000Z",
+    archivedAt: null,
+    deletedAt: null,
     ...over,
   };
 }

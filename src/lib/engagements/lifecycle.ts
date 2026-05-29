@@ -86,3 +86,25 @@ export function canDeleteEngagements(role: "owner" | "staff"): boolean {
 export function canArchiveEngagements(): boolean {
   return true;
 }
+
+// Lifecycle state of an engagement row, deciding its action menu's options.
+// Derived from archived_at / deleted_at (delete wins over archive).
+export type EngagementLifecycleState = "active" | "archived" | "deleted";
+
+// Which actions an engagement row's menu shows, in order, for a given state and
+// delete permission. Pure so it's unit-tested directly; the row menu
+// (engagement-row-menu.tsx) maps these keys to handlers + icons.
+//   active   → Open, Archive, [Delete]
+//   archived → Open, Unarchive, [Delete]
+//   deleted  → Open, [Restore]
+// Delete / Restore appear only for owners (canDelete); Archive / Unarchive are
+// available to everyone.
+export function rowMenuItemKeys(
+  state: EngagementLifecycleState,
+  canDelete: boolean,
+): ("open" | "archive" | "unarchive" | "restore" | "delete")[] {
+  if (state === "deleted") return canDelete ? ["open", "restore"] : ["open"];
+  if (state === "archived")
+    return canDelete ? ["open", "unarchive", "delete"] : ["open", "unarchive"];
+  return canDelete ? ["open", "archive", "delete"] : ["open", "archive"];
+}
