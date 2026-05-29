@@ -75,31 +75,37 @@ export function EngagementsWorklist({
 
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => {
-    const matchesQuery = (r: WorklistRow) =>
-      q === "" ||
-      r.title.toLowerCase().includes(q) ||
-      r.clientName.toLowerCase().includes(q);
+    // An active search spans every engagement, not just the current pill —
+    // from the default "Needs attention" view you should still be able to
+    // pull up any client by name. Most-recent first so the freshest match
+    // leads.
+    if (q !== "") {
+      return rows
+        .filter(
+          (r) =>
+            r.title.toLowerCase().includes(q) ||
+            r.clientName.toLowerCase().includes(q),
+        )
+        .sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
+    }
 
-    let set = rows.filter(matchesQuery);
+    const set = rows.slice();
     switch (filter) {
       case "attention":
-        set = set
+        return set
           .filter((r) => r.reasons.length > 0)
           .sort((a, b) => b.attentionScore - a.attentionScore);
-        break;
       case "recent":
-        set = [...set].sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
-        break;
+        return set.sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
       case "mine":
-        set = set.filter(
+        return set.filter(
           (r) => currentUserId != null && r.assigneeUserId === currentUserId,
         );
-        break;
       case "all":
+      default:
         // Keep the server order (newest first) for "All".
-        break;
+        return set;
     }
-    return set;
   }, [rows, filter, q, currentUserId]);
 
   const pillLabel = (f: Filter): string => {
