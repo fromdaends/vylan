@@ -1,5 +1,6 @@
 import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
 import type { EngagementType, TemplateItem } from "./templates";
 
 export type EngagementStatus =
@@ -24,6 +25,12 @@ export type Engagement = {
   assigned_user_id: string | null;
   reminders_paused: boolean;
   created_at: string;
+  // Lifecycle (migration 0139). archive = hidden from active views, reversible
+  // anytime; soft-delete = 30-day recoverable window before the purge cron.
+  archived_at: string | null;
+  archived_by_user_id: string | null;
+  deleted_at: string | null;
+  deleted_by_user_id: string | null;
 };
 
 export async function setRemindersPaused(
@@ -46,9 +53,19 @@ export function newMagicToken(): string {
   return generateMagicToken();
 }
 
+// Lifecycle scope for a listing (orthogonal to `status`):
+//   - "active"   (default): not archived, not deleted — the day-to-day board.
+//   - "archived": manually archived, not deleted.
+//   - "deleted":  soft-deleted within the 30-day window (Recently Deleted).
+//   - "any":      no lifecycle filter (e.g. a single-client history view).
+// Defaulting to "active" means every existing caller automatically stops
+// surfacing archived / deleted engagements.
+export type EngagementScope = "active" | "archived" | "deleted" | "any";
+
 export async function listEngagements(filters?: {
   client_id?: string;
   status?: EngagementStatus | "all";
+  scope?: EngagementScope;
 }): Promise<Engagement[]> {
   const supabase = await getServerSupabase();
   let q = supabase.from("engagements").select("*");
@@ -56,6 +73,20 @@ export async function listEngagements(filters?: {
   if (filters?.status && filters.status !== "all") {
     q = q.eq("status", filters.status);
   }
+  const scope = filters?.scope ?? "active";
+  if (scope === "active") {
+    q = q.is("deleted_at", null).is("archived_at", null);
+  } else if (scope === "archived") {
+    q = q.is("deleted_at", null).not("archived_at", "is", null);
+  } else if (scope === "deleted") {
+    // Recently Deleted = soft-deleted within the retention window; older rows
+    // are awaiting / mid-purge and must not surface.
+    const cutoff = new Date(
+      Date.now() - DELETED_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    q = q.not("deleted_at", "is", null).gte("deleted_at", cutoff);
+  }
+  // "any": no lifecycle filter at all.
   q = q.order("created_at", { ascending: false });
   const { data, error } = await q;
   if (error) throw error;
@@ -171,6 +202,61 @@ export async function reopenEngagement(id: string): Promise<void> {
   const { error } = await supabase
     .from("engagements")
     .update({ status: "in_progress", completed_at: null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// --- Lifecycle mutators: archive (reversible, never purged) + soft-delete
+// (30-day recoverable window). Rules + permissions live in
+// src/lib/engagements/lifecycle.ts; the permanent purge runs in
+// src/app/api/cron/purge-deleted-engagements. ---
+
+export async function archiveEngagement(
+  id: string,
+  userId: string,
+): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({
+      archived_at: new Date().toISOString(),
+      archived_by_user_id: userId,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function unarchiveEngagement(id: string): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ archived_at: null, archived_by_user_id: null })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// Soft-delete: recoverable for 30 days, then the purge cron removes it for
+// good. OWNER-ONLY — enforced in the server action (canDeleteEngagements).
+export async function softDeleteEngagement(
+  id: string,
+  userId: string,
+): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by_user_id: userId,
+    })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function restoreEngagement(id: string): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ deleted_at: null, deleted_by_user_id: null })
     .eq("id", id);
   if (error) throw error;
 }
