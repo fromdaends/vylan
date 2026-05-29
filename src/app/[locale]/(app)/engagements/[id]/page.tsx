@@ -36,6 +36,7 @@ import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { DeleteEngagementButton } from "@/components/engagements/delete-engagement-button";
+import { RecordEngagementOpen } from "@/components/engagements/record-engagement-open";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -100,6 +101,10 @@ export default async function EngagementDetailPage({
 
   return (
     <div className="space-y-6">
+      {/* Record this open (per device) so the dashboard's "Jump back in"
+          card can surface it. Renders nothing. */}
+      <RecordEngagementOpen engagementId={engagement.id} />
+
       {/* Auto-refresh while the engagement is still active. Picks up new
           client uploads + AI verdicts + activity-log entries without
           requiring the accountant to hit reload. Skipped for draft /
