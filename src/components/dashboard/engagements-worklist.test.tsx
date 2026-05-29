@@ -39,7 +39,7 @@ function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id" | "title">): Wo
 }
 
 // A = overdue + mine, B = stale + someone else's, C = clean + mine + newest,
-// D = clean + unassigned + draft + oldest.
+// D = clean + unassigned + draft + oldest, E = cancelled + mine.
 const rows: WorklistRow[] = [
   row({
     id: "a",
@@ -83,6 +83,15 @@ const rows: WorklistRow[] = [
     status: "draft",
     recencyAt: "2026-01-05T00:00:00.000Z",
   }),
+  row({
+    id: "e",
+    title: "Roy Year-End",
+    clientName: "Roy",
+    assigneeUserId: "me",
+    assigneeName: "Alex",
+    status: "cancelled",
+    recencyAt: "2026-02-15T00:00:00.000Z",
+  }),
 ];
 
 // Scope every query to *this* render's container. RTL's bound queries (and
@@ -103,14 +112,14 @@ function renderWorklist(items: WorklistRow[] = rows, currentUserId = "me") {
 }
 
 describe("EngagementsWorklist", () => {
-  it("defaults to Recent: active engagements only, newest first", () => {
+  it("defaults to Recent: active + cancelled work, newest first; complete excluded", () => {
     const q = renderWorklist();
 
     expect(
       q.getByRole("tab", { name: en.Dashboard.wl_filter_recent }),
     ).toHaveAttribute("aria-selected", "true");
 
-    // Recent shows active work, newest first: A (Mar 02) > B (Feb 01) >
+    // Recent shows in-flight work, newest first: A (Mar 02) > B (Feb 01) >
     // D (Jan 05). C (Tremblay) is complete, so it's excluded.
     const a = q.getByRole("link", { name: /Smith T1/i });
     const b = q.getByRole("link", { name: /Jones Bookkeeping/i });
@@ -120,6 +129,9 @@ describe("EngagementsWorklist", () => {
     expect(
       q.queryByRole("link", { name: /Tremblay T2/i }),
     ).not.toBeInTheDocument();
+    // A cancelled engagement (E) stays visible in Recent — it must not vanish
+    // on cancel; only successfully-completed work drops out.
+    expect(q.getByRole("link", { name: /Roy Year-End/i })).toBeInTheDocument();
   });
 
   it("has no All tab — a Browse all link points to the full list instead", () => {
@@ -132,12 +144,14 @@ describe("EngagementsWorklist", () => {
     ).toHaveAttribute("href", "/engagements");
   });
 
-  it("limits Mine to my active engagements", () => {
+  it("limits Mine to my active + cancelled engagements", () => {
     const q = renderWorklist();
     fireEvent.click(q.getByRole("tab", { name: en.Dashboard.wl_filter_mine }));
 
-    // A (Smith) is in-progress and assigned to me.
+    // A (Smith) is in-progress and assigned to me; E (Roy) is cancelled but
+    // still mine, so it stays visible too.
     expect(q.getByRole("link", { name: /Smith T1/i })).toBeInTheDocument();
+    expect(q.getByRole("link", { name: /Roy Year-End/i })).toBeInTheDocument();
     // C (Tremblay) is mine but complete → excluded; B is someone else's;
     // D is unassigned.
     expect(

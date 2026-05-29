@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, type AppLocale } from "@/lib/format";
-import { selectActive, selectCompleted } from "@/lib/dashboard/worklist-select";
+import { selectRecent, selectCompleted } from "@/lib/dashboard/worklist-select";
 import { cn } from "@/lib/cn";
 
 export type EngagementStatus =
@@ -52,10 +52,11 @@ const FILTERS = ["recent", "mine", "complete"] as const;
 type Filter = (typeof FILTERS)[number];
 
 // Word's "My documents" reimagined as a triage worklist. Recent (default) and
-// Mine show active work only; Complete surfaces finished engagements. A
-// "Browse all" link still goes to the full /engagements list. Per-engagement
-// attention/ready badges render inline; the dedicated "Needs attention" +
-// "Ready to review" lists live on /inbox.
+// Mine show in-flight work plus recently cancelled engagements — a cancel
+// doesn't silently vanish; it stays put with its "Cancelled" badge. Complete
+// surfaces finished engagements. A "Browse all" link still goes to the full
+// /engagements list. Per-engagement attention/ready badges render inline; the
+// dedicated "Needs attention" + "Ready to review" lists live on /inbox.
 export function EngagementsWorklist({
   rows,
   currentUserId,
@@ -90,14 +91,14 @@ export function EngagementsWorklist({
       return selectCompleted(rows).sort(byRecency);
     }
     if (filter === "mine") {
-      return selectActive(rows)
+      return selectRecent(rows)
         .filter(
           (r) => currentUserId != null && r.assigneeUserId === currentUserId,
         )
         .sort(byRecency);
     }
-    // "recent" (default): active work, newest first.
-    return selectActive(rows).sort(byRecency);
+    // "recent" (default): in-flight + recently cancelled work, newest first.
+    return selectRecent(rows).sort(byRecency);
   }, [rows, filter, q, currentUserId]);
 
   const pillLabel = (f: Filter): string =>

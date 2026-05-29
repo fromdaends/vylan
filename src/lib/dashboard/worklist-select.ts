@@ -31,6 +31,16 @@ export function selectActive(rows: WorklistRow[]): WorklistRow[] {
   );
 }
 
+// Recent / Mine on the *dashboard* worklist. Like selectActive but KEEPS
+// cancelled engagements, so a cancellation doesn't silently vanish from the
+// board — it stays in place (with its red "Cancelled" badge) until it ages
+// out of the recency sort. Only successfully-completed work moves off to the
+// dedicated Complete tab. (/engagements keeps the stricter selectActive for
+// its "Active" filter, where a cancelled engagement genuinely isn't active.)
+export function selectRecent(rows: WorklistRow[]): WorklistRow[] {
+  return rows.filter((r) => r.status !== "complete");
+}
+
 // Completed = marked done. The /engagements "Completed" filter.
 export function selectCompleted(rows: WorklistRow[]): WorklistRow[] {
   return rows.filter((r) => r.status === "complete");
