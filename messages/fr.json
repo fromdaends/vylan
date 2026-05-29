@@ -639,6 +639,8 @@
     "delete_cancel": "Annuler",
     "delete_confirm": "Supprimer définitivement",
     "jump_back_in": "Reprendre",
+    "last_updated": "Mise à jour le {date}",
+    "open_engagement": "Ouvrir l’engagement",
     "cancel": "Annuler",
     "draft_notice": "Cet engagement est un brouillon. Cliquez sur « Envoyer » pour générer le lien magique du client.",
     "send_no_items_blocked": "Cet engagement ne demande aucun document : le client n'a donc rien à téléverser. Ajoutez au moins un document avant de pouvoir l'envoyer.",

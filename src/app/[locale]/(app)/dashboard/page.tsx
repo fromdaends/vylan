@@ -67,6 +67,7 @@ export default async function DashboardPage({
           engagementId={jumpTarget.id}
           title={jumpTarget.title}
           clientName={jumpTarget.clientName}
+          date={formatDate(jumpTarget.recencyAt, locale, "medium")}
         />
       )}
 
