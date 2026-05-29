@@ -13,6 +13,8 @@ import {
   type TemplateCard,
 } from "@/components/dashboard/templates-gallery";
 import { EngagementsWorklist } from "@/components/dashboard/engagements-worklist";
+import { JumpBackIn } from "@/components/engagements/jump-back-in";
+import { selectActive } from "@/lib/dashboard/worklist-select";
 
 export default async function DashboardPage({
   params,
@@ -49,9 +51,24 @@ export default async function DashboardPage({
   const dateStr = formatDate(new Date(), locale, "long");
   const subtitle = firm?.name ? `${firm.name} · ${dateStr}` : dateStr;
 
+  // "Jump back in" target: the most recently active engagement, surfaced
+  // right under the greeting so you can resume in one click.
+  const jumpTarget =
+    selectActive(worklistRows).sort((a, b) =>
+      b.recencyAt.localeCompare(a.recencyAt),
+    )[0] ?? null;
+
   return (
     <div className="space-y-10 sm:space-y-12">
       <DashboardHeader firstName={firstName} subtitle={subtitle} />
+
+      {jumpTarget && (
+        <JumpBackIn
+          engagementId={jumpTarget.id}
+          title={jumpTarget.title}
+          clientName={jumpTarget.clientName}
+        />
+      )}
 
       <TemplatesGallery templates={templateCards} />
 
