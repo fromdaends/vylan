@@ -1,5 +1,5 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { listTemplates } from "@/lib/db/templates";
+import { listTemplates, BLANK_TEMPLATE_ID } from "@/lib/db/templates";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,11 @@ export default async function TemplatesPage({
   setRequestLocale(locale);
 
   const templates = await listTemplates();
-  const builtIn = templates.filter((tmpl) => tmpl.firm_id == null);
+  // Hide the empty "blank" built-in — it's only the clone source for
+  // "New template", never a template a firm should pick.
+  const builtIn = templates.filter(
+    (tmpl) => tmpl.firm_id == null && tmpl.id !== BLANK_TEMPLATE_ID,
+  );
   const firm = templates.filter((tmpl) => tmpl.firm_id != null);
 
   const t = await getTranslations("Templates");
@@ -178,22 +182,21 @@ function TemplateRow({
         <div className="min-w-0">
           <div className="font-medium text-sm truncate">{name}</div>
           <div className="text-xs text-muted-foreground mt-0.5 font-mono tabular-nums">
-            <span className="uppercase tracking-wider">{type}</span>
-            <span className="mx-2 text-border">·</span>
+            {/* Only the tax-form types (T1/T2/bookkeeping) carry a meaningful
+                label; firm templates are just named checklists, so we skip the
+                "custom" tag entirely. */}
+            {type && type !== "custom" && (
+              <>
+                <span className="uppercase tracking-wider">{type}</span>
+                <span className="mx-2 text-border">·</span>
+              </>
+            )}
             {itemsCount} {itemsLabel}
           </div>
         </div>
       </div>
       <div className="flex items-center gap-1 shrink-0">{children}</div>
     </li>
-  );
-}
-
-function EmptyRow({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-dashed border-border bg-card/40 px-5 py-10 text-center text-sm text-muted-foreground">
-      {children}
-    </div>
   );
 }
 

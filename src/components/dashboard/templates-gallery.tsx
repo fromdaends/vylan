@@ -15,14 +15,15 @@ export type TemplateCard = {
   builtIn: boolean;
 };
 
-const CATEGORIES = ["recommended", "t1", "t2", "bookkeeping", "custom"] as const;
+const CATEGORIES = ["recommended", "t1", "t2", "bookkeeping"] as const;
 type Category = (typeof CATEGORIES)[number];
 
 // The templates gallery — a Word-style row of "start here" cards. The
 // category pills and search both narrow the same horizontal card row.
-// "Recommended" surfaces the built-in starters; the other tabs filter by
-// engagement type. Each card opens the new-engagement flow pre-loaded with
-// that template; a leading "blank" card starts from scratch.
+// "Recommended" surfaces every usable template (built-in starters + the
+// firm's own); the other tabs filter by engagement type. Each card opens the
+// new-engagement flow pre-loaded with that template; a leading "blank" card
+// starts from scratch.
 export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
   const t = useTranslations("Dashboard");
   const [category, setCategory] = useState<Category>("recommended");
@@ -38,16 +39,16 @@ export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
         return "T2";
       case "bookkeeping":
         return t("tmpl_cat_bookkeeping");
-      case "custom":
-        return t("tmpl_cat_custom");
       default:
         return t("tmpl_cat_recommended");
     }
   };
 
   const q = query.trim().toLowerCase();
+  // Recommended = all templates (built-in + the firm's own); the type tabs
+  // narrow by engagement type.
   const inCategory = (tmpl: TemplateCard) =>
-    category === "recommended" ? tmpl.builtIn : tmpl.type === category;
+    category === "recommended" ? true : tmpl.type === category;
   const visible = templates.filter(
     (tmpl) =>
       inCategory(tmpl) && (q === "" || tmpl.name.toLowerCase().includes(q)),
@@ -150,8 +151,14 @@ export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
                   {tmpl.name}
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  <span>{label(tmpl.type)}</span>
-                  <span className="mx-1.5 text-border">·</span>
+                  {/* Tax-form templates show their type; firm (custom) ones
+                      are just named checklists, so no type tag. */}
+                  {tmpl.type !== "custom" && (
+                    <>
+                      <span>{label(tmpl.type)}</span>
+                      <span className="mx-1.5 text-border">·</span>
+                    </>
+                  )}
                   {t("tmpl_items", { count: tmpl.itemCount })}
                 </div>
               </div>

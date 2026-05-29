@@ -2,6 +2,10 @@ import { getServerSupabase } from "@/lib/supabase/server";
 
 export type EngagementType = "t1" | "t2" | "bookkeeping" | "custom";
 
+// The empty "blank" built-in (seeded in 0005). Used only as the clone source
+// for "New template" — never shown in any template listing.
+export const BLANK_TEMPLATE_ID = "00000000-0000-0000-0000-000000000004";
+
 export type DocType =
   | "t4" | "rl1" | "t5" | "rl3" | "t3" | "rl16" | "noa"
   | "bank_statement" | "credit_card_statement" | "receipt"
