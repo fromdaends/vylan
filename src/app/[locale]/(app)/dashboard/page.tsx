@@ -1,14 +1,13 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listEngagements, type Engagement } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
+import { getCurrentUser } from "@/lib/db/users";
 
 export const dynamic = "force-dynamic";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import {
-  Plus,
   AlertTriangle,
   Clock,
   FileWarning,
@@ -24,6 +23,7 @@ import {
   type AttentionResult,
 } from "@/lib/attention";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { CollapsibleSection } from "@/components/dashboard/collapsible-section";
 import { HashSectionLink } from "@/components/dashboard/hash-section-link";
 import { AiActivityList } from "@/components/dashboard/ai-activity-list";
@@ -48,10 +48,17 @@ export default async function DashboardPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [engagements, clients] = await Promise.all([
+  const [engagements, clients, user] = await Promise.all([
     listEngagements(),
     listClients({ includeArchived: false }),
+    getCurrentUser(),
   ]);
+
+  // First name only — prefer the explicit display_name, fall back to the
+  // account name; ignore the email local-part so an unnamed user gets the
+  // friendly "there"/"vous" fallback instead of a raw handle.
+  const rawName = user?.display_name?.trim() || user?.name?.trim() || null;
+  const firstName = rawName ? (rawName.split(/\s+/)[0] ?? null) : null;
 
   const sb = await getServerSupabase();
   const liveIds = engagements
@@ -134,7 +141,6 @@ export default async function DashboardPage({
 
   const t = await getTranslations("App");
   const tDashboard = await getTranslations("Dashboard");
-  const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
   const tAttention = await getTranslations("Attention");
   const clientsById = new Map(clients.map((c) => [c.id, c]));
@@ -171,21 +177,10 @@ export default async function DashboardPage({
 
   return (
     <div className="space-y-10 sm:space-y-12">
-      {/* No personalized greeting on /dashboard — that lives on /home,
-          the post-login landing page. Dashboard goes straight to the
-          metric tiles + section breakdown. Header is just a quiet
-          page title plus the New engagement CTA. */}
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground/90">
-          {t("dashboard_title")}
-        </h1>
-        <Link href="/engagements/new" className="shrink-0">
-          <Button size="sm">
-            <Plus className="h-4 w-4" />
-            {tEng("new")}
-          </Button>
-        </Link>
-      </header>
+      <DashboardHeader
+        firstName={firstName}
+        attentionCount={needsAttention.length}
+      />
 
       <section
         aria-label={tDashboard("overview_label")}
