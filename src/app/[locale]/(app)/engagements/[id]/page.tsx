@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getEngagement } from "@/lib/db/engagements";
+import { getEngagement, listEngagements } from "@/lib/db/engagements";
 import { getClient } from "@/lib/db/clients";
 import { listRequestItems, type RequestItem } from "@/lib/db/request-items";
 import {
@@ -36,6 +36,7 @@ import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { DeleteEngagementButton } from "@/components/engagements/delete-engagement-button";
+import { JumpBackIn } from "@/components/engagements/jump-back-in";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -62,14 +63,23 @@ export default async function EngagementDetailPage({
 
   const engagement = await getEngagement(id);
   if (!engagement) notFound();
-  const [client, items, uploads, activity, firm] = await Promise.all([
-    getClient(engagement.client_id),
-    listRequestItems(engagement.id),
-    listUploadedFilesForEngagement(engagement.id),
-    listActivityForEngagement(engagement.id),
-    getCurrentFirm(),
-  ]);
+  const [client, items, uploads, activity, firm, allEngagements] =
+    await Promise.all([
+      getClient(engagement.client_id),
+      listRequestItems(engagement.id),
+      listUploadedFilesForEngagement(engagement.id),
+      listActivityForEngagement(engagement.id),
+      getCurrentFirm(),
+      listEngagements(),
+    ]);
   const isDemo = firm?.is_demo === true;
+
+  // "Jump back in" — the firm's newest other engagement (listEngagements is
+  // ordered created_at desc), so you can hop straight back to recent work.
+  const jumpTarget = allEngagements.find((e) => e.id !== engagement.id) ?? null;
+  const jumpClient = jumpTarget
+    ? await getClient(jumpTarget.client_id)
+    : null;
 
   // Pre-sign URLs (15 min) for every upload.
   const filesByItem = new Map<string, (UploadedFile & { url: string })[]>();
@@ -285,6 +295,15 @@ export default async function EngagementDetailPage({
           )}
         </div>
       </header>
+
+      {jumpTarget && (
+        <JumpBackIn
+          engagementId={jumpTarget.id}
+          title={jumpTarget.title}
+          clientName={jumpClient?.display_name ?? null}
+          label={t("jump_back_in")}
+        />
+      )}
 
       {portalUrl && isLive && <MagicLinkPanel url={portalUrl} />}
 

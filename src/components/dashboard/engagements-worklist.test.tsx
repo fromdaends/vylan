@@ -103,26 +103,23 @@ function renderWorklist(items: WorklistRow[] = rows, currentUserId = "me") {
 }
 
 describe("EngagementsWorklist", () => {
-  it("defaults to Recent: every engagement, newest first", () => {
+  it("defaults to Recent: active engagements only, newest first", () => {
     const q = renderWorklist();
 
-    // Recent is the default tab now (Needs attention moved to /inbox).
     expect(
       q.getByRole("tab", { name: en.Dashboard.wl_filter_recent }),
     ).toHaveAttribute("aria-selected", "true");
-    expect(
-      q.queryByRole("tab", { name: /needs attention/i }),
-    ).not.toBeInTheDocument();
 
-    // Recent surfaces all engagements (clean ones included), newest first:
-    // C (Mar 20) > A (Mar 02) > B (Feb 01) > D (Jan 05).
-    const c = q.getByRole("link", { name: /Tremblay T2/i });
+    // Recent shows active work, newest first: A (Mar 02) > B (Feb 01) >
+    // D (Jan 05). C (Tremblay) is complete, so it's excluded.
     const a = q.getByRole("link", { name: /Smith T1/i });
     const b = q.getByRole("link", { name: /Jones Bookkeeping/i });
     const d = q.getByRole("link", { name: /Gagnon Custom/i });
-    expect(c.compareDocumentPosition(a)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(a.compareDocumentPosition(b)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     expect(b.compareDocumentPosition(d)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(
+      q.queryByRole("link", { name: /Tremblay T2/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("has no All tab — a Browse all link points to the full list instead", () => {
@@ -135,26 +132,39 @@ describe("EngagementsWorklist", () => {
     ).toHaveAttribute("href", "/engagements");
   });
 
-  it("limits Mine to engagements assigned to the current user", () => {
+  it("limits Mine to my active engagements", () => {
     const q = renderWorklist();
     fireEvent.click(q.getByRole("tab", { name: en.Dashboard.wl_filter_mine }));
 
+    // A (Smith) is in-progress and assigned to me.
     expect(q.getByRole("link", { name: /Smith T1/i })).toBeInTheDocument();
-    expect(q.getByRole("link", { name: /Tremblay T2/i })).toBeInTheDocument();
-    // Assigned to someone else / unassigned → hidden.
-    expect(q.queryByRole("link", { name: /Jones Bookkeeping/i })).not.toBeInTheDocument();
-    expect(q.queryByRole("link", { name: /Gagnon Custom/i })).not.toBeInTheDocument();
+    // C (Tremblay) is mine but complete → excluded; B is someone else's;
+    // D is unassigned.
+    expect(
+      q.queryByRole("link", { name: /Tremblay T2/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      q.queryByRole("link", { name: /Jones Bookkeeping/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      q.queryByRole("link", { name: /Gagnon Custom/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it("surfaces clean engagements under Recent, newest first", () => {
+  it("Complete tab shows only completed engagements", () => {
     const q = renderWorklist();
-    fireEvent.click(q.getByRole("tab", { name: en.Dashboard.wl_filter_recent }));
+    fireEvent.click(
+      q.getByRole("tab", { name: en.Dashboard.wl_filter_complete }),
+    );
 
-    const c = q.getByRole("link", { name: /Tremblay T2/i });
-    const a = q.getByRole("link", { name: /Smith T1/i });
-    expect(c).toBeInTheDocument();
-    // C (Mar 20) is more recent than A (Mar 02), so it sorts first.
-    expect(c.compareDocumentPosition(a)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    // Only C (Tremblay) is complete; the active ones are hidden.
+    expect(q.getByRole("link", { name: /Tremblay T2/i })).toBeInTheDocument();
+    expect(
+      q.queryByRole("link", { name: /Smith T1/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      q.queryByRole("link", { name: /Gagnon Custom/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("searches by engagement title or client name across the full set", () => {
