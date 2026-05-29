@@ -485,7 +485,7 @@
     "wl_empty_completed": "No completed engagements yet."
   },
   "App": {
-    "dashboard_title": "Dashboard",
+    "dashboard_title": "Overview",
     "dashboard_empty": "No active engagements yet. Add your first client to get started.",
     "filter_all": "All",
     "filter_active": "Active",
@@ -494,7 +494,7 @@
     "empty_all": "No engagements yet. Click 'New engagement' to start.",
     "empty_active": "No active engagements right now.",
     "empty_drafts": "No drafts.",
-    "nav_dashboard": "Dashboard",
+    "nav_dashboard": "Overview",
     "nav_inbox": "Inbox",
     "nav_clients": "Clients",
     "nav_engagements": "Engagements",
@@ -1094,7 +1094,7 @@
     "shortcuts_subtitle": "Move faster with these.",
     "shortcut_create": "New engagement",
     "shortcut_search": "Search (on the Clients page)",
-    "shortcut_dash": "Dashboard",
+    "shortcut_dash": "Overview",
     "shortcut_clients": "Clients",
     "shortcut_templates": "Templates",
     "shortcut_settings": "Settings",

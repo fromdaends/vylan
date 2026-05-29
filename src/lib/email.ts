@@ -160,7 +160,7 @@ export function buildWelcomeEmail(opts: {
   <li style="margin-bottom:8px"><strong>Laissez Vylan relancer pour vous</strong> &mdash; rappels intelligents, alertes IA si le client envoie le mauvais slip.</li>
 </ol>
 <p style="margin:24px 0">
-  <a href="${opts.appUrl}/dashboard" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Ouvrir mon tableau de bord</a>
+  <a href="${opts.appUrl}/dashboard" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Ouvrir mon aperçu</a>
 </p>
 <p style="color:#64748b;font-size:13px">Vous êtes en démo. Aucun mode de paiement n'est requis — nous discuterons des tarifs ensemble quand vous serez prêts.</p>
 <p style="color:#64748b;font-size:13px">Une question ? Répondez directement à ce courriel.</p>
@@ -172,7 +172,7 @@ Bienvenue chez Vylan. Trois choses à faire en moins de cinq minutes :
   2. Créer votre premier engagement
   3. Laissez Vylan relancer vos clients
 
-Ouvrez votre tableau de bord : ${opts.appUrl}/dashboard
+Ouvrez votre aperçu : ${opts.appUrl}/dashboard
 
 Vous êtes en démo. Aucun paiement requis — nous discuterons des tarifs ensemble quand vous serez prêts.`;
     return { subject, html, text };
@@ -188,7 +188,7 @@ Vous êtes en démo. Aucun paiement requis — nous discuterons des tarifs ensem
   <li style="margin-bottom:8px"><strong>Let Vylan chase for you</strong> &mdash; smart reminders + AI flags when a client uploads the wrong slip.</li>
 </ol>
 <p style="margin:24px 0">
-  <a href="${opts.appUrl}/dashboard" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Open my dashboard</a>
+  <a href="${opts.appUrl}/dashboard" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Open my overview</a>
 </p>
 <p style="color:#64748b;font-size:13px">You're in demo mode. No payment method required — we'll talk pricing together when you're ready.</p>
 <p style="color:#64748b;font-size:13px">Question? Reply directly to this email.</p>
@@ -200,7 +200,7 @@ Welcome to Vylan. Three things to do in under 5 min:
   2. Create your first engagement
   3. Let Vylan chase clients for you
 
-Open your dashboard: ${opts.appUrl}/dashboard
+Open your overview: ${opts.appUrl}/dashboard
 
 You're in demo mode. No payment required to start.`;
   return { subject, html, text };
