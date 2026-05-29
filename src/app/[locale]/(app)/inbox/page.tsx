@@ -1,6 +1,10 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
+import {
+  selectNeedsAttention,
+  selectReadyToReview,
+} from "@/lib/dashboard/worklist-select";
 import { listHomeNotifications } from "@/lib/home/notifications";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
 import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
@@ -27,12 +31,8 @@ export default async function InboxPage({
     listHomeNotifications(12),
   ]);
 
-  const needsAttention = rows
-    .filter((r) => r.reasons.length > 0)
-    .sort((a, b) => b.attentionScore - a.attentionScore);
-  const readyToReview = rows
-    .filter((r) => r.readyToReview)
-    .sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
+  const needsAttention = selectNeedsAttention(rows);
+  const readyToReview = selectReadyToReview(rows);
 
   const t = await getTranslations("Inbox");
   const tAttention = await getTranslations("Attention");
