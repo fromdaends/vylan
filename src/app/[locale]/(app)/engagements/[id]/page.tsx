@@ -40,6 +40,8 @@ import { RecordEngagementOpen } from "@/components/engagements/record-engagement
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
+import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import {
   ArrowLeft,
   Send,
@@ -63,14 +65,18 @@ export default async function EngagementDetailPage({
 
   const engagement = await getEngagement(id);
   if (!engagement) notFound();
-  const [client, items, uploads, activity, firm] = await Promise.all([
+  const [client, items, uploads, activity, firm, user] = await Promise.all([
     getClient(engagement.client_id),
     listRequestItems(engagement.id),
     listUploadedFilesForEngagement(engagement.id),
     listActivityForEngagement(engagement.id),
     getCurrentFirm(),
+    getCurrentUser(),
   ]);
   const isDemo = firm?.is_demo === true;
+  // Delete (incl. delete-draft) is owner-only — hide both controls from staff.
+  // The server actions enforce this too; this is the matching UI gate.
+  const canDelete = user ? canDeleteEngagements(user.role) : false;
 
   // Pre-sign URLs (15 min) for every upload.
   const filesByItem = new Map<string, (UploadedFile & { url: string })[]>();
@@ -179,14 +185,16 @@ export default async function EngagementDetailPage({
                   </Button>
                 </form>
               )}
-              <form action={deleteDraftAction}>
-                <input type="hidden" name="id" value={engagement.id} />
-                <input type="hidden" name="__app_locale" value={locale} />
-                <Button type="submit" variant="outline" size="sm">
-                  <Trash2 className="size-4" />
-                  {t("delete_draft")}
-                </Button>
-              </form>
+              {canDelete && (
+                <form action={deleteDraftAction}>
+                  <input type="hidden" name="id" value={engagement.id} />
+                  <input type="hidden" name="__app_locale" value={locale} />
+                  <Button type="submit" variant="outline" size="sm">
+                    <Trash2 className="size-4" />
+                    {t("delete_draft")}
+                  </Button>
+                </form>
+              )}
             </>
           )}
           {isLive && (
@@ -262,8 +270,9 @@ export default async function EngagementDetailPage({
             </form>
           )}
           {/* Drafts keep their instant "Delete draft" button above; every
-              other status gets the confirmed permanent delete. */}
-          {!isDraft && (
+              other status gets the confirmed (recoverable) delete. Owner-only
+              — hidden from staff, mirroring the row menu + server actions. */}
+          {!isDraft && canDelete && (
             <DeleteEngagementButton
               engagementId={engagement.id}
               locale={locale}
