@@ -125,18 +125,14 @@ describe("EngagementsWorklist", () => {
     expect(b.compareDocumentPosition(d)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
-  it("shows every engagement under All", () => {
+  it("has no All tab — a Browse all link points to the full list instead", () => {
     const q = renderWorklist();
-    fireEvent.click(q.getByRole("tab", { name: en.Dashboard.wl_filter_all }));
-
-    for (const name of [
-      /Smith T1/i,
-      /Jones Bookkeeping/i,
-      /Tremblay T2/i,
-      /Gagnon Custom/i,
-    ]) {
-      expect(q.getByRole("link", { name })).toBeInTheDocument();
-    }
+    expect(
+      q.queryByRole("tab", { name: en.Dashboard.wl_filter_all }),
+    ).not.toBeInTheDocument();
+    expect(
+      q.getByRole("link", { name: en.Dashboard.wl_view_all }),
+    ).toHaveAttribute("href", "/engagements");
   });
 
   it("limits Mine to engagements assigned to the current user", () => {
@@ -176,14 +172,16 @@ describe("EngagementsWorklist", () => {
     fireEvent.change(q.getByRole("searchbox"), { target: { value: "zzzzz" } });
 
     expect(q.getByText(en.Dashboard.wl_empty_search)).toBeInTheDocument();
-    expect(q.queryByRole("link")).not.toBeInTheDocument();
+    // No engagement-row links remain (the header "Browse all" link stays).
+    expect(
+      q.queryByRole("link", { name: /Smith T1/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("labels unassigned engagements", () => {
     const q = renderWorklist();
-    fireEvent.click(q.getByRole("tab", { name: en.Dashboard.wl_filter_all }));
-
-    // Gagnon's row carries the unassigned label.
+    // Recent (default) shows every engagement, so Gagnon's unassigned row
+    // is present without switching tabs.
     const gagnon = q
       .getByRole("link", { name: /Gagnon Custom/i })
       .closest("tr") as HTMLElement;
