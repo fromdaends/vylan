@@ -1,24 +1,48 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { FileText } from "lucide-react";
+import { formatDate, type AppLocale } from "@/lib/format";
+import { readRecentOpenId } from "@/lib/jump-back";
 
-// "Jump back in" card on the dashboard, styled after Microsoft Word/Excel:
-// a heading, then a card with the last-updated date + engagement name + an
-// "Open engagement" button. The whole card links to the engagement.
-export function JumpBackIn({
-  engagementId,
-  title,
-  clientName,
-  date,
-}: {
-  engagementId: string;
+// localStorage doesn't change while the dashboard is open, so a no-op
+// subscription is fine; getServerSnapshot returns null so SSR + hydration
+// agree before the client reads the real value.
+const noopSubscribe = () => () => {};
+
+type Engagement = {
+  id: string;
   title: string;
   clientName: string | null;
-  date: string;
+  recencyAt: string;
+};
+
+// "Jump back in" card on the dashboard, styled after Microsoft Word/Excel.
+// Only shows when the user has opened an engagement recently (tracked per
+// device in localStorage, expires after a week) — so it stays hidden for a
+// fresh or long-idle account and returns once an engagement is opened again.
+export function JumpBackIn({
+  engagements,
+  locale,
+}: {
+  engagements: Engagement[];
+  locale: AppLocale;
 }) {
   const t = useTranslations("Engagements");
+  const openId = useSyncExternalStore(
+    noopSubscribe,
+    () => readRecentOpenId(),
+    () => null,
+  );
+
+  const engagement = openId
+    ? (engagements.find((e) => e.id === openId) ?? null)
+    : null;
+  if (!engagement) return null;
+
+  const date = formatDate(engagement.recencyAt, locale, "medium");
 
   return (
     <section className="space-y-3">
@@ -27,7 +51,7 @@ export function JumpBackIn({
       </h2>
 
       <Link
-        href={`/engagements/${engagementId}`}
+        href={`/engagements/${engagement.id}`}
         className="group flex w-full max-w-md flex-col gap-5 rounded-xl border border-border/60 bg-card p-5 transition-colors hover:border-foreground/20"
       >
         <div className="min-w-0">
@@ -35,11 +59,11 @@ export function JumpBackIn({
             {t("last_updated", { date })}
           </p>
           <p className="mt-1 truncate text-base font-semibold text-foreground">
-            {title}
+            {engagement.title}
           </p>
-          {clientName ? (
+          {engagement.clientName ? (
             <p className="truncate text-sm text-muted-foreground">
-              {clientName}
+              {engagement.clientName}
             </p>
           ) : null}
         </div>
