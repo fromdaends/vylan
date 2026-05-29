@@ -1098,6 +1098,9 @@
     "status_na": "Not applicable",
     "help_intro": "Question?",
     "help_link": "Email your accountant",
+    "help_copy": "Copy",
+    "help_copied": "Copied",
+    "help_no_email": "Have a question? Reply to the invitation email your accountant sent you.",
     "powered_by": "Powered by",
     "errors": {
       "bad_request": "Bad request.",

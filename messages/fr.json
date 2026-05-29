@@ -1098,6 +1098,9 @@
     "rejected_action_needed": "Votre comptable a demandé un nouveau document :",
     "help_intro": "Une question ?",
     "help_link": "Écrire à votre comptable",
+    "help_copy": "Copier",
+    "help_copied": "Copié",
+    "help_no_email": "Une question ? Répondez au courriel d'invitation que votre comptable vous a envoyé.",
     "powered_by": "Propulsé par",
     "errors": {
       "bad_request": "Requête invalide.",
