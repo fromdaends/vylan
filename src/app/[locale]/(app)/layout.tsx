@@ -10,6 +10,7 @@ import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 import { AppShell } from "@/components/app/app-shell";
 import { DemoBanner } from "@/components/app/demo-banner";
 import { Toaster } from "@/components/ui/sonner";
+import { getEngagementBadges } from "@/lib/engagements/badges";
 
 export default async function AppLayout({
   children,
@@ -41,6 +42,7 @@ export default async function AppLayout({
     t,
     tAuth,
     tProfile,
+    tEng,
   ] = await Promise.all([
     supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
     getCurrentUser(),
@@ -48,6 +50,7 @@ export default async function AppLayout({
     getTranslations("App"),
     getTranslations("Auth"),
     getTranslations("Profile"),
+    getTranslations("Engagements"),
   ]);
 
   const aal = aalResult.data;
@@ -59,9 +62,10 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const [avatarUrl, firmLogoUrl] = await Promise.all([
+  const [avatarUrl, firmLogoUrl, badges] = await Promise.all([
     getBrandingImageUrl(dbUser.avatar_path),
     getBrandingImageUrl(firm.logo_url),
+    getEngagementBadges(),
   ]);
 
   return (
@@ -73,11 +77,26 @@ export default async function AppLayout({
       userEmail={dbUser.email}
       userAvatarUrl={avatarUrl}
       topBar={firm.is_demo ? <DemoBanner /> : undefined}
+      engagementBadges={{
+        ready: badges.readyToReview,
+        deleted: badges.recentlyDeleted,
+      }}
       labels={{
         inbox: t("nav_inbox"),
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),
+        engagements: t("nav_engagements"),
+        engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
+        engagementViews: {
+          active: tEng("view_active_label"),
+          ready: tEng("view_ready_label"),
+          drafts: tEng("view_drafts_label"),
+          completed: tEng("view_completed_label"),
+          archived: tEng("view_archived_label"),
+          cancelled: tEng("view_cancelled_label"),
+          deleted: tEng("view_deleted_label"),
+        },
         // `nav_billing` translation key kept for the Settings page's
         // billing link card; no longer needed in the sidebar labels.
         settings: t("nav_settings"),

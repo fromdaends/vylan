@@ -1,4 +1,9 @@
-import { listEngagements, type Engagement } from "@/lib/db/engagements";
+import { cache } from "react";
+import {
+  listEngagements,
+  type Engagement,
+  type EngagementScope,
+} from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
 import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import {
@@ -9,13 +14,18 @@ import {
 import { getServerSupabase } from "@/lib/supabase/server";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 
-// Loads every engagement as a WorklistRow — attention scoring, ready-to-review
-// state, completion %, and a "recency" stamp for the Recent sort. Shared by
-// /dashboard (the tabbed worklist) and /inbox (the Needs attention + Ready to
-// review lists) so the scoring and row shape never drift between the two.
-export async function loadEngagementWorklist(): Promise<WorklistRow[]> {
+// Loads engagements as WorklistRows — attention scoring, ready-to-review state,
+// completion %, and a "recency" stamp for the Recent sort. Shared by /dashboard
+// + /inbox (default "active" scope) and the All-Engagements sub-pages (which
+// pass "archived" / "deleted"). Wrapped in React.cache so the layout's badge
+// counts and a page's content load — both at "active" scope within one request
+// — dedupe to a single DB round-trip. Pass the SAME scope string everywhere to
+// share the cache entry.
+export const loadEngagementWorklist = cache(async function _loadEngagementWorklist(
+  scope: EngagementScope = "active",
+): Promise<WorklistRow[]> {
   const [engagements, clients, firmUsers] = await Promise.all([
-    listEngagements(),
+    listEngagements({ scope }),
     listClients({ includeArchived: false }),
     listFirmUsers(),
   ]);
@@ -96,4 +106,4 @@ export async function loadEngagementWorklist(): Promise<WorklistRow[]> {
       deletedAt: e.deleted_at,
     } satisfies WorklistRow;
   });
-}
+});

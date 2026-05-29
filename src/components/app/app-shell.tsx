@@ -22,28 +22,39 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
+  Archive,
   Building2,
+  ChevronDown,
   ChevronUp,
+  ClipboardList,
   FileText,
+  Folder,
   HelpCircle,
   Inbox,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   PanelLeft,
   PanelLeftClose,
+  PencilLine,
   Search,
   Settings,
   Sparkles,
+  Trash2,
   UserCircle,
   Users,
+  XCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { SidebarSearch } from "@/components/app/sidebar-search";
+import type { EngagementView } from "@/lib/engagements/views";
 
 type Labels = {
   inbox: string;
   dashboard: string;
   clients: string;
+  engagements: string;
+  engagementsToggle: string;
   templates: string;
   settings: string;
   firm: string;
@@ -57,7 +68,32 @@ type Labels = {
   collapseSidebar: string;
   expandSidebar: string;
   account: string;
+  // Engagement sub-view labels, keyed by view.
+  engagementViews: Record<EngagementView, string>;
 };
+
+// Sidebar badge counts for the Engagements sub-nav (ready-to-review +
+// recently-deleted). Threaded from the layout via getEngagementBadges.
+export type EngagementBadgeCounts = {
+  ready: number;
+  deleted: number;
+};
+
+// The seven Engagement sub-views, in nav order, with their icons + hrefs.
+// Active is the parent destination (/engagements); the rest are sub-routes.
+const ENGAGEMENT_SUBNAV: {
+  view: EngagementView;
+  href: string;
+  icon: typeof Users;
+}[] = [
+  { view: "active", href: "/engagements", icon: Folder },
+  { view: "ready", href: "/engagements/ready", icon: ListChecks },
+  { view: "drafts", href: "/engagements/drafts", icon: PencilLine },
+  { view: "completed", href: "/engagements/completed", icon: ClipboardList },
+  { view: "archived", href: "/engagements/archived", icon: Archive },
+  { view: "cancelled", href: "/engagements/cancelled", icon: XCircle },
+  { view: "deleted", href: "/engagements/deleted", icon: Trash2 },
+];
 
 type NavItemDef = {
   href: string;
@@ -102,6 +138,7 @@ export function AppShell({
   userEmail,
   userAvatarUrl,
   labels,
+  engagementBadges,
 }: {
   children: React.ReactNode;
   topBar?: React.ReactNode;
@@ -112,6 +149,7 @@ export function AppShell({
   userEmail: string;
   userAvatarUrl: string | null;
   labels: Labels;
+  engagementBadges: EngagementBadgeCounts;
 }) {
   const pathname = usePathname();
   const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
@@ -143,6 +181,9 @@ export function AppShell({
     }
   }, [pathname]);
 
+  // Engagements is rendered as its own expandable section (not a plain
+  // NavLink), so it's excluded from this flat list and inserted between
+  // Clients and Templates in the sidebar body.
   const primaryNav: NavItemDef[] = [
     {
       href: "/dashboard",
@@ -178,6 +219,7 @@ export function AppShell({
         <SidebarBody
           primaryNav={primaryNav}
           labels={labels}
+          engagementBadges={engagementBadges}
           firmName={firmName}
           firmLogoUrl={firmLogoUrl}
           brandColor={brandColor}
@@ -502,6 +544,7 @@ function MobileMenuItem({
 function SidebarBody({
   primaryNav,
   labels,
+  engagementBadges,
   firmName,
   firmLogoUrl,
   brandColor,
@@ -513,6 +556,7 @@ function SidebarBody({
 }: {
   primaryNav: NavItemDef[];
   labels: Labels;
+  engagementBadges: EngagementBadgeCounts;
   firmName: string;
   firmLogoUrl: string | null;
   brandColor: string;
@@ -628,6 +672,14 @@ function SidebarBody({
               color={item.color}
             />
           ))}
+          {/* Engagements is an expandable section (Active / Ready / Drafts /
+              Completed / Archived / Cancelled / Recently deleted) rather than a
+              plain link. Inserted after the primary destinations. */}
+          <EngagementsNav
+            labels={labels}
+            badges={engagementBadges}
+            collapsed={collapsed}
+          />
         </NavSection>
       </nav>
 
@@ -821,5 +873,152 @@ function NavLink({
         {!collapsed && <span className="truncate">{label}</span>}
       </span>
     </Link>
+  );
+}
+
+// Expandable "Engagements" sidebar section. The parent row links to
+// /engagements (Active) and toggles the sub-view list; sub-rows deep-link to
+// each view. Auto-expands when you're anywhere under /engagements. When the
+// rail is collapsed to icons, it degrades to a single icon link to Active
+// (the accordion needs labels, which the rail hides).
+function EngagementsNav({
+  labels,
+  badges,
+  collapsed,
+}: {
+  labels: Labels;
+  badges: EngagementBadgeCounts;
+  collapsed: boolean;
+}) {
+  const pathname = usePathname();
+  const onEngagements = pathname.startsWith("/engagements");
+  // Open when on any engagements route; otherwise user-controlled.
+  const [open, setOpen] = useState(onEngagements);
+  // Re-expand if navigation lands under /engagements (e.g. via search).
+  const lastOnRef = useRef(onEngagements);
+  useEffect(() => {
+    if (onEngagements && !lastOnRef.current) setOpen(true);
+    lastOnRef.current = onEngagements;
+  }, [onEngagements]);
+
+  const badgeFor = (view: EngagementView): number | null => {
+    if (view === "ready" && badges.ready > 0) return badges.ready;
+    if (view === "deleted" && badges.deleted > 0) return badges.deleted;
+    return null;
+  };
+
+  const isViewActive = (href: string) =>
+    href === "/engagements"
+      ? pathname === "/engagements"
+      : pathname === href;
+
+  // Collapsed rail: a single icon link to Active (no room for the accordion).
+  if (collapsed) {
+    return (
+      <Link
+        href="/engagements"
+        title={labels.engagements}
+        aria-label={labels.engagements}
+      >
+        <span
+          className={cn(
+            "flex h-10 w-full items-center justify-center rounded-lg text-sm font-medium transition-colors",
+            onEngagements
+              ? "bg-secondary text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
+          )}
+        >
+          <Folder className="size-4 shrink-0 text-icon-cyan" aria-hidden />
+        </span>
+      </Link>
+    );
+  }
+
+  return (
+    <div>
+      {/* Parent row: the label links to Active; the caret toggles the list.
+          Two controls in one row so clicking the name navigates while the
+          chevron just expands/collapses. */}
+      <div
+        className={cn(
+          "flex items-center rounded-lg text-sm font-medium transition-colors",
+          onEngagements
+            ? "text-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <Link
+          href="/engagements"
+          className={cn(
+            "flex flex-1 items-center gap-2.5 rounded-lg px-3 py-2 hover:bg-secondary/60",
+            pathname === "/engagements" &&
+              "bg-secondary shadow-[inset_0_1px_0_0_var(--color-border)]",
+          )}
+        >
+          <Folder className="size-4 shrink-0 text-icon-cyan" aria-hidden />
+          <span className="truncate">{labels.engagements}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={labels.engagementsToggle}
+          className="mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform duration-200",
+              open ? "rotate-0" : "-rotate-90",
+            )}
+            aria-hidden
+          />
+        </button>
+      </div>
+
+      {/* Sub-views — smooth grid-rows expand. */}
+      <div
+        className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+        style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <div className="mt-0.5 space-y-0.5 border-l border-border/50 pl-3 ml-4">
+            {ENGAGEMENT_SUBNAV.map(({ view, href, icon: Icon }) => {
+              const active = isViewActive(href);
+              const count = badgeFor(view);
+              return (
+                <Link
+                  key={view}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                    active
+                      ? "bg-secondary text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+                  )}
+                >
+                  <Icon className="size-3.5 shrink-0" aria-hidden />
+                  <span className="flex-1 truncate">
+                    {labels.engagementViews[view]}
+                  </span>
+                  {count != null && (
+                    <span
+                      className={cn(
+                        "inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
+                        view === "deleted"
+                          ? "bg-destructive/15 text-destructive"
+                          : "bg-accent/15 text-accent",
+                      )}
+                    >
+                      {count}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
