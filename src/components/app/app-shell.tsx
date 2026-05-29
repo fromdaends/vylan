@@ -519,13 +519,15 @@ function SidebarBody({
               onClick={onToggleCollapse}
               aria-label={labels.expandSidebar}
               title={labels.expandSidebar}
-              className="group relative inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+              className="group relative inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-90 motion-reduce:transition-none"
             >
-              <span className="transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0">
+              {/* Logo gently shrinks + fades as the panel icon spins in to
+                  replace it. motion-reduce falls back to a plain swap. */}
+              <span className="transition-all duration-300 ease-out group-hover:scale-50 group-hover:opacity-0 group-focus-visible:scale-50 group-focus-visible:opacity-0 motion-reduce:transition-none motion-reduce:group-hover:scale-100">
                 <Logo size={28} priority />
               </span>
               <PanelLeft
-                className="absolute left-1/2 top-1/2 size-[18px] -translate-x-1/2 -translate-y-1/2 text-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
+                className="absolute left-1/2 top-1/2 size-[18px] -translate-x-1/2 -translate-y-1/2 -rotate-90 scale-50 text-foreground opacity-0 transition-all duration-300 ease-out group-hover:rotate-0 group-hover:scale-100 group-hover:opacity-100 group-focus-visible:rotate-0 group-focus-visible:scale-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
                 aria-hidden
               />
             </button>
