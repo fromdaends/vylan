@@ -508,26 +508,35 @@ function SidebarBody({
       {/* Brand row */}
       {collapsed ? (
         <div className="flex flex-col items-center gap-3 px-2 pt-4 pb-3 border-b border-border/40">
-          <Link
-            href="/dashboard"
-            title={brand.name}
-            className="inline-flex items-center justify-center rounded-lg p-1 hover:bg-secondary/40 transition-colors"
-          >
-            <Logo size={28} priority />
-          </Link>
-          {onToggleCollapse && (
+          {onToggleCollapse ? (
+            // M365-style: when collapsed, the logo IS the expand control.
+            // The Vylan logo shows by default and cross-fades to the panel
+            // icon on hover/focus; clicking expands the rail. Expanded (the
+            // branch below), the logo is a plain link again and the collapse
+            // toggle returns to its own spot on the right.
             <button
               type="button"
               onClick={onToggleCollapse}
-              className="group inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground shadow-sm hover:text-foreground hover:bg-secondary hover:border-border hover:shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-all"
               aria-label={labels.expandSidebar}
               title={labels.expandSidebar}
+              className="group relative inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
             >
+              <span className="transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0">
+                <Logo size={28} priority />
+              </span>
               <PanelLeft
-                className="size-[18px] group-hover:translate-x-0.5 transition-transform"
+                className="absolute left-1/2 top-1/2 size-[18px] -translate-x-1/2 -translate-y-1/2 text-foreground opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
                 aria-hidden
               />
             </button>
+          ) : (
+            <Link
+              href="/dashboard"
+              title={brand.name}
+              className="inline-flex items-center justify-center rounded-lg p-1 hover:bg-secondary/40 transition-colors"
+            >
+              <Logo size={28} priority />
+            </Link>
           )}
         </div>
       ) : (
