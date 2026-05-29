@@ -18,9 +18,8 @@ export function DashboardGreeting({
 }: {
   firstName: string | null;
   subtitle: string;
-  // "default" — used on /dashboard (3xl/4xl heading).
-  // "hero"    — used on /home (4xl/5xl). Bigger focal point for the
-  //             post-login landing surface.
+  // "default" — the standard heading scale, used on the dashboard header.
+  // "hero"    — a larger 4xl/5xl scale for a more prominent landing surface.
   variant?: "default" | "hero";
 }) {
   const t = useTranslations("Dashboard");

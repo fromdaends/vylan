@@ -393,6 +393,12 @@
     "kind_ready_to_review": "Engagement is ready to review",
     "kind_overdue": "Engagement is overdue"
   },
+  "Inbox": {
+    "title": "Inbox",
+    "subtitle": "Everything that needs your eyes — what to chase, what to review, and what's new.",
+    "empty_attention": "Nothing needs your attention right now.",
+    "empty_ready": "Nothing's ready to review yet."
+  },
   "Home": {
     "view_full_dashboard": "View full dashboard",
     "notifications_title": "Activity",
@@ -479,8 +485,8 @@
     "empty_all": "No engagements yet. Click 'New engagement' to start.",
     "empty_active": "No active engagements right now.",
     "empty_drafts": "No drafts.",
-    "nav_home": "Home",
     "nav_dashboard": "Dashboard",
+    "nav_inbox": "Inbox",
     "nav_clients": "Clients",
     "nav_engagements": "Engagements",
     "nav_templates": "Templates",

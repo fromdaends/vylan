@@ -47,12 +47,13 @@ export type WorklistRow = {
   recencyAt: string;
 };
 
-const FILTERS = ["attention", "recent", "mine", "all"] as const;
+const FILTERS = ["recent", "mine", "all"] as const;
 type Filter = (typeof FILTERS)[number];
 
-// Word's "My documents" reimagined as a triage worklist. The default pill
-// ("Needs attention") preserves the dashboard's attention scoring; the
-// other pills slice the same engagement set without losing it.
+// Word's "My documents" reimagined as a triage worklist. Three views slice
+// the same engagement set without losing it: Recent (default), Mine, All.
+// Per-engagement attention/ready badges still render inline on the rows;
+// the dedicated "Needs attention" + "Ready to review" lists live on /inbox.
 export function EngagementsWorklist({
   rows,
   currentUserId,
@@ -63,22 +64,14 @@ export function EngagementsWorklist({
   locale: AppLocale;
 }) {
   const t = useTranslations("Dashboard");
-  const tStatus = useTranslations("Status");
-  const tAttention = useTranslations("Attention");
-  const [filter, setFilter] = useState<Filter>("attention");
+  const [filter, setFilter] = useState<Filter>("recent");
   const [query, setQuery] = useState("");
-
-  const attentionCount = useMemo(
-    () => rows.filter((r) => r.reasons.length > 0).length,
-    [rows],
-  );
 
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => {
-    // An active search spans every engagement, not just the current pill —
-    // from the default "Needs attention" view you should still be able to
-    // pull up any client by name. Most-recent first so the freshest match
-    // leads.
+    // An active search spans every engagement, not just the current pill, so
+    // you can always pull up any client by name. Most-recent first so the
+    // freshest match leads.
     if (q !== "") {
       return rows
         .filter(
@@ -91,10 +84,6 @@ export function EngagementsWorklist({
 
     const set = rows.slice();
     switch (filter) {
-      case "attention":
-        return set
-          .filter((r) => r.reasons.length > 0)
-          .sort((a, b) => b.attentionScore - a.attentionScore);
       case "recent":
         return set.sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
       case "mine":
@@ -110,8 +99,6 @@ export function EngagementsWorklist({
 
   const pillLabel = (f: Filter): string => {
     switch (f) {
-      case "attention":
-        return tAttention("needs_attention");
       case "recent":
         return t("wl_filter_recent");
       case "mine":
@@ -124,8 +111,6 @@ export function EngagementsWorklist({
   const emptyText = (): string => {
     if (q !== "") return t("wl_empty_search");
     switch (filter) {
-      case "attention":
-        return t("wl_empty_attention");
       case "mine":
         return t("wl_empty_mine");
       case "recent":
@@ -162,7 +147,6 @@ export function EngagementsWorklist({
       >
         {FILTERS.map((f) => {
           const active = f === filter;
-          const showCount = f === "attention" && attentionCount > 0;
           return (
             <button
               key={f}
@@ -178,85 +162,96 @@ export function EngagementsWorklist({
               )}
             >
               {pillLabel(f)}
-              {showCount ? (
-                <span
-                  className={cn(
-                    "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums",
-                    active
-                      ? "bg-warning/15 text-warning"
-                      : "bg-foreground/10 text-foreground/70",
-                  )}
-                >
-                  {attentionCount}
-                </span>
-              ) : null}
             </button>
           );
         })}
       </div>
 
-      {visible.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-card/40 px-5 py-12 text-center text-sm text-muted-foreground">
-          {emptyText()}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead className="px-4">{t("wl_col_engagement")}</TableHead>
-                <TableHead className="hidden px-4 sm:table-cell">
-                  {t("wl_col_due")}
-                </TableHead>
-                <TableHead className="hidden px-4 lg:table-cell">
-                  {t("wl_col_assigned")}
-                </TableHead>
-                <TableHead className="hidden px-4 md:table-cell">
-                  {t("wl_col_progress")}
-                </TableHead>
-                <TableHead className="px-4">{t("wl_col_status")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visible.map((r) => (
-                <WorklistRowView
-                  key={r.id}
-                  row={r}
-                  locale={locale}
-                  statusLabel={tStatus(r.status)}
-                  overdueText={
-                    r.reasons.includes("overdue")
-                      ? tAttention("overdue_by", { days: r.daysOverdue ?? 0 })
-                      : null
-                  }
-                  dueSoonText={
-                    r.reasons.includes("due_soon")
-                      ? tAttention("due_in", { days: r.daysUntilDue ?? 0 })
-                      : null
-                  }
-                  staleText={
-                    r.reasons.includes("stale")
-                      ? tAttention("stale_days", {
-                          days: r.daysSinceClientActivity ?? 0,
-                        })
-                      : null
-                  }
-                  readyText={
-                    r.readyToReview
-                      ? tAttention("items_ready", {
-                          count: r.itemsReadyToReview,
-                        })
-                      : null
-                  }
-                  unassignedText={t("wl_unassigned")}
-                  pctLabel={(pct) => t("wl_pct_complete", { pct })}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+      <WorklistTable rows={visible} locale={locale} emptyText={emptyText()} />
     </section>
+  );
+}
+
+// Presentational table of worklist rows, shared by the Dashboard worklist and
+// the Inbox's "Needs attention" / "Ready to review" sections. Renders the
+// dashed empty state when there are no rows.
+export function WorklistTable({
+  rows,
+  locale,
+  emptyText,
+}: {
+  rows: WorklistRow[];
+  locale: AppLocale;
+  emptyText: string;
+}) {
+  const t = useTranslations("Dashboard");
+  const tStatus = useTranslations("Status");
+  const tAttention = useTranslations("Attention");
+
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-card/40 px-5 py-12 text-center text-sm text-muted-foreground">
+        {emptyText}
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="px-4">{t("wl_col_engagement")}</TableHead>
+            <TableHead className="hidden px-4 sm:table-cell">
+              {t("wl_col_due")}
+            </TableHead>
+            <TableHead className="hidden px-4 lg:table-cell">
+              {t("wl_col_assigned")}
+            </TableHead>
+            <TableHead className="hidden px-4 md:table-cell">
+              {t("wl_col_progress")}
+            </TableHead>
+            <TableHead className="px-4">{t("wl_col_status")}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((r) => (
+            <WorklistRowView
+              key={r.id}
+              row={r}
+              locale={locale}
+              statusLabel={tStatus(r.status)}
+              overdueText={
+                r.reasons.includes("overdue")
+                  ? tAttention("overdue_by", { days: r.daysOverdue ?? 0 })
+                  : null
+              }
+              dueSoonText={
+                r.reasons.includes("due_soon")
+                  ? tAttention("due_in", { days: r.daysUntilDue ?? 0 })
+                  : null
+              }
+              staleText={
+                r.reasons.includes("stale")
+                  ? tAttention("stale_days", {
+                      days: r.daysSinceClientActivity ?? 0,
+                    })
+                  : null
+              }
+              readyText={
+                r.readyToReview
+                  ? tAttention("items_ready", {
+                      count: r.itemsReadyToReview,
+                    })
+                  : null
+              }
+              unassignedText={t("wl_unassigned")}
+              pctLabel={(pct) => t("wl_pct_complete", { pct })}
+            />
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }
 

@@ -18,7 +18,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// /notifications — the full feed behind "What's new" on /home.
+// /notifications — the full feed behind "What's new" on /inbox.
 // Same aggregation function as Home (`listHomeNotifications`), just
 // uncapped to 50 rows so the accountant can scroll through everything
 // recent. This is the deliberate destination for "View all" on the
@@ -43,7 +43,7 @@ export default async function NotificationsPage({
   return (
     <div className="mx-auto w-full max-w-2xl px-1 pt-10 sm:pt-14 pb-16 space-y-8">
       <Link
-        href="/home"
+        href="/inbox"
         className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />

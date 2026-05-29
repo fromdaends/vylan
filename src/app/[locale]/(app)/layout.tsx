@@ -73,7 +73,7 @@ export default async function AppLayout({
       userAvatarUrl={avatarUrl}
       topBar={firm.is_demo ? <DemoBanner /> : undefined}
       labels={{
-        home: t("nav_home"),
+        inbox: t("nav_inbox"),
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),
         templates: t("nav_templates"),

@@ -21,7 +21,7 @@ export default async function OnboardingLayout({
 
   const firm = await getCurrentFirm();
   if (firm?.onboarded_at) {
-    redirect(getPathname({ locale, href: "/home" }));
+    redirect(getPathname({ locale, href: "/dashboard" }));
   }
 
   return (
