@@ -9,8 +9,6 @@ import {
   cancelEngagement,
   completeEngagement,
   reopenEngagement,
-  deleteDraftEngagement,
-  deleteEngagement,
   archiveEngagement,
   unarchiveEngagement,
   softDeleteEngagement,
@@ -347,24 +345,31 @@ export async function deleteDraftAction(formData: FormData) {
     | "fr"
     | "en";
   if (typeof id !== "string" || !id) return;
-  await deleteDraftEngagement(id);
+  // Drafts go through the same 30-day recoverable soft-delete as everything
+  // else — nothing is hard-deleted straight from the UI. Owner-only.
+  const user = await getCurrentUser();
+  if (!user || !canDeleteEngagements(user.role)) return;
+  await softDeleteEngagement(id, user.id);
+  await logUserActivity(user.firm_id, id, "engagement_deleted", {});
   revalidateEngagementPaths(id);
   redirect(getPathname({ locale, href: "/dashboard" }));
 }
 
-// Permanently delete an engagement of ANY status (drafts have their own
-// instant action above). Stops any pending reminders first; the FK cascade
-// removes request items, uploads, and jobs. Destructive — the UI gates this
-// behind a confirmation dialog. We don't write an activity-log entry: that
-// row's engagement_id FK would cascade-delete along with the engagement.
+// "Delete" from an engagement's detail page: a recoverable 30-day soft-delete
+// (NOT a hard delete — nothing is hard-deleted from the UI; the purge cron is
+// the only permanent remove). Owner-only. Stops reminders, logs, then sends the
+// user back to the Overview since the engagement has left the active board.
 export async function deleteEngagementAction(formData: FormData) {
   const id = formData.get("id");
   const locale = (formData.get("__app_locale") === "en" ? "en" : "fr") as
     | "fr"
     | "en";
   if (typeof id !== "string" || !id) return;
+  const user = await getCurrentUser();
+  if (!user || !canDeleteEngagements(user.role)) return;
+  await softDeleteEngagement(id, user.id);
   await cancelEngagementReminders(id);
-  await deleteEngagement(id);
+  await logUserActivity(user.firm_id, id, "engagement_deleted", {});
   revalidateEngagementPaths(id);
   redirect(getPathname({ locale, href: "/dashboard" }));
 }

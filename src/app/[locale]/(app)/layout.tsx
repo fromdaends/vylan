@@ -9,6 +9,7 @@ import { HelpSidebar } from "@/components/help/help-sidebar";
 import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 import { AppShell } from "@/components/app/app-shell";
 import { DemoBanner } from "@/components/app/demo-banner";
+import { Toaster } from "@/components/ui/sonner";
 
 export default async function AppLayout({
   children,
@@ -101,6 +102,7 @@ export default async function AppLayout({
         userDisplayName={userDisplayLabel(dbUser)}
       />
       <KeyboardShortcuts />
+      <Toaster />
     </AppShell>
   );
 }

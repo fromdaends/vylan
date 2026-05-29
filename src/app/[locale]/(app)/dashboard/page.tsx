@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
+import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import {
   TemplatesGallery,
@@ -76,6 +77,7 @@ export default async function DashboardPage({
         rows={worklistRows}
         currentUserId={user?.id ?? null}
         locale={locale}
+        canDelete={user ? canDeleteEngagements(user.role) : false}
       />
     </div>
   );

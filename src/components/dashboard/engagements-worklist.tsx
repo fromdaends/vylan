@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Clock, FileWarning, Search } from "lucide-react";
+import { AlertTriangle, Clock, FileWarning, MoreHorizontal, Search } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,22 @@ import {
 import { formatDate, type AppLocale } from "@/lib/format";
 import { selectRecent, selectCompleted } from "@/lib/dashboard/worklist-select";
 import { cn } from "@/lib/cn";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  useEngagementRowMenu,
+  type EngagementLifecycleState,
+} from "@/components/engagements/engagement-row-menu";
 
 export type EngagementStatus =
   | "draft"
@@ -46,6 +62,10 @@ export type WorklistRow = {
   // Most recent of (last client upload, sent_at, created_at). Drives the
   // "Recent" sort. ISO 8601, so a lexicographic compare is chronological.
   recencyAt: string;
+  // Lifecycle (Phase 2) — drives the row's Archive / Delete / Restore menu.
+  // Both null = active; archivedAt set = archived; deletedAt set = in trash.
+  archivedAt: string | null;
+  deletedAt: string | null;
 };
 
 const FILTERS = ["recent", "mine", "complete"] as const;
@@ -61,10 +81,12 @@ export function EngagementsWorklist({
   rows,
   currentUserId,
   locale,
+  canDelete = false,
 }: {
   rows: WorklistRow[];
   currentUserId: string | null;
   locale: AppLocale;
+  canDelete?: boolean;
 }) {
   const t = useTranslations("Dashboard");
   const [filter, setFilter] = useState<Filter>("recent");
@@ -170,7 +192,12 @@ export function EngagementsWorklist({
         </div>
       </div>
 
-      <WorklistTable rows={visible} locale={locale} emptyText={emptyText()} />
+      <WorklistTable
+        rows={visible}
+        locale={locale}
+        emptyText={emptyText()}
+        canDelete={canDelete}
+      />
     </section>
   );
 }
@@ -182,14 +209,17 @@ export function WorklistTable({
   rows,
   locale,
   emptyText,
+  canDelete = false,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
   emptyText: string;
+  canDelete?: boolean;
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
   const tAttention = useTranslations("Attention");
+  const tEng = useTranslations("Engagements");
 
   if (rows.length === 0) {
     return (
@@ -215,6 +245,9 @@ export function WorklistTable({
               {t("wl_col_progress")}
             </TableHead>
             <TableHead className="px-4">{t("wl_col_status")}</TableHead>
+            <TableHead className="w-10 px-2">
+              <span className="sr-only">{tEng("menu_actions")}</span>
+            </TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -250,6 +283,7 @@ export function WorklistTable({
               }
               unassignedText={t("wl_unassigned")}
               pctLabel={(pct) => t("wl_pct_complete", { pct })}
+              canDelete={canDelete}
             />
           ))}
         </TableBody>
@@ -277,6 +311,7 @@ function WorklistRowView({
   readyText,
   unassignedText,
   pctLabel,
+  canDelete,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -287,7 +322,9 @@ function WorklistRowView({
   readyText: string | null;
   unassignedText: string;
   pctLabel: (pct: number) => string;
+  canDelete: boolean;
 }) {
+  const tEng = useTranslations("Engagements");
   // Completed engagements are 100% by definition; we don't fetch their
   // request items, so trust the status over the (empty) item counts.
   const pct =
@@ -302,96 +339,168 @@ function WorklistRowView({
       ? "text-warning"
       : "text-foreground";
 
+  // Delete wins over archive: a soft-deleted row shows the "deleted" menu even
+  // if it was archived first (matches lib/engagements/lifecycle).
+  const lifecycleState: EngagementLifecycleState = row.deletedAt
+    ? "deleted"
+    : row.archivedAt
+      ? "archived"
+      : "active";
+  const { items, dialog } = useEngagementRowMenu({
+    engagementId: row.id,
+    title: row.title,
+    state: lifecycleState,
+    canDelete,
+  });
+
   return (
-    <TableRow className="relative">
-      <TableCell className="px-4 py-3 align-top">
-        <Link
-          href={`/engagements/${row.id}`}
-          className="font-medium text-foreground after:absolute after:inset-0 hover:underline focus-visible:outline-none"
-        >
-          {row.title}
-        </Link>
-        <div className="mt-0.5 truncate text-xs text-muted-foreground">
-          {row.clientName}
-        </div>
-        {/* Urgency lives in the always-visible Engagement cell (not the
-            Due column, which is hidden on phones) so triage badges never
-            disappear on small screens. */}
-        {(overdueText || dueSoonText || staleText || readyText) && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {overdueText && (
-              <Badge variant="destructive" className="gap-1 font-normal">
-                <AlertTriangle className="h-3 w-3" />
-                {overdueText}
-              </Badge>
-            )}
-            {dueSoonText && (
-              <Badge variant="secondary" className="gap-1 font-normal">
-                <Clock className="h-3 w-3" />
-                {dueSoonText}
-              </Badge>
-            )}
-            {readyText && (
-              <Badge variant="secondary" className="font-normal">
-                {readyText}
-              </Badge>
-            )}
-            {staleText && (
-              <Badge variant="outline" className="gap-1 font-normal">
-                <FileWarning className="h-3 w-3" />
-                {staleText}
-              </Badge>
-            )}
-          </div>
-        )}
-      </TableCell>
+    <>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <TableRow className="relative">
+            <TableCell className="px-4 py-3 align-top">
+              <Link
+                href={`/engagements/${row.id}`}
+                className="font-medium text-foreground after:absolute after:inset-0 hover:underline focus-visible:outline-none"
+              >
+                {row.title}
+              </Link>
+              <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                {row.clientName}
+              </div>
+              {/* Urgency lives in the always-visible Engagement cell (not the
+                  Due column, which is hidden on phones) so triage badges never
+                  disappear on small screens. */}
+              {(overdueText || dueSoonText || staleText || readyText) && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {overdueText && (
+                    <Badge variant="destructive" className="gap-1 font-normal">
+                      <AlertTriangle className="h-3 w-3" />
+                      {overdueText}
+                    </Badge>
+                  )}
+                  {dueSoonText && (
+                    <Badge variant="secondary" className="gap-1 font-normal">
+                      <Clock className="h-3 w-3" />
+                      {dueSoonText}
+                    </Badge>
+                  )}
+                  {readyText && (
+                    <Badge variant="secondary" className="font-normal">
+                      {readyText}
+                    </Badge>
+                  )}
+                  {staleText && (
+                    <Badge variant="outline" className="gap-1 font-normal">
+                      <FileWarning className="h-3 w-3" />
+                      {staleText}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </TableCell>
 
-      <TableCell className="hidden px-4 py-3 align-top sm:table-cell">
-        <div className={cn("text-sm tabular-nums", dueTone)}>
-          {formatDate(row.dueDate, locale, "medium")}
-        </div>
-      </TableCell>
+            <TableCell className="hidden px-4 py-3 align-top sm:table-cell">
+              <div className={cn("text-sm tabular-nums", dueTone)}>
+                {formatDate(row.dueDate, locale, "medium")}
+              </div>
+            </TableCell>
 
-      <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">
-        {row.assigneeName ? (
-          <span className="text-foreground">{row.assigneeName}</span>
-        ) : (
-          <span className="italic text-muted-foreground">
-            {unassignedText}
-          </span>
-        )}
-      </TableCell>
+            <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">
+              {row.assigneeName ? (
+                <span className="text-foreground">{row.assigneeName}</span>
+              ) : (
+                <span className="italic text-muted-foreground">
+                  {unassignedText}
+                </span>
+              )}
+            </TableCell>
 
-      <TableCell className="hidden px-4 py-3 align-top md:table-cell">
-        {!showProgress ? (
-          <span className="text-sm text-muted-foreground">—</span>
-        ) : (
-          <div className="flex items-center gap-2">
-            <div
-              className="h-1.5 w-20 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-valuenow={pct}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={pctLabel(pct)}
-            >
-              <div
-                className="h-full rounded-full bg-primary transition-all"
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {pct}%
-            </span>
-          </div>
-        )}
-      </TableCell>
+            <TableCell className="hidden px-4 py-3 align-top md:table-cell">
+              {!showProgress ? (
+                <span className="text-sm text-muted-foreground">—</span>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div
+                    className="h-1.5 w-20 overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-valuenow={pct}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={pctLabel(pct)}
+                  >
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {pct}%
+                  </span>
+                </div>
+              )}
+            </TableCell>
 
-      <TableCell className="px-4 py-3 align-top">
-        <Badge variant={statusVariant(row.status)} className="font-normal">
-          {statusLabel}
-        </Badge>
-      </TableCell>
-    </TableRow>
+            <TableCell className="px-4 py-3 align-top">
+              <Badge
+                variant={statusVariant(row.status)}
+                className="font-normal"
+              >
+                {statusLabel}
+              </Badge>
+            </TableCell>
+
+            {/* Actions menu. The "..." button sits above the row's full-row
+                link overlay (relative z-10) so a click opens the menu instead
+                of navigating; right-clicking anywhere on the row opens the
+                same menu via the context-menu wrapper. */}
+            <TableCell className="px-2 py-3 align-top">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={tEng("menu_actions")}
+                    className="relative z-10 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  {items.map((it) => {
+                    const Icon = it.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={it.key}
+                        variant={it.variant}
+                        onSelect={it.onSelect}
+                      >
+                        <Icon />
+                        {it.label}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </TableCell>
+          </TableRow>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-44">
+          {items.map((it) => {
+            const Icon = it.icon;
+            return (
+              <ContextMenuItem
+                key={it.key}
+                variant={it.variant}
+                onSelect={it.onSelect}
+              >
+                <Icon />
+                {it.label}
+              </ContextMenuItem>
+            );
+          })}
+        </ContextMenuContent>
+      </ContextMenu>
+      {dialog}
+    </>
   );
 }

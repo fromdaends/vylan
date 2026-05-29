@@ -2,6 +2,8 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { AllEngagements } from "@/components/engagements/all-engagements";
+import { getCurrentUser } from "@/lib/db/users";
+import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +18,12 @@ export default async function EngagementsPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const rows = await loadEngagementWorklist();
+  const [rows, user] = await Promise.all([
+    loadEngagementWorklist(),
+    getCurrentUser(),
+  ]);
   const t = await getTranslations("Dashboard");
+  const canDelete = user ? canDeleteEngagements(user.role) : false;
 
   return (
     <div className="space-y-8">
@@ -28,7 +34,7 @@ export default async function EngagementsPage({
         <p className="text-sm text-muted-foreground">{t("wl_all_subtitle")}</p>
       </header>
 
-      <AllEngagements rows={rows} locale={locale} />
+      <AllEngagements rows={rows} locale={locale} canDelete={canDelete} />
     </div>
   );
 }

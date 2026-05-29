@@ -25,9 +25,11 @@ type StatusFilter = (typeof STATUS)[number];
 export function AllEngagements({
   rows,
   locale,
+  canDelete = false,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
+  canDelete?: boolean;
 }) {
   const t = useTranslations("Dashboard");
   const [status, setStatus] = useState<StatusFilter>("active");
@@ -111,7 +113,12 @@ export function AllEngagements({
         </div>
       </div>
 
-      <WorklistTable rows={visible} locale={locale} emptyText={emptyText} />
+      <WorklistTable
+        rows={visible}
+        locale={locale}
+        emptyText={emptyText}
+        canDelete={canDelete}
+      />
     </div>
   );
 }

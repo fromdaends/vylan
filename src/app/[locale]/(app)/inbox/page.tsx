@@ -6,6 +6,8 @@ import {
   selectReadyToReview,
 } from "@/lib/dashboard/worklist-select";
 import { listHomeNotifications } from "@/lib/home/notifications";
+import { getCurrentUser } from "@/lib/db/users";
+import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
 import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
 import { InboxSection } from "@/components/inbox/inbox-section";
@@ -27,13 +29,15 @@ export default async function InboxPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [rows, notifications] = await Promise.all([
+  const [rows, notifications, user] = await Promise.all([
     loadEngagementWorklist(),
     listHomeNotifications(12),
+    getCurrentUser(),
   ]);
 
   const needsAttention = selectNeedsAttention(rows);
   const readyToReview = selectReadyToReview(rows);
+  const canDelete = user ? canDeleteEngagements(user.role) : false;
 
   const t = await getTranslations("Inbox");
   const tAttention = await getTranslations("Attention");
@@ -57,6 +61,7 @@ export default async function InboxPage({
           rows={needsAttention}
           locale={locale}
           emptyText={t("empty_attention")}
+          canDelete={canDelete}
         />
       </InboxSection>
 
@@ -66,6 +71,7 @@ export default async function InboxPage({
           rows={readyToReview}
           locale={locale}
           emptyText={t("empty_ready")}
+          canDelete={canDelete}
         />
       </InboxSection>
     </div>

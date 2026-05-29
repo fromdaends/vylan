@@ -11,6 +11,16 @@ vi.mock("@/i18n/navigation", () => ({
   Link: ({ href, children }: { href: string; children: ReactNode }) => (
     <a href={href}>{children}</a>
   ),
+  useRouter: () => ({ push: () => {} }),
+}));
+
+// The row menu imports server actions; stub them so the test doesn't pull in
+// server-only modules (next/headers, supabase). They're only invoked on click.
+vi.mock("@/app/actions/engagements", () => ({
+  archiveEngagementAction: async () => {},
+  unarchiveEngagementAction: async () => {},
+  softDeleteEngagementAction: async () => {},
+  restoreEngagementAction: async () => {},
 }));
 
 afterEach(cleanup);
@@ -34,6 +44,8 @@ function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id" | "title">): Wo
     readyToReview: false,
     itemsReadyToReview: 0,
     recencyAt: "2026-01-01T00:00:00.000Z",
+    archivedAt: null,
+    deletedAt: null,
     ...over,
   };
 }
