@@ -639,6 +639,8 @@
     "delete_cancel": "Cancel",
     "delete_confirm": "Delete permanently",
     "jump_back_in": "Jump back in",
+    "last_updated": "Last updated {date}",
+    "open_engagement": "Open engagement",
     "cancel": "Cancel",
     "draft_notice": "This engagement is a draft. Click \"Send\" to generate the client's magic link.",
     "send_no_items_blocked": "This engagement has no documents to request, so there's nothing for the client to upload. Add at least one document before you can send it.",
