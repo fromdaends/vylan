@@ -38,6 +38,7 @@ export function SidebarSearch() {
   return (
     <button
       type="button"
+      data-command-palette-trigger
       onClick={openCommandPalette}
       aria-label={t("search_label")}
       aria-keyshortcuts="Meta+K Control+K"
