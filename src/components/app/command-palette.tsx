@@ -277,7 +277,7 @@ export function CommandPalette() {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-200 data-[state=open]:ease-out data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-150 data-[state=closed]:ease-in" />
         <DialogPrimitive.Content
           aria-label={t("title")}
           onOpenAutoFocus={(e) => {
@@ -289,7 +289,7 @@ export function CommandPalette() {
               ? { left: anchor.left, top: anchor.top, width: anchor.width }
               : undefined
           }
-          className="fixed z-50 origin-top-left outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          className="fixed z-50 origin-top-left outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:duration-200 data-[state=open]:ease-[cubic-bezier(0.16,1,0.3,1)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:duration-150 data-[state=closed]:ease-[cubic-bezier(0.4,0,1,1)]"
         >
           <DialogPrimitive.Title className="sr-only">
             {t("title")}
@@ -299,7 +299,12 @@ export function CommandPalette() {
           </DialogPrimitive.Description>
 
           <div className="overflow-hidden rounded-xl border border-border/60 bg-popover text-popover-foreground shadow-2xl ring-1 ring-black/5">
-            <Command shouldFilter={false} loop label={t("title")}>
+            <Command
+              shouldFilter={false}
+              loop
+              label={t("title")}
+              className="focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+            >
               {/* Input row */}
               <div className="flex items-center gap-2.5 border-b border-border/60 px-4">
                 <Search
@@ -311,14 +316,14 @@ export function CommandPalette() {
                   value={query}
                   onValueChange={setQuery}
                   placeholder={t("placeholder")}
-                  className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  className="h-12 w-full bg-transparent text-sm outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground"
                 />
                 <kbd className="pointer-events-none hidden shrink-0 select-none rounded border border-border/70 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-block">
                   Esc
                 </kbd>
               </div>
 
-              <CommandList className="max-h-[min(60vh,420px)] px-2 py-2">
+              <CommandList className="max-h-[min(60vh,420px)] px-2 py-2 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
                 {isSearching ? (
                   <>
                     {matchingPages.length > 0 && (
