@@ -1,10 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
-import {
-  selectNeedsAttention,
-  selectReadyToReview,
-} from "@/lib/dashboard/worklist-select";
+import { selectNeedsAttention } from "@/lib/dashboard/worklist-select";
 import { listHomeNotifications } from "@/lib/home/notifications";
 import { getCurrentUser } from "@/lib/db/users";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
@@ -14,12 +11,12 @@ import { InboxSection } from "@/components/inbox/inbox-section";
 
 export const dynamic = "force-dynamic";
 
-// /inbox — the triage hub. Three sections, all reusing existing data sources:
-//   1. Needs attention   — engagements with any attention reason (overdue,
+// /inbox — the triage hub. Two sections, both reusing existing data sources:
+//   1. What's new        — the activity feed lifted from the old Home page.
+//   2. Needs attention   — engagements with any attention reason (overdue,
 //                          due soon, gone quiet). Same scoring as the dashboard.
-//   2. Ready to review   — engagements with every required item in, awaiting a
-//                          decision.
-//   3. What's new        — the activity feed lifted from the old Home page.
+// (Ready to review used to live here too; it now lives under the Engagements
+// nav section, so it was removed from the Inbox to avoid duplication.)
 export default async function InboxPage({
   params,
 }: {
@@ -36,7 +33,6 @@ export default async function InboxPage({
   ]);
 
   const needsAttention = selectNeedsAttention(rows);
-  const readyToReview = selectReadyToReview(rows);
   const canDelete = user ? canDeleteEngagements(user.role) : false;
 
   const t = await getTranslations("Inbox");
@@ -61,16 +57,6 @@ export default async function InboxPage({
           rows={needsAttention}
           locale={locale}
           emptyText={t("empty_attention")}
-          canDelete={canDelete}
-        />
-      </InboxSection>
-
-      {/* 3. Ready to review — collapsible, collapsed on load. */}
-      <InboxSection title={tAttention("ready_to_review")} defaultOpen={false}>
-        <WorklistTable
-          rows={readyToReview}
-          locale={locale}
-          emptyText={t("empty_ready")}
           canDelete={canDelete}
         />
       </InboxSection>
