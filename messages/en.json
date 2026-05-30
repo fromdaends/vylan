@@ -1,4 +1,19 @@
 {
+  "CommandPalette": {
+    "title": "Command palette",
+    "placeholder": "Search clients, engagements, pages…",
+    "recent_searches": "Recent searches",
+    "recently_visited": "Recently visited",
+    "jump_to": "Jump to",
+    "pages": "Pages",
+    "clients": "Clients",
+    "engagements": "Engagements",
+    "searching": "Searching…",
+    "no_results": "No results found.",
+    "clear": "Clear recents",
+    "hint_navigate": "Navigate",
+    "hint_open": "Open"
+  },
   "Brand": {
     "name": "Vylan",
     "tagline": "Client paperwork, automated."
