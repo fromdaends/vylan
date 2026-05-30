@@ -53,6 +53,34 @@ type EngagementHit = {
 const MIN_CHARS = 2;
 const DEBOUNCE_MS = 180;
 
+// Anchor the palette to the on-screen search trigger so it appears to grow
+// out of the sidebar search box instead of as a centered modal. Falls back
+// to the top-left when no trigger is visible (e.g. the mobile drawer is shut).
+type Anchor = { left: number; top: number; width: number };
+
+function measureAnchor(): Anchor {
+  const fallback = (): Anchor => {
+    const vw = typeof window !== "undefined" ? window.innerWidth : 360;
+    return { left: 12, top: 72, width: Math.min(vw - 24, 360) };
+  };
+  if (typeof document === "undefined") return fallback();
+  const triggers = document.querySelectorAll<HTMLElement>(
+    "[data-command-palette-trigger]",
+  );
+  for (const el of triggers) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) {
+      // Sit exactly where the trigger is, just a touch wider than it.
+      return {
+        left: Math.round(r.left),
+        top: Math.round(r.top),
+        width: Math.min(Math.max(Math.round(r.width) + 80, 300), 420),
+      };
+    }
+  }
+  return fallback();
+}
+
 export function CommandPalette() {
   const t = useTranslations("CommandPalette");
   const tNav = useTranslations("App");
@@ -69,6 +97,7 @@ export function CommandPalette() {
   }>({ clients: [], engagements: [] });
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  const [anchor, setAnchor] = useState<Anchor | null>(null);
 
   const trimmed = query.trim();
   const isSearching = trimmed.length >= MIN_CHARS;
@@ -114,6 +143,7 @@ export function CommandPalette() {
     (next: boolean) => {
       openRef.current = next;
       if (next) {
+        setAnchor(measureAnchor());
         refreshRecents();
       } else {
         setQuery("");
@@ -254,7 +284,12 @@ export function CommandPalette() {
             e.preventDefault();
             inputRef.current?.focus();
           }}
-          className="fixed left-1/2 top-[14vh] z-50 w-full max-w-[640px] -translate-x-1/2 px-4 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          style={
+            anchor
+              ? { left: anchor.left, top: anchor.top, width: anchor.width }
+              : undefined
+          }
+          className="fixed z-50 origin-top-left outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
         >
           <DialogPrimitive.Title className="sr-only">
             {t("title")}
@@ -276,7 +311,7 @@ export function CommandPalette() {
                   value={query}
                   onValueChange={setQuery}
                   placeholder={t("placeholder")}
-                  className="h-14 w-full bg-transparent text-[15px] outline-none placeholder:text-muted-foreground"
+                  className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                 />
                 <kbd className="pointer-events-none hidden shrink-0 select-none rounded border border-border/70 bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-block">
                   Esc

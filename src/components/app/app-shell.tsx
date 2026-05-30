@@ -643,6 +643,7 @@ function SidebarBody({
         <div className="px-2 pt-1 pb-2">
           <button
             type="button"
+            data-command-palette-trigger
             onClick={openCommandPalette}
             className="flex w-full items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
             aria-label={tHome("search_label")}
