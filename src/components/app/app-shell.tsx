@@ -46,7 +46,8 @@ import {
   XCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { SidebarSearch } from "@/components/app/sidebar-search";
+import { SidebarSearch, openCommandPalette } from "@/components/app/sidebar-search";
+import { CommandPalette } from "@/components/app/command-palette";
 import type { EngagementView } from "@/lib/engagements/views";
 
 type Labels = {
@@ -280,6 +281,10 @@ export function AppShell({
           />
         </SheetContent>
       </Sheet>
+
+      {/* Global command palette — opened by the sidebar search trigger or
+          Cmd/Ctrl-K. Mounted once; renders into a portal. */}
+      <CommandPalette />
     </div>
   );
 }
@@ -632,22 +637,21 @@ function SidebarBody({
         </div>
       )}
 
-      {/* Global search — full input when expanded; a Search icon that
-          expands the rail when collapsed. */}
+      {/* Global search — full trigger when expanded; a Search icon that
+          opens the command palette when collapsed. */}
       {collapsed ? (
-        onToggleCollapse && (
-          <div className="px-2 pt-1 pb-2">
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              className="flex w-full items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-              aria-label={tHome("search_label")}
-              title={tHome("search_label")}
-            >
-              <Search className="size-[18px]" aria-hidden />
-            </button>
-          </div>
-        )
+        <div className="px-2 pt-1 pb-2">
+          <button
+            type="button"
+            onClick={openCommandPalette}
+            className="flex w-full items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+            aria-label={tHome("search_label")}
+            aria-keyshortcuts="Meta+K Control+K"
+            title={tHome("search_label")}
+          >
+            <Search className="size-[18px]" aria-hidden />
+          </button>
+        </div>
       ) : (
         <div className="px-3 pt-1 pb-2">
           <SidebarSearch />
