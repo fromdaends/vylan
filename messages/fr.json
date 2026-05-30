@@ -1,4 +1,19 @@
 {
+  "CommandPalette": {
+    "title": "Palette de commandes",
+    "placeholder": "Rechercher clients, engagements, pages…",
+    "recent_searches": "Recherches récentes",
+    "recently_visited": "Consultés récemment",
+    "jump_to": "Accéder à",
+    "pages": "Pages",
+    "clients": "Clients",
+    "engagements": "Engagements",
+    "searching": "Recherche…",
+    "no_results": "Aucun résultat.",
+    "clear": "Effacer l'historique",
+    "hint_navigate": "Naviguer",
+    "hint_open": "Ouvrir"
+  },
   "Brand": {
     "name": "Vylan",
     "tagline": "La paperasse client, automatisée."
