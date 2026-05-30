@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { Search } from "lucide-react";
 import { COMMAND_PALETTE_EVENT } from "@/components/app/command-palette";
@@ -14,17 +14,26 @@ export function openCommandPalette() {
   window.dispatchEvent(new CustomEvent(COMMAND_PALETTE_EVENT));
 }
 
+// The Cmd-vs-Ctrl hint depends on the OS, which is only known on the client.
+// useSyncExternalStore returns null during SSR and the real key after
+// hydration — no hydration mismatch and no setState-in-effect.
+const subscribeToNothing = () => () => {};
+
+function getModKey() {
+  return /mac|iphone|ipad|ipod/i.test(
+    navigator.platform || navigator.userAgent,
+  )
+    ? "⌘"
+    : "Ctrl";
+}
+
+function useModKey() {
+  return useSyncExternalStore(subscribeToNothing, getModKey, () => null);
+}
+
 export function SidebarSearch() {
   const t = useTranslations("Home");
-  // Computed after mount so the Cmd vs Ctrl hint never mismatches SSR.
-  const [modKey, setModKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    const isMac = /mac|iphone|ipad|ipod/i.test(
-      navigator.platform || navigator.userAgent,
-    );
-    setModKey(isMac ? "⌘" : "Ctrl");
-  }, []);
+  const modKey = useModKey();
 
   return (
     <button

@@ -58,6 +58,7 @@ export function CommandPalette() {
   const tNav = useTranslations("App");
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
+  const openRef = useRef(false);
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -105,22 +106,37 @@ export function CommandPalette() {
     setRecentItems(readRecentItems());
   }, []);
 
+  // Single entry point for every open/close. Refreshes recents on open and
+  // resets the query/results on close so the palette always opens fresh.
+  // openRef mirrors `open` synchronously so the keyboard toggle can read the
+  // latest value without this callback having to depend on `open`.
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      openRef.current = next;
+      if (next) {
+        refreshRecents();
+      } else {
+        setQuery("");
+        setResults({ clients: [], engagements: [] });
+        setLoading(false);
+      }
+      setOpen(next);
+    },
+    [refreshRecents],
+  );
+
   // Global open triggers: Cmd/Ctrl-K toggles, the CustomEvent (from the
-  // sidebar trigger) opens. Recents are re-read from localStorage on open so
-  // the list reflects anything recorded since the last time it was shown.
+  // sidebar trigger) opens. handleOpenChange re-reads recents on open so the
+  // list reflects anything recorded since the last time it was shown.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setOpen((prev) => {
-          if (!prev) refreshRecents();
-          return !prev;
-        });
+        handleOpenChange(!openRef.current);
       }
     }
     function onOpenEvent() {
-      refreshRecents();
-      setOpen(true);
+      handleOpenChange(true);
     }
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener(COMMAND_PALETTE_EVENT, onOpenEvent);
@@ -128,24 +144,15 @@ export function CommandPalette() {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener(COMMAND_PALETTE_EVENT, onOpenEvent);
     };
-  }, [refreshRecents]);
-
-  // Clear the query whenever the palette closes so it always opens fresh.
-  useEffect(() => {
-    if (!open) {
-      setQuery("");
-      setResults({ clients: [], engagements: [] });
-      setLoading(false);
-    }
-  }, [open]);
+  }, [handleOpenChange]);
 
   // Debounced fetch to /api/search while typing. An AbortController drops
   // stale responses; previous results stay on screen until the next land.
   useEffect(() => {
     if (!isSearching) return;
-    setLoading(true);
     const ctrl = new AbortController();
     const timer = window.setTimeout(async () => {
+      setLoading(true);
       try {
         const res = await fetch(
           `/api/search?q=${encodeURIComponent(trimmed)}`,
@@ -175,7 +182,7 @@ export function CommandPalette() {
     };
   }, [trimmed, isSearching]);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => handleOpenChange(false), [handleOpenChange]);
 
   const go = useCallback(
     (href: string) => {
@@ -238,7 +245,7 @@ export function CommandPalette() {
   const hasRecents = recentSearches.length > 0 || recentItems.length > 0;
 
   return (
-    <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
+    <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70 backdrop-blur-md data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0" />
         <DialogPrimitive.Content
