@@ -8,13 +8,13 @@ import {
 } from "@/lib/home/notifications";
 import {
   AlertTriangle,
-  ArrowLeft,
   Bell,
   CheckCheck,
   ChevronRight,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 export const dynamic = "force-dynamic";
 
@@ -39,16 +39,18 @@ export default async function NotificationsPage({
 
   const notifications = await listHomeNotifications(50);
   const t = await getTranslations("Notifications");
+  const tApp = await getTranslations("App");
+  const tCommon = await getTranslations("Common");
 
   return (
     <div className="mx-auto w-full max-w-2xl px-1 pt-10 sm:pt-14 pb-16 space-y-8">
-      <Link
-        href="/dashboard"
-        className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
-      >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
-        {t("back")}
-      </Link>
+      <Breadcrumb
+        label={tCommon("breadcrumb")}
+        items={[
+          { label: tApp("nav_dashboard"), href: "/dashboard" },
+          { label: t("title") },
+        ]}
+      />
 
       <header className="space-y-2">
         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight flex items-center gap-3">

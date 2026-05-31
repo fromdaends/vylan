@@ -13,6 +13,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { BILLING_ENABLED } from "@/lib/billing-mode";
 import { Calendar, Mail } from "lucide-react";
 import { BookCallButton } from "@/components/booking/book-call-button";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,8 @@ export default async function BillingPage({
     getFirmLimits(),
   ]);
   const t = await getTranslations("Billing");
+  const tApp = await getTranslations("App");
+  const tCommon = await getTranslations("Common");
 
   const stripeConfigured = isStripeConfigured();
 
@@ -44,6 +47,13 @@ export default async function BillingPage({
   if (!BILLING_ENABLED) {
     return (
       <div className="space-y-6 max-w-2xl">
+        <Breadcrumb
+          label={tCommon("breadcrumb")}
+          items={[
+            { label: tApp("nav_settings"), href: "/settings" },
+            { label: t("title") },
+          ]}
+        />
         <header className="animate-in-up">
           <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
           <p className="text-sm text-muted-foreground mt-1.5">
@@ -89,6 +99,13 @@ export default async function BillingPage({
 
   return (
     <div className="space-y-8 max-w-3xl">
+      <Breadcrumb
+        label={tCommon("breadcrumb")}
+        items={[
+          { label: tApp("nav_settings"), href: "/settings" },
+          { label: t("title") },
+        ]}
+      />
       <header className="animate-in-up">
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>

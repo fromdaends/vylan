@@ -14,7 +14,8 @@ import {
   isAuditAction,
 } from "@/components/settings/audit-actions";
 import { formatDate } from "@/lib/format";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 export const dynamic = "force-dynamic";
 
@@ -57,6 +58,8 @@ export default async function AuditLogPage({
   ]);
 
   const t = await getTranslations("Audit");
+  const tApp = await getTranslations("App");
+  const tCommon = await getTranslations("Common");
   // A new `action` value can land in activity_log before the i18n is
   // updated. Only translate codes we know about; fall back to the raw
   // string (still useful for the audit trail) for anything new.
@@ -68,13 +71,13 @@ export default async function AuditLogPage({
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
-      <Link
-        href="/settings"
-        className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-      >
-        <ArrowLeft className="size-3.5" />
-        {t("back")}
-      </Link>
+      <Breadcrumb
+        label={tCommon("breadcrumb")}
+        items={[
+          { label: tApp("nav_settings"), href: "/settings" },
+          { label: t("title") },
+        ]}
+      />
 
       <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
         <div>

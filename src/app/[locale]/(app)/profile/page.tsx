@@ -8,6 +8,7 @@ import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { ProfileForm } from "./profile-form";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 export const dynamic = "force-dynamic";
 
@@ -41,9 +42,18 @@ export default async function ProfilePage({
   }
 
   const avatarUrl = await getBrandingImageUrl(user.avatar_path);
+  const tApp = await getTranslations("App");
+  const tCommon = await getTranslations("Common");
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 animate-in-up">
+      <Breadcrumb
+        label={tCommon("breadcrumb")}
+        items={[
+          { label: tApp("nav_settings"), href: "/settings" },
+          { label: t("title") },
+        ]}
+      />
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground mt-1.5">
