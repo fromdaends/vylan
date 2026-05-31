@@ -7,35 +7,24 @@ type LogoProps = {
   priority?: boolean;
 };
 
-// Theme-aware brand mark — a two-tone folded "V" (deep navy + bright blue).
-// The light SVG is shown in light mode; the dark SVG uses brighter blues so the
-// mark stays legible on the pitch-black dark surfaces. Both ship as static SVGs
-// in /public so they're cached at the CDN edge and never hit Sharp.
+// Brand mark — the firm's blue "V". A single transparent PNG (the white
+// background keyed out of the source art) so the same mark sits cleanly on both
+// the light surfaces and the pitch-black dark mode.
 export function Logo({ size = 28, className, priority = false }: LogoProps) {
-  const alt = `${brand.name} logo`;
   return (
     <span
       className={
         "inline-flex shrink-0 items-center justify-center " + (className ?? "")
       }
       style={{ width: size, height: size }}
-      aria-hidden={false}
     >
       <Image
-        src="/logo-light.svg"
-        alt={alt}
+        src="/logo-mark.png"
+        alt={`${brand.name} logo`}
         width={size}
         height={size}
         priority={priority}
-        className="block dark:hidden"
-      />
-      <Image
-        src="/logo-dark.svg"
-        alt=""
-        width={size}
-        height={size}
-        priority={priority}
-        className="hidden dark:block"
+        className="block h-full w-full object-contain"
       />
     </span>
   );
