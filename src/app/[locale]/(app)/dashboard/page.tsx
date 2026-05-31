@@ -7,7 +7,6 @@ export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
-import { selectNeedsAttention } from "@/lib/dashboard/worklist-select";
 import { listHomeNotifications } from "@/lib/home/notifications";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
@@ -18,6 +17,7 @@ import {
 import { EngagementsWorklist } from "@/components/dashboard/engagements-worklist";
 import { JumpBackIn } from "@/components/engagements/jump-back-in";
 import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
+import { NeedsAttention } from "@/components/dashboard/needs-attention";
 
 // The Overview is the single home that answers all three of an accountant's
 // questions: what to do now (Needs attention), what's my work (My engagements),
@@ -41,8 +41,6 @@ export default async function DashboardPage({
       listTemplates(),
       listHomeNotifications(12),
     ]);
-
-  const needsAttention = selectNeedsAttention(worklistRows);
 
   const templateCards: TemplateCard[] = templates
     .filter((tmpl) => tmpl.id !== BLANK_TEMPLATE_ID)
@@ -84,11 +82,9 @@ export default async function DashboardPage({
           locale={locale}
         />
 
-        {/* Needs attention — prominent action block (styled in Phase 3).
-            Placeholder slot so the layout + data are wired now. */}
-        {needsAttention.length > 0 && (
-          <section aria-label="Needs attention" data-slot="needs-attention" />
-        )}
+        {/* Needs attention — prominent, accent-tinted action block. Always
+            rendered (shows a calm "all caught up" line when empty). */}
+        <NeedsAttention rows={worklistRows} />
 
         <TemplatesGallery templates={templateCards} />
 

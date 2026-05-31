@@ -13,6 +13,23 @@ export function selectNeedsAttention(rows: WorklistRow[]): WorklistRow[] {
     .sort((a, b) => b.attentionScore - a.attentionScore);
 }
 
+// Overview "Needs attention" block: broader than selectNeedsAttention — any
+// attention reason (overdue / due soon / quiet) OR ready-to-review. Sorted by
+// attentionScore (which encodes overdue > due_soon > stale; ready-to-review
+// rows score 0 so they sort last — the intended priority), tie-broken by
+// recency so the queue feels current. AI-rejected uploads aren't included here
+// — they surface in the What's-new feed (right rail), so we don't duplicate.
+export function selectNeedsAttentionRows(rows: WorklistRow[]): WorklistRow[] {
+  return rows
+    .filter((r) => r.reasons.length > 0 || r.readyToReview)
+    .sort((a, b) => {
+      if (b.attentionScore !== a.attentionScore) {
+        return b.attentionScore - a.attentionScore;
+      }
+      return b.recencyAt.localeCompare(a.recencyAt);
+    });
+}
+
 // Engagements with every required item in, awaiting the accountant's review —
 // freshest first. Powers the Inbox "Ready to review" list.
 export function selectReadyToReview(rows: WorklistRow[]): WorklistRow[] {
