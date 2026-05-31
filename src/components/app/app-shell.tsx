@@ -47,7 +47,15 @@ import {
 import { useTranslations } from "next-intl";
 import { SidebarSearch, openCommandPalette } from "@/components/app/sidebar-search";
 import { CommandPalette } from "@/components/app/command-palette";
-import type { EngagementView } from "@/lib/engagements/views";
+import { viewHref, type EngagementView } from "@/lib/engagements/views";
+import {
+  isNavItemActive,
+  isEngagementViewActive,
+} from "@/lib/navigation/active-nav";
+import {
+  ActiveNavProvider,
+  useActiveEngagementView,
+} from "@/components/app/active-nav-context";
 
 type Labels = {
   dashboard: string;
@@ -81,16 +89,15 @@ export type EngagementBadgeCounts = {
 // Active is the parent destination (/engagements); the rest are sub-routes.
 const ENGAGEMENT_SUBNAV: {
   view: EngagementView;
-  href: string;
   icon: typeof Users;
 }[] = [
-  { view: "active", href: "/engagements", icon: Folder },
-  { view: "ready", href: "/engagements/ready", icon: ListChecks },
-  { view: "drafts", href: "/engagements/drafts", icon: PencilLine },
-  { view: "completed", href: "/engagements/completed", icon: ClipboardList },
-  { view: "archived", href: "/engagements/archived", icon: Archive },
-  { view: "cancelled", href: "/engagements/cancelled", icon: XCircle },
-  { view: "deleted", href: "/engagements/deleted", icon: Trash2 },
+  { view: "active", icon: Folder },
+  { view: "ready", icon: ListChecks },
+  { view: "drafts", icon: PencilLine },
+  { view: "completed", icon: ClipboardList },
+  { view: "archived", icon: Archive },
+  { view: "cancelled", icon: XCircle },
+  { view: "deleted", icon: Trash2 },
 ];
 
 type NavItemDef = {
@@ -199,6 +206,7 @@ export function AppShell({
   // profile menu), so the sidebar nav is just primary destinations.
 
   return (
+    <ActiveNavProvider>
     <div className="flex min-h-screen">
       {/* Desktop sidebar — always visible on sm+, collapses to an
           icon rail when the toggle is flipped. */}
@@ -279,6 +287,7 @@ export function AppShell({
           Cmd/Ctrl-K. Mounted once; renders into a portal. */}
       <CommandPalette />
     </div>
+    </ActiveNavProvider>
   );
 }
 
@@ -316,12 +325,9 @@ function MobileTabBar({
     },
   ];
 
-  function isActive(href: string) {
-    // /dashboard is a leaf route — only match on the exact path, otherwise it'd
-    // also light up on any sub-route.
-    if (href === "/dashboard") return pathname === href;
-    return pathname.startsWith(href);
-  }
+  // Centralized rule: /dashboard matches exactly (a leaf route); every other
+  // section lights on its own page and any nested route beneath it.
+  const isActive = (href: string) => isNavItemActive(pathname, href);
 
   return (
     <nav
@@ -794,8 +800,7 @@ function NavLink({
   color: string;
 }) {
   const pathname = usePathname();
-  const active =
-    href === "/dashboard" ? pathname === href : pathname.startsWith(href);
+  const active = isNavItemActive(pathname, href);
   return (
     <Link
       href={href}
@@ -835,7 +840,8 @@ function EngagementsNav({
   collapsed: boolean;
 }) {
   const pathname = usePathname();
-  const onEngagements = pathname.startsWith("/engagements");
+  const detailView = useActiveEngagementView();
+  const onEngagements = isNavItemActive(pathname, "/engagements");
   // Open when on any engagements route; otherwise user-controlled.
   const [open, setOpen] = useState(onEngagements);
   // Re-expand if navigation lands under /engagements (e.g. via search).
@@ -850,11 +856,6 @@ function EngagementsNav({
     if (view === "deleted" && badges.deleted > 0) return badges.deleted;
     return null;
   };
-
-  const isViewActive = (href: string) =>
-    href === "/engagements"
-      ? pathname === "/engagements"
-      : pathname === href;
 
   // Collapsed rail: a single icon link to Active (no room for the accordion).
   if (collapsed) {
@@ -926,8 +927,9 @@ function EngagementsNav({
       >
         <div className="overflow-hidden">
           <div className="mt-0.5 space-y-0.5 border-l border-border/50 pl-3 ml-4">
-            {ENGAGEMENT_SUBNAV.map(({ view, href, icon: Icon }) => {
-              const active = isViewActive(href);
+            {ENGAGEMENT_SUBNAV.map(({ view, icon: Icon }) => {
+              const href = viewHref(view);
+              const active = isEngagementViewActive(pathname, view, detailView);
               const count = badgeFor(view);
               return (
                 <Link
