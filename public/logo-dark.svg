@@ -1,38 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-label="Vylan">
   <defs>
-    <radialGradient id="planet-d" cx="42%" cy="38%" r="68%">
-      <stop offset="0%" stop-color="#3a4150"/>
-      <stop offset="55%" stop-color="#1f2533"/>
-      <stop offset="100%" stop-color="#10131c"/>
-    </radialGradient>
-    <linearGradient id="ring-gold-d" x1="0%" y1="50%" x2="100%" y2="50%">
-      <stop offset="0%" stop-color="#9f7a3a"/>
-      <stop offset="50%" stop-color="#f3cc7b"/>
-      <stop offset="100%" stop-color="#8c6628"/>
+    <linearGradient id="v-right-d" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6aa6ff"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
     </linearGradient>
-    <linearGradient id="ring-inner-d" x1="0%" y1="50%" x2="100%" y2="50%">
-      <stop offset="0%" stop-color="#2a3140"/>
-      <stop offset="50%" stop-color="#3d4658"/>
-      <stop offset="100%" stop-color="#262c39"/>
+    <linearGradient id="v-left-d" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3a64d4"/>
+      <stop offset="100%" stop-color="#244aa6"/>
     </linearGradient>
-    <mask id="behind-planet-d">
-      <rect width="256" height="256" fill="white"/>
-      <circle cx="128" cy="128" r="58" fill="black"/>
-    </mask>
+    <clipPath id="v-left-clip-d">
+      <rect x="0" y="0" width="128" height="256"/>
+    </clipPath>
+    <filter id="v-shadow-d" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
   </defs>
 
-  <!-- Back half of rings -->
-  <g transform="rotate(-18 128 128)" mask="url(#behind-planet-d)">
-    <ellipse cx="128" cy="128" rx="106" ry="20" stroke="url(#ring-gold-d)" stroke-width="10" fill="none"/>
-    <ellipse cx="128" cy="128" rx="90" ry="13" stroke="url(#ring-inner-d)" stroke-width="6" fill="none"/>
-  </g>
-
-  <!-- Planet -->
-  <circle cx="128" cy="128" r="58" fill="url(#planet-d)"/>
-
-  <!-- Front half of rings -->
-  <g transform="rotate(-18 128 128)">
-    <path d="M 22 128 A 106 20 0 0 0 234 128" stroke="url(#ring-gold-d)" stroke-width="10" fill="none" stroke-linecap="round"/>
-    <path d="M 38 128 A 90 13 0 0 0 218 128" stroke="url(#ring-inner-d)" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- Same folded "V" as the light mark, brightened so it stays legible on the
+       pitch-black dark-mode surfaces. -->
+  <g filter="url(#v-shadow-d)" fill="none" stroke-width="52" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M72 76 L128 178 L184 76" stroke="url(#v-right-d)"/>
+    <g clip-path="url(#v-left-clip-d)">
+      <path d="M72 76 L128 178 L184 76" stroke="url(#v-left-d)"/>
+    </g>
   </g>
 </svg>
