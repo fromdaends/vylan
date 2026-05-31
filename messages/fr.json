@@ -756,6 +756,7 @@
     "needs_attention": "À relancer",
     "needs_attention_hint": "Engagements en retard, à échéance prochaine ou sans activité récente.",
     "empty_attention": "Rien à relancer aujourd'hui.",
+    "all_caught_up": "Tout est à jour. Beau travail!",
     "ready_to_review": "Prêt à réviser",
     "ready_to_review_hint": "Tous les documents requis sont arrivés — prêts pour votre validation.",
     "empty_review": "Rien à réviser pour l'instant.",

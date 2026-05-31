@@ -756,6 +756,7 @@
     "needs_attention": "Needs attention",
     "needs_attention_hint": "Engagements that are overdue, due soon, or have gone quiet.",
     "empty_attention": "Nothing to chase today.",
+    "all_caught_up": "All caught up. Nice work!",
     "ready_to_review": "Ready to review",
     "ready_to_review_hint": "All required items uploaded — ready for your approve / reject pass.",
     "empty_review": "Nothing waiting for review right now.",

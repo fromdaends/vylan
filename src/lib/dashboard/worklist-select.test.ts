@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 import {
   selectNeedsAttention,
+  selectNeedsAttentionRows,
   selectReadyToReview,
   selectActive,
   selectRecent,
@@ -64,6 +65,60 @@ describe("selectNeedsAttention", () => {
     const before = rows.map((r) => r.id);
     selectNeedsAttention(rows);
     expect(rows.map((r) => r.id)).toEqual(before);
+  });
+});
+
+describe("selectNeedsAttentionRows (Overview block)", () => {
+  it("includes any reason OR ready-to-review; excludes clean rows", () => {
+    const rows = [
+      row({ id: "clean" }),
+      row({ id: "overdue", reasons: ["overdue"], attentionScore: 1003 }),
+      row({ id: "ready", readyToReview: true, attentionScore: 0 }),
+    ];
+    const ids = selectNeedsAttentionRows(rows).map((r) => r.id);
+    expect(ids).toContain("overdue");
+    expect(ids).toContain("ready");
+    expect(ids).not.toContain("clean");
+  });
+
+  it("orders by attentionScore (overdue > due_soon > stale), ready-to-review last", () => {
+    const rows = [
+      row({ id: "ready", readyToReview: true, attentionScore: 0 }),
+      row({ id: "stale", reasons: ["stale"], attentionScore: 130 }),
+      row({ id: "overdue", reasons: ["overdue"], attentionScore: 1003 }),
+      row({ id: "due", reasons: ["due_soon"], attentionScore: 500 }),
+    ];
+    expect(selectNeedsAttentionRows(rows).map((r) => r.id)).toEqual([
+      "overdue",
+      "due",
+      "stale",
+      "ready",
+    ]);
+  });
+
+  it("tie-breaks equal scores by recency, freshest first", () => {
+    const rows = [
+      row({
+        id: "older",
+        readyToReview: true,
+        recencyAt: "2026-02-01T00:00:00.000Z",
+      }),
+      row({
+        id: "newer",
+        readyToReview: true,
+        recencyAt: "2026-03-01T00:00:00.000Z",
+      }),
+    ];
+    expect(selectNeedsAttentionRows(rows).map((r) => r.id)).toEqual([
+      "newer",
+      "older",
+    ]);
+  });
+
+  it("returns nothing when all rows are clean", () => {
+    expect(
+      selectNeedsAttentionRows([row({ id: "a" }), row({ id: "b" })]),
+    ).toEqual([]);
   });
 });
 
