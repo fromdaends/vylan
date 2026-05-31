@@ -54,7 +54,7 @@ export function PublicNav() {
       <div className={"pointer-events-auto w-full max-w-5xl " + PILL_CLASSES}>
         <div className="flex items-center justify-between gap-2 sm:gap-3 pl-3 pr-2 sm:pl-4 sm:pr-3 h-14 sm:h-16">
           {/* Logo only — wordmark removed per design direction.
-              Responsive size: 40px on mobile, 48px from md up. */}
+              Responsive size: 40px on mobile, 56px from md up. */}
           <Link
             href="/"
             className="flex items-center shrink-0"
@@ -65,10 +65,10 @@ export function PublicNav() {
                 `hidden` would otherwise lose to the `inline-flex` that
                 Logo applies to its own inner span. */}
             <span className="md:hidden inline-flex">
-              <Logo size={36} priority />
+              <Logo size={40} priority />
             </span>
             <span className="hidden md:inline-flex">
-              <Logo size={48} priority />
+              <Logo size={56} priority />
             </span>
           </Link>
 
