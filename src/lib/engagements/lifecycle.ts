@@ -33,6 +33,16 @@ export function isArchivedEngagement(e: Lifecycle): boolean {
   return e.deleted_at == null && e.archived_at != null;
 }
 
+// Soft-deleted at all, ignoring the retention window — i.e. the row belongs in
+// the Recently Deleted view regardless of age. Delete wins over archive, so a
+// row with deleted_at set is "deleted" even if it was archived first. Use this
+// for lifecycle-state classification (which sub-page a single engagement lives
+// in); use isRecentlyDeletedEngagement when the 30-day window matters (list
+// queries / the purge boundary).
+export function isDeletedEngagement(e: Pick<Lifecycle, "deleted_at">): boolean {
+  return e.deleted_at != null;
+}
+
 // Recently Deleted = soft-deleted within the retention window. Anything older
 // is awaiting (or mid-) purge and must not show in the UI.
 export function isRecentlyDeletedEngagement(

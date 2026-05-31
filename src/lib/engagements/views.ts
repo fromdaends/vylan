@@ -35,6 +35,14 @@ export function scopeForView(view: EngagementView): EngagementScope {
   return "active";
 }
 
+// The route a view lives at. Single source of truth for the All-Engagements
+// sub-page URLs — the sidebar nav and the engagement breadcrumb both resolve a
+// view to its href through here, so the links never drift. Active is the
+// section root (/engagements); every other view is /engagements/<view>.
+export function viewHref(view: EngagementView): string {
+  return view === "active" ? "/engagements" : `/engagements/${view}`;
+}
+
 // i18n key suffixes (under the Engagements namespace) for a view's nav label,
 // page title, and empty state — e.g. view_active_label / view_active_title /
 // view_active_empty.
