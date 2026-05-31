@@ -299,6 +299,8 @@
     "nav_general": "General",
     "nav_documents": "Documents",
     "nav_data": "Data & privacy",
+    "section_firm_settings": "Firm settings",
+    "section_firm_settings_hint": "Your firm's logo, name, brand color, and the language clients receive emails in.",
     "mode_label": "Mode",
     "mode_hint": "Light, dark, or follow your system.",
     "theme_light": "Light",

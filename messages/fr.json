@@ -299,6 +299,8 @@
     "nav_general": "Général",
     "nav_documents": "Documents",
     "nav_data": "Données et confidentialité",
+    "section_firm_settings": "Paramètres du cabinet",
+    "section_firm_settings_hint": "Le logo, le nom, la couleur de marque de votre cabinet et la langue des courriels envoyés aux clients.",
     "mode_label": "Mode",
     "mode_hint": "Clair, sombre, ou suivre votre système.",
     "theme_light": "Clair",

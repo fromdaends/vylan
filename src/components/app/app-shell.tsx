@@ -449,7 +449,7 @@ function MobileAccountMenu({
             onClick={onItemClick}
           />
           <MobileMenuItem
-            href="/firm"
+            href="/settings?tab=account"
             icon={Building2}
             label={labels.firm}
             onClick={onItemClick}
@@ -483,7 +483,7 @@ function MobileAccountMenu({
             {labels.yourFirm}
           </div>
           <Link
-            href="/firm"
+            href="/settings?tab=account"
             onClick={onItemClick}
             className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card px-3 py-3 text-sm font-medium text-foreground hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
           >
@@ -783,7 +783,7 @@ function SidebarBody({
                 working as" affordance from the prior sidebar layout. */}
             <DropdownMenuItem asChild>
               <Link
-                href="/firm"
+                href="/settings?tab=account"
                 className="flex items-center gap-2 cursor-pointer"
               >
                 <AvatarInitials

@@ -17,6 +17,7 @@ import {
   Download,
   Trash2,
   ChevronRight,
+  UserCog,
 } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
@@ -28,9 +29,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  FirmSettingsSections,
+  type FirmInfo,
+} from "@/components/settings/firm-settings-sections";
+import { AccountSecuritySections } from "@/components/settings/account-security-sections";
 
 type ThemeChoice = "light" | "dark" | "system";
-type SectionId = "appearance" | "general" | "documents" | "data";
+type SectionId = "account" | "appearance" | "general" | "documents" | "data";
 type Translate = (k: string) => string;
 
 // Same Canadian zones that used to live in /firm. Kept in sync with the
@@ -52,6 +58,14 @@ const CA_TIMEZONES: ReadonlyArray<readonly [string, string]> = [
 // existing Settings namespace.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const SECTION_IDS: SectionId[] = [
+  "account",
+  "appearance",
+  "general",
+  "documents",
+  "data",
+];
+
 export function SettingsShell({
   currentLocale,
   currentTimezone,
@@ -59,6 +73,11 @@ export function SettingsShell({
   isOwner,
   billingEnabled,
   firmName,
+  firm,
+  firmLogoUrl,
+  email,
+  mfaEnabled,
+  initialSection,
 }: {
   currentLocale: "fr" | "en";
   currentTimezone: string;
@@ -66,11 +85,23 @@ export function SettingsShell({
   isOwner: boolean;
   billingEnabled: boolean;
   firmName: string;
+  firm: FirmInfo;
+  firmLogoUrl: string | null;
+  email: string;
+  mfaEnabled: boolean;
+  // Deep-link target (?tab=account from the avatar menu + the old /firm
+  // redirect). Falls back to Account.
+  initialSection?: string;
 }) {
   const t = useTranslations("Settings");
-  const [section, setSection] = useState<SectionId>("appearance");
+  const [section, setSection] = useState<SectionId>(
+    SECTION_IDS.includes(initialSection as SectionId)
+      ? (initialSection as SectionId)
+      : "account",
+  );
 
   const nav: { id: SectionId; label: string; icon: typeof Palette }[] = [
+    { id: "account", label: t("nav_account"), icon: UserCog },
     { id: "appearance", label: t("nav_appearance"), icon: Palette },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
     { id: "documents", label: t("nav_documents"), icon: FileText },
@@ -109,6 +140,15 @@ export function SettingsShell({
       </nav>
 
       <div className="min-w-0 flex-1">
+        {section === "account" && (
+          <AccountSection
+            firm={firm}
+            firmLogoUrl={firmLogoUrl}
+            email={email}
+            mfaEnabled={mfaEnabled}
+            t={t}
+          />
+        )}
         {section === "appearance" && <AppearanceSection t={t} />}
         {section === "general" && (
           <GeneralSection
@@ -128,6 +168,45 @@ export function SettingsShell({
           <DataPrivacySection firmName={firmName} t={t} />
         )}
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Account — everything about "you + your firm" in one place: firm settings
+// (logo, name, brand color, client-email language), then your Email, Password,
+// and Two-factor. Firm settings sit under their own headliner; the security
+// sections follow. All reuse the existing flows extracted from /profile + /firm.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AccountSection({
+  firm,
+  firmLogoUrl,
+  email,
+  mfaEnabled,
+  t,
+}: {
+  firm: FirmInfo;
+  firmLogoUrl: string | null;
+  email: string;
+  mfaEnabled: boolean;
+  t: Translate;
+}) {
+  return (
+    <div className="space-y-12">
+      <div>
+        <h2 className="text-base font-semibold tracking-tight">
+          {t("section_firm_settings")}
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("section_firm_settings_hint")}
+        </p>
+        <div className="mt-5">
+          <FirmSettingsSections firm={firm} firmLogoUrl={firmLogoUrl} />
+        </div>
+      </div>
+
+      <AccountSecuritySections email={email} mfaEnabled={mfaEnabled} />
     </div>
   );
 }

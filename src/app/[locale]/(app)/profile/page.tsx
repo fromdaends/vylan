@@ -29,12 +29,11 @@ export default async function ProfilePage({
   // Fan out everything this page needs. getCurrentUser / getCurrentFirm
   // are React.cache()-wrapped — the (app) layout already called them
   // and the cache returns the same result instantly here. We still need
-  // the firm row for the brand color used to tint the avatar fallback;
-  // firm logo + name + timezone now live on /firm.
-  const [user, firm, mfaFactors, t] = await Promise.all([
+  // the firm row for the brand color used to tint the avatar fallback.
+  // Email / password / two-factor moved to Settings → Account.
+  const [user, firm, t] = await Promise.all([
     getCurrentUser(),
     getCurrentFirm(),
-    supabase.auth.mfa.listFactors(),
     getTranslations("Profile"),
   ]);
   if (!user || !firm) {
@@ -42,11 +41,6 @@ export default async function ProfilePage({
   }
 
   const avatarUrl = await getBrandingImageUrl(user.avatar_path);
-  // A user has MFA "enabled" only when they have a verified TOTP factor.
-  // Unverified factors are mid-enrollment leftovers and don't count.
-  const mfaEnabled = (mfaFactors.data?.totp ?? []).some(
-    (f) => f.status === "verified",
-  );
 
   return (
     <div className="max-w-2xl mx-auto space-y-8 animate-in-up">
@@ -67,7 +61,6 @@ export default async function ProfilePage({
         displayLabel={userDisplayLabel(user)}
         brandColor={firm.brand_color}
         avatarUrl={avatarUrl}
-        mfaEnabled={mfaEnabled}
       />
 
       {/* Subscription summary — owner-only. Subscription belongs here

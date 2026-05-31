@@ -20,13 +20,17 @@ import {
 import { updateFirmSettings } from "@/app/actions/settings";
 import { type SettingsState } from "@/app/actions/settings.schema";
 
-type FirmInfo = {
+export type FirmInfo = {
   name: string;
   brand_color: string;
   locale_default: "fr" | "en";
 };
 
-export function FirmForm({
+// Firm logo + firm details (name, brand color, client-email language), extracted
+// verbatim from the old /firm page so the Settings → Account tab reuses the exact
+// same flows. Strings stay in the Profile namespace. Timezone is unchanged —
+// it still lives under Settings → General.
+export function FirmSettingsSections({
   firm,
   firmLogoUrl,
 }: {
@@ -35,9 +39,8 @@ export function FirmForm({
 }) {
   const t = useTranslations("Profile");
   const tc = useTranslations("Common");
-
   return (
-    <div className="space-y-12">
+    <div className="space-y-10">
       <FirmLogoSection
         firmLogoUrl={firmLogoUrl}
         firmName={firm.name}
@@ -49,12 +52,6 @@ export function FirmForm({
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Firm logo — writes to firms.logo_url and is scoped to the whole firm
-// (any member sees the change after refresh). Mirrors the avatar pattern
-// on /profile.
-// ─────────────────────────────────────────────────────────────────────────────
 
 function FirmLogoSection({
   firmLogoUrl,
@@ -154,13 +151,6 @@ function FirmLogoSection({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Firm details — name, brand color, default language for client emails.
-// Saved via the existing updateFirmSettings server action. Timezone lives
-// on /settings now (see TimezoneSection there) and saves through its own
-// POST endpoint, so it's not part of this form anymore.
-// ─────────────────────────────────────────────────────────────────────────────
-
 function FirmSection({
   initial,
   t,
@@ -179,9 +169,7 @@ function FirmSection({
   return (
     <form action={action} className="space-y-5">
       <h2 className="text-sm font-semibold">{t("firm_title")}</h2>
-      <p className="text-xs text-muted-foreground mt-1 -mt-4">
-        {t("firm_hint")}
-      </p>
+      <p className="text-xs text-muted-foreground mt-1 -mt-4">{t("firm_hint")}</p>
 
       <div className="space-y-2">
         <Label htmlFor="name">{tOnb("step1_firm_name")}</Label>
