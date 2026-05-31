@@ -42,8 +42,12 @@ import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
+import { engagementToView } from "@/lib/navigation/active-nav";
+import { viewHref, viewLabelKey } from "@/lib/engagements/views";
+import { computeAttention, isReadyToReview } from "@/lib/attention";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
-  ArrowLeft,
   Send,
   X,
   Trash2,
@@ -93,6 +97,17 @@ export default async function EngagementDetailPage({
 
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
+  const tApp = await getTranslations("App");
+  const tCommon = await getTranslations("Common");
+
+  // Which All-Engagements sub-page this engagement belongs to — drives both the
+  // sidebar highlight (via SetEngagementDetailView) and the breadcrumb. Derived
+  // the same way the list pages categorize engagements (lifecycle predicates +
+  // readyToReview), so the sidebar always agrees with the lists.
+  const readyToReview = isReadyToReview(
+    computeAttention({ engagement, items, lastClientActivityAt: null }),
+  );
+  const view = engagementToView(engagement, { readyToReview });
 
   const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
   const portalUrl =
@@ -117,13 +132,20 @@ export default async function EngagementDetailPage({
           complete / cancelled engagements since nothing changes there. */}
       {isLive && <AutoRefresh intervalMs={5000} />}
 
-      <Link
-        href="/dashboard"
-        className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-      >
-        <ArrowLeft className="size-3.5" />
-        {t("back")}
-      </Link>
+      {/* Publishes this engagement's view to the sidebar so the matching
+          sub-page highlights. Renders nothing. */}
+      <SetEngagementDetailView view={view} />
+
+      {/* Orientation: Engagements › {sub-page} › {this engagement}. Replaces the
+          old single "Back" link — the crumbs return to the right list. */}
+      <Breadcrumb
+        label={tCommon("breadcrumb")}
+        items={[
+          { label: tApp("nav_engagements"), href: "/engagements" },
+          { label: t(viewLabelKey(view)), href: viewHref(view) },
+          { label: engagement.title },
+        ]}
+      />
 
       <header className="flex flex-wrap items-start justify-between gap-3 animate-in-up">
         <div>
