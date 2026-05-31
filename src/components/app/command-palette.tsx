@@ -10,7 +10,6 @@ import {
   Users,
   Briefcase,
   LayoutDashboard,
-  Inbox,
   FileText,
   Settings,
   CornerDownLeft,
@@ -109,7 +108,6 @@ export function CommandPalette() {
       icon: LayoutDashboard,
       color: "text-icon-blue",
     },
-    { href: "/inbox", label: tNav("nav_inbox"), icon: Inbox, color: "text-icon-indigo" },
     {
       href: "/clients",
       label: tNav("nav_clients"),

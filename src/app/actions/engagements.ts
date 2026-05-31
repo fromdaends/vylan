@@ -76,12 +76,11 @@ function fieldErrorsFromZod(error: z.ZodError): Record<string, string> {
 }
 
 // Narrow revalidation: hit the engagement page that changed plus the
-// surfaces that aggregate over engagements (/inbox triage + /dashboard
-// worklist + /clients per-client engagement lists). Replaces the previous
-// `revalidatePath("/", "layout")` shotgun.
+// surfaces that aggregate over engagements (/dashboard worklist + needs-
+// attention + what's-new, /clients per-client engagement lists). Replaces the
+// previous `revalidatePath("/", "layout")` shotgun.
 function revalidateEngagementPaths(id: string | undefined) {
   if (id) revalidatePath(`/engagements/${id}`);
-  revalidatePath("/inbox");
   revalidatePath("/dashboard");
   revalidatePath("/clients");
   // The All-Engagements list + its state sub-pages (Active / Archived /

@@ -79,7 +79,6 @@ export default async function AppLayout({
         deleted: badges.recentlyDeleted,
       }}
       labels={{
-        inbox: t("nav_inbox"),
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),
         engagements: t("nav_engagements"),

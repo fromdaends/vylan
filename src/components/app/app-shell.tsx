@@ -30,7 +30,6 @@ import {
   FileText,
   Folder,
   HelpCircle,
-  Inbox,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -51,7 +50,6 @@ import { CommandPalette } from "@/components/app/command-palette";
 import type { EngagementView } from "@/lib/engagements/views";
 
 type Labels = {
-  inbox: string;
   dashboard: string;
   clients: string;
   engagements: string;
@@ -187,7 +185,6 @@ export function AppShell({
       icon: LayoutDashboard,
       color: "text-icon-blue",
     },
-    { href: "/inbox", label: labels.inbox, icon: Inbox, color: "text-icon-indigo" },
     { href: "/clients", label: labels.clients, icon: Users, color: "text-icon-emerald" },
     {
       href: "/templates",
@@ -305,7 +302,6 @@ function MobileTabBar({
       icon: LayoutDashboard,
       color: "text-icon-blue",
     },
-    { href: "/inbox", label: labels.inbox, icon: Inbox, color: "text-icon-indigo" },
     { href: "/clients", label: labels.clients, icon: Users, color: "text-icon-emerald" },
     {
       href: "/templates",
@@ -316,9 +312,9 @@ function MobileTabBar({
   ];
 
   function isActive(href: string) {
-    // /dashboard and /inbox are leaf routes — only match on the exact path,
-    // otherwise they'd also light up on any sub-route.
-    if (href === "/dashboard" || href === "/inbox") return pathname === href;
+    // /dashboard is a leaf route — only match on the exact path, otherwise it'd
+    // also light up on any sub-route.
+    if (href === "/dashboard") return pathname === href;
     return pathname.startsWith(href);
   }
 
@@ -794,9 +790,7 @@ function NavLink({
 }) {
   const pathname = usePathname();
   const active =
-    href === "/dashboard" || href === "/inbox"
-      ? pathname === href
-      : pathname.startsWith(href);
+    href === "/dashboard" ? pathname === href : pathname.startsWith(href);
   return (
     <Link
       href={href}
