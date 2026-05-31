@@ -1,39 +1,28 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import {
-  AlertTriangle,
-  Clock,
-  FileWarning,
-  CheckCheck,
-  ChevronRight,
-  type LucideIcon,
-} from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 import { selectNeedsAttentionRows } from "@/lib/dashboard/worklist-select";
+import { NeedsAttentionRow } from "@/components/dashboard/needs-attention-row";
 
 const MAX_VISIBLE = 5;
-
-// The single reason we surface per row in the Needs-attention block — the most
-// urgent one, matching the prioritisation: overdue > due soon > quiet > ready
-// to review. Each maps to the same wording the engagement rows already use
-// (Attention namespace), so the badges read consistently across the app.
-type ReasonKind = "overdue" | "due_soon" | "stale" | "ready";
-
-function primaryReason(r: WorklistRow): ReasonKind | null {
-  if (r.reasons.includes("overdue")) return "overdue";
-  if (r.reasons.includes("due_soon")) return "due_soon";
-  if (r.reasons.includes("stale")) return "stale";
-  if (r.readyToReview) return "ready";
-  return null;
-}
 
 // Needs attention — the prominent, accent-tinted action block near the top of
 // the Overview. Visually distinct from the My-engagements table (it's the
 // urgent subset). Shows the top few; "View all" links to the full engagements
-// list when there are more. Calm, compact empty state.
-export async function NeedsAttention({ rows }: { rows: WorklistRow[] }) {
+// list when there are more. Calm, compact empty state. Each row carries the
+// same right-click / "..." Open-Archive-Delete menu as the My-engagements rows
+// (NeedsAttentionRow is a client component reusing useEngagementRowMenu).
+export async function NeedsAttention({
+  rows,
+  canDelete,
+}: {
+  rows: WorklistRow[];
+  canDelete: boolean;
+}) {
   const t = await getTranslations("Attention");
   const tDash = await getTranslations("Dashboard");
+  const tEng = await getTranslations("Engagements");
 
   const items = selectNeedsAttentionRows(rows);
   const visible = items.slice(0, MAX_VISIBLE);
@@ -75,7 +64,13 @@ export async function NeedsAttention({ rows }: { rows: WorklistRow[] }) {
       ) : (
         <ul className="mt-3 space-y-1.5">
           {visible.map((r) => (
-            <NeedsAttentionRow key={r.id} row={r} t={t} />
+            <NeedsAttentionRow
+              key={r.id}
+              row={r}
+              canDelete={canDelete}
+              menuActionsLabel={tEng("menu_actions")}
+              badge={badgeProps(r, t)}
+            />
           ))}
         </ul>
       )}
@@ -83,78 +78,55 @@ export async function NeedsAttention({ rows }: { rows: WorklistRow[] }) {
   );
 }
 
-function NeedsAttentionRow({
-  row,
-  t,
-}: {
-  row: WorklistRow;
-  t: Awaited<ReturnType<typeof getTranslations<"Attention">>>;
-}) {
-  const kind = primaryReason(row);
-  const badge = kind ? reasonBadge(kind, row, t) : null;
+// The single reason we surface per row — the most urgent one, matching the
+// prioritisation: overdue > due soon > quiet > ready to review. Resolved on the
+// server (so the row badge wording reuses the Attention namespace) and passed
+// to the client row as plain props.
+type ReasonKind = "overdue" | "due_soon" | "stale" | "ready";
 
-  return (
-    <li>
-      <Link
-        href={`/engagements/${row.id}`}
-        className="group flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-accent/10"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-foreground">
-            {row.title}
-          </div>
-          <div className="truncate text-xs text-muted-foreground">
-            {row.clientName}
-          </div>
-        </div>
-        {badge && (
-          <span
-            className={
-              "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
-              badge.tone
-            }
-          >
-            <badge.Icon className="h-3 w-3" aria-hidden />
-            {badge.label}
-          </span>
-        )}
-        <ChevronRight
-          className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-foreground/70"
-          aria-hidden
-        />
-      </Link>
-    </li>
-  );
+function primaryReason(r: WorklistRow): ReasonKind | null {
+  if (r.reasons.includes("overdue")) return "overdue";
+  if (r.reasons.includes("due_soon")) return "due_soon";
+  if (r.reasons.includes("stale")) return "stale";
+  if (r.readyToReview) return "ready";
+  return null;
 }
 
-function reasonBadge(
-  kind: ReasonKind,
+export type NeedsAttentionBadge = {
+  label: string;
+  iconKey: ReasonKind;
+  tone: string;
+};
+
+function badgeProps(
   row: WorklistRow,
   t: Awaited<ReturnType<typeof getTranslations<"Attention">>>,
-): { label: string; Icon: LucideIcon; tone: string } {
+): NeedsAttentionBadge | null {
+  const kind = primaryReason(row);
+  if (!kind) return null;
   switch (kind) {
     case "overdue":
       return {
         label: t("overdue_by", { days: row.daysOverdue ?? 0 }),
-        Icon: AlertTriangle,
+        iconKey: "overdue",
         tone: "bg-destructive/15 text-destructive",
       };
     case "due_soon":
       return {
         label: t("due_in", { days: row.daysUntilDue ?? 0 }),
-        Icon: Clock,
+        iconKey: "due_soon",
         tone: "bg-warning/15 text-warning",
       };
     case "stale":
       return {
         label: t("stale_days", { days: row.daysSinceClientActivity ?? 0 }),
-        Icon: FileWarning,
+        iconKey: "stale",
         tone: "bg-muted text-muted-foreground",
       };
     case "ready":
       return {
         label: t("items_ready", { count: row.itemsReadyToReview }),
-        Icon: CheckCheck,
+        iconKey: "ready",
         tone: "bg-success/15 text-success",
       };
   }
