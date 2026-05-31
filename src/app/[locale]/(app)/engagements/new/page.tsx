@@ -1,10 +1,9 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listClients } from "@/lib/db/clients";
 import { listTemplates } from "@/lib/db/templates";
-import { Link } from "@/i18n/navigation";
 import { EngagementBuilder } from "@/components/engagements/engagement-builder";
 import { assertLocale } from "@/lib/locale";
-import { ArrowLeft } from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 export default async function NewEngagementPage({
   params,
@@ -24,16 +23,18 @@ export default async function NewEngagementPage({
   ]);
 
   const t = await getTranslations("Engagements");
+  const tApp = await getTranslations("App");
+  const tCommon = await getTranslations("Common");
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <Link
-        href="/dashboard"
-        className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-      >
-        <ArrowLeft className="size-3.5" />
-        {t("back")}
-      </Link>
+      <Breadcrumb
+        label={tCommon("breadcrumb")}
+        items={[
+          { label: tApp("nav_engagements"), href: "/engagements" },
+          { label: t("new_title") },
+        ]}
+      />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">
           {t("new_title")}
