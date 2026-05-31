@@ -1,9 +1,10 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 import { selectNeedsAttentionRows } from "@/lib/dashboard/worklist-select";
 import { NeedsAttentionRow } from "@/components/dashboard/needs-attention-row";
+import { NeedsAttentionCollapsible } from "@/components/dashboard/needs-attention-collapsible";
 
 const MAX_VISIBLE = 5;
 
@@ -28,35 +29,23 @@ export async function NeedsAttention({
   const visible = items.slice(0, MAX_VISIBLE);
   const overflow = items.length - visible.length;
 
-  return (
-    <section
-      aria-labelledby="needs-attention-title"
-      className="rounded-2xl border border-accent/30 bg-accent/[0.06] p-4 sm:p-5"
-    >
-      <div className="flex items-center justify-between gap-3">
-        <h2
-          id="needs-attention-title"
-          className="flex items-center gap-2 text-base font-semibold tracking-tight text-foreground"
-        >
-          <AlertTriangle className="h-4 w-4 text-accent" aria-hidden />
-          {t("needs_attention")}
-          {items.length > 0 && (
-            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-accent/20 px-1.5 text-xs font-semibold tabular-nums text-accent">
-              {items.length}
-            </span>
-          )}
-        </h2>
-        {overflow > 0 && (
-          <Link
-            href="/engagements"
-            className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-accent transition-colors hover:text-accent/80"
-          >
-            {tDash("wl_view_all")}
-            <ChevronRight className="h-3 w-3" aria-hidden />
-          </Link>
-        )}
-      </div>
+  const viewAll =
+    overflow > 0 ? (
+      <Link
+        href="/engagements"
+        className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-accent transition-colors hover:text-accent/80"
+      >
+        {tDash("wl_view_all")}
+        <ChevronRight className="h-3 w-3" aria-hidden />
+      </Link>
+    ) : null;
 
+  return (
+    <NeedsAttentionCollapsible
+      title={t("needs_attention")}
+      count={items.length}
+      viewAll={viewAll}
+    >
       {items.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">
           {t("all_caught_up")}
@@ -74,7 +63,7 @@ export async function NeedsAttention({
           ))}
         </ul>
       )}
-    </section>
+    </NeedsAttentionCollapsible>
   );
 }
 
