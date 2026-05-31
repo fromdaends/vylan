@@ -173,10 +173,10 @@ export function SettingsShell({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Account — everything about "you + your firm" in one place: firm settings
-// (logo, name, brand color, client-email language), then your Email, Password,
-// and Two-factor. Firm settings sit under their own headliner; the security
-// sections follow. All reuse the existing flows extracted from /profile + /firm.
+// Account — everything about "you + your firm" in one place. Your account first
+// (Email, Password, Two-factor), then Firm settings (logo, name, brand color,
+// client-email language) under their own headliner at the bottom. All reuse the
+// existing flows extracted from /profile + /firm.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AccountSection({
@@ -194,6 +194,8 @@ function AccountSection({
 }) {
   return (
     <div className="space-y-12">
+      <AccountSecuritySections email={email} mfaEnabled={mfaEnabled} />
+
       <div>
         <h2 className="text-base font-semibold tracking-tight">
           {t("section_firm_settings")}
@@ -205,8 +207,6 @@ function AccountSection({
           <FirmSettingsSections firm={firm} firmLogoUrl={firmLogoUrl} />
         </div>
       </div>
-
-      <AccountSecuritySections email={email} mfaEnabled={mfaEnabled} />
     </div>
   );
 }

@@ -295,6 +295,7 @@
     "subtitle": "Préférences d'affichage et comportement du cabinet. Les infos sur vous et votre cabinet sont dans le profil.",
     "section_theme": "Apparence",
     "section_theme_hint": "Clair, sombre, ou suivre votre système.",
+    "nav_account": "Compte",
     "nav_appearance": "Apparence",
     "nav_general": "Général",
     "nav_documents": "Documents",
