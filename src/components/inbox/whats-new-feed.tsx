@@ -24,13 +24,13 @@ export async function WhatsNewFeed({
 }) {
   const t = await getTranslations("Home");
 
+  // aria-label (not aria-labelledby) because this feed renders twice on the
+  // Overview (mobile inline + desktop sticky rail) — a shared heading id would
+  // be a duplicate-id violation. The label carries the same text.
   return (
-    <section aria-labelledby="whats-new-title" className="space-y-3">
+    <section aria-label={t("whats_new")} className="space-y-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h2
-          id="whats-new-title"
-          className="text-sm font-semibold tracking-tight text-foreground"
-        >
+        <h2 className="text-sm font-semibold tracking-tight text-foreground">
           {t("whats_new")}
         </h2>
         {notifications.length > 0 && (
