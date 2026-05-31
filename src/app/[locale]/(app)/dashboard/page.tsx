@@ -7,6 +7,8 @@ export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
+import { selectNeedsAttention } from "@/lib/dashboard/worklist-select";
+import { listHomeNotifications } from "@/lib/home/notifications";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import {
@@ -15,7 +17,13 @@ import {
 } from "@/components/dashboard/templates-gallery";
 import { EngagementsWorklist } from "@/components/dashboard/engagements-worklist";
 import { JumpBackIn } from "@/components/engagements/jump-back-in";
+import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
 
+// The Overview is the single home that answers all three of an accountant's
+// questions: what to do now (Needs attention), what's my work (My engagements),
+// and what just happened (What's new). Two-column on desktop — a wide main
+// column + a sticky ~320px right rail for What's new; stacks to one column
+// below lg (the right rail drops under My engagements).
 export default async function DashboardPage({
   params,
 }: {
@@ -25,12 +33,16 @@ export default async function DashboardPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [worklistRows, user, firm, templates] = await Promise.all([
-    loadEngagementWorklist(),
-    getCurrentUser(),
-    getCurrentFirm(),
-    listTemplates(),
-  ]);
+  const [worklistRows, user, firm, templates, notifications] =
+    await Promise.all([
+      loadEngagementWorklist(),
+      getCurrentUser(),
+      getCurrentFirm(),
+      listTemplates(),
+      listHomeNotifications(12),
+    ]);
+
+  const needsAttention = selectNeedsAttention(worklistRows);
 
   const templateCards: TemplateCard[] = templates
     .filter((tmpl) => tmpl.id !== BLANK_TEMPLATE_ID)
@@ -54,31 +66,54 @@ export default async function DashboardPage({
   const subtitle = firm?.name ? `${firm.name} · ${dateStr}` : dateStr;
 
   return (
-    <div className="space-y-10 sm:space-y-12">
-      <DashboardHeader firstName={firstName} subtitle={subtitle} />
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-10">
+      {/* Main column */}
+      <div className="min-w-0 space-y-10 sm:space-y-12">
+        <DashboardHeader firstName={firstName} subtitle={subtitle} />
 
-      {/* Shows only when the user has opened an engagement recently (tracked
-          client-side); the component resolves which one + self-hides. */}
-      <JumpBackIn
-        engagements={worklistRows.map((r) => ({
-          id: r.id,
-          title: r.title,
-          clientName: r.clientName,
-          recencyAt: r.recencyAt,
-        }))}
-        locale={locale}
-      />
+        {/* Jump back in — sits right under the header (fast path back to work).
+            Shows only when the user has opened an engagement recently (tracked
+            client-side); the component resolves which one + self-hides. */}
+        <JumpBackIn
+          engagements={worklistRows.map((r) => ({
+            id: r.id,
+            title: r.title,
+            clientName: r.clientName,
+            recencyAt: r.recencyAt,
+          }))}
+          locale={locale}
+        />
 
-      <TemplatesGallery templates={templateCards} />
+        {/* Needs attention — prominent action block (styled in Phase 3).
+            Placeholder slot so the layout + data are wired now. */}
+        {needsAttention.length > 0 && (
+          <section aria-label="Needs attention" data-slot="needs-attention" />
+        )}
 
-      {/* Recent/Mine show active work; the Complete tab surfaces finished
-          engagements. The worklist filters per-tab, so it gets every row. */}
-      <EngagementsWorklist
-        rows={worklistRows}
-        currentUserId={user?.id ?? null}
-        locale={locale}
-        canDelete={user ? canDeleteEngagements(user.role) : false}
-      />
+        <TemplatesGallery templates={templateCards} />
+
+        {/* Recent/Mine show active work; the Complete tab surfaces finished
+            engagements. The worklist filters per-tab, so it gets every row. */}
+        <EngagementsWorklist
+          rows={worklistRows}
+          currentUserId={user?.id ?? null}
+          locale={locale}
+          canDelete={user ? canDeleteEngagements(user.role) : false}
+        />
+
+        {/* What's new — on mobile/tablet the right rail collapses to here,
+            under My engagements. Hidden on lg where the sticky rail shows it. */}
+        <div className="lg:hidden">
+          <WhatsNewFeed notifications={notifications} locale={locale} />
+        </div>
+      </div>
+
+      {/* Right rail — sticky on desktop; hidden below lg (shown inline above). */}
+      <aside className="hidden lg:block">
+        <div className="sticky top-8">
+          <WhatsNewFeed notifications={notifications} locale={locale} />
+        </div>
+      </aside>
     </div>
   );
 }
