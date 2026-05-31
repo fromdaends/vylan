@@ -62,17 +62,14 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const [avatarUrl, firmLogoUrl, badges] = await Promise.all([
+  const [avatarUrl, badges] = await Promise.all([
     getBrandingImageUrl(dbUser.avatar_path),
-    getBrandingImageUrl(firm.logo_url),
     getEngagementBadges(),
   ]);
 
   return (
     <AppShell
-      firmName={firm.name}
       brandColor={firm.brand_color}
-      firmLogoUrl={firmLogoUrl}
       userDisplayName={userDisplayLabel(dbUser)}
       userEmail={dbUser.email}
       userAvatarUrl={avatarUrl}
@@ -109,9 +106,6 @@ export default async function AppLayout({
         account: t("nav_account"),
         logout: tAuth("logout"),
         profile: tProfile("menu_profile"),
-        // The "Your firm" tile inside the profile dropdown — labels
-        // the firm-context group at the bottom of the menu.
-        yourFirm: tProfile("your_firm_label"),
         help: tProfile("menu_help"),
       }}
     >

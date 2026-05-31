@@ -61,7 +61,6 @@ type Labels = {
   firm: string;
   logout: string;
   profile: string;
-  yourFirm: string;
   help: string;
   sectionMain: string;
   sectionAccount: string;
@@ -132,9 +131,7 @@ function getServerCollapsed(): boolean {
 export function AppShell({
   children,
   topBar,
-  firmName,
   brandColor,
-  firmLogoUrl,
   userDisplayName,
   userEmail,
   userAvatarUrl,
@@ -143,9 +140,7 @@ export function AppShell({
 }: {
   children: React.ReactNode;
   topBar?: React.ReactNode;
-  firmName: string;
   brandColor: string;
-  firmLogoUrl: string | null;
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
@@ -221,8 +216,6 @@ export function AppShell({
           primaryNav={primaryNav}
           labels={labels}
           engagementBadges={engagementBadges}
-          firmName={firmName}
-          firmLogoUrl={firmLogoUrl}
           brandColor={brandColor}
           userDisplayName={userDisplayName}
           userEmail={userEmail}
@@ -271,8 +264,6 @@ export function AppShell({
         >
           <MobileAccountMenu
             labels={labels}
-            firmName={firmName}
-            firmLogoUrl={firmLogoUrl}
             brandColor={brandColor}
             userDisplayName={userDisplayName}
             userEmail={userEmail}
@@ -398,8 +389,6 @@ function MobileTabBar({
 
 function MobileAccountMenu({
   labels,
-  firmName,
-  firmLogoUrl,
   brandColor,
   userDisplayName,
   userEmail,
@@ -407,8 +396,6 @@ function MobileAccountMenu({
   onItemClick,
 }: {
   labels: Labels;
-  firmName: string;
-  firmLogoUrl: string | null;
   brandColor: string;
   userDisplayName: string;
   userEmail: string;
@@ -474,28 +461,6 @@ function MobileAccountMenu({
             <span className="flex-1 text-left">{labels.help}</span>
           </button>
         </div>
-
-        {/* Firm context tile — separate visual treatment to make the
-            current firm feel "anchored". Same /firm destination as the
-            menu item above but framed differently. */}
-        <div>
-          <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/70 font-semibold px-3 pb-2">
-            {labels.yourFirm}
-          </div>
-          <Link
-            href="/settings?tab=account"
-            onClick={onItemClick}
-            className="flex items-center gap-3 rounded-2xl border border-border/50 bg-card px-3 py-3 text-sm font-medium text-foreground hover:bg-secondary/40 active:bg-secondary/60 transition-colors"
-          >
-            <AvatarInitials
-              src={firmLogoUrl}
-              name={firmName}
-              size={36}
-              color={brandColor}
-            />
-            <span className="truncate flex-1">{firmName}</span>
-          </Link>
-        </div>
       </div>
 
       {/* Logout pinned at the bottom — destructive, separated. */}
@@ -550,8 +515,6 @@ function SidebarBody({
   primaryNav,
   labels,
   engagementBadges,
-  firmName,
-  firmLogoUrl,
   brandColor,
   userDisplayName,
   userEmail,
@@ -562,8 +525,6 @@ function SidebarBody({
   primaryNav: NavItemDef[];
   labels: Labels;
   engagementBadges: EngagementBadgeCounts;
-  firmName: string;
-  firmLogoUrl: string | null;
   brandColor: string;
   userDisplayName: string;
   userEmail: string;
@@ -772,32 +733,6 @@ function SidebarBody({
             >
               <HelpCircle className="h-4 w-4" />
               {labels.help}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel className="font-normal text-[11px] uppercase tracking-wider text-muted-foreground pb-1">
-              {labels.yourFirm}
-            </DropdownMenuLabel>
-            {/* Firm tile doubles as the entry point to firm settings —
-                clicking it routes to /firm (the firm-settings page).
-                The avatar + firm name keep the "this is who you're
-                working as" affordance from the prior sidebar layout. */}
-            <DropdownMenuItem asChild>
-              <Link
-                href="/settings?tab=account"
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <AvatarInitials
-                  src={firmLogoUrl}
-                  name={firmName}
-                  size={24}
-                  color={brandColor}
-                />
-                <span className="text-xs truncate flex-1">{firmName}</span>
-                <Building2
-                  className="h-3.5 w-3.5 text-muted-foreground"
-                  aria-hidden
-                />
-              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <form action={logoutAction}>
