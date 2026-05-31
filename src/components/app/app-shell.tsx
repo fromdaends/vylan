@@ -204,7 +204,12 @@ export function AppShell({
           icon rail when the toggle is flipped. */}
       <aside
         className={cn(
-          "hidden sm:flex sm:flex-col sm:fixed sm:inset-y-0 sm:left-0 sm:border-r sm:border-border/40 sm:bg-card/50 sm:backdrop-blur-sm sm:z-30 transition-[width] duration-200 ease-out",
+          // Seamless dark surface (Vercel-style): the sidebar fills with the
+          // same --background black as the main content. The sm:border-r (using
+          // the existing --border token) is the subtle divider that keeps the
+          // two zones distinguishable. backdrop-blur dropped — pointless on a
+          // solid fill.
+          "hidden sm:flex sm:flex-col sm:fixed sm:inset-y-0 sm:left-0 sm:border-r sm:border-border/40 sm:bg-background sm:z-30 transition-[width] duration-200 ease-out",
           collapsed ? "sm:w-16" : "sm:w-64",
         )}
         aria-label="Primary navigation"
