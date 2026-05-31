@@ -698,6 +698,11 @@ function SidebarBody({
             side="top"
             sideOffset={8}
             className="w-60"
+            // Every item here navigates (Profile/Settings) or acts (Help/Logout),
+            // so don't let Radix return focus to the trigger on close — otherwise
+            // its focus-visible ring lingers on the profile button after a
+            // client-side navigation (looked like the button stayed "selected").
+            onCloseAutoFocus={(e) => e.preventDefault()}
           >
             <DropdownMenuLabel className="font-normal">
               <div className="font-medium truncate">{userDisplayName}</div>
