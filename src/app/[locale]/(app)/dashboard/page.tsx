@@ -83,8 +83,12 @@ export default async function DashboardPage({
         />
 
         {/* Needs attention — prominent, accent-tinted action block. Always
-            rendered (shows a calm "all caught up" line when empty). */}
-        <NeedsAttention rows={worklistRows} />
+            rendered (shows a calm "all caught up" line when empty). Rows carry
+            the same right-click / "..." menu as the My-engagements table. */}
+        <NeedsAttention
+          rows={worklistRows}
+          canDelete={user ? canDeleteEngagements(user.role) : false}
+        />
 
         <TemplatesGallery templates={templateCards} />
 
