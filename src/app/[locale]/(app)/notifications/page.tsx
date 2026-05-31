@@ -43,7 +43,7 @@ export default async function NotificationsPage({
   return (
     <div className="mx-auto w-full max-w-2xl px-1 pt-10 sm:pt-14 pb-16 space-y-8">
       <Link
-        href="/inbox"
+        href="/dashboard"
         className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1 transition-colors"
       >
         <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
