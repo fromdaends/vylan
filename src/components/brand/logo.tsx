@@ -19,7 +19,7 @@ export function Logo({ size = 28, className, priority = false }: LogoProps) {
       style={{ width: size, height: size }}
     >
       <Image
-        src="/logo-mark.png"
+        src="/logo-v.png"
         alt={`${brand.name} logo`}
         width={size}
         height={size}
