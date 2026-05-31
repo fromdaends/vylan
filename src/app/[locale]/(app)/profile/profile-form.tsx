@@ -7,22 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   updateAvatarAction,
   removeAvatarAction,
   updateDisplayNameAction,
-  updateEmailAction,
-  changePasswordAction,
   type ProfileActionResult,
 } from "@/app/actions/profile";
-import { MfaSection } from "@/components/profile/mfa-section";
 
 type ProfileUser = {
   id: string;
@@ -31,18 +20,19 @@ type ProfileUser = {
   display_name: string | null;
 };
 
+// /profile keeps the personal basics: photo + display name (+ the subscription
+// card on the page). Email, Password, and Two-factor moved to Settings →
+// Account (they live alongside the firm settings now).
 export function ProfileForm({
   user,
   displayLabel,
   brandColor,
   avatarUrl,
-  mfaEnabled,
 }: {
   user: ProfileUser;
   displayLabel: string;
   brandColor: string;
   avatarUrl: string | null;
-  mfaEnabled: boolean;
 }) {
   const t = useTranslations("Profile");
   const tc = useTranslations("Common");
@@ -62,9 +52,6 @@ export function ProfileForm({
         t={t}
         tc={tc}
       />
-      <EmailSection email={user.email} t={t} />
-      <PasswordSection t={t} tc={tc} />
-      <MfaSection initialEnabled={mfaEnabled} />
     </div>
   );
 }
@@ -237,287 +224,3 @@ function DisplayNameSection({
     </section>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Email — current email shown read-only, "Change email" button opens a
-// modal. Submission triggers a Supabase-sent confirmation email to the
-// NEW address; users.email is reconciled by getCurrentUser the next
-// time the page loads after they click the confirmation link.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function EmailSection({
-  email,
-  t,
-}: {
-  email: string;
-  t: (k: string) => string;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <section>
-      <h2 className="text-sm font-semibold">{t("section_email")}</h2>
-      <p className="text-xs text-muted-foreground mt-1">
-        {t("section_email_hint")}
-      </p>
-      <div className="mt-4 max-w-sm flex items-center gap-2">
-        <Input value={email} disabled readOnly className="flex-1" />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setOpen(true)}
-        >
-          {t("change_email")}
-        </Button>
-      </div>
-      <EmailChangeDialog
-        open={open}
-        currentEmail={email}
-        onClose={() => setOpen(false)}
-      />
-    </section>
-  );
-}
-
-function EmailChangeDialog({
-  open,
-  currentEmail,
-  onClose,
-}: {
-  open: boolean;
-  currentEmail: string;
-  onClose: () => void;
-}) {
-  // Use the typed next-intl hook directly so the success message can
-  // interpolate the {email} placeholder. The parent's `t` is narrowed
-  // to (k: string) => string for the simple-label case, which doesn't
-  // accept variables.
-  const t = useTranslations("Profile");
-  const tc = useTranslations("Common");
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
-
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    const fd = new FormData(e.currentTarget);
-    const newEmail = String(fd.get("new_email") ?? "").trim();
-    startTransition(async () => {
-      const res = await updateEmailAction(fd);
-      if (!res.ok) {
-        setError(t(`errors.${res.error}`) || tc("loading"));
-        return;
-      }
-      setPendingEmail(newEmail);
-    });
-  }
-
-  function handleClose() {
-    setError(null);
-    setPendingEmail(null);
-    onClose();
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("email_modal_title")}</DialogTitle>
-          <DialogDescription>{t("email_modal_subtitle")}</DialogDescription>
-        </DialogHeader>
-        {pendingEmail ? (
-          <div className="space-y-3">
-            <p className="text-sm">
-              {t("email_check_inbox", { email: pendingEmail })}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {t("email_check_inbox_hint")}
-            </p>
-            <DialogFooter>
-              <Button type="button" onClick={handleClose}>
-                {tc("close")}
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="current_email">{t("section_email")}</Label>
-              <Input
-                id="current_email"
-                value={currentEmail}
-                disabled
-                readOnly
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="new_email">{t("new_email")}</Label>
-              <Input
-                id="new_email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                required
-                placeholder="name@example.com"
-              />
-            </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={handleClose}
-                disabled={pending}
-              >
-                {tc("cancel")}
-              </Button>
-              <Button type="submit" disabled={pending}>
-                {pending ? tc("saving") : t("submit_email")}
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Password — modal with current + new + confirm
-// ─────────────────────────────────────────────────────────────────────────────
-
-function PasswordSection({
-  t,
-  tc,
-}: {
-  t: (k: string) => string;
-  tc: (k: string) => string;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <section>
-      <h2 className="text-sm font-semibold">{t("section_password")}</h2>
-      <p className="text-xs text-muted-foreground mt-1">
-        {t("section_password_hint")}
-      </p>
-      <div className="mt-4">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setOpen(true)}
-        >
-          {t("change_password")}
-        </Button>
-      </div>
-      <PasswordDialog open={open} onClose={() => setOpen(false)} t={t} tc={tc} />
-    </section>
-  );
-}
-
-function PasswordDialog({
-  open,
-  onClose,
-  t,
-  tc,
-}: {
-  open: boolean;
-  onClose: () => void;
-  t: (k: string) => string;
-  tc: (k: string) => string;
-}) {
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    setSuccess(false);
-    const fd = new FormData(e.currentTarget);
-    const newPw = String(fd.get("new_password") ?? "");
-    const confirm = String(fd.get("new_password_confirm") ?? "");
-    if (newPw !== confirm) {
-      setError(t("errors.mismatch"));
-      return;
-    }
-    startTransition(async () => {
-      const res = await changePasswordAction(fd);
-      if (!res.ok) {
-        setError(t(`errors.${res.error}`) || tc("loading"));
-        return;
-      }
-      setSuccess(true);
-      setTimeout(() => {
-        setSuccess(false);
-        onClose();
-      }, 1200);
-    });
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{t("password_modal_title")}</DialogTitle>
-          <DialogDescription>{t("password_modal_subtitle")}</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="current_password">{t("current_password")}</Label>
-            <Input
-              id="current_password"
-              name="current_password"
-              type="password"
-              autoComplete="current-password"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new_password">{t("new_password")}</Label>
-            <Input
-              id="new_password"
-              name="new_password"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="new_password_confirm">
-              {t("new_password_confirm")}
-            </Label>
-            <Input
-              id="new_password_confirm"
-              name="new_password_confirm"
-              type="password"
-              autoComplete="new-password"
-              minLength={8}
-              required
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {success && (
-            <p className="text-sm text-success">{t("password_changed")}</p>
-          )}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={onClose}
-              disabled={pending}
-            >
-              {tc("cancel")}
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? tc("saving") : t("submit_password")}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-

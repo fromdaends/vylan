@@ -4,6 +4,7 @@ import { getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getBrandingImageUrl } from "@/lib/storage";
 import { assertLocale } from "@/lib/locale";
 import { BILLING_ENABLED } from "@/lib/billing-mode";
 import { SettingsShell } from "./settings-form";
@@ -12,15 +13,20 @@ import { GoLiveCard } from "@/components/settings/go-live-card";
 export const dynamic = "force-dynamic";
 
 // /settings: a sectioned settings surface (sub-nav on the left, the selected
-// category on the right). Categories: Appearance (mode + accent), General
-// (language + timezone), Documents (auto-reject), and an owner-only Data &
-// privacy bucket (audit log, export, delete request).
+// category on the right). Categories: Account (firm settings + email +
+// password + two-factor), Appearance (mode), General (language + timezone),
+// Documents (auto-reject), and an owner-only Data & privacy bucket.
+// ?tab=<section> deep-links a category (used by the avatar menu + the old
+// /firm redirect).
 export default async function SettingsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { locale: rawLocale } = await params;
+  const { tab } = await searchParams;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -29,10 +35,20 @@ export default async function SettingsPage({
   if (!auth.user) {
     redirect(getPathname({ locale, href: "/login" }));
   }
-  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  const [user, firm, mfaFactors] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    supabase.auth.mfa.listFactors(),
+  ]);
   if (!user || !firm) {
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
+
+  const firmLogoUrl = await getBrandingImageUrl(firm.logo_url);
+  // MFA is "enabled" only with a verified TOTP factor (unverified = mid-enroll).
+  const mfaEnabled = (mfaFactors.data?.totp ?? []).some(
+    (f) => f.status === "verified",
+  );
 
   const t = await getTranslations("Settings");
 
@@ -54,6 +70,15 @@ export default async function SettingsPage({
         isOwner={user.role === "owner"}
         billingEnabled={BILLING_ENABLED}
         firmName={firm.name}
+        firm={{
+          name: firm.name,
+          brand_color: firm.brand_color,
+          locale_default: firm.locale_default,
+        }}
+        firmLogoUrl={firmLogoUrl}
+        email={user.email}
+        mfaEnabled={mfaEnabled}
+        initialSection={tab}
       />
     </div>
   );
