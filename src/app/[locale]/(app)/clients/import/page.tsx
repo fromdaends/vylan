@@ -1,8 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { CsvImportClient } from "./csv-import-client";
-import { Link } from "@/i18n/navigation";
-import { ArrowLeft } from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 export default async function ImportPage({
   params,
@@ -13,16 +12,18 @@ export default async function ImportPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
   const t = await getTranslations("Clients");
+  const tApp = await getTranslations("App");
+  const tCommon = await getTranslations("Common");
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <Link
-        href="/clients"
-        className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-      >
-        <ArrowLeft className="size-3.5" />
-        {t("back_to_list")}
-      </Link>
+      <Breadcrumb
+        label={tCommon("breadcrumb")}
+        items={[
+          { label: tApp("nav_clients"), href: "/clients" },
+          { label: t("import_title") },
+        ]}
+      />
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">
           {t("import_title")}

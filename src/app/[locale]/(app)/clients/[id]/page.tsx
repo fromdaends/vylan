@@ -14,7 +14,8 @@ import {
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
-import { ArrowLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 export default async function ClientDetailPage({
   params,
@@ -32,18 +33,18 @@ export default async function ClientDetailPage({
   const t = await getTranslations("Clients");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
+  const tApp = await getTranslations("App");
+  const tCommon = await getTranslations("Common");
 
   return (
     <div className="space-y-6 max-w-3xl">
-      <div>
-        <Link
-          href="/clients"
-          className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-        >
-          <ArrowLeft className="size-3.5" />
-          {t("back_to_list")}
-        </Link>
-      </div>
+      <Breadcrumb
+        label={tCommon("breadcrumb")}
+        items={[
+          { label: tApp("nav_clients"), href: "/clients" },
+          { label: client.display_name },
+        ]}
+      />
 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
