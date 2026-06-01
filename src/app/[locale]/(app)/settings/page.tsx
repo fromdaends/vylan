@@ -13,11 +13,12 @@ import { SubscriptionCard } from "@/components/billing/subscription-card";
 export const dynamic = "force-dynamic";
 
 // /settings: a sectioned settings surface (sub-nav on the left, the selected
-// category on the right). Categories: Account (firm settings), Security (email
-// + password + two-factor), Appearance (mode), General (language + timezone),
-// Billing (subscription, owner-only), Documents (auto-reject), and an
-// owner-only Data & privacy bucket. ?tab=<section> deep-links a category (used
-// by the avatar menu + the old /firm redirect).
+// category on the right). Categories: Account (firm settings), Security &
+// privacy (email + password + two-factor for everyone, plus the owner-only
+// audit log / export / delete tools), Appearance (mode), General (language +
+// timezone), Billing (subscription, owner-only), Documents (auto-reject).
+// ?tab=<section> deep-links a category (used by the avatar menu + the old
+// /firm redirect).
 export default async function SettingsPage({
   params,
   searchParams,

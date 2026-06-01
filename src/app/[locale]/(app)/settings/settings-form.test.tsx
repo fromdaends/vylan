@@ -93,13 +93,18 @@ describe("SettingsShell — Security + Billing tabs", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders email/password/two-factor under the Security tab", () => {
-    renderShell({ initialSection: "security" });
+  it("renders email/password/two-factor AND the owner's privacy tools under one Security tab", () => {
+    renderShell({ initialSection: "security", isOwner: true });
     // Email section shows the current address read-only.
     expect(screen.getByDisplayValue(EMAIL)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: en.Profile.change_password }),
     ).toBeInTheDocument();
+    // Data & privacy is merged in here (owner) — no separate tab.
+    expect(screen.getByText(en.Settings.data_export_label)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: en.Settings.nav_data }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the subscription slot only after switching to the Billing tab", () => {
@@ -113,16 +118,19 @@ describe("SettingsShell — Security + Billing tabs", () => {
     expect(screen.queryByDisplayValue(EMAIL)).not.toBeInTheDocument();
   });
 
-  it("hides Billing (and Data) from non-owners but keeps Security", () => {
+  it("keeps Security for non-owners but hides Billing + the owner-only privacy tools", () => {
     renderShell({ isOwner: false, billingSlot: null });
     expect(
       screen.getByRole("button", { name: en.Settings.nav_security }),
     ).toBeInTheDocument();
+    // Non-owner still gets their own email/password/2FA.
+    expect(screen.getByDisplayValue(EMAIL)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: en.Settings.nav_billing }),
     ).not.toBeInTheDocument();
+    // ...but the audit/export/delete tools stay owner-only inside the tab.
     expect(
-      screen.queryByRole("button", { name: en.Settings.nav_data }),
+      screen.queryByText(en.Settings.data_export_label),
     ).not.toBeInTheDocument();
   });
 });
