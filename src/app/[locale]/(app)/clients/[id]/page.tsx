@@ -4,7 +4,6 @@ import { getClient } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import { ClientDetailForm } from "@/components/clients/client-detail-form";
@@ -87,12 +86,11 @@ export default async function ClientDetailPage({
         </div>
       </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("contact_info")}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {client.archived_at ? (
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          {t("contact_info")}
+        </h2>
+        {client.archived_at ? (
             // Archived clients: keep the read-only DetailRow rendering.
             // Editing an archived record without first restoring it would
             // be surprising, so the inline inputs are gated.
@@ -117,17 +115,16 @@ export default async function ClientDetailPage({
               }}
             />
           )}
-        </CardContent>
-      </Card>
+      </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">
+      <div className="space-y-3">
+        <div className="flex flex-row items-center justify-between gap-3">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">
             {t("engagements")}{" "}
             <span className="text-muted-foreground font-normal">
               ({engagements.length})
             </span>
-          </CardTitle>
+          </h2>
           {!client.archived_at && (
             <Link href={`/engagements/new?client=${client.id}`}>
               <Button size="sm">
@@ -136,14 +133,13 @@ export default async function ClientDetailPage({
               </Button>
             </Link>
           )}
-        </CardHeader>
-        <CardContent>
+        </div>
           {engagements.length === 0 ? (
             <div className="text-sm text-muted-foreground py-4">
               {t("engagements_empty")}
             </div>
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="divide-y divide-border border-t border-border">
               {engagements.map((e) => (
                 <li key={e.id} className="py-3">
                   <Link
@@ -165,8 +161,7 @@ export default async function ClientDetailPage({
               ))}
             </ul>
           )}
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

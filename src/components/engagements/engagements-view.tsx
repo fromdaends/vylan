@@ -115,7 +115,7 @@ export function EngagementsView({
       {/* Recently Deleted: surface the 30-day recovery policy up front so a
           finding-it-here user isn't surprised by the eventual purge. */}
       {view === "deleted" && (
-        <p className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+        <p className="rounded-lg border border-border/40 bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
           {t("deleted_policy_note")}
         </p>
       )}
