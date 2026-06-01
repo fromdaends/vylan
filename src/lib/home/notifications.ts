@@ -11,7 +11,8 @@
 //   - ai_auto_rejected         (AI auto-rejected a client upload)
 //   - ai_escalated_to_accountant (AI flagged the same file twice)
 //   - ai_quality_flagged       (AI flagged a file for review)
-//   - ready_to_review          (engagement has every required item in)
+//   - ready_to_review          (client has uploaded every required item —
+//                               regardless of the AI's verdict on them)
 //   - overdue                  (engagement's due_date has passed)
 
 import { listAiActivityForFirm } from "@/lib/db/ai-activity";
@@ -20,7 +21,7 @@ import { listClients, type Client } from "@/lib/db/clients";
 import { getServerSupabase } from "@/lib/supabase/server";
 import {
   computeAttention,
-  isReadyToReview,
+  isCollectionComplete,
 } from "@/lib/attention";
 
 export type HomeNotificationKind =
@@ -124,7 +125,11 @@ export async function listHomeNotifications(
       });
       const clientName =
         clientsById.get(e.client_id)?.display_name ?? null;
-      if (isReadyToReview(attention)) {
+      // Fire the moment the client has uploaded a file for every required
+      // item — regardless of whether the AI approved, rejected, or hasn't
+      // weighed in yet. (The dashboard's "Ready to review" queue still uses the
+      // narrower isReadyToReview; this feed is purely "the client finished".)
+      if (isCollectionComplete(attention)) {
         out.push({
           id: `ready:${e.id}`,
           kind: "ready_to_review",
