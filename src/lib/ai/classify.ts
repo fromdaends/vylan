@@ -7,6 +7,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import type { DocType } from "@/lib/db/templates";
+import { DOC_TYPES, DOC_TYPE_LABELS } from "@/lib/doc-types";
 import {
   USABILITY_ISSUES,
   USABLE_BY_DEFAULT,
@@ -39,16 +40,9 @@ export function isAiConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
 }
 
-const KNOWN_DOC_TYPES: DocType[] = [
-  "t4", "rl1", "t5", "rl3", "t3", "rl16", "noa",
-  "bank_statement", "credit_card_statement", "receipt",
-  "t2202", "rrsp", "medical", "donation", "rental",
-  "gst_hst_qst", "trial_balance", "gl_export", "financials",
-  "shareholder_loan", "payroll_summary", "capital_asset",
-  "inventory", "invoice",
-  "t1135", "t2125",
-  "other",
-];
+// Every doc type Vylan recognizes — derived from the single source of truth in
+// @/lib/doc-types so the classifier can never fall behind the picker.
+const KNOWN_DOC_TYPES: DocType[] = DOC_TYPES;
 
 const CLASSIFY_TOOL = {
   name: "classify_document",
@@ -147,31 +141,7 @@ function buildSystemPrompt(expected: DocType): string {
 The accountant requested a "${expected}" document from the client. The client just uploaded what you're about to see.
 
 Canadian tax document reference (use these exact identifiers):
-- t4 = T4 federal employment income slip
-- rl1 = Quebec RL-1 (provincial T4 equivalent)
-- t5 = T5 federal investment income slip
-- rl3 = Quebec RL-3
-- t3 = T3 federal trust income slip
-- rl16 = Quebec RL-16
-- t2202 = T2202 tuition slip
-- t1135 = T1135 Foreign Income Verification Statement (required when the
-  client held more than CAD $100,000 in foreign property at any point
-  during the year — foreign stocks/ETFs in a non-registered account,
-  foreign rental property, foreign bank accounts, etc.)
-- t2125 = T2125 Statement of Business or Professional Activities
-  (self-employment / freelance / small-business income and expenses)
-- noa = Notice of Assessment from CRA
-- bank_statement = monthly bank statement
-- credit_card_statement = monthly credit card statement
-- receipt = generic expense receipt
-- rrsp = RRSP contribution slip
-- medical = medical receipt
-- donation = donation receipt
-- rental = rental property income/expense summary
-- gst_hst_qst = sales tax filing
-- trial_balance, gl_export, financials, shareholder_loan = corporate accounting docs
-- payroll_summary, capital_asset, inventory, invoice = other business docs
-- other = anything else
+${DOC_TYPES.map((c) => `- ${c} = ${DOC_TYPE_LABELS[c].ai}`).join("\n")}
 - unknown = can't tell
 
 After identifying the document type, also assess whether this document is

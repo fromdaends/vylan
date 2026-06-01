@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -21,23 +21,17 @@ import {
   addItemAction,
   type ItemActionState,
 } from "@/app/actions/items";
-import type { DocType } from "@/lib/db/templates";
 import { Plus } from "lucide-react";
-
-const DOC_TYPES: DocType[] = [
-  "t4", "rl1", "t5", "rl3", "t3", "rl16", "noa",
-  "bank_statement", "credit_card_statement", "receipt",
-  "t2202", "rrsp", "medical", "donation", "rental",
-  "gst_hst_qst", "trial_balance", "gl_export", "financials",
-  "shareholder_loan", "payroll_summary", "capital_asset",
-  "inventory", "invoice",
-  "t1135", "t2125",
-  "other",
-];
+import {
+  docTypesByGroup,
+  docTypeLabel,
+  docTypeGroupLabel,
+} from "@/lib/doc-types";
 
 export function AddItemDialog({ engagementId }: { engagementId: string }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const [state, action, pending] = useActionState<ItemActionState, FormData>(
@@ -101,12 +95,19 @@ export function AddItemDialog({ engagementId }: { engagementId: string }) {
                 id="doc_type"
                 name="doc_type"
                 defaultValue="other"
-                className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono text-xs h-9"
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm h-9"
               >
-                {DOC_TYPES.map((dt) => (
-                  <option key={dt} value={dt}>
-                    {dt}
-                  </option>
+                {docTypesByGroup().map((g) => (
+                  <optgroup
+                    key={g.group}
+                    label={docTypeGroupLabel(g.group, locale)}
+                  >
+                    {g.codes.map((dt) => (
+                      <option key={dt} value={dt}>
+                        {docTypeLabel(dt, locale)}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </div>

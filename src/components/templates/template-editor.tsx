@@ -15,17 +15,11 @@ import {
   type UpdateTemplateState,
 } from "@/app/actions/templates";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
-
-const DOC_TYPES: DocType[] = [
-  "t4", "rl1", "t5", "rl3", "t3", "rl16", "noa",
-  "bank_statement", "credit_card_statement", "receipt",
-  "t2202", "rrsp", "medical", "donation", "rental",
-  "gst_hst_qst", "trial_balance", "gl_export", "financials",
-  "shareholder_loan", "payroll_summary", "capital_asset",
-  "inventory", "invoice",
-  "t1135", "t2125",
-  "other",
-];
+import {
+  docTypesByGroup,
+  docTypeLabel,
+  docTypeGroupLabel,
+} from "@/lib/doc-types";
 
 export function TemplateEditor({
   template,
@@ -34,7 +28,6 @@ export function TemplateEditor({
   template: Template;
   locale: "fr" | "en";
 }) {
-  void locale;
   const t = useTranslations("Templates");
   const tc = useTranslations("Common");
   const tEng = useTranslations("Engagements");
@@ -168,12 +161,19 @@ export function TemplateEditor({
                           doc_type: e.target.value as DocType,
                         })
                       }
-                      className="rounded-md border border-input bg-background px-2 py-1 font-mono"
+                      className="rounded-md border border-input bg-background px-2 py-1 text-sm"
                     >
-                      {DOC_TYPES.map((dt) => (
-                        <option key={dt} value={dt}>
-                          {dt}
-                        </option>
+                      {docTypesByGroup().map((g) => (
+                        <optgroup
+                          key={g.group}
+                          label={docTypeGroupLabel(g.group, locale)}
+                        >
+                          {g.codes.map((dt) => (
+                            <option key={dt} value={dt}>
+                              {docTypeLabel(dt, locale)}
+                            </option>
+                          ))}
+                        </optgroup>
                       ))}
                     </select>
                     <label className="flex items-center gap-1.5 select-none cursor-pointer">

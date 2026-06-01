@@ -79,7 +79,7 @@
     "ai_body_long": "Every time a client uploads a document, Claude reads it. If it's the wrong slip, the wrong year, a blurry photo, or a missing page, you'll know before it ever lands in your queue — and your client gets a polite, bilingual nudge to fix it. You spend your time on the work that actually pays.",
     "ai_bullet_1": "Spots the wrong document — wrong slip, wrong year, missing page — before it reaches your inbox.",
     "ai_bullet_2": "Catches blurry photos and partial scans, then asks the client to re-take them on their phone.",
-    "ai_bullet_3": "Sorts uploads by type (T4, T5, RC slips, receipts) so your queue stays organized for you.",
+    "ai_bullet_3": "Sorts uploads by type (T4, T5, RL slips, receipts) so your queue stays organized for you.",
     "ai_bullet_4": "Sends the retry request automatically — no extra clicks, no chasing.",
     "ai_v2_card_badge": "Document verified",
     "ai_v2_card_callout_title": "Document verified",

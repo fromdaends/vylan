@@ -79,7 +79,7 @@
     "ai_body_long": "Chaque fois qu'un client téléverse un document, Claude le lit. S'il s'agit du mauvais feuillet, de la mauvaise année, d'une photo floue ou d'une page manquante, vous le saurez avant que ça atteigne votre file — et votre client reçoit un rappel poli et bilingue pour le corriger. Vous passez votre temps sur le travail qui paie vraiment.",
     "ai_bullet_1": "Détecte le mauvais document — mauvais feuillet, mauvaise année, page manquante — avant qu'il atteigne votre boîte.",
     "ai_bullet_2": "Repère les photos floues et les scans partiels, puis demande au client de les reprendre depuis son téléphone.",
-    "ai_bullet_3": "Classe les téléversements par type (T4, T5, feuillets RC, reçus) pour garder votre file en ordre.",
+    "ai_bullet_3": "Classe les téléversements par type (T4, T5, feuillets RL, reçus) pour garder votre file en ordre.",
     "ai_bullet_4": "Envoie automatiquement la demande de reprise — aucun clic supplémentaire, aucune relance manuelle.",
     "ai_v2_card_badge": "Document vérifié",
     "ai_v2_card_callout_title": "Document vérifié",
