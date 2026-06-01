@@ -154,7 +154,7 @@ function Section({
 
 function TemplateList({ children }: { children: React.ReactNode }) {
   return (
-    <ul className="rounded-xl border border-border bg-card divide-y divide-border/60 overflow-hidden">
+    <ul className="divide-y divide-border/60">
       {children}
     </ul>
   );
@@ -202,7 +202,7 @@ function TemplateRow({
 
 function EmptyState({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-dashed border-border bg-card/40 px-5 py-10 flex flex-col items-center justify-center gap-3 text-center">
+    <div className="rounded-xl border border-dashed border-border/50 px-5 py-10 flex flex-col items-center justify-center gap-3 text-center">
       {children}
     </div>
   );
