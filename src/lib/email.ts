@@ -12,6 +12,10 @@ type SendArgs = {
   // Optional Reply-To — e.g. internal notifications set this to the person who
   // triggered them so a reply goes straight to them, not to the from address.
   replyTo?: string;
+  // Optional From override (must be on the verified vylan.app domain). Used to
+  // avoid a "self-send" — e.g. a notification TO hello@vylan.app should come
+  // FROM notifications@vylan.app, not hello@→hello@, which Gmail spam-files.
+  from?: string;
 };
 
 let _client: Resend | null = null;
@@ -29,6 +33,7 @@ export async function sendEmail({
   html,
   text,
   replyTo,
+  from: fromOverride,
 }: SendArgs): Promise<
   { sent: true; id: string } | { sent: false; reason: string }
 > {
@@ -39,7 +44,7 @@ export async function sendEmail({
   // initial Resend setup and easy to forget about), ignore it: Resend
   // 403s on resend.dev → external recipients, so honoring that value
   // would silently break founder notifications.
-  const rawFrom = process.env.RESEND_FROM_EMAIL?.trim();
+  const rawFrom = fromOverride?.trim() || process.env.RESEND_FROM_EMAIL?.trim();
   const from =
     !rawFrom || /@resend\.dev$/i.test(rawFrom) ? "hello@vylan.app" : rawFrom;
   if (!c) {
