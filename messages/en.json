@@ -741,6 +741,8 @@
     "add_item_title": "Add a checklist item",
     "add_item_subtitle": "The client will see this on their portal the next time they refresh.",
     "doc_type": "Document type",
+    "doc_type_search": "Search documents…",
+    "doc_type_empty": "No matching document.",
     "send_reminder": "Send reminder now",
     "pause_reminders": "Pause reminders",
     "resume_reminders": "Resume reminders",

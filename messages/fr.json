@@ -741,6 +741,8 @@
     "add_item_title": "Ajouter un élément",
     "add_item_subtitle": "Le client verra ce nouvel élément à sa prochaine ouverture du portail.",
     "doc_type": "Type de document",
+    "doc_type_search": "Rechercher un document…",
+    "doc_type_empty": "Aucun document correspondant.",
     "send_reminder": "Envoyer un rappel",
     "pause_reminders": "Pauser les rappels",
     "resume_reminders": "Reprendre les rappels",

@@ -16,11 +16,7 @@ import {
 } from "@/components/clients/client-combobox";
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
-import {
-  docTypesByGroup,
-  docTypeLabel,
-  docTypeGroupLabel,
-} from "@/lib/doc-types";
+import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 
 type KnownErrorKey =
   | "missing_client"
@@ -375,28 +371,11 @@ export function EngagementBuilder({
                         className="text-xs"
                       />
                       <div className="flex items-center gap-3 text-xs">
-                        <select
+                        <DocTypePicker
                           value={item.doc_type}
-                          onChange={(e) =>
-                            updateItem(idx, {
-                              doc_type: e.target.value as DocType,
-                            })
-                          }
-                          className="rounded-md border border-input bg-background px-2 py-1 text-sm"
-                        >
-                          {docTypesByGroup().map((g) => (
-                            <optgroup
-                              key={g.group}
-                              label={docTypeGroupLabel(g.group, locale)}
-                            >
-                              {g.codes.map((dt) => (
-                                <option key={dt} value={dt}>
-                                  {docTypeLabel(dt, locale)}
-                                </option>
-                              ))}
-                            </optgroup>
-                          ))}
-                        </select>
+                          onChange={(dt) => updateItem(idx, { doc_type: dt })}
+                          className="h-8 w-[14rem] max-w-full text-xs"
+                        />
                         <label className="flex items-center gap-1.5 select-none cursor-pointer">
                           <input
                             type="checkbox"

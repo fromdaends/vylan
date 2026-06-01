@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useTranslations, useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
 import {
   Dialog,
   DialogContent,
@@ -22,17 +22,14 @@ import {
   type ItemActionState,
 } from "@/app/actions/items";
 import { Plus } from "lucide-react";
-import {
-  docTypesByGroup,
-  docTypeLabel,
-  docTypeGroupLabel,
-} from "@/lib/doc-types";
+import { DocTypePicker } from "@/components/engagements/doc-type-picker";
+import type { DocType } from "@/lib/db/templates";
 
 export function AddItemDialog({ engagementId }: { engagementId: string }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
-  const locale = useLocale();
   const [open, setOpen] = useState(false);
+  const [docType, setDocType] = useState<DocType>("other");
   const router = useRouter();
   const [state, action, pending] = useActionState<ItemActionState, FormData>(
     addItemAction,
@@ -43,6 +40,7 @@ export function AddItemDialog({ engagementId }: { engagementId: string }) {
     if (!state?.ok) return;
     queueMicrotask(() => {
       setOpen(false);
+      setDocType("other");
       router.refresh();
     });
   }, [state, router]);
@@ -91,25 +89,13 @@ export function AddItemDialog({ engagementId }: { engagementId: string }) {
           <div className="flex items-center gap-3 text-sm">
             <div className="space-y-1.5 flex-1">
               <Label htmlFor="doc_type">{t("doc_type")}</Label>
-              <select
+              <input type="hidden" name="doc_type" value={docType} />
+              <DocTypePicker
                 id="doc_type"
-                name="doc_type"
-                defaultValue="other"
-                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm h-9"
-              >
-                {docTypesByGroup().map((g) => (
-                  <optgroup
-                    key={g.group}
-                    label={docTypeGroupLabel(g.group, locale)}
-                  >
-                    {g.codes.map((dt) => (
-                      <option key={dt} value={dt}>
-                        {docTypeLabel(dt, locale)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
+                value={docType}
+                onChange={setDocType}
+                className="w-full"
+              />
             </div>
             <label className="flex items-center gap-1.5 select-none cursor-pointer pt-5">
               <input type="checkbox" name="required" />
