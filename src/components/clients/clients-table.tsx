@@ -212,7 +212,7 @@ function ClientRowWithDrawer({
       </TableRow>
       {isOpen && (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={TABLE_COLS} className="bg-muted/20 px-6 py-4">
+          <TableCell colSpan={TABLE_COLS} className="px-6 py-4">
             <ExpandedDrawer
               clientId={client.id}
               engagements={engagements}
