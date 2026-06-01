@@ -4,7 +4,16 @@ import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 
-export function ThemeToggle({ className = "" }: { className?: string }) {
+export function ThemeToggle({
+  className = "",
+  lightLabel = "Switch to light mode",
+  darkLabel = "Switch to dark mode",
+}: {
+  className?: string;
+  // Optional localized aria-labels (the bilingual client portal passes FR/EN).
+  lightLabel?: string;
+  darkLabel?: string;
+}) {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -27,7 +36,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
     <button
       type="button"
       onClick={toggle}
-      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={isDark ? lightLabel : darkLabel}
       className={
         "relative inline-flex h-8 w-8 items-center justify-center rounded-md " +
         "border border-border bg-card text-muted-foreground " +

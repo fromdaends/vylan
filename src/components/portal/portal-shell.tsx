@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ShieldCheck } from "lucide-react";
 import type { PortalContext } from "@/lib/db/portal";
 import { ItemCard } from "./item-card";
 import { PortalFooter } from "./portal-footer";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 export function PortalShell({
   ctx,
@@ -58,13 +59,13 @@ export function PortalShell({
 
   return (
     <div className="relative flex flex-1 flex-col">
-      {/* Soft, firm-coloured glow behind the top of the page — gives the clean
-          surface depth without a heavy colour band. */}
+      {/* Soft, firm-coloured glow behind the top — gives the surface depth in
+          both light and dark without a heavy colour band. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72"
         style={{
-          background: `radial-gradient(72% 100% at 50% 0%, ${brand}1f, transparent 72%)`,
+          background: `radial-gradient(72% 100% at 50% 0%, ${brand}24, transparent 72%)`,
         }}
       />
       {/* Hairline brand accent at the very top. */}
@@ -78,11 +79,11 @@ export function PortalShell({
               <img
                 src={firmLogoUrl}
                 alt={ctx.firm.name}
-                className="size-10 shrink-0 rounded-xl object-cover ring-1 ring-black/5"
+                className="size-10 shrink-0 rounded-xl object-cover ring-1 ring-border"
               />
             ) : (
               <div
-                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold text-white ring-1 ring-black/5"
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold text-white ring-1 ring-black/10"
                 style={{ background: brand }}
                 aria-hidden
               >
@@ -98,30 +99,41 @@ export function PortalShell({
               </div>
             </div>
           </div>
-          <a
-            href={`?lang=${otherLocale}`}
-            className="shrink-0 rounded-full border border-border/70 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {otherLocale.toUpperCase()}
-          </a>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href={`?lang=${otherLocale}`}
+              className="inline-flex h-8 items-center rounded-full border border-border bg-card px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {otherLocale.toUpperCase()}
+            </a>
+            <ThemeToggle
+              className="rounded-full"
+              lightLabel={t("theme_light")}
+              darkLabel={t("theme_dark")}
+            />
+          </div>
         </div>
       </header>
 
       <main className="animate-in-up mx-auto w-full max-w-2xl flex-1 space-y-8 px-4 py-8 sm:px-6 sm:py-10">
-        <section className="space-y-2">
+        <section className="space-y-2.5">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {t("greeting", { name: ctx.client.display_name })}
           </h1>
           <p className="max-w-prose text-[15px] leading-relaxed text-muted-foreground">
             {t("subhead", { firm: ctx.firm.name })}
           </p>
+          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
+            {t("trust", { firm: ctx.firm.name })}
+          </p>
         </section>
 
         {total > 0 && (
           <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
             {allDone ? (
-              <div className="flex items-center gap-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-success/12 text-success">
+              <div className="flex items-center gap-3.5">
+                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
                   <CheckCircle2 className="size-6" aria-hidden />
                 </span>
                 <div className="min-w-0">
@@ -134,30 +146,17 @@ export function PortalShell({
                 </div>
               </div>
             ) : (
-              <>
-                <div className="flex items-end justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-foreground">
-                      {t("progress", { done, total })}
-                    </div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      {t("items_remaining", { count: remaining })}
-                    </div>
+              <div className="flex items-center gap-4">
+                <ProgressRing pct={pct} brand={brand} />
+                <div className="min-w-0">
+                  <div className="text-base font-semibold tracking-tight text-foreground">
+                    {t("progress", { done, total })}
                   </div>
-                  <div
-                    className="font-mono text-2xl font-semibold leading-none tabular-nums"
-                    style={{ color: brand }}
-                  >
-                    {pct}%
+                  <div className="mt-0.5 text-sm text-muted-foreground">
+                    {t("items_remaining", { count: remaining })}
                   </div>
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className="h-full rounded-full transition-all duration-700 ease-out motion-reduce:transition-none"
-                    style={{ width: `${pct}%`, background: brand }}
-                  />
-                </div>
-              </>
+              </div>
             )}
           </section>
         )}
@@ -183,6 +182,52 @@ export function PortalShell({
           body={helpBody}
         />
       </main>
+    </div>
+  );
+}
+
+// Circular progress ring with the percentage in the centre. The track uses a
+// theme token (adapts light/dark); the filled arc is the firm's brand colour.
+// The percentage uses the foreground token so it stays readable on any brand.
+function ProgressRing({ pct, brand }: { pct: number; brand: string }) {
+  const size = 64;
+  const stroke = 6;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - Math.min(100, Math.max(0, pct)) / 100);
+  return (
+    <div className="relative shrink-0" style={{ width: size, height: size }}>
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className="-rotate-90"
+        aria-hidden
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          strokeWidth={stroke}
+          className="stroke-muted"
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          strokeWidth={stroke}
+          stroke={brand}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={offset}
+          className="transition-[stroke-dashoffset] duration-700 ease-out motion-reduce:transition-none"
+        />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center font-mono text-sm font-semibold tabular-nums text-foreground">
+        {pct}%
+      </span>
     </div>
   );
 }
