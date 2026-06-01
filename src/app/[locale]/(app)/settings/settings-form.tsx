@@ -366,7 +366,7 @@ function GeneralSection({
           </p>
           <Link
             href="/billing"
-            className="mt-4 flex max-w-xl items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+            className="mt-4 flex max-w-xl items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
           >
             <span className="flex items-center gap-3">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
@@ -422,7 +422,7 @@ function LanguageSection({
       <p className="mt-1 text-xs text-muted-foreground">
         {t("section_language_hint")}
       </p>
-      <div className="mt-4 inline-flex rounded-md border border-border bg-secondary/40 p-0.5">
+      <div className="mt-4 inline-flex rounded-md bg-secondary/40 p-0.5">
         <LangButton
           label="Français"
           active={value === "fr"}
@@ -460,7 +460,7 @@ function LangButton({
       className={cn(
         "rounded-md px-3 py-1.5 text-sm transition-colors",
         active
-          ? "bg-card text-foreground shadow-sm"
+          ? "bg-card text-foreground"
           : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -568,7 +568,7 @@ function DocumentsSection({
       <p className="mt-1 text-xs text-muted-foreground">
         {t("section_doc_handling_hint")}
       </p>
-      <div className="mt-4 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3">
+      <div className="mt-4 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border/50 px-4 py-3">
         <div className="space-y-1">
           <div className="text-sm font-medium">{t("auto_reject_label")}</div>
           <p className="text-xs leading-relaxed text-muted-foreground">
@@ -606,7 +606,7 @@ function DataPrivacySection({
       <div className="mt-4 max-w-xl space-y-3">
         <Link
           href="/settings/audit"
-          className="group flex items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+          className="group flex items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
         >
           <span className="flex items-center gap-3">
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
@@ -626,7 +626,7 @@ function DataPrivacySection({
         <a
           href="/api/firm/export.zip"
           download
-          className="group flex items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+          className="group flex items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
         >
           <span className="flex items-center gap-3">
             <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
