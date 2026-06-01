@@ -627,7 +627,11 @@
     "inline_error_missing_id": "Couldn't save — client ID missing.",
     "saved_toast": "Changes saved",
     "created_toast": "Client added",
-    "save_error": "Couldn't save your changes. Please try again."
+    "save_error": "Couldn't save your changes. Please try again.",
+    "email_confirm_title": "Change this client's email?",
+    "email_confirm_desc": "You're changing this client's email from {from} to {to}. Document links and reminders will be sent to the new address.",
+    "email_confirm_confirm": "Confirm change",
+    "email_confirm_none": "(no email)"
   },
   "Engagements": {
     "title": "Engagements",

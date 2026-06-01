@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -30,6 +30,7 @@ import {
   type ClientFormState,
 } from "@/app/actions/clients";
 import type { Client } from "@/lib/db/clients";
+import { emailChangeNeedsConfirm } from "./email-change";
 import { Plus, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
@@ -67,6 +68,46 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, router]);
 
+  // Changing a client's email is consequential — it's the address that
+  // document-request links and reminders are sent to — so editing it
+  // pauses for a deliberate confirmation before the save goes through.
+  // Every other field saves without the extra step.
+  //
+  // Submission is driven manually (preventDefault, then dispatch the action
+  // ourselves) rather than via the form's `action` attribute, so the email
+  // guard can never be bypassed by a stray native submit.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [emailConfirm, setEmailConfirm] = useState<{
+    from: string;
+    to: string;
+  } | null>(null);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    // Native field validation first (required name, email format).
+    if (!form.reportValidity()) return;
+    const data = new FormData(form);
+    const nextEmail = String(data.get("email") ?? "");
+    if (emailChangeNeedsConfirm(mode, client?.email, nextEmail)) {
+      // Hold the save until confirmed. The fields are uncontrolled, so
+      // Cancel just returns to the open editor with the pending email
+      // still typed in — nothing is discarded.
+      setEmailConfirm({
+        from: (client?.email ?? "").trim(),
+        to: nextEmail.trim(),
+      });
+      return;
+    }
+    formAction(data);
+  }
+
+  function confirmEmailChange() {
+    const form = formRef.current;
+    setEmailConfirm(null);
+    if (form) formAction(new FormData(form));
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -92,7 +133,7 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
             {mode === "create" ? t("add_subtitle") : t("edit_subtitle")}
           </DialogDescription>
         </DialogHeader>
-        <form action={formAction} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
           <input type="hidden" name="__app_locale" value={locale} />
           {client && <input type="hidden" name="id" value={client.id} />}
           {state?.error && (
@@ -211,6 +252,40 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
             </Button>
           </DialogFooter>
         </form>
+
+        {/* Deliberate confirmation for an email change — this address
+            drives where document links + reminders are sent. Cancel
+            returns to the open editor with the pending change intact. */}
+        <Dialog
+          open={emailConfirm !== null}
+          onOpenChange={(o) => {
+            if (!o) setEmailConfirm(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("email_confirm_title")}</DialogTitle>
+              <DialogDescription>
+                {t("email_confirm_desc", {
+                  from: emailConfirm?.from || t("email_confirm_none"),
+                  to: emailConfirm?.to || t("email_confirm_none"),
+                })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEmailConfirm(null)}
+              >
+                {tc("cancel")}
+              </Button>
+              <Button type="button" onClick={confirmEmailChange}>
+                {t("email_confirm_confirm")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
