@@ -83,7 +83,7 @@ export function NeedsAttentionCollapsible({
   return (
     <section
       aria-labelledby="needs-attention-title"
-      className="rounded-2xl border border-accent/30 bg-accent/[0.06] p-4 sm:p-5"
+      className="border-l-2 border-accent/40 pl-4 sm:pl-5"
     >
       <div className="flex items-center justify-between gap-3">
         <button

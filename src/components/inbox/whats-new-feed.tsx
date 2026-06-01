@@ -29,11 +29,8 @@ export async function WhatsNewFeed({
   // Overview (mobile inline + desktop sticky rail) — a shared heading id would
   // be a duplicate-id violation. The label carries the same text.
   return (
-    <section
-      aria-label={t("whats_new")}
-      className="rounded-2xl border border-border/60 bg-card/50 p-4 sm:p-5"
-    >
-      <div className="flex items-baseline justify-between gap-3 border-b border-border/50 pb-3">
+    <section aria-label={t("whats_new")} className="space-y-3">
+      <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold tracking-tight text-foreground">
           {t("whats_new")}
         </h2>
@@ -49,11 +46,11 @@ export async function WhatsNewFeed({
       </div>
 
       {notifications.length === 0 ? (
-        <p className="pt-3 text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           {t("whats_new_empty")}
         </p>
       ) : (
-        <ol className="mt-1 divide-y divide-border/50">
+        <ol className="divide-y divide-border/50">
           {notifications.map((n) => (
             <WhatsNewRow key={n.id} n={n} locale={locale} t={t} />
           ))}
