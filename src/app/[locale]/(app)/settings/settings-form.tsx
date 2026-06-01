@@ -13,7 +13,6 @@ import {
   SlidersHorizontal,
   FileText,
   ShieldCheck,
-  Lock,
   CreditCard,
   Download,
   Trash2,
@@ -43,8 +42,7 @@ type SectionId =
   | "appearance"
   | "general"
   | "billing"
-  | "documents"
-  | "data";
+  | "documents";
 type Translate = (k: string) => string;
 
 // Same Canadian zones that used to live in /firm. Kept in sync with the
@@ -73,7 +71,6 @@ const SECTION_IDS: SectionId[] = [
   "general",
   "billing",
   "documents",
-  "data",
 ];
 
 export function SettingsShell({
@@ -115,16 +112,13 @@ export function SettingsShell({
 
   const nav: { id: SectionId; label: string; icon: typeof Palette }[] = [
     { id: "account", label: t("nav_account"), icon: UserCog },
-    { id: "security", label: t("nav_security"), icon: Lock },
+    { id: "security", label: t("nav_security"), icon: ShieldCheck },
     { id: "appearance", label: t("nav_appearance"), icon: Palette },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
     ...(isOwner
       ? [{ id: "billing" as const, label: t("nav_billing"), icon: CreditCard }]
       : []),
     { id: "documents", label: t("nav_documents"), icon: FileText },
-    ...(isOwner
-      ? [{ id: "data" as const, label: t("nav_data"), icon: ShieldCheck }]
-      : []),
   ];
 
   return (
@@ -161,7 +155,10 @@ export function SettingsShell({
           <AccountSection firm={firm} firmLogoUrl={firmLogoUrl} t={t} />
         )}
         {section === "security" && (
-          <AccountSecuritySections email={email} mfaEnabled={mfaEnabled} />
+          <div className="space-y-12">
+            <AccountSecuritySections email={email} mfaEnabled={mfaEnabled} />
+            {isOwner && <DataPrivacySection firmName={firmName} t={t} />}
+          </div>
         )}
         {section === "appearance" && <AppearanceSection t={t} />}
         {section === "general" && (
@@ -177,9 +174,6 @@ export function SettingsShell({
             autoRejectUnusableDocs={autoRejectUnusableDocs}
             t={t}
           />
-        )}
-        {section === "data" && isOwner && (
-          <DataPrivacySection firmName={firmName} t={t} />
         )}
       </div>
     </div>
