@@ -9,6 +9,9 @@ type SendArgs = {
   subject: string;
   html: string;
   text?: string;
+  // Optional Reply-To — e.g. internal notifications set this to the person who
+  // triggered them so a reply goes straight to them, not to the from address.
+  replyTo?: string;
 };
 
 let _client: Resend | null = null;
@@ -25,6 +28,7 @@ export async function sendEmail({
   subject,
   html,
   text,
+  replyTo,
 }: SendArgs): Promise<
   { sent: true; id: string } | { sent: false; reason: string }
 > {
@@ -48,7 +52,14 @@ export async function sendEmail({
     );
     return { sent: false, reason: "not_configured" };
   }
-  const res = await c.emails.send({ from, to, subject, html, text });
+  const res = await c.emails.send({
+    from,
+    to,
+    subject,
+    html,
+    text,
+    ...(replyTo ? { replyTo } : {}),
+  });
   if (res.error) {
     console.error("[email] Resend error:", res.error);
     return { sent: false, reason: res.error.message };
@@ -115,7 +126,7 @@ No password required. Link valid for 90 days.`;
   return { subject, html, text };
 }
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
