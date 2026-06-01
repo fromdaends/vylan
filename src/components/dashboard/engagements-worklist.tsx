@@ -227,14 +227,14 @@ export function WorklistTable({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-border bg-card/40 px-5 py-12 text-center text-sm text-muted-foreground">
+      <div className="rounded-xl border border-dashed border-border/50 px-5 py-12 text-center text-sm text-muted-foreground">
         {emptyText}
       </div>
     );
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-card">
+    <div className="border-t border-border">
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
