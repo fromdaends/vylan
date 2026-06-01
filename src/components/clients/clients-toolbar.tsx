@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { usePathname } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/cn";
 import {
   Select,
   SelectContent,
@@ -72,18 +72,37 @@ export function ClientsToolbar({
             aria-label={t("search_label")}
           />
         </div>
-        <Tabs
-          value={type}
-          onValueChange={(v) => setParam("type", v === "all" ? null : v)}
+        <div
+          role="tablist"
+          className="inline-flex items-center gap-5 overflow-x-auto"
         >
-          <TabsList>
-            <TabsTrigger value="all">{t("filter_all")}</TabsTrigger>
-            <TabsTrigger value="individual">
-              {t("filter_individual")}
-            </TabsTrigger>
-            <TabsTrigger value="business">{t("filter_business")}</TabsTrigger>
-          </TabsList>
-        </Tabs>
+          {(
+            [
+              ["all", t("filter_all")],
+              ["individual", t("filter_individual")],
+              ["business", t("filter_business")],
+            ] as const
+          ).map(([value, label]) => {
+            const active = type === value;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => setParam("type", value === "all" ? null : value)}
+                className={cn(
+                  "shrink-0 whitespace-nowrap border-b-2 pb-2 text-sm font-medium transition-colors",
+                  active
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
+                )}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
         <Select
           value={sort}
           onValueChange={(v) =>

@@ -19,7 +19,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   MoreHorizontal,
   ChevronDown,
@@ -92,16 +91,14 @@ export function ClientsTable({
 
   if (clients.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center text-muted-foreground">
-          {t("empty")}
-        </CardContent>
-      </Card>
+      <div className="py-16 text-center text-sm text-muted-foreground">
+        {t("empty")}
+      </div>
     );
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto border-t border-border">
       <Table>
         <TableHeader>
           <TableRow>
@@ -247,7 +244,7 @@ function ExpandedDrawer({
           {t("drawer_no_engagements")}
         </p>
       ) : (
-        <ul className="divide-y divide-border/50 rounded-lg border border-border/60 bg-card overflow-hidden">
+        <ul className="divide-y divide-border/50">
           {engagements.map((e) => (
             <li key={e.id}>
               <Link
