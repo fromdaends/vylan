@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import {
   ChevronDown,
@@ -8,14 +8,22 @@ import {
   Download,
   ExternalLink,
   FileText,
+  Loader2,
   RefreshCw,
 } from "lucide-react";
 import { AiBadge } from "./ai-badge";
 import { UsabilityBadge } from "./usability-badge";
 import { reclassifyFileAction } from "@/app/actions/ai";
 import { formatBytes } from "@/lib/format";
+import { cn } from "@/lib/cn";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
+
+// How long the "Re-checking…" animation runs if the verdict comes back
+// unchanged (a re-run that confirms the same result produces no signature
+// change to react to, so we stop after a grace period). When the verdict DOES
+// change, the page's auto-refresh brings it sooner and we stop immediately.
+const RECHECK_TIMEOUT_MS = 12_000;
 
 export function FilePreviewRow({
   file,
@@ -30,9 +38,42 @@ export function FilePreviewRow({
 }) {
   const t = useTranslations("Engagements");
   const [open, setOpen] = useState(false);
+  const [rechecking, setRechecking] = useState(false);
+  const [, startTransition] = useTransition();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const isImage = file.mime_type.startsWith("image/");
   const isPdf = file.mime_type === "application/pdf";
   const canPreview = isImage || isPdf;
+
+  // A fingerprint of the AI verdict. It changes when a fresh classification
+  // lands (the engagement page auto-refreshes while live), which is our cue to
+  // stop the animation — so the spinner tracks the real result, not a timer.
+  const sig = `${file.ai_classification}|${file.ai_confidence}|${file.ai_rejected}|${JSON.stringify(file.ai_usability)}`;
+  const [prevSig, setPrevSig] = useState(sig);
+  if (sig !== prevSig) {
+    // Documented React pattern: adjust state during render when a prop changes
+    // (guarded by prevSig so it can't loop). Verdict refreshed → stop spinning.
+    setPrevSig(sig);
+    if (rechecking) setRechecking(false);
+  }
+
+  function recheck() {
+    if (rechecking) return;
+    setRechecking(true);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => setRechecking(false), RECHECK_TIMEOUT_MS);
+    const fd = new FormData();
+    fd.append("id", file.id);
+    startTransition(async () => {
+      try {
+        await reclassifyFileAction(fd);
+      } catch (e) {
+        console.error("[reclassify] failed:", e);
+        // The verdict won't change; let the timeout clear the animation.
+      }
+    });
+  }
 
   return (
     <li className="rounded-md border border-border/40 bg-card/40">
@@ -80,19 +121,35 @@ export function FilePreviewRow({
         >
           <Download className="size-3.5" />
         </a>
-        <form action={reclassifyFileAction}>
-          <input type="hidden" name="id" value={file.id} />
-          <button
-            type="submit"
-            className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-            aria-label={t("reclassify")}
-            title={t("reclassify")}
-          >
-            <RefreshCw className="size-3.5" />
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={recheck}
+          disabled={rechecking}
+          className={cn(
+            "rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+            rechecking
+              ? "text-primary"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          aria-label={t("reclassify")}
+          title={t("reclassify")}
+        >
+          <RefreshCw className={cn("size-3.5", rechecking && "animate-spin")} />
+        </button>
       </div>
       <div className="px-2.5 pb-1.5 space-y-1">
+        {/* While re-checking, an explicit pill makes it obvious the AI is
+            running again (the verdict badges keep their previous value until a
+            fresh result lands). */}
+        {rechecking && (
+          <span
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
+            aria-live="polite"
+          >
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            {t("rechecking")}
+          </span>
+        )}
         {/* Usability lives above the document-type badge — separate
             concerns: "is this readable?" vs "is this the right slip?"
             UsabilityBadge renders null when there's no actionable
