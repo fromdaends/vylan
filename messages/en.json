@@ -624,7 +624,10 @@
     "inline_error_too_long": "That's a bit too long.",
     "inline_error_invalid_field": "Unknown field.",
     "inline_error_invalid_value": "That value isn't allowed here.",
-    "inline_error_missing_id": "Couldn't save — client ID missing."
+    "inline_error_missing_id": "Couldn't save — client ID missing.",
+    "saved_toast": "Changes saved",
+    "created_toast": "Client added",
+    "save_error": "Couldn't save your changes. Please try again."
   },
   "Engagements": {
     "title": "Engagements",

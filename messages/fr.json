@@ -624,7 +624,10 @@
     "inline_error_too_long": "C'est un peu trop long.",
     "inline_error_invalid_field": "Champ inconnu.",
     "inline_error_invalid_value": "Cette valeur n'est pas permise ici.",
-    "inline_error_missing_id": "Impossible d'enregistrer — identifiant client manquant."
+    "inline_error_missing_id": "Impossible d'enregistrer — identifiant client manquant.",
+    "saved_toast": "Modifications enregistrées",
+    "created_toast": "Client ajouté",
+    "save_error": "Impossible d'enregistrer vos modifications. Veuillez réessayer."
   },
   "Engagements": {
     "title": "Engagements",
