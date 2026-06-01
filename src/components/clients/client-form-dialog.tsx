@@ -31,6 +31,7 @@ import {
 } from "@/app/actions/clients";
 import type { Client } from "@/lib/db/clients";
 import { Plus, Pencil } from "lucide-react";
+import { toast } from "sonner";
 
 type Props = {
   mode: "create" | "edit";
@@ -58,7 +59,12 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
     queueMicrotask(() => {
       setOpen(false);
       router.refresh();
+      toast.success(mode === "create" ? t("created_toast") : t("saved_toast"));
     });
+    // `mode` and `t` are constant for a mounted dialog, so they're
+    // intentionally left out of the deps — success then fires exactly
+    // once per save (in lockstep with the refresh), never on a re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, router]);
 
   return (
@@ -91,7 +97,7 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
           {client && <input type="hidden" name="id" value={client.id} />}
           {state?.error && (
             <Alert variant="destructive">
-              <AlertDescription>{state.error}</AlertDescription>
+              <AlertDescription>{t("save_error")}</AlertDescription>
             </Alert>
           )}
           <div className="space-y-1.5">
