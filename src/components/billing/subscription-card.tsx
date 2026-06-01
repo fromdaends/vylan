@@ -69,7 +69,7 @@ export async function SubscriptionCard({
       <p className="text-xs text-muted-foreground mt-1">
         {t("section_subscription_hint")}
       </p>
-      <div className="mt-4 rounded-lg border border-border bg-card p-4 max-w-xl space-y-3">
+      <div className="mt-4 rounded-lg border border-border/50 p-4 max-w-xl space-y-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Badge variant={isActive ? "default" : "secondary"}>
