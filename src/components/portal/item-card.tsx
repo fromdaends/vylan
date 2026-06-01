@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { Upload, Check, FileCheck2, X, RotateCcw, AlertTriangle, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
 
 // Shape returned by /api/portal/upload-status once the background classifier
@@ -57,6 +56,9 @@ export function ItemCard({
   const [checking, setChecking] = useState(false);
   const pollAbortRef = useRef<AbortController | null>(null);
   const [pendingNa, startNa] = useTransition();
+  // Drag-and-drop a file straight onto the card (desktop nicety; the Upload
+  // button is the primary path and works everywhere).
+  const [dragging, setDragging] = useState(false);
 
   // Cancel any in-flight poll when the component unmounts.
   useEffect(() => {
@@ -199,36 +201,71 @@ export function ItemCard({
     });
   }
 
-  const isDone =
-    item.status === "submitted" ||
-    item.status === "approved" ||
-    item.status === "na";
+  const canUpload = item.status !== "na";
+
+  // Single rejection banner, two sources in priority order:
+  //   1. `aiRejection` — set during the current upload turn so the client sees
+  //      the verdict the instant the API replies, before the page refetches.
+  //   2. `item.rejection_reason` — the persistent server column that survives a
+  //      reload. The upload route clears it on every new upload, so it never
+  //      goes stale across attempts.
+  const bannerMsg =
+    aiRejection ??
+    (item.rejection_reason && item.rejection_reason.trim()
+      ? item.rejection_reason
+      : null);
+  const hasIssue = item.status === "rejected" || bannerMsg !== null;
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      uploadFiles(e.dataTransfer.files);
+    }
+  }
 
   return (
     <div
+      onDragOver={
+        canUpload
+          ? (e) => {
+              e.preventDefault();
+              setDragging(true);
+            }
+          : undefined
+      }
+      onDragLeave={canUpload ? () => setDragging(false) : undefined}
+      onDrop={canUpload ? onDrop : undefined}
       className={cn(
-        "rounded-lg border bg-card p-4 transition",
-        isDone ? "border-success/30" : "border-border",
+        "group rounded-xl border p-4 transition-all duration-200 sm:p-5",
+        dragging
+          ? "border-accent bg-accent/[0.05] ring-2 ring-accent/25"
+          : item.status === "submitted" || item.status === "approved"
+            ? "border-success/30 bg-success/[0.04]"
+            : item.status === "na"
+              ? "border-border/60 bg-muted/30"
+              : "border-border/60 bg-card/40 hover:border-border hover:bg-card hover:shadow-sm",
       )}
     >
-      <div className="flex items-start gap-3">
-        <StatusIcon status={item.status} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start gap-3 sm:gap-4">
+        <StatusIcon status={item.status} hasIssue={hasIssue} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="font-medium">
+              <h3 className="text-[15px] font-medium leading-snug text-foreground">
                 {label}
                 {item.required && (
                   <span
-                    className="ml-1.5 text-warning text-xs"
+                    className="ml-1 align-middle text-warning"
                     aria-label={t("required")}
+                    title={t("required")}
                   >
                     *
                   </span>
                 )}
-              </div>
+              </h3>
               {description && (
-                <p className="text-sm text-muted-foreground mt-0.5">
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                   {description}
                 </p>
               )}
@@ -236,42 +273,26 @@ export function ItemCard({
             <StatusBadge status={item.status} uploadedCount={uploadedCount} />
           </div>
 
-          {/* Single rejection banner. Two sources, in priority order:
-              1. `aiRejection` — set during the current upload turn so
-                 the client sees the verdict the instant the API replies,
-                 before the parent page refetches.
-              2. `item.rejection_reason` — the persistent server-side
-                 column. This is what survives a hard reload and shows
-                 the latest AI verdict from the database. The upload
-                 route clears it on every new upload, so it never goes
-                 stale across attempts. */}
-          {(aiRejection || (item.rejection_reason && item.rejection_reason.trim())) && (
-            <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm">
-              <div className="flex items-center gap-1.5 font-medium text-destructive">
-                <AlertTriangle className="size-4" aria-hidden />
+          {bannerMsg && (
+            <div className="mt-3 rounded-lg border border-warning/30 bg-warning/[0.08] px-3 py-2.5 text-sm">
+              <div className="flex items-center gap-1.5 font-medium text-warning">
+                <AlertTriangle className="size-4 shrink-0" aria-hidden />
                 {item.status === "rejected"
                   ? t("rejected_action_needed")
                   : t("ai_rejected_title")}
               </div>
-              <div className="text-foreground/80 mt-0.5">
-                {aiRejection ?? item.rejection_reason}
-              </div>
-              <div className="text-xs text-muted-foreground mt-1">
+              <p className="mt-1 text-foreground/80">{bannerMsg}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
                 {t("ai_rejected_help")}
-              </div>
+              </p>
             </div>
           )}
 
           {error && <ErrorLine error={error} />}
 
-          <div className="mt-3 flex items-center flex-wrap gap-2">
+          <div className="mt-3.5 flex flex-wrap items-center gap-2">
             {item.status === "na" ? (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={undoNa}
-                disabled={pendingNa}
-              >
+              <Button variant="outline" size="sm" onClick={undoNa} disabled={pendingNa}>
                 <RotateCcw className="size-4" />
                 {t("undo_na")}
               </Button>
@@ -290,11 +311,15 @@ export function ItemCard({
                   }}
                 />
                 <Button
-                  size="sm"
                   onClick={() => inputRef.current?.click()}
                   disabled={uploading}
+                  variant={uploadedCount > 0 ? "outline" : "default"}
                 >
-                  <Upload className="size-4" />
+                  {uploading ? (
+                    <Loader2 className="size-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Upload className="size-4" aria-hidden />
+                  )}
                   {uploading
                     ? t("uploading")
                     : uploadedCount > 0
@@ -315,14 +340,14 @@ export function ItemCard({
               </>
             )}
             {uploadedCount > 0 && item.status !== "na" && (
-              <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <FileCheck2 className="size-3.5" />
                 {t("uploaded_count", { count: uploadedCount })}
               </span>
             )}
             {checking && (
               <span
-                className="text-xs text-muted-foreground inline-flex items-center gap-1"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground"
                 aria-live="polite"
               >
                 <Loader2 className="size-3.5 animate-spin" aria-hidden />
@@ -348,16 +373,47 @@ function ErrorLine({ error }: { error: string }) {
   return <p className="text-xs text-destructive mt-2">{message}</p>;
 }
 
-function StatusIcon({ status }: { status: RequestItemStatus }) {
-  if (status === "submitted" || status === "approved") {
-    return <Check className="size-5 text-success mt-0.5" aria-hidden />;
+function StatusIcon({
+  status,
+  hasIssue,
+}: {
+  status: RequestItemStatus;
+  hasIssue: boolean;
+}) {
+  const ring =
+    "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full";
+  if (hasIssue) {
+    return (
+      <span className={cn(ring, "bg-warning/15 text-warning")}>
+        <AlertTriangle className="size-3.5" aria-hidden />
+      </span>
+    );
+  }
+  if (status === "approved") {
+    return (
+      <span className={cn(ring, "bg-success text-white")}>
+        <Check className="size-3.5" aria-hidden />
+      </span>
+    );
+  }
+  if (status === "submitted") {
+    return (
+      <span className={cn(ring, "bg-accent text-white")}>
+        <Check className="size-3.5" aria-hidden />
+      </span>
+    );
   }
   if (status === "na") {
-    return <X className="size-5 text-muted-foreground mt-0.5" aria-hidden />;
+    return (
+      <span className={cn(ring, "border-2 border-muted-foreground/20 text-muted-foreground")}>
+        <X className="size-3" aria-hidden />
+      </span>
+    );
   }
+  // pending — hollow ring
   return (
-    <div
-      className="size-5 rounded-full border-2 border-border mt-0.5"
+    <span
+      className="mt-0.5 size-6 shrink-0 rounded-full border-2 border-muted-foreground/25"
       aria-hidden
     />
   );
@@ -371,16 +427,27 @@ function StatusBadge({
   uploadedCount: number;
 }) {
   const t = useTranslations("Portal");
-  if (status === "approved") return <Badge>{t("status_approved")}</Badge>;
-  if (status === "submitted") {
+  const base =
+    "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium";
+  if (status === "approved")
     return (
-      <Badge variant="secondary">
-        {t("status_submitted", { count: uploadedCount })}
-      </Badge>
+      <span className={cn(base, "bg-success/15 text-success")}>
+        {t("status_approved")}
+      </span>
     );
-  }
-  if (status === "rejected")
-    return <Badge variant="destructive">{t("status_rejected")}</Badge>;
-  if (status === "na") return <Badge variant="outline">{t("status_na")}</Badge>;
+  if (status === "submitted")
+    return (
+      <span className={cn(base, "bg-accent/15 text-accent")}>
+        {t("status_submitted", { count: uploadedCount })}
+      </span>
+    );
+  // No "rejected" pill: the amber status icon + the re-upload banner carry it,
+  // and the full string would crowd the title on a phone.
+  if (status === "na")
+    return (
+      <span className={cn(base, "bg-muted text-muted-foreground")}>
+        {t("status_na")}
+      </span>
+    );
   return null;
 }
