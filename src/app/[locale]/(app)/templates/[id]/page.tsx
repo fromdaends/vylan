@@ -23,7 +23,7 @@ export default async function TemplateEditPage({
   const tCommon = await getTranslations("Common");
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-3xl mx-auto">
       <Breadcrumb
         label={tCommon("breadcrumb")}
         items={[
