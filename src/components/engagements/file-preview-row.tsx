@@ -35,7 +35,7 @@ export function FilePreviewRow({
   const canPreview = isImage || isPdf;
 
   return (
-    <li className="rounded-md border border-border bg-card">
+    <li className="rounded-md border border-border/40 bg-card/40">
       <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs">
         {canPreview ? (
           <button

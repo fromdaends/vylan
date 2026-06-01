@@ -1,6 +1,5 @@
 import { getTranslations } from "next-intl/server";
 import type { ActivityEntry } from "@/lib/db/activity";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatRelative, type AppLocale } from "@/lib/format";
 
 export async function ActivityTimeline({
@@ -32,11 +31,11 @@ export async function ActivityTimeline({
   const visible = entries.filter((e) => e.action !== "ai_classified");
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">{t("title")}</CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="space-y-3">
+      <h2 className="text-base font-semibold tracking-tight text-foreground">
+        {t("title")}
+      </h2>
+      <div>
         {visible.length === 0 ? (
           <p className="text-sm text-muted-foreground py-2">{t("empty")}</p>
         ) : (
@@ -66,8 +65,8 @@ export async function ActivityTimeline({
             ))}
           </ol>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

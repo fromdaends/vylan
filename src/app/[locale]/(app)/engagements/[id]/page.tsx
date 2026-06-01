@@ -12,7 +12,6 @@ import { listActivityForEngagement } from "@/lib/db/activity";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   sendEngagementAction,
@@ -337,36 +336,34 @@ export default async function EngagementDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <section className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0">
-              <CardTitle className="text-base">
+          <div className="space-y-3">
+            <div className="flex flex-row items-center justify-between gap-3">
+              <h2 className="text-base font-semibold tracking-tight text-foreground">
                 {t("checklist")}{" "}
                 <span className="text-muted-foreground font-normal">
                   ({items.length})
                 </span>
-              </CardTitle>
+              </h2>
               {isLive && <AddItemDialog engagementId={engagement.id} />}
-            </CardHeader>
-            <CardContent>
-              {items.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-4">
-                  {t("checklist_empty")}
-                </div>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {items.map((item) => (
-                    <ItemRow
-                      key={item.id}
-                      item={item}
-                      files={filesByItem.get(item.id) ?? []}
-                      locale={locale}
-                      canEdit={isLive}
-                    />
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
+            </div>
+            {items.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-4">
+                {t("checklist_empty")}
+              </div>
+            ) : (
+              <ul className="divide-y divide-border border-t border-border">
+                {items.map((item) => (
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    files={filesByItem.get(item.id) ?? []}
+                    locale={locale}
+                    canEdit={isLive}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
 
         <aside className="space-y-4">
