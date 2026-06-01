@@ -170,6 +170,7 @@ export function PortalShell({
               item={item}
               locale={locale}
               uploadedCount={uploads[item.id] ?? 0}
+              rejection={ctx.rejection_summary_by_item[item.id] ?? null}
               onUploaded={() => handleUploaded(item.id)}
               onStatusChange={(status) => handleItemUpdated(item.id, { status })}
             />

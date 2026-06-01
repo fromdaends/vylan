@@ -31,6 +31,7 @@ export function ItemCard({
   item,
   locale,
   uploadedCount,
+  rejection,
   onUploaded,
   onStatusChange,
 }: {
@@ -38,6 +39,12 @@ export function ItemCard({
   item: RequestItem;
   locale: "fr" | "en";
   uploadedCount: number;
+  // Bilingual AI rejection summary for this item (from the latest upload's
+  // usability verdict). Lets the re-upload banner follow the language toggle
+  // instead of being stuck in the single language `item.rejection_reason` was
+  // written in. Null for manual / legacy rejections — those fall back to the
+  // column text.
+  rejection: { fr: string; en: string } | null;
   onUploaded: () => void;
   onStatusChange: (s: RequestItemStatus) => void;
 }) {
@@ -209,11 +216,17 @@ export function ItemCard({
   //   2. `item.rejection_reason` — the persistent server column that survives a
   //      reload. The upload route clears it on every new upload, so it never
   //      goes stale across attempts.
+  const reasonSet =
+    item.rejection_reason != null && item.rejection_reason.trim() !== "";
   const bannerMsg =
     aiRejection ??
-    (item.rejection_reason && item.rejection_reason.trim()
-      ? item.rejection_reason
-      : null);
+    (!reasonSet
+      ? null
+      : rejection
+        ? locale === "fr"
+          ? rejection.fr
+          : rejection.en
+        : item.rejection_reason!.trim());
   const hasIssue = item.status === "rejected" || bannerMsg !== null;
 
   function onDrop(e: React.DragEvent) {
