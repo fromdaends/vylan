@@ -17,27 +17,18 @@ import {
   updateEmailAction,
   changePasswordAction,
 } from "@/app/actions/profile";
-import { MfaSection } from "@/components/profile/mfa-section";
-
-// Email + Password + Two-factor, extracted verbatim from the old /profile form
-// so the Settings → Account tab and (anywhere else) reuse the exact same flows.
-// Behaviour is unchanged: Email opens a confirm-to-new-address dialog, Password
-// opens a current/new/confirm dialog, MFA is the existing enroll/disable
-// component. Strings stay in the Profile namespace.
-export function AccountSecuritySections({
-  email,
-  mfaEnabled,
-}: {
-  email: string;
-  mfaEnabled: boolean;
-}) {
+// Email + Password sign-in sections, extracted verbatim from the old /profile
+// form so Settings can reuse the exact same flows. Email opens a
+// confirm-to-new-address dialog; Password opens a current/new/confirm dialog.
+// Two-factor (MfaSection) lives separately under Security & privacy. Strings
+// stay in the Profile namespace.
+export function AccountSignInSections({ email }: { email: string }) {
   const t = useTranslations("Profile");
   const tc = useTranslations("Common");
   return (
     <div className="space-y-10">
       <EmailSection email={email} t={t} />
       <PasswordSection t={t} tc={tc} />
-      <MfaSection initialEnabled={mfaEnabled} />
     </div>
   );
 }

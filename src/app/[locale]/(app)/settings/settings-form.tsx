@@ -33,7 +33,8 @@ import {
   FirmSettingsSections,
   type FirmInfo,
 } from "@/components/settings/firm-settings-sections";
-import { AccountSecuritySections } from "@/components/settings/account-security-sections";
+import { AccountSignInSections } from "@/components/settings/account-security-sections";
+import { MfaSection } from "@/components/profile/mfa-section";
 
 type ThemeChoice = "light" | "dark" | "system";
 type SectionId =
@@ -152,11 +153,16 @@ export function SettingsShell({
 
       <div className="min-w-0 flex-1">
         {section === "account" && (
-          <AccountSection firm={firm} firmLogoUrl={firmLogoUrl} t={t} />
+          <AccountSection
+            firm={firm}
+            firmLogoUrl={firmLogoUrl}
+            email={email}
+            t={t}
+          />
         )}
         {section === "security" && (
           <div className="space-y-12">
-            <AccountSecuritySections email={email} mfaEnabled={mfaEnabled} />
+            <MfaSection initialEnabled={mfaEnabled} />
             {isOwner && <DataPrivacySection firmName={firmName} t={t} />}
           </div>
         )}
@@ -181,30 +187,36 @@ export function SettingsShell({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Account — your firm settings (logo, name, brand color, client-email
-// language). Personal sign-in (Email, Password, Two-factor) lives in its own
-// Security tab; the subscription summary lives in Billing.
+// Account — your sign-in (Email, Password) up top, then your firm settings
+// (logo, name, brand color, client-email language). Two-factor lives under
+// Security & privacy; the subscription summary lives in Billing.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AccountSection({
   firm,
   firmLogoUrl,
+  email,
   t,
 }: {
   firm: FirmInfo;
   firmLogoUrl: string | null;
+  email: string;
   t: Translate;
 }) {
   return (
-    <div>
-      <h2 className="text-base font-semibold tracking-tight">
-        {t("section_firm_settings")}
-      </h2>
-      <p className="mt-1 text-xs text-muted-foreground">
-        {t("section_firm_settings_hint")}
-      </p>
-      <div className="mt-5">
-        <FirmSettingsSections firm={firm} firmLogoUrl={firmLogoUrl} />
+    <div className="space-y-12">
+      <AccountSignInSections email={email} />
+
+      <div>
+        <h2 className="text-base font-semibold tracking-tight">
+          {t("section_firm_settings")}
+        </h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("section_firm_settings_hint")}
+        </p>
+        <div className="mt-5">
+          <FirmSettingsSections firm={firm} firmLogoUrl={firmLogoUrl} />
+        </div>
       </div>
     </div>
   );
