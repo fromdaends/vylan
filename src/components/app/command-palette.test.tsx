@@ -150,4 +150,49 @@ describe("CommandPalette", () => {
       screen.getByRole("option", { name: /Bouchard Inc/i }),
     ).toBeInTheDocument();
   });
+
+  it("matches static pages and settings from the catalog (e.g. 'timezone')", async () => {
+    mockSearch({ clients: [], engagements: [] });
+    renderPalette();
+    open();
+    fireEvent.change(input(), { target: { value: "timezone" } });
+    // The catalog match is client-side (no API needed) and lands under "Go to".
+    expect(
+      await screen.findByText(en.CommandPalette.group_go),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: new RegExp(en.Settings.section_timezone, "i") }),
+    ).toBeInTheDocument();
+  });
+
+  it("finds the two-factor setting by the abbreviation '2fa'", async () => {
+    mockSearch({ clients: [], engagements: [] });
+    renderPalette();
+    open();
+    fireEvent.change(input(), { target: { value: "2fa" } });
+    fireEvent.click(
+      await screen.findByRole("option", {
+        name: new RegExp(en.Profile.mfa_title, "i"),
+      }),
+    );
+    expect(push).toHaveBeenCalledWith("/settings?tab=security");
+  });
+
+  it("lists matching templates and routes to a custom one", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        clients: [],
+        engagements: [],
+        templates: [{ id: "tpl1", name: "T1 Personnel", is_builtin: false }],
+      }),
+    }) as unknown as typeof fetch;
+    renderPalette();
+    open();
+    fireEvent.change(input(), { target: { value: "personnel" } });
+    fireEvent.click(
+      await screen.findByRole("option", { name: /T1 Personnel/i }),
+    );
+    expect(push).toHaveBeenCalledWith("/templates/tpl1");
+  });
 });

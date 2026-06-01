@@ -73,6 +73,7 @@ export default async function AppLayout({
       userDisplayName={userDisplayLabel(dbUser)}
       userEmail={dbUser.email}
       userAvatarUrl={avatarUrl}
+      isOwner={dbUser.role === "owner"}
       topBar={firm.is_demo ? <DemoBanner /> : undefined}
       engagementBadges={{
         ready: badges.readyToReview,
