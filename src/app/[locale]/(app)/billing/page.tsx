@@ -46,7 +46,7 @@ export default async function BillingPage({
   // above so the page still loads quickly when billing returns.
   if (!BILLING_ENABLED) {
     return (
-      <div className="space-y-6 max-w-2xl">
+      <div className="space-y-6 max-w-2xl mx-auto">
         <Breadcrumb
           label={tCommon("breadcrumb")}
           items={[
@@ -98,7 +98,7 @@ export default async function BillingPage({
   }
 
   return (
-    <div className="space-y-8 max-w-3xl">
+    <div className="space-y-8 max-w-3xl mx-auto">
       <Breadcrumb
         label={tCommon("breadcrumb")}
         items={[

@@ -30,7 +30,7 @@ export default async function TemplatesPage({
   const t = await getTranslations("Templates");
 
   return (
-    <div className="space-y-10 max-w-3xl">
+    <div className="space-y-10 max-w-5xl mx-auto">
       <header className="animate-in-up">
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>
