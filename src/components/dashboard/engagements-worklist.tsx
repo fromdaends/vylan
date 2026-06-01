@@ -155,7 +155,7 @@ export function EngagementsWorklist({
         <div
           role="tablist"
           aria-label={t("wl_filter_label")}
-          className="inline-flex items-center gap-1 self-start overflow-x-auto rounded-lg bg-muted p-[3px]"
+          className="inline-flex items-center gap-5 self-start overflow-x-auto"
         >
           {FILTERS.map((f) => {
             const active = f === filter;
@@ -167,10 +167,10 @@ export function EngagementsWorklist({
                 aria-selected={active}
                 onClick={() => setFilter(f)}
                 className={cn(
-                  "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                  "flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 pb-2 text-sm font-medium transition-colors",
                   active
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-foreground/60 hover:text-foreground",
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
                 )}
               >
                 {pillLabel(f)}

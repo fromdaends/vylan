@@ -75,7 +75,7 @@ export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
         <div
           role="tablist"
           aria-label={t("tmpl_tablist_label")}
-          className="inline-flex items-center gap-1 self-start overflow-x-auto rounded-lg bg-muted p-[3px]"
+          className="inline-flex items-center gap-5 self-start overflow-x-auto"
         >
           {CATEGORIES.map((c) => {
             const active = c === category;
@@ -87,10 +87,10 @@ export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
                 aria-selected={active}
                 onClick={() => setCategory(c)}
                 className={cn(
-                  "shrink-0 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium transition-colors",
+                  "shrink-0 whitespace-nowrap border-b-2 pb-2 text-sm font-medium transition-colors",
                   active
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-foreground/60 hover:text-foreground",
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground",
                 )}
               >
                 {label(c)}
