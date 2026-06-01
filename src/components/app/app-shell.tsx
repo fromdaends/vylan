@@ -142,6 +142,7 @@ export function AppShell({
   userAvatarUrl,
   labels,
   engagementBadges,
+  isOwner = false,
 }: {
   children: React.ReactNode;
   topBar?: React.ReactNode;
@@ -151,6 +152,9 @@ export function AppShell({
   userAvatarUrl: string | null;
   labels: Labels;
   engagementBadges: EngagementBadgeCounts;
+  // Gates owner-only entries (billing, audit log, firm export/delete) in the
+  // command palette. Defaults false so non-owners never see them.
+  isOwner?: boolean;
 }) {
   const pathname = usePathname();
   const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
@@ -285,7 +289,7 @@ export function AppShell({
 
       {/* Global command palette — opened by the sidebar search trigger or
           Cmd/Ctrl-K. Mounted once; renders into a portal. */}
-      <CommandPalette />
+      <CommandPalette isOwner={isOwner} />
     </div>
     </ActiveNavProvider>
   );

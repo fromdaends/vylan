@@ -1,7 +1,7 @@
 {
   "CommandPalette": {
     "title": "Command palette",
-    "placeholder": "Search clients, engagements, pages…",
+    "placeholder": "Search everything — clients, pages, settings…",
     "recent_searches": "Recent searches",
     "recently_visited": "Recently visited",
     "jump_to": "Jump to",
@@ -12,7 +12,15 @@
     "no_results": "No results found.",
     "clear": "Clear recents",
     "hint_navigate": "Navigate",
-    "hint_open": "Open"
+    "hint_open": "Open",
+    "group_go": "Go to",
+    "group_actions": "Actions",
+    "templates": "Templates",
+    "cat_new_engagement": "New engagement",
+    "cat_add_client": "Add client",
+    "cat_import_clients": "Import clients",
+    "cat_new_template": "New template",
+    "cat_whats_new": "What's new"
   },
   "Brand": {
     "name": "Vylan",

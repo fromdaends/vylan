@@ -1,7 +1,7 @@
 {
   "CommandPalette": {
     "title": "Palette de commandes",
-    "placeholder": "Rechercher clients, engagements, pages…",
+    "placeholder": "Tout rechercher — clients, pages, paramètres…",
     "recent_searches": "Recherches récentes",
     "recently_visited": "Consultés récemment",
     "jump_to": "Accéder à",
@@ -12,7 +12,15 @@
     "no_results": "Aucun résultat.",
     "clear": "Effacer l'historique",
     "hint_navigate": "Naviguer",
-    "hint_open": "Ouvrir"
+    "hint_open": "Ouvrir",
+    "group_go": "Aller à",
+    "group_actions": "Actions",
+    "templates": "Modèles",
+    "cat_new_engagement": "Nouvel engagement",
+    "cat_add_client": "Ajouter un client",
+    "cat_import_clients": "Importer des clients",
+    "cat_new_template": "Nouveau modèle",
+    "cat_whats_new": "Quoi de neuf"
   },
   "Brand": {
     "name": "Vylan",

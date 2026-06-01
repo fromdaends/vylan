@@ -1,22 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { Command as CommandPrimitive } from "cmdk";
 import { useTranslations } from "next-intl";
+import { useTheme } from "next-themes";
 import {
   Search,
   Clock,
   Users,
   Briefcase,
-  LayoutDashboard,
   FileText,
-  Settings,
   CornerDownLeft,
   ArrowUp,
   ArrowDown,
 } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
+import { logoutAction } from "@/app/actions/auth";
 import {
   Command,
   CommandGroup,
@@ -24,6 +24,11 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { cn } from "@/lib/cn";
+import {
+  buildSearchRegistry,
+  matchEntries,
+  type SearchEntry,
+} from "@/lib/search/registry";
 import {
   readRecentSearches,
   readRecentItems,
@@ -37,7 +42,9 @@ import {
 // sidebar search trigger (a CustomEvent) or Cmd/Ctrl-K from anywhere. Renders
 // a top-anchored panel over a blurred + dimmed backdrop. While the query is
 // short it shows recent searches, recently-opened items and quick-nav
-// destinations; once you type it streams live results from /api/search.
+// destinations; once you type it merges a static catalog of every page +
+// action (src/lib/search/registry.ts) with live clients / engagements /
+// templates streamed from /api/search.
 
 export const COMMAND_PALETTE_EVENT = "vylan:command-palette";
 
@@ -48,9 +55,22 @@ type EngagementHit = {
   client_id: string;
   client_display_name: string | null;
 };
+type TemplateHit = { id: string; name: string; is_builtin: boolean };
+
+type Results = {
+  clients: ClientHit[];
+  engagements: EngagementHit[];
+  templates: TemplateHit[];
+};
+
+const EMPTY_RESULTS: Results = { clients: [], engagements: [], templates: [] };
 
 const MIN_CHARS = 2;
 const DEBOUNCE_MS = 180;
+// Keep the static catalog tidy in the list even on broad queries; the user
+// narrows by typing more.
+const MAX_GO = 8;
+const MAX_ACTIONS = 6;
 
 // Anchor the palette to the on-screen search trigger so it appears to grow
 // out of the sidebar search box instead of as a centered modal. Falls back
@@ -80,20 +100,22 @@ function measureAnchor(): Anchor {
   return fallback();
 }
 
-export function CommandPalette() {
+export function CommandPalette({ isOwner = false }: { isOwner?: boolean }) {
   const t = useTranslations("CommandPalette");
-  const tNav = useTranslations("App");
+  const tApp = useTranslations("App");
+  const tEng = useTranslations("Engagements");
+  const tSet = useTranslations("Settings");
+  const tProfile = useTranslations("Profile");
+  const tAuth = useTranslations("Auth");
   const router = useRouter();
+  const { setTheme } = useTheme();
   const inputRef = useRef<HTMLInputElement>(null);
   const openRef = useRef(false);
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<{
-    clients: ClientHit[];
-    engagements: EngagementHit[];
-  }>({ clients: [], engagements: [] });
+  const [results, setResults] = useState<Results>(EMPTY_RESULTS);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
@@ -101,32 +123,32 @@ export function CommandPalette() {
   const trimmed = query.trim();
   const isSearching = trimmed.length >= MIN_CHARS;
 
-  const navDestinations = [
-    {
-      href: "/dashboard",
-      label: tNav("nav_dashboard"),
-      icon: LayoutDashboard,
-      color: "text-icon-blue",
-    },
-    {
-      href: "/clients",
-      label: tNav("nav_clients"),
-      icon: Users,
-      color: "text-icon-emerald",
-    },
-    {
-      href: "/templates",
-      label: tNav("nav_templates"),
-      icon: FileText,
-      color: "text-icon-amber",
-    },
-    {
-      href: "/settings",
-      label: tNav("nav_settings"),
-      icon: Settings,
-      color: "text-icon-cyan",
-    },
-  ];
+  // The static, hand-curated catalog of every destination + action. Built from
+  // i18n labels so it follows the UI language; owner-only entries (billing,
+  // audit log, firm export/delete) are filtered out for staff.
+  const registry = useMemo(
+    () =>
+      buildSearchRegistry(
+        { app: tApp, eng: tEng, set: tSet, profile: tProfile, auth: tAuth, cmd: t },
+        { isOwner },
+      ),
+    [tApp, tEng, tSet, tProfile, tAuth, t, isOwner],
+  );
+  const primaryDestinations = useMemo(
+    () => registry.filter((e) => e.primary),
+    [registry],
+  );
+
+  const entryMatches = useMemo(
+    () => (isSearching ? matchEntries(registry, trimmed) : []),
+    [isSearching, registry, trimmed],
+  );
+  const goMatches = entryMatches
+    .filter((e) => e.group === "go")
+    .slice(0, MAX_GO);
+  const actionMatches = entryMatches
+    .filter((e) => e.group === "action")
+    .slice(0, MAX_ACTIONS);
 
   const refreshRecents = useCallback(() => {
     setRecentSearches(readRecentSearches());
@@ -145,7 +167,7 @@ export function CommandPalette() {
         refreshRecents();
       } else {
         setQuery("");
-        setResults({ clients: [], engagements: [] });
+        setResults(EMPTY_RESULTS);
         setLoading(false);
       }
       setOpen(next);
@@ -187,18 +209,16 @@ export function CommandPalette() {
           { signal: ctrl.signal },
         );
         const data = res.ok
-          ? ((await res.json()) as {
-              clients?: ClientHit[];
-              engagements?: EngagementHit[];
-            })
-          : { clients: [], engagements: [] };
+          ? ((await res.json()) as Partial<Results>)
+          : EMPTY_RESULTS;
         setResults({
           clients: data.clients ?? [],
           engagements: data.engagements ?? [],
+          templates: data.templates ?? [],
         });
       } catch (err) {
         if (!(err instanceof DOMException && err.name === "AbortError")) {
-          setResults({ clients: [], engagements: [] });
+          setResults(EMPTY_RESULTS);
         }
       } finally {
         setLoading(false);
@@ -248,6 +268,44 @@ export function CommandPalette() {
     [go, isSearching, trimmed],
   );
 
+  const openTemplate = useCallback(
+    (tpl: TemplateHit) => {
+      if (isSearching) recordSearch(trimmed);
+      // Built-in templates 404 on the editor (it requires firm_id) — route them
+      // to the gallery where they can be viewed and cloned.
+      go(tpl.is_builtin ? "/templates" : `/templates/${tpl.id}`);
+    },
+    [go, isSearching, trimmed],
+  );
+
+  // A static registry entry: either navigate (most) or run an in-place action
+  // (log out, switch theme). Recorded as a search so it shows under recents.
+  const runEntry = useCallback(
+    (entry: SearchEntry) => {
+      if (isSearching) recordSearch(trimmed);
+      if (entry.action) {
+        close();
+        switch (entry.action) {
+          case "logout":
+            void logoutAction();
+            break;
+          case "theme-dark":
+            setTheme("dark");
+            break;
+          case "theme-light":
+            setTheme("light");
+            break;
+          case "theme-system":
+            setTheme("system");
+            break;
+        }
+        return;
+      }
+      if (entry.href) go(entry.href);
+    },
+    [isSearching, trimmed, close, go, setTheme],
+  );
+
   const openRecentItem = useCallback(
     (item: RecentItem) => {
       recordItem(item); // re-promote to the front
@@ -260,16 +318,13 @@ export function CommandPalette() {
     [go],
   );
 
-  const matchingPages = isSearching
-    ? navDestinations.filter((d) =>
-        d.label.toLowerCase().includes(trimmed.toLowerCase()),
-      )
-    : [];
-
   const hasApiResults =
-    results.clients.length > 0 || results.engagements.length > 0;
+    results.clients.length > 0 ||
+    results.engagements.length > 0 ||
+    results.templates.length > 0;
+  const hasEntryMatches = goMatches.length > 0 || actionMatches.length > 0;
   const showNoResults =
-    isSearching && !loading && !hasApiResults && matchingPages.length === 0;
+    isSearching && !loading && !hasApiResults && !hasEntryMatches;
   const hasRecents = recentSearches.length > 0 || recentItems.length > 0;
 
   return (
@@ -324,19 +379,40 @@ export function CommandPalette() {
               <CommandList className="max-h-[min(60vh,420px)] px-2 py-2 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0">
                 {isSearching ? (
                   <>
-                    {matchingPages.length > 0 && (
-                      <CommandGroup heading={t("pages")}>
-                        {matchingPages.map((d) => {
-                          const Icon = d.icon;
+                    {goMatches.length > 0 && (
+                      <CommandGroup heading={t("group_go")}>
+                        {goMatches.map((entry) => {
+                          const Icon = entry.icon;
                           return (
                             <NavRow
-                              key={d.href}
-                              value={`nav:${d.href}`}
-                              label={d.label}
-                              onSelect={() => go(d.href)}
+                              key={`go:${entry.id}`}
+                              value={`go:${entry.id}`}
+                              label={entry.label}
+                              onSelect={() => runEntry(entry)}
                               icon={
                                 <Icon
-                                  className={cn("size-4", d.color)}
+                                  className={cn("size-4", entry.color)}
+                                  aria-hidden
+                                />
+                              }
+                            />
+                          );
+                        })}
+                      </CommandGroup>
+                    )}
+                    {actionMatches.length > 0 && (
+                      <CommandGroup heading={t("group_actions")}>
+                        {actionMatches.map((entry) => {
+                          const Icon = entry.icon;
+                          return (
+                            <NavRow
+                              key={`action:${entry.id}`}
+                              value={`action:${entry.id}`}
+                              label={entry.label}
+                              onSelect={() => runEntry(entry)}
+                              icon={
+                                <Icon
+                                  className={cn("size-4", entry.color)}
                                   aria-hidden
                                 />
                               }
@@ -376,6 +452,24 @@ export function CommandPalette() {
                             icon={
                               <Briefcase
                                 className="size-4 text-icon-blue"
+                                aria-hidden
+                              />
+                            }
+                          />
+                        ))}
+                      </CommandGroup>
+                    )}
+                    {results.templates.length > 0 && (
+                      <CommandGroup heading={t("templates")}>
+                        {results.templates.map((tpl) => (
+                          <ResultRow
+                            key={tpl.id}
+                            value={`tpl:${tpl.id}`}
+                            title={tpl.name}
+                            onSelect={() => openTemplate(tpl)}
+                            icon={
+                              <FileText
+                                className="size-4 text-icon-amber"
                                 aria-hidden
                               />
                             }
@@ -441,17 +535,17 @@ export function CommandPalette() {
                       </CommandGroup>
                     )}
                     <CommandGroup heading={t("jump_to")}>
-                      {navDestinations.map((d) => {
-                        const Icon = d.icon;
+                      {primaryDestinations.map((entry) => {
+                        const Icon = entry.icon;
                         return (
                           <NavRow
-                            key={d.href}
-                            value={`nav:${d.href}`}
-                            label={d.label}
-                            onSelect={() => go(d.href)}
+                            key={entry.id}
+                            value={`go:${entry.id}`}
+                            label={entry.label}
+                            onSelect={() => runEntry(entry)}
                             icon={
                               <Icon
-                                className={cn("size-4", d.color)}
+                                className={cn("size-4", entry.color)}
                                 aria-hidden
                               />
                             }
