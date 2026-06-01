@@ -54,23 +54,21 @@ export function ClientsListView({
   }, [clients, query]);
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="px-4 py-3 border-b border-border/60">
-        <ClientsToolbar
-          query={query}
-          onQueryChange={setQuery}
-          type={type}
-          includeArchived={includeArchived}
-          sort={sort}
-          activeOnly={activeOnly}
-        />
-      </div>
+    <div className="space-y-4">
+      <ClientsToolbar
+        query={query}
+        onQueryChange={setQuery}
+        type={type}
+        includeArchived={includeArchived}
+        sort={sort}
+        activeOnly={activeOnly}
+      />
       {filtered.length === 0 && clients.length > 0 ? (
         // Live-filter empty state: the firm has clients but none
         // match the search box. Distinct from the page-level "you
         // haven't added any clients" empty state, which the existing
         // ClientsTable already handles when `clients` is empty.
-        <div className="px-4 py-12 text-center text-sm text-muted-foreground">
+        <div className="py-12 text-center text-sm text-muted-foreground">
           {t("empty_search")}
         </div>
       ) : (
