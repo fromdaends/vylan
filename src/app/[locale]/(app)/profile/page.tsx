@@ -7,7 +7,6 @@ import { getBrandingImageUrl } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { ProfileForm } from "./profile-form";
-import { SubscriptionCard } from "@/components/billing/subscription-card";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +30,8 @@ export default async function ProfilePage({
   // are React.cache()-wrapped — the (app) layout already called them
   // and the cache returns the same result instantly here. We still need
   // the firm row for the brand color used to tint the avatar fallback.
-  // Email / password / two-factor moved to Settings → Account.
+  // Email / password / two-factor live in Settings → Security; the
+  // subscription summary lives in Settings → Billing.
   const [user, firm, t] = await Promise.all([
     getCurrentUser(),
     getCurrentFirm(),
@@ -72,18 +72,6 @@ export default async function ProfilePage({
         brandColor={firm.brand_color}
         avatarUrl={avatarUrl}
       />
-
-      {/* Subscription summary — owner-only. Subscription belongs here
-          on "your account" rather than under app preferences. */}
-      {user.role === "owner" && (
-        <SubscriptionCard
-          plan={firm.plan}
-          subscriptionStatus={firm.subscription_status}
-          currentPeriodEnd={firm.current_period_end}
-          stripeCustomerId={firm.stripe_customer_id}
-          locale={locale}
-        />
-      )}
     </div>
   );
 }

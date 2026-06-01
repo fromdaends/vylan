@@ -13,6 +13,7 @@ import {
   SlidersHorizontal,
   FileText,
   ShieldCheck,
+  Lock,
   CreditCard,
   Download,
   Trash2,
@@ -36,7 +37,14 @@ import {
 import { AccountSecuritySections } from "@/components/settings/account-security-sections";
 
 type ThemeChoice = "light" | "dark" | "system";
-type SectionId = "account" | "appearance" | "general" | "documents" | "data";
+type SectionId =
+  | "account"
+  | "security"
+  | "appearance"
+  | "general"
+  | "billing"
+  | "documents"
+  | "data";
 type Translate = (k: string) => string;
 
 // Same Canadian zones that used to live in /firm. Kept in sync with the
@@ -60,8 +68,10 @@ const CA_TIMEZONES: ReadonlyArray<readonly [string, string]> = [
 
 const SECTION_IDS: SectionId[] = [
   "account",
+  "security",
   "appearance",
   "general",
+  "billing",
   "documents",
   "data",
 ];
@@ -71,7 +81,7 @@ export function SettingsShell({
   currentTimezone,
   autoRejectUnusableDocs,
   isOwner,
-  billingEnabled,
+  billingSlot,
   firmName,
   firm,
   firmLogoUrl,
@@ -83,7 +93,10 @@ export function SettingsShell({
   currentTimezone: string;
   autoRejectUnusableDocs: boolean;
   isOwner: boolean;
-  billingEnabled: boolean;
+  // Subscription card, rendered on the server (it's an async component) and
+  // passed in as a slot so the client shell can show it under the Billing tab.
+  // Null for non-owners.
+  billingSlot: React.ReactNode;
   firmName: string;
   firm: FirmInfo;
   firmLogoUrl: string | null;
@@ -102,8 +115,12 @@ export function SettingsShell({
 
   const nav: { id: SectionId; label: string; icon: typeof Palette }[] = [
     { id: "account", label: t("nav_account"), icon: UserCog },
+    { id: "security", label: t("nav_security"), icon: Lock },
     { id: "appearance", label: t("nav_appearance"), icon: Palette },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
+    ...(isOwner
+      ? [{ id: "billing" as const, label: t("nav_billing"), icon: CreditCard }]
+      : []),
     { id: "documents", label: t("nav_documents"), icon: FileText },
     ...(isOwner
       ? [{ id: "data" as const, label: t("nav_data"), icon: ShieldCheck }]
@@ -141,23 +158,20 @@ export function SettingsShell({
 
       <div className="min-w-0 flex-1">
         {section === "account" && (
-          <AccountSection
-            firm={firm}
-            firmLogoUrl={firmLogoUrl}
-            email={email}
-            mfaEnabled={mfaEnabled}
-            t={t}
-          />
+          <AccountSection firm={firm} firmLogoUrl={firmLogoUrl} t={t} />
+        )}
+        {section === "security" && (
+          <AccountSecuritySections email={email} mfaEnabled={mfaEnabled} />
         )}
         {section === "appearance" && <AppearanceSection t={t} />}
         {section === "general" && (
           <GeneralSection
             currentLocale={currentLocale}
             currentTimezone={currentTimezone}
-            billingEnabled={billingEnabled}
             t={t}
           />
         )}
+        {section === "billing" && isOwner && billingSlot}
         {section === "documents" && (
           <DocumentsSection
             autoRejectUnusableDocs={autoRejectUnusableDocs}
@@ -173,39 +187,30 @@ export function SettingsShell({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Account — everything about "you + your firm" in one place. Your account first
-// (Email, Password, Two-factor), then Firm settings (logo, name, brand color,
-// client-email language) under their own headliner at the bottom. All reuse the
-// existing flows extracted from /profile + /firm.
+// Account — your firm settings (logo, name, brand color, client-email
+// language). Personal sign-in (Email, Password, Two-factor) lives in its own
+// Security tab; the subscription summary lives in Billing.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AccountSection({
   firm,
   firmLogoUrl,
-  email,
-  mfaEnabled,
   t,
 }: {
   firm: FirmInfo;
   firmLogoUrl: string | null;
-  email: string;
-  mfaEnabled: boolean;
   t: Translate;
 }) {
   return (
-    <div className="space-y-12">
-      <AccountSecuritySections email={email} mfaEnabled={mfaEnabled} />
-
-      <div>
-        <h2 className="text-base font-semibold tracking-tight">
-          {t("section_firm_settings")}
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {t("section_firm_settings_hint")}
-        </p>
-        <div className="mt-5">
-          <FirmSettingsSections firm={firm} firmLogoUrl={firmLogoUrl} />
-        </div>
+    <div>
+      <h2 className="text-base font-semibold tracking-tight">
+        {t("section_firm_settings")}
+      </h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {t("section_firm_settings_hint")}
+      </p>
+      <div className="mt-5">
+        <FirmSettingsSections firm={firm} firmLogoUrl={firmLogoUrl} />
       </div>
     </div>
   );
@@ -346,40 +351,16 @@ function OptionCard({
 function GeneralSection({
   currentLocale,
   currentTimezone,
-  billingEnabled,
   t,
 }: {
   currentLocale: "fr" | "en";
   currentTimezone: string;
-  billingEnabled: boolean;
   t: Translate;
 }) {
   return (
     <div className="space-y-10">
       <LanguageSection currentLocale={currentLocale} t={t} />
       <TimezoneSection currentTimezone={currentTimezone} t={t} />
-      {billingEnabled && (
-        <section>
-          <h2 className="text-sm font-semibold">{t("section_billing")}</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {t("section_billing_hint")}
-          </p>
-          <Link
-            href="/billing"
-            className="mt-4 flex max-w-xl items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-          >
-            <span className="flex items-center gap-3">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-                <CreditCard className="h-4 w-4" />
-              </span>
-              <span className="text-sm font-medium">
-                {t("billing_link_label")}
-              </span>
-            </span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </Link>
-        </section>
-      )}
     </div>
   );
 }
