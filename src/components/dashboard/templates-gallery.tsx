@@ -113,7 +113,7 @@ export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
       </div>
 
       {visible.length === 0 && !showBlank ? (
-        <div className="rounded-xl border border-dashed border-border bg-card/40 px-5 py-10 text-center text-sm text-muted-foreground">
+        <div className="rounded-xl border border-dashed border-border/50 px-5 py-10 text-center text-sm text-muted-foreground">
           {t("tmpl_empty")}
         </div>
       ) : (
@@ -121,7 +121,7 @@ export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
           {showBlank ? (
             <Link
               href="/engagements/new"
-              className="group flex w-44 shrink-0 flex-col gap-3 rounded-xl border border-dashed border-border bg-card p-4 transition-all hover:border-foreground/20 hover:shadow-sm sm:w-48"
+              className="group flex w-44 shrink-0 flex-col gap-3 rounded-xl border border-dashed border-border/60 bg-card/40 p-4 transition-colors hover:border-foreground/20 hover:bg-card sm:w-48"
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
                 <FilePlus2 className="h-4 w-4" />
@@ -141,7 +141,7 @@ export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
             <Link
               key={tmpl.id}
               href={`/engagements/new?template=${tmpl.id}`}
-              className="group flex w-44 shrink-0 flex-col gap-3 rounded-xl border border-border bg-card p-4 transition-all hover:border-foreground/20 hover:shadow-sm sm:w-48"
+              className="group flex w-44 shrink-0 flex-col gap-3 rounded-xl border border-border/60 bg-card/40 p-4 transition-colors hover:border-foreground/20 hover:bg-card sm:w-48"
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
                 <FileText className="h-4 w-4" />
