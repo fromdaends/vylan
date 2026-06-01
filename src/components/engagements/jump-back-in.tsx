@@ -52,7 +52,7 @@ export function JumpBackIn({
 
       <Link
         href={`/engagements/${engagement.id}`}
-        className="group flex w-full max-w-md flex-col gap-4"
+        className="group flex w-full max-w-md flex-col gap-4 rounded-xl border border-border/50 bg-card/50 p-5 shadow-[0_2px_12px_-4px_rgba(0,0,0,0.5)] transition-all hover:-translate-y-0.5 hover:border-border/70 hover:shadow-[0_10px_24px_-6px_rgba(0,0,0,0.6)] motion-reduce:transition-none"
       >
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">
