@@ -5,6 +5,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { loadPortalContext } from "@/lib/db/portal";
 import { brand } from "@/lib/brand";
 import { PortalShell } from "@/components/portal/portal-shell";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 import { getBrandingImageUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
@@ -48,15 +49,18 @@ export default async function PortalPage({
     <html
       lang={locale}
       className={`${inter.variable} ${mono.variable} h-full antialiased`}
+      suppressHydrationWarning
     >
       <head>
         <title>{`${brand.name} — ${ctx.firm.name}`}</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <NextIntlClientProvider locale={locale} messages={messages}>
-          <PortalShell ctx={ctx} locale={locale} firmLogoUrl={firmLogoUrl} />
-        </NextIntlClientProvider>
+        <ThemeProvider>
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            <PortalShell ctx={ctx} locale={locale} firmLogoUrl={firmLogoUrl} />
+          </NextIntlClientProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
