@@ -364,11 +364,11 @@ function WorklistRowView({
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <TableRow className="relative">
+          <TableRow>
             <TableCell className="px-4 py-3 align-top">
               <Link
                 href={`/engagements/${row.id}`}
-                className="font-medium text-foreground after:absolute after:inset-0 hover:underline focus-visible:outline-none"
+                className="font-medium text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
               >
                 {row.title}
               </Link>
@@ -464,17 +464,16 @@ function WorklistRowView({
               </Badge>
             </TableCell>
 
-            {/* Actions menu. The "..." button sits above the row's full-row
-                link overlay (relative z-10) so a click opens the menu instead
-                of navigating; right-clicking anywhere on the row opens the
-                same menu via the context-menu wrapper. */}
+            {/* Actions menu. Left-clicking the "..." opens the menu; right-
+                clicking anywhere on the row opens the same menu via the
+                context-menu wrapper. (The engagement title is the row's link.) */}
             <TableCell className="px-2 py-3 align-top">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
                     aria-label={tEng("menu_actions")}
-                    className="relative z-10 inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <MoreHorizontal className="size-4" />
                   </button>
