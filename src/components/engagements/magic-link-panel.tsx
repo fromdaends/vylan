@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export function MagicLinkPanel({ url }: { url: string }) {
   const t = useTranslations("Engagements");
@@ -21,16 +20,15 @@ export function MagicLinkPanel({ url }: { url: string }) {
   }
 
   return (
-    <Card className="border-success/40 bg-success/5">
-      <CardHeader>
-        <CardTitle className="text-base">{t("magic_link_title")}</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <p className="text-sm text-muted-foreground">{t("magic_link_hint")}</p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 rounded-md border border-border bg-card px-3 py-2 text-xs font-mono break-all">
-            {url}
-          </code>
+    <div className="space-y-2 border-l-2 border-success/50 pl-4">
+      <h3 className="text-base font-semibold tracking-tight text-foreground">
+        {t("magic_link_title")}
+      </h3>
+      <p className="text-sm text-muted-foreground">{t("magic_link_hint")}</p>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 rounded-md bg-secondary/50 px-3 py-2 text-xs font-mono break-all">
+          {url}
+        </code>
           <Button
             type="button"
             variant="outline"
@@ -46,7 +44,6 @@ export function MagicLinkPanel({ url }: { url: string }) {
             {copied ? t("copied") : t("copy")}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+    </div>
   );
 }
