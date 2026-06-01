@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { MessageCircle } from "lucide-react";
 
 type Props = {
   // The accountant's contact address (assigned user, else firm owner).
@@ -50,20 +51,22 @@ export function PortalFooter({ email, subject, body }: Props) {
     : null;
 
   const itemClass =
-    "block rounded px-3 py-2 text-left text-foreground hover:bg-muted transition-colors";
+    "block rounded-md px-3 py-2 text-left text-sm text-foreground hover:bg-secondary/60 transition-colors";
 
   return (
-    <footer className="text-center text-sm text-muted-foreground pt-6 border-t border-border/60">
+    <footer className="border-t border-border/60 pt-8 text-center text-sm text-muted-foreground">
       {email && links ? (
-        <div className="flex flex-col items-center gap-2">
+        <div className="flex flex-col items-center gap-2.5">
+          <p className="text-foreground">{t("help_intro")}</p>
           <div className="relative inline-block">
             <button
               type="button"
               onClick={() => setMenuOpen((o) => !o)}
               aria-haspopup="menu"
               aria-expanded={menuOpen}
-              className="text-foreground font-medium underline underline-offset-4 hover:opacity-80"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border/70 px-4 py-2 text-sm font-medium text-foreground transition-colors hover:border-border hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
+              <MessageCircle className="size-4" aria-hidden />
               {t("help_message")}
             </button>
             {menuOpen && (
@@ -78,7 +81,7 @@ export function PortalFooter({ email, subject, body }: Props) {
                 />
                 <div
                   role="menu"
-                  className="absolute left-1/2 top-full z-20 mt-2 w-44 -translate-x-1/2 rounded-lg border border-border bg-card p-1 shadow-lg"
+                  className="absolute left-1/2 top-full z-20 mt-2 w-48 -translate-x-1/2 rounded-xl border border-border/60 bg-popover p-1 shadow-lg"
                 >
                   <a
                     role="menuitem"
@@ -117,7 +120,7 @@ export function PortalFooter({ email, subject, body }: Props) {
             <button
               type="button"
               onClick={copyEmail}
-              className="rounded border border-border/70 px-1.5 py-0.5 text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+              className="rounded-md border border-border/70 px-1.5 py-0.5 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
             >
               {copied ? t("help_copied") : t("help_copy")}
             </button>
@@ -126,9 +129,12 @@ export function PortalFooter({ email, subject, body }: Props) {
       ) : (
         <p>{t("help_no_email")}</p>
       )}
-      <p className="mt-4 text-xs text-muted-foreground/70 font-mono">
-        {t("powered_by")} <span className="font-sans font-medium">Vylan</span>
-      </p>
+      <div className="mt-8 inline-flex items-center justify-center gap-1.5 text-xs text-muted-foreground/70">
+        <span>{t("powered_by")}</span>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo-vylan.png" alt="" aria-hidden className="size-4" />
+        <span className="font-semibold text-muted-foreground">Vylan</span>
+      </div>
     </footer>
   );
 }
