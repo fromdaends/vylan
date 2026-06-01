@@ -68,7 +68,7 @@ export function ClientsToolbar({
             placeholder={t("search_placeholder")}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            className="pl-8 w-72"
+            className="pl-8 w-full sm:w-72"
             aria-label={t("search_label")}
           />
         </div>

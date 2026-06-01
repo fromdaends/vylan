@@ -53,7 +53,10 @@ export default async function PortalPage({
     >
       <head>
         <title>{`${brand.name} — ${ctx.firm.name}`}</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider>

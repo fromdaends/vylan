@@ -109,7 +109,7 @@ function FirmLogoSection({
       <p className="text-xs text-muted-foreground mt-1">
         {t("section_firm_logo_hint")}
       </p>
-      <div className="mt-4 flex items-center gap-4">
+      <div className="mt-4 flex flex-wrap items-center gap-4">
         <AvatarInitials
           src={preview ?? undefined}
           name={firmName}
