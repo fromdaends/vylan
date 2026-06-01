@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const getUserMock = vi.fn();
 const insertMock = vi.fn();
 const fromMock = vi.fn(() => ({ insert: insertMock }));
-const sendEmailMock = vi.fn(async (_args: unknown) => ({ sent: true, id: "x" }));
+const sendEmailMock = vi.fn(async (args: unknown) => {
+  void args;
+  return { sent: true, id: "x" };
+});
 
 vi.mock("@/lib/supabase/server", () => ({
   getServerSupabase: async () => ({
@@ -57,12 +60,15 @@ describe("submitFeedbackAction — emails the team", () => {
     expect(sendEmailMock).toHaveBeenCalledTimes(1);
     const arg = sendEmailMock.mock.calls[0][0] as {
       to: string;
+      from?: string;
       replyTo?: string;
       subject: string;
       html: string;
       text: string;
     };
     expect(arg.to).toBe("hello@vylan.app");
+    // Sent from a distinct address (not hello@→hello@) to dodge spam-filing.
+    expect(arg.from).toContain("notifications@vylan.app");
     expect(arg.replyTo).toBe("owner@firm.test");
     expect(arg.subject).toContain("Cabinet Test");
     expect(arg.html).toContain("Love the app!");

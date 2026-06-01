@@ -72,6 +72,10 @@ export async function submitFeedbackAction(
     ];
     await sendEmail({
       to,
+      // Send FROM a distinct address (not hello@→hello@) so Gmail/Workspace
+      // doesn't treat the notification as a suspicious self-send and spam-file
+      // it. Any local-part on the verified vylan.app domain is authorised.
+      from: "Vylan <notifications@vylan.app>",
       subject: `Vylan feedback — ${firmName}`,
       replyTo: auth.user.email ?? undefined,
       html: `<div style="font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1e293b">
