@@ -30,7 +30,7 @@ import {
   type ClientFormState,
 } from "@/app/actions/clients";
 import type { Client } from "@/lib/db/clients";
-import { Plus } from "lucide-react";
+import { Plus, Pencil } from "lucide-react";
 
 type Props = {
   mode: "create" | "edit";
@@ -64,12 +64,18 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        {trigger ?? (
-          <Button size="sm">
-            <Plus className="size-4" />
-            {t("add_client")}
-          </Button>
-        )}
+        {trigger ??
+          (mode === "edit" ? (
+            <Button size="sm">
+              <Pencil className="size-4" />
+              {t("edit_client")}
+            </Button>
+          ) : (
+            <Button size="sm">
+              <Plus className="size-4" />
+              {t("add_client")}
+            </Button>
+          ))}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>

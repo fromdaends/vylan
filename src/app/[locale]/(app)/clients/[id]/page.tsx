@@ -6,7 +6,6 @@ import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
-import { ClientDetailForm } from "@/components/clients/client-detail-form";
 import {
   archiveClientAction,
   restoreClientAction,
@@ -90,31 +89,21 @@ export default async function ClientDetailPage({
         <h2 className="text-base font-semibold tracking-tight text-foreground">
           {t("contact_info")}
         </h2>
-        {client.archived_at ? (
-            // Archived clients: keep the read-only DetailRow rendering.
-            // Editing an archived record without first restoring it would
-            // be surprising, so the inline inputs are gated.
-            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3 text-sm">
-              <DetailRow label={t("col_email")} value={client.email} />
-              <DetailRow label={t("col_phone")} value={client.phone} mono />
-              <DetailRow
-                label={t("field_external_ref")}
-                value={client.external_ref}
-                mono
-              />
-              <DetailRow label={t("field_notes")} value={client.notes} wide />
-            </dl>
-          ) : (
-            <ClientDetailForm
-              client={{
-                id: client.id,
-                email: client.email,
-                phone: client.phone,
-                external_ref: client.external_ref,
-                notes: client.notes,
-              }}
-            />
-          )}
+        {/* Read-only by default. Every field renders as a labeled value,
+            never an open input box — editing happens deliberately through
+            the "Edit client" dialog in the header. This protects the email
+            in particular, since it's where document-request links and
+            reminders get sent. */}
+        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 text-sm">
+          <DetailRow label={t("col_email")} value={client.email} />
+          <DetailRow label={t("col_phone")} value={client.phone} mono />
+          <DetailRow
+            label={t("field_external_ref")}
+            value={client.external_ref}
+            mono
+          />
+          <DetailRow label={t("field_notes")} value={client.notes} wide />
+        </dl>
       </div>
 
       <div className="space-y-3">
