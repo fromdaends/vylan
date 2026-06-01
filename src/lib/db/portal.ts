@@ -12,6 +12,7 @@ import type { Engagement } from "./engagements";
 import type { Client } from "./clients";
 import type { Firm } from "./firms";
 import type { RequestItem, RequestItemStatus } from "./request-items";
+import type { UsabilityVerdict } from "@/lib/ai/usability";
 
 const TOKEN_REGEX = /^[0-9A-Za-z]{43}$/;
 
@@ -25,6 +26,12 @@ export type PortalContext = {
   firm: Firm;
   items: RequestItem[];
   uploaded_count_by_item: Record<string, number>;
+  // Bilingual AI rejection summary per item, taken from the latest upload's
+  // usability verdict (the model writes it in both languages). Lets the
+  // portal's re-upload banner follow the language toggle instead of being stuck
+  // in the single language `request_items.rejection_reason` was written in.
+  // Only present for items whose latest upload was flagged.
+  rejection_summary_by_item: Record<string, { fr: string; en: string }>;
   // The "your accountant" contact surfaced in the portal footer. Resolves to
   // the user assigned to the engagement, falling back to the firm owner. Null
   // only if neither has an email on file (shouldn't happen — users.email is
@@ -72,11 +79,26 @@ export async function loadPortalContext(
 
   const { data: uploaded } = await sb
     .from("uploaded_files")
-    .select("request_item_id")
-    .eq("engagement_id", engagement.id);
+    .select("request_item_id, uploaded_at, ai_usability")
+    .eq("engagement_id", engagement.id)
+    .order("uploaded_at", { ascending: true });
   const counts: Record<string, number> = {};
+  // Ascending order → the last write per item wins, so this reflects the
+  // LATEST upload's verdict. A later clean upload supersedes an earlier flag.
+  const rejectionSummaryByItem: Record<string, { fr: string; en: string }> = {};
   for (const u of uploaded ?? []) {
     counts[u.request_item_id] = (counts[u.request_item_id] ?? 0) + 1;
+    const v = u.ai_usability as UsabilityVerdict | null;
+    const fr = v?.issue_summary_fr?.trim();
+    const en = v?.issue_summary_en?.trim();
+    if (fr || en) {
+      rejectionSummaryByItem[u.request_item_id] = {
+        fr: fr || en || "",
+        en: en || fr || "",
+      };
+    } else {
+      delete rejectionSummaryByItem[u.request_item_id];
+    }
   }
 
   // Resolve the accountant contact for the footer: the user assigned to this
@@ -109,6 +131,7 @@ export async function loadPortalContext(
     firm: firm as Firm,
     items: items as RequestItem[],
     uploaded_count_by_item: counts,
+    rejection_summary_by_item: rejectionSummaryByItem,
     accountant_email: accountantEmail,
   };
 }
