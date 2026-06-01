@@ -627,7 +627,11 @@
     "inline_error_missing_id": "Impossible d'enregistrer — identifiant client manquant.",
     "saved_toast": "Modifications enregistrées",
     "created_toast": "Client ajouté",
-    "save_error": "Impossible d'enregistrer vos modifications. Veuillez réessayer."
+    "save_error": "Impossible d'enregistrer vos modifications. Veuillez réessayer.",
+    "email_confirm_title": "Modifier le courriel de ce client ?",
+    "email_confirm_desc": "Vous changez le courriel de ce client de {from} à {to}. Les liens de documents et les rappels seront envoyés à la nouvelle adresse.",
+    "email_confirm_confirm": "Confirmer le changement",
+    "email_confirm_none": "(aucun courriel)"
   },
   "Engagements": {
     "title": "Engagements",
