@@ -3,6 +3,7 @@ import {
   computeAttention,
   attentionScore,
   isReadyToReview,
+  isCollectionComplete,
 } from "./attention";
 import type { Engagement } from "@/lib/db/engagements";
 import type { RequestItem } from "@/lib/db/request-items";
@@ -272,5 +273,83 @@ describe("isReadyToReview", () => {
     });
     expect(r.itemsPendingRequired).toBe(1);
     expect(isReadyToReview(r)).toBe(false);
+  });
+});
+
+describe("itemsUploaded + isCollectionComplete (client finished, AI-independent)", () => {
+  it("counts every item with a file behind it, regardless of the AI verdict", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "approved" }),
+        item({ status: "submitted" }),
+        item({ status: "rejected" }),
+        item({ status: "pending", rejection_reason: "Blurry." }), // AI-bounced
+        item({ status: "na" }), // marked not applicable — no file
+        item({ status: "pending" }), // truly waiting on the client
+      ],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    // approved + submitted + rejected + AI-bounced = 4 (na + pending excluded)
+    expect(r.itemsUploaded).toBe(4);
+  });
+
+  it("fires once the AI has APPROVED every upload — the case isReadyToReview misses", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [item({ status: "approved" }), item({ status: "approved" })],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(r.itemsPendingRequired).toBe(0);
+    expect(r.itemsReadyToReview).toBe(0); // nothing awaiting a decision...
+    expect(isReadyToReview(r)).toBe(false); // ...so the action queue stays quiet
+    expect(r.itemsUploaded).toBe(2);
+    expect(isCollectionComplete(r)).toBe(true); // ...but the client IS done
+  });
+
+  it("fires even when the AI REJECTED every upload", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [item({ status: "rejected" }), item({ status: "rejected" })],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(r.itemsPendingRequired).toBe(0);
+    expect(isCollectionComplete(r)).toBe(true);
+  });
+
+  it("does NOT fire when nothing was uploaded (every item marked N/A)", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [item({ status: "na" }), item({ status: "na" })],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(r.itemsUploaded).toBe(0);
+    expect(isCollectionComplete(r)).toBe(false);
+  });
+
+  it("does NOT fire while a required item is still waiting on the client", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [item({ status: "approved" }), item({ status: "pending" })],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(r.itemsPendingRequired).toBe(1);
+    expect(isCollectionComplete(r)).toBe(false);
+  });
+
+  it("does NOT fire for a non-live engagement even if every item is approved", () => {
+    const r = computeAttention({
+      engagement: eng({ status: "complete" }),
+      items: [item({ status: "approved" }), item({ status: "approved" })],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(r.isLive).toBe(false);
+    expect(isCollectionComplete(r)).toBe(false);
   });
 });

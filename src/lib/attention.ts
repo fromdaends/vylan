@@ -30,6 +30,14 @@ export type AttentionResult = {
   itemsDone: number;
   itemsPendingRequired: number;
   itemsReadyToReview: number;
+  // Items the client has actually uploaded a file for, regardless of the AI's
+  // verdict (submitted / approved / rejected / AI-bounced all count; "na" and a
+  // truly-pending item do not).
+  itemsUploaded: number;
+  // Engagement is live (sent / in_progress) — i.e. the client can still act and
+  // there's something to collect/review. Terminal statuses (draft, complete,
+  // cancelled) are not live.
+  isLive: boolean;
 };
 
 export function computeAttention(opts: {
@@ -68,6 +76,14 @@ export function computeAttention(opts: {
   const itemsReadyToReview = items.filter(
     (i) => i.status === "submitted" || isAiBounced(i),
   ).length;
+  // Files the client has actually provided — independent of the AI's call.
+  // submitted/approved/rejected all have a file behind them, as does an
+  // AI-bounced item (uploaded → flagged → reopened). "na" and a truly-pending
+  // item have no file.
+  const itemsUploaded = items.filter(
+    (i) => isAiBounced(i) || (i.status !== "pending" && i.status !== "na"),
+  ).length;
+  const isLive = e.status === "sent" || e.status === "in_progress";
 
   // No requested documents → nothing to collect, chase, or be overdue on.
   // Bail before any reason is computed so it stays out of Needs attention
@@ -83,6 +99,8 @@ export function computeAttention(opts: {
       itemsDone,
       itemsPendingRequired,
       itemsReadyToReview,
+      itemsUploaded,
+      isLive,
     };
   }
 
@@ -104,7 +122,6 @@ export function computeAttention(opts: {
   }
 
   const reasons: AttentionReason[] = [];
-  const isLive = e.status === "sent" || e.status === "in_progress";
 
   if (isLive && daysOverdue != null && daysOverdue > 0) {
     reasons.push("overdue");
@@ -136,6 +153,8 @@ export function computeAttention(opts: {
     itemsDone,
     itemsPendingRequired,
     itemsReadyToReview,
+    itemsUploaded,
+    isLive,
   };
 }
 
@@ -153,6 +172,20 @@ export function attentionScore(a: AttentionResult): number {
 
 export function isReadyToReview(a: AttentionResult): boolean {
   // All required items are non-pending AND at least one item is submitted
-  // (i.e. needs an approve/reject decision).
+  // (i.e. needs an approve/reject decision). Drives the dashboard "Ready to
+  // review" action queue + the engagement's sub-page routing.
   return a.itemsPendingRequired === 0 && a.itemsReadyToReview > 0;
+}
+
+// "The client has finished their part." Every required item is in (nothing
+// left waiting on the client) AND at least one file was actually uploaded —
+// REGARDLESS of what the AI decided about those files (approved, rejected, or
+// still awaiting a human decision all count). Scoped to live engagements.
+//
+// This is deliberately broader than isReadyToReview: when the AI auto-approves
+// every upload there's no item left "submitted", so isReadyToReview goes quiet
+// even though the client is done. The What's-new feed uses this so the firm
+// always learns the moment a client finishes uploading.
+export function isCollectionComplete(a: AttentionResult): boolean {
+  return a.isLive && a.itemsPendingRequired === 0 && a.itemsUploaded > 0;
 }

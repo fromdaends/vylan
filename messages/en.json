@@ -411,7 +411,7 @@
     "kind_ai_auto_rejected": "AI auto-rejected a client upload",
     "kind_ai_escalated_to_accountant": "AI flagged a file twice — please review",
     "kind_ai_quality_flagged": "AI flagged a file for your review",
-    "kind_ready_to_review": "Engagement is ready to review",
+    "kind_ready_to_review": "All documents received — ready to review",
     "kind_overdue": "Engagement is overdue"
   },
   "Inbox": {
@@ -429,7 +429,7 @@
     "kind_ai_auto_rejected": "AI auto-rejected a client upload",
     "kind_ai_escalated_to_accountant": "AI flagged a file twice — please review",
     "kind_ai_quality_flagged": "AI flagged a file for your review",
-    "kind_ready_to_review": "Engagement is ready to review",
+    "kind_ready_to_review": "All documents received — ready to review",
     "kind_overdue": "Engagement is overdue",
     "search_label": "Search clients",
     "search_placeholder": "Find",
