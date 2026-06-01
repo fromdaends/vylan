@@ -6,18 +6,18 @@ import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { assertLocale } from "@/lib/locale";
-import { BILLING_ENABLED } from "@/lib/billing-mode";
 import { SettingsShell } from "./settings-form";
 import { GoLiveCard } from "@/components/settings/go-live-card";
+import { SubscriptionCard } from "@/components/billing/subscription-card";
 
 export const dynamic = "force-dynamic";
 
 // /settings: a sectioned settings surface (sub-nav on the left, the selected
-// category on the right). Categories: Account (firm settings + email +
-// password + two-factor), Appearance (mode), General (language + timezone),
-// Documents (auto-reject), and an owner-only Data & privacy bucket.
-// ?tab=<section> deep-links a category (used by the avatar menu + the old
-// /firm redirect).
+// category on the right). Categories: Account (firm settings), Security (email
+// + password + two-factor), Appearance (mode), General (language + timezone),
+// Billing (subscription, owner-only), Documents (auto-reject), and an
+// owner-only Data & privacy bucket. ?tab=<section> deep-links a category (used
+// by the avatar menu + the old /firm redirect).
 export default async function SettingsPage({
   params,
   searchParams,
@@ -51,6 +51,19 @@ export default async function SettingsPage({
   );
 
   const t = await getTranslations("Settings");
+  const isOwner = user.role === "owner";
+
+  // The subscription summary is an async server component; render it here and
+  // hand it to the (client) settings shell as a slot for the Billing tab.
+  const billingSlot = isOwner ? (
+    <SubscriptionCard
+      plan={firm.plan}
+      subscriptionStatus={firm.subscription_status}
+      currentPeriodEnd={firm.current_period_end}
+      stripeCustomerId={firm.stripe_customer_id}
+      locale={locale}
+    />
+  ) : null;
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 animate-in-up">
@@ -67,8 +80,8 @@ export default async function SettingsPage({
         currentLocale={user.locale}
         currentTimezone={firm.timezone}
         autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
-        isOwner={user.role === "owner"}
-        billingEnabled={BILLING_ENABLED}
+        isOwner={isOwner}
+        billingSlot={billingSlot}
         firmName={firm.name}
         firm={{
           name: firm.name,

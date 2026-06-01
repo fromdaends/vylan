@@ -20,9 +20,9 @@ type ProfileUser = {
   display_name: string | null;
 };
 
-// /profile keeps the personal basics: photo + display name (+ the subscription
-// card on the page). Email, Password, and Two-factor moved to Settings →
-// Account (they live alongside the firm settings now).
+// /profile keeps the personal basics: photo + display name. Email, Password,
+// and Two-factor live in Settings → Security; the subscription summary lives
+// in Settings → Billing.
 export function ProfileForm({
   user,
   displayLabel,
