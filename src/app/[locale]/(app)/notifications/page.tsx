@@ -11,6 +11,7 @@ import {
   Bell,
   CheckCheck,
   ChevronRight,
+  FileUp,
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
@@ -159,6 +160,8 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: AlertTriangle, tone: "bg-warning/15 text-warning" };
     case "ai_quality_flagged":
       return { Icon: Sparkles, tone: "bg-primary/15 text-primary" };
+    case "document_uploaded":
+      return { Icon: FileUp, tone: "bg-primary/15 text-primary" };
     case "ready_to_review":
       return { Icon: CheckCheck, tone: "bg-success/15 text-success" };
     case "overdue":

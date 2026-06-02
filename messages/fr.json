@@ -420,6 +420,7 @@
     "kind_ai_escalated_to_accountant": "L'IA a signalé un fichier deux fois — à réviser",
     "kind_ai_quality_flagged": "L'IA a signalé un fichier à votre attention",
     "kind_ready_to_review": "Tous les documents reçus — prêt à réviser",
+    "kind_document_uploaded": "Nouveau document téléversé",
     "kind_overdue": "Engagement en retard"
   },
   "Inbox": {
@@ -438,6 +439,7 @@
     "kind_ai_escalated_to_accountant": "L'IA a signalé un fichier deux fois — à réviser",
     "kind_ai_quality_flagged": "L'IA a signalé un fichier à votre attention",
     "kind_ready_to_review": "Tous les documents reçus — prêt à réviser",
+    "kind_document_uploaded": "Nouveau document téléversé",
     "kind_overdue": "Engagement en retard",
     "search_label": "Rechercher des clients",
     "search_placeholder": "Rechercher",
