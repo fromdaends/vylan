@@ -10,7 +10,6 @@ import {
   type LandingShellStrings,
 } from "@/components/vylan-landing/landing-shell";
 import { LeadForm } from "@/components/vylan-landing/lead-form";
-import { buildLeadFormStrings } from "@/components/vylan-landing/lead-form-strings";
 import "@/styles/vylan-landing.css";
 
 export async function generateMetadata({
@@ -65,15 +64,13 @@ export default async function Home({
     follow: t("follow"),
   };
 
-  const formStrings = buildLeadFormStrings(t);
-
   return (
     <main className={`vy-root ${schibsted.variable}`}>
       <LandingShell s={shellStrings} />
 
-      {/* FORM */}
+      {/* FORM — the 3-phase demo-lead flow (see LeadForm) */}
       <section className="vy-form-section" id="vy-get-access">
-        <LeadForm s={formStrings} />
+        <LeadForm />
       </section>
 
       {/* FEATURES */}

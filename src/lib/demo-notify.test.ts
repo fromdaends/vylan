@@ -19,7 +19,6 @@ import {
   notifyFounderQualifiedLead,
   notifyFounderDemoBooked,
   notifyFounderNewSignup,
-  notifyFounderFirmLead,
 } from "./demo-notify";
 import type { DemoRequest } from "./db/demo-requests";
 
@@ -50,51 +49,6 @@ function fakeRow(extra: Partial<DemoRequest> = {}): DemoRequest {
     ...extra,
   };
 }
-
-describe("notifyFounderFirmLead", () => {
-  beforeEach(() => {
-    sendEmailMock.mockClear();
-  });
-
-  it("sends a landing-form lead email with firm, practice, clients + notes", async () => {
-    await notifyFounderFirmLead(
-      fakeRow({
-        contact_name: null,
-        source: "landing_form",
-        practice_type: "tax_advisory",
-        active_clients: "100_500",
-        notes: "Blurry receipts every quarter.",
-        firm_size: null,
-        client_volume: null,
-        current_tool: null,
-      }),
-    );
-    expect(sendEmailMock).toHaveBeenCalledTimes(1);
-    const arg = sendEmailMock.mock.calls[0]![0];
-    expect(arg.subject).toContain("landing form");
-    expect(arg.subject).toContain("Acme CPA");
-    // Stored enum keys render as human labels in the founder's email.
-    expect(arg.text).toContain("Tax & advisory");
-    expect(arg.text).toContain("500");
-    expect(arg.text).toContain("Blurry receipts every quarter.");
-    expect(arg.html).toContain("Acme CPA");
-  });
-
-  it("handles a blank note without crashing", async () => {
-    await notifyFounderFirmLead(
-      fakeRow({
-        contact_name: null,
-        source: "landing_form",
-        practice_type: "solo",
-        active_clients: "under_25",
-        notes: null,
-      }),
-    );
-    expect(sendEmailMock).toHaveBeenCalledTimes(1);
-    const arg = sendEmailMock.mock.calls[0]![0];
-    expect(arg.text).toContain("(left blank)");
-  });
-});
 
 describe("notifyFounderPartialLead", () => {
   beforeEach(() => {

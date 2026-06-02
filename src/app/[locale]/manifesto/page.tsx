@@ -5,7 +5,6 @@ import { assertLocale } from "@/lib/locale";
 import { schibsted } from "@/components/vylan-landing/fonts";
 import { BirdVideo } from "@/components/vylan-landing/bird-video";
 import { LeadForm } from "@/components/vylan-landing/lead-form";
-import { buildLeadFormStrings } from "@/components/vylan-landing/lead-form-strings";
 import "@/styles/vylan-landing.css";
 
 export async function generateMetadata({
@@ -41,7 +40,6 @@ export default async function ManifestoPage({
 
   const tm = await getTranslations("VylanManifesto");
   const tv = await getTranslations("Vylan");
-  const formStrings = buildLeadFormStrings(tv);
 
   return (
     <div className={`vy-manifesto ${schibsted.variable}`}>
@@ -91,7 +89,7 @@ export default async function ManifestoPage({
 
       {/* FORM — same lead form as the landing page */}
       <section className="vy-form-section" id="vy-get-access">
-        <LeadForm s={formStrings} />
+        <LeadForm />
       </section>
 
       {/* FOOTER */}
