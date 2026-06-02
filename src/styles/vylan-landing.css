@@ -844,3 +844,90 @@ textarea.vy-field {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* ---------- "You're qualified" choice cards + booking ---------- */
+.vy-choices {
+  margin-top: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.vy-choice {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 16px;
+  padding: 20px 22px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s var(--vy-ease);
+}
+.vy-choice:hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
+}
+.vy-choice-primary {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+.vy-choice-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.vy-choice-badge {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vy-blue);
+  background: #fff;
+  border-radius: 100px;
+  padding: 3px 9px 2px;
+}
+.vy-choice-body {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.8);
+}
+.vy-choice-cta {
+  display: inline-block;
+  margin-top: 14px;
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.vy-choice:hover .vy-choice-cta {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* cal.com embed sits in a white card (the calendar renders light). */
+.vy-booking-cal {
+  margin-top: 20px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.vy-booking-fallback {
+  margin-top: 14px;
+  font-size: 12.5px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.62);
+}
+.vy-booking-fallback a {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
