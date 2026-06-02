@@ -54,6 +54,14 @@ export async function POST(request: NextRequest) {
       .eq("id", firm.id);
   }
 
+  // Collect GST/QST automatically. GUARDED by an env flag because turning on
+  // automatic_tax before Stripe Tax is enabled (+ your GST/QST registrations
+  // added) in the Stripe Dashboard errors every checkout. Flip
+  // STRIPE_TAX_ENABLED=true only once Stripe Tax is live. When on, Checkout
+  // collects the billing address (needed to determine the tax jurisdiction)
+  // and saves it to the customer.
+  const taxEnabled = process.env.STRIPE_TAX_ENABLED === "true";
+
   const session = await s.checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
@@ -63,6 +71,13 @@ export async function POST(request: NextRequest) {
     metadata: { firm_id: firm.id, plan },
     subscription_data: { metadata: { firm_id: firm.id, plan } },
     allow_promotion_codes: true,
+    ...(taxEnabled
+      ? {
+          automatic_tax: { enabled: true },
+          customer_update: { address: "auto" },
+          billing_address_collection: "required" as const,
+        }
+      : {}),
   });
 
   return NextResponse.json({ url: session.url });
