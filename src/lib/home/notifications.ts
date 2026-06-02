@@ -11,6 +11,8 @@
 //   - ai_auto_rejected         (AI auto-rejected a client upload)
 //   - ai_escalated_to_accountant (AI flagged the same file twice)
 //   - ai_quality_flagged       (AI flagged a file for review)
+//   - document_uploaded        (client uploaded a document — partial
+//                               progress, before the whole set is in)
 //   - ready_to_review          (client has uploaded every required item —
 //                               regardless of the AI's verdict on them)
 //   - overdue                  (engagement's due_date has passed)
@@ -28,6 +30,7 @@ export type HomeNotificationKind =
   | "ai_auto_rejected"
   | "ai_escalated_to_accountant"
   | "ai_quality_flagged"
+  | "document_uploaded"
   | "ready_to_review"
   | "overdue";
 
@@ -54,13 +57,14 @@ export type HomeNotification = {
 export async function listHomeNotifications(
   limit = 12,
 ): Promise<HomeNotification[]> {
+  // Recency window shared by the AI-activity pull and the "new document
+  // uploaded" signal below — the Home glance only cares about the last
+  // couple of weeks.
+  const recentSinceISO = new Date(
+    Date.now() - 14 * 24 * 60 * 60 * 1000,
+  ).toISOString();
   const [aiActivity, engagements, clients] = await Promise.all([
-    // Last 14 days of AI activity; we don't need months of history on
-    // the Home glance.
-    listAiActivityForFirm(
-      40,
-      new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-    ),
+    listAiActivityForFirm(40, recentSinceISO),
     listEngagements(),
     listClients({ includeArchived: true }),
   ]);
@@ -125,6 +129,7 @@ export async function listHomeNotifications(
       });
       const clientName =
         clientsById.get(e.client_id)?.display_name ?? null;
+      const lastUploadAt = lastActByEng.get(e.id);
       // Fire the moment the client has uploaded a file for every required
       // item — regardless of whether the AI approved, rejected, or hasn't
       // weighed in yet. (The dashboard's "Ready to review" queue still uses the
@@ -137,10 +142,21 @@ export async function listHomeNotifications(
           client_display_name: clientName,
           // Use the most recent client upload as the "fresh"
           // timestamp; falls back to sent_at if nothing has uploaded.
-          timestamp:
-            lastActByEng.get(e.id) ??
-            e.sent_at ??
-            new Date().toISOString(),
+          timestamp: lastUploadAt ?? e.sent_at ?? new Date().toISOString(),
+          href: `/engagements/${e.id}`,
+        });
+      } else if (lastUploadAt && lastUploadAt >= recentSinceISO) {
+        // Set isn't complete yet, but the client uploaded something
+        // recently — surface that progress so the feed shows movement as
+        // documents trickle in, not only when everything is finally in.
+        // One row per engagement at its newest upload; naturally replaced
+        // by ready_to_review above once the collection completes.
+        out.push({
+          id: `upload:${e.id}`,
+          kind: "document_uploaded",
+          engagement_title: e.title,
+          client_display_name: clientName,
+          timestamp: lastUploadAt,
           href: `/engagements/${e.id}`,
         });
       }
