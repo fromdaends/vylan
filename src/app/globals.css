@@ -186,9 +186,13 @@
     font-family: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo,
       Monaco, Consolas, monospace;
   }
-  /* Better focus ring */
+  /* Universal focus fallback for elements that don't define their own
+     focus-visible style. Flush (no ring-offset) so it follows the element's
+     border-radius and never detaches or gets clipped by an overflow-hidden
+     ancestor. shadcn components define their own focus rings (utilities layer),
+     which override this base-layer rule. */
   *:focus-visible {
-    @apply outline-none ring-2 ring-ring/50 ring-offset-2 ring-offset-background;
+    @apply outline-none ring-2 ring-ring/50;
   }
   /* Smooth theme transitions on common surfaces */
   body,

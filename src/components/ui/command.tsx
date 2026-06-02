@@ -73,7 +73,11 @@ function CommandInput({
       <CommandPrimitive.Input
         data-slot="command-input"
         className={cn(
-          "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
+          // No focus ring on the search input itself — it lives inside a
+          // bordered popover/dialog, so a ring here just gets clipped by the
+          // overflow-hidden container and looks jagged. Focus is conveyed by
+          // the open popover + the text caret (Linear/Raycast pattern).
+          "flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden focus-visible:ring-0 placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
         {...props}
