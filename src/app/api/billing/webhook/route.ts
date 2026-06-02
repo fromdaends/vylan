@@ -3,27 +3,25 @@ import type Stripe from "stripe";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { planForPriceId, type PlanId } from "@/lib/plans";
+import {
+  ALLOWED_FALLBACK_PLANS,
+  isSubscriptionInvoice,
+  planForInvoice,
+  invoiceLinePeriodEnd,
+} from "@/lib/billing/invoice";
 import { cleanupDemoSeedData } from "@/lib/demo-seed";
-
-// Set of valid plan tiers we'll accept from subscription metadata as a
-// fallback when the price ID isn't recognised (i.e. a custom-priced
-// subscription created in the Stripe Dashboard for a private deal).
-// 'trial' is excluded — paying through a custom price can't downgrade
-// anyone back to trial; cancellations route through the deleted handler.
-const ALLOWED_FALLBACK_PLANS: ReadonlySet<PlanId> = new Set([
-  "solo",
-  "cabinet",
-  "cabinet_plus",
-]);
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // Stripe sends events here. We verify the signature and update firm rows.
 // The events we care about:
-//   * checkout.session.completed   — initial subscribe
-//   * customer.subscription.updated — plan change, status change
-//   * customer.subscription.deleted — cancellation
+//   * checkout.session.completed            — initial subscribe (self-serve)
+//   * customer.subscription.created/updated — plan / status change
+//   * customer.subscription.deleted         — cancellation
+//   * invoice.paid                          — a standalone (one-off) invoice
+//                                             was paid → activate the firm
+//                                             (the manual / sales-led sale)
 
 export async function POST(request: NextRequest) {
   if (!isStripeConfigured()) {
@@ -67,6 +65,9 @@ export async function POST(request: NextRequest) {
         await handleSubscriptionDeleted(
           event.data.object as Stripe.Subscription,
         );
+        break;
+      case "invoice.paid":
+        await handleInvoicePaid(event.data.object as Stripe.Invoice);
         break;
     }
   } catch (e) {
@@ -122,6 +123,15 @@ async function resolveAndLinkFirm(
 ): Promise<{ id: string; stripe_customer_id: string | null } | null> {
   const customerId =
     typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null;
+  return resolveFirmByCustomer(customerId, sub.metadata?.firm_id ?? null);
+}
+
+// Shared firm resolver for both subscription and invoice events — same three
+// paths and security guarantees described above.
+async function resolveFirmByCustomer(
+  customerId: string | null,
+  metaFirmId: string | null,
+): Promise<{ id: string; stripe_customer_id: string | null } | null> {
   const byCustomer = await findFirmForCustomer(customerId);
   if (byCustomer) return byCustomer;
   if (!customerId) return null;
@@ -129,7 +139,6 @@ async function resolveAndLinkFirm(
   const sb = getServiceRoleSupabase();
 
   // Path 2 — metadata.firm_id.
-  const metaFirmId = sub.metadata?.firm_id;
   if (typeof metaFirmId === "string" && UUID_RE.test(metaFirmId)) {
     const { data: firm } = await sb
       .from("firms")
@@ -379,4 +388,81 @@ async function handleSubscriptionDeleted(sub: Stripe.Subscription) {
       plan: "trial",
     })
     .eq("id", firm.id);
+}
+
+// A standalone (one-off) invoice was paid — the founder's manual / sales-led
+// path: they create a custom-priced invoice in the Stripe Dashboard for a firm,
+// and paying it activates that firm. Subscription invoices are skipped (the
+// customer.subscription.* handlers own those).
+async function handleInvoicePaid(invoice: Stripe.Invoice) {
+  if (isSubscriptionInvoice(invoice)) return;
+
+  // Only act once the invoice is actually paid.
+  const paid =
+    invoice.status === "paid" ||
+    (invoice as { paid?: boolean }).paid === true;
+  if (!paid) return;
+
+  const customerId =
+    typeof invoice.customer === "string"
+      ? invoice.customer
+      : invoice.customer?.id ?? null;
+  const metaFirmId = (invoice.metadata?.firm_id ?? null) as string | null;
+  const firm = await resolveFirmByCustomer(customerId, metaFirmId);
+  if (!firm) {
+    console.warn(
+      "[billing/webhook] paid one-off invoice for unknown customer",
+      { customerId, metaFirmId },
+    );
+    return;
+  }
+
+  const sb = getServiceRoleSupabase();
+
+  // Safety guard: a one-off invoice should ACTIVATE a not-yet-paying firm
+  // (the manual sale), but must NEVER clobber an existing paid subscriber's
+  // plan — e.g. an add-on / ad-hoc invoice sent to a current customer. Only
+  // proceed when the firm isn't already on an active paid plan.
+  const { data: cur } = await sb
+    .from("firms")
+    .select("is_demo, plan, subscription_status")
+    .eq("id", firm.id)
+    .maybeSingle();
+  const alreadyActive =
+    cur?.subscription_status === "active" &&
+    cur?.plan !== "trial" &&
+    cur?.is_demo === false;
+  if (alreadyActive) {
+    console.info(
+      "[billing/webhook] one-off invoice for an already-active firm; leaving plan untouched",
+      { firmId: firm.id },
+    );
+    return;
+  }
+
+  const periodEnd = invoiceLinePeriodEnd(invoice);
+  const updates: Record<string, unknown> = {
+    plan: planForInvoice(invoice),
+    subscription_status: "active",
+    is_demo: false,
+  };
+  if (periodEnd != null) {
+    updates.current_period_end = new Date(periodEnd * 1000).toISOString();
+  }
+
+  const wasInDemo = cur?.is_demo === true;
+  await sb.from("firms").update(updates).eq("id", firm.id);
+
+  // On the demo → paid transition, wipe the seeded sample data so the
+  // customer starts their paid account clean. Best-effort.
+  if (wasInDemo) {
+    try {
+      await cleanupDemoSeedData(sb, firm.id);
+    } catch (e) {
+      console.error(
+        "[billing/webhook] demo cleanup failed after invoice activation:",
+        e,
+      );
+    }
+  }
 }
