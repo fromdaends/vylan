@@ -52,21 +52,6 @@ const CURRENT_TOOL_LABEL: Record<string, string> = {
   other_software: "Other software",
   nothing: "Nothing structured",
 };
-// Landing lead form values → founder-facing English labels (the row
-// stores the stable key; this is just how it reads in the email).
-const PRACTICE_TYPE_LABEL: Record<string, string> = {
-  solo: "Solo / bookkeeper",
-  small_firm: "Small accounting firm",
-  mid_size: "Mid-size practice",
-  tax_advisory: "Tax & advisory",
-  other: "Other",
-};
-const ACTIVE_CLIENTS_LABEL: Record<string, string> = {
-  under_25: "Under 25",
-  "25_100": "25 – 100",
-  "100_500": "100 – 500",
-  "500_plus": "500+",
-};
 
 function fmt(label: string | null | undefined, map?: Record<string, string>) {
   if (!label) return "—";
@@ -360,76 +345,6 @@ export async function notifyFounderQualifiedLead(row: DemoRequest) {
           true,
         ],
       ])}
-      <p style="margin:20px 0 0;font-size:12px;color:#94a3b8">
-        Lead id: <code>${escapeHtml(row.id)}</code><br/>
-        Submitted: ${escapeHtml(new Date(row.updated_at).toLocaleString("en-CA"))}
-      </p>
-    </div>
-  `.trim();
-
-  return sendEmail({ to, subject, text, html });
-}
-
-// ---------------------------------------------------------------------------
-// Landing lead — prospect filled the marketing-site "Tell us about your
-// firm" form. Single submit, fired immediately (createFirmLead already
-// stamped notified_at). Carries the firm + qualifying answers + their
-// free-text "worst part of document season" note.
-// ---------------------------------------------------------------------------
-
-export async function notifyFounderFirmLead(row: DemoRequest) {
-  const to = founderEmail();
-  const quality = assessLeadQuality(row);
-  const practice = fmt(row.practice_type, PRACTICE_TYPE_LABEL);
-  const clients = fmt(row.active_clients, ACTIVE_CLIENTS_LABEL);
-  const subject = `${qualityPrefix(quality.tier)}New lead (landing form) — ${row.firm_name ?? "(unknown firm)"}`;
-  const note = row.notes?.trim() ? row.notes.trim() : null;
-
-  const text = [
-    `New lead from the marketing-site "Tell us about your firm" form.`,
-    ``,
-    qualityTextBlock(quality),
-    `── Contact ──`,
-    `Email: ${row.email}`,
-    ``,
-    `── Firm ──`,
-    `Name:    ${row.firm_name ?? "—"}`,
-    `Type:    ${practice}`,
-    `Clients: ${clients}`,
-    ``,
-    `── Their answer: worst part of document season ──`,
-    note ?? "(left blank)",
-    ``,
-    `Lead id: ${row.id}`,
-    `Submitted: ${new Date(row.updated_at).toLocaleString("en-CA")}`,
-  ].join("\n");
-
-  const noteHtml = note
-    ? `<p style="margin:0;font-size:14px;color:#0f172a;line-height:1.5;white-space:pre-wrap">${escapeHtml(note)}</p>`
-    : `<p style="margin:0;font-size:14px;color:#94a3b8">(left blank)</p>`;
-
-  const html = `
-    <div style="font-family:Inter,system-ui,-apple-system,sans-serif;color:#0f172a;max-width:560px">
-      <p style="margin:0 0 18px;font-size:14px;color:#475569">
-        New lead from the marketing-site &ldquo;Tell us about your firm&rdquo; form.
-      </p>
-      ${qualityHtmlBlock(quality)}
-      ${section("Contact", [
-        [
-          "Email",
-          `<a href="mailto:${encodeURIComponent(row.email)}">${escapeHtml(row.email)}</a>`,
-          true,
-        ],
-      ])}
-      ${section("Firm", [
-        ["Name", row.firm_name ?? "—"],
-        ["Type", practice],
-        ["Clients", clients],
-      ])}
-      <div style="margin:0 0 18px">
-        <div style="text-transform:uppercase;letter-spacing:0.08em;font-size:11px;color:#64748b;font-weight:600;margin:0 0 8px">Worst part of document season</div>
-        ${noteHtml}
-      </div>
       <p style="margin:20px 0 0;font-size:12px;color:#94a3b8">
         Lead id: <code>${escapeHtml(row.id)}</code><br/>
         Submitted: ${escapeHtml(new Date(row.updated_at).toLocaleString("en-CA"))}
