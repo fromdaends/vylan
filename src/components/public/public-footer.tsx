@@ -13,9 +13,8 @@ export async function PublicFooter() {
           <span className="text-muted-foreground/70">{t("based_in")}</span>
         </div>
         <nav className="flex flex-wrap items-center gap-4">
-          <Link href="/pricing" className="hover:text-foreground">
-            {t("pricing")}
-          </Link>
+          {/* Pricing retired from the marketing site (sales-led demo
+              model); /pricing now redirects to the landing page. */}
           <Link href="/terms" className="hover:text-foreground">
             {t("terms")}
           </Link>

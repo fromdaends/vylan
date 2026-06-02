@@ -41,6 +41,12 @@ export type DemoRequest = {
   booked_at: string | null;
   notified_at: string | null;
   notion_page_id: string | null;
+  // Landing-page lead form fields (migration 0160). NULL for leads that
+  // came through the multi-step /demo flow.
+  practice_type: string | null;
+  active_clients: string | null;
+  notes: string | null;
+  source: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -103,6 +109,48 @@ export async function updateDemoRequest(
     .single();
   if (error) {
     console.error("[demo-requests] updateDemoRequest failed:", error);
+    return null;
+  }
+  return data as DemoRequest;
+}
+
+// Landing marketing-site lead form. Unlike the /demo flow this is a
+// single submit, so it's one insert with everything we collected (no
+// progressive save). Writes to the SAME demo_requests table so leads
+// land in one place and reuse the founder-notification + cron infra.
+export type CreateFirmLeadInput = {
+  email: string;
+  firm_name: string;
+  practice_type: string;
+  active_clients: string;
+  notes: string | null;
+};
+
+export async function createFirmLead(
+  input: CreateFirmLeadInput,
+): Promise<DemoRequest | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("demo_requests")
+    .insert({
+      email: input.email,
+      firm_name: input.firm_name,
+      practice_type: input.practice_type,
+      active_clients: input.active_clients,
+      notes: input.notes,
+      source: "landing_form",
+      // A single-step form is a complete lead, so mark furthest_step 3
+      // (reads as "qualified" in the funnel metric) and stamp
+      // notified_at up front so the /api/cron/demo-leads debounce job
+      // never double-emails it — the action sends its own founder email
+      // immediately via after().
+      furthest_step: 3,
+      notified_at: new Date().toISOString(),
+    })
+    .select("*")
+    .single();
+  if (error) {
+    console.error("[demo-requests] createFirmLead failed:", error);
     return null;
   }
   return data as DemoRequest;

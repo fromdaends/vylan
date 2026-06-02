@@ -1,0 +1,774 @@
+/* =====================================================================
+   Vylan public marketing site (landing + manifesto).
+   Ported from the "vylan #4" Claude Design handoff (vylan.html +
+   Manifesto.html). Every class is namespaced `vy-` and every @keyframes
+   `vy*` so this global stylesheet can't collide with Tailwind or the
+   app's own globals.css. Colours are hard-coded (the marketing site is
+   always the blue theme, independent of the app's light/dark tokens).
+   ===================================================================== */
+
+.vy-root,
+.vy-manifesto {
+  --vy-blue: #1050ed;
+  --vy-blue-deep: #0a39d6;
+  --vy-ink: #ffffff;
+  --vy-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+
+  position: relative;
+  background: var(--vy-blue);
+  color: var(--vy-ink);
+  font-family: var(--font-schibsted), "Schibsted Grotesk", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+  min-height: 100vh;
+}
+
+/* Smooth in-page anchor scrolling, scoped to the marketing pages only. */
+html:has(.vy-root),
+html:has(.vy-manifesto) {
+  scroll-behavior: smooth;
+}
+
+.vy-root *,
+.vy-manifesto * {
+  box-sizing: border-box;
+}
+.vy-root ::selection,
+.vy-manifesto ::selection {
+  background: #fff;
+  color: var(--vy-blue);
+}
+.vy-mono {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+}
+
+/* ---------- Top bar ---------- */
+.vy-topbar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 26px 34px;
+  pointer-events: none;
+}
+.vy-topbar > * {
+  pointer-events: auto;
+}
+.vy-brand {
+  position: absolute;
+  left: 50%;
+  top: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 600;
+  font-size: 28px;
+  letter-spacing: -0.055em;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: var(--vy-ink);
+  font-family: inherit;
+}
+.vy-brand .vy-logo {
+  height: 0.78em;
+  width: auto;
+  flex: none;
+  display: block;
+  transform: translateY(0.015em);
+}
+/* Manifesto brand is a link, not a menu button — no absolute centering. */
+.vy-manifesto .vy-brand {
+  position: static;
+  transform: none;
+  text-decoration: none;
+}
+.vy-back {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-weight: 500;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  color: #fff;
+  text-decoration: none;
+  opacity: 0.85;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.vy-back:hover {
+  opacity: 1;
+}
+.vy-back .vy-arr {
+  transition: transform 0.2s var(--vy-ease);
+}
+.vy-back:hover .vy-arr {
+  transform: translateX(-4px);
+}
+
+/* ---------- Hero (scroll-pinned) ---------- */
+.vy-hero {
+  position: relative;
+  height: 185vh;
+}
+.vy-hero-sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.vy-hero-inner {
+  position: relative;
+  z-index: 5;
+  text-align: center;
+  padding: 0 24px;
+  max-width: 1100px;
+}
+.vy-headline {
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 0.95;
+  font-size: clamp(40px, 6.2vw, 88px);
+  text-wrap: balance;
+}
+.vy-subhead {
+  margin-top: clamp(14px, 2.4vw, 30px);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.18;
+  font-size: clamp(24px, 4.4vw, 60px);
+  text-align: center;
+}
+/* scroll-linked word reel */
+.vy-reel-mask {
+  display: inline-block;
+  overflow: visible;
+  vertical-align: -0.185em;
+  height: 1.18em;
+  width: var(--vy-rw, 4em);
+  position: relative;
+  transition: width 0.42s cubic-bezier(0.16, 0.84, 0.22, 1);
+}
+.vy-subprefix {
+  display: inline-block;
+  margin-right: 0.26em;
+  will-change: transform;
+}
+@keyframes vyPrefixFwd {
+  0% { transform: translateX(0); }
+  40% { transform: translateX(-6px); }
+  100% { transform: translateX(0); }
+}
+@keyframes vyPrefixRev {
+  0% { transform: translateX(0); }
+  40% { transform: translateX(6px); }
+  100% { transform: translateX(0); }
+}
+.vy-subprefix.vy-pf-fwd {
+  animation: vyPrefixFwd 0.5s cubic-bezier(0.16, 0.84, 0.22, 1);
+}
+.vy-subprefix.vy-pf-rev {
+  animation: vyPrefixRev 0.5s cubic-bezier(0.16, 0.84, 0.22, 1);
+}
+.vy-reel {
+  position: relative;
+  display: block;
+  height: 1.18em;
+  text-align: left;
+}
+.vy-reel-word {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 1.18em;
+  line-height: 1.18em;
+  transform-origin: left center;
+  font-weight: 800;
+  white-space: nowrap;
+  opacity: 0;
+  will-change: opacity, filter, transform;
+}
+.vy-reel-word:first-child {
+  opacity: 1;
+}
+.vy-reel-brand {
+  font-weight: 700;
+}
+/* Fire-and-forget word switch — a fixed ~0.5s animation runs to
+   completion when a scroll threshold is crossed (NOT scrubbed). */
+@keyframes vyFwdOut {
+  0% { opacity: 1; filter: blur(0); transform: translate(0, 0); }
+  100% { opacity: 0; filter: blur(120px); transform: translate(-72px, -50px); }
+}
+@keyframes vyFwdIn {
+  0% { opacity: 0; filter: blur(120px); transform: translate(66px, 46px); }
+  100% { opacity: 1; filter: blur(0); transform: translate(0, 0); }
+}
+@keyframes vyRevOut {
+  0% { opacity: 1; filter: blur(0); transform: translate(0, 0); }
+  100% { opacity: 0; filter: blur(120px); transform: translate(72px, 50px); }
+}
+@keyframes vyRevIn {
+  0% { opacity: 0; filter: blur(120px); transform: translate(-66px, -46px); }
+  100% { opacity: 1; filter: blur(0); transform: translate(0, 0); }
+}
+.vy-reel-word.vy-out {
+  animation: vyFwdOut 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.vy-reel-word.vy-in {
+  animation: vyFwdIn 0.56s cubic-bezier(0.16, 0.84, 0.22, 1) forwards;
+  opacity: 0;
+}
+.vy-reel-word.vy-out-rev {
+  animation: vyRevOut 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+.vy-reel-word.vy-in-rev {
+  animation: vyRevIn 0.56s cubic-bezier(0.16, 0.84, 0.22, 1) forwards;
+  opacity: 0;
+}
+/* chromatic glitch on the first word at load / idle */
+@keyframes vyAiGlitch {
+  0% { transform: translate(0, 0) skewX(0deg); clip-path: inset(0 0 0 0); text-shadow: 0 0 0 transparent; }
+  7% { transform: translate(-2px, 0) skewX(-3deg); clip-path: inset(2% 0 60% 0); text-shadow: -3px 0 rgba(63, 224, 255, 0.75), 3px 0 rgba(255, 61, 166, 0.6), 0 0 18px rgba(120, 170, 255, 0.4); }
+  15% { transform: translate(2px, 0) skewX(2deg); clip-path: inset(52% 0 8% 0); text-shadow: 3px 0 rgba(63, 224, 255, 0.7), -3px 0 rgba(255, 61, 166, 0.6), 0 0 16px rgba(120, 170, 255, 0.35); }
+  24% { transform: translate(-1px, 0) skewX(0deg); clip-path: inset(20% 0 38% 0); text-shadow: -2px 0 rgba(63, 224, 255, 0.6), 2px 0 rgba(255, 61, 166, 0.5), 0 0 14px rgba(120, 170, 255, 0.3); }
+  34% { transform: translate(1px, 0); clip-path: inset(0 0 0 0); text-shadow: 2px 0 rgba(63, 224, 255, 0.5), -2px 0 rgba(255, 61, 166, 0.45); }
+  47% { transform: translate(-1px, 0); clip-path: inset(0 0 0 0); text-shadow: -1.5px 0 rgba(63, 224, 255, 0.4), 1.5px 0 rgba(255, 61, 166, 0.35); }
+  62% { transform: translate(0.5px, 0); text-shadow: 1px 0 rgba(63, 224, 255, 0.28), -1px 0 rgba(255, 61, 166, 0.24); }
+  100% { transform: translate(0, 0) skewX(0deg); clip-path: inset(0 0 0 0); text-shadow: 0 0 0 transparent; }
+}
+.vy-reel-word.vy-ai-glitch {
+  animation: vyAiGlitch 0.8s cubic-bezier(0.3, 0.7, 0.3, 1) both;
+}
+/* one-shot dissolve for the final "vylan" — drifts up, blurs, fades */
+@keyframes vyBrandOut {
+  0% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+  100% { opacity: 0; filter: blur(72px); transform: translateY(-90px) scale(1.06); }
+}
+.vy-reel-word.vy-brand-out {
+  animation: vyBrandOut 0.72s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vy-subprefix.vy-pf-fwd,
+  .vy-subprefix.vy-pf-rev { animation: none; }
+  .vy-reel-mask { transition: none; }
+  .vy-reel-word.vy-out,
+  .vy-reel-word.vy-in,
+  .vy-reel-word.vy-out-rev,
+  .vy-reel-word.vy-in-rev { animation: none; opacity: 1; }
+  .vy-reel-word.vy-ai-glitch { animation: none; }
+  .vy-reel-word.vy-brand-out { animation: none; opacity: 0; }
+}
+
+.vy-cta-row {
+  margin-top: clamp(26px, 3.6vw, 46px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+.vy-btn {
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 16px;
+  letter-spacing: -0.01em;
+  background: #fff;
+  color: var(--vy-blue);
+  border: none;
+  cursor: pointer;
+  padding: 14px 26px;
+  border-radius: 9px;
+  text-decoration: none;
+  display: inline-block;
+  transition: transform 0.2s var(--vy-ease), box-shadow 0.2s var(--vy-ease);
+}
+.vy-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+.vy-link-btn {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 16px;
+  color: #fff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  opacity: 0.92;
+}
+.vy-link-btn:hover {
+  opacity: 1;
+}
+
+.vy-scroll-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  z-index: 5;
+  color: #fff;
+  font-size: 22px;
+  opacity: 0.7;
+  animation: vyBob 1.8s ease-in-out infinite;
+  transition: opacity 0.4s;
+}
+@keyframes vyBob {
+  0%, 100% { transform: translate(-50%, 0); }
+  50% { transform: translate(-50%, 7px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vy-scroll-cue { animation: none; }
+}
+
+/* ---------- Bird video background ---------- */
+.vy-figure {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.vy-figure video {
+  width: clamp(440px, 65vw, 1060px);
+  height: auto;
+  max-height: 90vh;
+  object-fit: contain;
+  display: block;
+  margin: auto;
+  opacity: 0.7;
+  -webkit-mask-image: radial-gradient(ellipse 72% 74% at 50% 48%, #000 48%, transparent 100%);
+  mask-image: radial-gradient(ellipse 72% 74% at 50% 48%, #000 48%, transparent 100%);
+  transform: translateY(-3vh) scale(var(--vy-cscale, 1)) translateZ(0);
+  transform-origin: center;
+  backface-visibility: hidden;
+}
+/* Manifesto dims the bird a touch more so the text stays legible. */
+.vy-manifesto .vy-figure video {
+  opacity: 0.5;
+}
+
+/* ---------- Form section ---------- */
+.vy-form-section {
+  position: relative;
+  z-index: 5;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 120px 24px 90px;
+}
+.vy-form-card {
+  width: min(680px, 100%);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 20px;
+  padding: clamp(28px, 4vw, 46px);
+  backdrop-filter: blur(6px);
+  position: relative;
+  overflow: hidden;
+}
+.vy-form-card .vy-glow {
+  position: absolute;
+  right: -40px;
+  top: -40px;
+  width: 220px;
+  height: 220px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.18), transparent 70%);
+  filter: blur(8px);
+  pointer-events: none;
+}
+.vy-form-card h2 {
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.vy-form-sub {
+  margin-top: 14px;
+  font-size: 16px;
+  line-height: 1.5;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 46ch;
+}
+.vy-spark {
+  position: absolute;
+  right: clamp(24px, 4vw, 42px);
+  top: clamp(28px, 4vw, 46px);
+  font-size: 30px;
+  color: #fff;
+  opacity: 0.9;
+  line-height: 1;
+}
+.vy-fields {
+  margin-top: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.vy-field,
+.vy-sel,
+textarea.vy-field {
+  width: 100%;
+  font-family: inherit;
+  font-size: 15.5px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 11px;
+  padding: 15px 16px;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+}
+.vy-field::placeholder,
+textarea.vy-field::placeholder {
+  color: rgba(255, 255, 255, 0.6);
+}
+.vy-field:focus,
+.vy-sel:focus,
+textarea.vy-field:focus {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.17);
+}
+.vy-field.vy-invalid,
+.vy-sel.vy-invalid {
+  border-color: #fff;
+  box-shadow: 0 0 0 1px #fff;
+}
+.vy-sel {
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 42px;
+}
+.vy-sel option {
+  color: #111;
+}
+textarea.vy-field {
+  resize: vertical;
+  min-height: 108px;
+}
+.vy-submit {
+  margin-top: 6px;
+  align-self: flex-start;
+  background: #fff;
+  color: var(--vy-blue);
+  font-weight: 700;
+  font-size: 15.5px;
+  border: none;
+  border-radius: 11px;
+  padding: 15px 30px;
+  cursor: pointer;
+  transition: transform 0.2s var(--vy-ease), box-shadow 0.2s var(--vy-ease);
+}
+.vy-submit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+}
+.vy-submit:disabled {
+  opacity: 0.6;
+  cursor: progress;
+  transform: none;
+  box-shadow: none;
+}
+.vy-form-err {
+  font-size: 14px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+.vy-form-done {
+  padding: 14px 0 4px;
+}
+.vy-form-done b {
+  font-size: 20px;
+}
+.vy-form-done p {
+  margin-top: 8px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 15.5px;
+  line-height: 1.5;
+}
+.vy-hide {
+  display: none !important;
+}
+
+/* ---------- Feature strip ---------- */
+.vy-features {
+  position: relative;
+  z-index: 5;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 10px 24px 120px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.vy-feature {
+  background: var(--vy-blue);
+  padding: 34px 28px;
+}
+.vy-feature .vy-k {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 13px;
+  opacity: 0.7;
+  letter-spacing: 0.04em;
+}
+.vy-feature h3 {
+  margin-top: 16px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.vy-feature p {
+  margin-top: 9px;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.8);
+}
+@media (max-width: 760px) {
+  .vy-features {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Footer ---------- */
+.vy-footer {
+  position: relative;
+  z-index: 5;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  padding: 40px 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+.vy-fbrand {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  font-size: 20px;
+  letter-spacing: -0.055em;
+}
+.vy-links {
+  display: flex;
+  gap: 26px;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.85;
+  flex-wrap: wrap;
+}
+.vy-links a {
+  color: #fff;
+  text-decoration: none;
+}
+.vy-links a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.vy-cr {
+  font-size: 13px;
+  opacity: 0.6;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+}
+
+/* ---------- Menu overlay ---------- */
+.vy-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(18, 38, 201, 0.55);
+  backdrop-filter: blur(10px);
+  display: grid;
+  place-items: start center;
+  padding-top: 18px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s var(--vy-ease);
+}
+.vy-overlay.vy-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.vy-menu-card {
+  width: min(420px, 92vw);
+  margin-top: 80px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  padding: 26px;
+  transform: translateY(-14px);
+  transition: transform 0.35s var(--vy-ease);
+}
+.vy-overlay.vy-open .vy-menu-card {
+  transform: translateY(0);
+}
+.vy-menu-def {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.85);
+  padding-bottom: 8px;
+}
+.vy-menu-def b {
+  color: #fff;
+}
+.vy-menu-nav {
+  margin-top: 8px;
+}
+.vy-menu-nav a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 2px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+}
+.vy-menu-nav a .vy-arr {
+  opacity: 0.5;
+  transition: transform 0.2s, opacity 0.2s;
+}
+.vy-menu-nav a:hover .vy-arr {
+  transform: translateX(5px);
+  opacity: 1;
+}
+.vy-menu-follow {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 12px;
+  opacity: 0.7;
+  letter-spacing: 0.08em;
+}
+.vy-menu-follow .vy-soc {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  cursor: pointer;
+}
+.vy-menu-follow .vy-soc:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.vy-menu-close {
+  position: absolute;
+  top: 26px;
+  right: 30px;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 26px;
+  cursor: pointer;
+  opacity: 0.8;
+}
+.vy-menu-close:hover {
+  opacity: 1;
+}
+
+/* ---------- Manifesto page ---------- */
+.vy-manifesto-main {
+  position: relative;
+  z-index: 5;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 168px 32px 140px;
+}
+.vy-pill {
+  display: inline-block;
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-radius: 100px;
+  padding: 7px 16px 6px;
+  margin-bottom: 30px;
+}
+.vy-manifesto-main h1 {
+  font-size: clamp(36px, 8vw, 64px);
+  font-weight: 800;
+  line-height: 0.94;
+  letter-spacing: -0.04em;
+  text-wrap: balance;
+  margin-bottom: 36px;
+}
+.vy-lede {
+  font-size: clamp(22px, 2.7vw, 34px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.22;
+  max-width: 760px;
+  margin-bottom: 54px;
+  text-wrap: pretty;
+}
+.vy-body {
+  max-width: 680px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.vy-body p {
+  font-size: clamp(17px, 1.5vw, 20px);
+  line-height: 1.62;
+  color: rgba(255, 255, 255, 0.92);
+  text-wrap: pretty;
+}
+.vy-body strong {
+  font-weight: 700;
+  color: #fff;
+}
+.vy-kicker {
+  margin-top: 64px;
+  font-size: clamp(26px, 3.4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+.vy-signoff {
+  margin-top: 90px;
+  padding-top: 34px;
+  border-top: 1px solid rgba(255, 255, 255, 0.22);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+.vy-signoff .vy-name {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+@media (max-width: 640px) {
+  .vy-manifesto-main {
+    padding: 140px 22px 100px;
+  }
+  .vy-form-section {
+    padding: 90px 22px 80px;
+  }
+}

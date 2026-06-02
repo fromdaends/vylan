@@ -21,11 +21,13 @@ import {
   DemoStep1Schema,
   DemoStep2Schema,
   DemoStep3Schema,
+  FirmLeadSchema,
 } from "@/app/actions/demo-request.schema";
 import {
   createDemoRequest,
   updateDemoRequest,
   getDemoRequest,
+  createFirmLead,
   type DemoRequest,
 } from "@/lib/db/demo-requests";
 import {
@@ -39,7 +41,10 @@ import {
 //   - Partial fills (step 1 or 2, never reached step 3) → debounced
 //     by /api/cron/demo-leads, 5 min after last activity.
 //   - Booking confirmation → fires immediately from markDemoBooked.
-import { notifyFounderQualifiedLead } from "@/lib/demo-notify";
+import {
+  notifyFounderQualifiedLead,
+  notifyFounderFirmLead,
+} from "@/lib/demo-notify";
 import { pushLeadToNotion } from "@/lib/notion";
 
 export type SaveDemoStepResult =
@@ -155,6 +160,54 @@ export async function saveDemoStep(
       await pushLeadToNotion(row);
     } catch (e) {
       console.error("[saveDemoStep] pushLeadToNotion failed:", e);
+    }
+  });
+
+  return { ok: true, id: row.id };
+}
+
+// Landing marketing-site lead form ("Tell us about your firm"). A single
+// submit — not the 3-step /demo flow — but it lands in the same
+// demo_requests table and fires the founder notification immediately
+// (createFirmLead stamps notified_at so the debounce cron won't
+// double-email). Same rate limit as the /demo form.
+export async function submitFirmLead(
+  data: unknown,
+): Promise<SaveDemoStepResult> {
+  const h = await headers();
+  const ip = ipFromRequest({ headers: { get: (n) => h.get(n) } });
+  const rl = await checkRateLimit({
+    key: `demo:ip:${ip}`,
+    ...DEMO_FORM_PER_IP,
+  });
+  if (!rl.ok) return { ok: false, error: "rate_limited" };
+
+  const parsed = FirmLeadSchema.safeParse(data);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "invalid" };
+  }
+
+  const row = await createFirmLead({
+    email: parsed.data.email,
+    firm_name: parsed.data.firm_name,
+    practice_type: parsed.data.practice_type,
+    active_clients: parsed.data.active_clients,
+    notes: parsed.data.notes?.trim() ? parsed.data.notes.trim() : null,
+  });
+  if (!row) return { ok: false, error: "save_failed" };
+
+  // Same after() rationale as saveDemoStep step 3: keep the serverless
+  // function alive past the response so Resend / Notion finish.
+  after(async () => {
+    try {
+      await notifyFounderFirmLead(row);
+    } catch (e) {
+      console.error("[submitFirmLead] notifyFounderFirmLead failed:", e);
+    }
+    try {
+      await pushLeadToNotion(row);
+    } catch (e) {
+      console.error("[submitFirmLead] pushLeadToNotion failed:", e);
     }
   });
 

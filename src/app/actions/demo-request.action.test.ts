@@ -36,6 +36,10 @@ vi.mock("@/lib/db/demo-requests", () => {
         booked_at: null,
         notified_at: null,
         notion_page_id: null,
+        practice_type: null,
+        active_clients: null,
+        notes: null,
+        source: null,
         created_at: now,
         updated_at: now,
       };

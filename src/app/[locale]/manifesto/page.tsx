@@ -1,0 +1,110 @@
+import type { Metadata } from "next";
+import { setRequestLocale, getTranslations } from "next-intl/server";
+import { Link } from "@/i18n/navigation";
+import { assertLocale } from "@/lib/locale";
+import { schibsted } from "@/components/vylan-landing/fonts";
+import { BirdVideo } from "@/components/vylan-landing/bird-video";
+import { LeadForm } from "@/components/vylan-landing/lead-form";
+import { buildLeadFormStrings } from "@/components/vylan-landing/lead-form-strings";
+import "@/styles/vylan-landing.css";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "VylanManifesto" });
+  return { title: t("meta_title") };
+}
+
+// Render a string that may contain "\n" line breaks as <br/>-separated
+// fragments.
+function withBreaks(text: string) {
+  const lines = text.split("\n");
+  return lines.map((line, i) => (
+    <span key={i}>
+      {line}
+      {i < lines.length - 1 ? <br /> : null}
+    </span>
+  ));
+}
+
+export default async function ManifestoPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale: rawLocale } = await params;
+  const locale = assertLocale(rawLocale);
+  setRequestLocale(locale);
+
+  const tm = await getTranslations("VylanManifesto");
+  const tv = await getTranslations("Vylan");
+  const formStrings = buildLeadFormStrings(tv);
+
+  return (
+    <div className={`vy-manifesto ${schibsted.variable}`}>
+      <BirdVideo />
+
+      {/* top bar — brand + back both return to the landing */}
+      <div className="vy-topbar">
+        <Link className="vy-brand" href="/">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="vy-logo"
+            src="/vylan-logo-white.png"
+            alt={tm("logo_alt")}
+          />
+          {tm("brand")}
+        </Link>
+        <Link className="vy-back" href="/">
+          <span className="vy-arr">←</span> {tm("back")}
+        </Link>
+      </div>
+
+      <main className="vy-manifesto-main">
+        <span className="vy-pill">{tm("pill")}</span>
+        <h1>{withBreaks(tm("title"))}</h1>
+        <p className="vy-lede">{tm("lede")}</p>
+
+        <div className="vy-body">
+          <p>{tm("body_1")}</p>
+          <p>{tm("body_2")}</p>
+          <p>{tm("body_3")}</p>
+          <p>
+            {tm.rich("body_4", {
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
+          </p>
+        </div>
+
+        <p className="vy-kicker">{withBreaks(tm("kicker"))}</p>
+
+        <div className="vy-signoff">
+          <span className="vy-name">{tm("signoff_name")}</span>
+          <a className="vy-btn" href="#vy-get-access">
+            {tm("signoff_cta")}
+          </a>
+        </div>
+      </main>
+
+      {/* FORM — same lead form as the landing page */}
+      <section className="vy-form-section" id="vy-get-access">
+        <LeadForm s={formStrings} />
+      </section>
+
+      {/* FOOTER */}
+      <footer className="vy-footer">
+        <div className="vy-fbrand">{tv("brand_word")}</div>
+        <div className="vy-links">
+          <Link href="/manifesto">{tv("footer_manifesto")}</Link>
+          <a href="#vy-get-access">{tv("footer_for_firms")}</a>
+          <a href="#vy-get-access">{tv("footer_book_demo")}</a>
+          <Link href="/login">{tv("footer_login")}</Link>
+        </div>
+        <div className="vy-cr">{tv("footer_copyright")}</div>
+      </footer>
+    </div>
+  );
+}
