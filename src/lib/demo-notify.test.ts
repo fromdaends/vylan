@@ -18,6 +18,7 @@ import {
   notifyFounderPartialLead,
   notifyFounderQualifiedLead,
   notifyFounderDemoBooked,
+  notifyFounderNewSignup,
 } from "./demo-notify";
 import type { DemoRequest } from "./db/demo-requests";
 
@@ -161,5 +162,41 @@ describe("notifyFounderDemoBooked", () => {
     expect(args.text).toContain("25-100 clients");
     expect(args.text).toContain("TaxDome");
     expect(args.text).toContain("Marketing opt-in: YES");
+  });
+});
+
+describe("notifyFounderNewSignup", () => {
+  beforeEach(() => {
+    sendEmailMock.mockClear();
+  });
+
+  it("emails the founder the firm ID + owner login email (Stripe copy-paste)", async () => {
+    await notifyFounderNewSignup({
+      firmId: "a1b2c3d4-5e6f-7890-abcd-ef1234567890",
+      firmName: "Cabinet Lavoie",
+      ownerName: "Marie Lavoie",
+      ownerEmail: "marie@cabinetlavoie.ca",
+    });
+    expect(sendEmailMock).toHaveBeenCalledTimes(1);
+    const args = sendEmailMock.mock.calls[0]![0]!;
+    expect(args.subject).toContain("Cabinet Lavoie");
+    // The login email + firm ID must appear in BOTH bodies — they're exactly
+    // what the founder pastes into Stripe to bill + activate the prospect.
+    for (const body of [args.text, args.html]) {
+      expect(body).toContain("marie@cabinetlavoie.ca");
+      expect(body).toContain("a1b2c3d4-5e6f-7890-abcd-ef1234567890");
+    }
+  });
+
+  it("is best-effort: never throws if Resend fails", async () => {
+    sendEmailMock.mockRejectedValueOnce(new Error("resend down"));
+    await expect(
+      notifyFounderNewSignup({
+        firmId: "f",
+        firmName: "F",
+        ownerName: "O",
+        ownerEmail: "o@example.com",
+      }),
+    ).resolves.toBeUndefined();
   });
 });

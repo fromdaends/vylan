@@ -11,6 +11,7 @@ import { getPathname } from "@/i18n/navigation";
 import { parseEmailList } from "@/lib/validators";
 import { buildWelcomeEmail, sendEmail } from "@/lib/email";
 import { seedDemoData } from "@/lib/demo-seed";
+import { notifyFounderNewSignup } from "@/lib/demo-notify";
 
 export type OnboardingState = {
   error?: string;
@@ -192,6 +193,20 @@ async function sendWelcomeEmail(): Promise<void> {
       console.error("[welcome email] failed:", e);
     }
   });
+
+  // Notify the founder that a prospect just signed up — with the firm ID +
+  // login email needed to bill + activate them in Stripe. Demo signups only:
+  // those are the accounts that go through the manual sales/activation flow.
+  if (firm.is_demo) {
+    after(() =>
+      notifyFounderNewSignup({
+        firmId: firm.id,
+        firmName: firm.name,
+        ownerName: user.name || user.email.split("@")[0],
+        ownerEmail: user.email,
+      }),
+    );
+  }
 }
 
 export async function skipStep(formData: FormData) {

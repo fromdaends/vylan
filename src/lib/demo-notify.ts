@@ -533,6 +533,72 @@ export async function notifyFounderDemoBooked(row: DemoRequest) {
 }
 
 // ---------------------------------------------------------------------------
+// New demo signup — fires when a prospect finishes creating their (demo)
+// account. Unlike the lead emails above, an account now EXISTS, so this
+// carries the two things needed to bill them in Stripe: the owner's login
+// email (the webhook's match key) and the firm ID (the metadata fallback when
+// the billing email differs from the login email). Best-effort.
+// ---------------------------------------------------------------------------
+
+export async function notifyFounderNewSignup(params: {
+  firmId: string;
+  firmName: string;
+  ownerName: string;
+  ownerEmail: string;
+}): Promise<void> {
+  const to = founderEmail();
+  const subject = `New demo signup — ${params.firmName}`;
+
+  const text = [
+    `A new demo account just finished signing up.`,
+    ``,
+    `── Account ──`,
+    `Firm:        ${params.firmName}`,
+    `Owner:       ${params.ownerName}`,
+    `Login email: ${params.ownerEmail}`,
+    `Firm ID:     ${params.firmId}`,
+    ``,
+    `── To activate them after they pay ──`,
+    `In Stripe, create a customer with the LOGIN EMAIL above (that's how the`,
+    `payment is matched to this account), then send the invoice/subscription.`,
+    `If you must use a different billing email, instead add this metadata to`,
+    `the invoice/subscription:  firm_id = ${params.firmId}`,
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Inter,system-ui,-apple-system,sans-serif;color:#0f172a;max-width:560px">
+      <p style="margin:0 0 18px;font-size:14px;color:#475569">
+        A new <strong>demo account</strong> just finished signing up.
+      </p>
+      ${section("Account", [
+        ["Firm", params.firmName],
+        ["Owner", params.ownerName],
+        [
+          "Login email",
+          `<a href="mailto:${encodeURIComponent(params.ownerEmail)}">${escapeHtml(params.ownerEmail)}</a>`,
+          true,
+        ],
+        ["Firm ID", `<code>${escapeHtml(params.firmId)}</code>`, true],
+      ])}
+      <div style="background:#f1f5f9;border-radius:10px;padding:12px 14px;margin:4px 0 0;font-size:13px;color:#475569;line-height:1.5">
+        <strong style="color:#0f172a">To activate them after they pay:</strong>
+        in Stripe, create a customer with the <strong>login email</strong> above
+        (that's how the payment is matched to this account), then send the
+        invoice/subscription. If the billing email must differ, instead add
+        <code>firm_id = ${escapeHtml(params.firmId)}</code> as metadata on the
+        invoice/subscription.
+      </div>
+    </div>
+  `.trim();
+
+  try {
+    await sendEmail({ to, subject, text, html });
+  } catch (e) {
+    console.error("[notifyFounderNewSignup] failed:", e);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Internals
 // ---------------------------------------------------------------------------
 
