@@ -14,24 +14,16 @@ import {
   updateTemplateAction,
   type UpdateTemplateState,
 } from "@/app/actions/templates";
-import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
-
-const DOC_TYPES: DocType[] = [
-  "t4", "rl1", "t5", "rl3", "t3", "rl16", "noa",
-  "bank_statement", "credit_card_statement", "receipt",
-  "t2202", "rrsp", "medical", "donation", "rental",
-  "gst_hst_qst", "trial_balance", "gl_export", "financials",
-  "shareholder_loan", "payroll_summary", "capital_asset",
-  "inventory", "invoice",
-  "t1135", "t2125",
-  "other",
-];
+import type { Template, TemplateItem } from "@/lib/db/templates";
+import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 
 export function TemplateEditor({
   template,
   locale,
 }: {
   template: Template;
+  // Picker localization is handled inside DocTypePicker (useLocale); kept on the
+  // signature for the caller's API stability.
   locale: "fr" | "en";
 }) {
   void locale;
@@ -161,21 +153,11 @@ export function TemplateEditor({
                     className="text-xs"
                   />
                   <div className="flex items-center gap-3 text-xs">
-                    <select
+                    <DocTypePicker
                       value={item.doc_type}
-                      onChange={(e) =>
-                        updateItem(idx, {
-                          doc_type: e.target.value as DocType,
-                        })
-                      }
-                      className="rounded-md border border-input bg-background px-2 py-1 font-mono"
-                    >
-                      {DOC_TYPES.map((dt) => (
-                        <option key={dt} value={dt}>
-                          {dt}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(dt) => updateItem(idx, { doc_type: dt })}
+                      className="h-8 w-[14rem] max-w-full text-xs"
+                    />
                     <label className="flex items-center gap-1.5 select-none cursor-pointer">
                       <input
                         type="checkbox"

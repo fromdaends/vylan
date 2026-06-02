@@ -7,13 +7,21 @@ export type EngagementType = "t1" | "t2" | "bookkeeping" | "custom";
 export const BLANK_TEMPLATE_ID = "00000000-0000-0000-0000-000000000004";
 
 export type DocType =
-  | "t4" | "rl1" | "t5" | "rl3" | "t3" | "rl16" | "noa"
-  | "bank_statement" | "credit_card_statement" | "receipt"
-  | "t2202" | "rrsp" | "medical" | "donation" | "rental"
-  | "gst_hst_qst" | "trial_balance" | "gl_export" | "financials"
-  | "shareholder_loan" | "payroll_summary" | "capital_asset"
-  | "inventory" | "invoice"
-  | "t1135" | "t2125"
+  // Federal slips
+  | "t4" | "t4a" | "t4a_oas" | "t4a_p" | "t4e" | "t4rsp" | "t4rif"
+  | "t5" | "t5008" | "t5013" | "t3" | "nr4"
+  // Quebec slips (Relevés)
+  | "rl1" | "rl2" | "rl3" | "rl5" | "rl6" | "rl7" | "rl8" | "rl10"
+  | "rl15" | "rl16" | "rl18" | "rl19" | "rl24" | "rl25" | "rl26" | "rl27"
+  | "rl31" | "rl32"
+  // Credits & receipts
+  | "rrsp" | "fhsa" | "t2202" | "medical" | "donation"
+  // Forms, returns & assessments
+  | "t1135" | "t2125" | "t2200" | "t2091" | "t2201" | "noa"
+  // Bookkeeping & business
+  | "bank_statement" | "credit_card_statement" | "receipt" | "invoice"
+  | "gst_hst_qst" | "rental" | "trial_balance" | "gl_export" | "financials"
+  | "shareholder_loan" | "payroll_summary" | "capital_asset" | "inventory"
   | "other";
 
 export type TemplateItem = {
