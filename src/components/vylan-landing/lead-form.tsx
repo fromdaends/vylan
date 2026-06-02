@@ -22,9 +22,17 @@ import {
   PROVINCES,
   type Province,
 } from "@/app/actions/demo-request.schema";
+import { VylanBooking } from "@/components/vylan-landing/vylan-booking";
 
-type View = 1 | 2 | 3 | "done";
+// Same view machine as the /demo flow: the 3 qualifying steps, then the
+// "you're qualified" choice screen (try the demo / book a call), the
+// cal.com booking embed, and the booked confirmation.
+type View = 1 | 2 | 3 | "next-steps" | "booking" | "booked";
 type Locale = "fr" | "en";
+
+function firstName(label: string): string {
+  return label.trim().split(/\s+/)[0] ?? "";
+}
 
 const FIRM_SIZES = ["solo", "2_5", "6_15", "16_plus"] as const;
 const CLIENT_VOLUMES = ["under_25", "25_100", "100_300", "300_plus"] as const;
@@ -118,7 +126,7 @@ export function LeadForm() {
     });
     setSubmitting(false);
     if (!res.ok) return showError(res.error);
-    setView("done");
+    setView("next-steps");
   }
 
   return (
@@ -127,15 +135,73 @@ export function LeadForm() {
       <span className="vy-spark" aria-hidden>
         ✦
       </span>
-      <h2>{t("form_title")}</h2>
-
-      {view === "done" ? (
-        <div className="vy-form-done">
-          <b>{t("form_done_title")}</b>
-          <p>{t("form_done_body")}</p>
-        </div>
-      ) : (
+      {/* "You're qualified" choice screen — try the demo or book a call */}
+      {view === "next-steps" && (
         <>
+          <h2>
+            {td("next_heading", { name: firstName(s1.contact_name) || "👋" })}
+          </h2>
+          <p className="vy-form-sub">{td("next_body")}</p>
+          <div className="vy-choices">
+            {/* Primary: jump straight into the demo by making an account. */}
+            <Link
+              href="/signup?continue=onboarding"
+              className="vy-choice vy-choice-primary"
+            >
+              <div className="vy-choice-head">
+                {td("next_demo_heading")}
+                <span className="vy-choice-badge">{td("next_recommended")}</span>
+              </div>
+              <p className="vy-choice-body">{td("next_demo_body")}</p>
+              <span className="vy-choice-cta">{td("next_demo_cta")} →</span>
+            </Link>
+            {/* Secondary: book a call (cal.com). */}
+            <button
+              type="button"
+              className="vy-choice"
+              onClick={() => setView("booking")}
+            >
+              <div className="vy-choice-head">{td("next_meeting_heading")}</div>
+              <p className="vy-choice-body">{td("next_meeting_body")}</p>
+              <span className="vy-choice-cta">{td("next_meeting_cta")} →</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* cal.com booking embed */}
+      {view === "booking" && (
+        <VylanBooking
+          demoId={rowId ?? ""}
+          contactName={s1.contact_name}
+          email={s1.email}
+          locale={s3.preferred_language}
+          onBack={() => setView("next-steps")}
+          onBooked={() => setView("booked")}
+        />
+      )}
+
+      {/* Booking confirmation — still nudges them to try the demo */}
+      {view === "booked" && (
+        <>
+          <h2>{td("booked_heading")}</h2>
+          <p className="vy-form-sub">{td("booked_body")}</p>
+          <div className="vy-choices">
+            <Link href="/signup" className="vy-choice vy-choice-primary">
+              <div className="vy-choice-head">
+                {td("booked_try_demo_heading")}
+              </div>
+              <p className="vy-choice-body">{td("booked_try_demo_body")}</p>
+              <span className="vy-choice-cta">{td("booked_try_demo_cta")} →</span>
+            </Link>
+          </div>
+        </>
+      )}
+
+      {/* The 3 qualifying steps */}
+      {(view === 1 || view === 2 || view === 3) && (
+        <>
+          <h2>{t("form_title")}</h2>
           {view === 1 && <p className="vy-form-sub">{t("form_sub")}</p>}
 
           {/* 3-step progress */}
