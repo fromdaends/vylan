@@ -1,25 +1,26 @@
 "use client";
 
+// Blue glassmorphic login — matches the public marketing site (the "Tell us
+// about your firm" lead form). Reuses the landing's .vy-* classes (blue
+// background, glass card, translucent fields, white CTA) from vylan-landing.css
+// + the Schibsted Grotesk face, on a fixed full-bleed layer so it covers the
+// shared (auth) layout's dark chrome. Only the LOOK changed — the form action,
+// field names (email / password / remember_me / locale) and flow are identical.
+
+import "@/styles/vylan-landing.css";
 import { useActionState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
 import { Link } from "@/i18n/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { loginAction, type AuthActionState } from "@/app/actions/auth";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
+import { schibsted } from "@/components/vylan-landing/fonts";
+import { brand } from "@/lib/brand";
 import { ArrowRight } from "lucide-react";
 
-// Allowlist of error codes the login page knows how to surface from
-// the URL. Anything else gets ignored so a stray ?error=whatever
-// doesn't try to render a missing translation.
-const URL_ERROR_CODES = new Set([
-  "callback",
-  "oauth_failed",
-  "rate_limited",
-]);
+// Allowlist of error codes the login page surfaces from the URL (a stray
+// ?error=whatever is ignored so it can't render a missing translation).
+const URL_ERROR_CODES = new Set(["callback", "oauth_failed", "rate_limited"]);
 
 export default function LoginPage() {
   const t = useTranslations("Auth");
@@ -34,124 +35,147 @@ export default function LoginPage() {
     AuthActionState,
     FormData
   >(loginAction, null);
-  // Form-submit error takes precedence over the URL one — the URL
-  // error is from a prior redirect (OAuth failure, expired link, etc.)
-  // and we don't want to keep showing it after the user has tried again.
+  // A fresh submit error wins over the URL one (which is from a prior redirect).
   const visibleError = state?.error ?? urlError;
 
   return (
-    <div>
-      <div className="mb-8 text-center">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {t("login_title")}
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {t("login_subtitle")}
-        </p>
-      </div>
-
-      <GoogleSignInButton
-        locale={localeNarrow}
-        label={t("continue_with_google")}
-      />
-
-      <div className="relative my-5" aria-hidden>
-        <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-border" />
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      <div className={`vy-root ${schibsted.variable} flex min-h-full flex-col`}>
+        {/* Brand */}
+        <div className="flex justify-center px-6 pb-2 pt-9">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 text-[22px] font-semibold tracking-[-0.04em] text-white"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/vylan-logo-white.png"
+              alt={brand.name}
+              className="h-6 w-6"
+            />
+            {brand.name}
+          </Link>
         </div>
-        <div className="relative flex justify-center text-xs uppercase tracking-wider">
-          <span className="bg-background px-2 text-muted-foreground">
-            {t("or_divider")}
-          </span>
-        </div>
-      </div>
 
-      {visibleError && (
-        <Alert variant="destructive" className="animate-in-fade mb-4">
-          <AlertDescription>
-            {t(`errors.${visibleError}` as const)}
-          </AlertDescription>
-        </Alert>
-      )}
+        {/* Card */}
+        <main className="flex flex-1 items-center justify-center px-6 py-10">
+          <div className="w-full max-w-md">
+            <div className="vy-form-card">
+              <div className="vy-glow" />
+              <span className="vy-spark" aria-hidden>
+                ✦
+              </span>
 
-      <form action={formAction} className="space-y-4">
-        <input type="hidden" name="locale" value={locale} />
-        <div className="space-y-2">
-          <Label htmlFor="email">{t("email")}</Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@firm.com"
-            required
-            aria-invalid={Boolean(state?.fieldErrors?.email)}
-          />
-          {state?.fieldErrors?.email && (
-            <p className="text-xs text-destructive">
-              {t(`errors.${state.fieldErrors.email}` as const)}
-            </p>
-          )}
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-baseline justify-between">
-            <Label htmlFor="password">{t("password")}</Label>
-            <Link
-              href="/forgot-password"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {t("forgot_link")}
-            </Link>
+              <h2>{t("login_title")}</h2>
+              <p className="vy-form-sub">{t("login_subtitle")}</p>
+
+              <div className="vy-fields">
+                <GoogleSignInButton
+                  locale={localeNarrow}
+                  label={t("continue_with_google")}
+                  className="border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+                />
+
+                {/* OR divider — two line segments around the label (no masking
+                    needed on the translucent card). */}
+                <div className="flex items-center gap-3" aria-hidden>
+                  <span className="h-px flex-1 bg-white/20" />
+                  <span className="text-xs uppercase tracking-wider text-white/55">
+                    {t("or_divider")}
+                  </span>
+                  <span className="h-px flex-1 bg-white/20" />
+                </div>
+
+                {visibleError && (
+                  <div className="vy-form-err" role="alert">
+                    {t(`errors.${visibleError}` as const)}
+                  </div>
+                )}
+
+                <form action={formAction} className="flex flex-col gap-3.5">
+                  <input type="hidden" name="locale" value={locale} />
+                  <div>
+                    <input
+                      className={
+                        "vy-field" +
+                        (state?.fieldErrors?.email ? " vy-invalid" : "")
+                      }
+                      name="email"
+                      type="email"
+                      autoComplete="email"
+                      placeholder={t("email")}
+                      aria-label={t("email")}
+                      required
+                    />
+                    {state?.fieldErrors?.email && (
+                      <p className="mt-1.5 text-xs text-white/90">
+                        {t(`errors.${state.fieldErrors.email}` as const)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <input
+                      className={
+                        "vy-field" +
+                        (state?.fieldErrors?.password ? " vy-invalid" : "")
+                      }
+                      name="password"
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder={t("password")}
+                      aria-label={t("password")}
+                      required
+                    />
+                    {state?.fieldErrors?.password && (
+                      <p className="mt-1.5 text-xs text-white/90">
+                        {t(`errors.${state.fieldErrors.password}` as const)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <label className="inline-flex cursor-pointer select-none items-center gap-2 text-sm text-white/85">
+                      <input
+                        type="checkbox"
+                        name="remember_me"
+                        defaultChecked
+                        className="size-4 rounded border-white/40 bg-white/10 accent-white"
+                      />
+                      {t("remember_me")}
+                    </label>
+                    <Link
+                      href="/forgot-password"
+                      className="text-sm text-white/70 transition-colors hover:text-white"
+                    >
+                      {t("forgot_link")}
+                    </Link>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={pending}
+                    className="vy-submit mt-1 inline-flex w-full items-center justify-center gap-2"
+                  >
+                    {pending ? tc("loading") : t("submit_login")}
+                    {!pending && <ArrowRight className="h-4 w-4" />}
+                  </button>
+                </form>
+              </div>
+
+              <p className="mt-6 text-center text-sm text-white/75">
+                {t("no_account")}{" "}
+                <Link
+                  href="/signup"
+                  className="font-semibold text-white underline-offset-4 hover:underline"
+                >
+                  {t("create_account")}
+                </Link>
+              </p>
+            </div>
           </div>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="••••••••"
-            required
-            aria-invalid={Boolean(state?.fieldErrors?.password)}
-          />
-          {state?.fieldErrors?.password && (
-            <p className="text-xs text-destructive">
-              {t(`errors.${state.fieldErrors.password}` as const)}
-            </p>
-          )}
-        </div>
-        <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
-          <input
-            type="checkbox"
-            name="remember_me"
-            defaultChecked
-            className="mt-0.5 size-4 rounded border-input text-accent focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <span className="text-sm leading-snug">
-            {t("remember_me")}
-            <span className="block text-xs text-muted-foreground mt-0.5">
-              {t("remember_me_hint")}
-            </span>
-          </span>
-        </label>
-        <Button
-          type="submit"
-          size="lg"
-          className="w-full mt-2"
-          disabled={pending}
-        >
-          {pending ? tc("loading") : t("submit_login")}
-          {!pending && <ArrowRight className="h-4 w-4" />}
-        </Button>
-      </form>
-
-      <p className="mt-6 text-center text-sm text-muted-foreground">
-        {t("no_account")}{" "}
-        <Link
-          href="/signup"
-          className="text-foreground font-medium hover:underline underline-offset-4"
-        >
-          {t("create_account")}
-        </Link>
-      </p>
+        </main>
+      </div>
     </div>
   );
 }

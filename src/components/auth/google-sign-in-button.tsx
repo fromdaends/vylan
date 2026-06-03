@@ -2,6 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/cn";
 import { signInWithGoogleAction } from "@/app/actions/auth";
 
 // Shared OAuth button used on /login and /signup. Posts to the
@@ -17,30 +18,40 @@ export function GoogleSignInButton({
   locale,
   label,
   continueParam = "",
+  className,
 }: {
   locale: "fr" | "en";
   label: string;
   continueParam?: string;
+  // Optional style override (e.g. the blue login page restyles it to a
+  // glass button). Merged after the defaults, so it wins for conflicts.
+  className?: string;
 }) {
   return (
     <form action={signInWithGoogleAction}>
       <input type="hidden" name="locale" value={locale} />
       <input type="hidden" name="continue" value={continueParam} />
-      <SubmitButton label={label} />
+      <SubmitButton label={label} className={className} />
     </form>
   );
 }
 
 // Pulled into its own component so useFormStatus can see the form
 // context (the hook only works inside a <form action={...}>).
-function SubmitButton({ label }: { label: string }) {
+function SubmitButton({
+  label,
+  className,
+}: {
+  label: string;
+  className?: string;
+}) {
   const { pending } = useFormStatus();
   return (
     <Button
       type="submit"
       variant="outline"
       size="lg"
-      className="w-full gap-3"
+      className={cn("w-full gap-3", className)}
       disabled={pending}
     >
       <GoogleLogo className="size-5" aria-hidden />
