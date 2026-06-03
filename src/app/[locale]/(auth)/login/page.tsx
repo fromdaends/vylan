@@ -40,27 +40,28 @@ export default function LoginPage() {
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className={`vy-root ${schibsted.variable} flex min-h-full flex-col`}>
-        {/* Brand */}
-        <div className="flex justify-center px-6 pb-2 pt-9">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-[22px] font-semibold tracking-[-0.04em] text-white"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/vylan-logo-white.png"
-              alt={brand.name}
-              className="h-6 w-6"
-            />
-            {brand.name}
-          </Link>
-        </div>
+      <div className={`vy-root ${schibsted.variable}`}>
+        {/* Block-flow centering (max-width + margin:auto) — reliably full-width,
+            unlike a nested-flex item which can shrink-wrap. */}
+        <div className="mx-auto max-w-md px-6 pb-16 pt-9">
+          {/* Brand */}
+          <div className="mb-7 flex justify-center">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-[22px] font-semibold tracking-[-0.04em] text-white"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/vylan-logo-white.png"
+                alt={brand.name}
+                className="h-6 w-6"
+              />
+              {brand.name}
+            </Link>
+          </div>
 
-        {/* Card */}
-        <main className="flex flex-1 items-center justify-center px-6 py-10">
-          <div className="w-full max-w-md">
-            <div className="vy-form-card">
+          {/* Card */}
+          <div className="vy-form-card" style={{ width: "100%" }}>
               <div className="vy-glow" />
               <span className="vy-spark" aria-hidden>
                 ✦
@@ -174,8 +175,7 @@ export default function LoginPage() {
               </p>
             </div>
           </div>
-        </main>
+        </div>
       </div>
-    </div>
   );
 }
