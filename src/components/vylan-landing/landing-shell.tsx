@@ -79,12 +79,12 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
     );
     if (reelWords.length === 0) return;
     const brand = reelWords[reelWords.length - 1];
-    // The rest of the hero — headline, CTA buttons, and the "We'll chase them
-    // with" lead-in — stays fully visible throughout the finale, so the page
-    // reads as a complete hero. Only the subhead's last word animates: it lands
-    // on "…vylan" (full line, held), then the lead-in drops leaving "vylan",
-    // then "vylan" dissolves. Staged in enterFinale; exitFinale restores the
-    // reel on scroll-back.
+    // The finale plays in three beats: (1) the full hero holds with the subhead
+    // reading "We'll chase them with vylan" — headline, CTA, and lead-in all
+    // visible; (2) the lead-in AND the rest of the hero (headline + CTA) fade
+    // out together, leaving only "vylan"; (3) "vylan" dissolves. ctxEls is that
+    // "rest of the hero" group — faded in beat 2, restored in exitFinale.
+    const ctxEls = [headlineRef.current, ctaRowRef.current];
 
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
@@ -148,6 +148,14 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
       syncWidth(i);
     }
 
+    function setCtxFaded(faded: boolean) {
+      ctxEls.forEach((el) => {
+        if (!el) return;
+        el.style.transition = "opacity .34s ease, filter .34s ease";
+        el.style.opacity = faded ? "0" : "1";
+        el.style.filter = faded ? "blur(10px)" : "none";
+      });
+    }
     function clearFinaleTimers() {
       stageT.forEach(clearTimeout);
       stageT = [];
@@ -188,7 +196,8 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
           void brand.offsetWidth;
           brand.style.opacity = "1";
           // BEAT 2 — once the full line "We'll chase them with vylan" has held,
-          // drop just the lead-in so only "vylan" remains on screen.
+          // the lead-in AND the rest of the hero (headline + CTA) fade out
+          // together, leaving only "vylan" on screen.
           stageT.push(
             setTimeout(() => {
               if (pf) {
@@ -196,6 +205,7 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
                 pf.style.opacity = "0";
                 pf.style.filter = "blur(10px)";
               }
+              setCtxFaded(true);
               // BEAT 3 — "vylan" then dissolves on its own, like a normal word.
               stageT.push(
                 setTimeout(() => {
@@ -226,7 +236,9 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
         w.style.transition = "none";
         w.style.filter = "none";
       });
-      // Restore the lead-in instantly (the finale may have dropped it).
+      // Restore the rest of the hero (headline + CTA) — beat 2 may have faded
+      // it — then restore the lead-in.
+      setCtxFaded(false);
       if (subPrefixRef.current) {
         const pf = subPrefixRef.current;
         pf.style.transition = "none";
