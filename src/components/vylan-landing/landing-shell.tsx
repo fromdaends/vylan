@@ -74,7 +74,11 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
     );
     if (reelWords.length === 0) return;
     const brand = reelWords[reelWords.length - 1];
-    const ctxEls = [headlineRef.current, subPrefixRef.current, ctaRowRef.current];
+    // subPrefix is intentionally NOT faded with the rest of the context: the
+    // finale keeps the "We'll chase them with" lead-in visible so the reveal
+    // reads as the full sentence "…with vylan", then dissolves it together
+    // with the brand at the very end (see enterFinale / exitFinale).
+    const ctxEls = [headlineRef.current, ctaRowRef.current];
 
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
@@ -154,6 +158,15 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
       finaleState = "finale";
       clearFinaleTimers();
       setCtxFaded(true);
+      // Keep the lead-in ("We'll chase them with") visible through the brand
+      // reveal so the finale reads as the full sentence "…with vylan".
+      const pf = subPrefixRef.current;
+      if (pf) {
+        pf.classList.remove("vy-pf-fwd", "vy-pf-rev");
+        pf.style.transition = "opacity .34s ease, filter .34s ease";
+        pf.style.opacity = "1";
+        pf.style.filter = "none";
+      }
       reelWords.forEach((w) => {
         if (w !== brand) {
           w.style.transition = "opacity .34s ease, filter .34s ease";
@@ -186,6 +199,13 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
               brand.style.filter = "";
               brand.style.transform = "";
               brand.classList.add("vy-brand-out");
+              // Dissolve the lead-in in step with the brand so the line exits
+              // together instead of leaving "We'll chase them with" hanging.
+              if (pf) {
+                pf.style.transition = "opacity .34s ease, filter .34s ease";
+                pf.style.opacity = "0";
+                pf.style.filter = "blur(10px)";
+              }
             }, HOLD_MS),
           );
         }, 120),
@@ -205,6 +225,14 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
         w.style.filter = "none";
       });
       setCtxFaded(false);
+      // Restore the lead-in instantly (it's excluded from setCtxFaded, and the
+      // finale may have dissolved it).
+      if (subPrefixRef.current) {
+        const pf = subPrefixRef.current;
+        pf.style.transition = "none";
+        pf.style.filter = "none";
+        pf.style.opacity = "1";
+      }
       shownIdx = -1;
     }
 
