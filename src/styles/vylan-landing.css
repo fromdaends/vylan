@@ -553,8 +553,13 @@ textarea.vy-field {
 .vy-footer {
   position: relative;
   z-index: 5;
+  /* Match the features box (max-width 1000px, centered, 24px side
+     padding) so the footer's edges + content line up with it instead
+     of spanning the full page width. */
+  max-width: 1000px;
+  margin: 0 auto;
   border-top: 1px solid rgba(255, 255, 255, 0.16);
-  padding: 40px 34px;
+  padding: 40px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
