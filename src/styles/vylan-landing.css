@@ -511,8 +511,12 @@ textarea.vy-field {
   position: relative;
   z-index: 5;
   max-width: 1000px;
-  margin: 0 auto;
-  padding: 10px 24px 120px;
+  /* The box hugs its tiles (their own 34px padding gives symmetric inner
+     spacing). The old `padding: 10px 24px 120px` left 120px of dead space
+     inside the bottom of the box — that gap is now margin BELOW the box,
+     as breathing room before the footer. */
+  margin: 0 auto 72px;
+  padding: 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
