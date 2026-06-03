@@ -79,12 +79,12 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
     );
     if (reelWords.length === 0) return;
     const brand = reelWords[reelWords.length - 1];
-    // subPrefix is intentionally NOT faded with the rest of the context: the
-    // finale keeps the "We'll chase them with" lead-in visible so the reveal
-    // reads as the full sentence "…with vylan". The lead-in then drops on its
-    // own (leaving "vylan" alone), and "vylan" dissolves last — a 3-beat
-    // sequence staged in enterFinale; exitFinale restores it on scroll-back.
-    const ctxEls = [headlineRef.current, ctaRowRef.current];
+    // The rest of the hero — headline, CTA buttons, and the "We'll chase them
+    // with" lead-in — stays fully visible throughout the finale, so the page
+    // reads as a complete hero. Only the subhead's last word animates: it lands
+    // on "…vylan" (full line, held), then the lead-in drops leaving "vylan",
+    // then "vylan" dissolves. Staged in enterFinale; exitFinale restores the
+    // reel on scroll-back.
 
     const reduceMotion = window.matchMedia(
       "(prefers-reduced-motion: reduce)",
@@ -148,14 +148,6 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
       syncWidth(i);
     }
 
-    function setCtxFaded(faded: boolean) {
-      ctxEls.forEach((el) => {
-        if (!el) return;
-        el.style.transition = "opacity .34s ease, filter .34s ease";
-        el.style.opacity = faded ? "0" : "1";
-        el.style.filter = faded ? "blur(10px)" : "none";
-      });
-    }
     function clearFinaleTimers() {
       stageT.forEach(clearTimeout);
       stageT = [];
@@ -163,7 +155,6 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
     function enterFinale() {
       finaleState = "finale";
       clearFinaleTimers();
-      setCtxFaded(true);
       // Keep the lead-in ("We'll chase them with") visible through the brand
       // reveal so the finale reads as the full sentence "…with vylan".
       const pf = subPrefixRef.current;
@@ -235,9 +226,7 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
         w.style.transition = "none";
         w.style.filter = "none";
       });
-      setCtxFaded(false);
-      // Restore the lead-in instantly (it's excluded from setCtxFaded, and the
-      // finale may have dissolved it).
+      // Restore the lead-in instantly (the finale may have dropped it).
       if (subPrefixRef.current) {
         const pf = subPrefixRef.current;
         pf.style.transition = "none";
