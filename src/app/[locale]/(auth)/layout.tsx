@@ -33,8 +33,11 @@ export default function AuthLayout({
         </div>
       </header>
 
+      {/* No `animate-in-up` here: its `transform` (kept by `both` fill-mode)
+          would create a containing block that traps the blue login's
+          fixed full-bleed layer at this max-w-sm width. */}
       <main className="flex-1 flex items-center justify-center px-6 py-12">
-        <div className="w-full max-w-sm animate-in-up">{children}</div>
+        <div className="w-full max-w-sm">{children}</div>
       </main>
     </div>
   );
