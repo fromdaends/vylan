@@ -347,6 +347,9 @@ html:has(.vy-manifesto) {
   display: block;
   margin: auto;
   opacity: 0.7;
+  /* The video's background is encoded as the exact page blue (#1050ED),
+     so it blends seamlessly with no colour seam/border — the radial mask
+     just softens the edges into the page. */
   -webkit-mask-image: radial-gradient(ellipse 72% 74% at 50% 48%, #000 48%, transparent 100%);
   mask-image: radial-gradient(ellipse 72% 74% at 50% 48%, #000 48%, transparent 100%);
   transform: translateY(-3vh) scale(var(--vy-cscale, 1)) translateZ(0);
