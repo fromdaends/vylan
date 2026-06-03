@@ -5,7 +5,7 @@ import { getClient } from "@/lib/db/clients";
 import { listRequestItems, type RequestItem } from "@/lib/db/request-items";
 import {
   listUploadedFilesForEngagement,
-  signedDownloadUrl,
+  signedDownloadUrls,
   type UploadedFile,
 } from "@/lib/db/uploaded-files";
 import { listActivityForEngagement } from "@/lib/db/activity";
@@ -66,33 +66,41 @@ export default async function EngagementDetailPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const engagement = await getEngagement(id);
+  // Items / uploads / activity all key off the URL `id` (= engagement.id), so
+  // they don't need to wait for getEngagement — run the whole lot in ONE
+  // parallel batch. The uploads branch also batch-signs every download URL in a
+  // single storage round-trip (was N separate calls, the biggest chunk of this
+  // page's load). Only the client lookup (needs engagement.client_id) waits.
+  const [engagement, items, uploadData, activity, firm, user] =
+    await Promise.all([
+      getEngagement(id),
+      listRequestItems(id),
+      (async () => {
+        const uploads = await listUploadedFilesForEngagement(id);
+        const urlByPath = await signedDownloadUrls(
+          uploads.map((u) => u.storage_path),
+          900,
+        );
+        return { uploads, urlByPath };
+      })(),
+      listActivityForEngagement(id),
+      getCurrentFirm(),
+      getCurrentUser(),
+    ]);
   if (!engagement) notFound();
-  const [client, items, uploads, activity, firm, user] = await Promise.all([
-    getClient(engagement.client_id),
-    listRequestItems(engagement.id),
-    listUploadedFilesForEngagement(engagement.id),
-    listActivityForEngagement(engagement.id),
-    getCurrentFirm(),
-    getCurrentUser(),
-  ]);
+  const client = await getClient(engagement.client_id);
+  const { uploads, urlByPath } = uploadData;
   const isDemo = firm?.is_demo === true;
   // Delete (incl. delete-draft) is owner-only — hide both controls from staff.
   // The server actions enforce this too; this is the matching UI gate.
   const canDelete = user ? canDeleteEngagements(user.role) : false;
 
-  // Pre-sign URLs (15 min) for every upload.
   const filesByItem = new Map<string, (UploadedFile & { url: string })[]>();
-  await Promise.all(
-    uploads.map(async (u) => {
-      const url = await signedDownloadUrl(u.storage_path, 900).catch(
-        () => "#",
-      );
-      const arr = filesByItem.get(u.request_item_id) ?? [];
-      arr.push({ ...u, url });
-      filesByItem.set(u.request_item_id, arr);
-    }),
-  );
+  for (const u of uploads) {
+    const arr = filesByItem.get(u.request_item_id) ?? [];
+    arr.push({ ...u, url: urlByPath.get(u.storage_path) ?? "#" });
+    filesByItem.set(u.request_item_id, arr);
+  }
 
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");

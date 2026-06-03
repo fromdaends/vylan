@@ -49,3 +49,24 @@ export async function signedDownloadUrl(
   if (error || !data) throw error ?? new Error("signed_url_failed");
   return data.signedUrl;
 }
+
+// Batched variant: ONE storage round-trip to sign many paths at once. The
+// engagement detail page pre-signs every upload, and doing that as N separate
+// calls was a real chunk of its load time. Returns a path -> URL map; fail-soft
+// (a path that errors or is missing just isn't in the map — callers fall back).
+export async function signedDownloadUrls(
+  storage_paths: string[],
+  ttlSec = 900,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (storage_paths.length === 0) return out;
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb.storage
+    .from("client-uploads")
+    .createSignedUrls(storage_paths, ttlSec);
+  if (error || !data) return out;
+  for (const row of data) {
+    if (row.path && row.signedUrl) out.set(row.path, row.signedUrl);
+  }
+  return out;
+}
