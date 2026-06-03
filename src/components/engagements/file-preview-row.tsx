@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import {
   ChevronDown,
@@ -9,6 +10,7 @@ import {
   ExternalLink,
   FileText,
   Loader2,
+  Maximize2,
   RefreshCw,
 } from "lucide-react";
 import { AiBadge } from "./ai-badge";
@@ -19,6 +21,26 @@ import { cn } from "@/lib/cn";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
 
+// The document viewer pulls in react-pdf / pdf.js — browser-only and a sizeable
+// chunk — so load it lazily (ssr:false). It ships only when an accountant
+// actually opens a preview; the row itself stays light, and pdf.js never runs
+// on the server (it throws on Node).
+const DocumentViewerModal = dynamic(
+  () => import("./document-viewer").then((m) => m.DocumentViewerModal),
+  { ssr: false },
+);
+const InlinePdfPreview = dynamic(
+  () => import("./document-viewer").then((m) => m.InlinePdfPreview),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-40 items-center justify-center">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    ),
+  },
+);
+
 // How long the "Re-checking…" animation runs if the verdict comes back
 // unchanged (a re-run that confirms the same result produces no signature
 // change to react to, so we stop after a grace period). When the verdict DOES
@@ -27,17 +49,21 @@ const RECHECK_TIMEOUT_MS = 12_000;
 
 export function FilePreviewRow({
   file,
-  url,
   expectedDocType,
   rejectionCount,
 }: {
   file: UploadedFile;
-  url: string;
+  // Legacy signed-URL prop (still passed by the engagement page). It's
+  // superseded by the same-origin /api/files/[id] proxy below — which doesn't
+  // expire mid-review and serves HTTP range requests for fast large-file
+  // rendering — so we accept it for compatibility but no longer read it.
+  url?: string;
   expectedDocType: DocType;
   rejectionCount: number;
 }) {
   const t = useTranslations("Engagements");
   const [open, setOpen] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [rechecking, setRechecking] = useState(false);
   const [, startTransition] = useTransition();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,6 +71,20 @@ export function FilePreviewRow({
   const isImage = file.mime_type.startsWith("image/");
   const isPdf = file.mime_type === "application/pdf";
   const canPreview = isImage || isPdf;
+
+  // Bytes are served by the authenticated, same-origin proxy keyed by file id.
+  // inline = view / open-in-new-tab; ?download=1 = force-download with the
+  // original filename.
+  const source = useMemo(
+    () => ({
+      url: `/api/files/${file.id}`,
+      openHref: `/api/files/${file.id}`,
+      downloadUrl: `/api/files/${file.id}?download=1`,
+      filename: file.original_filename,
+      isImage,
+    }),
+    [file.id, file.original_filename, isImage],
+  );
 
   // A fingerprint of the AI verdict. It changes when a fresh classification
   // lands (the engagement page auto-refreshes while live), which is our cue to
@@ -103,7 +143,7 @@ export function FilePreviewRow({
           {formatBytes(file.size_bytes)}
         </span>
         <a
-          href={url}
+          href={source.openHref}
           target="_blank"
           rel="noopener noreferrer"
           className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
@@ -113,7 +153,7 @@ export function FilePreviewRow({
           <ExternalLink className="size-3.5" />
         </a>
         <a
-          href={url}
+          href={source.downloadUrl}
           download={file.original_filename}
           className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
           aria-label={t("download_file")}
@@ -165,22 +205,36 @@ export function FilePreviewRow({
       {open && canPreview && (
         <div className="border-t border-border p-2 bg-muted/30">
           {isImage ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={url}
-              alt={file.original_filename}
-              className="max-h-[480px] w-auto mx-auto rounded"
-            />
+            <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={source.url}
+                alt={file.original_filename}
+                className="max-h-[480px] w-auto mx-auto rounded"
+              />
+              <button
+                type="button"
+                onClick={() => setViewerOpen(true)}
+                aria-label={t("viewer_fullscreen")}
+                title={t("viewer_fullscreen")}
+                className="absolute right-2 top-2 inline-flex size-7 items-center justify-center rounded-md bg-background/80 text-foreground shadow-sm ring-1 ring-border backdrop-blur transition-colors hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Maximize2 className="size-3.5" />
+              </button>
+            </div>
           ) : (
-            <iframe
-              src={url}
-              title={file.original_filename}
-              className="w-full h-[520px] rounded bg-white"
-              sandbox=""
-              referrerPolicy="no-referrer"
+            <InlinePdfPreview
+              source={source}
+              onOpenFull={() => setViewerOpen(true)}
             />
           )}
         </div>
+      )}
+      {viewerOpen && (
+        <DocumentViewerModal
+          source={source}
+          onClose={() => setViewerOpen(false)}
+        />
       )}
     </li>
   );
