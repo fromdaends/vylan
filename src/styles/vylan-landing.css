@@ -57,10 +57,11 @@ html:has(.vy-manifesto) {
   pointer-events: auto;
 }
 .vy-brand {
-  position: absolute;
+  position: fixed;
   left: 50%;
   top: 24px;
   transform: translateX(-50%);
+  z-index: 110;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -80,11 +81,10 @@ html:has(.vy-manifesto) {
   display: block;
   transform: translateY(0.015em);
 }
-/* Manifesto brand is a link, not a menu button — no absolute centering. */
-.vy-manifesto .vy-brand {
-  position: static;
-  transform: none;
-  text-decoration: none;
+/* Manifesto: the lone "back" link sits top-right; the centred brand is the
+   shared VylanMenu, which positions itself. */
+.vy-manifesto .vy-topbar {
+  justify-content: flex-end;
 }
 .vy-back {
   font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;

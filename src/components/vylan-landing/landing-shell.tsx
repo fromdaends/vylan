@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { Link } from "@/i18n/navigation";
 import { BirdVideo } from "@/components/vylan-landing/bird-video";
+import { VylanMenu } from "@/components/vylan-landing/vylan-menu";
 
 export type LandingShellStrings = {
   brand: string;
@@ -38,7 +39,7 @@ const REEL_CLASSES = [
 ];
 const NW = 4; // cycling words; the 5th reel word is the brand finale
 const REEL_END = 0.42; // scroll fraction across which the 4 words cycle
-const HOLD_MS = 1350; // brand shows, holds ~1.35s, then auto-dissolves
+const HOLD_MS = 1000; // brand shows, holds 1s, then auto-dissolves
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 function scrollToForm() {
@@ -48,8 +49,6 @@ function scrollToForm() {
 }
 
 export function LandingShell({ s }: { s: LandingShellStrings }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
   const heroRef = useRef<HTMLElement>(null);
   const reelRef = useRef<HTMLSpanElement>(null);
   const reelMaskRef = useRef<HTMLSpanElement>(null);
@@ -57,15 +56,6 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
   const subPrefixRef = useRef<HTMLSpanElement>(null);
   const ctaRowRef = useRef<HTMLDivElement>(null);
   const cueRef = useRef<HTMLDivElement>(null);
-
-  // Close the menu on Escape.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenuOpen(false);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, []);
 
   // The scroll-pinned reel engine. Ported from the prototype's vanilla
   // JS — crossing a scroll threshold fires a fixed ~0.5s CSS animation
@@ -296,11 +286,6 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
     };
   }, []);
 
-  const closeAnd = (fn?: () => void) => () => {
-    setMenuOpen(false);
-    fn?.();
-  };
-
   const headlineLines = s.headline.split("\n");
 
   return (
@@ -308,19 +293,8 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
       {/* background: the bird animation video, persists while scrolling */}
       <BirdVideo />
 
-      {/* top bar — brand opens the menu */}
-      <div className="vy-topbar">
-        <button
-          className="vy-brand"
-          type="button"
-          aria-label={s.menuLabel}
-          onClick={() => setMenuOpen(true)}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="vy-logo" src="/vylan-logo-white.png" alt={s.logoAlt} />
-          {s.brand}
-        </button>
-      </div>
+      {/* brand + slide-down menu (shared with the manifesto page) */}
+      <VylanMenu s={s} />
 
       {/* HERO */}
       <section className="vy-hero" ref={heroRef}>
@@ -365,55 +339,6 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
           </div>
         </div>
       </section>
-
-      {/* MENU OVERLAY */}
-      <div
-        className={"vy-overlay" + (menuOpen ? " vy-open" : "")}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) setMenuOpen(false);
-        }}
-        role="dialog"
-        aria-modal="true"
-        aria-hidden={!menuOpen}
-      >
-        <button
-          className="vy-menu-close"
-          type="button"
-          aria-label={s.closeLabel}
-          onClick={() => setMenuOpen(false)}
-        >
-          ×
-        </button>
-        <div className="vy-menu-card">
-          <p className="vy-menu-def">
-            <b>{s.defTerm}</b> <span className="vy-mono">{s.defAbbr}</span>
-            &nbsp;{s.defText}
-          </p>
-          <nav className="vy-menu-nav">
-            <a href="#" onClick={closeAnd()}>
-              {s.navHome} <span className="vy-arr">→</span>
-            </a>
-            <Link href="/manifesto" onClick={() => setMenuOpen(false)}>
-              {s.navManifesto} <span className="vy-arr">→</span>
-            </Link>
-            <a href="#vy-get-access" onClick={closeAnd(scrollToForm)}>
-              {s.navForFirms} <span className="vy-arr">→</span>
-            </a>
-            <a href="#vy-get-access" onClick={closeAnd(scrollToForm)}>
-              {s.navBookDemo} <span className="vy-arr">→</span>
-            </a>
-            <Link href="/login" onClick={() => setMenuOpen(false)}>
-              {s.navLogin} <span className="vy-arr">→</span>
-            </Link>
-          </nav>
-          <div className="vy-menu-follow">
-            {s.follow}
-            <span className="vy-soc">in</span>
-            <span className="vy-soc">𝕏</span>
-            <span className="vy-soc">◎</span>
-          </div>
-        </div>
-      </div>
     </>
   );
 }
