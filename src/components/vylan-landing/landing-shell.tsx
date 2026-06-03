@@ -86,10 +86,6 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
     // "rest of the hero" group — faded in beat 2, restored in exitFinale.
     const ctxEls = [headlineRef.current, ctaRowRef.current];
 
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
-
     const widths: number[] = [];
     function measure() {
       reelWords.forEach((w, i) => {
@@ -282,33 +278,6 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
     }
     reset();
 
-    // Recurring chromatic glitch on the first word while it's settled
-    // at the top of the reel.
-    let glitchInterval: ReturnType<typeof setInterval> | undefined;
-    let glitchTimeout: ReturnType<typeof setTimeout> | undefined;
-    if (!reduceMotion) {
-      const w = reelWords[0];
-      const run = () => {
-        if (targetProgress() >= 0.02 || shownIdx > 0) return;
-        if (
-          w.classList.contains("vy-ai-glitch") ||
-          w.classList.contains("vy-in") ||
-          w.classList.contains("vy-in-rev") ||
-          w.classList.contains("vy-out") ||
-          w.classList.contains("vy-out-rev")
-        )
-          return;
-        w.classList.add("vy-ai-glitch");
-        w.addEventListener(
-          "animationend",
-          () => w.classList.remove("vy-ai-glitch"),
-          { once: true },
-        );
-      };
-      glitchTimeout = setTimeout(run, 260);
-      glitchInterval = setInterval(run, 3200);
-    }
-
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", reset);
     window.addEventListener("load", reset);
@@ -321,8 +290,6 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
       window.removeEventListener("resize", reset);
       window.removeEventListener("load", reset);
       clearFinaleTimers();
-      if (glitchTimeout) clearTimeout(glitchTimeout);
-      if (glitchInterval) clearInterval(glitchInterval);
     };
   }, []);
 
