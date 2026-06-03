@@ -361,6 +361,12 @@ html:has(.vy-manifesto) {
      decodes. Only the white bird is added. The radial mask softens the
      bird's edges into the page. */
   mix-blend-mode: screen;
+  /* Dim ONLY the bird so it doesn't fight the white headline. Do NOT
+     lower `opacity` to do this — that fades the whole element (incl. the
+     black bg) and breaks the seamless blue/blue merge, leaving a border.
+     `brightness` multiplies pixels, so black (0) stays black → still
+     screens to the exact page blue → seamless; only the bright bird dims. */
+  filter: brightness(0.62);
   -webkit-mask-image: radial-gradient(ellipse 72% 74% at 50% 48%, #000 48%, transparent 100%);
   mask-image: radial-gradient(ellipse 72% 74% at 50% 48%, #000 48%, transparent 100%);
   transform: translateY(-3vh) scale(var(--vy-cscale, 1)) translateZ(0);
