@@ -1,0 +1,90 @@
+- generic [active] [ref=e1]:
+  - main [ref=e2]:
+    - button "Open menu" [ref=e3] [cursor=pointer]:
+      - img "Vylan logo" [ref=e4]
+      - text: vylan
+    - generic [ref=e6]:
+      - generic [ref=e7]:
+        - heading "You chased every document by hand." [level=1] [ref=e8]:
+          - generic [ref=e9]: You chased every
+          - text: document by hand.
+        - generic [ref=e10]:
+          - generic [ref=e11]: We'll chase them with
+          - generic [ref=e13]:
+            - generic [ref=e14]: AI.
+            - generic [ref=e15]: follow-ups.
+            - generic [ref=e16]: reminders.
+            - generic [ref=e17]: emails.
+            - generic [ref=e18]: vylan
+        - generic [ref=e19]:
+          - button "Book a demo" [ref=e20] [cursor=pointer]
+          - link "Read the manifesto" [ref=e21] [cursor=pointer]:
+            - /url: /en/manifesto
+      - generic [ref=e22]: ⌄
+    - dialog:
+      - button: ×
+      - generic:
+        - paragraph: Vylan (n.) The backlog of client paperwork an accountant chases by hand — every receipt, statement and form standing between a messy inbox and a closed book.
+        - navigation:
+          - link:
+            - /url: "#"
+            - text: HOME
+            - generic: →
+          - link:
+            - /url: /en/manifesto
+            - text: MANIFESTO
+            - generic: →
+          - link:
+            - /url: "#vy-get-access"
+            - text: FOR FIRMS
+            - generic: →
+          - link:
+            - /url: "#vy-get-access"
+            - text: BOOK A DEMO
+            - generic: →
+          - link:
+            - /url: /en/login
+            - text: LOGIN
+            - generic: →
+        - generic:
+          - text: FOLLOW
+          - generic: in
+          - generic: 𝕏
+          - generic: ◎
+    - generic [ref=e24]:
+      - generic [ref=e25]: ✦
+      - heading "Tell us about your firm" [level=2] [ref=e26]
+      - paragraph [ref=e27]: We'll connect your client portal, learn what every client still owes, and start chasing — then verify or reject each document as it lands.
+      - generic [ref=e32]:
+        - textbox "Full name" [ref=e33]
+        - textbox "Email" [ref=e34]
+        - textbox "Firm name" [ref=e35]
+        - button "Next" [ref=e37] [cursor=pointer]
+    - generic [ref=e38]:
+      - generic [ref=e39]:
+        - generic [ref=e40]: 01 / CHASE
+        - heading "Auto follow-up" [level=3] [ref=e41]
+        - paragraph [ref=e42]: Vylan emails and nudges each client for exactly the documents they still owe — politely, on schedule, without you lifting a finger.
+      - generic [ref=e43]:
+        - generic [ref=e44]: 02 / READ
+        - heading "AI document review" [level=3] [ref=e45]
+        - paragraph [ref=e46]: Every upload is read on arrival. Vylan checks it's the right document, the right period, legible, and complete.
+      - generic [ref=e47]:
+        - generic [ref=e48]: 03 / DECIDE
+        - heading "Verify or reject" [level=3] [ref=e49]
+        - paragraph [ref=e50]: Clean documents are verified into the ledger. The wrong ones are auto-rejected with a clear reason — and the client is re-chased.
+    - generic [ref=e51]:
+      - generic [ref=e52]: vylan
+      - generic [ref=e53]:
+        - link "Manifesto" [ref=e54] [cursor=pointer]:
+          - /url: /en/manifesto
+        - link "For firms" [ref=e55] [cursor=pointer]:
+          - /url: "#vy-get-access"
+        - link "Book a demo" [ref=e56] [cursor=pointer]:
+          - /url: "#vy-get-access"
+        - link "Login" [ref=e57] [cursor=pointer]:
+          - /url: /en/login
+      - generic [ref=e58]: © 2026 Vylan, Inc.
+  - button "Open Next.js Dev Tools" [ref=e64] [cursor=pointer]:
+    - img [ref=e65]
+  - alert [ref=e68]
