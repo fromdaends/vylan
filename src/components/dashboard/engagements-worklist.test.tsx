@@ -1,6 +1,12 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
 import type { ReactNode } from "react";
-import { render, fireEvent, within, cleanup } from "@testing-library/react";
+import {
+  render,
+  fireEvent,
+  within,
+  screen,
+  cleanup,
+} from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { EngagementsWorklist, type WorklistRow } from "./engagements-worklist";
 import en from "../../../messages/en.json";
@@ -22,6 +28,23 @@ vi.mock("@/app/actions/engagements", () => ({
   softDeleteEngagementAction: async () => {},
   restoreEngagementAction: async () => {},
 }));
+
+// Radix DropdownMenu (the row "..." menu) leans on a few DOM APIs happy-dom
+// doesn't implement. Plain assignments survive vi.restoreAllMocks.
+beforeAll(() => {
+  Element.prototype.scrollIntoView = () => {};
+  Element.prototype.hasPointerCapture = () => false;
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
+  if (!("ResizeObserver" in globalThis)) {
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      };
+  }
+});
 
 afterEach(cleanup);
 
@@ -222,5 +245,29 @@ describe("EngagementsWorklist", () => {
       .getByRole("link", { name: /Gagnon Custom/i })
       .closest("tr") as HTMLElement;
     expect(within(gagnon).getByText(en.Dashboard.wl_unassigned)).toBeInTheDocument();
+  });
+
+  it("optimistically removes a row the moment Archive is clicked", async () => {
+    const q = renderWorklist();
+    // Smith T1 is visible in the default Recent view.
+    const smithRow = q
+      .getByRole("link", { name: /Smith T1/i })
+      .closest("tr") as HTMLElement;
+    // Open its "..." actions menu (Radix opens on pointer-down).
+    const trigger = within(smithRow).getByRole("button", {
+      name: en.Engagements.menu_actions,
+    });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+    // The menu content is portaled to the body, so query globally.
+    const archiveItem = await screen.findByRole("menuitem", {
+      name: en.Engagements.menu_archive,
+    });
+    fireEvent.click(archiveItem);
+    // The row is gone immediately — before any server revalidation. The mocked
+    // action resolves with no fresh `rows`, so only the optimistic overlay can
+    // remove it.
+    expect(
+      q.queryByRole("link", { name: /Smith T1/i }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -225,7 +225,34 @@ export function WorklistTable({
   const tAttention = useTranslations("Attention");
   const tEng = useTranslations("Engagements");
 
-  if (rows.length === 0) {
+  // Optimistic removal: archiving / deleting a row drops it from the list
+  // instantly. `removedIds` is a client-only overlay — once the server action
+  // revalidates and a fresh `rows` set arrives, that IS the truth, so reset the
+  // overlay (render-time prev-prop pattern, not setState-in-effect). A failed
+  // action reverts just its own id, so the row reappears.
+  const [removedIds, setRemovedIds] = useState<Set<string>>(() => new Set());
+  const [prevRows, setPrevRows] = useState(rows);
+  if (prevRows !== rows) {
+    setPrevRows(rows);
+    if (removedIds.size > 0) setRemovedIds(new Set());
+  }
+  const visibleRows = removedIds.size
+    ? rows.filter((r) => !removedIds.has(r.id))
+    : rows;
+
+  const removeRow = (id: string, action: () => Promise<unknown>) => {
+    setRemovedIds((prev) => new Set(prev).add(id));
+    void action().catch((e) => {
+      console.error("[worklist] lifecycle action failed:", e);
+      setRemovedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    });
+  };
+
+  if (visibleRows.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border/50 px-5 py-12 text-center text-sm text-muted-foreground">
         {emptyText}
@@ -255,11 +282,12 @@ export function WorklistTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((r) => (
+          {visibleRows.map((r) => (
             <WorklistRowView
               key={r.id}
               row={r}
               locale={locale}
+              onOptimisticRemoval={removeRow}
               statusLabel={tStatus(r.status)}
               overdueText={
                 r.reasons.includes("overdue")
@@ -318,6 +346,7 @@ function WorklistRowView({
   pctLabel,
   canDelete,
   countdownText,
+  onOptimisticRemoval,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -330,6 +359,7 @@ function WorklistRowView({
   pctLabel: (pct: number) => string;
   canDelete: boolean;
   countdownText: string | null;
+  onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
 }) {
   const tEng = useTranslations("Engagements");
   // Completed engagements are 100% by definition; we don't fetch their
@@ -358,6 +388,7 @@ function WorklistRowView({
     title: row.title,
     state: lifecycleState,
     canDelete,
+    runOptimistic: onOptimisticRemoval,
   });
 
   return (
