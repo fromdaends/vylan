@@ -38,7 +38,7 @@ const REEL_CLASSES = [
 ];
 const NW = 4; // cycling words; the 5th reel word is the brand finale
 const REEL_END = 0.42; // scroll fraction across which the 4 words cycle
-const HOLD_MS = 2350; // brand shows, holds ~2.3s (founder wanted it to linger), then auto-dissolves
+const HOLD_MS = 1350; // brand shows, holds ~1.35s, then auto-dissolves
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 function scrollToForm() {
