@@ -4,6 +4,7 @@ import { Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { schibsted } from "@/components/vylan-landing/fonts";
 import { BirdVideo } from "@/components/vylan-landing/bird-video";
+import { VylanMenu } from "@/components/vylan-landing/vylan-menu";
 import { LeadForm } from "@/components/vylan-landing/lead-form";
 import "@/styles/vylan-landing.css";
 
@@ -41,21 +42,33 @@ export default async function ManifestoPage({
   const tm = await getTranslations("VylanManifesto");
   const tv = await getTranslations("Vylan");
 
+  // Same menu strings the landing builds (all in the Vylan namespace), so the
+  // shared VylanMenu shows identical options on both pages.
+  const menu = {
+    brand: tv("brand_word"),
+    logoAlt: tv("logo_alt"),
+    menuLabel: tv("menu_label"),
+    closeLabel: tv("menu_close"),
+    defTerm: tv("menu_def_term"),
+    defAbbr: tv("menu_def_abbr"),
+    defText: tv("menu_def_text"),
+    navHome: tv("nav_home"),
+    navManifesto: tv("nav_manifesto"),
+    navForFirms: tv("nav_for_firms"),
+    navBookDemo: tv("nav_book_demo"),
+    navLogin: tv("nav_login"),
+    follow: tv("follow"),
+  };
+
   return (
     <div className={`vy-manifesto ${schibsted.variable}`}>
       <BirdVideo />
 
-      {/* top bar — brand + back both return to the landing */}
+      {/* centred brand + shared slide-down menu (opens on hover) */}
+      <VylanMenu s={menu} />
+
+      {/* back to the landing — kept top-right */}
       <div className="vy-topbar">
-        <Link className="vy-brand" href="/">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="vy-logo"
-            src="/vylan-logo-white.png"
-            alt={tm("logo_alt")}
-          />
-          {tm("brand")}
-        </Link>
         <Link className="vy-back" href="/">
           <span className="vy-arr">←</span> {tm("back")}
         </Link>
