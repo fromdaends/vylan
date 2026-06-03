@@ -65,11 +65,27 @@ export function useEngagementRowMenu(args: {
   title: string;
   state: EngagementLifecycleState;
   canDelete: boolean;
+  // When provided (the worklist table), a lifecycle action removes the row
+  // from the list instantly and runs the server action itself; the menu just
+  // shows the undo toast right away. Without it (e.g. the Needs-attention
+  // rows), the menu fires the action and toasts on completion as before.
+  runOptimistic?: (id: string, action: () => Promise<unknown>) => void;
 }): { items: RowMenuItem[]; dialog: ReactNode } {
-  const { engagementId, title, state, canDelete } = args;
+  const { engagementId, title, state, canDelete, runOptimistic } = args;
   const t = useTranslations("Engagements");
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Optimistic path: drop the row now + toast now, the server catches up.
+  // Fallback path: fire the action, then toast on completion.
+  const fire = (action: () => Promise<unknown>, done: () => void) => {
+    if (runOptimistic) {
+      runOptimistic(engagementId, action);
+      done();
+    } else {
+      void action().then(done);
+    }
+  };
 
   const open: RowMenuItem = {
     key: "open",
@@ -82,39 +98,41 @@ export function useEngagementRowMenu(args: {
     key: "archive",
     label: t("menu_archive"),
     icon: Archive,
-    onSelect: () => {
-      void archiveEngagementAction(idForm(engagementId)).then(() => {
-        toast(t("toast_archived"), {
-          description: title,
-          action: {
-            label: t("toast_undo"),
-            onClick: () => void unarchiveEngagementAction(idForm(engagementId)),
-          },
-        });
-      });
-    },
+    onSelect: () =>
+      fire(
+        () => archiveEngagementAction(idForm(engagementId)),
+        () =>
+          toast(t("toast_archived"), {
+            description: title,
+            action: {
+              label: t("toast_undo"),
+              onClick: () =>
+                void unarchiveEngagementAction(idForm(engagementId)),
+            },
+          }),
+      ),
   };
 
   const unarchive: RowMenuItem = {
     key: "unarchive",
     label: t("menu_unarchive"),
     icon: ArchiveRestore,
-    onSelect: () => {
-      void unarchiveEngagementAction(idForm(engagementId)).then(() => {
-        toast(t("toast_unarchived"), { description: title });
-      });
-    },
+    onSelect: () =>
+      fire(
+        () => unarchiveEngagementAction(idForm(engagementId)),
+        () => toast(t("toast_unarchived"), { description: title }),
+      ),
   };
 
   const restore: RowMenuItem = {
     key: "restore",
     label: t("menu_restore"),
     icon: RotateCcw,
-    onSelect: () => {
-      void restoreEngagementAction(idForm(engagementId)).then(() => {
-        toast(t("toast_restored"), { description: title });
-      });
-    },
+    onSelect: () =>
+      fire(
+        () => restoreEngagementAction(idForm(engagementId)),
+        () => toast(t("toast_restored"), { description: title }),
+      ),
   };
 
   const del: RowMenuItem = {
@@ -138,15 +156,17 @@ export function useEngagementRowMenu(args: {
 
   const confirmDelete = () => {
     setConfirmOpen(false);
-    void softDeleteEngagementAction(idForm(engagementId)).then(() => {
-      toast(t("toast_deleted"), {
-        description: title,
-        action: {
-          label: t("toast_undo"),
-          onClick: () => void restoreEngagementAction(idForm(engagementId)),
-        },
-      });
-    });
+    fire(
+      () => softDeleteEngagementAction(idForm(engagementId)),
+      () =>
+        toast(t("toast_deleted"), {
+          description: title,
+          action: {
+            label: t("toast_undo"),
+            onClick: () => void restoreEngagementAction(idForm(engagementId)),
+          },
+        }),
+    );
   };
 
   const dialog = (
