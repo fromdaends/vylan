@@ -12,12 +12,13 @@ import { EngagementsWorklist, type WorklistRow } from "./engagements-worklist";
 import en from "../../../messages/en.json";
 
 // Stub the locale-aware <Link> (needs next/navigation, absent under vitest)
-// with a plain anchor so we can assert the href each row produces.
+// with a plain anchor; capture router.push so we can assert row-click nav.
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("@/i18n/navigation", () => ({
   Link: ({ href, children }: { href: string; children: ReactNode }) => (
     <a href={href}>{children}</a>
   ),
-  useRouter: () => ({ push: () => {} }),
+  useRouter: () => ({ push }),
 }));
 
 // The row menu imports server actions; stub them so the test doesn't pull in
@@ -46,7 +47,10 @@ beforeAll(() => {
   }
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  push.mockClear();
+});
 
 // A base row with sane defaults; each fixture overrides what it needs.
 function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id" | "title">): WorklistRow {
@@ -269,5 +273,23 @@ describe("EngagementsWorklist", () => {
     expect(
       q.queryByRole("link", { name: /Smith T1/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("clicking anywhere on a row opens that engagement", () => {
+    const q = renderWorklist();
+    const smithRow = q
+      .getByRole("link", { name: /Smith T1/i })
+      .closest("tr") as HTMLElement;
+    // Click the row itself, not the title link or the "..." menu button.
+    fireEvent.click(smithRow);
+    expect(push).toHaveBeenCalledWith("/engagements/a");
+  });
+
+  it("clicking the engagement title navigates via the link, not a second router push", () => {
+    const q = renderWorklist();
+    fireEvent.click(q.getByRole("link", { name: /Smith T1/i }));
+    // The title is a real <a> (the row's onClick bows out for links/buttons),
+    // so the router isn't called a second time.
+    expect(push).not.toHaveBeenCalled();
   });
 });

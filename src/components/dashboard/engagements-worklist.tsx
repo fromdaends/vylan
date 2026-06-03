@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Clock, FileWarning, MoreHorizontal, Search } from "lucide-react";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
@@ -362,6 +362,7 @@ function WorklistRowView({
   onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
 }) {
   const tEng = useTranslations("Engagements");
+  const router = useRouter();
   // Completed engagements are 100% by definition; we don't fetch their
   // request items, so trust the status over the (empty) item counts.
   const pct =
@@ -395,7 +396,20 @@ function WorklistRowView({
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <TableRow>
+          <TableRow
+            className="cursor-pointer"
+            onClick={(e) => {
+              // Whole-row click opens the engagement. Skip when the click
+              // lands on an interactive child (the title link or the "..."
+              // menu button) or while the user is selecting text, so those
+              // keep their own behaviour. Plain JS navigation — not a CSS
+              // stretched-link — so it works in Safari too (cf. #366).
+              const el = e.target as HTMLElement;
+              if (el.closest("a, button")) return;
+              if (window.getSelection()?.toString()) return;
+              router.push(`/engagements/${row.id}`);
+            }}
+          >
             <TableCell className="px-4 py-3 align-top">
               <Link
                 href={`/engagements/${row.id}`}
