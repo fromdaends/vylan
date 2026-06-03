@@ -39,7 +39,12 @@ const REEL_CLASSES = [
 ];
 const NW = 4; // cycling words; the 5th reel word is the brand finale
 const REEL_END = 0.42; // scroll fraction across which the 4 words cycle
-const HOLD_MS = 1000; // brand shows, holds 1s, then auto-dissolves
+// The finale plays as three beats: (1) show the full line "We'll chase them
+// with vylan" and hold it (HOLD_FULL); (2) drop the lead-in so only "vylan"
+// remains, and hold that (HOLD_BRAND); (3) dissolve "vylan" like a normal word.
+// Both holds are tuned for readability and easy to tweak.
+const HOLD_FULL = 1200;
+const HOLD_BRAND = 1000;
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 function scrollToForm() {
@@ -76,8 +81,9 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
     const brand = reelWords[reelWords.length - 1];
     // subPrefix is intentionally NOT faded with the rest of the context: the
     // finale keeps the "We'll chase them with" lead-in visible so the reveal
-    // reads as the full sentence "…with vylan", then dissolves it together
-    // with the brand at the very end (see enterFinale / exitFinale).
+    // reads as the full sentence "…with vylan". The lead-in then drops on its
+    // own (leaving "vylan" alone), and "vylan" dissolves last — a 3-beat
+    // sequence staged in enterFinale; exitFinale restores it on scroll-back.
     const ctxEls = [headlineRef.current, ctaRowRef.current];
 
     const reduceMotion = window.matchMedia(
@@ -190,23 +196,28 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
           brand.classList.add("vy-in");
           void brand.offsetWidth;
           brand.style.opacity = "1";
+          // BEAT 2 — once the full line "We'll chase them with vylan" has held,
+          // drop just the lead-in so only "vylan" remains on screen.
           stageT.push(
             setTimeout(() => {
-              brand.classList.remove(...REEL_CLASSES);
-              void brand.offsetWidth;
-              brand.style.transition = "none";
-              brand.style.opacity = "";
-              brand.style.filter = "";
-              brand.style.transform = "";
-              brand.classList.add("vy-brand-out");
-              // Dissolve the lead-in in step with the brand so the line exits
-              // together instead of leaving "We'll chase them with" hanging.
               if (pf) {
                 pf.style.transition = "opacity .34s ease, filter .34s ease";
                 pf.style.opacity = "0";
                 pf.style.filter = "blur(10px)";
               }
-            }, HOLD_MS),
+              // BEAT 3 — "vylan" then dissolves on its own, like a normal word.
+              stageT.push(
+                setTimeout(() => {
+                  brand.classList.remove(...REEL_CLASSES);
+                  void brand.offsetWidth;
+                  brand.style.transition = "none";
+                  brand.style.opacity = "";
+                  brand.style.filter = "";
+                  brand.style.transform = "";
+                  brand.classList.add("vy-brand-out");
+                }, HOLD_BRAND),
+              );
+            }, HOLD_FULL),
           );
         }, 120),
       );
