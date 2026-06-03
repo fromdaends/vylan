@@ -55,6 +55,8 @@ next-env.d.ts
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+# Playwright MCP server scratch output (console logs + page snapshots)
+.playwright-mcp/
 
 # Python bytecode (from .claude/skills/ tooling scripts)
 __pycache__/
