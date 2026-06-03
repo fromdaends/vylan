@@ -8,7 +8,7 @@
 // other doesn't snap the menu shut.
 
 import { useEffect, useRef, useState } from "react";
-import { Link } from "@/i18n/navigation";
+import { Link, usePathname } from "@/i18n/navigation";
 
 export type VylanMenuStrings = {
   brand: string;
@@ -35,6 +35,7 @@ function scrollToForm() {
 export function VylanMenu({ s }: { s: VylanMenuStrings }) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pathname = usePathname();
 
   const cancelClose = () => {
     if (closeTimer.current) {
@@ -121,7 +122,18 @@ export function VylanMenu({ s }: { s: VylanMenuStrings }) {
             &nbsp;{s.defText}
           </p>
           <nav className="vy-menu-nav">
-            <Link href="/" onClick={closeNow}>
+            <Link
+              href="/"
+              onClick={(e) => {
+                closeNow();
+                // Already on the landing: scroll back to the top (which resets
+                // the scroll-driven hero) instead of a dead same-route nav.
+                if (pathname === "/") {
+                  e.preventDefault();
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+            >
               {s.navHome} <span className="vy-arr">→</span>
             </Link>
             <Link href="/manifesto" onClick={closeNow}>
