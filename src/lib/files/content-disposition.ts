@@ -16,7 +16,6 @@ export function buildContentDisposition(
     filename
       .replace(/[\r\n"\\]/g, "_")
       // Drop non-ASCII for the legacy param; the UTF-8 one below carries truth.
-      // eslint-disable-next-line no-control-regex
       .replace(/[^\x20-\x7E]/g, "_")
       .slice(0, 200) || "file";
   const utf8 = encodeURIComponent(filename);

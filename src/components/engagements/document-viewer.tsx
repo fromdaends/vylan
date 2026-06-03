@@ -5,7 +5,8 @@
 // IMPORTANT: this module imports react-pdf, which pulls in pdf.js — that engine
 // references browser-only globals (DOMMatrix, etc.) at import time and throws in
 // Node. So this file must ONLY ever be loaded through `next/dynamic(..., { ssr:
-// false })`. The consumer (file-preview-row.tsx) does exactly that.
+// false })`. The consumer (file-preview-row.tsx) does exactly that, which also
+// guarantees `document` exists on first render (no SSR pass).
 //
 // Design goals (why this exists): the old preview dropped large PDFs into an
 // `<iframe sandbox="">`, which silently disabled the browser's native PDF
@@ -90,10 +91,15 @@ type ViewerSource = {
 };
 
 function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false);
+  // Lazy-init from the media query (this component is client-only), then only
+  // update from the change event — never synchronously inside the effect body.
+  const [reduced, setReduced] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
     const on = (e: MediaQueryListEvent) => setReduced(e.matches);
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
@@ -252,8 +258,9 @@ export function InlinePdfPreview({
 
 // ---------------------------------------------------------------------------
 // One page slot in the continuous-scroll column. Renders the heavy <Page>
-// canvas only when within the current window; otherwise reserves height so the
-// scrollbar stays accurate and there's no layout jump.
+// canvas only when within the current window; otherwise reserves an estimated
+// height so the scrollbar stays accurate and there's no layout jump. (Tax PDFs
+// have uniform page sizes, so the estimate matches the real height exactly.)
 // ---------------------------------------------------------------------------
 
 function PageSlot({
@@ -262,7 +269,6 @@ function PageSlot({
   scale,
   rotation,
   reservedHeight,
-  onMeasured,
   registerRef,
 }: {
   pageNumber: number;
@@ -270,17 +276,9 @@ function PageSlot({
   scale: number;
   rotation: number;
   reservedHeight: number;
-  onMeasured: (page: number, height: number) => void;
   registerRef: (page: number, el: HTMLDivElement | null) => void;
 }) {
   const t = useTranslations("Engagements");
-  const innerRef = useRef<HTMLDivElement>(null);
-
-  const measure = useCallback(() => {
-    const h = innerRef.current?.offsetHeight;
-    if (h && h > 0) onMeasured(pageNumber, h);
-  }, [pageNumber, onMeasured]);
-
   return (
     <div
       ref={(el) => registerRef(pageNumber, el)}
@@ -289,23 +287,20 @@ function PageSlot({
       style={{ minHeight: active ? undefined : reservedHeight }}
     >
       {active ? (
-        <div ref={innerRef}>
-          <Page
-            pageNumber={pageNumber}
-            scale={scale}
-            rotate={rotation}
-            onRenderSuccess={measure}
-            className="bg-white shadow-md ring-1 ring-black/5"
-            loading={
-              <div
-                className="flex items-center justify-center bg-muted/40"
-                style={{ height: reservedHeight, width: 200 }}
-              >
-                <Loader2 className="size-4 animate-spin text-muted-foreground" />
-              </div>
-            }
-          />
-        </div>
+        <Page
+          pageNumber={pageNumber}
+          scale={scale}
+          rotate={rotation}
+          className="bg-white shadow-md ring-1 ring-black/5"
+          loading={
+            <div
+              className="flex items-center justify-center bg-muted/40"
+              style={{ height: reservedHeight, width: 200 }}
+            >
+              <Loader2 className="size-4 animate-spin text-muted-foreground" />
+            </div>
+          }
+        />
       ) : (
         <div
           className="flex w-full items-center justify-center rounded bg-muted/30"
@@ -369,7 +364,9 @@ function Thumb({
       <span
         className={cn(
           "overflow-hidden rounded ring-1 transition-shadow",
-          current ? "ring-2 ring-primary" : "ring-black/10 group-hover:ring-primary/40",
+          current
+            ? "ring-2 ring-primary"
+            : "ring-black/10 group-hover:ring-primary/40",
         )}
         style={{ width: THUMB_WIDTH }}
       >
@@ -381,14 +378,20 @@ function Thumb({
             renderAnnotationLayer={false}
             loading={
               <div
-                style={{ width: THUMB_WIDTH, height: THUMB_WIDTH * FALLBACK_PAGE_RATIO }}
+                style={{
+                  width: THUMB_WIDTH,
+                  height: THUMB_WIDTH * FALLBACK_PAGE_RATIO,
+                }}
                 className="bg-muted"
               />
             }
           />
         ) : (
           <div
-            style={{ width: THUMB_WIDTH, height: THUMB_WIDTH * FALLBACK_PAGE_RATIO }}
+            style={{
+              width: THUMB_WIDTH,
+              height: THUMB_WIDTH * FALLBACK_PAGE_RATIO,
+            }}
             className="bg-muted"
           />
         )}
@@ -406,7 +409,7 @@ function Thumb({
 }
 
 // ---------------------------------------------------------------------------
-// Image stage (for jpeg/png/webp/heic→jpeg scans) — zoom + rotate + pan.
+// Image stage (for jpeg/png/webp/heic→jpeg scans) — zoom + rotate.
 // ---------------------------------------------------------------------------
 
 function ImageStage({
@@ -453,10 +456,11 @@ export function DocumentViewerModal({
   const t = useTranslations("Engagements");
   const reducedMotion = usePrefersReducedMotion();
 
-  const [mounted, setMounted] = useState(false);
   const [numPages, setNumPages] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const [scale, setScale] = useState(DEFAULT_ZOOM);
+  // `userScale` is the explicit zoom the accountant set; until they touch zoom
+  // we derive the scale from fit-to-width so the page fills the stage.
+  const [userScale, setUserScale] = useState<number | null>(null);
   const [rotation, setRotation] = useState(0);
   const [errored, setErrored] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -468,29 +472,22 @@ export function DocumentViewerModal({
   const railRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
   const slotRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const measured = useRef<Map<number, number>>(new Map());
-  const restoreFocusRef = useRef<HTMLElement | null>(null);
 
   const registerRef = useCallback((page: number, el: HTMLDivElement | null) => {
     if (el) slotRefs.current.set(page, el);
     else slotRefs.current.delete(page);
   }, []);
 
-  const onMeasured = useCallback((page: number, height: number) => {
-    measured.current.set(page, height);
-  }, []);
-
-  // Portal + focus management + body scroll lock.
+  // Focus management + body scroll lock. (No SSR — this is loaded ssr:false.)
   useEffect(() => {
-    setMounted(true);
-    restoreFocusRef.current = document.activeElement as HTMLElement | null;
+    const restore = document.activeElement as HTMLElement | null;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const id = window.setTimeout(() => closeBtnRef.current?.focus(), 0);
     return () => {
       document.body.style.overflow = prevOverflow;
       window.clearTimeout(id);
-      restoreFocusRef.current?.focus?.();
+      restore?.focus?.();
     };
   }, []);
 
@@ -513,6 +510,10 @@ export function DocumentViewerModal({
     return clampZoom(usable / naturalW);
   }, [natural, stageWidth, rotation]);
 
+  // Effective scale: the user's explicit zoom wins; otherwise fit-to-width;
+  // otherwise 100%. Derived during render — no effects, no flicker.
+  const scale = userScale ?? fitWidthScale ?? DEFAULT_ZOOM;
+
   // Estimated CSS height of a page at the current scale/rotation — used to
   // reserve space for not-yet-rendered slots so scrolling stays smooth.
   const estimatedHeight = useMemo(() => {
@@ -522,11 +523,17 @@ export function DocumentViewerModal({
   }, [natural, scale, rotation, stageWidth]);
 
   const onDocumentLoad = useCallback(
-    async (pdf: { numPages: number; getPage: (n: number) => Promise<unknown> }) => {
+    async (pdf: {
+      numPages: number;
+      getPage: (n: number) => Promise<unknown>;
+    }) => {
       setNumPages(pdf.numPages);
       try {
         const page = (await pdf.getPage(1)) as {
-          getViewport: (o: { scale: number }) => { width: number; height: number };
+          getViewport: (o: { scale: number }) => {
+            width: number;
+            height: number;
+          };
         };
         const vp = page.getViewport({ scale: 1 });
         setNatural({ width: vp.width, height: vp.height });
@@ -535,26 +542,6 @@ export function DocumentViewerModal({
       }
     },
     [],
-  );
-
-  // Apply fit-to-width once on first load (and keep "actual size" reachable).
-  const didInitScale = useRef(false);
-  useEffect(() => {
-    if (didInitScale.current) return;
-    if (fitWidthScale != null) {
-      setScale(fitWidthScale);
-      didInitScale.current = true;
-    }
-  }, [fitWidthScale]);
-
-  // Zooming/rotating invalidates measured heights.
-  useEffect(() => {
-    measured.current.clear();
-  }, [scale, rotation]);
-
-  const reservedHeightFor = useCallback(
-    (page: number) => measured.current.get(page) ?? estimatedHeight,
-    [estimatedHeight],
   );
 
   const renderWindow = useMemo(
@@ -638,23 +625,18 @@ export function DocumentViewerModal({
         case "+":
         case "=":
           e.preventDefault();
-          setScale((s) => nextZoom(s, 1));
+          setUserScale(nextZoom(scale, 1));
           break;
         case "-":
           e.preventDefault();
-          setScale((s) => nextZoom(s, -1));
+          setUserScale(nextZoom(scale, -1));
           break;
         default:
           break;
       }
     },
-    [currentPage, numPages, onClose, scrollToPage, source.isImage],
+    [currentPage, numPages, onClose, scale, scrollToPage, source.isImage],
   );
-
-  const [pageInput, setPageInput] = useState("1");
-  useEffect(() => setPageInput(String(currentPage)), [currentPage]);
-
-  if (!mounted) return null;
 
   const zoomLabel = formatZoom(scale);
 
@@ -669,7 +651,10 @@ export function DocumentViewerModal({
       {/* Toolbar */}
       <div className="flex items-center gap-2 border-b border-white/10 bg-neutral-900 px-3 py-2 text-neutral-100">
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="truncate text-sm font-medium" title={source.filename}>
+          <span
+            className="truncate text-sm font-medium"
+            title={source.filename}
+          >
             {source.filename}
           </span>
         </span>
@@ -677,25 +662,28 @@ export function DocumentViewerModal({
         {!source.isImage && numPages > 0 && (
           <span className="hidden items-center gap-1.5 text-xs text-neutral-300 sm:flex">
             <input
+              key={currentPage}
+              defaultValue={currentPage}
               aria-label={t("viewer_go_to_page_field")}
-              value={pageInput}
-              onChange={(e) => setPageInput(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
-                  const p = parsePageInput(pageInput, numPages);
+                  const p = parsePageInput(e.currentTarget.value, numPages);
                   if (p) scrollToPage(p);
-                  else setPageInput(String(currentPage));
+                  else e.currentTarget.value = String(currentPage);
+                  e.currentTarget.blur();
                 }
               }}
-              onBlur={() => {
-                const p = parsePageInput(pageInput, numPages);
+              onBlur={(e) => {
+                const p = parsePageInput(e.currentTarget.value, numPages);
                 if (p) scrollToPage(p);
-                else setPageInput(String(currentPage));
+                else e.currentTarget.value = String(currentPage);
               }}
               inputMode="numeric"
               className="w-12 rounded border border-white/20 bg-neutral-800 px-1.5 py-1 text-center text-xs tabular-nums text-neutral-100 focus:outline-none focus:ring-2 focus:ring-primary"
             />
-            <span className="tabular-nums">{t("viewer_of_n", { total: numPages })}</span>
+            <span className="tabular-nums">
+              {t("viewer_of_n", { total: numPages })}
+            </span>
           </span>
         )}
 
@@ -703,16 +691,13 @@ export function DocumentViewerModal({
         <div className="flex items-center gap-0.5">
           <ToolbarButton
             label={t("viewer_zoom_out")}
-            onClick={() => setScale((s) => nextZoom(s, -1))}
+            onClick={() => setUserScale(nextZoom(scale, -1))}
           >
             <Minus className="size-4" aria-hidden />
           </ToolbarButton>
           <button
             type="button"
-            onClick={() => {
-              if (source.isImage) setScale(DEFAULT_ZOOM);
-              else setScale(fitWidthScale ?? DEFAULT_ZOOM);
-            }}
+            onClick={() => setUserScale(null)}
             className="min-w-[3.25rem] rounded px-1.5 py-1 text-center text-xs tabular-nums text-neutral-200 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             title={t("viewer_fit_width")}
           >
@@ -720,7 +705,7 @@ export function DocumentViewerModal({
           </button>
           <ToolbarButton
             label={t("viewer_zoom_in")}
-            onClick={() => setScale((s) => nextZoom(s, 1))}
+            onClick={() => setUserScale(nextZoom(scale, 1))}
           >
             <Plus className="size-4" aria-hidden />
           </ToolbarButton>
@@ -762,7 +747,11 @@ export function DocumentViewerModal({
           >
             <Download className="size-4" aria-hidden />
           </ToolbarLink>
-          <ToolbarButton ref={closeBtnRef} label={t("viewer_close")} onClick={onClose}>
+          <ToolbarButton
+            ref={closeBtnRef}
+            label={t("viewer_close")}
+            onClick={onClose}
+          >
             <X className="size-4" aria-hidden />
           </ToolbarButton>
         </div>
@@ -825,7 +814,6 @@ export function DocumentViewerModal({
               ref={scrollRef}
               onScroll={handleScroll}
               className="min-h-0 flex-1 overflow-auto bg-neutral-800/40 px-4 py-4"
-              style={{ scrollBehavior: reducedMotion ? "auto" : undefined }}
             >
               <div
                 className="mx-auto flex flex-col items-center"
@@ -838,8 +826,7 @@ export function DocumentViewerModal({
                     active={renderWindow.has(p)}
                     scale={scale}
                     rotation={rotation}
-                    reservedHeight={reservedHeightFor(p)}
-                    onMeasured={onMeasured}
+                    reservedHeight={estimatedHeight}
                     registerRef={registerRef}
                   />
                 ))}
