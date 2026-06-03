@@ -338,6 +338,13 @@ html:has(.vy-manifesto) {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  /* Exact page blue painted directly behind the video. `position: fixed`
+     makes this layer its own stacking context, so the video's
+     `mix-blend-mode: screen` blends against THIS blue (not the page
+     further back). The blue is the CSS token (pixel-exact), so the
+     black video background screens to exactly the page colour — no
+     rectangle/patch, independent of how the video file decodes. */
+  background: var(--vy-blue);
 }
 .vy-figure video {
   width: clamp(440px, 65vw, 1060px);
@@ -346,10 +353,14 @@ html:has(.vy-manifesto) {
   object-fit: contain;
   display: block;
   margin: auto;
-  opacity: 0.7;
-  /* The video's background is encoded as the exact page blue (#1050ED),
-     so it blends seamlessly with no colour seam/border — the radial mask
-     just softens the edges into the page. */
+  opacity: 0.85;
+  /* The video is a white bird on a BLACK background. `screen` blending
+     makes the black contribute nothing, so the page's OWN blue shows
+     through everywhere behind the bird — there is no rectangular patch /
+     colour seam possible, regardless of how the video's background tone
+     decodes. Only the white bird is added. The radial mask softens the
+     bird's edges into the page. */
+  mix-blend-mode: screen;
   -webkit-mask-image: radial-gradient(ellipse 72% 74% at 50% 48%, #000 48%, transparent 100%);
   mask-image: radial-gradient(ellipse 72% 74% at 50% 48%, #000 48%, transparent 100%);
   transform: translateY(-3vh) scale(var(--vy-cscale, 1)) translateZ(0);
