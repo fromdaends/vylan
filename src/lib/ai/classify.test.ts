@@ -21,6 +21,9 @@ describe("parseClassification", () => {
     expect(out).toEqual({
       document_type: "t4",
       confidence: 0.92,
+      reasoning: "",
+      key_identifiers: [],
+      second_guess: null,
       extracted_year: 2024,
       extracted_amount_or_total: 52140,
       looks_correct: true,
@@ -215,5 +218,61 @@ describe("parseClassification", () => {
       issue_summary_en: "y",
     });
     expect(lo?.usability.confidence).toBe(0);
+  });
+
+  it("captures reasoning, key_identifiers, and a second guess when provided", () => {
+    const out = parseClassification({
+      document_type: "t4",
+      confidence: 0.6,
+      reasoning: "title reads 'T4 Statement of Remuneration Paid'",
+      key_identifiers: ["T4", "Statement of Remuneration Paid", "  "],
+      second_guess_type: "t4a",
+      second_guess_confidence: 0.3,
+      extracted_year: 2024,
+      extracted_amount_or_total: null,
+      looks_correct: true,
+      issue_if_any: null,
+    });
+    expect(out?.reasoning).toBe(
+      "title reads 'T4 Statement of Remuneration Paid'",
+    );
+    // blank entries dropped + values trimmed
+    expect(out?.key_identifiers).toEqual([
+      "T4",
+      "Statement of Remuneration Paid",
+    ]);
+    expect(out?.second_guess).toEqual({ document_type: "t4a", confidence: 0.3 });
+  });
+
+  it("drops a second guess that is 'unknown', unrecognized, or missing its confidence", () => {
+    const base = {
+      document_type: "t4",
+      confidence: 0.9,
+      extracted_year: null,
+      extracted_amount_or_total: null,
+      looks_correct: true,
+      issue_if_any: null,
+    };
+    expect(
+      parseClassification({
+        ...base,
+        second_guess_type: "unknown",
+        second_guess_confidence: 0.3,
+      })?.second_guess,
+    ).toBeNull();
+    expect(
+      parseClassification({
+        ...base,
+        second_guess_type: "made_up",
+        second_guess_confidence: 0.3,
+      })?.second_guess,
+    ).toBeNull();
+    expect(
+      parseClassification({
+        ...base,
+        second_guess_type: "t4a",
+        second_guess_confidence: null,
+      })?.second_guess,
+    ).toBeNull();
   });
 });

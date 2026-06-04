@@ -20,6 +20,12 @@ const MODEL = "claude-sonnet-4-6";
 export type ClassificationResult = {
   document_type: DocType | "unknown";
   confidence: number;
+  // Phase 2: the model's own reasoning + the literal identifying text it read
+  // (so the accountant can see WHY), and an honest runner-up type when the
+  // document is genuinely ambiguous — never a coin-flip dressed as certainty.
+  reasoning: string;
+  key_identifiers: string[];
+  second_guess: { document_type: DocType; confidence: number } | null;
   extracted_year: number | null;
   extracted_amount_or_total: number | null;
   looks_correct: boolean;
@@ -61,7 +67,30 @@ const CLASSIFY_TOOL = {
         minimum: 0,
         maximum: 1,
         description:
-          "How confident the classification is. Use <0.5 for unfamiliar or hard-to-read documents.",
+          "Confidence in document_type. Use >0.85 only when the form's title or identifier is clearly legible; 0.5-0.85 when the layout strongly suggests the type but the title isn't fully readable; <0.5 when genuinely unsure (and fill second_guess_type).",
+      },
+      reasoning: {
+        type: "string",
+        description:
+          "One short sentence naming the strongest evidence for document_type — ideally the form title/identifier you actually read (e.g. \"title reads 'T4 Statement of Remuneration Paid'\").",
+      },
+      key_identifiers: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "The exact distinguishing text you READ on the document that pins the type down — e.g. [\"Relevé 1\", \"Revenus d'emploi\"] or [\"T4\", \"Statement of Remuneration Paid\", \"Box 14\"]. Empty array if no identifying text is legible.",
+      },
+      second_guess_type: {
+        type: ["string", "null"],
+        description:
+          "When you are torn between two types, the SECOND most likely doc-type code from the reference list (e.g. 't4a' when you picked 't4'). Null when you are confident.",
+      },
+      second_guess_confidence: {
+        type: ["number", "null"],
+        minimum: 0,
+        maximum: 1,
+        description:
+          "Confidence (0-1) in second_guess_type, or null when there is no second guess.",
       },
       extracted_year: {
         type: ["integer", "null"],
@@ -121,6 +150,10 @@ const CLASSIFY_TOOL = {
     required: [
       "document_type",
       "confidence",
+      "reasoning",
+      "key_identifiers",
+      "second_guess_type",
+      "second_guess_confidence",
       "extracted_year",
       "extracted_amount_or_total",
       "looks_correct",
@@ -143,6 +176,26 @@ The accountant requested a "${expected}" document from the client. The client ju
 Canadian tax document reference (use these exact identifiers):
 ${DOC_TYPES.map((c) => `- ${c} = ${DOC_TYPE_LABELS[c].ai}`).join("\n")}
 - unknown = can't tell
+
+Identify the document by READING its title and form identifier first, not by
+guessing from layout. Watch these commonly-confused pairs:
+- t4 vs t4a: "Statement of Remuneration Paid" (employment, box 14) = t4;
+  "Statement of Pension, Retirement, Annuity, and Other Income" = t4a.
+- t4 vs rl1 (and t5 vs rl3, t3 vs rl16, …): a CRA federal slip = the T-slip; a
+  Revenu Québec slip headed "Relevé 1 / Revenus d'emploi…" = the RL slip. The
+  relevés (RL-#) are provincial; the T-slips are federal.
+- t4a_p (RPC/RRQ benefits) vs t4a_oas (Old Age Security) vs t4a (general).
+- rrsp (a contribution RECEIPT — money paid IN) vs t4rsp (RRSP income — money
+  taken OUT).
+- bank_statement vs credit_card_statement: a credit-card statement shows a
+  credit limit, a minimum payment, and a card number; a bank statement shows an
+  account balance with deposits and withdrawals.
+- Read the TAX YEAR printed on the document carefully — a 2023 slip is not a
+  2024 slip.
+
+If two types are genuinely plausible, pick the more likely one but LOWER the
+confidence and fill second_guess_type / second_guess_confidence. Never present a
+coin-flip as a confident answer. Use "unknown" only when you truly cannot tell.
 
 After identifying the document type, also assess whether this document is
 USABLE for an accountant. A document is usable if all key information is
@@ -194,6 +247,9 @@ export async function classifyDocument(opts: {
     return {
       document_type: "unknown",
       confidence: 0,
+      reasoning: "",
+      key_identifiers: [],
+      second_guess: null,
       extracted_year: null,
       extracted_amount_or_total: null,
       looks_correct: false,
@@ -239,7 +295,7 @@ export async function classifyDocument(opts: {
 
   const resp = await c.messages.create({
     model: MODEL,
-    max_tokens: 512,
+    max_tokens: 900,
     system: buildSystemPrompt(opts.expectedDocType),
     tools: [CLASSIFY_TOOL],
     tool_choice: { type: "tool", name: "classify_document" },
@@ -267,6 +323,13 @@ export function parseClassification(
       ? (doc as DocType)
       : "unknown",
     confidence: Math.max(0, Math.min(1, conf)),
+    reasoning: typeof raw.reasoning === "string" ? raw.reasoning.trim() : "",
+    key_identifiers: Array.isArray(raw.key_identifiers)
+      ? raw.key_identifiers
+          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+          .map((x) => x.trim())
+      : [],
+    second_guess: parseSecondGuess(raw),
     extracted_year:
       typeof raw.extracted_year === "number" ? raw.extracted_year : null,
     extracted_amount_or_total:
@@ -280,6 +343,19 @@ export function parseClassification(
         : null,
     usability: parseUsability(raw),
   };
+}
+
+// The model's runner-up type when it's torn. Kept only when second_guess_type
+// is a REAL doc code (not "unknown" or junk) AND a numeric confidence came
+// back — so a half-filled guess never surfaces as a phantom alternative.
+function parseSecondGuess(
+  raw: Record<string, unknown>,
+): { document_type: DocType; confidence: number } | null {
+  const t = raw.second_guess_type;
+  const c = raw.second_guess_confidence;
+  if (typeof t !== "string" || typeof c !== "number") return null;
+  if (!(KNOWN_DOC_TYPES as string[]).includes(t)) return null;
+  return { document_type: t as DocType, confidence: Math.max(0, Math.min(1, c)) };
 }
 
 // Tolerant parser for the usability sub-object. Anything malformed

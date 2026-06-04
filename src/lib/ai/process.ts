@@ -106,6 +106,11 @@ export async function processClassifyJob(
         extracted_amount_or_total: result.extracted_amount_or_total,
         looks_correct: result.looks_correct,
         issue_if_any: result.issue_if_any,
+        // Phase 2: classification transparency — why, the identifying text
+        // read, and an honest runner-up when the type was ambiguous.
+        reasoning: result.reasoning,
+        key_identifiers: result.key_identifiers,
+        second_guess: result.second_guess,
       },
       ai_usability: result.usability,
     })
