@@ -111,6 +111,14 @@ export async function processClassifyJob(
         reasoning: result.reasoning,
         key_identifiers: result.key_identifiers,
         second_guess: result.second_guess,
+        // Phase 3: key fields read off the document (power Phase 4 matching).
+        document_date: result.document_date,
+        issuer_name: result.issuer_name,
+        party_name: result.party_name,
+        account_or_period: result.account_or_period,
+        form_identifier: result.form_identifier,
+        amounts: result.amounts,
+        fields_confidence: result.fields_confidence,
       },
       ai_usability: result.usability,
     })

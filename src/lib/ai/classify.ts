@@ -28,6 +28,15 @@ export type ClassificationResult = {
   second_guess: { document_type: DocType; confidence: number } | null;
   extracted_year: number | null;
   extracted_amount_or_total: number | null;
+  // Phase 3: key fields read off the document (null when not legible). These
+  // power the expected-vs-actual matching in Phase 4.
+  document_date: string | null;
+  issuer_name: string | null;
+  party_name: string | null;
+  account_or_period: string | null;
+  form_identifier: string | null;
+  amounts: { label: string; value: number }[];
+  fields_confidence: number;
   looks_correct: boolean;
   issue_if_any: string | null;
   usability: UsabilityVerdict;
@@ -102,6 +111,55 @@ const CLASSIFY_TOOL = {
         description:
           "The headline dollar amount on the document if there is one (e.g. T4 box 14 'Employment income'), in CAD. Null if there's no obvious headline figure.",
       },
+      document_date: {
+        type: ["string", "null"],
+        description:
+          "The date printed on the document (issue or statement date) as an ISO date (YYYY-MM-DD) when possible, else as printed. Null if none is visible.",
+      },
+      issuer_name: {
+        type: ["string", "null"],
+        description:
+          "Who issued the document — the employer/payer on a slip, the financial institution on a statement, or 'CRA' / 'Revenu Québec' on an assessment. Null if not visible.",
+      },
+      party_name: {
+        type: ["string", "null"],
+        description:
+          "The person or business the document is ABOUT — the named taxpayer, employee, or account holder. Used later to confirm the document belongs to the right client. Null if not visible.",
+      },
+      account_or_period: {
+        type: ["string", "null"],
+        description:
+          "For statements, the statement period (e.g. 'Jan 1 - Jan 31, 2024'); for slips, an account/policy reference if shown. Null if none.",
+      },
+      form_identifier: {
+        type: ["string", "null"],
+        description:
+          "The form code/number printed on the document (e.g. 'T4', 'RL-1', 'FPZ-500'). Null if none.",
+      },
+      amounts: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            label: {
+              type: "string",
+              description:
+                "What the figure is (e.g. 'Box 14 employment income', 'Statement closing balance').",
+            },
+            value: { type: "number", description: "The amount in CAD." },
+          },
+          required: ["label", "value"],
+        },
+        description:
+          "The 1-5 most important labelled dollar amounts on the document. Empty array if none are legible.",
+      },
+      fields_confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+        description:
+          "How confident you are in the EXTRACTED FIELD VALUES above (separate from document_type confidence). Use <0.5 when the values were hard to read.",
+      },
       looks_correct: {
         type: "boolean",
         description:
@@ -156,6 +214,13 @@ const CLASSIFY_TOOL = {
       "second_guess_confidence",
       "extracted_year",
       "extracted_amount_or_total",
+      "document_date",
+      "issuer_name",
+      "party_name",
+      "account_or_period",
+      "form_identifier",
+      "amounts",
+      "fields_confidence",
       "looks_correct",
       "issue_if_any",
       "usable",
@@ -196,6 +261,19 @@ guessing from layout. Watch these commonly-confused pairs:
 If two types are genuinely plausible, pick the more likely one but LOWER the
 confidence and fill second_guess_type / second_guess_confidence. Never present a
 coin-flip as a confident answer. Use "unknown" only when you truly cannot tell.
+
+Also EXTRACT the document's key fields, reading them straight off the page —
+null anything you cannot read clearly:
+- document_date — the date printed on it (issue or statement date).
+- issuer_name — who issued it (employer/payer on a slip, the bank on a
+  statement, "CRA" / "Revenu Québec" on an assessment).
+- party_name — the person or business the document is ABOUT (the named
+  taxpayer, employee, or account holder).
+- account_or_period — the statement period for statements, or an account
+  reference.
+- form_identifier — the form code printed on it (e.g. "T4", "RL-1").
+- amounts — the 1-5 most important labelled dollar figures.
+Set fields_confidence from how legible those values were.
 
 After identifying the document type, also assess whether this document is
 USABLE for an accountant. A document is usable if all key information is
@@ -252,6 +330,13 @@ export async function classifyDocument(opts: {
       second_guess: null,
       extracted_year: null,
       extracted_amount_or_total: null,
+      document_date: null,
+      issuer_name: null,
+      party_name: null,
+      account_or_period: null,
+      form_identifier: null,
+      amounts: [],
+      fields_confidence: 0,
       looks_correct: false,
       issue_if_any: "Unsupported file format for AI classification.",
       usability: USABLE_BY_DEFAULT,
@@ -295,7 +380,7 @@ export async function classifyDocument(opts: {
 
   const resp = await c.messages.create({
     model: MODEL,
-    max_tokens: 900,
+    max_tokens: 1200,
     system: buildSystemPrompt(opts.expectedDocType),
     tools: [CLASSIFY_TOOL],
     tool_choice: { type: "tool", name: "classify_document" },
@@ -336,6 +421,16 @@ export function parseClassification(
       typeof raw.extracted_amount_or_total === "number"
         ? raw.extracted_amount_or_total
         : null,
+    document_date: str(raw.document_date),
+    issuer_name: str(raw.issuer_name),
+    party_name: str(raw.party_name),
+    account_or_period: str(raw.account_or_period),
+    form_identifier: str(raw.form_identifier),
+    amounts: parseAmounts(raw.amounts),
+    fields_confidence:
+      typeof raw.fields_confidence === "number"
+        ? Math.max(0, Math.min(1, raw.fields_confidence))
+        : 0,
     looks_correct: raw.looks_correct === true,
     issue_if_any:
       typeof raw.issue_if_any === "string" && raw.issue_if_any.trim() !== ""
@@ -343,6 +438,29 @@ export function parseClassification(
         : null,
     usability: parseUsability(raw),
   };
+}
+
+// Trim to a non-empty string, or null. Keeps the extracted-field parsing terse.
+function str(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}
+
+// Keep only well-formed { label, value } amount rows (the model can return
+// partial entries), trim labels, and cap at 5 so a runaway list can't bloat
+// the stored JSON.
+function parseAmounts(v: unknown): { label: string; value: number }[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter(
+      (x): x is { label: string; value: number } =>
+        !!x &&
+        typeof x === "object" &&
+        typeof (x as Record<string, unknown>).label === "string" &&
+        typeof (x as Record<string, unknown>).value === "number",
+    )
+    .map((x) => ({ label: x.label.trim(), value: x.value }))
+    .filter((x) => x.label !== "")
+    .slice(0, 5);
 }
 
 // The model's runner-up type when it's torn. Kept only when second_guess_type

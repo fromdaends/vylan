@@ -26,6 +26,13 @@ describe("parseClassification", () => {
       second_guess: null,
       extracted_year: 2024,
       extracted_amount_or_total: 52140,
+      document_date: null,
+      issuer_name: null,
+      party_name: null,
+      account_or_period: null,
+      form_identifier: null,
+      amounts: [],
+      fields_confidence: 0,
       looks_correct: true,
       issue_if_any: null,
       usability: {
@@ -274,5 +281,46 @@ describe("parseClassification", () => {
         second_guess_confidence: null,
       })?.second_guess,
     ).toBeNull();
+  });
+
+  it("extracts and normalizes the Phase 3 key fields + caps amounts at 5", () => {
+    const out = parseClassification({
+      document_type: "t4",
+      confidence: 0.95,
+      extracted_year: 2024,
+      extracted_amount_or_total: 52140,
+      document_date: "2025-02-28",
+      issuer_name: "  Acme Corp  ",
+      party_name: "Jane Doe",
+      account_or_period: "",
+      form_identifier: "T4",
+      fields_confidence: 0.8,
+      amounts: [
+        { label: " Box 14 ", value: 52140 },
+        { label: "Box 22", value: 8200 },
+        { label: "no value" },
+        { label: 99, value: 1 },
+        { label: "a", value: 1 },
+        { label: "b", value: 2 },
+        { label: "c", value: 3 },
+        { label: "d", value: 4 },
+      ],
+      looks_correct: true,
+      issue_if_any: null,
+    });
+    expect(out?.document_date).toBe("2025-02-28");
+    expect(out?.issuer_name).toBe("Acme Corp");
+    expect(out?.party_name).toBe("Jane Doe");
+    expect(out?.account_or_period).toBeNull(); // empty string -> null
+    expect(out?.form_identifier).toBe("T4");
+    expect(out?.fields_confidence).toBe(0.8);
+    // malformed rows dropped, labels trimmed, capped at 5
+    expect(out?.amounts).toEqual([
+      { label: "Box 14", value: 52140 },
+      { label: "Box 22", value: 8200 },
+      { label: "a", value: 1 },
+      { label: "b", value: 2 },
+      { label: "c", value: 3 },
+    ]);
   });
 });
