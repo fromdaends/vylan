@@ -15,8 +15,23 @@ import {
   isUsabilityIssue,
   type UsabilityVerdict,
 } from "./usability";
+import { classifyWithOpenAI, isOpenAiConfigured } from "./openai-classify";
 
 const MODEL = "claude-sonnet-4-6";
+
+// Which AI runs the classifier. Defaults to Anthropic (Claude); set
+// AI_CLASSIFIER_PROVIDER=openai to use GPT-5 Mini instead. Read per-call so the
+// provider can be flipped (and reverted) via env with no code change.
+function getProvider(): "anthropic" | "openai" {
+  return process.env.AI_CLASSIFIER_PROVIDER?.toLowerCase() === "openai"
+    ? "openai"
+    : "anthropic";
+}
+
+// The OpenAI model id, overridable via env (e.g. "gpt-5.4-mini").
+function getOpenAiModel(): string {
+  return process.env.OPENAI_MODEL?.trim() || "gpt-5-mini";
+}
 
 // Anthropic's vision sweet spot — images past this are downscaled by the API
 // anyway, so capping here is accuracy-neutral while cutting the upload payload
@@ -89,8 +104,14 @@ function client(): Anthropic | null {
   return _client;
 }
 
-export function isAiConfigured(): boolean {
+function isAnthropicConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
+}
+
+export function isAiConfigured(): boolean {
+  return getProvider() === "openai"
+    ? isOpenAiConfigured()
+    : isAnthropicConfigured();
 }
 
 // Every doc type Vylan recognizes — derived from the single source of truth in
@@ -360,12 +381,6 @@ export async function classifyDocument(opts: {
   fileBytes: Buffer;
   mimeType: string;
 }): Promise<ClassificationResult | null> {
-  const c = client();
-  if (!c) {
-    console.warn("[ai/classify] ANTHROPIC_API_KEY not set — skipping");
-    return null;
-  }
-
   const isPdf = opts.mimeType === "application/pdf";
   const isImage = opts.mimeType.startsWith("image/");
   if (!isPdf && !isImage) {
@@ -390,69 +405,92 @@ export async function classifyDocument(opts: {
     };
   }
 
+  const provider = getProvider();
+  if (provider === "openai" ? !isOpenAiConfigured() : !isAnthropicConfigured()) {
+    console.warn(`[ai/classify] no API key for provider=${provider} — skipping`);
+    return null;
+  }
+
   // Downscale oversized images before the model (accuracy-neutral; cuts cost +
-  // keeps large photos under Anthropic's limits). PDFs pass through untouched.
+  // keeps large photos under the vision model's limits). PDFs pass through
+  // untouched — both providers read PDFs natively.
   const prepared = isImage
     ? await normalizeImageForAi(opts.fileBytes, opts.mimeType)
     : { bytes: opts.fileBytes, mimeType: opts.mimeType };
   const base64 = prepared.bytes.toString("base64");
+  const systemPrompt = buildSystemPrompt(opts.expectedDocType);
+  const userText = `The accountant requested a "${opts.expectedDocType}". Classify this document.`;
 
-  type ContentBlock =
-    | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }
-    | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
-    | { type: "text"; text: string };
+  // Both providers return the same raw object shape; parseClassification (with
+  // all its tolerant defaults) is the single source of truth for turning it
+  // into a ClassificationResult.
+  let raw: Record<string, unknown> | null = null;
 
-  const content: ContentBlock[] = isPdf
-    ? [
-        {
-          type: "document",
-          source: {
-            type: "base64",
-            media_type: "application/pdf",
-            data: base64,
+  if (provider === "openai") {
+    const model = getOpenAiModel();
+    const { raw: r, usage } = await classifyWithOpenAI({
+      model,
+      systemPrompt,
+      userText,
+      schema: CLASSIFY_TOOL.input_schema,
+      isPdf,
+      base64,
+      mediaType: prepared.mimeType,
+    });
+    raw = r;
+    console.info(
+      `[ai/classify] provider=openai model=${model} in_tokens=${usage?.input ?? "?"} out_tokens=${usage?.output ?? "?"}${usage?.reasoning != null ? ` reasoning_tokens=${usage.reasoning}` : ""}`,
+    );
+  } else {
+    const c = client();
+    if (!c) return null;
+
+    type ContentBlock =
+      | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }
+      | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+      | { type: "text"; text: string };
+
+    const content: ContentBlock[] = isPdf
+      ? [
+          {
+            type: "document",
+            source: { type: "base64", media_type: "application/pdf", data: base64 },
           },
-        },
-        {
-          type: "text",
-          text: `The accountant requested a "${opts.expectedDocType}". Classify this document.`,
-        },
-      ]
-    : [
-        {
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: prepared.mimeType,
-            data: base64,
+          { type: "text", text: userText },
+        ]
+      : [
+          {
+            type: "image",
+            source: { type: "base64", media_type: prepared.mimeType, data: base64 },
           },
-        },
-        {
-          type: "text",
-          text: `The accountant requested a "${opts.expectedDocType}". Classify this document.`,
-        },
-      ];
+          { type: "text", text: userText },
+        ];
 
-  const resp = await c.messages.create({
-    model: MODEL,
-    max_tokens: 1200,
-    system: buildSystemPrompt(opts.expectedDocType),
-    tools: [CLASSIFY_TOOL],
-    tool_choice: { type: "tool", name: "classify_document" },
-    // sdk types are strict but the SDK accepts this content shape at runtime
-    messages: [{ role: "user", content: content as never }],
-  });
+    const resp = await c.messages.create({
+      model: MODEL,
+      max_tokens: 1200,
+      system: systemPrompt,
+      tools: [CLASSIFY_TOOL],
+      tool_choice: { type: "tool", name: "classify_document" },
+      // sdk types are strict but the SDK accepts this content shape at runtime
+      messages: [{ role: "user", content: content as never }],
+    });
 
-  // Cost/latency visibility — token counts per classification (Phase 7).
-  console.info(
-    `[ai/classify] model=${MODEL} in_tokens=${resp.usage?.input_tokens ?? "?"} out_tokens=${resp.usage?.output_tokens ?? "?"}`,
-  );
+    // Cost/latency visibility — token counts per classification (Phase 7).
+    console.info(
+      `[ai/classify] provider=anthropic model=${MODEL} in_tokens=${resp.usage?.input_tokens ?? "?"} out_tokens=${resp.usage?.output_tokens ?? "?"}`,
+    );
 
-  for (const block of resp.content) {
-    if (block.type === "tool_use" && block.name === "classify_document") {
-      return parseClassification(block.input as Record<string, unknown>);
+    for (const block of resp.content) {
+      if (block.type === "tool_use" && block.name === "classify_document") {
+        raw = block.input as Record<string, unknown>;
+        break;
+      }
     }
   }
-  return null;
+
+  if (!raw) return null;
+  return parseClassification(raw);
 }
 
 export function parseClassification(
