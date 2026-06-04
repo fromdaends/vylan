@@ -43,15 +43,18 @@ export function toStrictSchema(node: unknown): unknown {
   return node;
 }
 
-// Reasoning models bill "thinking" tokens as output. Keep effort low for a
-// classification task — tunable via env without a code change.
+// Reasoning models bill "thinking" tokens as output, and on dense real
+// documents that "thinking" is the dominant cost. The eval scored a perfect
+// 8/8 + 3/3 even at "minimal", so default there to keep cost down; bump via
+// OPENAI_REASONING_EFFORT (low|medium|high) without a code change if a messier
+// real-world doc ever needs more deliberation.
 const REASONING_EFFORT =
   (process.env.OPENAI_REASONING_EFFORT?.trim() as
     | "minimal"
     | "low"
     | "medium"
     | "high"
-    | undefined) || "low";
+    | undefined) || "minimal";
 
 export async function classifyWithOpenAI(opts: {
   model: string;
