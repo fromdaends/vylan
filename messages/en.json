@@ -928,6 +928,10 @@
     "issue_glare_or_shadow": "Glare or shadow",
     "issue_wrong_document_type": "Wrong document type",
     "issue_corrupt_or_blank": "Blank or corrupted",
+    "issue_wrong_orientation": "Wrong orientation",
+    "issue_password_protected": "Password-protected",
+    "issue_missing_pages": "Pages missing",
+    "issue_screenshot_of_screen": "Photo of a screen",
     "issue_other": "Other quality issue"
   },
   "Activity": {
@@ -964,6 +968,10 @@
     "issue_glare_or_shadow": "glare or shadow",
     "issue_wrong_document_type": "wrong document type",
     "issue_corrupt_or_blank": "file was corrupt or blank",
+    "issue_wrong_orientation": "wrong orientation",
+    "issue_password_protected": "password-protected",
+    "issue_missing_pages": "pages missing",
+    "issue_screenshot_of_screen": "photo of a screen",
     "issue_other": "quality issue",
     "tone_gentle": "Gentle",
     "tone_firm": "Firm",

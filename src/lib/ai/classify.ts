@@ -5,6 +5,7 @@
 // accountant always has the final word — AI is advisory only.
 
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import type { DocType } from "@/lib/db/templates";
 import { DOC_TYPES, DOC_TYPE_LABELS } from "@/lib/doc-types";
@@ -16,6 +17,43 @@ import {
 } from "./usability";
 
 const MODEL = "claude-sonnet-4-6";
+
+// Anthropic's vision sweet spot — images past this are downscaled by the API
+// anyway, so capping here is accuracy-neutral while cutting the upload payload
+// and token cost (a phone photo is often 3000-4000px on the long edge).
+const MAX_IMAGE_EDGE = 1568;
+
+// Downscale an oversized image (and honour EXIF rotation) before it goes to the
+// model. Fail-soft: ANY error falls back to the original bytes so analysis
+// never breaks on a quirky file. PDFs are never passed here.
+async function normalizeImageForAi(
+  bytes: Buffer,
+  mimeType: string,
+): Promise<{ bytes: Buffer; mimeType: string }> {
+  try {
+    const img = sharp(bytes, { failOn: "none" });
+    const meta = await img.metadata();
+    const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
+    // Unknown dimensions (0) or already small → leave it untouched.
+    if (longest === 0 || longest <= MAX_IMAGE_EDGE) {
+      return { bytes, mimeType };
+    }
+    const out = await img
+      .rotate()
+      .resize({
+        width: MAX_IMAGE_EDGE,
+        height: MAX_IMAGE_EDGE,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+    return { bytes: out, mimeType: "image/jpeg" };
+  } catch (e) {
+    console.warn("[ai/classify] image normalize failed, using original:", e);
+    return { bytes, mimeType };
+  }
+}
 
 export type ClassificationResult = {
   document_type: DocType | "unknown";
@@ -291,6 +329,16 @@ clearly readable. Mark it unusable if ANY of the following are true:
   (e.g., a screenshot of a payment app where a T4 was requested)
 - corrupt_or_blank: the file appears blank, corrupted, or contains no
   meaningful document content
+- wrong_orientation: the page is sideways or upside-down AND that makes the
+  text hard to read. A readable rotated page is USABLE (the accountant can
+  rotate it) — flag this only when orientation genuinely impairs reading.
+- password_protected: the file is locked / encrypted and its contents can't
+  be read; an unlocked copy is needed.
+- missing_pages: the document clearly has more pages than were provided (e.g.
+  "Page 1 of 3" with only one page, or a statement cut off mid-table).
+- screenshot_of_screen: this is a PHOTO of a monitor or phone screen (visible
+  bezel, glare, or moiré) rather than the document itself, and that impairs
+  reading. A clean digital screenshot of the actual document is USABLE.
 - other: a usability issue that doesn't match the categories above
 
 If the document is borderline (mildly blurry but readable), prefer USABLE.
@@ -318,7 +366,6 @@ export async function classifyDocument(opts: {
     return null;
   }
 
-  const base64 = opts.fileBytes.toString("base64");
   const isPdf = opts.mimeType === "application/pdf";
   const isImage = opts.mimeType.startsWith("image/");
   if (!isPdf && !isImage) {
@@ -342,6 +389,13 @@ export async function classifyDocument(opts: {
       usability: USABLE_BY_DEFAULT,
     };
   }
+
+  // Downscale oversized images before the model (accuracy-neutral; cuts cost +
+  // keeps large photos under Anthropic's limits). PDFs pass through untouched.
+  const prepared = isImage
+    ? await normalizeImageForAi(opts.fileBytes, opts.mimeType)
+    : { bytes: opts.fileBytes, mimeType: opts.mimeType };
+  const base64 = prepared.bytes.toString("base64");
 
   type ContentBlock =
     | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }
@@ -368,7 +422,7 @@ export async function classifyDocument(opts: {
           type: "image",
           source: {
             type: "base64",
-            media_type: opts.mimeType,
+            media_type: prepared.mimeType,
             data: base64,
           },
         },

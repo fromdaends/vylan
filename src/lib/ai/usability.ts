@@ -11,6 +11,10 @@ export const USABILITY_ISSUES = [
   "glare_or_shadow",
   "wrong_document_type",
   "corrupt_or_blank",
+  "wrong_orientation",
+  "password_protected",
+  "missing_pages",
+  "screenshot_of_screen",
   "other",
 ] as const;
 
