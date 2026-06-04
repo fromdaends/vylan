@@ -903,7 +903,16 @@
     "advisory": "Suggestion only. You make the call.",
     "review_heading": "Please review",
     "year_mismatch": "Expected {expected}, but this reads {actual}",
-    "identity_mismatch": "Name on the document ({actual}) doesn't match the client ({expected})"
+    "identity_mismatch": "Name on the document ({actual}) doesn't match the client ({expected})",
+    "detail_why": "Why",
+    "detail_read": "Read",
+    "detail_name": "Name",
+    "detail_issuer": "Issuer",
+    "detail_year": "Year",
+    "detail_period": "Period",
+    "detail_form": "Form",
+    "detail_amounts": "Amounts",
+    "detail_also_possible": "Also possible"
   },
   "Usability": {
     "label": "AI quality",

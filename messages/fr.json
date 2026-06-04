@@ -903,7 +903,16 @@
     "advisory": "Suggestion automatique. Vous gardez le dernier mot.",
     "review_heading": "À vérifier",
     "year_mismatch": "{expected} attendu, mais ce document indique {actual}",
-    "identity_mismatch": "Le nom sur le document ({actual}) ne correspond pas au client ({expected})"
+    "identity_mismatch": "Le nom sur le document ({actual}) ne correspond pas au client ({expected})",
+    "detail_why": "Pourquoi",
+    "detail_read": "Lu",
+    "detail_name": "Nom",
+    "detail_issuer": "Émetteur",
+    "detail_year": "Année",
+    "detail_period": "Période",
+    "detail_form": "Formulaire",
+    "detail_amounts": "Montants",
+    "detail_also_possible": "Aussi possible"
   },
   "Usability": {
     "label": "Qualité IA",

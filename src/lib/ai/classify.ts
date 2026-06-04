@@ -442,6 +442,11 @@ export async function classifyDocument(opts: {
     messages: [{ role: "user", content: content as never }],
   });
 
+  // Cost/latency visibility — token counts per classification (Phase 7).
+  console.info(
+    `[ai/classify] model=${MODEL} in_tokens=${resp.usage?.input_tokens ?? "?"} out_tokens=${resp.usage?.output_tokens ?? "?"}`,
+  );
+
   for (const block of resp.content) {
     if (block.type === "tool_use" && block.name === "classify_document") {
       return parseClassification(block.input as Record<string, unknown>);
