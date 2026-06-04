@@ -900,7 +900,19 @@
     "likely": "Looks like {type}",
     "mismatch": "Expected {expected}, got {detected}",
     "not_a_document": "Not a {expected}",
-    "advisory": "Suggestion only. You make the call."
+    "advisory": "Suggestion only. You make the call.",
+    "review_heading": "Please review",
+    "year_mismatch": "Expected {expected}, but this reads {actual}",
+    "identity_mismatch": "Name on the document ({actual}) doesn't match the client ({expected})",
+    "detail_why": "Why",
+    "detail_read": "Read",
+    "detail_name": "Name",
+    "detail_issuer": "Issuer",
+    "detail_year": "Year",
+    "detail_period": "Period",
+    "detail_form": "Form",
+    "detail_amounts": "Amounts",
+    "detail_also_possible": "Also possible"
   },
   "Usability": {
     "label": "AI quality",
@@ -925,6 +937,10 @@
     "issue_glare_or_shadow": "Glare or shadow",
     "issue_wrong_document_type": "Wrong document type",
     "issue_corrupt_or_blank": "Blank or corrupted",
+    "issue_wrong_orientation": "Wrong orientation",
+    "issue_password_protected": "Password-protected",
+    "issue_missing_pages": "Pages missing",
+    "issue_screenshot_of_screen": "Photo of a screen",
     "issue_other": "Other quality issue"
   },
   "Activity": {
@@ -961,6 +977,10 @@
     "issue_glare_or_shadow": "glare or shadow",
     "issue_wrong_document_type": "wrong document type",
     "issue_corrupt_or_blank": "file was corrupt or blank",
+    "issue_wrong_orientation": "wrong orientation",
+    "issue_password_protected": "password-protected",
+    "issue_missing_pages": "pages missing",
+    "issue_screenshot_of_screen": "photo of a screen",
     "issue_other": "quality issue",
     "tone_gentle": "Gentle",
     "tone_firm": "Firm",

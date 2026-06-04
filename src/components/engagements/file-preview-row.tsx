@@ -50,6 +50,8 @@ const RECHECK_TIMEOUT_MS = 12_000;
 export function FilePreviewRow({
   file,
   expectedDocType,
+  expectedYear,
+  clientName,
   rejectionCount,
 }: {
   file: UploadedFile;
@@ -59,6 +61,9 @@ export function FilePreviewRow({
   // rendering — so we accept it for compatibility but no longer read it.
   url?: string;
   expectedDocType: DocType;
+  // Phase 4 matching context (optional — the comparison runs only when known).
+  expectedYear?: number | null;
+  clientName?: string | null;
   rejectionCount: number;
 }) {
   const t = useTranslations("Engagements");
@@ -200,7 +205,12 @@ export function FilePreviewRow({
           aiRejected={file.ai_rejected}
           rejectionCount={rejectionCount}
         />
-        <AiBadge file={file} expectedDocType={expectedDocType} />
+        <AiBadge
+          file={file}
+          expectedDocType={expectedDocType}
+          expectedYear={expectedYear}
+          clientName={clientName}
+        />
       </div>
       {open && canPreview && (
         <div className="border-t border-border p-2 bg-muted/30">

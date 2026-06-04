@@ -106,6 +106,19 @@ export async function processClassifyJob(
         extracted_amount_or_total: result.extracted_amount_or_total,
         looks_correct: result.looks_correct,
         issue_if_any: result.issue_if_any,
+        // Phase 2: classification transparency — why, the identifying text
+        // read, and an honest runner-up when the type was ambiguous.
+        reasoning: result.reasoning,
+        key_identifiers: result.key_identifiers,
+        second_guess: result.second_guess,
+        // Phase 3: key fields read off the document (power Phase 4 matching).
+        document_date: result.document_date,
+        issuer_name: result.issuer_name,
+        party_name: result.party_name,
+        account_or_period: result.account_or_period,
+        form_identifier: result.form_identifier,
+        amounts: result.amounts,
+        fields_confidence: result.fields_confidence,
       },
       ai_usability: result.usability,
     })

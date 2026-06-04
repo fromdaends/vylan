@@ -900,7 +900,19 @@
     "likely": "Probablement {type}",
     "mismatch": "Attendu {expected}, détecté {detected}",
     "not_a_document": "Ce n'est pas un {expected}",
-    "advisory": "Suggestion automatique. Vous gardez le dernier mot."
+    "advisory": "Suggestion automatique. Vous gardez le dernier mot.",
+    "review_heading": "À vérifier",
+    "year_mismatch": "{expected} attendu, mais ce document indique {actual}",
+    "identity_mismatch": "Le nom sur le document ({actual}) ne correspond pas au client ({expected})",
+    "detail_why": "Pourquoi",
+    "detail_read": "Lu",
+    "detail_name": "Nom",
+    "detail_issuer": "Émetteur",
+    "detail_year": "Année",
+    "detail_period": "Période",
+    "detail_form": "Formulaire",
+    "detail_amounts": "Montants",
+    "detail_also_possible": "Aussi possible"
   },
   "Usability": {
     "label": "Qualité IA",
@@ -925,6 +937,10 @@
     "issue_glare_or_shadow": "Reflet ou ombre",
     "issue_wrong_document_type": "Mauvais type de document",
     "issue_corrupt_or_blank": "Blanc ou corrompu",
+    "issue_wrong_orientation": "Mauvaise orientation",
+    "issue_password_protected": "Protégé par mot de passe",
+    "issue_missing_pages": "Pages manquantes",
+    "issue_screenshot_of_screen": "Photo d'un écran",
     "issue_other": "Autre problème de qualité"
   },
   "Activity": {
@@ -961,6 +977,10 @@
     "issue_glare_or_shadow": "reflet ou ombre",
     "issue_wrong_document_type": "mauvais type de document",
     "issue_corrupt_or_blank": "fichier corrompu ou vide",
+    "issue_wrong_orientation": "mauvaise orientation",
+    "issue_password_protected": "protégé par mot de passe",
+    "issue_missing_pages": "pages manquantes",
+    "issue_screenshot_of_screen": "photo d'un écran",
     "issue_other": "problème de qualité",
     "tone_gentle": "Doux",
     "tone_firm": "Ferme",

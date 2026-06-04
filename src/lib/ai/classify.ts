@@ -5,6 +5,7 @@
 // accountant always has the final word — AI is advisory only.
 
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import type { DocType } from "@/lib/db/templates";
 import { DOC_TYPES, DOC_TYPE_LABELS } from "@/lib/doc-types";
@@ -17,11 +18,63 @@ import {
 
 const MODEL = "claude-sonnet-4-6";
 
+// Anthropic's vision sweet spot — images past this are downscaled by the API
+// anyway, so capping here is accuracy-neutral while cutting the upload payload
+// and token cost (a phone photo is often 3000-4000px on the long edge).
+const MAX_IMAGE_EDGE = 1568;
+
+// Downscale an oversized image (and honour EXIF rotation) before it goes to the
+// model. Fail-soft: ANY error falls back to the original bytes so analysis
+// never breaks on a quirky file. PDFs are never passed here.
+async function normalizeImageForAi(
+  bytes: Buffer,
+  mimeType: string,
+): Promise<{ bytes: Buffer; mimeType: string }> {
+  try {
+    const img = sharp(bytes, { failOn: "none" });
+    const meta = await img.metadata();
+    const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
+    // Unknown dimensions (0) or already small → leave it untouched.
+    if (longest === 0 || longest <= MAX_IMAGE_EDGE) {
+      return { bytes, mimeType };
+    }
+    const out = await img
+      .rotate()
+      .resize({
+        width: MAX_IMAGE_EDGE,
+        height: MAX_IMAGE_EDGE,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+    return { bytes: out, mimeType: "image/jpeg" };
+  } catch (e) {
+    console.warn("[ai/classify] image normalize failed, using original:", e);
+    return { bytes, mimeType };
+  }
+}
+
 export type ClassificationResult = {
   document_type: DocType | "unknown";
   confidence: number;
+  // Phase 2: the model's own reasoning + the literal identifying text it read
+  // (so the accountant can see WHY), and an honest runner-up type when the
+  // document is genuinely ambiguous — never a coin-flip dressed as certainty.
+  reasoning: string;
+  key_identifiers: string[];
+  second_guess: { document_type: DocType; confidence: number } | null;
   extracted_year: number | null;
   extracted_amount_or_total: number | null;
+  // Phase 3: key fields read off the document (null when not legible). These
+  // power the expected-vs-actual matching in Phase 4.
+  document_date: string | null;
+  issuer_name: string | null;
+  party_name: string | null;
+  account_or_period: string | null;
+  form_identifier: string | null;
+  amounts: { label: string; value: number }[];
+  fields_confidence: number;
   looks_correct: boolean;
   issue_if_any: string | null;
   usability: UsabilityVerdict;
@@ -61,7 +114,30 @@ const CLASSIFY_TOOL = {
         minimum: 0,
         maximum: 1,
         description:
-          "How confident the classification is. Use <0.5 for unfamiliar or hard-to-read documents.",
+          "Confidence in document_type. Use >0.85 only when the form's title or identifier is clearly legible; 0.5-0.85 when the layout strongly suggests the type but the title isn't fully readable; <0.5 when genuinely unsure (and fill second_guess_type).",
+      },
+      reasoning: {
+        type: "string",
+        description:
+          "One short sentence naming the strongest evidence for document_type — ideally the form title/identifier you actually read (e.g. \"title reads 'T4 Statement of Remuneration Paid'\").",
+      },
+      key_identifiers: {
+        type: "array",
+        items: { type: "string" },
+        description:
+          "The exact distinguishing text you READ on the document that pins the type down — e.g. [\"Relevé 1\", \"Revenus d'emploi\"] or [\"T4\", \"Statement of Remuneration Paid\", \"Box 14\"]. Empty array if no identifying text is legible.",
+      },
+      second_guess_type: {
+        type: ["string", "null"],
+        description:
+          "When you are torn between two types, the SECOND most likely doc-type code from the reference list (e.g. 't4a' when you picked 't4'). Null when you are confident.",
+      },
+      second_guess_confidence: {
+        type: ["number", "null"],
+        minimum: 0,
+        maximum: 1,
+        description:
+          "Confidence (0-1) in second_guess_type, or null when there is no second guess.",
       },
       extracted_year: {
         type: ["integer", "null"],
@@ -72,6 +148,55 @@ const CLASSIFY_TOOL = {
         type: ["number", "null"],
         description:
           "The headline dollar amount on the document if there is one (e.g. T4 box 14 'Employment income'), in CAD. Null if there's no obvious headline figure.",
+      },
+      document_date: {
+        type: ["string", "null"],
+        description:
+          "The date printed on the document (issue or statement date) as an ISO date (YYYY-MM-DD) when possible, else as printed. Null if none is visible.",
+      },
+      issuer_name: {
+        type: ["string", "null"],
+        description:
+          "Who issued the document — the employer/payer on a slip, the financial institution on a statement, or 'CRA' / 'Revenu Québec' on an assessment. Null if not visible.",
+      },
+      party_name: {
+        type: ["string", "null"],
+        description:
+          "The person or business the document is ABOUT — the named taxpayer, employee, or account holder. Used later to confirm the document belongs to the right client. Null if not visible.",
+      },
+      account_or_period: {
+        type: ["string", "null"],
+        description:
+          "For statements, the statement period (e.g. 'Jan 1 - Jan 31, 2024'); for slips, an account/policy reference if shown. Null if none.",
+      },
+      form_identifier: {
+        type: ["string", "null"],
+        description:
+          "The form code/number printed on the document (e.g. 'T4', 'RL-1', 'FPZ-500'). Null if none.",
+      },
+      amounts: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            label: {
+              type: "string",
+              description:
+                "What the figure is (e.g. 'Box 14 employment income', 'Statement closing balance').",
+            },
+            value: { type: "number", description: "The amount in CAD." },
+          },
+          required: ["label", "value"],
+        },
+        description:
+          "The 1-5 most important labelled dollar amounts on the document. Empty array if none are legible.",
+      },
+      fields_confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+        description:
+          "How confident you are in the EXTRACTED FIELD VALUES above (separate from document_type confidence). Use <0.5 when the values were hard to read.",
       },
       looks_correct: {
         type: "boolean",
@@ -121,8 +246,19 @@ const CLASSIFY_TOOL = {
     required: [
       "document_type",
       "confidence",
+      "reasoning",
+      "key_identifiers",
+      "second_guess_type",
+      "second_guess_confidence",
       "extracted_year",
       "extracted_amount_or_total",
+      "document_date",
+      "issuer_name",
+      "party_name",
+      "account_or_period",
+      "form_identifier",
+      "amounts",
+      "fields_confidence",
       "looks_correct",
       "issue_if_any",
       "usable",
@@ -144,6 +280,39 @@ Canadian tax document reference (use these exact identifiers):
 ${DOC_TYPES.map((c) => `- ${c} = ${DOC_TYPE_LABELS[c].ai}`).join("\n")}
 - unknown = can't tell
 
+Identify the document by READING its title and form identifier first, not by
+guessing from layout. Watch these commonly-confused pairs:
+- t4 vs t4a: "Statement of Remuneration Paid" (employment, box 14) = t4;
+  "Statement of Pension, Retirement, Annuity, and Other Income" = t4a.
+- t4 vs rl1 (and t5 vs rl3, t3 vs rl16, …): a CRA federal slip = the T-slip; a
+  Revenu Québec slip headed "Relevé 1 / Revenus d'emploi…" = the RL slip. The
+  relevés (RL-#) are provincial; the T-slips are federal.
+- t4a_p (RPC/RRQ benefits) vs t4a_oas (Old Age Security) vs t4a (general).
+- rrsp (a contribution RECEIPT — money paid IN) vs t4rsp (RRSP income — money
+  taken OUT).
+- bank_statement vs credit_card_statement: a credit-card statement shows a
+  credit limit, a minimum payment, and a card number; a bank statement shows an
+  account balance with deposits and withdrawals.
+- Read the TAX YEAR printed on the document carefully — a 2023 slip is not a
+  2024 slip.
+
+If two types are genuinely plausible, pick the more likely one but LOWER the
+confidence and fill second_guess_type / second_guess_confidence. Never present a
+coin-flip as a confident answer. Use "unknown" only when you truly cannot tell.
+
+Also EXTRACT the document's key fields, reading them straight off the page —
+null anything you cannot read clearly:
+- document_date — the date printed on it (issue or statement date).
+- issuer_name — who issued it (employer/payer on a slip, the bank on a
+  statement, "CRA" / "Revenu Québec" on an assessment).
+- party_name — the person or business the document is ABOUT (the named
+  taxpayer, employee, or account holder).
+- account_or_period — the statement period for statements, or an account
+  reference.
+- form_identifier — the form code printed on it (e.g. "T4", "RL-1").
+- amounts — the 1-5 most important labelled dollar figures.
+Set fields_confidence from how legible those values were.
+
 After identifying the document type, also assess whether this document is
 USABLE for an accountant. A document is usable if all key information is
 clearly readable. Mark it unusable if ANY of the following are true:
@@ -160,6 +329,16 @@ clearly readable. Mark it unusable if ANY of the following are true:
   (e.g., a screenshot of a payment app where a T4 was requested)
 - corrupt_or_blank: the file appears blank, corrupted, or contains no
   meaningful document content
+- wrong_orientation: the page is sideways or upside-down AND that makes the
+  text hard to read. A readable rotated page is USABLE (the accountant can
+  rotate it) — flag this only when orientation genuinely impairs reading.
+- password_protected: the file is locked / encrypted and its contents can't
+  be read; an unlocked copy is needed.
+- missing_pages: the document clearly has more pages than were provided (e.g.
+  "Page 1 of 3" with only one page, or a statement cut off mid-table).
+- screenshot_of_screen: this is a PHOTO of a monitor or phone screen (visible
+  bezel, glare, or moiré) rather than the document itself, and that impairs
+  reading. A clean digital screenshot of the actual document is USABLE.
 - other: a usability issue that doesn't match the categories above
 
 If the document is borderline (mildly blurry but readable), prefer USABLE.
@@ -187,20 +366,36 @@ export async function classifyDocument(opts: {
     return null;
   }
 
-  const base64 = opts.fileBytes.toString("base64");
   const isPdf = opts.mimeType === "application/pdf";
   const isImage = opts.mimeType.startsWith("image/");
   if (!isPdf && !isImage) {
     return {
       document_type: "unknown",
       confidence: 0,
+      reasoning: "",
+      key_identifiers: [],
+      second_guess: null,
       extracted_year: null,
       extracted_amount_or_total: null,
+      document_date: null,
+      issuer_name: null,
+      party_name: null,
+      account_or_period: null,
+      form_identifier: null,
+      amounts: [],
+      fields_confidence: 0,
       looks_correct: false,
       issue_if_any: "Unsupported file format for AI classification.",
       usability: USABLE_BY_DEFAULT,
     };
   }
+
+  // Downscale oversized images before the model (accuracy-neutral; cuts cost +
+  // keeps large photos under Anthropic's limits). PDFs pass through untouched.
+  const prepared = isImage
+    ? await normalizeImageForAi(opts.fileBytes, opts.mimeType)
+    : { bytes: opts.fileBytes, mimeType: opts.mimeType };
+  const base64 = prepared.bytes.toString("base64");
 
   type ContentBlock =
     | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }
@@ -227,7 +422,7 @@ export async function classifyDocument(opts: {
           type: "image",
           source: {
             type: "base64",
-            media_type: opts.mimeType,
+            media_type: prepared.mimeType,
             data: base64,
           },
         },
@@ -239,13 +434,18 @@ export async function classifyDocument(opts: {
 
   const resp = await c.messages.create({
     model: MODEL,
-    max_tokens: 512,
+    max_tokens: 1200,
     system: buildSystemPrompt(opts.expectedDocType),
     tools: [CLASSIFY_TOOL],
     tool_choice: { type: "tool", name: "classify_document" },
     // sdk types are strict but the SDK accepts this content shape at runtime
     messages: [{ role: "user", content: content as never }],
   });
+
+  // Cost/latency visibility — token counts per classification (Phase 7).
+  console.info(
+    `[ai/classify] model=${MODEL} in_tokens=${resp.usage?.input_tokens ?? "?"} out_tokens=${resp.usage?.output_tokens ?? "?"}`,
+  );
 
   for (const block of resp.content) {
     if (block.type === "tool_use" && block.name === "classify_document") {
@@ -267,12 +467,29 @@ export function parseClassification(
       ? (doc as DocType)
       : "unknown",
     confidence: Math.max(0, Math.min(1, conf)),
+    reasoning: typeof raw.reasoning === "string" ? raw.reasoning.trim() : "",
+    key_identifiers: Array.isArray(raw.key_identifiers)
+      ? raw.key_identifiers
+          .filter((x): x is string => typeof x === "string" && x.trim() !== "")
+          .map((x) => x.trim())
+      : [],
+    second_guess: parseSecondGuess(raw),
     extracted_year:
       typeof raw.extracted_year === "number" ? raw.extracted_year : null,
     extracted_amount_or_total:
       typeof raw.extracted_amount_or_total === "number"
         ? raw.extracted_amount_or_total
         : null,
+    document_date: str(raw.document_date),
+    issuer_name: str(raw.issuer_name),
+    party_name: str(raw.party_name),
+    account_or_period: str(raw.account_or_period),
+    form_identifier: str(raw.form_identifier),
+    amounts: parseAmounts(raw.amounts),
+    fields_confidence:
+      typeof raw.fields_confidence === "number"
+        ? Math.max(0, Math.min(1, raw.fields_confidence))
+        : 0,
     looks_correct: raw.looks_correct === true,
     issue_if_any:
       typeof raw.issue_if_any === "string" && raw.issue_if_any.trim() !== ""
@@ -280,6 +497,42 @@ export function parseClassification(
         : null,
     usability: parseUsability(raw),
   };
+}
+
+// Trim to a non-empty string, or null. Keeps the extracted-field parsing terse.
+function str(v: unknown): string | null {
+  return typeof v === "string" && v.trim() !== "" ? v.trim() : null;
+}
+
+// Keep only well-formed { label, value } amount rows (the model can return
+// partial entries), trim labels, and cap at 5 so a runaway list can't bloat
+// the stored JSON.
+function parseAmounts(v: unknown): { label: string; value: number }[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .filter(
+      (x): x is { label: string; value: number } =>
+        !!x &&
+        typeof x === "object" &&
+        typeof (x as Record<string, unknown>).label === "string" &&
+        typeof (x as Record<string, unknown>).value === "number",
+    )
+    .map((x) => ({ label: x.label.trim(), value: x.value }))
+    .filter((x) => x.label !== "")
+    .slice(0, 5);
+}
+
+// The model's runner-up type when it's torn. Kept only when second_guess_type
+// is a REAL doc code (not "unknown" or junk) AND a numeric confidence came
+// back — so a half-filled guess never surfaces as a phantom alternative.
+function parseSecondGuess(
+  raw: Record<string, unknown>,
+): { document_type: DocType; confidence: number } | null {
+  const t = raw.second_guess_type;
+  const c = raw.second_guess_confidence;
+  if (typeof t !== "string" || typeof c !== "number") return null;
+  if (!(KNOWN_DOC_TYPES as string[]).includes(t)) return null;
+  return { document_type: t as DocType, confidence: Math.max(0, Math.min(1, c)) };
 }
 
 // Tolerant parser for the usability sub-object. Anything malformed

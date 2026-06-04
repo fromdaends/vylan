@@ -31,6 +31,7 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
+import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
@@ -367,6 +368,8 @@ export default async function EngagementDetailPage({
                     files={filesByItem.get(item.id) ?? []}
                     locale={locale}
                     canEdit={isLive}
+                    clientName={client?.display_name ?? null}
+                    expectedYear={expectedYearFromTitle(engagement.title)}
                   />
                 ))}
               </ul>
@@ -396,11 +399,15 @@ async function ItemRow({
   files,
   locale,
   canEdit,
+  clientName,
+  expectedYear,
 }: {
   item: RequestItem;
   files: (UploadedFile & { url: string })[];
   locale: "fr" | "en";
   canEdit: boolean;
+  clientName: string | null;
+  expectedYear: number | null;
 }) {
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -491,6 +498,8 @@ async function ItemRow({
               file={f}
               url={f.url}
               expectedDocType={item.doc_type}
+              expectedYear={expectedYear}
+              clientName={clientName}
               rejectionCount={item.ai_rejection_count ?? 0}
             />
           ))}

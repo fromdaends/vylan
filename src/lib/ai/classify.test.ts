@@ -21,8 +21,18 @@ describe("parseClassification", () => {
     expect(out).toEqual({
       document_type: "t4",
       confidence: 0.92,
+      reasoning: "",
+      key_identifiers: [],
+      second_guess: null,
       extracted_year: 2024,
       extracted_amount_or_total: 52140,
+      document_date: null,
+      issuer_name: null,
+      party_name: null,
+      account_or_period: null,
+      form_identifier: null,
+      amounts: [],
+      fields_confidence: 0,
       looks_correct: true,
       issue_if_any: null,
       usability: {
@@ -215,5 +225,102 @@ describe("parseClassification", () => {
       issue_summary_en: "y",
     });
     expect(lo?.usability.confidence).toBe(0);
+  });
+
+  it("captures reasoning, key_identifiers, and a second guess when provided", () => {
+    const out = parseClassification({
+      document_type: "t4",
+      confidence: 0.6,
+      reasoning: "title reads 'T4 Statement of Remuneration Paid'",
+      key_identifiers: ["T4", "Statement of Remuneration Paid", "  "],
+      second_guess_type: "t4a",
+      second_guess_confidence: 0.3,
+      extracted_year: 2024,
+      extracted_amount_or_total: null,
+      looks_correct: true,
+      issue_if_any: null,
+    });
+    expect(out?.reasoning).toBe(
+      "title reads 'T4 Statement of Remuneration Paid'",
+    );
+    // blank entries dropped + values trimmed
+    expect(out?.key_identifiers).toEqual([
+      "T4",
+      "Statement of Remuneration Paid",
+    ]);
+    expect(out?.second_guess).toEqual({ document_type: "t4a", confidence: 0.3 });
+  });
+
+  it("drops a second guess that is 'unknown', unrecognized, or missing its confidence", () => {
+    const base = {
+      document_type: "t4",
+      confidence: 0.9,
+      extracted_year: null,
+      extracted_amount_or_total: null,
+      looks_correct: true,
+      issue_if_any: null,
+    };
+    expect(
+      parseClassification({
+        ...base,
+        second_guess_type: "unknown",
+        second_guess_confidence: 0.3,
+      })?.second_guess,
+    ).toBeNull();
+    expect(
+      parseClassification({
+        ...base,
+        second_guess_type: "made_up",
+        second_guess_confidence: 0.3,
+      })?.second_guess,
+    ).toBeNull();
+    expect(
+      parseClassification({
+        ...base,
+        second_guess_type: "t4a",
+        second_guess_confidence: null,
+      })?.second_guess,
+    ).toBeNull();
+  });
+
+  it("extracts and normalizes the Phase 3 key fields + caps amounts at 5", () => {
+    const out = parseClassification({
+      document_type: "t4",
+      confidence: 0.95,
+      extracted_year: 2024,
+      extracted_amount_or_total: 52140,
+      document_date: "2025-02-28",
+      issuer_name: "  Acme Corp  ",
+      party_name: "Jane Doe",
+      account_or_period: "",
+      form_identifier: "T4",
+      fields_confidence: 0.8,
+      amounts: [
+        { label: " Box 14 ", value: 52140 },
+        { label: "Box 22", value: 8200 },
+        { label: "no value" },
+        { label: 99, value: 1 },
+        { label: "a", value: 1 },
+        { label: "b", value: 2 },
+        { label: "c", value: 3 },
+        { label: "d", value: 4 },
+      ],
+      looks_correct: true,
+      issue_if_any: null,
+    });
+    expect(out?.document_date).toBe("2025-02-28");
+    expect(out?.issuer_name).toBe("Acme Corp");
+    expect(out?.party_name).toBe("Jane Doe");
+    expect(out?.account_or_period).toBeNull(); // empty string -> null
+    expect(out?.form_identifier).toBe("T4");
+    expect(out?.fields_confidence).toBe(0.8);
+    // malformed rows dropped, labels trimmed, capped at 5
+    expect(out?.amounts).toEqual([
+      { label: "Box 14", value: 52140 },
+      { label: "Box 22", value: 8200 },
+      { label: "a", value: 1 },
+      { label: "b", value: 2 },
+      { label: "c", value: 3 },
+    ]);
   });
 });
