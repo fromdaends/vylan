@@ -900,7 +900,10 @@
     "likely": "Probablement {type}",
     "mismatch": "Attendu {expected}, détecté {detected}",
     "not_a_document": "Ce n'est pas un {expected}",
-    "advisory": "Suggestion automatique. Vous gardez le dernier mot."
+    "advisory": "Suggestion automatique. Vous gardez le dernier mot.",
+    "review_heading": "À vérifier",
+    "year_mismatch": "{expected} attendu, mais ce document indique {actual}",
+    "identity_mismatch": "Le nom sur le document ({actual}) ne correspond pas au client ({expected})"
   },
   "Usability": {
     "label": "Qualité IA",

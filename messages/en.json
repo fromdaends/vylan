@@ -900,7 +900,10 @@
     "likely": "Looks like {type}",
     "mismatch": "Expected {expected}, got {detected}",
     "not_a_document": "Not a {expected}",
-    "advisory": "Suggestion only. You make the call."
+    "advisory": "Suggestion only. You make the call.",
+    "review_heading": "Please review",
+    "year_mismatch": "Expected {expected}, but this reads {actual}",
+    "identity_mismatch": "Name on the document ({actual}) doesn't match the client ({expected})"
   },
   "Usability": {
     "label": "AI quality",
