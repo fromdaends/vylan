@@ -324,3 +324,94 @@ describe("parseClassification", () => {
     ]);
   });
 });
+
+describe("parseClassification — unreadable owner rule", () => {
+  const base = {
+    document_type: "t4",
+    confidence: 0.95,
+    extracted_year: 2024,
+    extracted_amount_or_total: 14650,
+    looks_correct: true,
+    issue_if_any: null,
+  };
+
+  it("forces an unusable verdict when owner_identifiable is false", () => {
+    const out = parseClassification({
+      ...base,
+      party_name: "(name visible but redacted)",
+      owner_identifiable: false,
+      usable: true,
+      usability_confidence: 0.9,
+      primary_issue: null,
+      all_issues: [],
+      issue_summary_fr: "",
+      issue_summary_en: "",
+    });
+    expect(out?.usability.usable).toBe(false);
+    expect(out?.usability.primary_issue).toBe("key_fields_obscured");
+    expect(out?.usability.all_issues).toContain("key_fields_obscured");
+    // surfaced above the 0.80 auto-act threshold so it routes for rejection
+    expect(out?.usability.confidence).toBeGreaterThanOrEqual(0.85);
+    // a client-facing message is always present
+    expect(out?.usability.issue_summary_en).not.toBe("");
+    expect(out?.usability.issue_summary_fr).not.toBe("");
+  });
+
+  it("drops a 'redacted' placeholder name to null when the owner is unreadable", () => {
+    const out = parseClassification({
+      ...base,
+      party_name: "(Employee name visible but redacted)",
+      owner_identifiable: false,
+      usable: true,
+      usability_confidence: 0.9,
+    });
+    expect(out?.party_name).toBeNull();
+  });
+
+  it("keeps a worse primary issue but still adds key_fields_obscured", () => {
+    const out = parseClassification({
+      ...base,
+      owner_identifiable: false,
+      usable: false,
+      usability_confidence: 0.95,
+      primary_issue: "text_unreadable",
+      all_issues: ["text_unreadable"],
+      issue_summary_en: "Too blurry to read.",
+      issue_summary_fr: "Trop floue.",
+    });
+    expect(out?.usability.usable).toBe(false);
+    expect(out?.usability.primary_issue).toBe("text_unreadable");
+    expect(out?.usability.all_issues).toEqual(
+      expect.arrayContaining(["text_unreadable", "key_fields_obscured"]),
+    );
+    // an existing client message is preserved, not overwritten
+    expect(out?.usability.issue_summary_en).toBe("Too blurry to read.");
+  });
+
+  it("leaves the verdict untouched when the owner IS identifiable", () => {
+    const out = parseClassification({
+      ...base,
+      party_name: "Mahdi Ebrahimi",
+      owner_identifiable: true,
+      usable: true,
+      usability_confidence: 0.9,
+      primary_issue: null,
+      all_issues: [],
+      issue_summary_fr: "",
+      issue_summary_en: "",
+    });
+    expect(out?.usability.usable).toBe(true);
+    expect(out?.party_name).toBe("Mahdi Ebrahimi");
+  });
+
+  it("does not over-reject when owner_identifiable is absent (fail-safe)", () => {
+    const out = parseClassification({
+      ...base,
+      party_name: "Sarah Fielding",
+      usable: true,
+      usability_confidence: 0.9,
+    });
+    expect(out?.usability.usable).toBe(true);
+    expect(out?.party_name).toBe("Sarah Fielding");
+  });
+});

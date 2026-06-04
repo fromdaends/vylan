@@ -12,7 +12,9 @@ import { DOC_TYPES, DOC_TYPE_LABELS } from "@/lib/doc-types";
 import {
   USABILITY_ISSUES,
   USABLE_BY_DEFAULT,
+  USABILITY_CONFIDENCE_THRESHOLD,
   isUsabilityIssue,
+  type UsabilityIssue,
   type UsabilityVerdict,
 } from "./usability";
 import { classifyWithOpenAI, isOpenAiConfigured } from "./openai-classify";
@@ -183,7 +185,12 @@ const CLASSIFY_TOOL = {
       party_name: {
         type: ["string", "null"],
         description:
-          "The person or business the document is ABOUT — the named taxpayer, employee, or account holder. Used later to confirm the document belongs to the right client. Null if not visible.",
+          "The person or business the document is ABOUT — the named taxpayer, employee, or account holder. Used later to confirm the document belongs to the right client. Null if not visible. If the name is covered/redacted/blacked-out, return null here (do NOT describe the redaction) and set owner_identifiable to false.",
+      },
+      owner_identifiable: {
+        type: "boolean",
+        description:
+          "Can you clearly READ the name of the person or business this document is about (employee, recipient, taxpayer, account holder, or company)? Return false if that name is missing, blank, covered, blacked out, redacted, scribbled over, or otherwise not clearly legible. A document whose owner cannot be identified must be treated as unusable.",
       },
       account_or_period: {
         type: ["string", "null"],
@@ -276,6 +283,7 @@ const CLASSIFY_TOOL = {
       "document_date",
       "issuer_name",
       "party_name",
+      "owner_identifiable",
       "account_or_period",
       "form_identifier",
       "amounts",
@@ -341,7 +349,11 @@ clearly readable. Mark it unusable if ANY of the following are true:
 - text_unreadable: blur, low resolution, or pixelation makes key text
   illegible
 - key_fields_obscured: important fields (amounts, names, dates, account
-  numbers) are covered, scratched out, or missing
+  numbers) are covered, scratched out, redacted, blacked out, or missing.
+  This ALWAYS includes the case where the NAME of the person or business the
+  document is about (employee, recipient, taxpayer, account holder) is covered,
+  redacted, scribbled over, or unreadable — Vylan cannot accept a document when
+  it cannot confirm whose it is.
 - partial_capture: the document is cut off — edges missing, only part
   of a page visible
 - glare_or_shadow: reflections, bright spots, or shadows obscure
@@ -364,6 +376,15 @@ clearly readable. Mark it unusable if ANY of the following are true:
 
 If the document is borderline (mildly blurry but readable), prefer USABLE.
 Only mark UNUSABLE if a human accountant would clearly reject it.
+
+IDENTITY IS THE ONE HARD EXCEPTION to that leniency. You must be able to read
+the name of the person or business the document is about. Set owner_identifiable
+to false whenever that name is missing, blank, covered, blacked out, redacted,
+or scribbled over. When owner_identifiable is false you MUST also set
+usable=false, primary_issue=key_fields_obscured, set party_name to null (do not
+describe the redaction in party_name), and use a usability_confidence of at
+least 0.85 — a document whose owner cannot be confirmed is never acceptable,
+even if everything else on it is perfectly legible.
 
 Return a usability_confidence between 0 and 1. Use <0.80 when you are
 uncertain — Vylan only auto-acts above that threshold.
@@ -500,6 +521,11 @@ export function parseClassification(
   const conf = raw.confidence;
   if (typeof doc !== "string") return null;
   if (typeof conf !== "number") return null;
+
+  // Hard identity rule (see withUnreadableOwner): when the owner's name can't be
+  // read, force an unusable verdict and drop any "redacted" placeholder name.
+  const ownerUnreadable = raw.owner_identifiable === false;
+
   return {
     document_type: (KNOWN_DOC_TYPES as string[]).includes(doc)
       ? (doc as DocType)
@@ -520,7 +546,7 @@ export function parseClassification(
         : null,
     document_date: str(raw.document_date),
     issuer_name: str(raw.issuer_name),
-    party_name: str(raw.party_name),
+    party_name: ownerUnreadable ? null : str(raw.party_name),
     account_or_period: str(raw.account_or_period),
     form_identifier: str(raw.form_identifier),
     amounts: parseAmounts(raw.amounts),
@@ -533,7 +559,9 @@ export function parseClassification(
       typeof raw.issue_if_any === "string" && raw.issue_if_any.trim() !== ""
         ? raw.issue_if_any.trim()
         : null,
-    usability: parseUsability(raw),
+    usability: ownerUnreadable
+      ? withUnreadableOwner(parseUsability(raw))
+      : parseUsability(raw),
   };
 }
 
@@ -595,6 +623,32 @@ function parseUsability(raw: Record<string, unknown>): UsabilityVerdict {
     all_issues: Array.isArray(all) ? all.filter(isUsabilityIssue) : [],
     issue_summary_fr: typeof summaryFr === "string" ? summaryFr.trim() : "",
     issue_summary_en: typeof summaryEn === "string" ? summaryEn.trim() : "",
+  };
+}
+
+// Hard rule: a document whose owner cannot be identified (name missing, covered,
+// blacked out, or redacted) is never usable — Vylan can't confirm whose document
+// it is. The prompt tells the model to flag this, but we ALSO enforce it here so
+// a redacted identity can never slip through as "usable". We surface it above the
+// auto-act threshold (so it routes like any other firm-controlled auto-reject)
+// with a clear, client-facing fallback message when the model didn't write one.
+function withUnreadableOwner(v: UsabilityVerdict): UsabilityVerdict {
+  const all_issues: UsabilityIssue[] = v.all_issues.includes(
+    "key_fields_obscured",
+  )
+    ? v.all_issues
+    : [...v.all_issues, "key_fields_obscured"];
+  return {
+    usable: false,
+    confidence: Math.max(v.confidence, USABILITY_CONFIDENCE_THRESHOLD + 0.05),
+    primary_issue: v.primary_issue ?? "key_fields_obscured",
+    all_issues,
+    issue_summary_en:
+      v.issue_summary_en ||
+      "We couldn't read the name on this document, so we can't confirm whose it is. Please re-upload a copy with the name fully visible.",
+    issue_summary_fr:
+      v.issue_summary_fr ||
+      "Nous n'avons pas pu lire le nom sur ce document, donc nous ne pouvons pas confirmer à qui il appartient. Veuillez téléverser une copie où le nom est entièrement visible.",
   };
 }
 
