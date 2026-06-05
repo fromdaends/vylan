@@ -1,14 +1,20 @@
+import type { ReactNode } from "react";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { listTemplates, BLANK_TEMPLATE_ID } from "@/lib/db/templates";
+import {
+  listTemplates,
+  BLANK_TEMPLATE_ID,
+  type Template,
+} from "@/lib/db/templates";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
+import { TemplateCard } from "@/components/templates/template-card";
 import {
   cloneTemplateAction,
   createBlankTemplateAction,
   deleteTemplateAction,
 } from "@/app/actions/templates";
 import { assertLocale } from "@/lib/locale";
-import { FileText, ArrowUpRight, Plus } from "lucide-react";
+import { Plus, FilePlus2 } from "lucide-react";
 
 export default async function TemplatesPage({
   params,
@@ -29,38 +35,54 @@ export default async function TemplatesPage({
 
   const t = await getTranslations("Templates");
 
+  // Localized "peek inside" + required count, computed once per template.
+  const cardData = (tmpl: Template) => {
+    const preview = tmpl.items
+      .slice(0, 3)
+      .map((it) => (locale === "fr" ? it.label_fr : it.label_en));
+    const requiredCount = tmpl.items.filter((it) => it.required).length;
+    return {
+      name: tmpl.name,
+      type: tmpl.type,
+      itemCount: tmpl.items.length,
+      requiredCount,
+      preview,
+    };
+  };
+
   return (
-    <div className="space-y-10 max-w-5xl mx-auto">
+    <div className="mx-auto max-w-5xl space-y-10">
       <header className="animate-in-up">
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>
+        <p className="mt-1.5 max-w-xl text-sm text-muted-foreground">
+          {t("subtitle")}
+        </p>
       </header>
 
       <Section title={t("section_builtin")} count={builtIn.length}>
-        <TemplateList>
+        <CardGrid>
           {builtIn.map((tmpl) => (
-            <TemplateRow
+            <TemplateCard
               key={tmpl.id}
-              name={tmpl.name}
-              type={tmpl.type}
-              itemsCount={tmpl.items.length}
-              itemsLabel={t("items_count")}
-            >
-              <form action={cloneTemplateAction}>
-                <input type="hidden" name="id" value={tmpl.id} />
-                <Button type="submit" size="sm" variant="ghost">
-                  {t("clone")}
-                </Button>
-              </form>
-              <Link href={`/engagements/new?template=${tmpl.id}`}>
-                <Button size="sm" variant="ghost">
-                  {t("use_in_new")}
-                  <ArrowUpRight className="h-3.5 w-3.5" />
-                </Button>
-              </Link>
-            </TemplateRow>
+              {...cardData(tmpl)}
+              footer={
+                <>
+                  <form action={cloneTemplateAction}>
+                    <input type="hidden" name="id" value={tmpl.id} />
+                    <Button type="submit" size="sm" variant="ghost">
+                      {t("clone")}
+                    </Button>
+                  </form>
+                  <Link href={`/engagements/new?template=${tmpl.id}`}>
+                    <Button size="sm" variant="secondary">
+                      {t("use_in_new")}
+                    </Button>
+                  </Link>
+                </>
+              }
+            />
           ))}
-        </TemplateList>
+        </CardGrid>
       </Section>
 
       <Section
@@ -78,8 +100,13 @@ export default async function TemplatesPage({
       >
         {firm.length === 0 ? (
           <EmptyState>
-            <p className="text-sm text-muted-foreground">{t("firm_empty")}</p>
-            <p className="text-xs text-muted-foreground max-w-md mx-auto leading-relaxed">
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <FilePlus2 className="h-5 w-5" />
+            </span>
+            <p className="text-sm font-medium text-foreground">
+              {t("firm_empty")}
+            </p>
+            <p className="mx-auto max-w-md text-xs leading-relaxed text-muted-foreground">
               {t("templates_new_hint")}
             </p>
             <form action={createBlankTemplateAction}>
@@ -91,29 +118,34 @@ export default async function TemplatesPage({
             </form>
           </EmptyState>
         ) : (
-          <TemplateList>
+          <CardGrid>
             {firm.map((tmpl) => (
-              <TemplateRow
+              <TemplateCard
                 key={tmpl.id}
-                name={tmpl.name}
-                type={tmpl.type}
-                itemsCount={tmpl.items.length}
-                itemsLabel={t("items_count")}
-              >
-                <Link href={`/templates/${tmpl.id}`}>
-                  <Button size="sm" variant="ghost">
-                    {t("edit")}
-                  </Button>
-                </Link>
-                <form action={deleteTemplateAction}>
-                  <input type="hidden" name="id" value={tmpl.id} />
-                  <Button type="submit" size="sm" variant="ghost">
-                    {t("delete")}
-                  </Button>
-                </form>
-              </TemplateRow>
+                {...cardData(tmpl)}
+                footer={
+                  <>
+                    <form action={deleteTemplateAction}>
+                      <input type="hidden" name="id" value={tmpl.id} />
+                      <Button
+                        type="submit"
+                        size="sm"
+                        variant="ghost"
+                        className="text-muted-foreground hover:text-destructive"
+                      >
+                        {t("delete")}
+                      </Button>
+                    </form>
+                    <Link href={`/templates/${tmpl.id}`}>
+                      <Button size="sm" variant="secondary">
+                        {t("edit")}
+                      </Button>
+                    </Link>
+                  </>
+                }
+              />
             ))}
-          </TemplateList>
+          </CardGrid>
         )}
       </Section>
     </div>
@@ -128,81 +160,40 @@ function Section({
 }: {
   title: string;
   count: number;
-  children: React.ReactNode;
+  children: ReactNode;
   // Optional right-aligned action (e.g. "+ New template" on the firm
   // section). Replaces the small numeric count when present.
-  action?: React.ReactNode;
+  action?: ReactNode;
 }) {
   return (
-    <section className="space-y-3">
+    <section className="space-y-4">
       <div className="flex items-center justify-between border-b border-border/60 pb-2">
-        <h2 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
-          {title}
-        </h2>
-        {action ? (
-          action
-        ) : (
-          <span className="text-xs font-mono tabular-nums text-muted-foreground">
+        <div className="flex items-baseline gap-2.5">
+          <h2 className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            {title}
+          </h2>
+          <span className="text-xs font-mono tabular-nums text-muted-foreground/60">
             {count}
           </span>
-        )}
+        </div>
+        {action}
       </div>
       {children}
     </section>
   );
 }
 
-function TemplateList({ children }: { children: React.ReactNode }) {
+function CardGrid({ children }: { children: ReactNode }) {
   return (
-    <ul className="divide-y divide-border/60">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {children}
-    </ul>
+    </div>
   );
 }
 
-function TemplateRow({
-  name,
-  type,
-  itemsCount,
-  itemsLabel,
-  children,
-}: {
-  name: string;
-  type: string;
-  itemsCount: number;
-  itemsLabel: string;
-  children: React.ReactNode;
-}) {
+function EmptyState({ children }: { children: ReactNode }) {
   return (
-    <li className="group flex items-center justify-between gap-4 px-5 py-4 transition-colors hover:bg-secondary/40">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="hidden sm:inline-flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-accent/10 group-hover:text-accent shrink-0">
-          <FileText className="h-4 w-4" />
-        </div>
-        <div className="min-w-0">
-          <div className="font-medium text-sm truncate">{name}</div>
-          <div className="text-xs text-muted-foreground mt-0.5 font-mono tabular-nums">
-            {/* Only the tax-form types (T1/T2/bookkeeping) carry a meaningful
-                label; firm templates are just named checklists, so we skip the
-                "custom" tag entirely. */}
-            {type && type !== "custom" && (
-              <>
-                <span className="uppercase tracking-wider">{type}</span>
-                <span className="mx-2 text-border">·</span>
-              </>
-            )}
-            {itemsCount} {itemsLabel}
-          </div>
-        </div>
-      </div>
-      <div className="flex items-center gap-1 shrink-0">{children}</div>
-    </li>
-  );
-}
-
-function EmptyState({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-dashed border-border/50 px-5 py-10 flex flex-col items-center justify-center gap-3 text-center">
+    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/60 bg-card/30 px-6 py-12 text-center">
       {children}
     </div>
   );
