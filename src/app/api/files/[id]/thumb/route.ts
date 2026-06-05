@@ -17,10 +17,13 @@ import convert from "heic-convert";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-// ~2x the on-screen card so retina screens stay crisp; small enough to keep the
-// grid fast. `fit: inside` preserves aspect (the card crops with object-cover).
-const THUMB_WIDTH = 480;
-const THUMB_HEIGHT = 640;
+// Default ~2x the on-screen card so retina screens stay crisp; the split detail
+// view passes a larger ?w= for a readable full image. Width-only resize keeps
+// aspect (the card crops with object-cover; the detail uses object-contain).
+// Re-encoding to JPEG also makes HEIC/webp originals display in every browser.
+const DEFAULT_WIDTH = 480;
+const MIN_WIDTH = 120;
+const MAX_WIDTH = 2000;
 
 export async function GET(
   request: NextRequest,
@@ -93,15 +96,17 @@ export async function GET(
       })) as ArrayBuffer;
       input = Buffer.from(jpeg);
     }
+    const wParam = Number.parseInt(
+      request.nextUrl.searchParams.get("w") ?? "",
+      10,
+    );
+    const width = Number.isFinite(wParam)
+      ? Math.min(Math.max(wParam, MIN_WIDTH), MAX_WIDTH)
+      : DEFAULT_WIDTH;
     const out = await sharp(input)
       .rotate() // honour EXIF orientation (phone photos)
-      .resize({
-        width: THUMB_WIDTH,
-        height: THUMB_HEIGHT,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-      .jpeg({ quality: 72 })
+      .resize({ width, withoutEnlargement: true })
+      .jpeg({ quality: 76 })
       .toBuffer();
 
     return new Response(new Uint8Array(out), {

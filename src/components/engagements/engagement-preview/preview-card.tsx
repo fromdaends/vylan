@@ -48,18 +48,21 @@ const STATUS_UI: Record<
 // One document in the grid: a recognisable thumbnail (image rendition or PDF
 // first page, lazy-loaded), a couple-word header, an unmistakable colour status
 // (border + corner icon + labelled line — never colour alone), and hover/focus
-// quick actions (approve, reject, download). Clicking the card opens the detail
-// view in Phase 4.
+// quick actions (approve, reject, download). Clicking the thumbnail opens the
+// detail view (a covering button keeps it keyboard-accessible; the quick actions
+// layer above it).
 export function PreviewCard({
   doc,
   locale,
   pending,
+  onOpen,
   onApprove,
   onReject,
 }: {
   doc: PreviewDoc;
   locale: string;
   pending: boolean;
+  onOpen: () => void;
   onApprove: () => void;
   onReject: () => void;
 }) {
@@ -109,10 +112,20 @@ export function PreviewCard({
           />
         )}
 
+        {/* Open affordance — covers the thumbnail, keyboard-focusable. The
+            quick actions + badges sit above it (z-20) so they take their own
+            clicks. */}
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={`${t("open")} ${header}`}
+          className="absolute inset-0 z-10 cursor-pointer rounded-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none focus-visible:ring-inset"
+        />
+
         {/* Status corner badge — the icon is the non-colour cue. */}
         <span
           className={cn(
-            "absolute top-1.5 right-1.5 inline-flex size-5 items-center justify-center rounded-full text-white shadow-sm",
+            "pointer-events-none absolute top-1.5 right-1.5 z-20 inline-flex size-5 items-center justify-center rounded-full text-white shadow-sm",
             s.badge,
           )}
         >
@@ -122,21 +135,21 @@ export function PreviewCard({
 
         {/* How many files share this checklist item (shared approve/reject). */}
         {doc.siblingCount > 1 && (
-          <span className="absolute top-1.5 left-1.5 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          <span className="pointer-events-none absolute top-1.5 left-1.5 z-20 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
             {t("n_files", { count: doc.siblingCount })}
           </span>
         )}
 
-        {/* In-flight approve/reject. */}
+        {/* In-flight approve/reject (visual only; the card stays clickable). */}
         {pending && (
-          <div className="absolute inset-0 flex items-center justify-center bg-background/40">
+          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/40">
             <Loader2 className="size-5 animate-spin text-foreground/70" />
           </div>
         )}
 
         {/* Quick actions — hidden until hover/keyboard focus, and not clickable
             while hidden (pointer-events gated with opacity). */}
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 bg-gradient-to-t from-black/50 to-transparent p-1.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-center gap-1.5 bg-gradient-to-t from-black/50 to-transparent p-1.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
           <QuickButton
             label={t("approve")}
             onClick={onApprove}

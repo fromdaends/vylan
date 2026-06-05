@@ -30,7 +30,22 @@
     "reject_reason_incomplete": "Some pages or information are missing.",
     "reject_reason_wrong_name": "The name on it doesn't match this client.",
     "action_failed": "Something went wrong. Please try again.",
-    "clear_search": "Clear search"
+    "clear_search": "Clear search",
+    "open": "Open",
+    "back": "Back to all",
+    "fullscreen": "Fullscreen",
+    "exit_fullscreen": "Exit fullscreen",
+    "prev_page": "Previous page",
+    "next_page": "Next page",
+    "page_of": "{page} of {total}",
+    "viewer_unsupported": "Can't show a preview of this file.",
+    "open_new_tab": "Open in new tab",
+    "confidence": "{percent}% confidence",
+    "quality_ok": "Quality looks good",
+    "quality_issue": "Quality issue",
+    "flags_heading": "Doesn't match the request",
+    "details_heading": "Details",
+    "no_ai_yet": "The AI hasn't analyzed this document yet."
   },
   "Vylan": {
     "meta_title": "Vylan — Stop chasing documents",

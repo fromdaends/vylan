@@ -8,6 +8,7 @@ import { Download, FolderOpen, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { approveItemAction, rejectItemAction } from "@/app/actions/items";
+import { expectedYearFromTitle } from "@/lib/ai/matching";
 import {
   applyOverrides,
   buildPreviewDocs,
@@ -21,6 +22,7 @@ import {
 } from "./preview-model";
 import { PreviewCard } from "./preview-card";
 import { PreviewRejectPrompt } from "./preview-reject-prompt";
+import { PreviewDetail } from "./preview-detail";
 import type { EngagementPreviewProps } from "./engagement-preview";
 
 type Props = EngagementPreviewProps & { onClose: () => void };
@@ -51,6 +53,7 @@ export function PreviewOverlay({
     () => new Set(),
   );
   const [rejectTarget, setRejectTarget] = useState<PreviewDoc | null>(null);
+  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const docs = useMemo(
@@ -62,6 +65,24 @@ export function PreviewOverlay({
   const searched = useMemo(() => searchDocs(docs, query), [docs, query]);
   const counts = useMemo(() => previewCounts(searched), [searched]);
   const visible = useMemo(() => filterDocs(searched, view), [searched, view]);
+  const selectedDoc = useMemo(
+    () =>
+      selectedFileId
+        ? (docs.find((d) => d.fileId === selectedFileId) ?? null)
+        : null,
+    [docs, selectedFileId],
+  );
+  const selectedFile = useMemo(
+    () =>
+      selectedFileId
+        ? (uploads.find((u) => u.id === selectedFileId) ?? null)
+        : null,
+    [uploads, selectedFileId],
+  );
+  const expectedYear = useMemo(
+    () => expectedYearFromTitle(engagementTitle),
+    [engagementTitle],
+  );
 
   // Lock the page behind the overlay from scrolling and move focus into the
   // panel; restore both on close so the engagement page is exactly where the
@@ -81,14 +102,16 @@ export function PreviewOverlay({
   // own Escape/cancel first).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape" && !rejectTarget) {
-        e.stopPropagation();
-        onClose();
-      }
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      // Escape peels back one layer at a time: reject prompt -> detail -> close.
+      if (rejectTarget) setRejectTarget(null);
+      else if (selectedFileId) setSelectedFileId(null);
+      else onClose();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose, rejectTarget]);
+  }, [onClose, rejectTarget, selectedFileId]);
 
   function setItemPending(itemId: string, on: boolean) {
     setPendingItems((prev) => {
@@ -266,6 +289,7 @@ export function PreviewOverlay({
                   doc={doc}
                   locale={locale}
                   pending={pendingItems.has(doc.itemId)}
+                  onOpen={() => setSelectedFileId(doc.fileId)}
                   onApprove={() => approve(doc)}
                   onReject={() => setRejectTarget(doc)}
                 />
@@ -273,6 +297,25 @@ export function PreviewOverlay({
             </div>
           )}
         </div>
+
+        {selectedDoc && selectedFile && (
+          <PreviewDetail
+            doc={selectedDoc}
+            file={selectedFile}
+            expectedDocType={
+              items.find((i) => i.id === selectedDoc.itemId)?.doc_type ??
+              "other"
+            }
+            expectedYear={expectedYear}
+            clientName={clientName}
+            locale={locale}
+            pending={pendingItems.has(selectedDoc.itemId)}
+            onApprove={() => approve(selectedDoc)}
+            onReject={() => setRejectTarget(selectedDoc)}
+            onBack={() => setSelectedFileId(null)}
+            onCloseOverlay={onClose}
+          />
+        )}
       </div>
 
       {rejectTarget && (

@@ -30,7 +30,22 @@
     "reject_reason_incomplete": "Des pages ou des informations manquent.",
     "reject_reason_wrong_name": "Le nom sur le document ne correspond pas à ce client.",
     "action_failed": "Une erreur s'est produite. Veuillez réessayer.",
-    "clear_search": "Effacer la recherche"
+    "clear_search": "Effacer la recherche",
+    "open": "Ouvrir",
+    "back": "Retour",
+    "fullscreen": "Plein écran",
+    "exit_fullscreen": "Quitter le plein écran",
+    "prev_page": "Page précédente",
+    "next_page": "Page suivante",
+    "page_of": "{page} sur {total}",
+    "viewer_unsupported": "Impossible d'afficher un aperçu de ce fichier.",
+    "open_new_tab": "Ouvrir dans un nouvel onglet",
+    "confidence": "Confiance de {percent} %",
+    "quality_ok": "Qualité correcte",
+    "quality_issue": "Problème de qualité",
+    "flags_heading": "Ne correspond pas à la demande",
+    "details_heading": "Détails",
+    "no_ai_yet": "L'IA n'a pas encore analysé ce document."
   },
   "Vylan": {
     "meta_title": "Vylan — Arrêtez de courir après les documents",
