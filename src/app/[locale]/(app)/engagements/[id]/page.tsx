@@ -31,6 +31,7 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
+import { EngagementPreview } from "@/components/engagements/engagement-preview/engagement-preview";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
@@ -353,7 +354,19 @@ export default async function EngagementDetailPage({
                   ({items.length})
                 </span>
               </h2>
-              {isLive && <AddItemDialog engagementId={engagement.id} />}
+              <div className="flex items-center gap-2">
+                {/* Always-available visual review of every uploaded document,
+                    regardless of how many there are. */}
+                <EngagementPreview
+                  uploads={uploads}
+                  items={items}
+                  engagementId={engagement.id}
+                  engagementTitle={engagement.title}
+                  clientName={client?.display_name ?? null}
+                  locale={locale}
+                />
+                {isLive && <AddItemDialog engagementId={engagement.id} />}
+              </div>
             </div>
             {items.length === 0 ? (
               <div className="text-sm text-muted-foreground py-4">
