@@ -71,6 +71,10 @@ async function applyRememberMePreference(remember: boolean): Promise<void> {
 export type AuthActionState = {
   error?: string;
   fieldErrors?: Record<string, string>;
+  // Signup succeeded but email confirmation is pending: the signup page renders
+  // a "check your email" view (with the address) instead of redirecting.
+  checkEmail?: boolean;
+  email?: string;
 } | null;
 
 const LoginSchema = z.object({
@@ -172,11 +176,23 @@ export async function signupAction(
     return { error: "rate_limited" };
   }
   const supabase = await getServerSupabase();
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  // Email confirmation is enabled on this project, so the account can only be
+  // activated by clicking the link we email. Point that link at our OAuth-style
+  // callback with the post-confirmation destination (/onboarding) AND
+  // continue=onboarding — the callback exchanges the code for a session and,
+  // because of that flag, skips the new-user → /demo funnel and lands the user
+  // straight in firm setup, signed in.
+  const onboardingNext = localPath(parsed.data.locale, "/onboarding");
+  const emailRedirectTo =
+    `${appUrl}/api/auth/callback?next=${encodeURIComponent(onboardingNext)}` +
+    `&continue=onboarding`;
   const { error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
       data: { name: parsed.data.name, locale: parsed.data.locale },
+      emailRedirectTo,
     },
   });
   if (error) {
@@ -207,20 +223,13 @@ export async function signupAction(
     }
     return { error: "signup_failed" };
   }
-  // Funnel discipline: every brand-new account flows through /demo
-  // first for qualification (firm size, current tools, etc.). The
-  // founder hand-converts qualified leads while billing is gated.
-  // This matches the OAuth callback behaviour (see PR #242).
-  //
-  // Exception: `continue=onboarding` is a soft signal set by /demo's
-  // "Try the demo" button — it means the prospect already qualified
-  // via the /demo questionnaire and is now self-serving an account.
-  // Bouncing them back to /demo would loop. Allowlist a single
-  // sanctioned value so a random `?continue=evil` can't bypass.
-  const continueRaw = formData.get("continue");
-  const continueOk = continueRaw === "onboarding";
-  const destination = continueOk ? "/onboarding" : "/demo";
-  redirect(localPath(parsed.data.locale, destination));
+  // signUp() can't establish a session while email confirmation is on — the
+  // account is activated only when the user clicks the link we just emailed.
+  // Rather than bouncing them to a login screen they can't use yet (the old
+  // "why am I logging in twice?" confusion), return a success state so the
+  // signup page renders a "check your email" view. The link (emailRedirectTo
+  // above) routes through the callback and lands them signed in, in onboarding.
+  return { checkEmail: true, email: parsed.data.email };
 }
 
 export async function logoutAction() {
