@@ -414,4 +414,36 @@ describe("parseClassification — unreadable owner rule", () => {
     expect(out?.usability.usable).toBe(true);
     expect(out?.party_name).toBe("Sarah Fielding");
   });
+
+  it("rejects when no owner name is extracted, even if owner_identifiable is true", () => {
+    // The model can contradict itself — claim the owner is identifiable while
+    // leaving party_name blank (seen on a Sample-Company trial balance). A
+    // missing name is ground truth: there's nobody to confirm the doc by.
+    const out = parseClassification({
+      ...base,
+      document_type: "trial_balance",
+      party_name: null,
+      owner_identifiable: true,
+      usable: true,
+      usability_confidence: 0.9,
+      primary_issue: null,
+      all_issues: [],
+      issue_summary_fr: "",
+      issue_summary_en: "",
+    });
+    expect(out?.usability.usable).toBe(false);
+    expect(out?.usability.primary_issue).toBe("key_fields_obscured");
+    expect(out?.party_name).toBeNull();
+  });
+
+  it("rejects when party_name is empty/whitespace and the owner signal is present", () => {
+    const out = parseClassification({
+      ...base,
+      party_name: "   ",
+      owner_identifiable: true,
+      usable: true,
+      usability_confidence: 0.9,
+    });
+    expect(out?.usability.usable).toBe(false);
+  });
 });
