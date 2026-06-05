@@ -55,6 +55,7 @@ export function PreviewOverlay({
   const [rejectTarget, setRejectTarget] = useState<PreviewDoc | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const docs = useMemo(
     () => applyOverrides(buildPreviewDocs(uploads, items), overrides),
@@ -165,6 +166,39 @@ export function PreviewOverlay({
     }
   }
 
+  // Trap Tab within the overlay so keyboard focus can't fall back to the dimmed
+  // engagement page behind it. Skips anything inside an `inert` subtree (the
+  // grid while the detail is open, the whole panel while the reject prompt is).
+  function trapTab(e: React.KeyboardEvent) {
+    if (e.key !== "Tab") return;
+    const root = containerRef.current;
+    if (!root) return;
+    const focusables = Array.from(
+      root.querySelectorAll<HTMLElement>(
+        'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter(
+      (el) =>
+        !el.closest("[inert]") &&
+        (el.offsetWidth > 0 ||
+          el.offsetHeight > 0 ||
+          el === document.activeElement),
+    );
+    if (focusables.length === 0) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      if (active === first || !root.contains(active)) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || !root.contains(active)) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
+
   const emptyMessage = query.trim()
     ? t("empty_search")
     : view === "approved"
@@ -175,6 +209,8 @@ export function PreviewOverlay({
 
   const overlay = (
     <div
+      ref={containerRef}
+      onKeyDown={trapTab}
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in-0"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
@@ -186,10 +222,14 @@ export function PreviewOverlay({
         role="dialog"
         aria-modal="true"
         aria-label={`${t("eyebrow")} — ${engagementTitle}`}
+        inert={rejectTarget != null || undefined}
         className="relative flex h-[88vh] w-[92vw] max-w-[1680px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-background shadow-2xl outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-200"
       >
         {/* Header: engagement name + Download all + close */}
-        <div className="flex items-start justify-between gap-3 border-b border-border/40 px-5 py-4">
+        <div
+          inert={selectedDoc != null || undefined}
+          className="flex items-start justify-between gap-3 border-b border-border/40 px-5 py-4"
+        >
           <div className="min-w-0">
             <div className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
               {t("eyebrow")}
@@ -228,7 +268,10 @@ export function PreviewOverlay({
         </div>
 
         {/* Tabs + search */}
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border/40 px-5">
+        <div
+          inert={selectedDoc != null || undefined}
+          className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border/40 px-5"
+        >
           <div className="flex items-center gap-5">
             <PreviewTab
               label={t("tab_all")}
@@ -275,7 +318,10 @@ export function PreviewOverlay({
         </div>
 
         {/* Grid */}
-        <div className="flex-1 overflow-y-auto px-5 py-5">
+        <div
+          inert={selectedDoc != null || undefined}
+          className="flex-1 overflow-y-auto px-5 py-5"
+        >
           {visible.length === 0 ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
               <FolderOpen className="size-8 opacity-40" />
@@ -312,7 +358,10 @@ export function PreviewOverlay({
             pending={pendingItems.has(selectedDoc.itemId)}
             onApprove={() => approve(selectedDoc)}
             onReject={() => setRejectTarget(selectedDoc)}
-            onBack={() => setSelectedFileId(null)}
+            onBack={() => {
+              setSelectedFileId(null);
+              panelRef.current?.focus();
+            }}
             onCloseOverlay={onClose}
           />
         )}

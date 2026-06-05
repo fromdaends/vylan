@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
@@ -86,6 +86,13 @@ export function PreviewDetail({
   const t = useTranslations("Preview");
   const tAi = useTranslations("Ai");
   const [fullscreen, setFullscreen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  // Move focus into the detail when it opens, so keyboard users land on the
+  // document's actions rather than behind the panel.
+  useEffect(() => {
+    rootRef.current?.focus();
+  }, []);
 
   const header = previewHeader(doc, locale);
   const pill = STATUS_PILL[doc.status];
@@ -166,13 +173,23 @@ export function PreviewDetail({
   const hasAnyAi = typeName != null || verdict != null || detailRows.length > 0;
 
   return (
-    <div className="absolute inset-0 z-10 flex flex-col bg-background">
+    <div
+      ref={rootRef}
+      tabIndex={-1}
+      className="absolute inset-0 z-10 flex flex-col bg-background outline-none"
+    >
       {/* Top bar */}
       <div className="flex items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            aria-label={t("back")}
+          >
             <ArrowLeft className="size-4" />
-            {t("back")}
+            <span className="hidden sm:inline">{t("back")}</span>
           </Button>
           <span className="hidden max-w-[22ch] truncate text-sm font-semibold sm:block">
             {header}
@@ -194,10 +211,11 @@ export function PreviewDetail({
             size="sm"
             disabled={pending}
             onClick={onApprove}
+            aria-label={t("approve")}
             className="hover:border-success/40 hover:bg-success hover:text-white"
           >
             <CheckCircle2 className="size-4" />
-            {t("approve")}
+            <span className="hidden sm:inline">{t("approve")}</span>
           </Button>
           <Button
             type="button"
@@ -205,10 +223,11 @@ export function PreviewDetail({
             size="sm"
             disabled={pending}
             onClick={onReject}
+            aria-label={t("reject")}
             className="hover:border-destructive/40 hover:bg-destructive hover:text-white"
           >
             <X className="size-4" />
-            {t("reject")}
+            <span className="hidden sm:inline">{t("reject")}</span>
           </Button>
           <a
             href={`/api/files/${doc.fileId}?download=1`}
