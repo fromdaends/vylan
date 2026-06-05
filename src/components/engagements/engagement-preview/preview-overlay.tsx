@@ -14,6 +14,7 @@ import {
   filterDocs,
   previewCounts,
   previewHeader,
+  searchDocs,
   type PreviewDoc,
   type PreviewStatus,
   type PreviewView,
@@ -56,8 +57,11 @@ export function PreviewOverlay({
     () => applyOverrides(buildPreviewDocs(uploads, items), overrides),
     [uploads, items, overrides],
   );
-  const counts = useMemo(() => previewCounts(docs), [docs]);
-  const visible = useMemo(() => filterDocs(docs, view), [docs, view]);
+  // Search first, then the status tabs filter the search results — so the tab
+  // counts + the grid both reflect the current search.
+  const searched = useMemo(() => searchDocs(docs, query), [docs, query]);
+  const counts = useMemo(() => previewCounts(searched), [searched]);
+  const visible = useMemo(() => filterDocs(searched, view), [searched, view]);
 
   // Lock the page behind the overlay from scrolling and move focus into the
   // panel; restore both on close so the engagement page is exactly where the
@@ -138,8 +142,9 @@ export function PreviewOverlay({
     }
   }
 
-  const emptyMessage =
-    view === "approved"
+  const emptyMessage = query.trim()
+    ? t("empty_search")
+    : view === "approved"
       ? t("empty_approved")
       : view === "rejected"
         ? t("empty_rejected")
@@ -226,13 +231,23 @@ export function PreviewOverlay({
           <div className="relative py-2">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
-              type="search"
+              type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder={t("search_placeholder")}
               aria-label={t("search_placeholder")}
-              className="h-9 w-full rounded-lg border border-border/40 bg-card/40 pr-3 pl-8 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/60 sm:w-64"
+              className="h-9 w-full rounded-lg border border-border/40 bg-card/40 pr-8 pl-8 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/60 sm:w-72"
             />
+            {query && (
+              <button
+                type="button"
+                aria-label={t("clear_search")}
+                onClick={() => setQuery("")}
+                className="absolute top-1/2 right-1.5 inline-flex size-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
           </div>
         </div>
 

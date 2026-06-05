@@ -35,7 +35,22 @@ export type PreviewDoc = {
   itemLabelFr: string | null;
   isImage: boolean;
   isPdf: boolean;
+  // Pre-normalised haystack for keyword search: doc type (code + both EN/FR
+  // names), year, issuer, taxpayer name, form id, amounts, filename, and the
+  // checklist label — lower-cased and accent-stripped so search is language- and
+  // accent-insensitive.
+  searchText: string;
 };
+
+// Strip accents + lower-case so "Rémunération" matches "remuneration" and
+// "EMPLOI" matches "emploi" — the same accent/case-insensitive approach used by
+// the app-wide command search.
+export function normalizeText(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase();
+}
 
 // Resolve the single status a document shows. Order matters:
 //   1. The accountant's explicit decision on the checklist item wins.
@@ -53,6 +68,40 @@ export function resolvePreviewStatus(
     return file.ai_usability.usable ? "approved" : "rejected";
   }
   return "pending";
+}
+
+function buildSearchText(
+  u: UploadedFile,
+  item: RequestItem | undefined,
+): string {
+  const f = (u.ai_extracted_fields ?? {}) as Record<string, unknown>;
+  const parts: (string | null | undefined)[] = [
+    u.original_filename,
+    u.ai_classification,
+  ];
+  const code = u.ai_classification;
+  if (code && code in DOC_TYPE_LABELS) {
+    parts.push(
+      DOC_TYPE_LABELS[code as DocType].en,
+      DOC_TYPE_LABELS[code as DocType].fr,
+    );
+  }
+  if (typeof f.extracted_year === "number") parts.push(String(f.extracted_year));
+  if (typeof f.issuer_name === "string") parts.push(f.issuer_name);
+  if (typeof f.party_name === "string") parts.push(f.party_name);
+  if (typeof f.form_identifier === "string") parts.push(f.form_identifier);
+  if (typeof f.account_or_period === "string") parts.push(f.account_or_period);
+  if (Array.isArray(f.amounts)) {
+    for (const a of f.amounts) {
+      if (a && typeof a === "object") {
+        const am = a as { label?: unknown; value?: unknown };
+        if (typeof am.label === "string") parts.push(am.label);
+        if (typeof am.value === "number") parts.push(String(am.value));
+      }
+    }
+  }
+  parts.push(item?.label, item?.label_fr);
+  return normalizeText(parts.filter(Boolean).join(" "));
 }
 
 // Build the Preview view-model from the raw uploads + checklist items the
@@ -94,6 +143,7 @@ export function buildPreviewDocs(
       itemLabelFr: item?.label_fr ?? null,
       isImage: u.mime_type.startsWith("image/"),
       isPdf: u.mime_type === "application/pdf",
+      searchText: buildSearchText(u, item),
     };
   });
 }
@@ -133,10 +183,20 @@ export function previewCounts(docs: PreviewDoc[]): PreviewCounts {
 }
 
 // Filter the docs to a view. "all" returns everything; the status tabs return
-// only matching docs. (Search filtering is layered on top in a later phase.)
+// only matching docs.
 export function filterDocs(docs: PreviewDoc[], view: PreviewView): PreviewDoc[] {
   if (view === "all") return docs;
   return docs.filter((d) => d.status === view);
+}
+
+// Keyword search: every whitespace-separated token in the query must appear in
+// the document's haystack (AND, so "bank 2024" narrows). Empty query matches
+// everything. Combines with the status tabs (apply search first, then filter).
+export function searchDocs(docs: PreviewDoc[], query: string): PreviewDoc[] {
+  const q = normalizeText(query.trim());
+  if (!q) return docs;
+  const tokens = q.split(/\s+/).filter(Boolean);
+  return docs.filter((d) => tokens.every((tok) => d.searchText.includes(tok)));
 }
 
 // Apply optimistic, in-session status changes (keyed by checklist item, since

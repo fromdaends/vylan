@@ -29,7 +29,8 @@
     "reject_reason_wrong_doc": "Ce n'est pas le document demandé.",
     "reject_reason_incomplete": "Des pages ou des informations manquent.",
     "reject_reason_wrong_name": "Le nom sur le document ne correspond pas à ce client.",
-    "action_failed": "Une erreur s'est produite. Veuillez réessayer."
+    "action_failed": "Une erreur s'est produite. Veuillez réessayer.",
+    "clear_search": "Effacer la recherche"
   },
   "Vylan": {
     "meta_title": "Vylan — Arrêtez de courir après les documents",

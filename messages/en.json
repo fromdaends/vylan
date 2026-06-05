@@ -29,7 +29,8 @@
     "reject_reason_wrong_doc": "This isn't the document we asked for.",
     "reject_reason_incomplete": "Some pages or information are missing.",
     "reject_reason_wrong_name": "The name on it doesn't match this client.",
-    "action_failed": "Something went wrong. Please try again."
+    "action_failed": "Something went wrong. Please try again.",
+    "clear_search": "Clear search"
   },
   "Vylan": {
     "meta_title": "Vylan — Stop chasing documents",

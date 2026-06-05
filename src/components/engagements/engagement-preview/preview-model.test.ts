@@ -6,6 +6,8 @@ import {
   filterDocs,
   previewHeader,
   applyOverrides,
+  searchDocs,
+  normalizeText,
   type PreviewDoc,
 } from "./preview-model";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
@@ -159,6 +161,7 @@ describe("previewHeader", () => {
     itemLabelFr: "Balance de vérification",
     isImage: true,
     isPdf: false,
+    searchText: "",
   };
 
   it("uses the short doc-type name + year when classified", () => {
@@ -234,5 +237,58 @@ describe("applyOverrides", () => {
       rejected: 1,
       pending: 0,
     });
+  });
+});
+
+describe("normalizeText", () => {
+  it("strips accents and lower-cases", () => {
+    expect(normalizeText("Rémunération ÉTÉ")).toBe("remuneration ete");
+  });
+});
+
+describe("searchDocs", () => {
+  const items = [item({ id: "i1", status: "submitted" })];
+  const uploads = [
+    file({
+      id: "a",
+      request_item_id: "i1",
+      original_filename: "scan.png",
+      ai_classification: "t4",
+      ai_extracted_fields: {
+        extracted_year: 2024,
+        issuer_name: "Acme Payroll",
+        party_name: "Geneviève Côté",
+      },
+    }),
+    file({
+      id: "b",
+      request_item_id: "i1",
+      original_filename: "rbc-statement.pdf",
+      ai_classification: "bank_statement",
+      ai_extracted_fields: { extracted_year: 2023 },
+    }),
+  ];
+  const docs = buildPreviewDocs(uploads, items);
+  const ids = (q: string) => searchDocs(docs, q).map((d) => d.fileId);
+
+  it("an empty query returns everything", () => {
+    expect(searchDocs(docs, "   ")).toHaveLength(2);
+  });
+  it("matches the doc-type name even when it differs from the code", () => {
+    expect(ids("remuneration")).toEqual(["a"]); // T4's official EN title
+  });
+  it("matches by year", () => {
+    expect(ids("2023")).toEqual(["b"]);
+  });
+  it("matches issuer + is accent-insensitive on the taxpayer name", () => {
+    expect(ids("acme")).toEqual(["a"]);
+    expect(ids("genevieve")).toEqual(["a"]);
+  });
+  it("matches by filename", () => {
+    expect(ids("rbc")).toEqual(["b"]);
+  });
+  it("AND-combines every token", () => {
+    expect(ids("bank 2023")).toEqual(["b"]);
+    expect(searchDocs(docs, "bank 2024")).toHaveLength(0);
   });
 });
