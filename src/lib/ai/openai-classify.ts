@@ -11,7 +11,12 @@ function client(): OpenAI | null {
   if (_client) return _client;
   const key = process.env.OPENAI_API_KEY;
   if (!key || key.trim() === "") return null;
-  _client = new OpenAI({ apiKey: key });
+  // Hard 40s timeout (under the 60s serverless maxDuration) + no SDK retries:
+  // the classifier runs inside the upload route's after() and the cron worker,
+  // so a slow/hung call must fail cleanly within the function budget rather than
+  // be killed mid-write (which left documents stuck on "Analyzing…" forever).
+  // The 15-minute cron is the retry path, so SDK-level retries aren't needed.
+  _client = new OpenAI({ apiKey: key, timeout: 40_000, maxRetries: 0 });
   return _client;
 }
 
@@ -43,19 +48,19 @@ export function toStrictSchema(node: unknown): unknown {
   return node;
 }
 
-// Reasoning models bill "thinking" tokens as output, but the gap between
-// minimal and medium is only a few hundredths of a cent per document — and
-// "minimal" proved too inconsistent on real-world docs (it hallucinated owner
-// names and occasionally misread a clean slip). So default to "medium" for
-// stable, reliable reads on this core feature. Tunable via
-// OPENAI_REASONING_EFFORT (minimal | low | high) without a code change.
+// Reasoning effort. "medium" was stable but occasionally ran long enough on
+// Vercel to exceed the 60s function limit, leaving uploads stuck on
+// "Analyzing…". "low" is fast (~5-15s) and bounded — and legible-read accuracy
+// comes mostly from normalizing images (webp→jpeg), not from heavy reasoning —
+// so default to "low" for reliable, timely analysis. Tunable via
+// OPENAI_REASONING_EFFORT (minimal | medium | high) without a code change.
 const REASONING_EFFORT =
   (process.env.OPENAI_REASONING_EFFORT?.trim() as
     | "minimal"
     | "low"
     | "medium"
     | "high"
-    | undefined) || "medium";
+    | undefined) || "low";
 
 export async function classifyWithOpenAI(opts: {
   model: string;
