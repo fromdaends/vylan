@@ -51,20 +51,28 @@ async function normalizeImageForAi(
     const img = sharp(bytes, { failOn: "none" });
     const meta = await img.metadata();
     const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
-    // Unknown dimensions (0) or already small → leave it untouched.
-    if (longest === 0 || longest <= MAX_IMAGE_EDGE) {
+    const isStandard = mimeType === "image/jpeg" || mimeType === "image/png";
+    const tooBig = longest > MAX_IMAGE_EDGE;
+
+    // Already a standard format (jpeg/png) and not oversized → send as-is.
+    if (isStandard && !tooBig) {
       return { bytes, mimeType };
     }
-    const out = await img
-      .rotate()
-      .resize({
+
+    // Otherwise re-encode to JPEG (downscaling if oversized). This converts
+    // webp/heic/etc. — which GPT-5 misreads or misclassifies when sent as-is (a
+    // real T4 .webp came back as "not a T4" until converted) — into a format the
+    // vision models read reliably, and caps oversized phone photos.
+    let pipeline = img.rotate();
+    if (tooBig) {
+      pipeline = pipeline.resize({
         width: MAX_IMAGE_EDGE,
         height: MAX_IMAGE_EDGE,
         fit: "inside",
         withoutEnlargement: true,
-      })
-      .jpeg({ quality: 82 })
-      .toBuffer();
+      });
+    }
+    const out = await pipeline.jpeg({ quality: 82 }).toBuffer();
     return { bytes: out, mimeType: "image/jpeg" };
   } catch (e) {
     console.warn("[ai/classify] image normalize failed, using original:", e);
