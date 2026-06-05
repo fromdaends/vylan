@@ -13,6 +13,8 @@ import {
   applyOverrides,
   buildPreviewDocs,
   filterDocs,
+  groupDocsByItem,
+  groupLabel,
   previewCounts,
   previewHeader,
   searchDocs,
@@ -66,6 +68,9 @@ export function PreviewOverlay({
   const searched = useMemo(() => searchDocs(docs, query), [docs, query]);
   const counts = useMemo(() => previewCounts(searched), [searched]);
   const visible = useMemo(() => filterDocs(searched, view), [searched, view]);
+  // Group the visible docs into one section per checklist item (in checklist
+  // order). Composes with the tabs + search — only items with matching docs show.
+  const groups = useMemo(() => groupDocsByItem(visible, items), [visible, items]);
   const selectedDoc = useMemo(
     () =>
       selectedFileId
@@ -337,17 +342,33 @@ export function PreviewOverlay({
               <p>{emptyMessage}</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
-              {visible.map((doc) => (
-                <PreviewCard
-                  key={doc.fileId}
-                  doc={doc}
-                  locale={locale}
-                  pending={pendingItems.has(doc.itemId)}
-                  onOpen={() => setSelectedFileId(doc.fileId)}
-                  onApprove={() => approve(doc)}
-                  onReject={() => setRejectTarget(doc)}
-                />
+            <div className="space-y-7">
+              {groups.map((g) => (
+                <section key={g.itemId} aria-label={groupLabel(g, locale)}>
+                  {/* Section header — the checklist item these documents belong
+                      to. Hairline divider, not a box (mesh, don't box). */}
+                  <div className="mb-3 flex items-baseline gap-2 border-b border-border/30 pb-2">
+                    <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
+                      {groupLabel(g, locale)}
+                    </h3>
+                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                      {t("doc_count", { count: g.docs.length })}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+                    {g.docs.map((doc) => (
+                      <PreviewCard
+                        key={doc.fileId}
+                        doc={doc}
+                        locale={locale}
+                        pending={pendingItems.has(doc.itemId)}
+                        onOpen={() => setSelectedFileId(doc.fileId)}
+                        onApprove={() => approve(doc)}
+                        onReject={() => setRejectTarget(doc)}
+                      />
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}

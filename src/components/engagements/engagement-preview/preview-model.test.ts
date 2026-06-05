@@ -4,6 +4,8 @@ import {
   buildPreviewDocs,
   previewCounts,
   filterDocs,
+  groupDocsByItem,
+  groupLabel,
   previewHeader,
   applyOverrides,
   searchDocs,
@@ -301,5 +303,60 @@ describe("searchDocs", () => {
   it("AND-combines every token", () => {
     expect(ids("bank 2023")).toEqual(["b"]);
     expect(searchDocs(docs, "bank 2024")).toHaveLength(0);
+  });
+});
+
+describe("groupDocsByItem", () => {
+  it("groups docs by item in checklist order, skipping items with no docs", () => {
+    // items arrive pre-ordered by order_index (as listRequestItems returns
+    // them); the middle item has no uploads and must be skipped.
+    const items = [
+      item({ id: "i1", label: "Trial balance" }),
+      item({ id: "i2", label: "T4" }),
+      item({ id: "i3", label: "Bank statement" }),
+    ];
+    const uploads = [
+      file({ id: "a", request_item_id: "i3" }),
+      file({ id: "b", request_item_id: "i1" }),
+      file({ id: "c", request_item_id: "i1" }),
+    ];
+    const docs = buildPreviewDocs(uploads, items);
+    const groups = groupDocsByItem(docs, items);
+    expect(groups.map((g) => g.itemId)).toEqual(["i1", "i3"]); // i2 skipped, order kept
+    expect(groups[0].docs.map((d) => d.fileId)).toEqual(["b", "c"]);
+    expect(groups[1].docs.map((d) => d.fileId)).toEqual(["a"]);
+  });
+
+  it("puts orphan files (item deleted) in a trailing section", () => {
+    const items = [item({ id: "i1", label: "Trial balance" })];
+    const uploads = [
+      file({ id: "a", request_item_id: "i1" }),
+      file({ id: "z", request_item_id: "ghost" }),
+    ];
+    const docs = buildPreviewDocs(uploads, items);
+    const groups = groupDocsByItem(docs, items);
+    expect(groups.map((g) => g.itemId)).toEqual(["i1", "ghost"]);
+    expect(groups[1].docs.map((d) => d.fileId)).toEqual(["z"]);
+  });
+});
+
+describe("groupLabel", () => {
+  it("uses the FR label under fr locale, EN otherwise", () => {
+    const items = [
+      item({ id: "i1", label: "Trial balance", label_fr: "Balance de vérification" }),
+    ];
+    const docs = buildPreviewDocs([file({ id: "a", request_item_id: "i1" })], items);
+    const [g] = groupDocsByItem(docs, items);
+    expect(groupLabel(g, "en")).toBe("Trial balance");
+    expect(groupLabel(g, "fr")).toBe("Balance de vérification");
+  });
+
+  it("falls back to the filename for an orphan section with no label", () => {
+    const docs = buildPreviewDocs(
+      [file({ id: "z", request_item_id: "ghost", original_filename: "mystery.pdf" })],
+      [],
+    );
+    const [g] = groupDocsByItem(docs, []);
+    expect(groupLabel(g, "en")).toBe("mystery.pdf");
   });
 });

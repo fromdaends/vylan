@@ -225,3 +225,65 @@ export function applyOverrides(
       : d,
   );
 }
+
+// A checklist-item section in the Preview grid: every document uploaded under
+// one request item, grouped together so the accountant reviews an item's files
+// side by side instead of scanning a mixed wall.
+export type PreviewGroup = {
+  itemId: string;
+  label: string;
+  labelFr: string | null;
+  docType: string | null;
+  docs: PreviewDoc[];
+};
+
+// Group docs by their checklist item, in checklist order (the `items` array is
+// already ordered by order_index). Items with no matching docs are skipped, so
+// this composes with the tab + search filters: pass the already-filtered docs
+// and only the sections that still have something show up. A file whose item was
+// deleted (orphan) keeps its own trailing section so nothing silently vanishes.
+export function groupDocsByItem(
+  docs: PreviewDoc[],
+  items: RequestItem[],
+): PreviewGroup[] {
+  const byItem = new Map<string, PreviewDoc[]>();
+  for (const d of docs) {
+    const arr = byItem.get(d.itemId);
+    if (arr) arr.push(d);
+    else byItem.set(d.itemId, [d]);
+  }
+  const groups: PreviewGroup[] = [];
+  const seen = new Set<string>();
+  for (const it of items) {
+    const ds = byItem.get(it.id);
+    if (ds && ds.length > 0) {
+      groups.push({
+        itemId: it.id,
+        label: it.label,
+        labelFr: it.label_fr,
+        docType: it.doc_type,
+        docs: ds,
+      });
+      seen.add(it.id);
+    }
+  }
+  for (const [itemId, ds] of byItem) {
+    if (!seen.has(itemId)) {
+      groups.push({
+        itemId,
+        label: ds[0]?.itemLabel ?? "",
+        labelFr: ds[0]?.itemLabelFr ?? null,
+        docType: ds[0]?.classification ?? null,
+        docs: ds,
+      });
+    }
+  }
+  return groups;
+}
+
+// The localized section heading (mirrors previewHeader's fallback chain): the
+// item's FR/EN label, falling back to the first file's name for orphan sections.
+export function groupLabel(group: PreviewGroup, locale: string): string {
+  const label = locale === "fr" && group.labelFr ? group.labelFr : group.label;
+  return label || group.docs[0]?.fileName || "";
+}
