@@ -203,9 +203,11 @@ export function PreviewOverlay({
     ? t("empty_search")
     : view === "approved"
       ? t("empty_approved")
-      : view === "rejected"
-        ? t("empty_rejected")
-        : t("empty_all");
+      : view === "flagged"
+        ? t("empty_flagged")
+        : view === "rejected"
+          ? t("empty_rejected")
+          : t("empty_all");
 
   const overlay = (
     <div
@@ -285,6 +287,13 @@ export function PreviewOverlay({
               active={view === "approved"}
               onClick={() => setView("approved")}
               tone="success"
+            />
+            <PreviewTab
+              label={t("tab_flagged")}
+              count={counts.flagged}
+              active={view === "flagged"}
+              onClick={() => setView("flagged")}
+              tone="warning"
             />
             <PreviewTab
               label={t("tab_rejected")}
@@ -392,16 +401,18 @@ function PreviewTab({
   count: number;
   active: boolean;
   onClick: () => void;
-  tone?: "success" | "destructive";
+  tone?: "success" | "warning" | "destructive";
 }) {
   const countColor =
     tone === "success" && count > 0
       ? "text-success"
-      : tone === "destructive" && count > 0
-        ? "text-destructive"
-        : active
-          ? "text-foreground"
-          : "text-muted-foreground";
+      : tone === "warning" && count > 0
+        ? "text-warning"
+        : tone === "destructive" && count > 0
+          ? "text-destructive"
+          : active
+            ? "text-foreground"
+            : "text-muted-foreground";
   return (
     <button
       type="button"

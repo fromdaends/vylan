@@ -86,9 +86,17 @@ describe("resolvePreviewStatus", () => {
       resolvePreviewStatus(file({ ai_usability: verdict(true) }), "submitted"),
     ).toBe("approved");
   });
-  it("an AI unusable verdict => rejected", () => {
+  it("an AI unusable verdict that was NOT sent to the client => flagged", () => {
     expect(
       resolvePreviewStatus(file({ ai_usability: verdict(false) }), "submitted"),
+    ).toBe("flagged");
+  });
+  it("an AI-unusable doc the system actually bounced to the client => rejected", () => {
+    expect(
+      resolvePreviewStatus(
+        file({ ai_usability: verdict(false), ai_rejected: true }),
+        "submitted",
+      ),
     ).toBe("rejected");
   });
   it("no verdict yet => pending (neutral)", () => {
@@ -111,7 +119,7 @@ describe("buildPreviewDocs", () => {
     expect(docs).toHaveLength(3);
 
     const a = docs.find((d) => d.fileId === "a")!;
-    expect(a.status).toBe("rejected");
+    expect(a.status).toBe("flagged");
     expect(a.siblingCount).toBe(2);
 
     const c = docs.find((d) => d.fileId === "c")!;
@@ -198,7 +206,8 @@ describe("previewCounts + filterDocs", () => {
     expect(previewCounts(docs)).toEqual({
       all: 3,
       approved: 1,
-      rejected: 1,
+      flagged: 1,
+      rejected: 0,
       pending: 1,
     });
   });
@@ -206,7 +215,8 @@ describe("previewCounts + filterDocs", () => {
   it("filters by view", () => {
     expect(filterDocs(docs, "all")).toHaveLength(3);
     expect(filterDocs(docs, "approved").map((d) => d.fileId)).toEqual(["a"]);
-    expect(filterDocs(docs, "rejected").map((d) => d.fileId)).toEqual(["b"]);
+    expect(filterDocs(docs, "flagged").map((d) => d.fileId)).toEqual(["b"]);
+    expect(filterDocs(docs, "rejected")).toHaveLength(0);
   });
 });
 
@@ -230,11 +240,12 @@ describe("applyOverrides", () => {
     const out = applyOverrides(docs, new Map([["i1", "approved"]]));
     expect(out.find((d) => d.fileId === "a")!.status).toBe("approved");
     expect(out.find((d) => d.fileId === "b")!.status).toBe("approved");
-    expect(out.find((d) => d.fileId === "c")!.status).toBe("rejected");
+    expect(out.find((d) => d.fileId === "c")!.status).toBe("flagged");
     expect(previewCounts(out)).toEqual({
       all: 3,
       approved: 2,
-      rejected: 1,
+      flagged: 1,
+      rejected: 0,
       pending: 0,
     });
   });

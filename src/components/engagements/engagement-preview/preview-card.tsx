@@ -4,6 +4,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import {
+  AlertTriangle,
   Check,
   CheckCircle2,
   Clock,
@@ -30,6 +31,12 @@ const STATUS_UI: Record<
     badge: "bg-success",
     text: "text-success",
     Icon: CheckCircle2,
+  },
+  flagged: {
+    border: "border-warning/60",
+    badge: "bg-warning",
+    text: "text-warning",
+    Icon: AlertTriangle,
   },
   rejected: {
     border: "border-destructive/60",
