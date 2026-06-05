@@ -383,6 +383,7 @@ export default async function EngagementDetailPage({
                     canEdit={isLive}
                     clientName={client?.display_name ?? null}
                     expectedYear={expectedYearFromTitle(engagement.title)}
+                    engagementTitle={engagement.title}
                   />
                 ))}
               </ul>
@@ -414,6 +415,7 @@ async function ItemRow({
   canEdit,
   clientName,
   expectedYear,
+  engagementTitle,
 }: {
   item: RequestItem;
   files: (UploadedFile & { url: string })[];
@@ -421,6 +423,7 @@ async function ItemRow({
   canEdit: boolean;
   clientName: string | null;
   expectedYear: number | null;
+  engagementTitle: string;
 }) {
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -441,6 +444,17 @@ async function ItemRow({
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {hasSubmittedFiles && (
+            <EngagementPreview
+              variant="item"
+              uploads={files}
+              items={[item]}
+              engagementId={item.engagement_id}
+              engagementTitle={engagementTitle}
+              clientName={clientName}
+              locale={locale}
+            />
+          )}
           <Badge variant={itemBadgeVariant(item.status)}>
             {tStatus(item.status)}
           </Badge>
