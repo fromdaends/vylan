@@ -3,39 +3,61 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { Download, FolderOpen, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
+import { approveItemAction, rejectItemAction } from "@/app/actions/items";
 import {
+  applyOverrides,
   buildPreviewDocs,
+  filterDocs,
   previewCounts,
+  previewHeader,
+  type PreviewDoc,
+  type PreviewStatus,
   type PreviewView,
 } from "./preview-model";
+import { PreviewCard } from "./preview-card";
+import { PreviewRejectPrompt } from "./preview-reject-prompt";
 import type { EngagementPreviewProps } from "./engagement-preview";
 
 type Props = EngagementPreviewProps & { onClose: () => void };
 
 // The focused review workspace: an ~85% overlay floating over the dimmed
-// engagement page. Phase 1 builds the shell — header (with Download all),
-// status tabs with live counts, search box, and the responsive grid frame.
-// The real thumbnail cards, tab/search filtering, and click-in detail land in
-// the following phases (the grid currently shows skeleton tiles).
+// engagement page. Header (with Download all), status tabs with live counts, a
+// search box, and the responsive thumbnail grid. Approve / reject / download act
+// straight from the grid (optimistic), reusing the existing item actions. The
+// click-in split detail lands in Phase 4; keyword search filtering in Phase 3.
 export function PreviewOverlay({
   uploads,
   items,
   engagementId,
   engagementTitle,
   clientName,
+  locale,
   onClose,
 }: Props) {
   const t = useTranslations("Preview");
   const tEng = useTranslations("Engagements");
   const [view, setView] = useState<PreviewView>("all");
   const [query, setQuery] = useState("");
+  // Optimistic, in-session approve/reject, keyed by checklist item.
+  const [overrides, setOverrides] = useState<Map<string, PreviewStatus>>(
+    () => new Map(),
+  );
+  const [pendingItems, setPendingItems] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [rejectTarget, setRejectTarget] = useState<PreviewDoc | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const docs = useMemo(() => buildPreviewDocs(uploads, items), [uploads, items]);
+  const docs = useMemo(
+    () => applyOverrides(buildPreviewDocs(uploads, items), overrides),
+    [uploads, items, overrides],
+  );
   const counts = useMemo(() => previewCounts(docs), [docs]);
+  const visible = useMemo(() => filterDocs(docs, view), [docs, view]);
 
   // Lock the page behind the overlay from scrolling and move focus into the
   // panel; restore both on close so the engagement page is exactly where the
@@ -51,19 +73,71 @@ export function PreviewOverlay({
     };
   }, []);
 
-  // Escape closes the overlay.
+  // Escape closes the overlay (unless the reject prompt is open — it handles its
+  // own Escape/cancel first).
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !rejectTarget) {
         e.stopPropagation();
         onClose();
       }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, rejectTarget]);
 
-  const visibleCount = counts[view];
+  function setItemPending(itemId: string, on: boolean) {
+    setPendingItems((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(itemId);
+      else next.delete(itemId);
+      return next;
+    });
+  }
+
+  function clearOverride(itemId: string) {
+    setOverrides((prev) => {
+      const next = new Map(prev);
+      next.delete(itemId);
+      return next;
+    });
+  }
+
+  async function approve(doc: PreviewDoc) {
+    setOverrides((prev) => new Map(prev).set(doc.itemId, "approved"));
+    setItemPending(doc.itemId, true);
+    try {
+      const fd = new FormData();
+      fd.set("id", doc.itemId);
+      await approveItemAction(fd);
+    } catch {
+      clearOverride(doc.itemId);
+      toast.error(t("action_failed"));
+    } finally {
+      setItemPending(doc.itemId, false);
+    }
+  }
+
+  async function reject(doc: PreviewDoc, reason: string) {
+    setRejectTarget(null);
+    setOverrides((prev) => new Map(prev).set(doc.itemId, "rejected"));
+    setItemPending(doc.itemId, true);
+    try {
+      const fd = new FormData();
+      fd.set("id", doc.itemId);
+      fd.set("reason", reason);
+      const res = await rejectItemAction(null, fd);
+      if (res && (res.fieldErrors || res.error)) {
+        throw new Error("reject_failed");
+      }
+    } catch {
+      clearOverride(doc.itemId);
+      toast.error(t("action_failed"));
+    } finally {
+      setItemPending(doc.itemId, false);
+    }
+  }
+
   const emptyMessage =
     view === "approved"
       ? t("empty_approved")
@@ -74,7 +148,6 @@ export function PreviewOverlay({
   const overlay = (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in-0"
-      // Clicking the dimmed area (but not the panel) closes the overlay.
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -90,7 +163,7 @@ export function PreviewOverlay({
         {/* Header: engagement name + Download all + close */}
         <div className="flex items-start justify-between gap-3 border-b border-border/40 px-5 py-4">
           <div className="min-w-0">
-            <div className="text-[0.7rem] font-medium uppercase tracking-wide text-muted-foreground">
+            <div className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
               {t("eyebrow")}
             </div>
             <h2 className="truncate text-lg font-semibold tracking-tight">
@@ -163,22 +236,38 @@ export function PreviewOverlay({
           </div>
         </div>
 
-        {/* Grid area */}
+        {/* Grid */}
         <div className="flex-1 overflow-y-auto px-5 py-5">
-          {visibleCount === 0 ? (
+          {visible.length === 0 ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
               <FolderOpen className="size-8 opacity-40" />
               <p>{emptyMessage}</p>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
-              {Array.from({ length: visibleCount }).map((_, i) => (
-                <SkeletonTile key={i} />
+              {visible.map((doc) => (
+                <PreviewCard
+                  key={doc.fileId}
+                  doc={doc}
+                  locale={locale}
+                  pending={pendingItems.has(doc.itemId)}
+                  onApprove={() => approve(doc)}
+                  onReject={() => setRejectTarget(doc)}
+                />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {rejectTarget && (
+        <PreviewRejectPrompt
+          docHeader={previewHeader(rejectTarget, locale)}
+          busy={pendingItems.has(rejectTarget.itemId)}
+          onCancel={() => setRejectTarget(null)}
+          onConfirm={(reason) => reject(rejectTarget, reason)}
+        />
+      )}
     </div>
   );
 
@@ -229,20 +318,5 @@ function PreviewTab({
         {count}
       </span>
     </button>
-  );
-}
-
-// Phase 1 placeholder tile. The dense responsive grid + the document card
-// frame are real; the thumbnail image + couple-word header + status colour +
-// quick actions are filled in by Phase 2.
-function SkeletonTile() {
-  return (
-    <div className="overflow-hidden rounded-xl border border-border/40 bg-card/40">
-      <div className="aspect-[3/4] w-full bg-muted/50 motion-safe:animate-pulse" />
-      <div className="space-y-1.5 p-2.5">
-        <div className="h-3 w-2/3 rounded bg-muted/50 motion-safe:animate-pulse" />
-        <div className="h-2.5 w-1/3 rounded bg-muted/40 motion-safe:animate-pulse" />
-      </div>
-    </div>
   );
 }

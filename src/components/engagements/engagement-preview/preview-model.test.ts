@@ -4,6 +4,9 @@ import {
   buildPreviewDocs,
   previewCounts,
   filterDocs,
+  previewHeader,
+  applyOverrides,
+  type PreviewDoc,
 } from "./preview-model";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { RequestItem } from "@/lib/db/request-items";
@@ -114,10 +117,68 @@ describe("buildPreviewDocs", () => {
     expect(c.siblingCount).toBe(1);
   });
 
+  it("carries classification, year, and mime flags onto the doc", () => {
+    const docs = buildPreviewDocs(
+      [
+        file({
+          id: "a",
+          mime_type: "image/png",
+          ai_classification: "t4",
+          ai_extracted_fields: { extracted_year: 2024 },
+        }),
+      ],
+      [item({ id: "i1" })],
+    );
+    expect(docs[0].classification).toBe("t4");
+    expect(docs[0].extractedYear).toBe(2024);
+    expect(docs[0].isImage).toBe(true);
+    expect(docs[0].isPdf).toBe(false);
+  });
+
   it("defaults a file whose item is missing to pending", () => {
     const docs = buildPreviewDocs([file({ request_item_id: "ghost" })], []);
     expect(docs[0].status).toBe("pending");
     expect(docs[0].itemStatus).toBe("pending");
+  });
+});
+
+describe("previewHeader", () => {
+  const base: PreviewDoc = {
+    fileId: "f",
+    itemId: "i",
+    fileName: "scan.jpg",
+    mimeType: "image/jpeg",
+    sizeBytes: 1,
+    uploadedAt: "2026-01-01T00:00:00Z",
+    status: "pending",
+    itemStatus: "submitted",
+    siblingCount: 1,
+    classification: null,
+    extractedYear: null,
+    itemLabel: "Trial Balance",
+    itemLabelFr: "Balance de vérification",
+    isImage: true,
+    isPdf: false,
+  };
+
+  it("uses the short doc-type name + year when classified", () => {
+    expect(
+      previewHeader({ ...base, classification: "t4", extractedYear: 2024 }, "en"),
+    ).toBe("T4 · 2024");
+  });
+  it("drops the year when not extracted", () => {
+    expect(
+      previewHeader({ ...base, classification: "bank_statement" }, "en"),
+    ).toBe("Bank statements");
+  });
+  it("falls back to the localized item label when unclassified", () => {
+    expect(previewHeader(base, "en")).toBe("Trial Balance");
+    expect(previewHeader(base, "fr")).toBe("Balance de vérification");
+  });
+  it("falls back to the filename when there is no item label", () => {
+    expect(previewHeader({ ...base, itemLabel: "", itemLabelFr: null }, "en")).toBe(
+      "scan.jpg",
+    );
   });
 });
 
@@ -143,5 +204,35 @@ describe("previewCounts + filterDocs", () => {
     expect(filterDocs(docs, "all")).toHaveLength(3);
     expect(filterDocs(docs, "approved").map((d) => d.fileId)).toEqual(["a"]);
     expect(filterDocs(docs, "rejected").map((d) => d.fileId)).toEqual(["b"]);
+  });
+});
+
+describe("applyOverrides", () => {
+  const items = [
+    item({ id: "i1", status: "submitted" }),
+    item({ id: "i2", status: "submitted" }),
+  ];
+  const uploads = [
+    file({ id: "a", request_item_id: "i1", ai_usability: verdict(false) }),
+    file({ id: "b", request_item_id: "i1", ai_usability: verdict(false) }),
+    file({ id: "c", request_item_id: "i2", ai_usability: verdict(false) }),
+  ];
+  const docs = buildPreviewDocs(uploads, items);
+
+  it("returns the same array when there are no overrides", () => {
+    expect(applyOverrides(docs, new Map())).toBe(docs);
+  });
+
+  it("flips every sibling under an overridden item, leaving others untouched", () => {
+    const out = applyOverrides(docs, new Map([["i1", "approved"]]));
+    expect(out.find((d) => d.fileId === "a")!.status).toBe("approved");
+    expect(out.find((d) => d.fileId === "b")!.status).toBe("approved");
+    expect(out.find((d) => d.fileId === "c")!.status).toBe("rejected");
+    expect(previewCounts(out)).toEqual({
+      all: 3,
+      approved: 2,
+      rejected: 1,
+      pending: 0,
+    });
   });
 });

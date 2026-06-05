@@ -1,5 +1,7 @@
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
+import type { DocType } from "@/lib/db/templates";
+import { DOC_TYPE_LABELS, docTypeLabel } from "@/lib/doc-types";
 
 // The at-a-glance states a document can show in the Preview grid. Deliberately
 // only two "decided" states (approved / rejected) plus a neutral "pending" for
@@ -23,6 +25,16 @@ export type PreviewDoc = {
   // rejecting one card moves its siblings too — the UI surfaces this count so
   // it is never a surprise.
   siblingCount: number;
+  // What the AI read this document as (a DocType code, "unknown", or null when
+  // not analysed) + the year it pulled, used for the couple-word header.
+  classification: string | null;
+  extractedYear: number | null;
+  // The parent checklist item's labels, used as the header fallback when the
+  // AI hasn't classified the file yet.
+  itemLabel: string;
+  itemLabelFr: string | null;
+  isImage: boolean;
+  isPdf: boolean;
 };
 
 // Resolve the single status a document shows. Order matters:
@@ -59,8 +71,13 @@ export function buildPreviewDocs(
     );
   }
   return uploads.map((u) => {
-    const itemStatus: RequestItemStatus =
-      itemById.get(u.request_item_id)?.status ?? "pending";
+    const item = itemById.get(u.request_item_id);
+    const itemStatus: RequestItemStatus = item?.status ?? "pending";
+    const fields = (u.ai_extracted_fields ?? {}) as {
+      extracted_year?: unknown;
+    };
+    const year =
+      typeof fields.extracted_year === "number" ? fields.extracted_year : null;
     return {
       fileId: u.id,
       itemId: u.request_item_id,
@@ -71,8 +88,29 @@ export function buildPreviewDocs(
       status: resolvePreviewStatus(u, itemStatus),
       itemStatus,
       siblingCount: siblingCounts.get(u.request_item_id) ?? 1,
+      classification: u.ai_classification,
+      extractedYear: year,
+      itemLabel: item?.label ?? "",
+      itemLabelFr: item?.label_fr ?? null,
+      isImage: u.mime_type.startsWith("image/"),
+      isPdf: u.mime_type === "application/pdf",
     };
   });
+}
+
+// The couple-word grid header: the AI's short doc-type name (the bit before the
+// " — " in the official form title, e.g. "T4", "RL-1", "Bank statements") plus
+// the year when known. Falls back to the checklist item label, then the
+// filename, when the AI hasn't classified the document yet.
+export function previewHeader(doc: PreviewDoc, locale: string): string {
+  const code = doc.classification;
+  if (code && code !== "unknown" && code in DOC_TYPE_LABELS) {
+    const short = docTypeLabel(code as DocType, locale).split(" — ")[0].trim();
+    return doc.extractedYear ? `${short} · ${doc.extractedYear}` : short;
+  }
+  const label =
+    locale === "fr" && doc.itemLabelFr ? doc.itemLabelFr : doc.itemLabel;
+  return label || doc.fileName;
 }
 
 export type PreviewCounts = {
@@ -99,4 +137,20 @@ export function previewCounts(docs: PreviewDoc[]): PreviewCounts {
 export function filterDocs(docs: PreviewDoc[], view: PreviewView): PreviewDoc[] {
   if (view === "all") return docs;
   return docs.filter((d) => d.status === view);
+}
+
+// Apply optimistic, in-session status changes (keyed by checklist item, since
+// that is where approve/reject lives) on top of the server-derived docs. Lets
+// an approve/reject reflect instantly in the grid + tab counts before the page
+// data refreshes.
+export function applyOverrides(
+  docs: PreviewDoc[],
+  overrides: Map<string, PreviewStatus>,
+): PreviewDoc[] {
+  if (overrides.size === 0) return docs;
+  return docs.map((d) =>
+    overrides.has(d.itemId)
+      ? { ...d, status: overrides.get(d.itemId)! }
+      : d,
+  );
 }

@@ -14,7 +14,22 @@
     "empty_all": "No documents uploaded yet.",
     "empty_approved": "Nothing approved yet.",
     "empty_rejected": "Nothing rejected.",
-    "empty_search": "No documents match your search."
+    "empty_search": "No documents match your search.",
+    "approve": "Approve",
+    "reject": "Reject",
+    "download": "Download",
+    "rejecting": "Rejecting…",
+    "cancel": "Cancel",
+    "n_files": "{count, plural, one {# file} other {# files}}",
+    "reject_title": "Reject this document?",
+    "reject_subtitle": "The client sees this reason and is asked to re-upload.",
+    "reject_placeholder": "What should the client fix? (they'll see this)",
+    "reject_confirm": "Reject",
+    "reject_reason_blurry": "The scan is too blurry to read.",
+    "reject_reason_wrong_doc": "This isn't the document we asked for.",
+    "reject_reason_incomplete": "Some pages or information are missing.",
+    "reject_reason_wrong_name": "The name on it doesn't match this client.",
+    "action_failed": "Something went wrong. Please try again."
   },
   "Vylan": {
     "meta_title": "Vylan — Stop chasing documents",
