@@ -43,18 +43,19 @@ export function toStrictSchema(node: unknown): unknown {
   return node;
 }
 
-// Reasoning models bill "thinking" tokens as output, and on dense real
-// documents that "thinking" is the dominant cost. The eval scored a perfect
-// 8/8 + 3/3 even at "minimal", so default there to keep cost down; bump via
-// OPENAI_REASONING_EFFORT (low|medium|high) without a code change if a messier
-// real-world doc ever needs more deliberation.
+// Reasoning models bill "thinking" tokens as output, but the gap between
+// minimal and medium is only a few hundredths of a cent per document — and
+// "minimal" proved too inconsistent on real-world docs (it hallucinated owner
+// names and occasionally misread a clean slip). So default to "medium" for
+// stable, reliable reads on this core feature. Tunable via
+// OPENAI_REASONING_EFFORT (minimal | low | high) without a code change.
 const REASONING_EFFORT =
   (process.env.OPENAI_REASONING_EFFORT?.trim() as
     | "minimal"
     | "low"
     | "medium"
     | "high"
-    | undefined) || "minimal";
+    | undefined) || "medium";
 
 export async function classifyWithOpenAI(opts: {
   model: string;

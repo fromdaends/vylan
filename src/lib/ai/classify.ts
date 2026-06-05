@@ -51,20 +51,28 @@ async function normalizeImageForAi(
     const img = sharp(bytes, { failOn: "none" });
     const meta = await img.metadata();
     const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
-    // Unknown dimensions (0) or already small → leave it untouched.
-    if (longest === 0 || longest <= MAX_IMAGE_EDGE) {
+    const isStandard = mimeType === "image/jpeg" || mimeType === "image/png";
+    const tooBig = longest > MAX_IMAGE_EDGE;
+
+    // Already a standard format (jpeg/png) and not oversized → send as-is.
+    if (isStandard && !tooBig) {
       return { bytes, mimeType };
     }
-    const out = await img
-      .rotate()
-      .resize({
+
+    // Otherwise re-encode to JPEG (downscaling if oversized). This converts
+    // webp/heic/etc. — which GPT-5 misreads or misclassifies when sent as-is (a
+    // real T4 .webp came back as "not a T4" until converted) — into a format the
+    // vision models read reliably, and caps oversized phone photos.
+    let pipeline = img.rotate();
+    if (tooBig) {
+      pipeline = pipeline.resize({
         width: MAX_IMAGE_EDGE,
         height: MAX_IMAGE_EDGE,
         fit: "inside",
         withoutEnlargement: true,
-      })
-      .jpeg({ quality: 82 })
-      .toBuffer();
+      });
+    }
+    const out = await pipeline.jpeg({ quality: 82 }).toBuffer();
     return { bytes: out, mimeType: "image/jpeg" };
   } catch (e) {
     console.warn("[ai/classify] image normalize failed, using original:", e);
@@ -386,6 +394,14 @@ describe the redaction in party_name), and use a usability_confidence of at
 least 0.85 — a document whose owner cannot be confirmed is never acceptable,
 even if everything else on it is perfectly legible.
 
+For financial statements (trial balance, income statement, balance sheet,
+general ledger), the owner is the COMPANY named in the header — read it into
+party_name. Whenever you CAN identify the real owner, ALWAYS copy that exact
+name into party_name; never leave party_name blank if a real name is legible.
+Obvious placeholder / sample / template names (e.g. "Sample Company",
+"Example", "John Doe", "Test", a generic "You") do NOT identify a real owner —
+treat them as missing: set party_name to null and owner_identifiable to false.
+
 Return a usability_confidence between 0 and 1. Use <0.80 when you are
 uncertain — Vylan only auto-acts above that threshold.
 
@@ -522,9 +538,20 @@ export function parseClassification(
   if (typeof doc !== "string") return null;
   if (typeof conf !== "number") return null;
 
-  // Hard identity rule (see withUnreadableOwner): when the owner's name can't be
-  // read, force an unusable verdict and drop any "redacted" placeholder name.
-  const ownerUnreadable = raw.owner_identifiable === false;
+  // Hard identity rule (see withUnreadableOwner): a document is unusable when its
+  // owner can't be identified — either the model flagged it (owner_identifiable
+  // false) OR no owner/company name was legible at all (party_name empty). The
+  // two model signals sometimes disagree (it can claim "identifiable" while
+  // leaving the name blank), so a MISSING name is treated as ground truth: if
+  // there is no name to confirm the document by, it cannot be accepted.
+  const partyName = str(raw.party_name);
+  // Only enforced on responses that include the owner_identifiable signal (all
+  // current model output does); a missing name then counts as "no owner". Older
+  // responses without the field keep their prior behavior, so a usable verdict
+  // is never silently flipped just because no party was extracted.
+  const hasOwnerSignal = typeof raw.owner_identifiable === "boolean";
+  const ownerUnreadable =
+    hasOwnerSignal && (raw.owner_identifiable === false || partyName === null);
 
   return {
     document_type: (KNOWN_DOC_TYPES as string[]).includes(doc)
@@ -546,7 +573,7 @@ export function parseClassification(
         : null,
     document_date: str(raw.document_date),
     issuer_name: str(raw.issuer_name),
-    party_name: ownerUnreadable ? null : str(raw.party_name),
+    party_name: ownerUnreadable ? null : partyName,
     account_or_period: str(raw.account_or_period),
     form_identifier: str(raw.form_identifier),
     amounts: parseAmounts(raw.amounts),
