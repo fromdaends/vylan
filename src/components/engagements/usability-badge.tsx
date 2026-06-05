@@ -131,11 +131,14 @@ export function UsabilityBadge({
             <dd className="font-mono">
               {Math.round(verdict.confidence * 100)}%
             </dd>
-            {state === "auto_rejected" && localizedSummary && (
+            {localizedSummary && (
               <>
                 <dt className="text-muted-foreground">
-                  {t("client_message")}
+                  {state === "auto_rejected"
+                    ? t("client_message")
+                    : t("reason")}
                 </dt>
+                {/* Full, untruncated reason — the collapsed header clips it. */}
                 <dd className="italic">&ldquo;{localizedSummary}&rdquo;</dd>
               </>
             )}
