@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   ArrowUpRight,
@@ -81,7 +81,9 @@ export function TemplateCard({
   className?: string;
 }) {
   const t = useTranslations("Templates");
-  const Icon = resolveTemplateIcon(name, type);
+  // Lowercase + createElement: the resolved glyph is a stable lucide component,
+  // but assigning it to a capitalized `const` trips react-hooks/static-components.
+  const icon = resolveTemplateIcon(name, type);
   const shown = preview.map(cleanLabel).filter(Boolean).slice(0, 3);
   const more = Math.max(0, itemCount - shown.length);
 
@@ -89,7 +91,7 @@ export function TemplateCard({
     <>
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent transition-colors duration-200 group-hover:bg-accent group-hover:text-accent-foreground">
-          <Icon className="h-5 w-5" aria-hidden />
+          {createElement(icon, { className: "h-5 w-5", "aria-hidden": true })}
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold leading-snug text-foreground">

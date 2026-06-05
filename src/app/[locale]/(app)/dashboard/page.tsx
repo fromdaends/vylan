@@ -49,6 +49,11 @@ export default async function DashboardPage({
       name: tmpl.name,
       type: tmpl.type,
       itemCount: tmpl.items.length,
+      requiredCount: tmpl.items.filter((it) => it.required).length,
+      // First few item labels (localized) for the card's "peek inside".
+      preview: tmpl.items
+        .slice(0, 3)
+        .map((it) => (locale === "fr" ? it.label_fr : it.label_en)),
       builtIn: tmpl.firm_id == null,
     }));
 

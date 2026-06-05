@@ -14,13 +14,31 @@ vi.mock("@/i18n/navigation", () => ({
 }));
 
 const templates: TemplateCard[] = [
-  { id: "b1", name: "T1 Personal Return", type: "t1", itemCount: 8, builtIn: true },
-  { id: "b2", name: "Corporate T2", type: "t2", itemCount: 12, builtIn: true },
+  {
+    id: "b1",
+    name: "T1 Personal Return",
+    type: "t1",
+    itemCount: 8,
+    requiredCount: 3,
+    preview: ["T4", "RL-1"],
+    builtIn: true,
+  },
+  {
+    id: "b2",
+    name: "Corporate T2",
+    type: "t2",
+    itemCount: 12,
+    requiredCount: 5,
+    preview: ["Trial balance", "General ledger"],
+    builtIn: true,
+  },
   {
     id: "f1",
     name: "Monthly Bookkeeping",
     type: "bookkeeping",
     itemCount: 5,
+    requiredCount: 4,
+    preview: ["Bank statements"],
     builtIn: false,
   },
   {
@@ -28,6 +46,8 @@ const templates: TemplateCard[] = [
     name: "Client Onboarding",
     type: "custom",
     itemCount: 3,
+    requiredCount: 2,
+    preview: ["Prior return"],
     builtIn: false,
   },
 ];
