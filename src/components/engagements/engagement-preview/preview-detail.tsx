@@ -44,6 +44,10 @@ const STATUS_PILL: Record<
     cls: "border-success/40 bg-success/10 text-success",
     Icon: CheckCircle2,
   },
+  flagged: {
+    cls: "border-warning/40 bg-warning/10 text-warning",
+    Icon: AlertTriangle,
+  },
   rejected: {
     cls: "border-destructive/40 bg-destructive/10 text-destructive",
     Icon: XCircle,

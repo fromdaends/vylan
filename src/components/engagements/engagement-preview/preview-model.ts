@@ -3,13 +3,18 @@ import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
 import type { DocType } from "@/lib/db/templates";
 import { DOC_TYPE_LABELS, docTypeLabel } from "@/lib/doc-types";
 
-// The at-a-glance states a document can show in the Preview grid. Deliberately
-// only two "decided" states (approved / rejected) plus a neutral "pending" for
-// documents the AI hasn't finished analysing yet — there is NO "unsure".
-export type PreviewStatus = "approved" | "rejected" | "pending";
+// The at-a-glance states a document can show in the Preview grid:
+//   * approved — the accountant accepted it (or the AI read it as usable).
+//   * rejected — it was ACTUALLY sent back to the client to re-upload (the
+//     accountant rejected the item, or the firm's auto-reject bounced it).
+//   * flagged  — the AI spotted a possible issue but NOTHING was sent to the
+//     client; it's waiting on the accountant. (This used to show as "rejected",
+//     which wrongly implied the client had already been told.)
+//   * pending  — the AI hasn't finished analysing yet. There is NO "unsure".
+export type PreviewStatus = "approved" | "rejected" | "flagged" | "pending";
 
-// The grid's view tabs. "all" shows everything; the other two filter by status.
-export type PreviewView = "all" | "approved" | "rejected";
+// The grid's view tabs. "all" shows everything; the others filter by status.
+export type PreviewView = "all" | "approved" | "flagged" | "rejected";
 
 export type PreviewDoc = {
   fileId: string;
@@ -53,9 +58,12 @@ export function normalizeText(s: string): string {
 }
 
 // Resolve the single status a document shows. Order matters:
-//   1. The accountant's explicit decision on the checklist item wins.
-//   2. Otherwise the system's auto-reject flag.
-//   3. Otherwise the AI's usability verdict (usable -> approved, else rejected).
+//   1. The accountant's explicit decision on the checklist item wins
+//      (approved, or rejected = they sent it back to the client).
+//   2. Otherwise the system's auto-reject flag — a TRUE rejection the client
+//      was notified about.
+//   3. Otherwise the AI's usability verdict: usable -> approved; not usable ->
+//      "flagged" (a suggestion for the accountant, NOT a client rejection).
 //   4. Otherwise it simply hasn't been analysed yet (neutral "pending").
 export function resolvePreviewStatus(
   file: Pick<UploadedFile, "ai_usability" | "ai_rejected">,
@@ -65,7 +73,7 @@ export function resolvePreviewStatus(
   if (itemStatus === "rejected") return "rejected";
   if (file.ai_rejected) return "rejected";
   if (file.ai_usability) {
-    return file.ai_usability.usable ? "approved" : "rejected";
+    return file.ai_usability.usable ? "approved" : "flagged";
   }
   return "pending";
 }
@@ -166,20 +174,23 @@ export function previewHeader(doc: PreviewDoc, locale: string): string {
 export type PreviewCounts = {
   all: number;
   approved: number;
+  flagged: number;
   rejected: number;
   pending: number;
 };
 
 export function previewCounts(docs: PreviewDoc[]): PreviewCounts {
   let approved = 0;
+  let flagged = 0;
   let rejected = 0;
   let pending = 0;
   for (const d of docs) {
     if (d.status === "approved") approved++;
+    else if (d.status === "flagged") flagged++;
     else if (d.status === "rejected") rejected++;
     else pending++;
   }
-  return { all: docs.length, approved, rejected, pending };
+  return { all: docs.length, approved, flagged, rejected, pending };
 }
 
 // Filter the docs to a view. "all" returns everything; the status tabs return
