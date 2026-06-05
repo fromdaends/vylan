@@ -994,7 +994,11 @@
   },
   "Templates": {
     "title": "Modèles",
-    "subtitle": "Listes prédéfinies que vous pouvez réutiliser pour créer des engagements.",
+    "subtitle": "Lancez un engagement à partir d'une liste de documents prête à l'emploi, ou créez la vôtre.",
+    "documents_count": "{count, plural, one {# document} other {# documents}}",
+    "required_count": "{count} requis",
+    "includes": "Comprend",
+    "plus_more": "+{count} de plus",
     "section_builtin": "Modèles intégrés",
     "section_firm": "Vos modèles",
     "firm_empty": "Vous n’avez pas encore cloné de modèle.",

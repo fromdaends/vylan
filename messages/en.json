@@ -994,7 +994,11 @@
   },
   "Templates": {
     "title": "Templates",
-    "subtitle": "Predefined checklists you can reuse when creating engagements.",
+    "subtitle": "Start an engagement from a ready-made document checklist, or build your own.",
+    "documents_count": "{count, plural, one {# document} other {# documents}}",
+    "required_count": "{count} required",
+    "includes": "Includes",
+    "plus_more": "+{count} more",
     "section_builtin": "Built-in templates",
     "section_firm": "Your templates",
     "firm_empty": "You haven't cloned a template yet.",
