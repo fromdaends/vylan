@@ -25,25 +25,43 @@ export type EngagementPreviewProps = {
   locale: "fr" | "en";
 };
 
-// The always-available "Preview" entry point that sits in the engagement's
-// checklist header. Clicking it opens the focused review overlay; the overlay
-// lives in the same component so it stays in the engagement's context.
-export function EngagementPreview(props: EngagementPreviewProps) {
+// The always-available "Preview" entry point. variant="header" (default) is the
+// outline button in the checklist header that opens EVERY uploaded document;
+// variant="item" is the smaller, quieter button on a single checklist row that
+// opens just that item's documents (scoped — the engagement-wide "Download all"
+// is hidden so it can't over-promise). The overlay lives in the same component
+// so it stays in the engagement's context.
+export function EngagementPreview({
+  variant = "header",
+  ...props
+}: EngagementPreviewProps & { variant?: "header" | "item" }) {
   const t = useTranslations("Preview");
   const [open, setOpen] = useState(false);
+  const isItem = variant === "item";
 
   return (
     <>
       <Button
         type="button"
-        variant="outline"
+        variant={isItem ? "ghost" : "outline"}
         size="sm"
         onClick={() => setOpen(true)}
+        className={
+          isItem
+            ? "h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground"
+            : undefined
+        }
       >
-        <LayoutGrid className="size-4" />
+        <LayoutGrid className={isItem ? "size-3.5" : "size-4"} />
         {t("button")}
       </Button>
-      {open && <PreviewOverlay {...props} onClose={() => setOpen(false)} />}
+      {open && (
+        <PreviewOverlay
+          {...props}
+          scoped={isItem}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </>
   );
 }

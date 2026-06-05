@@ -27,7 +27,13 @@ import { PreviewRejectPrompt } from "./preview-reject-prompt";
 import { PreviewDetail } from "./preview-detail";
 import type { EngagementPreviewProps } from "./engagement-preview";
 
-type Props = EngagementPreviewProps & { onClose: () => void };
+type Props = EngagementPreviewProps & {
+  onClose: () => void;
+  // When opened from a single checklist row, the overlay shows only that item's
+  // documents. The engagement-wide "Download all" is hidden in that case so it
+  // never implies it'll zip the whole engagement from a one-item view.
+  scoped?: boolean;
+};
 
 // The focused review workspace: an ~85% overlay floating over the dimmed
 // engagement page. Header (with Download all), status tabs with live counts, a
@@ -41,6 +47,7 @@ export function PreviewOverlay({
   engagementTitle,
   clientName,
   locale,
+  scoped,
   onClose,
 }: Props) {
   const t = useTranslations("Preview");
@@ -250,7 +257,7 @@ export function PreviewOverlay({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {counts.all > 0 && (
+            {!scoped && counts.all > 0 && (
               <a
                 href={`/api/engagements/${engagementId}/files.zip`}
                 className="inline-flex"
