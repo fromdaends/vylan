@@ -1,4 +1,21 @@
 {
+  "Preview": {
+    "button": "Preview",
+    "eyebrow": "Document preview",
+    "close": "Close",
+    "doc_count": "{count, plural, =0 {No documents} one {# document} other {# documents}}",
+    "tab_all": "All",
+    "tab_approved": "AI Approved",
+    "tab_rejected": "AI Rejected",
+    "search_placeholder": "Search documents…",
+    "status_approved": "Approved",
+    "status_rejected": "Rejected",
+    "status_pending": "Not analyzed yet",
+    "empty_all": "No documents uploaded yet.",
+    "empty_approved": "Nothing approved yet.",
+    "empty_rejected": "Nothing rejected.",
+    "empty_search": "No documents match your search."
+  },
   "Vylan": {
     "meta_title": "Vylan — Stop chasing documents",
     "logo_alt": "Vylan logo",
