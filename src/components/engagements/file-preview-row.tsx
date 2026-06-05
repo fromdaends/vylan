@@ -210,6 +210,7 @@ export function FilePreviewRow({
           expectedDocType={expectedDocType}
           expectedYear={expectedYear}
           clientName={clientName}
+          quiet={Boolean(file.ai_usability && !file.ai_usability.usable)}
         />
       </div>
       {open && canPreview && (

@@ -42,11 +42,16 @@ export function AiBadge({
   expectedDocType,
   expectedYear = null,
   clientName = null,
+  quiet = false,
 }: {
   file: UploadedFile;
   expectedDocType: DocType;
   expectedYear?: number | null;
   clientName?: string | null;
+  // True when a separate quality check already flagged this file unusable.
+  // The type read is then shown quietly (neutral "Type: X") instead of a
+  // confident green badge, so a rejected file doesn't look approved.
+  quiet?: boolean;
 }) {
   const t = useTranslations("Ai");
   const locale = useLocale() as AppLocale;
@@ -98,11 +103,18 @@ export function AiBadge({
       : null;
   const hasConcern = isUnknown || flags.length > 0 || modelConcern !== null;
 
-  const tone = hasConcern
-    ? { border: "border-destructive/40", bg: "bg-destructive/5", text: "text-destructive" }
-    : conf < 0.5
-      ? { border: "border-warning/40", bg: "bg-warning/5", text: "text-warning" }
-      : { border: "border-success/40", bg: "bg-success/5", text: "text-success" };
+  // When the quality check already flagged the doc unusable but the TYPE read
+  // itself is fine, demote the would-be green "looks good" badge to a neutral
+  // "Type: X". A rejected file shouldn't wear a confident green badge — the
+  // rejection (UsabilityBadge) renders above and leads.
+  const demote = quiet && !hasConcern;
+  const tone = demote
+    ? { border: "border-muted-foreground/25", bg: "bg-muted/40", text: "text-muted-foreground" }
+    : hasConcern
+      ? { border: "border-destructive/40", bg: "bg-destructive/5", text: "text-destructive" }
+      : conf < 0.5
+        ? { border: "border-warning/40", bg: "bg-warning/5", text: "text-warning" }
+        : { border: "border-success/40", bg: "bg-success/5", text: "text-success" };
   const Icon = hasConcern ? AlertTriangle : Sparkles;
 
   const bits: string[] = [];
@@ -160,7 +172,9 @@ export function AiBadge({
         <span className={`font-medium ${tone.text}`}>
           {hasConcern
             ? t("review_heading")
-            : t("likely", { type: detected.toUpperCase() })}
+            : demote
+              ? t("type_label", { type: detected.toUpperCase() })
+              : t("likely", { type: detected.toUpperCase() })}
         </span>
         {!hasConcern && bits.length > 0 && (
           <span className="text-muted-foreground truncate">
