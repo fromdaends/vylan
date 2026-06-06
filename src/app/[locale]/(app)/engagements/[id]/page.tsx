@@ -15,12 +15,10 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   sendEngagementAction,
-  cancelEngagementAction,
   completeEngagementAction,
   reopenEngagementAction,
   sendReminderAction,
   deleteDraftAction,
-  toggleRemindersPausedAction,
 } from "@/app/actions/engagements";
 import {
   approveItemAction,
@@ -36,7 +34,7 @@ import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
-import { DeleteEngagementButton } from "@/components/engagements/delete-engagement-button";
+import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { RecordEngagementOpen } from "@/components/engagements/record-engagement-open";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
@@ -50,13 +48,11 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
   Send,
-  X,
   Trash2,
   CheckCircle2,
   RotateCcw,
   Bell,
   BellOff,
-  Download,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -247,32 +243,11 @@ export default async function EngagementDetailPage({
                   </Button>
                 </form>
               )}
-              <form action={toggleRemindersPausedAction}>
-                <input type="hidden" name="id" value={engagement.id} />
-                <input
-                  type="hidden"
-                  name="paused"
-                  value={engagement.reminders_paused ? "0" : "1"}
-                />
-                <Button type="submit" variant="outline" size="sm">
-                  {engagement.reminders_paused ? (
-                    <>
-                      <Bell className="size-4" />
-                      {t("resume_reminders")}
-                    </>
-                  ) : (
-                    <>
-                      <BellOff className="size-4" />
-                      {t("pause_reminders")}
-                    </>
-                  )}
-                </Button>
-              </form>
+              {/* Mark complete — the clear primary action. Success-tinted hover
+                  matches the per-item Approve button (PR #156) so confirm
+                  actions read consistently across the app. */}
               <form action={completeEngagementAction}>
                 <input type="hidden" name="id" value={engagement.id} />
-                {/* Success-tinted hover — matches the per-item Approve
-                    button (PR #156) so positive / confirm actions read
-                    consistently across the app. */}
                 <Button
                   type="submit"
                   size="sm"
@@ -280,13 +255,6 @@ export default async function EngagementDetailPage({
                 >
                   <CheckCircle2 className="size-4" />
                   {t("mark_complete")}
-                </Button>
-              </form>
-              <form action={cancelEngagementAction}>
-                <input type="hidden" name="id" value={engagement.id} />
-                <Button type="submit" variant="ghost" size="sm">
-                  <X className="size-4" />
-                  {t("cancel")}
                 </Button>
               </form>
             </>
@@ -300,33 +268,20 @@ export default async function EngagementDetailPage({
               </Button>
             </form>
           )}
-          {/* Drafts keep their instant "Delete draft" button above; every
-              other status gets the confirmed (recoverable) delete. Owner-only
-              — hidden from staff, mirroring the row menu + server actions. */}
-          {!isDraft && canDelete && (
-            <DeleteEngagementButton
+          {/* Occasional actions (Pause/Resume reminders, Download all, Cancel,
+              Delete) live in a "..." menu so the header stays calm — primary +
+              secondary visible, the rest one tap away. Delete keeps its
+              confirmation + 30-day recovery. Drafts keep their own inline
+              Send + Delete-draft buttons above and never get this menu. */}
+          {!isDraft && (
+            <EngagementMoreMenu
               engagementId={engagement.id}
               locale={locale}
+              status={isLive ? "live" : isComplete ? "complete" : "cancelled"}
+              remindersPaused={engagement.reminders_paused}
+              hasUploads={uploads.length > 0}
+              canDelete={canDelete}
             />
-          )}
-          {/* Bulk download of every uploaded file for this engagement.
-              Disabled in draft (nothing's been requested yet) or when
-              no files have actually been uploaded — the route would
-              404 anyway. */}
-          {uploads.length > 0 && (
-            <a
-              href={`/api/engagements/${engagement.id}/files.zip`}
-              className="inline-flex"
-              // The native <a download> hint asks the browser to save
-              // rather than navigate. Server's Content-Disposition
-              // sets the actual filename.
-              download
-            >
-              <Button type="button" variant="outline" size="sm">
-                <Download className="size-4" />
-                {t("download_all")}
-              </Button>
-            </a>
           )}
         </div>
       </header>
