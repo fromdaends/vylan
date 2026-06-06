@@ -88,8 +88,12 @@ export function PreviewCard({
   return (
     <article
       title={statusLabel}
+      // `isolate` makes each card its own stacking context so its inner badges /
+      // quick-actions (z-20) stay contained. Without it, those z-20 children
+      // escaped into the shared overlay context and painted OVER the detail
+      // panel that covers the grid — the "grid bleeds through" layering bug.
       className={cn(
-        "group relative flex flex-col overflow-hidden rounded-xl border-2 bg-card/40 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg",
+        "group relative isolate flex flex-col overflow-hidden rounded-xl border-2 bg-card/40 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg",
         s.border,
       )}
     >
