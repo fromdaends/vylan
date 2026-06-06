@@ -200,6 +200,14 @@ export function filterDocs(docs: PreviewDoc[], view: PreviewView): PreviewDoc[] 
   return docs.filter((d) => d.status === view);
 }
 
+// Filter to a single checklist item, or "all" to keep everything. Combines with
+// the status tabs + keyword search — apply it alongside them on the searched set
+// so the tab counts reflect the chosen item.
+export function filterByItem(docs: PreviewDoc[], itemId: string): PreviewDoc[] {
+  if (itemId === "all") return docs;
+  return docs.filter((d) => d.itemId === itemId);
+}
+
 // Keyword search: every whitespace-separated token in the query must appear in
 // the document's haystack (AND, so "bank 2024" narrows). Empty query matches
 // everything. Combines with the status tabs (apply search first, then filter).

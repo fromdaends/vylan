@@ -9,6 +9,8 @@
     "tab_flagged": "Signalés",
     "tab_rejected": "Rejetés",
     "search_placeholder": "Rechercher des documents…",
+    "filter_all_items": "Tous les éléments",
+    "filter_by_item": "Filtrer par élément de la liste",
     "status_approved": "Approuvé",
     "status_rejected": "Rejeté",
     "status_flagged": "Signalé",

@@ -4,7 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Download, FolderOpen, Search, X } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  FolderOpen,
+  ListFilter,
+  Search,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import { approveItemAction, rejectItemAction } from "@/app/actions/items";
@@ -12,6 +19,7 @@ import { expectedYearFromTitle } from "@/lib/ai/matching";
 import {
   applyOverrides,
   buildPreviewDocs,
+  filterByItem,
   filterDocs,
   groupDocsByItem,
   groupLabel,
@@ -19,6 +27,7 @@ import {
   previewHeader,
   searchDocs,
   type PreviewDoc,
+  type PreviewGroup,
   type PreviewStatus,
   type PreviewView,
 } from "./preview-model";
@@ -54,6 +63,8 @@ export function PreviewOverlay({
   const tEng = useTranslations("Engagements");
   const [view, setView] = useState<PreviewView>("all");
   const [query, setQuery] = useState("");
+  // The checklist-item filter ("all" or a specific request_item id).
+  const [itemFilter, setItemFilter] = useState<string>("all");
   // Optimistic, in-session approve/reject, keyed by checklist item.
   const [overrides, setOverrides] = useState<Map<string, PreviewStatus>>(
     () => new Map(),
@@ -73,10 +84,24 @@ export function PreviewOverlay({
   // Search first, then the status tabs filter the search results — so the tab
   // counts + the grid both reflect the current search.
   const searched = useMemo(() => searchDocs(docs, query), [docs, query]);
-  const counts = useMemo(() => previewCounts(searched), [searched]);
-  const visible = useMemo(() => filterDocs(searched, view), [searched, view]);
+  // Stable list of checklist items that have uploads, for the item-filter
+  // dropdown — built from the full set (not search/tab) so the options don't
+  // flicker as you type or switch tabs.
+  const itemOptions = useMemo(() => groupDocsByItem(docs, items), [docs, items]);
+  // The checklist-item filter applies on top of search; the tab counts + grid
+  // both reflect it ("all" keeps everything).
+  const itemScoped = useMemo(
+    () => filterByItem(searched, itemFilter),
+    [searched, itemFilter],
+  );
+  const counts = useMemo(() => previewCounts(itemScoped), [itemScoped]);
+  const visible = useMemo(
+    () => filterDocs(itemScoped, view),
+    [itemScoped, view],
+  );
   // Group the visible docs into one section per checklist item (in checklist
-  // order). Composes with the tabs + search — only items with matching docs show.
+  // order). Composes with the item filter + tabs + search — only items with
+  // matching docs show.
   const groups = useMemo(() => groupDocsByItem(visible, items), [visible, items]);
   const selectedDoc = useMemo(
     () =>
@@ -286,34 +311,50 @@ export function PreviewOverlay({
           inert={selectedDoc != null || undefined}
           className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border/40 px-5"
         >
-          <div className="flex items-center gap-5">
-            <PreviewTab
-              label={t("tab_all")}
-              count={counts.all}
-              active={view === "all"}
-              onClick={() => setView("all")}
-            />
-            <PreviewTab
-              label={t("tab_approved")}
-              count={counts.approved}
-              active={view === "approved"}
-              onClick={() => setView("approved")}
-              tone="success"
-            />
-            <PreviewTab
-              label={t("tab_flagged")}
-              count={counts.flagged}
-              active={view === "flagged"}
-              onClick={() => setView("flagged")}
-              tone="warning"
-            />
-            <PreviewTab
-              label={t("tab_rejected")}
-              count={counts.rejected}
-              active={view === "rejected"}
-              onClick={() => setView("rejected")}
-              tone="destructive"
-            />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {itemOptions.length > 1 && (
+              <>
+                <PreviewItemFilter
+                  options={itemOptions}
+                  value={itemFilter}
+                  onChange={setItemFilter}
+                  locale={locale}
+                />
+                <span
+                  aria-hidden
+                  className="hidden h-5 w-px bg-border/50 sm:block"
+                />
+              </>
+            )}
+            <div className="flex items-center gap-5">
+              <PreviewTab
+                label={t("tab_all")}
+                count={counts.all}
+                active={view === "all"}
+                onClick={() => setView("all")}
+              />
+              <PreviewTab
+                label={t("tab_approved")}
+                count={counts.approved}
+                active={view === "approved"}
+                onClick={() => setView("approved")}
+                tone="success"
+              />
+              <PreviewTab
+                label={t("tab_flagged")}
+                count={counts.flagged}
+                active={view === "flagged"}
+                onClick={() => setView("flagged")}
+                tone="warning"
+              />
+              <PreviewTab
+                label={t("tab_rejected")}
+                count={counts.rejected}
+                active={view === "rejected"}
+                onClick={() => setView("rejected")}
+                tone="destructive"
+              />
+            </div>
           </div>
           <div className="relative py-2">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -416,6 +457,43 @@ export function PreviewOverlay({
   );
 
   return createPortal(overlay, document.body);
+}
+
+// The checklist-item filter — a native <select> (no portal, so it never fights
+// the overlay's stacking context the way a popover would, and it gets free
+// keyboard + mobile behaviour). Styled minimal to match the meshed look:
+// transparent, hairless, an icon on each side.
+function PreviewItemFilter({
+  options,
+  value,
+  onChange,
+  locale,
+}: {
+  options: PreviewGroup[];
+  value: string;
+  onChange: (v: string) => void;
+  locale: string;
+}) {
+  const t = useTranslations("Preview");
+  return (
+    <div className="relative inline-flex items-center">
+      <ListFilter className="pointer-events-none absolute left-2 size-4 text-muted-foreground" />
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={t("filter_by_item")}
+        className="max-w-[14rem] cursor-pointer appearance-none truncate rounded-md bg-transparent py-2 pr-7 pl-8 text-sm font-medium text-foreground outline-none transition-colors hover:bg-secondary/60 focus-visible:ring-2 focus-visible:ring-ring/60"
+      >
+        <option value="all">{t("filter_all_items")}</option>
+        {options.map((g) => (
+          <option key={g.itemId} value={g.itemId}>
+            {groupLabel(g, locale)}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-1.5 size-4 text-muted-foreground" />
+    </div>
+  );
 }
 
 function PreviewTab({
