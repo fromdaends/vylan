@@ -4,6 +4,7 @@ import {
   buildPreviewDocs,
   previewCounts,
   filterDocs,
+  filterByItem,
   groupDocsByItem,
   groupLabel,
   previewHeader,
@@ -358,5 +359,34 @@ describe("groupLabel", () => {
     );
     const [g] = groupDocsByItem(docs, []);
     expect(groupLabel(g, "en")).toBe("mystery.pdf");
+  });
+});
+
+describe("filterByItem", () => {
+  const items = [item({ id: "i1" }), item({ id: "i2" })];
+  const docs = buildPreviewDocs(
+    [
+      file({ id: "a", request_item_id: "i1" }),
+      file({ id: "b", request_item_id: "i1" }),
+      file({ id: "c", request_item_id: "i2" }),
+    ],
+    items,
+  );
+
+  it("'all' returns everything unchanged", () => {
+    expect(filterByItem(docs, "all")).toBe(docs);
+  });
+
+  it("filters to a single checklist item", () => {
+    expect(filterByItem(docs, "i1").map((d) => d.fileId)).toEqual(["a", "b"]);
+    expect(filterByItem(docs, "i2").map((d) => d.fileId)).toEqual(["c"]);
+  });
+
+  it("composes with searchDocs + filterDocs (item + search + status)", () => {
+    // The overlay applies: search -> item -> status. Mirror that here.
+    const searched = searchDocs(docs, ""); // empty search keeps all
+    const scoped = filterByItem(searched, "i1");
+    expect(previewCounts(scoped).all).toBe(2);
+    expect(filterDocs(scoped, "all").map((d) => d.fileId)).toEqual(["a", "b"]);
   });
 });
