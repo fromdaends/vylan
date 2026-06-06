@@ -177,10 +177,14 @@ export function PreviewDetail({
   const hasAnyAi = typeName != null || verdict != null || detailRows.length > 0;
 
   return (
+    // Opaque, top-of-panel layer that fully covers the grid. z-30 sits above
+    // the grid cards' inner badges/quick-actions (z-20); paired with each card
+    // now being `isolate` (so those z-20 children are contained), nothing from
+    // the grid can bleed through. bg-background is fully opaque. Keep z > 20.
     <div
       ref={rootRef}
       tabIndex={-1}
-      className="absolute inset-0 z-10 flex flex-col bg-background outline-none"
+      className="absolute inset-0 z-30 flex flex-col bg-background outline-none"
     >
       {/* Top bar */}
       <div className="flex items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
