@@ -50,6 +50,9 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   push.mockClear();
+  // The worklist persists its tab choice per user in localStorage; clear it so
+  // a tab click in one test doesn't leak into the next test's default.
+  localStorage.clear();
 });
 
 // A base row with sane defaults; each fixture overrides what it needs.
@@ -137,12 +140,19 @@ const rows: WorklistRow[] = [
 // the global `screen`) default to document.body, so a worklist left mounted
 // by an earlier test — with a stale search term or filter — would otherwise
 // bleed into the next test's assertions.
-function renderWorklist(items: WorklistRow[] = rows, currentUserId = "me") {
+// Defaults to an OWNER render (default tab = Recent) so the table-behaviour
+// tests see every row; pass isOwner=false to exercise the staff default (Mine).
+function renderWorklist(
+  items: WorklistRow[] = rows,
+  currentUserId = "me",
+  isOwner = true,
+) {
   const { container } = render(
     <NextIntlClientProvider locale="en" messages={en}>
       <EngagementsWorklist
         rows={items}
         currentUserId={currentUserId}
+        isOwner={isOwner}
         locale="en"
       />
     </NextIntlClientProvider>,
@@ -171,6 +181,13 @@ describe("EngagementsWorklist", () => {
     // A cancelled engagement (E) stays visible in Recent — it must not vanish
     // on cancel; only successfully-completed work drops out.
     expect(q.getByRole("link", { name: /Roy Year-End/i })).toBeInTheDocument();
+  });
+
+  it("a staff member (non-owner) defaults to the Mine tab", () => {
+    const q = renderWorklist(rows, "me", false);
+    expect(
+      q.getByRole("tab", { name: en.Dashboard.wl_filter_mine }),
+    ).toHaveAttribute("aria-selected", "true");
   });
 
   it("has no All tab — a Browse all link points to the full list instead", () => {
