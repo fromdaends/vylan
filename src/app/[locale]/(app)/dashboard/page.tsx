@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
+import { selectAssignedTo } from "@/lib/dashboard/worklist-select";
 import { listHomeNotifications } from "@/lib/home/notifications";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
@@ -45,6 +46,15 @@ export default async function DashboardPage({
     listTemplates(),
     listHomeNotifications(12, viewer),
   ]);
+
+  // Needs attention is scoped to a staff member's OWN assigned work (so their
+  // Overview is about their work, matching the What's-new feed); owners see the
+  // firm-wide queue. The My-engagements table below keeps every row — it has its
+  // own Mine/All tabs.
+  const attentionRows =
+    viewer && !viewer.isOwner
+      ? selectAssignedTo(worklistRows, viewer.userId)
+      : worklistRows;
 
   const templateCards: TemplateCard[] = templates
     .filter((tmpl) => tmpl.id !== BLANK_TEMPLATE_ID)
@@ -95,7 +105,7 @@ export default async function DashboardPage({
             rendered (shows a calm "all caught up" line when empty). Rows carry
             the same right-click / "..." menu as the My-engagements table. */}
         <NeedsAttention
-          rows={worklistRows}
+          rows={attentionRows}
           canDelete={user ? canDeleteEngagements(user.role) : false}
         />
 
