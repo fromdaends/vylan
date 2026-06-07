@@ -39,6 +39,15 @@ export const AUDIT_ACTIONS = [
   "reminder_fired",
   "client_retry_email_sent",
   "client_retry_sms_sent",
+  // team / multi-user
+  "invite_created",
+  "invite_accepted",
+  "invite_revoked",
+  "invite_resent",
+  "engagement_reassigned",
+  "user_deactivated",
+  "user_reactivated",
+  "ownership_transferred",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
