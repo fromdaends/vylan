@@ -58,11 +58,13 @@ export default async function ClientsPage({
     ? (sp.sort as SortKey)
     : "recent";
   const activeOnly = sp.active === "1";
-  const ownerFilter: OwnerFilter = OWNER_FILTERS.includes(
+  // An explicit ?owner choice (from the toolbar) always wins; null = use the
+  // default computed below once we know who the caller owns.
+  const explicitOwner: OwnerFilter | null = OWNER_FILTERS.includes(
     sp.owner as OwnerFilter,
   )
     ? (sp.owner as OwnerFilter)
-    : "all";
+    : null;
 
   const [clientsRaw, engagements, firm, currentUser, members] =
     await Promise.all([
@@ -74,6 +76,16 @@ export default async function ClientsPage({
     ]);
   const isDemo = firm?.is_demo === true;
   const currentUserId = currentUser?.id ?? "";
+
+  // Default to the accountant's OWN clients ("mine") when they actually own at
+  // least one — so /clients opens on their book. Fall back to "all" when they
+  // own none yet (e.g. before migration 0210 backfills owners, or a staff
+  // member with no clients) so the list is never mysteriously empty.
+  const ownsAnyClient = clientsRaw.some(
+    (c) => c.assigned_user_id === currentUserId,
+  );
+  const ownerFilter: OwnerFilter =
+    explicitOwner ?? (currentUserId && ownsAnyClient ? "mine" : "all");
 
   // Resolve each firm member's avatar once (small set — seat caps are 1–15)
   // so the table can render an owner badge without N per-row fetches.
