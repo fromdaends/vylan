@@ -4,6 +4,7 @@ import { getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getFirmAiUsage } from "@/lib/ai/usage";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { assertLocale } from "@/lib/locale";
 import { SettingsShell } from "./settings-form";
@@ -46,6 +47,9 @@ export default async function SettingsPage({
   }
 
   const firmLogoUrl = await getBrandingImageUrl(firm.logo_url);
+  // AI monthly-cap usage for the Documents tab status (point-read; resilient
+  // pre-migration — defaults to 0 used / not paused).
+  const aiUsage = await getFirmAiUsage(firm.id);
   // MFA is "enabled" only with a verified TOTP factor (unverified = mid-enroll).
   const mfaEnabled = (mfaFactors.data?.totp ?? []).some(
     (f) => f.status === "verified",
@@ -81,6 +85,7 @@ export default async function SettingsPage({
         currentLocale={user.locale}
         currentTimezone={firm.timezone}
         autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
+        aiUsage={aiUsage}
         isOwner={isOwner}
         billingSlot={billingSlot}
         firmName={firm.name}

@@ -19,6 +19,7 @@ import {
 } from "./classify";
 import { shouldActOnUsability } from "./usability";
 import { decide, applyDecision, type DispatcherResult } from "./router";
+import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 
 export async function processClassifyJob(
   payload: Record<string, unknown>,
@@ -66,12 +67,20 @@ export async function processClassifyJob(
     .select("firm_id")
     .eq("id", file.engagement_id)
     .single();
-  if (engagementForLimit) {
+  const limitFirmId: string | null = engagementForLimit?.firm_id ?? null;
+  if (limitFirmId) {
     const rl = await checkRateLimit({
-      key: `ai:classify:firm:${engagementForLimit.firm_id}`,
+      key: `ai:classify:firm:${limitFirmId}`,
       ...AI_CLASSIFY_PER_FIRM_DAILY,
     });
     if (!rl.ok) return { skipped: "firm_daily_quota_exceeded" };
+
+    // Per-firm MONTHLY cap (migration 0230): once a firm hits ai_monthly_cap
+    // client-document AI checks this calendar month, auto-pause the AI for the
+    // rest of the month to bound token spend. The upload already succeeded —
+    // we just skip the (paid) classification. Resets next month.
+    const usage = await getFirmAiUsage(limitFirmId);
+    if (usage.paused) return { skipped: "firm_monthly_cap_exceeded" };
   }
 
   let bytes: Buffer;
@@ -127,6 +136,10 @@ export async function processClassifyJob(
       ai_usability: result.usability,
     })
     .eq("id", file.id);
+
+  // A real AI check ran — count it against the firm's monthly cap (best-effort,
+  // never blocks). Drives the auto-pause once the firm reaches ai_monthly_cap.
+  if (limitFirmId) await incrementFirmAiUsage(limitFirmId);
 
   // Pull the firm + client locale together so we can both log the
   // classification AND decide whether to route the AI's verdict.

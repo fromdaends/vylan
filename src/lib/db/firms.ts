@@ -18,6 +18,10 @@ export type Firm = {
   invited_emails: string[];
   business_hours: Record<string, unknown>;
   auto_reject_unusable_docs: boolean;
+  // Per-firm monthly AI-check cap (migration 0230). Service-role-only — not in
+  // the updateCurrentFirm whitelist. May be undefined at runtime until 0230 is
+  // applied; getFirmAiUsage defaults it to 400.
+  ai_monthly_cap: number;
   is_demo: boolean;
   created_at: string;
 };

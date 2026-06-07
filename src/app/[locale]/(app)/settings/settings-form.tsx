@@ -46,7 +46,7 @@ type SectionId =
   | "general"
   | "billing"
   | "documents";
-type Translate = (k: string) => string;
+type Translate = (k: string, values?: Record<string, string | number>) => string;
 
 // Same Canadian zones that used to live in /firm. Kept in sync with the
 // server-side allow-list in /api/firm/timezone — if you add a zone here,
@@ -80,6 +80,7 @@ export function SettingsShell({
   currentLocale,
   currentTimezone,
   autoRejectUnusableDocs,
+  aiUsage,
   isOwner,
   billingSlot,
   firmName,
@@ -92,6 +93,7 @@ export function SettingsShell({
   currentLocale: "fr" | "en";
   currentTimezone: string;
   autoRejectUnusableDocs: boolean;
+  aiUsage: { used: number; cap: number; paused: boolean; resetsAt: string };
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
   // passed in as a slot so the client shell can show it under the Billing tab.
@@ -185,6 +187,8 @@ export function SettingsShell({
         {section === "documents" && isOwner && (
           <DocumentsSection
             autoRejectUnusableDocs={autoRejectUnusableDocs}
+            aiUsage={aiUsage}
+            locale={currentLocale}
             t={t}
           />
         )}
@@ -563,13 +567,28 @@ function TimezoneSection({
 
 function DocumentsSection({
   autoRejectUnusableDocs,
+  aiUsage,
+  locale,
   t,
 }: {
   autoRejectUnusableDocs: boolean;
+  aiUsage: { used: number; cap: number; paused: boolean; resetsAt: string };
+  locale: "fr" | "en";
   t: Translate;
 }) {
   const [enabled, setEnabled] = useState(autoRejectUnusableDocs);
   const [error, setError] = useState<string | null>(null);
+
+  const pct = Math.min(
+    100,
+    Math.round((aiUsage.used / Math.max(1, aiUsage.cap)) * 100),
+  );
+  // The meter resets at the first of next month UTC; format in UTC so a
+  // behind-UTC viewer doesn't see it slip to "the 30th".
+  const resetDate = new Date(aiUsage.resetsAt).toLocaleDateString(
+    locale === "fr" ? "fr-CA" : "en-CA",
+    { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" },
+  );
 
   async function onToggle(next: boolean) {
     setError(null);
@@ -597,6 +616,49 @@ function DocumentsSection({
       <p className="mt-1 text-xs text-muted-foreground">
         {t("section_doc_handling_hint")}
       </p>
+
+      {/* AI monthly-cap status — read-only. The cap auto-pauses the AI checks
+          for the rest of the month to bound token spend; uploads keep working. */}
+      <div className="mt-4 max-w-xl rounded-lg border border-border/50 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm font-medium">{t("ai_usage_label")}</div>
+          <span
+            className={
+              "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-xs font-medium " +
+              (aiUsage.paused
+                ? "bg-warning/15 text-warning"
+                : "bg-accent/15 text-accent")
+            }
+          >
+            {aiUsage.paused ? t("ai_paused_badge") : t("ai_active_badge")}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("ai_usage_count", { used: aiUsage.used, cap: aiUsage.cap })}
+          {" · "}
+          {t("ai_resets_on", { date: resetDate })}
+        </p>
+        <div
+          className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuenow={pct}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={t("ai_usage_label")}
+        >
+          <div
+            className={
+              "h-full rounded-full transition-all " +
+              (aiUsage.paused ? "bg-warning" : "bg-primary")
+            }
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        {aiUsage.paused && (
+          <p className="mt-2 text-xs text-warning">{t("ai_paused_hint")}</p>
+        )}
+      </div>
+
       <div className="mt-4 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border/50 px-4 py-3">
         <div className="space-y-1">
           <div className="text-sm font-medium">{t("auto_reject_label")}</div>
