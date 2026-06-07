@@ -30,7 +30,12 @@ import {
   type ClientFormState,
 } from "@/app/actions/clients";
 import type { Client } from "@/lib/db/clients";
-import { PROVINCES, TIMEZONES, INDUSTRIES } from "@/lib/clients/fields";
+import {
+  PROVINCES,
+  TIMEZONES,
+  INDUSTRIES,
+  timezoneForProvince,
+} from "@/lib/clients/fields";
 import { SearchableSelect } from "./searchable-select";
 import { emailChangeNeedsConfirm } from "./email-change";
 import { Plus, Pencil } from "lucide-react";
@@ -48,6 +53,10 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
   const tc = useTranslations("Common");
   const tAuth = useTranslations("Auth");
   const [open, setOpen] = useState(false);
+  // Province + timezone are controlled so picking a province auto-fills the
+  // timezone (timezone stays editable for the rare multi-zone override).
+  const [province, setProvince] = useState(client?.province ?? "none");
+  const [timezone, setTimezone] = useState(client?.timezone ?? "none");
   const router = useRouter();
   const action = mode === "create" ? createClientAction : updateClientAction;
   const [state, formAction, pending] = useActionState<
@@ -221,7 +230,16 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="province">{t("field_province")}</Label>
-              <Select name="province" defaultValue={client?.province ?? "none"}>
+              <Select
+                name="province"
+                value={province}
+                onValueChange={(v) => {
+                  setProvince(v);
+                  // Auto-fill the timezone from the chosen province.
+                  const tz = timezoneForProvince(v);
+                  if (tz) setTimezone(tz);
+                }}
+              >
                 <SelectTrigger id="province" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -237,7 +255,7 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="timezone">{t("field_timezone")}</Label>
-              <Select name="timezone" defaultValue={client?.timezone ?? "none"}>
+              <Select name="timezone" value={timezone} onValueChange={setTimezone}>
                 <SelectTrigger id="timezone" className="w-full">
                   <SelectValue />
                 </SelectTrigger>

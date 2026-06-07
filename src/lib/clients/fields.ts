@@ -85,3 +85,30 @@ export const INDUSTRIES: FieldOption[] = [
 export const PROVINCE_VALUES = PROVINCES.map((p) => p.value);
 export const TIMEZONE_VALUES = TIMEZONES.map((t) => t.value);
 export const INDUSTRY_VALUES = INDUSTRIES.map((i) => i.value);
+
+// The default timezone for each province/territory — used to auto-fill the
+// client's timezone when a province is chosen. Maps to one of TIMEZONES; for
+// the multi-zone provinces (NU, NT, …) it's the most-populated zone, and the
+// timezone field stays editable for the rare override.
+export const PROVINCE_TIMEZONE: Record<string, string> = {
+  QC: "America/Toronto", // Eastern
+  ON: "America/Toronto",
+  BC: "America/Vancouver", // Pacific
+  AB: "America/Edmonton", // Mountain
+  MB: "America/Winnipeg", // Central
+  SK: "America/Winnipeg", // Saskatchewan ≈ Central (CST year-round)
+  NS: "America/Halifax", // Atlantic
+  NB: "America/Halifax",
+  NL: "America/St_Johns", // Newfoundland
+  PE: "America/Halifax",
+  YT: "America/Vancouver", // Yukon — Pacific corner
+  NT: "America/Edmonton", // Northwest Territories ≈ Mountain
+  NU: "America/Toronto", // Nunavut — Iqaluit (most populated) is Eastern
+};
+
+export function timezoneForProvince(
+  code: string | null | undefined,
+): string | null {
+  if (!code) return null;
+  return PROVINCE_TIMEZONE[code] ?? null;
+}
