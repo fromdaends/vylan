@@ -1,4 +1,16 @@
 {
+  "Team": {
+    "error_seat_limit": "You've reached the {cap}-user limit on your current plan. To add more members, upgrade your plan or contact us.",
+    "error_email_exists": "This user already has a Vylan account. For security reasons, we can't add them automatically. Contact support.",
+    "error_already_invited": "There's already a pending invitation for this email. Resend or revoke it from the list below.",
+    "error_invalid_email": "Please enter a valid email address.",
+    "error_owner_only": "This action requires owner permissions. Ask your firm owner to do it for you.",
+    "error_generic": "Something went wrong. Please try again.",
+    "invite_sent": "Invitation sent.",
+    "invite_sent_no_email": "Invitation created, but the email didn't go out. Use Resend to try again.",
+    "invite_revoked": "Invitation revoked.",
+    "invite_resent": "Invitation resent."
+  },
   "Preview": {
     "button": "Preview",
     "eyebrow": "Document preview",
