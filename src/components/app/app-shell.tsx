@@ -42,6 +42,7 @@ import {
   Trash2,
   UserCircle,
   Users,
+  Users2,
   XCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
@@ -234,6 +235,7 @@ export function AppShell({
           userDisplayName={userDisplayName}
           userEmail={userEmail}
           userAvatarUrl={userAvatarUrl}
+          isOwner={isOwner}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((v) => !v)}
         />
@@ -282,6 +284,7 @@ export function AppShell({
             userDisplayName={userDisplayName}
             userEmail={userEmail}
             userAvatarUrl={userAvatarUrl}
+            isOwner={isOwner}
             onItemClick={() => setMobileAccountOpen(false)}
           />
         </SheetContent>
@@ -404,6 +407,7 @@ function MobileAccountMenu({
   userDisplayName,
   userEmail,
   userAvatarUrl,
+  isOwner,
   onItemClick,
 }: {
   labels: Labels;
@@ -411,8 +415,10 @@ function MobileAccountMenu({
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
+  isOwner: boolean;
   onItemClick: () => void;
 }) {
+  const tTeam = useTranslations("Team");
   return (
     <div className="flex flex-col">
       {/* Drag handle — visual affordance for swipe-to-dismiss. */}
@@ -452,6 +458,14 @@ function MobileAccountMenu({
             label={labels.firm}
             onClick={onItemClick}
           />
+          {isOwner && (
+            <MobileMenuItem
+              href="/settings/team"
+              icon={Users2}
+              label={tTeam("title")}
+              onClick={onItemClick}
+            />
+          )}
           <MobileMenuItem
             href="/settings"
             icon={Settings}
@@ -530,6 +544,7 @@ function SidebarBody({
   userDisplayName,
   userEmail,
   userAvatarUrl,
+  isOwner,
   collapsed,
   onToggleCollapse,
 }: {
@@ -540,10 +555,12 @@ function SidebarBody({
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
+  isOwner: boolean;
   collapsed: boolean;
   onToggleCollapse?: () => void;
 }) {
   const tHome = useTranslations("Home");
+  const tTeam = useTranslations("Team");
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Brand row */}
@@ -659,6 +676,19 @@ function SidebarBody({
           />
         </NavSection>
       </nav>
+
+      {/* Team (owner-only) — quick access sitting just above the profile card. */}
+      {isOwner && (
+        <div className={cn(collapsed ? "px-2 pb-1.5" : "px-3 pb-2")}>
+          <NavLink
+            href="/settings/team"
+            icon={Users2}
+            label={tTeam("title")}
+            collapsed={collapsed}
+            color="text-icon-indigo"
+          />
+        </div>
+      )}
 
       {/* Profile card */}
       <div
