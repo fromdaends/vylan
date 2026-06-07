@@ -84,9 +84,45 @@ describe("resolvePreviewStatus", () => {
       "rejected",
     );
   });
-  it("an AI usable verdict => approved", () => {
+  it("an AI usable verdict (no concern) => approved", () => {
     expect(
       resolvePreviewStatus(file({ ai_usability: verdict(true) }), "submitted"),
+    ).toBe("approved");
+  });
+  it("a usable doc the AI reads as the WRONG type (looks_correct=false) => flagged, not approved", () => {
+    expect(
+      resolvePreviewStatus(
+        file({
+          ai_usability: verdict(true),
+          ai_extracted_fields: {
+            looks_correct: false,
+            issue_if_any: "Looks like a T4, not a general ledger export.",
+          },
+        }),
+        "submitted",
+      ),
+    ).toBe("flagged");
+  });
+  it("a usable doc with looks_correct=true stays approved", () => {
+    expect(
+      resolvePreviewStatus(
+        file({
+          ai_usability: verdict(true),
+          ai_extracted_fields: { looks_correct: true },
+        }),
+        "submitted",
+      ),
+    ).toBe("approved");
+  });
+  it("the accountant's approval still wins even over an AI type mismatch", () => {
+    expect(
+      resolvePreviewStatus(
+        file({
+          ai_usability: verdict(true),
+          ai_extracted_fields: { looks_correct: false },
+        }),
+        "approved",
+      ),
     ).toBe("approved");
   });
   it("an AI unusable verdict that was NOT sent to the client => flagged", () => {

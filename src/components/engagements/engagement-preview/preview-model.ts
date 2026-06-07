@@ -4,12 +4,15 @@ import type { DocType } from "@/lib/db/templates";
 import { DOC_TYPE_LABELS, docTypeLabel } from "@/lib/doc-types";
 
 // The at-a-glance states a document can show in the Preview grid:
-//   * approved — the accountant accepted it (or the AI read it as usable).
+//   * approved — the accountant accepted it, OR the AI read it as usable AND
+//     matching the request (no concern). A readable-but-wrong document is NOT
+//     approved — see flagged.
 //   * rejected — it was ACTUALLY sent back to the client to re-upload (the
 //     accountant rejected the item, or the firm's auto-reject bounced it).
-//   * flagged  — the AI spotted a possible issue but NOTHING was sent to the
-//     client; it's waiting on the accountant. (This used to show as "rejected",
-//     which wrongly implied the client had already been told.)
+//   * flagged  — the AI spotted a possible issue (unreadable, or the wrong
+//     document type / wrong year / etc.) but NOTHING was sent to the client;
+//     it's waiting on the accountant. (This used to show as "rejected", which
+//     wrongly implied the client had already been told.)
 //   * pending  — the AI hasn't finished analysing yet. There is NO "unsure".
 export type PreviewStatus = "approved" | "rejected" | "flagged" | "pending";
 
@@ -66,16 +69,36 @@ export function normalizeText(s: string): string {
 //      "flagged" (a suggestion for the accountant, NOT a client rejection).
 //   4. Otherwise it simply hasn't been analysed yet (neutral "pending").
 export function resolvePreviewStatus(
-  file: Pick<UploadedFile, "ai_usability" | "ai_rejected">,
+  file: Pick<
+    UploadedFile,
+    "ai_usability" | "ai_rejected" | "ai_extracted_fields"
+  >,
   itemStatus: RequestItemStatus,
 ): PreviewStatus {
   if (itemStatus === "approved") return "approved";
   if (itemStatus === "rejected") return "rejected";
   if (file.ai_rejected) return "rejected";
   if (file.ai_usability) {
-    return file.ai_usability.usable ? "approved" : "flagged";
+    // Not usable, OR the AI flagged a content concern — most importantly the
+    // WRONG DOCUMENT TYPE (e.g. a T4 uploaded for a "General Ledger Export"
+    // item), which the classifier records as looks_correct === false. A
+    // readable-but-wrong document must NOT auto-"approve"; it needs the
+    // accountant's eye, so it's "flagged". A clean, matching read is "approved".
+    if (!file.ai_usability.usable || aiFlaggedConcern(file)) return "flagged";
+    return "approved";
   }
   return "pending";
+}
+
+// Did the AI note a concern beyond legibility — typically a mismatch with what
+// the checklist item asked for? The classifier sets looks_correct === false
+// (with a reason in issue_if_any) for a wrong type, wrong year, or multiple
+// slips in one file.
+function aiFlaggedConcern(
+  file: Pick<UploadedFile, "ai_extracted_fields">,
+): boolean {
+  const f = file.ai_extracted_fields as { looks_correct?: unknown } | null;
+  return f?.looks_correct === false;
 }
 
 function buildSearchText(
