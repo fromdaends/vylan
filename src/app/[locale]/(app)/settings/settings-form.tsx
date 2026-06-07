@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
+import { isOwnerOnlySettingsSection } from "@/lib/settings/owner-sections";
 import { Switch } from "@/components/ui/switch";
 import {
   Select,
@@ -105,22 +106,25 @@ export function SettingsShell({
   initialSection?: string;
 }) {
   const t = useTranslations("Settings");
+  const requested: SectionId = SECTION_IDS.includes(initialSection as SectionId)
+    ? (initialSection as SectionId)
+    : "account";
+  // Staff deep-linking ?tab=billing / ?tab=documents would land on an empty
+  // owner-only tab — fall back to Account.
   const [section, setSection] = useState<SectionId>(
-    SECTION_IDS.includes(initialSection as SectionId)
-      ? (initialSection as SectionId)
-      : "account",
+    !isOwner && isOwnerOnlySettingsSection(requested) ? "account" : requested,
   );
 
-  const nav: { id: SectionId; label: string; icon: typeof Palette }[] = [
+  const allNav: { id: SectionId; label: string; icon: typeof Palette }[] = [
     { id: "account", label: t("nav_account"), icon: UserCog },
     { id: "security", label: t("nav_security"), icon: ShieldCheck },
     { id: "appearance", label: t("nav_appearance"), icon: Palette },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
-    ...(isOwner
-      ? [{ id: "billing" as const, label: t("nav_billing"), icon: CreditCard }]
-      : []),
+    { id: "billing", label: t("nav_billing"), icon: CreditCard },
     { id: "documents", label: t("nav_documents"), icon: FileText },
   ];
+  // Owner-only tabs (Billing, Documents) are hidden from staff.
+  const nav = allNav.filter((n) => isOwner || !isOwnerOnlySettingsSection(n.id));
 
   return (
     <div className="flex flex-col gap-8 md:flex-row md:gap-10">
@@ -157,6 +161,7 @@ export function SettingsShell({
             firm={firm}
             firmLogoUrl={firmLogoUrl}
             email={email}
+            isOwner={isOwner}
             t={t}
           />
         )}
@@ -171,11 +176,12 @@ export function SettingsShell({
           <GeneralSection
             currentLocale={currentLocale}
             currentTimezone={currentTimezone}
+            isOwner={isOwner}
             t={t}
           />
         )}
         {section === "billing" && isOwner && billingSlot}
-        {section === "documents" && (
+        {section === "documents" && isOwner && (
           <DocumentsSection
             autoRejectUnusableDocs={autoRejectUnusableDocs}
             t={t}
@@ -196,28 +202,37 @@ function AccountSection({
   firm,
   firmLogoUrl,
   email,
+  isOwner,
   t,
 }: {
   firm: FirmInfo;
   firmLogoUrl: string | null;
   email: string;
+  isOwner: boolean;
   t: Translate;
 }) {
   return (
     <div className="space-y-12">
       <AccountSignInSections email={email} />
 
-      <div>
-        <h2 className="text-base font-semibold tracking-tight">
-          {t("section_firm_settings")}
-        </h2>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {t("section_firm_settings_hint")}
-        </p>
-        <div className="mt-5">
-          <FirmSettingsSections firm={firm} firmLogoUrl={firmLogoUrl} />
+      {isOwner ? (
+        <div>
+          <h2 className="text-base font-semibold tracking-tight">
+            {t("section_firm_settings")}
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {t("section_firm_settings_hint")}
+          </p>
+          <div className="mt-5">
+            <FirmSettingsSections firm={firm} firmLogoUrl={firmLogoUrl} />
+          </div>
         </div>
-      </div>
+      ) : (
+        // Staff see their own sign-in settings; firm branding/name is owner-only.
+        <p className="max-w-xl text-xs leading-relaxed text-muted-foreground">
+          {t("owner_only_note")}
+        </p>
+      )}
     </div>
   );
 }
@@ -357,16 +372,22 @@ function OptionCard({
 function GeneralSection({
   currentLocale,
   currentTimezone,
+  isOwner,
   t,
 }: {
   currentLocale: "fr" | "en";
   currentTimezone: string;
+  isOwner: boolean;
   t: Translate;
 }) {
   return (
     <div className="space-y-10">
+      {/* UI language is a per-user preference (kept for staff); the firm
+          timezone is a firm-wide setting (owner-only). */}
       <LanguageSection currentLocale={currentLocale} t={t} />
-      <TimezoneSection currentTimezone={currentTimezone} t={t} />
+      {isOwner && (
+        <TimezoneSection currentTimezone={currentTimezone} t={t} />
+      )}
     </div>
   );
 }

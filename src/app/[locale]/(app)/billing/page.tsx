@@ -1,5 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { redirect } from "next/navigation";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 import { getFirmLimits } from "@/lib/plan-limits";
 import { PLANS, PAID_PLANS, priceIdFor, type PlanId } from "@/lib/plans";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +30,12 @@ export default async function BillingPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
   const sp = await searchParams;
+
+  // Owner-only: billing is firm-admin. Staff are bounced to their settings.
+  const me = await getCurrentUser();
+  if (!me || me.role !== "owner") {
+    redirect(`/${locale}/settings`);
+  }
 
   const [firm, limits] = await Promise.all([
     getCurrentFirm(),

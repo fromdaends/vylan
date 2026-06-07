@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 import { priceIdFor, type PlanId } from "@/lib/plans";
 
 export const runtime = "nodejs";
@@ -30,6 +31,11 @@ export async function POST(request: NextRequest) {
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+  // Owner-only: billing is firm-admin. Staff are blocked from starting checkout.
+  const me = await getCurrentUser();
+  if (me?.role !== "owner") {
+    return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
   const firm = await getCurrentFirm();
   if (!firm) {

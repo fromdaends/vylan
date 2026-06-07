@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 
 export const runtime = "nodejs";
 
@@ -9,6 +10,14 @@ export const runtime = "nodejs";
 export async function POST() {
   if (!isStripeConfigured()) {
     return NextResponse.json({ error: "stripe_not_configured" }, { status: 503 });
+  }
+  // Owner-only: only the firm owner manages the subscription / payment method.
+  const me = await getCurrentUser();
+  if (!me) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+  if (me.role !== "owner") {
+    return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
   const firm = await getCurrentFirm();
   if (!firm?.stripe_customer_id) {

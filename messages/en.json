@@ -479,6 +479,7 @@
   },
   "Settings": {
     "title": "Settings",
+    "owner_only_note": "Your firm's settings (logo, name, branding, default client language) are managed by the firm owner.",
     "subtitle": "Display preferences and firm behaviour. Your account and firm info live in your profile.",
     "section_theme": "Appearance",
     "section_theme_hint": "Light, dark, or follow your system.",

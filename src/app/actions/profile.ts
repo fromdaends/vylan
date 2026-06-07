@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { updateUserProfile } from "@/lib/db/users";
+import { updateUserProfile, getCurrentUser } from "@/lib/db/users";
 import { updateCurrentFirm } from "@/lib/db/firms";
 import { uploadBrandingImage } from "@/app/actions/branding";
 
@@ -20,7 +20,8 @@ export type ProfileActionResult =
         | "weak_password"
         | "upload_failed"
         | "email_taken"
-        | "same_email";
+        | "same_email"
+        | "owner_only";
     };
 
 const DisplayNameSchema = z.object({
@@ -173,6 +174,9 @@ export async function updateFirmLogoAction(
 ): Promise<ProfileActionResult> {
   const user = await requireAuth();
   if (!user) return { ok: false, error: "unauth" };
+  // Owner-only: the firm logo is firm branding, not a personal setting.
+  const me = await getCurrentUser();
+  if (me?.role !== "owner") return { ok: false, error: "owner_only" };
 
   const upload = await uploadBrandingImage(formData, "firm_logo");
   if (!upload.ok) {
@@ -192,6 +196,9 @@ export async function updateFirmLogoAction(
 export async function removeFirmLogoAction(): Promise<ProfileActionResult> {
   const user = await requireAuth();
   if (!user) return { ok: false, error: "unauth" };
+  // Owner-only: the firm logo is firm branding, not a personal setting.
+  const me = await getCurrentUser();
+  if (me?.role !== "owner") return { ok: false, error: "owner_only" };
 
   try {
     await updateCurrentFirm({ logo_url: null });

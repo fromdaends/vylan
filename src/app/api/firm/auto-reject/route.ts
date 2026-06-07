@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { updateCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 
 // Firm-level auto-reject toggle. Lives on a plain POST route instead of
 // a Server Action because the action's automatic post-action re-render
@@ -22,6 +23,11 @@ export async function POST(request: NextRequest) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  // Owner-only: auto-reject is a firm-wide document-handling policy.
+  const me = await getCurrentUser();
+  if (me?.role !== "owner") {
+    return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
 
   try {

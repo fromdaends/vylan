@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { updateCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 import { SettingsSchema, type SettingsState } from "./settings.schema";
 
 // The auto-reject toggle on /settings used to live in a focused Server
@@ -19,6 +20,13 @@ export async function updateFirmSettings(
   _prev: SettingsState,
   formData: FormData,
 ): Promise<SettingsState> {
+  // Owner-only: firm settings (name, branding, default client language…) are
+  // firm-admin, not a per-user preference. Staff are blocked here even though
+  // the column-level grant would otherwise let any authenticated member write.
+  const user = await getCurrentUser();
+  if (!user) return { error: "no_session" };
+  if (user.role !== "owner") return { error: "owner_only" };
+
   const parsed = SettingsSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
