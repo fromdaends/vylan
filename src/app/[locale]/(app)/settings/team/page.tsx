@@ -10,6 +10,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { listFirmInvites } from "@/lib/db/invites";
 import { getFirmSeatUsage } from "@/lib/billing/seats";
 import { inviteState } from "@/lib/team/invites";
+import { getBrandingImageUrl } from "@/lib/storage";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { TeamManager } from "@/components/settings/team/team-manager";
 
@@ -46,6 +47,13 @@ export default async function TeamPage({
 
   const nameById = new Map(members.map((m) => [m.id, userDisplayLabel(m)]));
 
+  // Resolve each member's avatar once so the roster shows real profile
+  // pictures (AvatarInitials falls back to initials when the URL is null).
+  const memberAvatars = await Promise.all(
+    members.map((m) => getBrandingImageUrl(m.avatar_path)),
+  );
+  const avatarById = new Map(members.map((m, i) => [m.id, memberAvatars[i]]));
+
   const activeMembers = members
     .filter((m) => !m.deactivated_at)
     .map((m) => ({
@@ -54,6 +62,7 @@ export default async function TeamPage({
       email: m.email,
       role: m.role,
       isSelf: m.id === user.id,
+      avatarUrl: avatarById.get(m.id) ?? null,
     }))
     // Owner first, then the rest alphabetically.
     .sort((a, b) =>
@@ -70,6 +79,7 @@ export default async function TeamPage({
       id: m.id,
       name: userDisplayLabel(m),
       email: m.email,
+      avatarUrl: avatarById.get(m.id) ?? null,
       deactivatedAt: m.deactivated_at,
       deactivatedByName: m.deactivated_by_user_id
         ? (nameById.get(m.deactivated_by_user_id) ?? null)

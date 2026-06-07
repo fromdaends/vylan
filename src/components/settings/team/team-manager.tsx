@@ -47,11 +47,13 @@ type ActiveMember = {
   email: string;
   role: "owner" | "staff";
   isSelf: boolean;
+  avatarUrl: string | null;
 };
 type DeactivatedMember = {
   id: string;
   name: string;
   email: string;
+  avatarUrl: string | null;
   deactivatedAt: string | null;
   deactivatedByName: string | null;
 };
@@ -221,7 +223,7 @@ export function TeamManager({
         <TransferOwnership
           staff={activeMembers
             .filter((m) => m.role === "staff")
-            .map((m) => ({ id: m.id, name: m.name }))}
+            .map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatarUrl }))}
         />
       )}
 
@@ -264,7 +266,7 @@ function MemberRow({
 
   return (
     <div className="flex items-center gap-3 border-b border-border/40 py-3">
-      <AvatarInitials name={member.name} size={36} />
+      <AvatarInitials src={member.avatarUrl} name={member.name} size={36} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{member.name}</span>
@@ -470,6 +472,7 @@ function DeactivatedSection({
               className="flex items-center gap-3 border-b border-border/40 py-3"
             >
               <AvatarInitials
+                src={m.avatarUrl}
                 name={m.name}
                 size={36}
                 color="#64748b"
@@ -611,7 +614,7 @@ function InviteModal({
 function TransferOwnership({
   staff,
 }: {
-  staff: { id: string; name: string }[];
+  staff: { id: string; name: string; avatarUrl: string | null }[];
 }) {
   const t = useTranslations("Team");
   const errorMessage = useErrorMessage();
@@ -670,7 +673,7 @@ function TransferOwnership({
                     : "border-border/60 hover:bg-secondary/30")
                 }
               >
-                <AvatarInitials name={m.name} size={24} />
+                <AvatarInitials src={m.avatarUrl} name={m.name} size={24} />
                 <span className="flex-1 truncate">{m.name}</span>
                 {selected === m.id && (
                   <Check className="size-4 text-primary" />
