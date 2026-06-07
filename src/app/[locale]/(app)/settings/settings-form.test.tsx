@@ -65,6 +65,12 @@ function renderShell(
         currentLocale="en"
         currentTimezone="America/Toronto"
         autoRejectUnusableDocs={false}
+        aiUsage={{
+          used: 0,
+          cap: 400,
+          paused: false,
+          resetsAt: "2026-07-01T00:00:00.000Z",
+        }}
         isOwner
         billingSlot={<div>SUBSCRIPTION_SLOT</div>}
         firmName="Acme"
