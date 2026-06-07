@@ -23,6 +23,7 @@ import {
   hasRoomForMember,
   SeatLimitError,
 } from "@/lib/billing/seats";
+import { canDeactivateMember } from "@/lib/team/deactivation";
 import { sendEmail, buildTeamInviteEmail } from "@/lib/email";
 import {
   generateInviteToken,
@@ -417,4 +418,116 @@ export async function acceptInvite(
     redirect(localPath(locale, "/login"));
   }
   redirect(localPath(locale, "/dashboard"));
+}
+
+// --- Member management (owner-only) -----------------------------------------
+
+export type MemberActionResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error:
+        | "no_session"
+        | "owner_only"
+        | "not_found"
+        | "cannot_deactivate_self"
+        | "cannot_deactivate_only_owner"
+        | "seat_limit"
+        | "update_failed";
+    };
+
+// Owner-only. Soft-removes a teammate: sets deactivated_at (+ who did it),
+// which frees a seat and — via the (app) layout's deactivated-user check —
+// signs them out + blocks future sign-in. Never a hard delete: their name
+// stays in the audit trail + past assignments. Guards: can't remove yourself
+// or the firm's only owner (transfer ownership first).
+export async function deactivateUser(
+  userId: string,
+): Promise<MemberActionResult> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+
+  const admin = getServiceRoleSupabase();
+  const { data: target } = await admin
+    .from("users")
+    .select("id, role, firm_id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (!target || target.firm_id !== firm.id) {
+    return { ok: false, error: "not_found" };
+  }
+
+  const { count: ownerCount } = await admin
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .eq("firm_id", firm.id)
+    .eq("role", "owner")
+    .is("deactivated_at", null);
+  const check = canDeactivateMember({
+    targetId: userId,
+    targetRole: target.role,
+    currentUserId: me.id,
+    activeOwnerCount: ownerCount ?? 1,
+  });
+  if (!check.ok) return { ok: false, error: check.reason };
+
+  const { error } = await admin
+    .from("users")
+    .update({
+      deactivated_at: new Date().toISOString(),
+      deactivated_by_user_id: me.id,
+    })
+    .eq("id", userId)
+    .eq("firm_id", firm.id);
+  if (error) {
+    console.error("[team] deactivateUser failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firm.id, null, "user_deactivated", {
+    target_user_id: userId,
+  });
+  revalidatePath(TEAM_PATH);
+  return { ok: true };
+}
+
+// Owner-only. Restores a deactivated teammate — re-checks there's a free seat
+// first (an active member is coming back).
+export async function reactivateUser(
+  userId: string,
+): Promise<MemberActionResult> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+
+  const admin = getServiceRoleSupabase();
+  const { data: target } = await admin
+    .from("users")
+    .select("id, firm_id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (!target || target.firm_id !== firm.id) {
+    return { ok: false, error: "not_found" };
+  }
+
+  if (!hasRoomForMember(await getFirmSeatUsage(firm.id))) {
+    return { ok: false, error: "seat_limit" };
+  }
+
+  const { error } = await admin
+    .from("users")
+    .update({ deactivated_at: null, deactivated_by_user_id: null })
+    .eq("id", userId)
+    .eq("firm_id", firm.id);
+  if (error) {
+    console.error("[team] reactivateUser failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firm.id, null, "user_reactivated", {
+    target_user_id: userId,
+  });
+  revalidatePath(TEAM_PATH);
+  return { ok: true };
 }

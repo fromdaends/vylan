@@ -18,6 +18,7 @@ import {
   Trash2,
   ChevronRight,
   UserCog,
+  Users,
 } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
@@ -214,6 +215,26 @@ function AccountSection({
   return (
     <div className="space-y-12">
       <AccountSignInSections email={email} />
+
+      {isOwner && (
+        <Link
+          href="/settings/team"
+          className="group flex max-w-xl items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+        >
+          <span className="flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+              <Users className="h-4 w-4" />
+            </span>
+            <span className="flex flex-col">
+              <span className="text-sm font-medium">{t("section_team_label")}</span>
+              <span className="text-xs text-muted-foreground">
+                {t("section_team_hint")}
+              </span>
+            </span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      )}
 
       {isOwner ? (
         <div>

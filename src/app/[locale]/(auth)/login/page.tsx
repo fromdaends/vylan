@@ -20,7 +20,12 @@ import { ArrowRight } from "lucide-react";
 
 // Allowlist of error codes the login page surfaces from the URL (a stray
 // ?error=whatever is ignored so it can't render a missing translation).
-const URL_ERROR_CODES = new Set(["callback", "oauth_failed", "rate_limited"]);
+const URL_ERROR_CODES = new Set([
+  "callback",
+  "oauth_failed",
+  "rate_limited",
+  "deactivated",
+]);
 
 export default function LoginPage() {
   const t = useTranslations("Auth");

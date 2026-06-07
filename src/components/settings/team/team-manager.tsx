@@ -1,0 +1,581 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
+import { toast } from "sonner";
+import {
+  UserPlus,
+  MoreHorizontal,
+  ChevronDown,
+  ChevronRight,
+  Mail,
+  Clock,
+} from "lucide-react";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  createInvite,
+  revokeInvite,
+  resendInvite,
+  deactivateUser,
+  reactivateUser,
+} from "@/app/actions/team";
+
+type Seat = { used: number; cap: number | null; atCap: boolean };
+type ActiveMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: "owner" | "staff";
+  isSelf: boolean;
+};
+type DeactivatedMember = {
+  id: string;
+  name: string;
+  email: string;
+  deactivatedAt: string | null;
+  deactivatedByName: string | null;
+};
+type PendingInvite = {
+  id: string;
+  email: string;
+  invitedByName: string | null;
+  createdAt: string;
+  expiresAt: string;
+  expired: boolean;
+};
+
+// Maps a server action's error code to a friendly, localized message.
+function useErrorMessage() {
+  const t = useTranslations("Team");
+  return (error: string | undefined, cap?: number) => {
+    switch (error) {
+      case "seat_limit":
+        return t("error_seat_limit", { cap: cap ?? 0 });
+      case "email_exists":
+        return t("error_email_exists");
+      case "already_invited":
+        return t("error_already_invited");
+      case "invalid_email":
+        return t("error_invalid_email");
+      case "cannot_deactivate_self":
+        return t("error_cannot_deactivate_self");
+      case "cannot_deactivate_only_owner":
+        return t("error_cannot_deactivate_only_owner");
+      case "owner_only":
+        return t("error_owner_only");
+      default:
+        return t("error_generic");
+    }
+  };
+}
+
+export function TeamManager({
+  seat,
+  activeMembers,
+  deactivatedMembers,
+  pendingInvites,
+  locale,
+}: {
+  seat: Seat;
+  activeMembers: ActiveMember[];
+  deactivatedMembers: DeactivatedMember[];
+  pendingInvites: PendingInvite[];
+  locale: "fr" | "en";
+}) {
+  const t = useTranslations("Team");
+  const [inviteOpen, setInviteOpen] = useState(false);
+
+  const seatLabel =
+    seat.cap == null
+      ? t("seats_unlimited", { used: seat.used })
+      : t("seats_used", { used: seat.used, cap: seat.cap });
+  const pct =
+    seat.cap == null || seat.cap === 0
+      ? 0
+      : Math.min(100, Math.round((seat.used / seat.cap) * 100));
+
+  return (
+    <section className="space-y-10">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            {t("title")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          disabled={seat.atCap}
+          title={seat.atCap ? t("seats_at_cap", { cap: seat.cap ?? 0 }) : undefined}
+          onClick={() => setInviteOpen(true)}
+        >
+          <UserPlus className="size-4" />
+          {t("invite_button")}
+        </Button>
+      </div>
+
+      {/* Seat usage */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium">{seatLabel}</span>
+          {seat.atCap && (
+            <span className="text-xs text-warning">
+              {t("seats_at_cap", { cap: seat.cap ?? 0 })}
+            </span>
+          )}
+        </div>
+        {seat.cap != null && (
+          <div
+            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            role="progressbar"
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={seatLabel}
+          >
+            <div
+              className={
+                "h-full rounded-full transition-all " +
+                (seat.atCap ? "bg-warning" : "bg-primary")
+              }
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Active members */}
+      <div>
+        <h2 className="text-sm font-semibold">{t("section_active")}</h2>
+        <div className="mt-3 border-t border-border/60">
+          {activeMembers.map((m) => (
+            <MemberRow
+              key={m.id}
+              member={m}
+              canManage={!m.isSelf && m.role !== "owner"}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Pending invitations */}
+      <div>
+        <h2 className="text-sm font-semibold">{t("section_pending")}</h2>
+        {pendingInvites.length === 0 ? (
+          <p className="mt-3 rounded-lg border border-dashed border-border/50 px-4 py-8 text-center text-sm text-muted-foreground">
+            {t("pending_empty")}
+          </p>
+        ) : (
+          <div className="mt-3 border-t border-border/60">
+            {pendingInvites.map((inv) => (
+              <InviteRow key={inv.id} invite={inv} locale={locale} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Deactivated members (collapsed) */}
+      {deactivatedMembers.length > 0 && (
+        <DeactivatedSection members={deactivatedMembers} locale={locale} />
+      )}
+
+      <InviteModal
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        defaultLocale={locale}
+      />
+    </section>
+  );
+}
+
+function MemberRow({
+  member,
+  canManage,
+}: {
+  member: ActiveMember;
+  canManage: boolean;
+}) {
+  const t = useTranslations("Team");
+  const errorMessage = useErrorMessage();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  function doDeactivate() {
+    startTransition(async () => {
+      const res = await deactivateUser(member.id);
+      if (res.ok) {
+        toast.success(t("member_deactivated"));
+        router.refresh();
+      } else {
+        toast.error(errorMessage(res.error));
+      }
+      setConfirmOpen(false);
+    });
+  }
+
+  return (
+    <div className="flex items-center gap-3 border-b border-border/40 py-3">
+      <AvatarInitials name={member.name} size={36} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-medium">{member.name}</span>
+          <Badge
+            variant={member.role === "owner" ? "default" : "secondary"}
+            className="shrink-0 font-normal"
+          >
+            {member.role === "owner" ? t("role_owner") : t("role_staff")}
+          </Badge>
+          {member.isSelf && (
+            <span className="text-xs text-muted-foreground">{t("you")}</span>
+          )}
+        </div>
+        <div className="truncate text-xs text-muted-foreground">
+          {member.email}
+        </div>
+      </div>
+
+      {canManage && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={t("member_actions")}
+              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <MoreHorizontal className="size-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={(e) => {
+                e.preventDefault();
+                setConfirmOpen(true);
+              }}
+            >
+              {t("menu_deactivate")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("deactivate_confirm_title")}</DialogTitle>
+            <DialogDescription>
+              {t("deactivate_confirm_body", { name: member.name })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmOpen(false)}
+              disabled={pending}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={doDeactivate}
+              disabled={pending}
+            >
+              {t("menu_deactivate")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function InviteRow({
+  invite,
+  locale,
+}: {
+  invite: PendingInvite;
+  locale: "fr" | "en";
+}) {
+  const t = useTranslations("Team");
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function act(fn: () => Promise<{ ok: boolean }>, okMsg: string) {
+    startTransition(async () => {
+      const res = await fn();
+      if (res.ok) {
+        toast.success(okMsg);
+        router.refresh();
+      } else {
+        toast.error(t("error_generic"));
+      }
+    });
+  }
+
+  return (
+    <div className="flex items-center gap-3 border-b border-border/40 py-3">
+      <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        <Mail className="size-4" />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{invite.email}</div>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          {invite.invitedByName && (
+            <span>{t("invited_by_name", { name: invite.invitedByName })}</span>
+          )}
+          {invite.expired ? (
+            <span className="inline-flex items-center gap-1 text-warning">
+              <Clock className="size-3" />
+              {t("invite_expired")}
+            </span>
+          ) : (
+            <span>
+              {t("invite_expires", {
+                date: new Date(invite.expiresAt).toLocaleDateString(locale),
+              })}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            disabled={pending}
+            aria-label={t("invite_actions")}
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <MoreHorizontal className="size-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44">
+          <DropdownMenuItem
+            onSelect={() =>
+              act(() => resendInvite(invite.id), t("invite_resent"))
+            }
+          >
+            {t("menu_resend")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={() =>
+              act(() => revokeInvite(invite.id), t("invite_revoked"))
+            }
+          >
+            {t("menu_revoke")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function DeactivatedSection({
+  members,
+  locale,
+}: {
+  members: DeactivatedMember[];
+  locale: "fr" | "en";
+}) {
+  const t = useTranslations("Team");
+  const errorMessage = useErrorMessage();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function reactivate(id: string) {
+    startTransition(async () => {
+      const res = await reactivateUser(id);
+      if (res.ok) {
+        toast.success(t("member_reactivated"));
+        router.refresh();
+      } else {
+        toast.error(errorMessage(res.error));
+      }
+    });
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {open ? (
+          <ChevronDown className="size-4" />
+        ) : (
+          <ChevronRight className="size-4" />
+        )}
+        {t("section_deactivated", { count: members.length })}
+      </button>
+      {open && (
+        <div className="mt-3 border-t border-border/60">
+          {members.map((m) => (
+            <div
+              key={m.id}
+              className="flex items-center gap-3 border-b border-border/40 py-3"
+            >
+              <AvatarInitials
+                name={m.name}
+                size={36}
+                color="#64748b"
+                className="opacity-60"
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-muted-foreground">
+                  {m.name}
+                </div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {m.email}
+                  {m.deactivatedAt && (
+                    <>
+                      {" · "}
+                      {t("deactivated_on", {
+                        date: new Date(m.deactivatedAt).toLocaleDateString(
+                          locale,
+                        ),
+                      })}
+                    </>
+                  )}
+                </div>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={pending}
+                onClick={() => reactivate(m.id)}
+              >
+                {t("reactivate")}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InviteModal({
+  open,
+  onOpenChange,
+  defaultLocale,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  defaultLocale: "fr" | "en";
+}) {
+  const t = useTranslations("Team");
+  const errorMessage = useErrorMessage();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [email, setEmail] = useState("");
+  const [inviteLocale, setInviteLocale] = useState<"fr" | "en">(defaultLocale);
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const fd = new FormData();
+    fd.set("email", email);
+    fd.set("locale", inviteLocale);
+    startTransition(async () => {
+      const res = await createInvite(fd);
+      if (res.ok) {
+        toast.success(res.emailSent ? t("invite_sent") : t("invite_sent_no_email"));
+        setEmail("");
+        onOpenChange(false);
+        router.refresh();
+      } else {
+        toast.error(errorMessage(res.error, res.cap));
+      }
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t("invite_modal_title")}</DialogTitle>
+          <DialogDescription>{t("invite_modal_hint")}</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="invite-email" className="text-sm font-medium">
+              {t("invite_email_label")}
+            </label>
+            <Input
+              id="invite-email"
+              type="email"
+              autoComplete="off"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="colleague@example.com"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <span className="text-sm font-medium">
+              {t("invite_locale_label")}
+            </span>
+            <div className="inline-flex rounded-md bg-secondary/40 p-0.5">
+              {(["fr", "en"] as const).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setInviteLocale(l)}
+                  className={
+                    "rounded px-3 py-1 text-sm font-medium transition-colors " +
+                    (inviteLocale === l
+                      ? "bg-card text-foreground"
+                      : "text-muted-foreground hover:text-foreground")
+                  }
+                >
+                  {l === "fr" ? "Français" : "English"}
+                </button>
+              ))}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={pending}
+            >
+              {t("cancel")}
+            </Button>
+            <Button type="submit" disabled={pending || email.trim() === ""}>
+              <UserPlus className="size-4" />
+              {t("invite_submit")}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}

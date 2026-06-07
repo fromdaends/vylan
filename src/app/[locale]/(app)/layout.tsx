@@ -58,6 +58,14 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/login/mfa" }));
   }
 
+  // A deactivated member (removed by the firm owner) is signed out on their
+  // next request + bounced to login with a friendly reason. This is the
+  // reliable force-logout — deactivateUser only sets the flag.
+  if (dbUser?.deactivated_at) {
+    await supabase.auth.signOut();
+    redirect(getPathname({ locale, href: "/login?error=deactivated" }));
+  }
+
   if (!dbUser || !firm || !firm.onboarded_at) {
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
