@@ -31,6 +31,7 @@ import {
 } from "@/app/actions/clients";
 import type { Client } from "@/lib/db/clients";
 import { PROVINCES, TIMEZONES, INDUSTRIES } from "@/lib/clients/fields";
+import { SearchableSelect } from "./searchable-select";
 import { emailChangeNeedsConfirm } from "./email-change";
 import { Plus, Pencil } from "lucide-react";
 import { toast } from "sonner";
@@ -253,19 +254,18 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="industry">{t("field_industry")}</Label>
-            <Select name="industry" defaultValue={client?.industry ?? "none"}>
-              <SelectTrigger id="industry" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">{t("field_unset")}</SelectItem>
-                {INDUSTRIES.map((ind) => (
-                  <SelectItem key={ind.value} value={ind.value}>
-                    {locale === "fr" ? ind.fr : ind.en}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              name="industry"
+              triggerId="industry"
+              defaultValue={client?.industry ?? "none"}
+              options={INDUSTRIES.map((ind) => ({
+                value: ind.value,
+                label: locale === "fr" ? ind.fr : ind.en,
+              }))}
+              unsetLabel={t("field_unset")}
+              searchPlaceholder={t("industry_search")}
+              emptyText={t("industry_empty")}
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="external_ref">{t("field_external_ref")}</Label>
