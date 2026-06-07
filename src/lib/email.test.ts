@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildEngagementInviteEmail } from "./email";
+import { buildEngagementInviteEmail, resolveSender } from "./email";
 
 describe("buildEngagementInviteEmail", () => {
   const base = {
@@ -79,5 +79,28 @@ describe("buildEngagementInviteEmail", () => {
     const greetingIdx = html.indexOf("Hi Marie Tremblay");
     expect(imgIdx).toBeGreaterThan(-1);
     expect(imgIdx).toBeLessThan(greetingIdx);
+  });
+});
+
+describe("resolveSender", () => {
+  it("gives the default sender a 'Vylan' display name", () => {
+    expect(resolveSender(undefined)).toBe("Vylan <hello@vylan.app>");
+    expect(resolveSender(null)).toBe("Vylan <hello@vylan.app>");
+    expect(resolveSender("")).toBe("Vylan <hello@vylan.app>");
+  });
+  it("wraps a bare custom address with the Vylan name", () => {
+    expect(resolveSender("notifications@vylan.app")).toBe(
+      "Vylan <notifications@vylan.app>",
+    );
+  });
+  it("keeps a display name the caller already provided", () => {
+    expect(resolveSender("Vylan <notifications@vylan.app>")).toBe(
+      "Vylan <notifications@vylan.app>",
+    );
+  });
+  it("ignores a leftover resend.dev sandbox address", () => {
+    expect(resolveSender("onboarding@resend.dev")).toBe(
+      "Vylan <hello@vylan.app>",
+    );
   });
 });

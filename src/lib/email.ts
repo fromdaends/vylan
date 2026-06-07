@@ -27,6 +27,19 @@ function client(): Resend | null {
   return _client;
 }
 
+// Resolve the From header. Defaults to hello@vylan.app; ignores a leftover
+// resend.dev sandbox value (Resend 403s on it for external recipients); and
+// ensures a "Vylan" display name so inboxes show the brand, not the bare
+// local-part (e.g. Gmail rendering "hello" from hello@vylan.app). A caller that
+// already set a name (value contains "<") is left untouched. PURE — exported
+// for tests.
+export function resolveSender(rawFrom: string | undefined | null): string {
+  const trimmed = rawFrom?.trim();
+  const resolved =
+    !trimmed || /@resend\.dev$/i.test(trimmed) ? "hello@vylan.app" : trimmed;
+  return resolved.includes("<") ? resolved : `Vylan <${resolved}>`;
+}
+
 export async function sendEmail({
   to,
   subject,
@@ -44,9 +57,9 @@ export async function sendEmail({
   // initial Resend setup and easy to forget about), ignore it: Resend
   // 403s on resend.dev → external recipients, so honoring that value
   // would silently break founder notifications.
-  const rawFrom = fromOverride?.trim() || process.env.RESEND_FROM_EMAIL?.trim();
-  const from =
-    !rawFrom || /@resend\.dev$/i.test(rawFrom) ? "hello@vylan.app" : rawFrom;
+  const from = resolveSender(
+    fromOverride?.trim() || process.env.RESEND_FROM_EMAIL?.trim(),
+  );
   if (!c) {
     // Redact the recipient so a misconfigured prod doesn't dump client PII
     // into the function logs. The dev-mode signal we actually need is
