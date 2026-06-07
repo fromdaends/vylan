@@ -2,9 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Search } from "lucide-react";
+import { Search, Users } from "lucide-react";
 import { Link, usePathname } from "@/i18n/navigation";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   WorklistTable,
   type WorklistRow,
@@ -30,7 +37,6 @@ export function EngagementsView({
   locale,
   canDelete,
   currentUserId,
-  isOwner,
   badges,
 }: {
   view: EngagementView;
@@ -38,16 +44,15 @@ export function EngagementsView({
   locale: AppLocale;
   canDelete: boolean;
   currentUserId: string | null;
-  isOwner: boolean;
   badges: { ready: number; deleted: number };
 }) {
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
   const pathname = usePathname();
   const [query, setQuery] = useState("");
-  // Mine/All — staff default to their own assigned work, owners to All.
-  // Remembered per user (localStorage).
-  const [scope, setScope] = useState<"mine" | "all">(isOwner ? "all" : "mine");
+  // My/All engagements — mirrors the clients owner filter. Defaults to All for
+  // everyone (same as clients); the choice is remembered per user (localStorage).
+  const [scope, setScope] = useState<"mine" | "all">("all");
   useEffect(() => {
     if (!currentUserId) return;
     let saved: string | null = null;
@@ -151,29 +156,23 @@ export function EngagementsView({
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div
-          role="tablist"
-          aria-label={t("scope_label")}
-          className="inline-flex items-center gap-0.5 self-start rounded-md bg-secondary/40 p-0.5 text-sm"
+        <Select
+          value={scope}
+          onValueChange={(v) => chooseScope(v as "mine" | "all")}
         >
-          {(["mine", "all"] as const).map((s) => (
-            <button
-              key={s}
-              type="button"
-              role="tab"
-              aria-selected={scope === s}
-              onClick={() => chooseScope(s)}
-              className={cn(
-                "rounded px-3 py-1 font-medium transition-colors",
-                scope === s
-                  ? "bg-card text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {s === "mine" ? t("scope_mine") : t("scope_all")}
-            </button>
-          ))}
-        </div>
+          <SelectTrigger
+            size="sm"
+            className="w-[13rem] self-start"
+            aria-label={t("scope_label")}
+          >
+            <Users className="h-3.5 w-3.5 text-muted-foreground" />
+            <SelectValue placeholder={t("scope_label")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("scope_all")}</SelectItem>
+            <SelectItem value="mine">{t("scope_mine")}</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="relative sm:w-72">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
