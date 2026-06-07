@@ -63,12 +63,8 @@ function renderGallery(items: TemplateCard[] = templates) {
 const blankName = new RegExp(en.Dashboard.tmpl_blank_name, "i");
 
 describe("TemplatesGallery", () => {
-  it("shows a blank starter plus every template, regardless of type or origin", () => {
+  it("shows every template, regardless of type or origin", () => {
     renderGallery();
-
-    // Blank card → the from-scratch flow (no template query).
-    const blank = screen.getByRole("link", { name: blankName });
-    expect(blank).toHaveAttribute("href", "/engagements/new");
 
     // A built-in card carries its template id into the new-engagement flow.
     const t1 = screen.getByRole("link", { name: /T1 Personal Return/i });
@@ -84,6 +80,16 @@ describe("TemplatesGallery", () => {
     expect(
       screen.getByRole("link", { name: /Client Onboarding/i }),
     ).toBeInTheDocument();
+  });
+
+  it("has no blank / 'from scratch' card — only real templates", () => {
+    renderGallery();
+    // No plain from-scratch link (href exactly /engagements/new, no ?template).
+    const links = screen.getAllByRole("link");
+    expect(
+      links.some((a) => a.getAttribute("href") === "/engagements/new"),
+    ).toBe(false);
+    expect(screen.queryByText(blankName)).not.toBeInTheDocument();
   });
 
   it("renders no category tabs and no search box", () => {

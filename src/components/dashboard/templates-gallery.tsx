@@ -1,7 +1,6 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { FilePlus2 } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { TemplateCard as TemplateCardView } from "@/components/templates/template-card";
 
@@ -16,11 +15,12 @@ export type TemplateCard = {
   builtIn: boolean;
 };
 
-// The templates gallery — a horizontal "start here" rail on the Overview page.
-// A leading "blank" card starts from scratch, followed by every usable template
-// (built-in starters + the firm's own). No category tabs or search here — that
-// browsing/filtering lives on the full /templates page (the "Browse all" link);
-// the Overview just offers a quick "start from a template" rail.
+// The templates gallery — a horizontal "start here" rail on the Overview page
+// of every usable template (built-in starters + the firm's own). Only REAL
+// templates show here (no "blank / from scratch" card — that's not a template;
+// starting from scratch lives in the normal New-engagement flow). No category
+// tabs or search either — that browsing/filtering lives on the full /templates
+// page (the "Browse all" link); the Overview is just a quick start rail.
 export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
   const t = useTranslations("Dashboard");
 
@@ -39,23 +39,6 @@ export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-1">
-        <Link
-          href="/engagements/new"
-          className="group flex w-[18rem] shrink-0 flex-col justify-center gap-3 rounded-xl border border-dashed border-border/60 bg-card/40 p-4 transition-colors duration-200 hover:border-foreground/20 hover:bg-card"
-        >
-          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground transition-colors group-hover:bg-accent/10 group-hover:text-accent">
-            <FilePlus2 className="h-5 w-5" />
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-foreground">
-              {t("tmpl_blank_name")}
-            </div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {t("tmpl_blank_hint")}
-            </div>
-          </div>
-        </Link>
-
         {templates.map((tmpl) => (
           <TemplateCardView
             key={tmpl.id}
