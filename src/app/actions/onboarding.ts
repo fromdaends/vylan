@@ -12,6 +12,7 @@ import { parseEmailList } from "@/lib/validators";
 import { buildWelcomeEmail, sendEmail } from "@/lib/email";
 import { seedDemoData } from "@/lib/demo-seed";
 import { notifyFounderNewSignup } from "@/lib/demo-notify";
+import { createInvite } from "@/app/actions/team";
 
 export type OnboardingState = {
   error?: string;
@@ -162,11 +163,22 @@ export async function submitStep3(
     return { error: "invalid" };
   }
   const emails = parseEmailList(parsed.data.emails);
-  await updateCurrentFirm({
-    invited_emails: emails,
-    onboarded_at: new Date().toISOString(),
-  });
+  await updateCurrentFirm({ onboarded_at: new Date().toISOString() });
   await sendWelcomeEmail();
+  // Send real invitations for any colleagues entered (Phase 7 — replaces the
+  // old "invites coming soon" stub that only stashed them in invited_emails).
+  // Best-effort: onboarding must not fail on an email hiccup, and createInvite
+  // respects the seat cap + returns a result instead of throwing on
+  // over-cap / duplicate / already-a-user.
+  for (const email of emails) {
+    try {
+      const fd = new FormData();
+      fd.set("email", email);
+      await createInvite(fd);
+    } catch (e) {
+      console.error("[onboarding] invite failed:", e);
+    }
+  }
   revalidatePath("/", "layout");
   const locale = pickLocale(formData);
   redirect(localPath(locale, "/dashboard"));

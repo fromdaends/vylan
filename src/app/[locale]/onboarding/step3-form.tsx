@@ -51,7 +51,7 @@ export function Step3Form({ locale }: { locale: "fr" | "en" }) {
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
             <p className="text-xs text-muted-foreground">
-              {t("step3_invites_pending")}
+              {t("step3_invites_help")}
             </p>
           </div>
           <div className="flex gap-2">
