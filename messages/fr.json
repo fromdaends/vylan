@@ -1,4 +1,16 @@
 {
+  "Team": {
+    "error_seat_limit": "Vous avez atteint la limite de {cap} utilisateurs pour votre forfait actuel. Pour ajouter plus de membres, passez à un forfait supérieur ou contactez-nous.",
+    "error_email_exists": "Cet utilisateur a déjà un compte Vylan. Pour des raisons de sécurité, nous ne pouvons pas l'ajouter automatiquement. Contactez le support.",
+    "error_already_invited": "Une invitation est déjà en attente pour ce courriel. Renvoyez-la ou révoquez-la depuis la liste ci-dessous.",
+    "error_invalid_email": "Veuillez entrer une adresse courriel valide.",
+    "error_owner_only": "Cette action nécessite les droits d'administrateur. Demandez à votre administrateur de le faire pour vous.",
+    "error_generic": "Une erreur est survenue. Veuillez réessayer.",
+    "invite_sent": "Invitation envoyée.",
+    "invite_sent_no_email": "Invitation créée, mais le courriel n'a pas été envoyé. Utilisez Renvoyer pour réessayer.",
+    "invite_revoked": "Invitation révoquée.",
+    "invite_resent": "Invitation renvoyée."
+  },
   "Preview": {
     "button": "Aperçu",
     "eyebrow": "Aperçu des documents",
