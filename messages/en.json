@@ -867,6 +867,8 @@
     "field_timezone": "Timezone",
     "field_industry": "Industry",
     "field_unset": "Not specified",
+    "industry_search": "Search industries…",
+    "industry_empty": "No industry found.",
     "row_actions": "Actions",
     "edit": "Edit",
     "archive": "Archive",

@@ -867,6 +867,8 @@
     "field_timezone": "Fuseau horaire",
     "field_industry": "Secteur d'activité",
     "field_unset": "Non spécifié",
+    "industry_search": "Rechercher un secteur…",
+    "industry_empty": "Aucun secteur trouvé.",
     "row_actions": "Actions",
     "edit": "Modifier",
     "archive": "Archiver",
