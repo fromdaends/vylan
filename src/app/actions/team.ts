@@ -24,6 +24,7 @@ import {
   SeatLimitError,
 } from "@/lib/billing/seats";
 import { canDeactivateMember } from "@/lib/team/deactivation";
+import { canTransferOwnershipTo } from "@/lib/team/ownership";
 import { sendEmail, buildTeamInviteEmail } from "@/lib/email";
 import {
   generateInviteToken,
@@ -529,5 +530,58 @@ export async function reactivateUser(
     target_user_id: userId,
   });
   revalidatePath(TEAM_PATH);
+  return { ok: true };
+}
+
+export type TransferOwnershipResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error: "no_session" | "owner_only" | "invalid_target" | "transfer_failed";
+    };
+
+// Owner-only. Hands ownership to an active staff member: the caller becomes
+// staff and the target becomes owner, swapped atomically via the
+// transfer_firm_ownership() SQL function (migration 0200). Irreversible from
+// the app — the (now former) owner can only get it back if the new owner
+// transfers it again.
+export async function transferOwnership(
+  newOwnerId: string,
+): Promise<TransferOwnershipResult> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+
+  const admin = getServiceRoleSupabase();
+  const { data: target } = await admin
+    .from("users")
+    .select("id, role, firm_id, deactivated_at")
+    .eq("id", newOwnerId)
+    .maybeSingle();
+  const check = canTransferOwnershipTo({
+    targetId: newOwnerId,
+    targetRole: target?.role ?? "staff",
+    targetDeactivated: !!target?.deactivated_at,
+    currentUserId: me.id,
+    targetSameFirm: !!target && target.firm_id === firm.id,
+  });
+  if (!check.ok) return { ok: false, error: "invalid_target" };
+
+  const { error } = await admin.rpc("transfer_firm_ownership", {
+    p_firm_id: firm.id,
+    p_old_owner: me.id,
+    p_new_owner: newOwnerId,
+  });
+  if (error) {
+    console.error("[team] transferOwnership failed:", error.message);
+    return { ok: false, error: "transfer_failed" };
+  }
+
+  await logUserActivity(firm.id, null, "ownership_transferred", {
+    to_user_id: newOwnerId,
+  });
+  // The caller is now staff — refresh the whole app tree so their owner-only
+  // UI (nav, this page) updates; the UI then sends them to /settings.
+  revalidatePath("/", "layout");
   return { ok: true };
 }

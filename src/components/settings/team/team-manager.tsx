@@ -11,6 +11,7 @@ import {
   ChevronRight,
   Mail,
   Clock,
+  Check,
 } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,7 @@ import {
   resendInvite,
   deactivateUser,
   reactivateUser,
+  transferOwnership,
 } from "@/app/actions/team";
 
 type Seat = { used: number; cap: number | null; atCap: boolean };
@@ -197,6 +199,15 @@ export function TeamManager({
       {/* Deactivated members (collapsed) */}
       {deactivatedMembers.length > 0 && (
         <DeactivatedSection members={deactivatedMembers} locale={locale} />
+      )}
+
+      {/* Transfer ownership — only when there's an active staff member to hand to. */}
+      {activeMembers.some((m) => m.role === "staff") && (
+        <TransferOwnership
+          staff={activeMembers
+            .filter((m) => m.role === "staff")
+            .map((m) => ({ id: m.id, name: m.name }))}
+        />
       )}
 
       <InviteModal
@@ -577,5 +588,99 @@ function InviteModal({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TransferOwnership({
+  staff,
+}: {
+  staff: { id: string; name: string }[];
+}) {
+  const t = useTranslations("Team");
+  const errorMessage = useErrorMessage();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  function confirm() {
+    if (!selected) return;
+    startTransition(async () => {
+      const res = await transferOwnership(selected);
+      if (res.ok) {
+        toast.success(t("ownership_transferred_toast"));
+        // The caller is now a member — leave the owner-only team page.
+        router.push("/settings");
+      } else {
+        toast.error(errorMessage(res.error));
+        setOpen(false);
+      }
+    });
+  }
+
+  return (
+    <div className="border-t border-border/40 pt-8">
+      <h2 className="text-sm font-semibold">{t("transfer_title")}</h2>
+      <p className="mt-1 max-w-xl text-xs text-muted-foreground">
+        {t("transfer_hint")}
+      </p>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-3"
+        onClick={() => setOpen(true)}
+      >
+        {t("transfer_button")}
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("transfer_modal_title")}</DialogTitle>
+            <DialogDescription>{t("transfer_modal_warning")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            {staff.map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setSelected(m.id)}
+                className={
+                  "flex w-full items-center gap-2.5 rounded-lg border px-3 py-2 text-left text-sm transition-colors " +
+                  (selected === m.id
+                    ? "border-primary bg-secondary/40"
+                    : "border-border/60 hover:bg-secondary/30")
+                }
+              >
+                <AvatarInitials name={m.name} size={24} />
+                <span className="flex-1 truncate">{m.name}</span>
+                {selected === m.id && (
+                  <Check className="size-4 text-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={pending}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirm}
+              disabled={pending || !selected}
+            >
+              {t("transfer_confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
