@@ -66,6 +66,7 @@ const CLIENT: Client = {
   notes: null,
   created_at: "2026-01-01T00:00:00Z",
   archived_at: null,
+  assigned_user_id: null,
 };
 
 function openEditor(client: Client = CLIENT) {

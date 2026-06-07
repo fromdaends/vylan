@@ -13,8 +13,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, ArrowUpDown } from "lucide-react";
+import { Search, ArrowUpDown, Users } from "lucide-react";
 import { SORT_OPTIONS, type SortKey } from "./sort";
+import { OWNER_FILTERS, type OwnerFilter } from "./owner";
 
 export function ClientsToolbar({
   query,
@@ -23,6 +24,7 @@ export function ClientsToolbar({
   includeArchived,
   sort,
   activeOnly,
+  ownerFilter,
 }: {
   // Search is now a pure client-side filter held by the parent
   // view — typing in the input updates this prop on every keystroke
@@ -35,6 +37,7 @@ export function ClientsToolbar({
   includeArchived: boolean;
   sort: SortKey;
   activeOnly: boolean;
+  ownerFilter: OwnerFilter;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -121,6 +124,26 @@ export function ClientsToolbar({
             {SORT_OPTIONS.map((opt) => (
               <SelectItem key={opt} value={opt}>
                 {t(`sort_${opt}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={ownerFilter}
+          onValueChange={(v) => setParam("owner", v === "all" ? null : v)}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-[11rem]"
+            aria-label={t("owner_filter_label")}
+          >
+            <Users className="h-3.5 w-3.5 text-muted-foreground" />
+            <SelectValue placeholder={t("owner_filter_label")} />
+          </SelectTrigger>
+          <SelectContent>
+            {OWNER_FILTERS.map((opt) => (
+              <SelectItem key={opt} value={opt}>
+                {t(`owner_${opt}`)}
               </SelectItem>
             ))}
           </SelectContent>

@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
   MoreHorizontal,
   ChevronDown,
@@ -31,6 +32,7 @@ import {
   archiveClientAction,
   restoreClientAction,
 } from "@/app/actions/clients";
+import type { ClientOwner } from "./owner";
 import type { Client } from "@/lib/db/clients";
 import type { EngagementStatus } from "@/lib/db/engagements";
 import type { EngagementType } from "@/lib/db/templates";
@@ -59,17 +61,21 @@ export type ClientEngagementRow = {
 
 // Column count for the expanded `colSpan` cell. Bump if the row gains
 // or loses a column.
-const TABLE_COLS = 7;
+const TABLE_COLS = 8;
 
 export function ClientsTable({
   clients,
   summaries,
   engagementsByClient,
+  owners,
+  currentUserId,
   locale,
 }: {
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
   engagementsByClient: Record<string, ClientEngagementRow[]>;
+  owners: Record<string, ClientOwner>;
+  currentUserId: string;
   locale: AppLocale;
 }) {
   const t = useTranslations("Clients");
@@ -108,6 +114,7 @@ export function ClientsTable({
             <TableHead className="py-3">{t("col_email")}</TableHead>
             <TableHead className="py-3">{t("col_phone")}</TableHead>
             <TableHead className="py-3">{t("col_engagements")}</TableHead>
+            <TableHead className="py-3">{t("col_owner")}</TableHead>
             <TableHead className="w-12 text-right" />
           </TableRow>
         </TableHeader>
@@ -121,6 +128,13 @@ export function ClientsTable({
                 client={c}
                 summary={summaries[c.id]}
                 engagements={rows}
+                owner={
+                  c.assigned_user_id ? owners[c.assigned_user_id] : undefined
+                }
+                isYou={
+                  c.assigned_user_id != null &&
+                  c.assigned_user_id === currentUserId
+                }
                 isOpen={isOpen}
                 onToggle={() => toggle(c.id)}
                 locale={locale}
@@ -137,6 +151,8 @@ function ClientRowWithDrawer({
   client,
   summary,
   engagements,
+  owner,
+  isYou,
   isOpen,
   onToggle,
   locale,
@@ -144,6 +160,8 @@ function ClientRowWithDrawer({
   client: Client;
   summary: ClientEngagementSummary | undefined;
   engagements: ClientEngagementRow[];
+  owner: ClientOwner | undefined;
+  isYou: boolean;
   isOpen: boolean;
   onToggle: () => void;
   locale: AppLocale;
@@ -205,6 +223,9 @@ function ClientRowWithDrawer({
         </TableCell>
         <TableCell className="py-4">
           <EngagementSummaryCell summary={summary} />
+        </TableCell>
+        <TableCell className="py-4">
+          <OwnerCell owner={owner} isYou={isYou} />
         </TableCell>
         <TableCell className="py-4 pr-4 text-right" onClick={stop}>
           <RowActions client={client} locale={locale} />
@@ -352,6 +373,37 @@ function EngagementSummaryCell({
     );
   }
   return <span className="text-muted-foreground text-sm">—</span>;
+}
+
+// Owner ("belongs to") cell — the firm member who owns this client. Shows their
+// avatar + name, with a "(you)" marker when it's the current user. Unassigned
+// clients (no owner, or the owner was removed) show a muted placeholder.
+function OwnerCell({
+  owner,
+  isYou,
+}: {
+  owner: ClientOwner | undefined;
+  isYou: boolean;
+}) {
+  const t = useTranslations("Clients");
+  if (!owner) {
+    return (
+      <span className="text-sm text-muted-foreground">
+        {t("owner_unassigned")}
+      </span>
+    );
+  }
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <AvatarInitials src={owner.avatarUrl} name={owner.name} size={24} />
+      <span className="truncate text-sm">
+        {owner.name}
+        {isYou && (
+          <span className="text-muted-foreground"> {t("owner_you")}</span>
+        )}
+      </span>
+    </div>
+  );
 }
 
 function RowActions({

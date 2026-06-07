@@ -10,6 +10,7 @@ import {
 } from "./clients-table";
 import type { Client } from "@/lib/db/clients";
 import type { SortKey } from "./sort";
+import type { OwnerFilter, ClientOwner } from "./owner";
 import type { AppLocale } from "@/lib/format";
 
 // Holds the in-memory search state shared between the toolbar's
@@ -24,6 +25,9 @@ export function ClientsListView({
   clients,
   summaries,
   engagementsByClient,
+  owners,
+  currentUserId,
+  ownerFilter,
   locale,
   type,
   includeArchived,
@@ -33,6 +37,9 @@ export function ClientsListView({
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
   engagementsByClient: Record<string, ClientEngagementRow[]>;
+  owners: Record<string, ClientOwner>;
+  currentUserId: string;
+  ownerFilter: OwnerFilter;
   locale: AppLocale;
   type: "all" | "individual" | "business";
   includeArchived: boolean;
@@ -62,6 +69,7 @@ export function ClientsListView({
         includeArchived={includeArchived}
         sort={sort}
         activeOnly={activeOnly}
+        ownerFilter={ownerFilter}
       />
       {filtered.length === 0 && clients.length > 0 ? (
         // Live-filter empty state: the firm has clients but none
@@ -76,6 +84,8 @@ export function ClientsListView({
           clients={filtered}
           summaries={summaries}
           engagementsByClient={engagementsByClient}
+          owners={owners}
+          currentUserId={currentUserId}
           locale={locale}
         />
       )}
