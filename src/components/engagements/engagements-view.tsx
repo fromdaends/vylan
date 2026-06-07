@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Search } from "lucide-react";
 import { Link, usePathname } from "@/i18n/navigation";
@@ -9,6 +9,7 @@ import {
   WorklistTable,
   type WorklistRow,
 } from "@/components/dashboard/engagements-worklist";
+import { selectAssignedTo } from "@/lib/dashboard/worklist-select";
 import { daysUntilPurge } from "@/lib/engagements/lifecycle";
 import {
   ENGAGEMENT_VIEWS,
@@ -28,22 +29,50 @@ export function EngagementsView({
   rows,
   locale,
   canDelete,
+  currentUserId,
+  isOwner,
   badges,
 }: {
   view: EngagementView;
   rows: WorklistRow[];
   locale: AppLocale;
   canDelete: boolean;
+  currentUserId: string | null;
+  isOwner: boolean;
   badges: { ready: number; deleted: number };
 }) {
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
   const pathname = usePathname();
   const [query, setQuery] = useState("");
+  // Mine/All — staff default to their own assigned work, owners to All.
+  // Remembered per user (localStorage).
+  const [scope, setScope] = useState<"mine" | "all">(isOwner ? "all" : "mine");
+  useEffect(() => {
+    if (!currentUserId) return;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(`vylan:eng-scope:${currentUserId}`);
+    } catch {
+      saved = null;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (saved === "mine" || saved === "all") setScope(saved);
+  }, [currentUserId]);
+  const chooseScope = (s: "mine" | "all") => {
+    setScope(s);
+    if (currentUserId) {
+      try {
+        localStorage.setItem(`vylan:eng-scope:${currentUserId}`, s);
+      } catch {
+        /* ignore */
+      }
+    }
+  };
 
   const q = query.trim().toLowerCase();
   const visible = useMemo(() => {
-    const base =
+    let base =
       q !== ""
         ? rows.filter(
             (r) =>
@@ -51,8 +80,9 @@ export function EngagementsView({
               r.clientName.toLowerCase().includes(q),
           )
         : rows;
+    if (scope === "mine") base = selectAssignedTo(base, currentUserId);
     return [...base].sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
-  }, [rows, q]);
+  }, [rows, q, scope, currentUserId]);
 
   const badgeFor = (v: EngagementView): number | null => {
     if (v === "ready" && badges.ready > 0) return badges.ready;
@@ -120,16 +150,41 @@ export function EngagementsView({
         </p>
       )}
 
-      <div className="relative sm:w-72">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={tDash("wl_search_placeholder")}
-          aria-label={tDash("wl_search_placeholder")}
-          className="h-9 pl-9"
-        />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          role="tablist"
+          aria-label={t("scope_label")}
+          className="inline-flex items-center gap-0.5 self-start rounded-md bg-secondary/40 p-0.5 text-sm"
+        >
+          {(["mine", "all"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="tab"
+              aria-selected={scope === s}
+              onClick={() => chooseScope(s)}
+              className={cn(
+                "rounded px-3 py-1 font-medium transition-colors",
+                scope === s
+                  ? "bg-card text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {s === "mine" ? t("scope_mine") : t("scope_all")}
+            </button>
+          ))}
+        </div>
+        <div className="relative sm:w-72">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={tDash("wl_search_placeholder")}
+            aria-label={tDash("wl_search_placeholder")}
+            className="h-9 pl-9"
+          />
+        </div>
       </div>
 
       <WorklistTable

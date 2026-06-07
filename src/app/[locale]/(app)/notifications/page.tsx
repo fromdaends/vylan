@@ -6,6 +6,7 @@ import {
   listHomeNotifications,
   type HomeNotification,
 } from "@/lib/home/notifications";
+import { getCurrentUser } from "@/lib/db/users";
 import {
   AlertTriangle,
   Bell,
@@ -38,7 +39,12 @@ export default async function NotificationsPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const notifications = await listHomeNotifications(50);
+  // Scope per role: staff see their assigned engagements; owners firm-wide.
+  const user = await getCurrentUser();
+  const viewer = user
+    ? { userId: user.id, isOwner: user.role === "owner" }
+    : undefined;
+  const notifications = await listHomeNotifications(50, viewer);
   const t = await getTranslations("Notifications");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");

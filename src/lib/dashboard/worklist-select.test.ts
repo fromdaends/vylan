@@ -7,6 +7,7 @@ import {
   selectActive,
   selectRecent,
   selectCompleted,
+  selectAssignedTo,
 } from "./worklist-select";
 
 function row(
@@ -179,5 +180,27 @@ describe("selectActive / selectRecent / selectCompleted", () => {
 
   it("selectCompleted keeps only complete", () => {
     expect(selectCompleted(rows).map((r) => r.id)).toEqual(["done"]);
+  });
+});
+
+describe("selectAssignedTo", () => {
+  const rows = [
+    row({ id: "a", assigneeUserId: "u1" }),
+    row({ id: "b", assigneeUserId: "u2" }),
+    row({ id: "c", assigneeUserId: "u1" }),
+    row({ id: "d", assigneeUserId: null }),
+  ];
+
+  it("keeps only rows assigned to the given user", () => {
+    expect(selectAssignedTo(rows, "u1").map((r) => r.id)).toEqual(["a", "c"]);
+    expect(selectAssignedTo(rows, "u2").map((r) => r.id)).toEqual(["b"]);
+  });
+
+  it("returns nothing for a null user (no assignments)", () => {
+    expect(selectAssignedTo(rows, null)).toEqual([]);
+  });
+
+  it("returns nothing when the user has no assigned rows", () => {
+    expect(selectAssignedTo(rows, "nobody")).toEqual([]);
   });
 });

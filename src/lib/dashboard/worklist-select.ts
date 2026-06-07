@@ -62,3 +62,14 @@ export function selectRecent(rows: WorklistRow[]): WorklistRow[] {
 export function selectCompleted(rows: WorklistRow[]): WorklistRow[] {
   return rows.filter((r) => r.status === "complete");
 }
+
+// "Mine" — engagements assigned to `userId`. Shared by the Overview worklist's
+// Mine tab and the /engagements Mine/All filter so the rule lives in one place.
+// A null user has no assignments (returns []).
+export function selectAssignedTo(
+  rows: WorklistRow[],
+  userId: string | null,
+): WorklistRow[] {
+  if (!userId) return [];
+  return rows.filter((r) => r.assigneeUserId === userId);
+}

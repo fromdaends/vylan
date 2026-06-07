@@ -37,6 +37,10 @@ export type HomeNotificationKind =
 export type HomeNotification = {
   id: string;
   kind: HomeNotificationKind;
+  // Engagement this notification belongs to (null if not engagement-scoped).
+  // Drives per-viewer relevance: staff only see notifications for engagements
+  // assigned to them; owners see firm-wide.
+  engagement_id: string | null;
   // Engagement title — already on the row when relevant. Optional so
   // we can rendere notifications that aren't engagement-scoped later.
   engagement_title: string | null;
@@ -54,8 +58,26 @@ export type HomeNotification = {
 // this function with a single query against that table. Callers don't
 // need to change. The aggregation pattern below is intentionally
 // stateless for now — every load recomputes from current data.
+// Per-viewer relevance. Owners (and an unspecified viewer — back-compat) see
+// every firm notification. Staff see only notifications for engagements
+// assigned to THEM; anything unassigned or assigned to a deactivated member
+// falls through to the owner's firm-wide view. PURE + exported for tests.
+export function filterNotificationsForViewer(
+  notifications: HomeNotification[],
+  assigneeByEngagement: Map<string, string | null>,
+  viewer: { userId: string; isOwner: boolean } | undefined,
+): HomeNotification[] {
+  if (!viewer || viewer.isOwner) return notifications;
+  return notifications.filter(
+    (n) =>
+      n.engagement_id != null &&
+      assigneeByEngagement.get(n.engagement_id) === viewer.userId,
+  );
+}
+
 export async function listHomeNotifications(
   limit = 12,
+  viewer?: { userId: string; isOwner: boolean },
 ): Promise<HomeNotification[]> {
   // Recency window shared by the AI-activity pull and the "new document
   // uploaded" signal below — the Home glance only cares about the last
@@ -70,6 +92,10 @@ export async function listHomeNotifications(
   ]);
 
   const clientsById = new Map<string, Client>(clients.map((c) => [c.id, c]));
+  // engagement.id -> assigned_user_id, for per-viewer relevance filtering.
+  const assigneeByEng = new Map<string, string | null>(
+    engagements.map((e) => [e.id, e.assigned_user_id]),
+  );
   const out: HomeNotification[] = [];
 
   // 1) AI signals straight off the existing activity feed.
@@ -82,6 +108,7 @@ export async function listHomeNotifications(
       out.push({
         id: a.id,
         kind: a.action as HomeNotificationKind,
+        engagement_id: a.engagement_id,
         engagement_title: a.engagement_title,
         client_display_name: a.client_display_name,
         timestamp: a.created_at,
@@ -138,6 +165,7 @@ export async function listHomeNotifications(
         out.push({
           id: `ready:${e.id}`,
           kind: "ready_to_review",
+          engagement_id: e.id,
           engagement_title: e.title,
           client_display_name: clientName,
           // Use the most recent client upload as the "fresh"
@@ -154,6 +182,7 @@ export async function listHomeNotifications(
         out.push({
           id: `upload:${e.id}`,
           kind: "document_uploaded",
+          engagement_id: e.id,
           engagement_title: e.title,
           client_display_name: clientName,
           timestamp: lastUploadAt,
@@ -164,6 +193,7 @@ export async function listHomeNotifications(
         out.push({
           id: `overdue:${e.id}`,
           kind: "overdue",
+          engagement_id: e.id,
           engagement_title: e.title,
           client_display_name: clientName,
           // Use the due date as the timestamp so overdue items sort
@@ -180,10 +210,13 @@ export async function listHomeNotifications(
   // De-dupe: an engagement might be both ready_to_review AND have an
   // AI flag on a file — keep both rows, but only one of each kind
   // per engagement (the latest).
+  // Scope to the viewer (staff -> their assignments only; owner -> firm-wide)
+  // BEFORE dedup/cap, so the cap applies to what they'll actually see.
+  const scoped = filterNotificationsForViewer(out, assigneeByEng, viewer);
   const seen = new Set<string>();
-  out.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  scoped.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   const deduped: HomeNotification[] = [];
-  for (const n of out) {
+  for (const n of scoped) {
     const key = `${n.kind}:${n.href}`;
     if (seen.has(key)) continue;
     seen.add(key);

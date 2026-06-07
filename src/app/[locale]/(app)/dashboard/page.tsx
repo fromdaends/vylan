@@ -33,14 +33,18 @@ export default async function DashboardPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [worklistRows, user, firm, templates, notifications] =
-    await Promise.all([
-      loadEngagementWorklist(),
-      getCurrentUser(),
-      getCurrentFirm(),
-      listTemplates(),
-      listHomeNotifications(12),
-    ]);
+  // Resolve the viewer first (React.cache'd, so this is ~free) so What's-new
+  // can be scoped per-role: staff see their assigned work; owners see firm-wide.
+  const user = await getCurrentUser();
+  const viewer = user
+    ? { userId: user.id, isOwner: user.role === "owner" }
+    : undefined;
+  const [worklistRows, firm, templates, notifications] = await Promise.all([
+    loadEngagementWorklist(),
+    getCurrentFirm(),
+    listTemplates(),
+    listHomeNotifications(12, viewer),
+  ]);
 
   const templateCards: TemplateCard[] = templates
     .filter((tmpl) => tmpl.id !== BLANK_TEMPLATE_ID)
@@ -102,6 +106,7 @@ export default async function DashboardPage({
         <EngagementsWorklist
           rows={worklistRows}
           currentUserId={user?.id ?? null}
+          isOwner={user?.role === "owner"}
           locale={locale}
           canDelete={user ? canDeleteEngagements(user.role) : false}
         />
