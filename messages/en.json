@@ -1,4 +1,40 @@
 {
+  "InviteAccept": {
+    "join_title": "Join {firm}",
+    "invited_by": "{inviter} invited you to join {firm} on Vylan.",
+    "invited_by_generic": "You've been invited to join {firm} on Vylan.",
+    "name_label": "Your name",
+    "password_label": "Create a password",
+    "confirm_label": "Confirm password",
+    "submit": "Create my account",
+    "footer": "You're joining {firm} as a team member. The owner can remove your access at any time.",
+    "error_heading": "This invitation can't be opened",
+    "back_to_sign_in": "Go to sign in",
+    "your_firm": "this firm",
+    "the_owner": "the firm owner",
+    "edge": {
+      "not_found": "This invitation link isn't valid. Make sure you used the full link from your email.",
+      "expired": "This invitation has expired. Ask {inviter} to send you a new one.",
+      "accepted": "This invitation has already been used. You can sign in instead.",
+      "revoked": "This invitation was cancelled by {firm}.",
+      "seat_full": "{firm} has reached its team-size limit. Ask the firm owner to free a seat or upgrade."
+    },
+    "errors": {
+      "not_found": "This invitation is no longer valid. Ask the firm owner for a new one.",
+      "expired": "This invitation has expired. Ask the firm owner for a new one.",
+      "accepted": "This invitation has already been used. Try signing in instead.",
+      "revoked": "This invitation was cancelled by the firm.",
+      "seat_full": "This firm has reached its team-size limit. Ask the owner to free a seat or upgrade.",
+      "email_exists": "This email already has a Vylan account. Try signing in instead.",
+      "create_failed": "Something went wrong creating your account. Please try again.",
+      "rate_limited": "Too many attempts. Please wait a minute and try again.",
+      "invalid": "This invitation link isn't valid.",
+      "min_2_chars": "Enter your name (at least 2 characters).",
+      "min_8_chars": "Use a password of at least 8 characters.",
+      "password_mismatch": "The two passwords don't match.",
+      "required": "This field is required."
+    }
+  },
   "Team": {
     "error_seat_limit": "You've reached the {cap}-user limit on your current plan. To add more members, upgrade your plan or contact us.",
     "error_email_exists": "This user already has a Vylan account. For security reasons, we can't add them automatically. Contact support.",

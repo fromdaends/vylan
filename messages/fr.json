@@ -1,4 +1,40 @@
 {
+  "InviteAccept": {
+    "join_title": "Rejoindre {firm}",
+    "invited_by": "{inviter} vous a invité(e) à rejoindre {firm} sur Vylan.",
+    "invited_by_generic": "Vous avez été invité(e) à rejoindre {firm} sur Vylan.",
+    "name_label": "Votre nom",
+    "password_label": "Créer un mot de passe",
+    "confirm_label": "Confirmer le mot de passe",
+    "submit": "Créer mon compte",
+    "footer": "Vous rejoignez {firm} en tant que membre de l'équipe. L'administrateur peut vous retirer l'accès à tout moment.",
+    "error_heading": "Cette invitation ne peut pas être ouverte",
+    "back_to_sign_in": "Aller à la connexion",
+    "your_firm": "ce cabinet",
+    "the_owner": "l'administrateur du cabinet",
+    "edge": {
+      "not_found": "Ce lien d'invitation n'est pas valide. Assurez-vous d'avoir utilisé le lien complet de votre courriel.",
+      "expired": "Cette invitation a expiré. Demandez à {inviter} de vous en envoyer une nouvelle.",
+      "accepted": "Cette invitation a déjà été utilisée. Vous pouvez vous connecter.",
+      "revoked": "Cette invitation a été annulée par {firm}.",
+      "seat_full": "{firm} a atteint sa limite de membres. Demandez à l'administrateur de libérer une place ou de passer à un forfait supérieur."
+    },
+    "errors": {
+      "not_found": "Cette invitation n'est plus valide. Demandez une nouvelle invitation à l'administrateur.",
+      "expired": "Cette invitation a expiré. Demandez une nouvelle invitation à l'administrateur.",
+      "accepted": "Cette invitation a déjà été utilisée. Essayez de vous connecter.",
+      "revoked": "Cette invitation a été annulée par le cabinet.",
+      "seat_full": "Ce cabinet a atteint sa limite de membres. Demandez à l'administrateur de libérer une place ou de passer à un forfait supérieur.",
+      "email_exists": "Ce courriel a déjà un compte Vylan. Essayez de vous connecter.",
+      "create_failed": "Une erreur est survenue lors de la création de votre compte. Veuillez réessayer.",
+      "rate_limited": "Trop de tentatives. Veuillez patienter une minute et réessayer.",
+      "invalid": "Ce lien d'invitation n'est pas valide.",
+      "min_2_chars": "Entrez votre nom (au moins 2 caractères).",
+      "min_8_chars": "Utilisez un mot de passe d'au moins 8 caractères.",
+      "password_mismatch": "Les deux mots de passe ne correspondent pas.",
+      "required": "Ce champ est requis."
+    }
+  },
   "Team": {
     "error_seat_limit": "Vous avez atteint la limite de {cap} utilisateurs pour votre forfait actuel. Pour ajouter plus de membres, passez à un forfait supérieur ou contactez-nous.",
     "error_email_exists": "Cet utilisateur a déjà un compte Vylan. Pour des raisons de sécurité, nous ne pouvons pas l'ajouter automatiquement. Contactez le support.",
