@@ -222,6 +222,69 @@ You're in demo mode. No payment required to start.`;
   return { subject, html, text };
 }
 
+// Teammate invitation email. Internal (a firm member joining), so it's
+// Vylan-branded like the welcome email rather than firm-branded. The accept
+// link points at /{locale}/invite/{token} (the page is built in Phase 3).
+// Bilingual; copy is em-dash-free per the house style.
+export function buildTeamInviteEmail(opts: {
+  firmName: string;
+  inviterName: string;
+  acceptUrl: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  const firm = escapeHtml(opts.firmName);
+  const inviter = escapeHtml(opts.inviterName);
+  if (opts.locale === "fr") {
+    const subject = `Vous êtes invité(e) à rejoindre ${opts.firmName} sur Vylan`;
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Bonjour,</p>
+<p>${inviter} vous a invité(e) à rejoindre <strong>${firm}</strong> sur <strong>Vylan</strong>, l'outil qui simplifie la collecte de documents auprès de vos clients.</p>
+<p style="margin:24px 0">
+  <a href="${opts.acceptUrl}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Créer mon compte</a>
+</p>
+<p style="color:#64748b;font-size:13px">Ou copiez ce lien dans votre navigateur :<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.acceptUrl}</span></p>
+<p style="color:#64748b;font-size:13px">Ce lien est valide pendant 7 jours.</p>
+<p style="color:#64748b;font-size:13px">Si vous n'attendiez pas cette invitation, vous pouvez ignorer ce courriel.</p>
+<p style="margin-top:32px">L'équipe Vylan</p>
+</body></html>`;
+    const text = `Bonjour,
+
+${opts.inviterName} vous a invité(e) à rejoindre ${opts.firmName} sur Vylan, l'outil qui simplifie la collecte de documents auprès de vos clients.
+
+Créez votre compte : ${opts.acceptUrl}
+
+Ce lien est valide pendant 7 jours.
+Si vous n'attendiez pas cette invitation, ignorez ce courriel.
+
+L'équipe Vylan`;
+    return { subject, html, text };
+  }
+
+  const subject = `You've been invited to join ${opts.firmName} on Vylan`;
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Hi,</p>
+<p>${inviter} invited you to join <strong>${firm}</strong> on <strong>Vylan</strong>, the tool that makes collecting documents from clients simple.</p>
+<p style="margin:24px 0">
+  <a href="${opts.acceptUrl}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Create my account</a>
+</p>
+<p style="color:#64748b;font-size:13px">Or copy this link into your browser:<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.acceptUrl}</span></p>
+<p style="color:#64748b;font-size:13px">This link is valid for 7 days.</p>
+<p style="color:#64748b;font-size:13px">If you weren't expecting this invitation, you can ignore this email.</p>
+<p style="margin-top:32px">The Vylan team</p>
+</body></html>`;
+  const text = `Hi,
+
+${opts.inviterName} invited you to join ${opts.firmName} on Vylan, the tool that makes collecting documents from clients simple.
+
+Create your account: ${opts.acceptUrl}
+
+This link is valid for 7 days.
+If you weren't expecting this invitation, you can ignore this email.
+
+The Vylan team`;
+  return { subject, html, text };
+}
+
 // Client retry email — sent when the AI auto-rejects an upload. The
 // wording is intentionally friendly and SPECIFIC: the client should
 // feel the firm noticed a problem (not a robot). Phrasing here is
