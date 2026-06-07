@@ -70,8 +70,9 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const [avatarUrl, badges] = await Promise.all([
+  const [avatarUrl, firmLogoUrl, badges] = await Promise.all([
     getBrandingImageUrl(dbUser.avatar_path),
+    getBrandingImageUrl(firm.logo_url),
     getEngagementBadges(),
   ]);
 
@@ -81,6 +82,8 @@ export default async function AppLayout({
       userDisplayName={userDisplayLabel(dbUser)}
       userEmail={dbUser.email}
       userAvatarUrl={avatarUrl}
+      firmName={firm.name}
+      firmLogoUrl={firmLogoUrl}
       isOwner={dbUser.role === "owner"}
       topBar={firm.is_demo ? <DemoBanner /> : undefined}
       engagementBadges={{

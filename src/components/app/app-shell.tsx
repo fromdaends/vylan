@@ -141,6 +141,8 @@ export function AppShell({
   userDisplayName,
   userEmail,
   userAvatarUrl,
+  firmName,
+  firmLogoUrl,
   labels,
   engagementBadges,
   isOwner = false,
@@ -151,6 +153,8 @@ export function AppShell({
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
+  firmName: string;
+  firmLogoUrl: string | null;
   labels: Labels;
   engagementBadges: EngagementBadgeCounts;
   // Gates owner-only entries (billing, audit log, firm export/delete) in the
