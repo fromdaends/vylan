@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ReactNode } from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { TemplatesGallery, type TemplateCard } from "./templates-gallery";
 import en from "../../../messages/en.json";
@@ -63,7 +63,7 @@ function renderGallery(items: TemplateCard[] = templates) {
 const blankName = new RegExp(en.Dashboard.tmpl_blank_name, "i");
 
 describe("TemplatesGallery", () => {
-  it("defaults to Recommended: a blank starter plus all templates", () => {
+  it("shows a blank starter plus every template, regardless of type or origin", () => {
     renderGallery();
 
     // Blank card → the from-scratch flow (no template query).
@@ -74,40 +74,22 @@ describe("TemplatesGallery", () => {
     const t1 = screen.getByRole("link", { name: /T1 Personal Return/i });
     expect(t1.getAttribute("href")).toContain("/engagements/new?template=b1");
 
-    // Firm templates now appear in the default view too (no separate tab).
+    // Every type + both origins appear — there is no category filtering.
+    expect(
+      screen.getByRole("link", { name: /Corporate T2/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Monthly Bookkeeping/i }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Client Onboarding/i }),
     ).toBeInTheDocument();
   });
 
-  it("has no Custom category tab", () => {
+  it("renders no category tabs and no search box", () => {
     renderGallery();
-    expect(
-      screen.queryByRole("tab", { name: en.Dashboard.tmpl_cat_custom }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("filters to T1 templates regardless of origin when the T1 tab is selected", () => {
-    renderGallery();
-    fireEvent.click(screen.getByRole("tab", { name: "T1" }));
-
-    expect(
-      screen.getByRole("link", { name: /T1 Personal Return/i }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /Corporate T2/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows an empty state when the search matches nothing", () => {
-    renderGallery();
-    fireEvent.change(screen.getByRole("searchbox"), {
-      target: { value: "zzzzz" },
-    });
-
-    expect(screen.getByText(en.Dashboard.tmpl_empty)).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: /T1 Personal Return/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
   });
 });

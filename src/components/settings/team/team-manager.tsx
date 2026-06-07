@@ -92,6 +92,7 @@ function useErrorMessage() {
 }
 
 export function TeamManager({
+  firmName,
   canManage,
   seat,
   activeMembers,
@@ -99,6 +100,8 @@ export function TeamManager({
   pendingInvites,
   locale,
 }: {
+  // The firm's name — shown as the page heading (this is the firm's team).
+  firmName: string;
   // Owners see the full manager; staff get a read-only roster (no invite,
   // deactivate, transfer, or seat controls).
   canManage: boolean;
@@ -126,7 +129,7 @@ export function TeamManager({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {t("title")}
+            {firmName}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {canManage ? t("subtitle") : t("subtitle_readonly")}

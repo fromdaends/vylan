@@ -119,6 +119,7 @@ export default async function TeamPage({
         ]}
       />
       <TeamManager
+        firmName={firm.name}
         canManage={canManage}
         seat={seat}
         activeMembers={activeMembers}
