@@ -1,6 +1,35 @@
 import { describe, it, expect } from "vitest";
-import { parseClassification } from "./classify";
+import {
+  parseClassification,
+  normalizeMimeType,
+  isSupportedAiMime,
+} from "./classify";
 import { USABLE_BY_DEFAULT } from "./usability";
+
+describe("normalizeMimeType / isSupportedAiMime", () => {
+  it("strips charset params, trims, and lowercases", () => {
+    expect(normalizeMimeType("application/pdf; charset=binary")).toBe(
+      "application/pdf",
+    );
+    expect(normalizeMimeType("IMAGE/JPEG")).toBe("image/jpeg");
+    expect(normalizeMimeType("  application/pdf  ")).toBe("application/pdf");
+  });
+
+  it("treats PDFs and images (including charset-tagged) as AI-readable", () => {
+    expect(isSupportedAiMime("application/pdf")).toBe(true);
+    expect(isSupportedAiMime("application/pdf; charset=binary")).toBe(true);
+    expect(isSupportedAiMime("image/jpeg")).toBe(true);
+    expect(isSupportedAiMime("image/webp")).toBe(true);
+    expect(isSupportedAiMime("image/heic")).toBe(true);
+  });
+
+  it("rejects the octet-stream fallback that made PDFs skip the AI check", () => {
+    expect(isSupportedAiMime("application/octet-stream")).toBe(false);
+    expect(isSupportedAiMime("binary/octet-stream")).toBe(false);
+    expect(isSupportedAiMime("text/plain")).toBe(false);
+    expect(isSupportedAiMime("")).toBe(false);
+  });
+});
 
 describe("parseClassification", () => {
   it("returns a complete result for valid input", () => {

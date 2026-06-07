@@ -78,12 +78,16 @@ export async function processClassifyJob(
   let mimeType: string;
   if (preDownloaded) {
     bytes = preDownloaded.bytes;
-    mimeType = preDownloaded.mimeType || file.mime_type;
+    // Prefer the MIME validated + stored at upload (uploaded_files.mime_type)
+    // over a download/header-derived one. The storage CDN sometimes returns
+    // application/octet-stream for PDFs, which made the classifier treat them
+    // as an unsupported format and skip the AI check entirely.
+    mimeType = file.mime_type || preDownloaded.mimeType;
   } else {
     const dl = await downloadStorageObject(file.storage_path);
     if (!dl) return { skipped: "download_failed" };
     bytes = dl.bytes;
-    mimeType = dl.mimeType || file.mime_type;
+    mimeType = file.mime_type || dl.mimeType;
   }
 
   const result = await classifyDocument({

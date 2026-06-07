@@ -413,13 +413,29 @@ phrasing like "blurry image".
 Always call the classify_document tool. Never reply with prose.`;
 }
 
+// The bare media type — strip an optional "; charset=…" parameter and
+// lowercase before matching. The MIME can arrive from a storage CDN header as
+// e.g. "application/pdf; charset=binary" (or even "application/octet-stream"),
+// which made PDFs silently fail the "=== application/pdf" guard and skip the
+// AI check entirely. Exported for testing.
+export function normalizeMimeType(mime: string): string {
+  return (mime || "").split(";")[0]!.trim().toLowerCase();
+}
+
+// Can Vylan's vision model read this file at all? PDF or any image.
+export function isSupportedAiMime(mime: string): boolean {
+  const mt = normalizeMimeType(mime);
+  return mt === "application/pdf" || mt.startsWith("image/");
+}
+
 export async function classifyDocument(opts: {
   expectedDocType: DocType;
   fileBytes: Buffer;
   mimeType: string;
 }): Promise<ClassificationResult | null> {
-  const isPdf = opts.mimeType === "application/pdf";
-  const isImage = opts.mimeType.startsWith("image/");
+  const mt = normalizeMimeType(opts.mimeType);
+  const isPdf = mt === "application/pdf";
+  const isImage = mt.startsWith("image/");
   if (!isPdf && !isImage) {
     return {
       document_type: "unknown",
@@ -452,8 +468,8 @@ export async function classifyDocument(opts: {
   // keeps large photos under the vision model's limits). PDFs pass through
   // untouched — both providers read PDFs natively.
   const prepared = isImage
-    ? await normalizeImageForAi(opts.fileBytes, opts.mimeType)
-    : { bytes: opts.fileBytes, mimeType: opts.mimeType };
+    ? await normalizeImageForAi(opts.fileBytes, mt)
+    : { bytes: opts.fileBytes, mimeType: mt };
   const base64 = prepared.bytes.toString("base64");
   const systemPrompt = buildSystemPrompt(opts.expectedDocType);
   const userText = `The accountant requested a "${opts.expectedDocType}". Classify this document.`;
