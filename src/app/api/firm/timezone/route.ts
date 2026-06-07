@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { updateCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 
 // Firm-level timezone selector. Lives on a plain POST route (same
 // reasoning as /api/firm/auto-reject): Server Actions auto-trigger an
@@ -35,6 +36,11 @@ export async function POST(request: NextRequest) {
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  // Owner-only: timezone is a firm-wide setting (drives reminder scheduling).
+  const me = await getCurrentUser();
+  if (me?.role !== "owner") {
+    return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
 
   try {
