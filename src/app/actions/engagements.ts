@@ -28,6 +28,7 @@ import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
@@ -305,6 +306,50 @@ export async function restoreEngagementAction(formData: FormData) {
   await restoreEngagement(id);
   await logUserActivity(user.firm_id, id, "engagement_restored", {});
   revalidateEngagementPaths(id);
+}
+
+// Reassign an engagement's accountability to another ACTIVE firm member. Any
+// firm member may reassign — it's accountability, NOT access control (everyone
+// still sees every engagement). Logs engagement_reassigned for the feed.
+export async function reassignEngagementAction(
+  engagementId: string,
+  assigneeId: string,
+): Promise<{
+  ok: boolean;
+  error?: "no_session" | "invalid_assignee" | "update_failed";
+}> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+
+  const sb = await getServerSupabase();
+  // Target must be an ACTIVE member of the SAME firm.
+  const { data: target } = await sb
+    .from("users")
+    .select("id, firm_id, deactivated_at")
+    .eq("id", assigneeId)
+    .maybeSingle();
+  if (!target || target.firm_id !== firm.id || target.deactivated_at) {
+    return { ok: false, error: "invalid_assignee" };
+  }
+
+  const { error } = await sb
+    .from("engagements")
+    .update({
+      assigned_user_id: assigneeId,
+      assigned_at: new Date().toISOString(),
+    })
+    .eq("id", engagementId)
+    .eq("firm_id", firm.id);
+  if (error) {
+    console.error("[engagements] reassign failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firm.id, engagementId, "engagement_reassigned", {
+    to_user_id: assigneeId,
+  });
+  revalidateEngagementPaths(engagementId);
+  return { ok: true };
 }
 
 export async function toggleRemindersPausedAction(formData: FormData) {

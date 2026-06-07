@@ -10,8 +10,18 @@ export type AppUser = {
   locale: "fr" | "en";
   display_name: string | null;
   avatar_path: string | null;
+  // Soft "removed from the firm" (Phase 1 migration). Set = deactivated:
+  // can't sign in, frees a seat, and is excluded from assignment targets.
+  // Still appears in historical records (activity log, past assignments).
+  deactivated_at: string | null;
   created_at: string;
 };
+
+/** Active firm members only (not deactivated) — the valid targets for
+ *  engagement assignment + the team-size count. */
+export async function listActiveFirmUsers(): Promise<AppUser[]> {
+  return (await listFirmUsers()).filter((u) => !u.deactivated_at);
+}
 
 // React.cache() deduplicates concurrent + repeated calls within a
 // single request. (app)/layout and a downstream page both call this;

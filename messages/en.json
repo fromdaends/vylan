@@ -826,6 +826,12 @@
   },
   "Engagements": {
     "title": "Engagements",
+    "assigned_to": "Assigned to",
+    "unassigned": "Unassigned",
+    "assignee_deactivated": "This teammate was removed. Please reassign this engagement.",
+    "scope_label": "Filter by assignment",
+    "scope_mine": "Mine",
+    "scope_all": "All",
     "new": "New engagement",
     "new_title": "New engagement",
     "new_subtitle": "Pick a client, a template, then tweak the document checklist.",

@@ -35,11 +35,16 @@ import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
+import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { RecordEngagementOpen } from "@/components/engagements/record-engagement-open";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { getCurrentUser } from "@/lib/db/users";
+import {
+  getCurrentUser,
+  listFirmUsers,
+  userDisplayLabel,
+} from "@/lib/db/users";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { engagementToView } from "@/lib/navigation/active-nav";
 import { viewHref, viewLabelKey } from "@/lib/engagements/views";
@@ -69,7 +74,7 @@ export default async function EngagementDetailPage({
   // parallel batch. The uploads branch also batch-signs every download URL in a
   // single storage round-trip (was N separate calls, the biggest chunk of this
   // page's load). Only the client lookup (needs engagement.client_id) waits.
-  const [engagement, items, uploadData, activity, firm, user] =
+  const [engagement, items, uploadData, activity, firm, user, firmUsers] =
     await Promise.all([
       getEngagement(id),
       listRequestItems(id),
@@ -84,6 +89,7 @@ export default async function EngagementDetailPage({
       listActivityForEngagement(id),
       getCurrentFirm(),
       getCurrentUser(),
+      listFirmUsers(),
     ]);
   if (!engagement) notFound();
   const client = await getClient(engagement.client_id);
@@ -92,6 +98,14 @@ export default async function EngagementDetailPage({
   // Delete (incl. delete-draft) is owner-only — hide both controls from staff.
   // The server actions enforce this too; this is the matching UI gate.
   const canDelete = user ? canDeleteEngagements(user.role) : false;
+
+  // Assignment (Phase 5): resolve the assignee (may be deactivated — still shown
+  // for history) + the active members available as reassignment targets.
+  const assignee =
+    firmUsers.find((u) => u.id === engagement.assigned_user_id) ?? null;
+  const activeMembers = firmUsers
+    .filter((u) => !u.deactivated_at)
+    .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
 
   const filesByItem = new Map<string, (UploadedFile & { url: string })[]>();
   for (const u of uploads) {
@@ -180,6 +194,16 @@ export default async function EngagementDetailPage({
                 {t("reminders_paused_badge")}
               </Badge>
             )}
+          </div>
+          {/* Assigned to — accountability control (reassign to any active member). */}
+          <div className="mt-3">
+            <EngagementAssignee
+              engagementId={engagement.id}
+              assigneeId={engagement.assigned_user_id}
+              assigneeName={assignee ? userDisplayLabel(assignee) : null}
+              assigneeDeactivated={!!assignee?.deactivated_at}
+              members={activeMembers}
+            />
           </div>
         </div>
 

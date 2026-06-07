@@ -134,7 +134,10 @@ export async function createEngagementWithItems(
       type: input.type,
       status: "draft",
       due_date: input.due_date,
+      // Default the creator as the assignee-of-record (accountability, not
+      // access control — every firm member still sees every engagement).
       assigned_user_id: user.user.id,
+      assigned_at: new Date().toISOString(),
     })
     .select("*")
     .single();

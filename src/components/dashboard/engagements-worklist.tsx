@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AlertTriangle, Clock, FileWarning, MoreHorizontal, Search } from "lucide-react";
 import { Link, useRouter } from "@/i18n/navigation";
@@ -15,7 +15,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, type AppLocale } from "@/lib/format";
-import { selectRecent, selectCompleted } from "@/lib/dashboard/worklist-select";
+import {
+  selectRecent,
+  selectCompleted,
+  selectAssignedTo,
+} from "@/lib/dashboard/worklist-select";
 import { cn } from "@/lib/cn";
 import {
   ContextMenu,
@@ -80,16 +84,45 @@ type Filter = (typeof FILTERS)[number];
 export function EngagementsWorklist({
   rows,
   currentUserId,
+  isOwner = false,
   locale,
   canDelete = false,
 }: {
   rows: WorklistRow[];
   currentUserId: string | null;
+  isOwner?: boolean;
   locale: AppLocale;
   canDelete?: boolean;
 }) {
   const t = useTranslations("Dashboard");
-  const [filter, setFilter] = useState<Filter>("recent");
+  // Default tab: staff start on THEIR work, owners on the firm-wide Recent
+  // view. The choice is remembered per user (localStorage), restored on mount.
+  const [filter, setFilterState] = useState<Filter>(
+    isOwner ? "recent" : "mine",
+  );
+  useEffect(() => {
+    if (!currentUserId) return;
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(`vylan:wl-filter:${currentUserId}`);
+    } catch {
+      saved = null;
+    }
+    if (saved && (FILTERS as readonly string[]).includes(saved)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFilterState(saved as Filter);
+    }
+  }, [currentUserId]);
+  const setFilter = (f: Filter) => {
+    setFilterState(f);
+    if (currentUserId) {
+      try {
+        localStorage.setItem(`vylan:wl-filter:${currentUserId}`, f);
+      } catch {
+        /* ignore quota / disabled storage */
+      }
+    }
+  };
   const [query, setQuery] = useState("");
 
   const byRecency = (a: WorklistRow, b: WorklistRow) =>
@@ -113,11 +146,7 @@ export function EngagementsWorklist({
       return selectCompleted(rows).sort(byRecency);
     }
     if (filter === "mine") {
-      return selectRecent(rows)
-        .filter(
-          (r) => currentUserId != null && r.assigneeUserId === currentUserId,
-        )
-        .sort(byRecency);
+      return selectAssignedTo(selectRecent(rows), currentUserId).sort(byRecency);
     }
     // "recent" (default): in-flight + recently cancelled work, newest first.
     return selectRecent(rows).sort(byRecency);

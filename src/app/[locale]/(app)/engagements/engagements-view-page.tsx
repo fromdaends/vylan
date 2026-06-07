@@ -49,6 +49,8 @@ export async function renderEngagementsView({
         rows={selectView(view, rows)}
         locale={locale}
         canDelete={canDelete}
+        currentUserId={user?.id ?? null}
+        isOwner={user?.role === "owner"}
         badges={{ ready: badges.readyToReview, deleted: badges.recentlyDeleted }}
       />
     </div>
