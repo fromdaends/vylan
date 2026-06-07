@@ -15,8 +15,9 @@ import { TeamManager } from "@/components/settings/team/team-manager";
 
 export const dynamic = "force-dynamic";
 
-// Owner-only team management. Staff are bounced to their settings (the server
-// actions + /api routes reject them too; this is the matching UI gate).
+// Team page. Owners get the full manager (invite / deactivate / transfer /
+// seats); staff get a READ-ONLY roster of who's on the team. The server
+// actions + /api routes still reject staff, so this read-only UI is safe.
 export default async function TeamPage({
   params,
 }: {
@@ -27,16 +28,17 @@ export default async function TeamPage({
   setRequestLocale(locale);
 
   const user = await getCurrentUser();
-  if (!user || user.role !== "owner") {
-    redirect(`/${locale}/settings`);
-  }
+  if (!user) redirect(`/${locale}/login`);
   const firm = await getCurrentFirm();
   if (!firm) redirect(`/${locale}/dashboard`);
 
+  // Owners manage; staff only view. firm_invites + seat usage are owner-only
+  // (RLS) — staff would just get empty results, so skip those fetches for them.
+  const canManage = user.role === "owner";
   const [members, invites, usage] = await Promise.all([
     listFirmUsers(),
-    listFirmInvites(),
-    getFirmSeatUsage(firm.id),
+    canManage ? listFirmInvites() : Promise.resolve([]),
+    canManage ? getFirmSeatUsage(firm.id) : Promise.resolve(null),
   ]);
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
@@ -88,11 +90,13 @@ export default async function TeamPage({
   }));
 
   // Infinity (an unlimited plan) isn't JSON-serializable — pass cap as null.
-  const cap = Number.isFinite(usage.cap) ? usage.cap : null;
+  // usage is null for staff (the read-only view never renders seats), so fall
+  // back to a harmless placeholder.
+  const cap = usage && Number.isFinite(usage.cap) ? usage.cap : null;
   const seat = {
-    used: usage.total,
+    used: usage?.total ?? 0,
     cap,
-    atCap: cap != null && usage.total >= cap,
+    atCap: cap != null && (usage?.total ?? 0) >= cap,
   };
 
   return (
@@ -105,6 +109,7 @@ export default async function TeamPage({
         ]}
       />
       <TeamManager
+        canManage={canManage}
         seat={seat}
         activeMembers={activeMembers}
         deactivatedMembers={deactivatedMembers}

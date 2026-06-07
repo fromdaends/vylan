@@ -90,12 +90,16 @@ function useErrorMessage() {
 }
 
 export function TeamManager({
+  canManage,
   seat,
   activeMembers,
   deactivatedMembers,
   pendingInvites,
   locale,
 }: {
+  // Owners see the full manager; staff get a read-only roster (no invite,
+  // deactivate, transfer, or seat controls).
+  canManage: boolean;
   seat: Seat;
   activeMembers: ActiveMember[];
   deactivatedMembers: DeactivatedMember[];
@@ -122,49 +126,57 @@ export function TeamManager({
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {t("title")}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {canManage ? t("subtitle") : t("subtitle_readonly")}
+          </p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          disabled={seat.atCap}
-          title={seat.atCap ? t("seats_at_cap", { cap: seat.cap ?? 0 }) : undefined}
-          onClick={() => setInviteOpen(true)}
-        >
-          <UserPlus className="size-4" />
-          {t("invite_button")}
-        </Button>
-      </div>
-
-      {/* Seat usage */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-medium">{seatLabel}</span>
-          {seat.atCap && (
-            <span className="text-xs text-warning">
-              {t("seats_at_cap", { cap: seat.cap ?? 0 })}
-            </span>
-          )}
-        </div>
-        {seat.cap != null && (
-          <div
-            className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
-            role="progressbar"
-            aria-valuenow={pct}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label={seatLabel}
+        {canManage && (
+          <Button
+            type="button"
+            size="sm"
+            disabled={seat.atCap}
+            title={
+              seat.atCap ? t("seats_at_cap", { cap: seat.cap ?? 0 }) : undefined
+            }
+            onClick={() => setInviteOpen(true)}
           >
-            <div
-              className={
-                "h-full rounded-full transition-all " +
-                (seat.atCap ? "bg-warning" : "bg-primary")
-              }
-              style={{ width: `${pct}%` }}
-            />
-          </div>
+            <UserPlus className="size-4" />
+            {t("invite_button")}
+          </Button>
         )}
       </div>
+
+      {/* Seat usage (owner-only) */}
+      {canManage && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">{seatLabel}</span>
+            {seat.atCap && (
+              <span className="text-xs text-warning">
+                {t("seats_at_cap", { cap: seat.cap ?? 0 })}
+              </span>
+            )}
+          </div>
+          {seat.cap != null && (
+            <div
+              className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+              role="progressbar"
+              aria-valuenow={pct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={seatLabel}
+            >
+              <div
+                className={
+                  "h-full rounded-full transition-all " +
+                  (seat.atCap ? "bg-warning" : "bg-primary")
+                }
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Active members */}
       <div>
@@ -174,35 +186,38 @@ export function TeamManager({
             <MemberRow
               key={m.id}
               member={m}
-              canManage={!m.isSelf && m.role !== "owner"}
+              canManage={canManage && !m.isSelf && m.role !== "owner"}
             />
           ))}
         </div>
       </div>
 
-      {/* Pending invitations */}
-      <div>
-        <h2 className="text-sm font-semibold">{t("section_pending")}</h2>
-        {pendingInvites.length === 0 ? (
-          <p className="mt-3 rounded-lg border border-dashed border-border/50 px-4 py-8 text-center text-sm text-muted-foreground">
-            {t("pending_empty")}
-          </p>
-        ) : (
-          <div className="mt-3 border-t border-border/60">
-            {pendingInvites.map((inv) => (
-              <InviteRow key={inv.id} invite={inv} locale={locale} />
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Pending invitations (owner-only) */}
+      {canManage && (
+        <div>
+          <h2 className="text-sm font-semibold">{t("section_pending")}</h2>
+          {pendingInvites.length === 0 ? (
+            <p className="mt-3 rounded-lg border border-dashed border-border/50 px-4 py-8 text-center text-sm text-muted-foreground">
+              {t("pending_empty")}
+            </p>
+          ) : (
+            <div className="mt-3 border-t border-border/60">
+              {pendingInvites.map((inv) => (
+                <InviteRow key={inv.id} invite={inv} locale={locale} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Deactivated members (collapsed) */}
-      {deactivatedMembers.length > 0 && (
+      {/* Deactivated members (collapsed, owner-only) */}
+      {canManage && deactivatedMembers.length > 0 && (
         <DeactivatedSection members={deactivatedMembers} locale={locale} />
       )}
 
-      {/* Transfer ownership — only when there's an active staff member to hand to. */}
-      {activeMembers.some((m) => m.role === "staff") && (
+      {/* Transfer ownership — owner-only, and only when there's an active
+          staff member to hand to. */}
+      {canManage && activeMembers.some((m) => m.role === "staff") && (
         <TransferOwnership
           staff={activeMembers
             .filter((m) => m.role === "staff")
@@ -210,11 +225,13 @@ export function TeamManager({
         />
       )}
 
-      <InviteModal
-        open={inviteOpen}
-        onOpenChange={setInviteOpen}
-        defaultLocale={locale}
-      />
+      {canManage && (
+        <InviteModal
+          open={inviteOpen}
+          onOpenChange={setInviteOpen}
+          defaultLocale={locale}
+        />
+      )}
     </section>
   );
 }

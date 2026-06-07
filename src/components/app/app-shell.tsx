@@ -141,6 +141,8 @@ export function AppShell({
   userDisplayName,
   userEmail,
   userAvatarUrl,
+  firmName,
+  firmLogoUrl,
   labels,
   engagementBadges,
   isOwner = false,
@@ -151,6 +153,8 @@ export function AppShell({
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
+  firmName: string;
+  firmLogoUrl: string | null;
   labels: Labels;
   engagementBadges: EngagementBadgeCounts;
   // Gates owner-only entries (billing, audit log, firm export/delete) in the
@@ -235,6 +239,8 @@ export function AppShell({
           userDisplayName={userDisplayName}
           userEmail={userEmail}
           userAvatarUrl={userAvatarUrl}
+          firmName={firmName}
+          firmLogoUrl={firmLogoUrl}
           isOwner={isOwner}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((v) => !v)}
@@ -284,7 +290,6 @@ export function AppShell({
             userDisplayName={userDisplayName}
             userEmail={userEmail}
             userAvatarUrl={userAvatarUrl}
-            isOwner={isOwner}
             onItemClick={() => setMobileAccountOpen(false)}
           />
         </SheetContent>
@@ -407,7 +412,6 @@ function MobileAccountMenu({
   userDisplayName,
   userEmail,
   userAvatarUrl,
-  isOwner,
   onItemClick,
 }: {
   labels: Labels;
@@ -415,7 +419,6 @@ function MobileAccountMenu({
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
-  isOwner: boolean;
   onItemClick: () => void;
 }) {
   const tTeam = useTranslations("Team");
@@ -458,14 +461,12 @@ function MobileAccountMenu({
             label={labels.firm}
             onClick={onItemClick}
           />
-          {isOwner && (
-            <MobileMenuItem
-              href="/settings/team"
-              icon={Users2}
-              label={tTeam("title")}
-              onClick={onItemClick}
-            />
-          )}
+          <MobileMenuItem
+            href="/settings/team"
+            icon={Users2}
+            label={tTeam("title")}
+            onClick={onItemClick}
+          />
           <MobileMenuItem
             href="/settings"
             icon={Settings}
@@ -544,6 +545,8 @@ function SidebarBody({
   userDisplayName,
   userEmail,
   userAvatarUrl,
+  firmName,
+  firmLogoUrl,
   isOwner,
   collapsed,
   onToggleCollapse,
@@ -555,6 +558,8 @@ function SidebarBody({
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
+  firmName: string;
+  firmLogoUrl: string | null;
   isOwner: boolean;
   collapsed: boolean;
   onToggleCollapse?: () => void;
@@ -677,18 +682,44 @@ function SidebarBody({
         </NavSection>
       </nav>
 
-      {/* Team (owner-only) — quick access sitting just above the profile card. */}
-      {isOwner && (
-        <div className={cn(collapsed ? "px-2 pb-1.5" : "px-3 pb-2")}>
-          <NavLink
-            href="/settings/team"
-            icon={Users2}
-            label={tTeam("title")}
-            collapsed={collapsed}
-            color="text-icon-indigo"
+      {/* Firm button — firm logo + name, mirrors the profile button below it.
+          Visible to ALL members and sits just above the profile card; clicking
+          opens the team page (owners manage it there, staff see a read-only
+          roster). */}
+      <div className={cn(collapsed ? "px-2 pb-1.5" : "px-3 pb-1")}>
+        <Link
+          href="/settings/team"
+          title={collapsed ? firmName : undefined}
+          aria-label={firmName}
+          className={cn(
+            "group flex items-center rounded-xl hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors",
+            collapsed ? "w-full justify-center p-1.5" : "w-full gap-3 px-2 py-2",
+          )}
+        >
+          <AvatarInitials
+            src={firmLogoUrl}
+            name={firmName}
+            size={collapsed ? 32 : 36}
+            color={brandColor}
           />
-        </div>
-      )}
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0 text-left">
+                <div className="text-sm font-medium leading-tight truncate">
+                  {firmName}
+                </div>
+                <div className="text-xs text-muted-foreground leading-tight truncate mt-0.5">
+                  {isOwner ? tTeam("manage_team") : tTeam("view_team")}
+                </div>
+              </div>
+              <Users2
+                className="size-3.5 text-muted-foreground/70 group-hover:text-foreground transition-colors shrink-0"
+                aria-hidden
+              />
+            </>
+          )}
+        </Link>
+      </div>
 
       {/* Profile card */}
       <div
