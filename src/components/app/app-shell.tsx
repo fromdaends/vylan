@@ -241,7 +241,6 @@ export function AppShell({
           userAvatarUrl={userAvatarUrl}
           firmName={firmName}
           firmLogoUrl={firmLogoUrl}
-          isOwner={isOwner}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((v) => !v)}
         />
@@ -547,7 +546,6 @@ function SidebarBody({
   userAvatarUrl,
   firmName,
   firmLogoUrl,
-  isOwner,
   collapsed,
   onToggleCollapse,
 }: {
@@ -560,12 +558,10 @@ function SidebarBody({
   userAvatarUrl: string | null;
   firmName: string;
   firmLogoUrl: string | null;
-  isOwner: boolean;
   collapsed: boolean;
   onToggleCollapse?: () => void;
 }) {
   const tHome = useTranslations("Home");
-  const tTeam = useTranslations("Team");
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Brand row */}
@@ -682,38 +678,36 @@ function SidebarBody({
         </NavSection>
       </nav>
 
-      {/* Firm button — firm logo + name, mirrors the profile button below it.
-          Visible to ALL members and sits just above the profile card; clicking
-          opens the team page (owners manage it there, staff see a read-only
-          roster). */}
-      <div className={cn(collapsed ? "px-2 pb-1.5" : "px-3 pb-1")}>
+      {/* Firm button — a deliberately QUIET, secondary affordance: a small firm
+          logo + muted, single-line firm name + a small team icon. Visible to all
+          members; opens the team page. Kept subtler than the profile card below
+          it (smaller avatar, muted xs text, lighter hover) so the profile stays
+          the primary identity and this recedes. */}
+      <div className={cn(collapsed ? "px-2 pb-1" : "px-3 pb-1")}>
         <Link
           href="/settings/team"
-          title={collapsed ? firmName : undefined}
+          title={firmName}
           aria-label={firmName}
           className={cn(
-            "group flex items-center rounded-xl hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors",
-            collapsed ? "w-full justify-center p-1.5" : "w-full gap-3 px-2 py-2",
+            "group flex items-center rounded-lg hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors",
+            collapsed
+              ? "w-full justify-center p-1.5"
+              : "w-full gap-2 px-2 py-1.5",
           )}
         >
           <AvatarInitials
             src={firmLogoUrl}
             name={firmName}
-            size={collapsed ? 32 : 36}
+            size={collapsed ? 28 : 22}
             color={brandColor}
           />
           {!collapsed && (
             <>
-              <div className="flex-1 min-w-0 text-left">
-                <div className="text-sm font-medium leading-tight truncate">
-                  {firmName}
-                </div>
-                <div className="text-xs text-muted-foreground leading-tight truncate mt-0.5">
-                  {isOwner ? tTeam("manage_team") : tTeam("view_team")}
-                </div>
-              </div>
+              <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+                {firmName}
+              </span>
               <Users2
-                className="size-3.5 text-muted-foreground/70 group-hover:text-foreground transition-colors shrink-0"
+                className="size-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground"
                 aria-hidden
               />
             </>
