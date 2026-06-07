@@ -130,7 +130,9 @@ export function ClientsToolbar({
         </Select>
         <Select
           value={ownerFilter}
-          onValueChange={(v) => setParam("owner", v === "all" ? null : v)}
+          // Always write the choice — the default is dynamic ("mine" when you
+          // own clients, else "all"), so clearing the param can't represent it.
+          onValueChange={(v) => setParam("owner", v)}
         >
           <SelectTrigger
             size="sm"

@@ -50,9 +50,13 @@ export function EngagementsView({
   const tDash = useTranslations("Dashboard");
   const pathname = usePathname();
   const [query, setQuery] = useState("");
-  // My/All engagements — mirrors the clients owner filter. Defaults to All for
-  // everyone (same as clients); the choice is remembered per user (localStorage).
-  const [scope, setScope] = useState<"mine" | "all">("all");
+  // My/All engagements — mirrors the clients owner filter. Defaults to the
+  // accountant's OWN work ("mine") when they're assigned at least one in this
+  // view, else "all" so the list is never mysteriously empty. The choice is
+  // then remembered per user (localStorage), which overrides this default.
+  const ownsAny =
+    !!currentUserId && rows.some((r) => r.assigneeUserId === currentUserId);
+  const [scope, setScope] = useState<"mine" | "all">(ownsAny ? "mine" : "all");
   useEffect(() => {
     if (!currentUserId) return;
     let saved: string | null = null;
