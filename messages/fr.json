@@ -38,6 +38,9 @@
   "Team": {
     "title": "Équipe",
     "subtitle": "Invitez des collègues et gérez qui a accès à votre cabinet.",
+    "subtitle_readonly": "Les personnes qui ont accès à votre cabinet.",
+    "manage_team": "Gérer l'équipe",
+    "view_team": "Voir l'équipe",
     "invite_button": "Inviter un membre",
     "invite_modal_title": "Inviter un membre",
     "invite_modal_hint": "Il recevra un courriel pour créer son compte et rejoindre votre cabinet.",

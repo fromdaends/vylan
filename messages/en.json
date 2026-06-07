@@ -38,6 +38,9 @@
   "Team": {
     "title": "Team",
     "subtitle": "Invite teammates and manage who has access to your firm.",
+    "subtitle_readonly": "The people who have access to your firm.",
+    "manage_team": "Manage team",
+    "view_team": "View team",
     "invite_button": "Invite teammate",
     "invite_modal_title": "Invite a teammate",
     "invite_modal_hint": "They'll get an email to create their account and join your firm.",
