@@ -29,21 +29,21 @@ export type Client = {
   // only — clients stay firm-scoped/visible to all. Possibly undefined at
   // runtime until 0210 is applied to the remote DB; callers coalesce to null.
   assigned_user_id: string | null;
+  // Profile fields (migration 0220). All optional; null = not specified.
+  province: string | null;
+  timezone: string | null;
+  industry: string | null;
 };
 
-// PostgREST raises PGRST204 (and names the column) when asked to write a column
-// it doesn't know about. Used to make client creation safe to deploy BEFORE
-// migration 0210 is applied to the remote DB: we retry the insert without the
-// owner column rather than 500ing. Once 0210 is applied, the first attempt
-// succeeds and this never fires.
-function isMissingAssignedColumn(
-  error: { code?: string | null; message?: string | null } | null,
+// PostgREST raises PGRST204 ("column not found in schema cache") when asked to
+// write a column it doesn't know about. We use this to make client writes safe
+// to deploy BEFORE the gated migrations (0210 owner, 0220 profile fields) are
+// applied to the remote DB: retry with fewer columns rather than 500ing. Once
+// the migrations are applied, the first attempt succeeds and this never fires.
+function isMissingColumn(
+  error: { code?: string | null } | null,
 ): boolean {
-  if (!error) return false;
-  return (
-    error.code === "PGRST204" ||
-    /assigned_user_id/i.test(error.message ?? "")
-  );
+  return error?.code === "PGRST204";
 }
 
 async function currentAuthUserId(): Promise<string | null> {
@@ -100,6 +100,9 @@ export type ClientInput = {
   locale: "fr" | "en";
   external_ref?: string | null;
   notes?: string | null;
+  province?: string | null;
+  timezone?: string | null;
+  industry?: string | null;
 };
 
 export async function createClient(input: ClientInput): Promise<Client> {
@@ -117,20 +120,36 @@ export async function createClient(input: ClientInput): Promise<Client> {
     notes: input.notes ?? null,
   };
 
-  // New clients belong to whoever creates them. If 0210 isn't applied yet the
-  // first insert fails on the unknown column; retry without it so creation
-  // still works (the client is just unassigned until the migration lands).
+  // New clients belong to whoever creates them and carry the optional profile
+  // fields. Both sets of columns are migration-gated (0210 owner, 0220 profile),
+  // so degrade progressively if a migration isn't applied yet: full -> owner
+  // only -> base. Creation never breaks; the gated values just fill in once the
+  // migrations land.
+  const withOwner = { ...base, assigned_user_id: owner };
+  const withProfile = {
+    ...withOwner,
+    province: input.province ?? null,
+    timezone: input.timezone ?? null,
+    industry: input.industry ?? null,
+  };
   let { data, error } = await supabase
     .from("clients")
-    .insert({ ...base, assigned_user_id: owner })
+    .insert(withProfile)
     .select("*")
     .single();
-  if (error && isMissingAssignedColumn(error)) {
+  if (error && isMissingColumn(error)) {
     ({ data, error } = await supabase
       .from("clients")
-      .insert(base)
+      .insert(withOwner)
       .select("*")
       .single());
+    if (error && isMissingColumn(error)) {
+      ({ data, error } = await supabase
+        .from("clients")
+        .insert(base)
+        .select("*")
+        .single());
+    }
   }
   if (error) throw error;
   return data as Client;
@@ -162,7 +181,7 @@ export async function bulkCreateClients(
       base.map((r) => ({ ...r, assigned_user_id: owner })),
       { count: "exact" },
     );
-  if (error && isMissingAssignedColumn(error)) {
+  if (error && isMissingColumn(error)) {
     ({ error, count } = await supabase
       .from("clients")
       .insert(base, { count: "exact" }));
@@ -176,12 +195,26 @@ export async function updateClient(
   patch: Partial<ClientInput>,
 ): Promise<Client> {
   const supabase = await getServerSupabase();
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("clients")
     .update(patch)
     .eq("id", id)
     .select("*")
     .single();
+  // If 0220 isn't applied yet, an edit including the profile fields fails on
+  // the unknown column — retry without them so editing still works.
+  if (error && isMissingColumn(error)) {
+    const safe = { ...patch };
+    delete safe.province;
+    delete safe.timezone;
+    delete safe.industry;
+    ({ data, error } = await supabase
+      .from("clients")
+      .update(safe)
+      .eq("id", id)
+      .select("*")
+      .single());
+  }
   if (error) throw error;
   return data as Client;
 }

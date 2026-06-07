@@ -30,6 +30,7 @@ import {
   type ClientFormState,
 } from "@/app/actions/clients";
 import type { Client } from "@/lib/db/clients";
+import { PROVINCES, TIMEZONES, INDUSTRIES } from "@/lib/clients/fields";
 import { emailChangeNeedsConfirm } from "./email-change";
 import { Plus, Pencil } from "lucide-react";
 import { toast } from "sonner";
@@ -215,6 +216,56 @@ export function ClientFormDialog({ mode, locale, client, trigger }: Props) {
                 defaultValue={client?.phone ?? ""}
               />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="province">{t("field_province")}</Label>
+              <Select name="province" defaultValue={client?.province ?? "none"}>
+                <SelectTrigger id="province" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("field_unset")}</SelectItem>
+                  {PROVINCES.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {locale === "fr" ? p.fr : p.en}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="timezone">{t("field_timezone")}</Label>
+              <Select name="timezone" defaultValue={client?.timezone ?? "none"}>
+                <SelectTrigger id="timezone" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{t("field_unset")}</SelectItem>
+                  {TIMEZONES.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {locale === "fr" ? tz.fr : tz.en}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="industry">{t("field_industry")}</Label>
+            <Select name="industry" defaultValue={client?.industry ?? "none"}>
+              <SelectTrigger id="industry" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">{t("field_unset")}</SelectItem>
+                {INDUSTRIES.map((ind) => (
+                  <SelectItem key={ind.value} value={ind.value}>
+                    {locale === "fr" ? ind.fr : ind.en}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="external_ref">{t("field_external_ref")}</Label>
