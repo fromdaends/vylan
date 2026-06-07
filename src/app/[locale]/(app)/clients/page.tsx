@@ -9,8 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/navigation";
 import { ClientsListView } from "@/components/clients/clients-list-view";
 import { SORT_OPTIONS, type SortKey } from "@/components/clients/sort";
+import {
+  OWNER_FILTERS,
+  filterClientsByOwner,
+  type OwnerFilter,
+  type ClientOwner,
+} from "@/components/clients/owner";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { getBrandingImageUrl } from "@/lib/storage";
 import type {
   ClientEngagementSummary,
   ClientEngagementRow,
@@ -35,6 +43,7 @@ export default async function ClientsPage({
     archived?: string;
     sort?: string;
     active?: string;
+    owner?: string;
   }>;
 }) {
   const { locale: rawLocale } = await params;
@@ -49,13 +58,36 @@ export default async function ClientsPage({
     ? (sp.sort as SortKey)
     : "recent";
   const activeOnly = sp.active === "1";
+  const ownerFilter: OwnerFilter = OWNER_FILTERS.includes(
+    sp.owner as OwnerFilter,
+  )
+    ? (sp.owner as OwnerFilter)
+    : "all";
 
-  const [clientsRaw, engagements, firm] = await Promise.all([
-    listClients({ type, includeArchived }),
-    listEngagements(),
-    getCurrentFirm(),
-  ]);
+  const [clientsRaw, engagements, firm, currentUser, members] =
+    await Promise.all([
+      listClients({ type, includeArchived }),
+      listEngagements(),
+      getCurrentFirm(),
+      getCurrentUser(),
+      listFirmUsers(),
+    ]);
   const isDemo = firm?.is_demo === true;
+  const currentUserId = currentUser?.id ?? "";
+
+  // Resolve each firm member's avatar once (small set — seat caps are 1–15)
+  // so the table can render an owner badge without N per-row fetches.
+  const memberAvatars = await Promise.all(
+    members.map((m) => getBrandingImageUrl(m.avatar_path)),
+  );
+  const owners: Record<string, ClientOwner> = {};
+  members.forEach((m, i) => {
+    owners[m.id] = {
+      id: m.id,
+      name: userDisplayLabel(m),
+      avatarUrl: memberAvatars[i],
+    };
+  });
 
   // Group engagement counts by client_id (for the summary badge in the
   // row's "Engagements" column) AND group the full engagement rows by
@@ -122,6 +154,8 @@ export default async function ClientsPage({
   if (activeOnly) {
     clients = clients.filter((c) => (summaries[c.id]?.total_live ?? 0) > 0);
   }
+  // Apply the "My clients / All firm" owner filter.
+  clients = filterClientsByOwner(clients, ownerFilter, currentUserId);
 
   // Apply sort. listClients already returns newest-first, so `recent`
   // is a no-op pass-through.
@@ -181,6 +215,9 @@ export default async function ClientsPage({
         clients={clients}
         summaries={summaries}
         engagementsByClient={engagementsByClient}
+        owners={owners}
+        currentUserId={currentUserId}
+        ownerFilter={ownerFilter}
         locale={locale}
         type={type}
         includeArchived={includeArchived}

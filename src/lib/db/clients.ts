@@ -25,7 +25,32 @@ export type Client = {
   notes: string | null;
   created_at: string;
   archived_at: string | null;
+  // The firm member who owns this client (migration 0210). Accountability
+  // only — clients stay firm-scoped/visible to all. Possibly undefined at
+  // runtime until 0210 is applied to the remote DB; callers coalesce to null.
+  assigned_user_id: string | null;
 };
+
+// PostgREST raises PGRST204 (and names the column) when asked to write a column
+// it doesn't know about. Used to make client creation safe to deploy BEFORE
+// migration 0210 is applied to the remote DB: we retry the insert without the
+// owner column rather than 500ing. Once 0210 is applied, the first attempt
+// succeeds and this never fires.
+function isMissingAssignedColumn(
+  error: { code?: string | null; message?: string | null } | null,
+): boolean {
+  if (!error) return false;
+  return (
+    error.code === "PGRST204" ||
+    /assigned_user_id/i.test(error.message ?? "")
+  );
+}
+
+async function currentAuthUserId(): Promise<string | null> {
+  const supabase = await getServerSupabase();
+  const { data } = await supabase.auth.getUser();
+  return data.user?.id ?? null;
+}
 
 export type ClientFilters = {
   search?: string;
@@ -80,20 +105,33 @@ export type ClientInput = {
 export async function createClient(input: ClientInput): Promise<Client> {
   const supabase = await getServerSupabase();
   const firm_id = await currentFirmId();
-  const { data, error } = await supabase
+  const owner = await currentAuthUserId();
+  const base = {
+    firm_id,
+    type: input.type,
+    display_name: input.display_name,
+    email: input.email ?? null,
+    phone: input.phone ?? null,
+    locale: input.locale,
+    external_ref: input.external_ref ?? null,
+    notes: input.notes ?? null,
+  };
+
+  // New clients belong to whoever creates them. If 0210 isn't applied yet the
+  // first insert fails on the unknown column; retry without it so creation
+  // still works (the client is just unassigned until the migration lands).
+  let { data, error } = await supabase
     .from("clients")
-    .insert({
-      firm_id,
-      type: input.type,
-      display_name: input.display_name,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-      locale: input.locale,
-      external_ref: input.external_ref ?? null,
-      notes: input.notes ?? null,
-    })
+    .insert({ ...base, assigned_user_id: owner })
     .select("*")
     .single();
+  if (error && isMissingAssignedColumn(error)) {
+    ({ data, error } = await supabase
+      .from("clients")
+      .insert(base)
+      .select("*")
+      .single());
+  }
   if (error) throw error;
   return data as Client;
 }
@@ -104,7 +142,8 @@ export async function bulkCreateClients(
   if (inputs.length === 0) return { created: 0 };
   const supabase = await getServerSupabase();
   const firm_id = await currentFirmId();
-  const rows = inputs.map((i) => ({
+  const owner = await currentAuthUserId();
+  const base = inputs.map((i) => ({
     firm_id,
     type: i.type,
     display_name: i.display_name,
@@ -114,11 +153,22 @@ export async function bulkCreateClients(
     external_ref: i.external_ref ?? null,
     notes: i.notes ?? null,
   }));
-  const { error, count } = await supabase
+
+  // Imported clients belong to the importer. Same pre-0210 fallback as
+  // createClient: retry without the owner column if it doesn't exist yet.
+  let { error, count } = await supabase
     .from("clients")
-    .insert(rows, { count: "exact" });
+    .insert(
+      base.map((r) => ({ ...r, assigned_user_id: owner })),
+      { count: "exact" },
+    );
+  if (error && isMissingAssignedColumn(error)) {
+    ({ error, count } = await supabase
+      .from("clients")
+      .insert(base, { count: "exact" }));
+  }
   if (error) throw error;
-  return { created: count ?? rows.length };
+  return { created: count ?? base.length };
 }
 
 export async function updateClient(
