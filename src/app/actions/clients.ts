@@ -46,6 +46,35 @@ const ClientSchema = z.object({
       z.string().optional(),
     )
     .optional(),
+  // Profile fields (migration 0220). Optional; the "none" sentinel from the
+  // form's "Not specified" option (and an empty value) clear the field.
+  province: z
+    .preprocess(
+      (v) =>
+        typeof v === "string" && (v.trim() === "" || v === "none")
+          ? undefined
+          : v,
+      z.string().optional(),
+    )
+    .optional(),
+  timezone: z
+    .preprocess(
+      (v) =>
+        typeof v === "string" && (v.trim() === "" || v === "none")
+          ? undefined
+          : v,
+      z.string().optional(),
+    )
+    .optional(),
+  industry: z
+    .preprocess(
+      (v) =>
+        typeof v === "string" && (v.trim() === "" || v === "none")
+          ? undefined
+          : v,
+      z.string().optional(),
+    )
+    .optional(),
 });
 
 function fieldErrorsFromZod(error: z.ZodError): Record<string, string> {
