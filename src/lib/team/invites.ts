@@ -66,3 +66,60 @@ export function inviteState(
   if (Date.parse(invite.expires_at) <= nowMs) return "expired";
   return "pending";
 }
+
+// Single source of truth for "can this invite be opened/accepted right now?",
+// shared by the accept PAGE (form vs error) and the acceptInvite ACTION
+// (proceed vs error). `hasRoom` is whether the firm can take one more active
+// member (see hasRoomForMember in billing/seats) — the pending invite being
+// accepted does not count against itself.
+export type InviteAccess =
+  | "ok"
+  | "not_found"
+  | "expired"
+  | "accepted"
+  | "revoked"
+  | "seat_full";
+
+export function resolveInviteAccess(
+  invite: InviteRow | null,
+  hasRoom: boolean,
+  nowMs: number = Date.now(),
+): InviteAccess {
+  if (!invite) return "not_found";
+  const state = inviteState(invite, nowMs);
+  if (state === "revoked") return "revoked";
+  if (state === "accepted") return "accepted";
+  if (state === "expired") return "expired";
+  return hasRoom ? "ok" : "seat_full";
+}
+
+// Accept-form validation: display name (>= 2), password (>= 8), and a matching
+// confirmation. Error messages are i18n keys the page maps to friendly copy.
+export const acceptInviteSchema = z
+  .object({
+    name: z.string().trim().min(2, "min_2_chars"),
+    password: z.string().min(8, "min_8_chars"),
+    confirm: z.string().min(1, "required"),
+    locale: z.enum(["fr", "en"]).default("fr"),
+  })
+  .refine((d) => d.password === d.confirm, {
+    path: ["confirm"],
+    message: "password_mismatch",
+  });
+
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
+
+export function parseAcceptInput(
+  raw: Record<string, unknown>,
+):
+  | { ok: true; data: AcceptInviteInput }
+  | { ok: false; fieldErrors: Record<string, string> } {
+  const parsed = acceptInviteSchema.safeParse(raw);
+  if (parsed.success) return { ok: true, data: parsed.data };
+  const fieldErrors: Record<string, string> = {};
+  for (const issue of parsed.error.issues) {
+    const key = issue.path.join(".") || "form";
+    if (!fieldErrors[key]) fieldErrors[key] = issue.message;
+  }
+  return { ok: false, fieldErrors };
+}

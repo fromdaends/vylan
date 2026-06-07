@@ -6,11 +6,23 @@
 // `error` code the UI (Phase 6) maps to a friendly bilingual message.
 
 import { revalidatePath } from "next/cache";
-import { getServiceRoleSupabase } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import {
+  getServiceRoleSupabase,
+  getServerSupabase,
+} from "@/lib/supabase/server";
 import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { logUserActivity } from "@/lib/db/activity";
-import { assertCanAddSeat, SeatLimitError } from "@/lib/billing/seats";
+import { getPathname } from "@/i18n/navigation";
+import { checkRateLimit, SIGNUP_LIMIT } from "@/lib/rate-limit";
+import {
+  assertCanAddSeat,
+  getFirmSeatUsage,
+  hasRoomForMember,
+  SeatLimitError,
+} from "@/lib/billing/seats";
 import { sendEmail, buildTeamInviteEmail } from "@/lib/email";
 import {
   generateInviteToken,
@@ -18,6 +30,8 @@ import {
   inviteExpiryISO,
   inviteAcceptUrl,
   parseInviteEmail,
+  parseAcceptInput,
+  resolveInviteAccess,
 } from "@/lib/team/invites";
 
 // The team list (built in Phase 6) lives here; revalidating it keeps the
@@ -246,4 +260,161 @@ export async function resendInvite(
   });
   revalidatePath(TEAM_PATH);
   return { ok: true, emailSent: send.sent };
+}
+
+// --- Accept flow (public — gated by the token, not by an owner check) --------
+
+async function clientIp(): Promise<string> {
+  const h = await headers();
+  const first = h.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return first || "unknown";
+}
+
+function localPath(locale: "fr" | "en", pathname: string): string {
+  return getPathname({ locale, href: pathname });
+}
+
+export type AcceptInviteState = {
+  // Top-level error code (maps to InviteAccept.errors.* in the UI). Mirrors the
+  // page-level InviteAccess reasons plus the form/security ones.
+  error?:
+    | "not_found"
+    | "expired"
+    | "accepted"
+    | "revoked"
+    | "seat_full"
+    | "email_exists"
+    | "create_failed"
+    | "rate_limited"
+    | "invalid";
+  // Per-field validation (name / password / confirm).
+  fieldErrors?: Record<string, string>;
+} | null;
+
+// An invited person submits their account details. Re-validates everything
+// server-side (token, state, seat, email), creates a confirmed staff account in
+// the invite's firm, signs them in, and lands them on the dashboard. On a valid
+// submit this never returns — it redirects.
+export async function acceptInvite(
+  _prev: AcceptInviteState,
+  formData: FormData,
+): Promise<AcceptInviteState> {
+  const ip = await clientIp();
+  const rl = await checkRateLimit({
+    key: `invite-accept:ip:${ip}`,
+    ...SIGNUP_LIMIT,
+  });
+  if (!rl.ok) return { error: "rate_limited" };
+
+  const token = String(formData.get("token") ?? "");
+  if (!token) return { error: "invalid" };
+
+  const parsed = parseAcceptInput({
+    name: formData.get("name"),
+    password: formData.get("password"),
+    confirm: formData.get("confirm"),
+    locale: formData.get("locale") ?? "fr",
+  });
+  if (!parsed.ok) return { fieldErrors: parsed.fieldErrors };
+  const { name, password, locale } = parsed.data;
+
+  const admin = getServiceRoleSupabase();
+
+  // Look up by token hash; re-run the same access decision the page used.
+  const { data: invite } = await admin
+    .from("firm_invites")
+    .select("id, firm_id, email, accepted_at, revoked_at, expires_at")
+    .eq("token_hash", hashInviteToken(token))
+    .maybeSingle();
+  const usage = invite ? await getFirmSeatUsage(invite.firm_id) : null;
+  const access = resolveInviteAccess(
+    invite ?? null,
+    usage ? hasRoomForMember(usage) : false,
+  );
+  if (access !== "ok" || !invite) {
+    return { error: access === "ok" ? "not_found" : access };
+  }
+
+  // Re-check the email isn't already a Vylan account (someone may have signed
+  // up between invite + accept). createUser is also a backstop — auth emails
+  // are unique — but this returns the clean error first.
+  const { data: existingUser } = await admin
+    .from("users")
+    .select("id")
+    .eq("email", invite.email)
+    .maybeSingle();
+  if (existingUser) return { error: "email_exists" };
+
+  // Create an already-confirmed auth user: the invite link proves control of
+  // the email, so there is no second confirmation step.
+  const { data: created, error: createErr } =
+    await admin.auth.admin.createUser({
+      email: invite.email as string,
+      password,
+      email_confirm: true,
+      user_metadata: { name, locale },
+    });
+  if (createErr || !created?.user) {
+    const msg = (createErr?.message ?? "").toLowerCase();
+    if (msg.includes("already") || msg.includes("registered")) {
+      return { error: "email_exists" };
+    }
+    console.error("[team] acceptInvite createUser failed:", createErr?.message);
+    return { error: "create_failed" };
+  }
+  const newUserId = created.user.id;
+
+  // Insert the public.users profile (staff, in the invite's firm).
+  const { error: profileErr } = await admin.from("users").insert({
+    id: newUserId,
+    firm_id: invite.firm_id,
+    email: invite.email,
+    name,
+    role: "staff",
+    locale,
+  });
+  if (profileErr) {
+    // Orphan recovery: roll the auth user back so a retry can succeed.
+    console.error(
+      "[team] acceptInvite profile insert failed; deleting auth user:",
+      profileErr.message,
+    );
+    await admin.auth.admin.deleteUser(newUserId).catch(() => {});
+    return { error: "create_failed" };
+  }
+
+  // Mark the invite accepted (guarded; auth email-uniqueness already prevents
+  // a double-accept from creating two accounts, so this is best-effort).
+  await admin
+    .from("firm_invites")
+    .update({
+      accepted_at: new Date().toISOString(),
+      accepted_by_user_id: newUserId,
+    })
+    .eq("id", invite.id)
+    .is("accepted_at", null);
+
+  // Log via the service-role client — the new user isn't signed in yet, so the
+  // authed logUserActivity (RLS-scoped) can't write here.
+  await admin.from("activity_log").insert({
+    firm_id: invite.firm_id,
+    engagement_id: null,
+    actor_type: "user",
+    actor_id: newUserId,
+    action: "invite_accepted",
+    metadata: { invite_id: invite.id },
+  });
+
+  // Sign them in (sets the session cookies), then land on the dashboard.
+  const supabase = await getServerSupabase();
+  const { error: signInErr } = await supabase.auth.signInWithPassword({
+    email: invite.email as string,
+    password,
+  });
+  if (signInErr) {
+    // The account exists + is confirmed; if sign-in hiccups, send them to login.
+    console.error("[team] acceptInvite sign-in failed:", signInErr.message);
+    redirect(localPath(locale, "/login"));
+  }
+  redirect(localPath(locale, "/dashboard"));
 }

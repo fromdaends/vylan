@@ -140,3 +140,11 @@ export async function getFirmSeatUsage(firmId: string): Promise<SeatUsage> {
 export async function assertCanAddSeat(firmId: string): Promise<void> {
   assertSeatAvailable(await getFirmSeatUsage(firmId));
 }
+
+// PURE. Room to convert a PENDING invite into an ACTIVE member (the accept
+// flow). The invite being accepted doesn't block itself, so only active members
+// count against the cap here — unlike assertCanAddSeat, which also counts
+// pending invites when deciding whether a NEW invite may be sent.
+export function hasRoomForMember(usage: SeatUsage): boolean {
+  return usage.activeUsers < usage.cap;
+}

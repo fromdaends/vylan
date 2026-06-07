@@ -5,6 +5,7 @@ import {
   assertSeatAvailable,
   SeatLimitError,
   UNKNOWN_PLAN_SEAT_CAP,
+  hasRoomForMember,
 } from "./seats";
 
 describe("resolveSeatCap", () => {
@@ -107,5 +108,45 @@ describe("assertSeatAvailable", () => {
         summarizeSeatUsage({ activeUsers: 1, pendingInvites: 0, cap: 1 }),
       ),
     ).toThrow(SeatLimitError);
+  });
+});
+
+describe("hasRoomForMember", () => {
+  it("has room while active members are below the cap", () => {
+    expect(
+      hasRoomForMember(
+        summarizeSeatUsage({ activeUsers: 1, pendingInvites: 3, cap: 6 }),
+      ),
+    ).toBe(true);
+  });
+
+  it("pending invites do NOT block accepting (only active members count)", () => {
+    // 2 active + 4 pending = at cap by total, but there's still room to ACCEPT
+    // (convert a pending invite to active) because active < cap.
+    expect(
+      hasRoomForMember(
+        summarizeSeatUsage({ activeUsers: 2, pendingInvites: 4, cap: 6 }),
+      ),
+    ).toBe(true);
+  });
+
+  it("no room once active members reach the cap", () => {
+    expect(
+      hasRoomForMember(
+        summarizeSeatUsage({ activeUsers: 6, pendingInvites: 0, cap: 6 }),
+      ),
+    ).toBe(false);
+  });
+
+  it("an unlimited (Infinity) cap always has room", () => {
+    expect(
+      hasRoomForMember(
+        summarizeSeatUsage({
+          activeUsers: 999,
+          pendingInvites: 0,
+          cap: Number.POSITIVE_INFINITY,
+        }),
+      ),
+    ).toBe(true);
   });
 });
