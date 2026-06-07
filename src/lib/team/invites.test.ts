@@ -7,6 +7,8 @@ import {
   parseInviteEmail,
   inviteState,
   INVITE_TTL_DAYS,
+  resolveInviteAccess,
+  parseAcceptInput,
 } from "./invites";
 import { buildTeamInviteEmail } from "@/lib/email";
 
@@ -151,5 +153,87 @@ describe("buildTeamInviteEmail", () => {
     expect(html).toContain("A &amp; B &lt;script&gt;");
     expect(html).not.toContain("<script>");
     expect(html).toContain("O&#39;Brien");
+  });
+});
+
+describe("resolveInviteAccess", () => {
+  const future = "2999-01-01T00:00:00.000Z";
+  const past = "2000-01-01T00:00:00.000Z";
+  const now = Date.parse("2026-06-01T00:00:00.000Z");
+  const pending = { accepted_at: null, revoked_at: null, expires_at: future };
+
+  it("ok for a pending invite when the firm has room", () => {
+    expect(resolveInviteAccess(pending, true, now)).toBe("ok");
+  });
+  it("seat_full for a pending invite when the firm is at capacity", () => {
+    expect(resolveInviteAccess(pending, false, now)).toBe("seat_full");
+  });
+  it("not_found when there is no invite", () => {
+    expect(resolveInviteAccess(null, true, now)).toBe("not_found");
+  });
+  it("expired / accepted / revoked take priority over the seat check", () => {
+    expect(
+      resolveInviteAccess(
+        { accepted_at: null, revoked_at: null, expires_at: past },
+        true,
+        now,
+      ),
+    ).toBe("expired");
+    expect(
+      resolveInviteAccess(
+        { accepted_at: past, revoked_at: null, expires_at: future },
+        true,
+        now,
+      ),
+    ).toBe("accepted");
+    expect(
+      resolveInviteAccess(
+        { accepted_at: null, revoked_at: past, expires_at: future },
+        true,
+        now,
+      ),
+    ).toBe("revoked");
+  });
+});
+
+describe("parseAcceptInput", () => {
+  const good = {
+    name: "Bob Tremblay",
+    password: "supersecret",
+    confirm: "supersecret",
+    locale: "fr",
+  };
+
+  it("accepts a valid submission", () => {
+    const r = parseAcceptInput(good);
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.name).toBe("Bob Tremblay");
+      expect(r.data.locale).toBe("fr");
+    }
+  });
+  it("flags a short name", () => {
+    const r = parseAcceptInput({ ...good, name: "B" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.name).toBe("min_2_chars");
+  });
+  it("flags a short password", () => {
+    const r = parseAcceptInput({ ...good, password: "short", confirm: "short" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.password).toBe("min_8_chars");
+  });
+  it("flags a password mismatch on the confirm field", () => {
+    const r = parseAcceptInput({ ...good, confirm: "different1" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.fieldErrors.confirm).toBe("password_mismatch");
+  });
+  it("defaults locale to fr when missing", () => {
+    const r = parseAcceptInput({
+      name: "Bob Tremblay",
+      password: "supersecret",
+      confirm: "supersecret",
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.locale).toBe("fr");
   });
 });
