@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
+import { WhatsNewCollapsible } from "./whats-new-collapsible";
 import { formatRelative, type AppLocale } from "@/lib/format";
 import type { HomeNotification } from "@/lib/home/notifications";
 import {
@@ -26,16 +27,17 @@ export async function WhatsNewFeed({
 }) {
   const t = await getTranslations("Home");
 
-  // aria-label (not aria-labelledby) because this feed renders twice on the
-  // Overview (mobile inline + desktop sticky rail) — a shared heading id would
-  // be a duplicate-id violation. The label carries the same text.
+  // Collapsible (default open, remembered) — the header title is the toggle.
+  // The body (rows / empty state) is server-rendered and passed as children to
+  // the client shell. Renders twice on the Overview (mobile inline + desktop
+  // rail); the shell's useId keeps the aria ids unique and both share one
+  // collapse preference.
   return (
-    <section aria-label={t("whats_new")} className="space-y-3">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-semibold tracking-tight text-foreground">
-          {t("whats_new")}
-        </h2>
-        {notifications.length > 0 && (
+    <WhatsNewCollapsible
+      title={t("whats_new")}
+      count={notifications.length}
+      viewAll={
+        notifications.length > 0 ? (
           <Link
             href="/notifications"
             className="inline-flex items-center gap-0.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
@@ -43,13 +45,11 @@ export async function WhatsNewFeed({
             {t("view_all")}
             <ChevronRight className="h-3 w-3" aria-hidden />
           </Link>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       {notifications.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {t("whats_new_empty")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("whats_new_empty")}</p>
       ) : (
         <ol className="divide-y divide-border/50">
           {notifications.map((n) => (
@@ -57,7 +57,7 @@ export async function WhatsNewFeed({
           ))}
         </ol>
       )}
-    </section>
+    </WhatsNewCollapsible>
   );
 }
 
