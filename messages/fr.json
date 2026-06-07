@@ -479,6 +479,7 @@
   },
   "Settings": {
     "title": "Paramètres",
+    "owner_only_note": "Les paramètres de votre cabinet (logo, nom, image de marque, langue par défaut des clients) sont gérés par l'administrateur du cabinet.",
     "subtitle": "Préférences d'affichage et comportement du cabinet. Les infos sur vous et votre cabinet sont dans le profil.",
     "section_theme": "Apparence",
     "section_theme_hint": "Clair, sombre, ou suivre votre système.",
