@@ -14,6 +14,7 @@ export type AppUser = {
   // can't sign in, frees a seat, and is excluded from assignment targets.
   // Still appears in historical records (activity log, past assignments).
   deactivated_at: string | null;
+  deactivated_by_user_id: string | null;
   created_at: string;
 };
 
