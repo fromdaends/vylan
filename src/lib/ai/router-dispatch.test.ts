@@ -8,6 +8,14 @@ vi.mock("@/lib/db/jobs", () => ({
   enqueueJob: (...args: unknown[]) => enqueueJobMock(...args),
 }));
 
+// The router now re-derives item status via recomputeItemStatus instead of
+// writing request_items.status directly. Mock it so we can assert it was
+// called (its roll-up logic is covered by the rollup tests).
+const recomputeMock = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/lib/db/file-review", () => ({
+  recomputeItemStatus: (...args: unknown[]) => recomputeMock(...args),
+}));
+
 import { applyDecision, decide } from "./router";
 
 const VERDICT: UsabilityVerdict = {
@@ -77,7 +85,8 @@ const COMMON = {
 describe("applyDecision — auto_reject_and_notify_client", () => {
   beforeEach(() => enqueueJobMock.mockClear());
 
-  it("flips the item back to pending, sets the rejection reason, increments the strike counter, marks the file rejected, queues the notify job, and writes an audit row", async () => {
+  it("rejects the file (flag + review_status + reason), increments the strike counter, recomputes the item, queues the notify job, and writes an audit row", async () => {
+    recomputeMock.mockClear();
     const { supabase, recorded } = makeMockSupabase({ request_items: 0 });
     const result = await applyDecision({
       supabase,
@@ -90,17 +99,7 @@ describe("applyDecision — auto_reject_and_notify_client", () => {
       jobQueued: true,
     });
 
-    // Item: re-opened + rejection_reason set (first update).
-    const itemReopen = recorded.updates.find(
-      (u) =>
-        u.table === "request_items" &&
-        u.values.status === "pending",
-    );
-    expect(itemReopen?.values.rejection_reason).toBe(
-      "Le texte est illisible.",
-    );
-
-    // Strike counter went 0 → 1 (second update).
+    // Strike counter went 0 → 1.
     const itemStrike = recorded.updates.find(
       (u) =>
         u.table === "request_items" &&
@@ -108,11 +107,22 @@ describe("applyDecision — auto_reject_and_notify_client", () => {
     );
     expect(itemStrike?.values.ai_rejection_count).toBe(1);
 
-    // File: ai_rejected = true.
-    const fileFlag = recorded.updates.find(
+    // File: flagged AND marked rejected with the client-facing reason, so the
+    // item roll-up + portal treat it as a real (client-facing) rejection.
+    const fileUpdate = recorded.updates.find(
       (u) => u.table === "uploaded_files",
     );
-    expect(fileFlag?.values.ai_rejected).toBe(true);
+    expect(fileUpdate?.values.ai_rejected).toBe(true);
+    expect(fileUpdate?.values.review_status).toBe("rejected");
+    expect(fileUpdate?.values.rejection_reason).toBe("Le texte est illisible.");
+
+    // Item status is re-derived from the files, not written directly.
+    expect(recomputeMock).toHaveBeenCalledWith(supabase, "item-1");
+    expect(
+      recorded.updates.find(
+        (u) => u.table === "request_items" && u.values.status !== undefined,
+      ),
+    ).toBeUndefined();
 
     // Activity log line.
     const activity = recorded.inserts.find((i) => i.table === "activity_log");
@@ -135,11 +145,10 @@ describe("applyDecision — auto_reject_and_notify_client", () => {
       ...COMMON,
       clientLocale: "en",
     });
-    const itemReopen = recorded.updates.find(
-      (u) =>
-        u.table === "request_items" && u.values.status === "pending",
+    const fileUpdate = recorded.updates.find(
+      (u) => u.table === "uploaded_files",
     );
-    expect(itemReopen?.values.rejection_reason).toBe(
+    expect(fileUpdate?.values.rejection_reason).toBe(
       "The text is not readable.",
     );
     expect(enqueueJobMock.mock.calls[0][0].payload.language).toBe("en");
@@ -149,7 +158,8 @@ describe("applyDecision — auto_reject_and_notify_client", () => {
 describe("applyDecision — escalate_to_accountant", () => {
   beforeEach(() => enqueueJobMock.mockClear());
 
-  it("moves the item to submitted, marks the file rejected, does NOT increment the counter, logs ai_escalated_to_accountant, no job queued", async () => {
+  it("flags the file, recomputes the item (no direct status write), does NOT increment the counter, logs ai_escalated_to_accountant, no job queued", async () => {
+    recomputeMock.mockClear();
     const { supabase, recorded } = makeMockSupabase({ request_items: 2 });
     const result = await applyDecision({
       supabase,
@@ -162,25 +172,19 @@ describe("applyDecision — escalate_to_accountant", () => {
       jobQueued: false,
     });
 
-    const itemUpdate = recorded.updates.find(
-      (u) => u.table === "request_items",
-    );
-    expect(itemUpdate?.values.status).toBe("submitted");
-    // We assert the absence of an ai_rejection_count change anywhere
-    // in the recorded updates — the spec keeps the counter at 2 so
-    // an override decrement lands at 1.
+    // No direct request_items write at all (status comes from recompute; the
+    // counter is intentionally left at 2 so an override decrement lands at 1).
     expect(
-      recorded.updates.find(
-        (u) =>
-          u.table === "request_items" &&
-          typeof u.values.ai_rejection_count === "number",
-      ),
+      recorded.updates.find((u) => u.table === "request_items"),
     ).toBeUndefined();
+    expect(recomputeMock).toHaveBeenCalledWith(supabase, "item-1");
 
-    expect(
-      recorded.updates.find((u) => u.table === "uploaded_files")?.values
-        .ai_rejected,
-    ).toBe(true);
+    // File flagged, but NOT marked review_status rejected (accountant-facing).
+    const fileUpdate = recorded.updates.find(
+      (u) => u.table === "uploaded_files",
+    );
+    expect(fileUpdate?.values.ai_rejected).toBe(true);
+    expect(fileUpdate?.values.review_status).toBeUndefined();
 
     expect(
       recorded.inserts.find((i) => i.table === "activity_log")?.values.action,
@@ -193,7 +197,8 @@ describe("applyDecision — escalate_to_accountant", () => {
 describe("applyDecision — queue_for_accountant", () => {
   beforeEach(() => enqueueJobMock.mockClear());
 
-  it("moves the item to submitted, does NOT set ai_rejected, logs ai_quality_flagged, no job queued, no counter change", async () => {
+  it("recomputes the item (no direct status write), does NOT touch the file, logs ai_quality_flagged, no job queued, no counter change", async () => {
+    recomputeMock.mockClear();
     const { supabase, recorded } = makeMockSupabase();
     const result = await applyDecision({
       supabase,
@@ -206,12 +211,13 @@ describe("applyDecision — queue_for_accountant", () => {
       jobQueued: false,
     });
 
+    // No direct request_items write; the item is recomputed from its files.
     expect(
-      recorded.updates.find((u) => u.table === "request_items")?.values.status,
-    ).toBe("submitted");
+      recorded.updates.find((u) => u.table === "request_items"),
+    ).toBeUndefined();
+    expect(recomputeMock).toHaveBeenCalledWith(supabase, "item-1");
 
-    // ai_rejected stays untouched on queue_for_accountant — only the
-    // status changes.
+    // ai_rejected stays untouched on queue_for_accountant — only flagged.
     expect(
       recorded.updates.find((u) => u.table === "uploaded_files"),
     ).toBeUndefined();

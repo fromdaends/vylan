@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enqueueJob } from "@/lib/db/jobs";
+import { recomputeItemStatus } from "@/lib/db/file-review";
 import type { UsabilityVerdict } from "./usability";
 
 export type RouterDecision =
@@ -85,21 +86,6 @@ async function autoRejectAndNotify(
   const { supabase, verdict, fileId, requestItemId, engagementId, firmId } =
     ctx;
 
-  // Re-open the request item so the client portal shows it as
-  // outstanding again. The AI's bilingual summary becomes the
-  // accountant-facing rejection reason.
-  await supabase
-    .from("request_items")
-    .update({
-      status: "pending",
-      rejection_reason: pickClientLocaleSummary(verdict, ctx.clientLocale),
-      // Note: the column is a free-text reason. We store the
-      // client-facing summary here so the accountant sees the same
-      // message the client will read. Both bilingual fields live on
-      // uploaded_files.ai_usability for full audit.
-    })
-    .eq("id", requestItemId);
-
   // Bump the strike counter via a small read-modify-write. We do this
   // in two steps rather than a Postgres expression because the
   // supabase client typing for `.update({ col: sql\`col + 1\` })` is
@@ -110,12 +96,26 @@ async function autoRejectAndNotify(
     .update({ ai_rejection_count: currentCount + 1 })
     .eq("id", requestItemId);
 
-  // Mark this specific upload as rejected. The file stays in storage
-  // — the accountant can still view it and override.
+  // Mark this specific upload as rejected — BOTH the system flag AND the
+  // per-file review_status, so the item roll-up (recomputeItemStatus) treats it
+  // as an outstanding rejection and the client portal shows the line as "needs
+  // attention". The AI's bilingual summary is the client-facing reason;
+  // reviewed_by stays null since the SYSTEM, not an accountant, rejected it. The
+  // file stays in storage so the accountant can still view + override it.
   await supabase
     .from("uploaded_files")
-    .update({ ai_rejected: true })
+    .update({
+      ai_rejected: true,
+      review_status: "rejected",
+      rejection_reason: pickClientLocaleSummary(verdict, ctx.clientLocale),
+      reviewed_at: new Date().toISOString(),
+    })
     .eq("id", fileId);
+
+  // Re-derive the item status from its files (replaces the old direct
+  // status="pending" write). The newly-rejected file rolls the item up to
+  // "rejected" so the client portal reflects it.
+  await recomputeItemStatus(supabase, requestItemId);
 
   // Queue the client-retry notification. Phase 4 implements the
   // actual sending; until then the cron route absorbs unknown kinds
@@ -156,18 +156,17 @@ async function escalateToAccountant(
   const { supabase, verdict, fileId, requestItemId, engagementId, firmId } =
     ctx;
 
-  // Item moves into the accountant's "ready to review" lane. We do
-  // NOT increment the strike count — escalation is a system action,
-  // not another client failure. Phase 5 surfaces a red badge.
-  await supabase
-    .from("request_items")
-    .update({ status: "submitted" })
-    .eq("id", requestItemId);
-
+  // We do NOT increment the strike count — escalation is a system action, not
+  // another client failure. The file is flagged but NOT marked review_status
+  // rejected (escalation is accountant-facing, not bounced to the client); the
+  // item then rolls up from its files, so it stays "rejected" if earlier strikes
+  // already rejected siblings, otherwise lands on "submitted".
   await supabase
     .from("uploaded_files")
     .update({ ai_rejected: true })
     .eq("id", fileId);
+
+  await recomputeItemStatus(supabase, requestItemId);
 
   await supabase.from("activity_log").insert({
     firm_id: firmId,
@@ -191,17 +190,11 @@ async function queueForAccountant(
   const { supabase, verdict, fileId, requestItemId, engagementId, firmId } =
     ctx;
 
-  // Auto-reject is off. Surface the file with a yellow "AI flagged"
-  // badge (Phase 5). The accountant decides whether to approve, send
-  // the AI's suggested message, or reject manually with their own
-  // wording.
-  await supabase
-    .from("request_items")
-    .update({ status: "submitted" })
-    .eq("id", requestItemId);
-
-  // ai_rejected stays false — the system hasn't acted, only flagged.
-  // ai_usability is already populated by process.ts before this runs.
+  // Auto-reject is off. The file is only flagged — ai_rejected stays false (the
+  // system hasn't acted; ai_usability is already populated by process.ts). Just
+  // re-derive the item from its files so its status is the true roll-up
+  // (submitted unless an accountant already rejected / approved a sibling).
+  await recomputeItemStatus(supabase, requestItemId);
 
   await supabase.from("activity_log").insert({
     firm_id: firmId,
