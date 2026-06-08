@@ -86,6 +86,22 @@ export async function GET(request: NextRequest) {
         : `/${userLocale}${next}`;
       return NextResponse.redirect(`${origin}${dest}`);
     }
+    // verifyOtp failed — log WHY so a bad confirmation is debuggable in prod
+    // (e.g. "otp_expired" when an email scanner already consumed the one-time
+    // token, or a token_hash / type mismatch).
+    console.error("[auth/confirm] verifyOtp failed", {
+      message: error.message,
+      status: (error as { status?: number }).status,
+      code: (error as { code?: string }).code,
+      type: rawType,
+      next,
+    });
+  } else {
+    console.error("[auth/confirm] missing or invalid params", {
+      hasTokenHash: !!tokenHash,
+      type: rawType,
+      next,
+    });
   }
 
   // Bad / expired / already-used link (or another error). Send them to log in —
