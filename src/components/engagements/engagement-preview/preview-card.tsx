@@ -152,7 +152,8 @@ export function PreviewCard({
           <span className="sr-only">{statusLabel}</span>
         </span>
 
-        {/* How many files share this checklist item (shared approve/reject). */}
+        {/* How many files are on this checklist line (informational only now —
+            approve/reject is per file). */}
         {doc.siblingCount > 1 && (
           <span className="pointer-events-none absolute top-1.5 left-1.5 z-20 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
             {t("n_files", { count: doc.siblingCount })}

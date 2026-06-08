@@ -74,25 +74,27 @@ function item(over: Partial<RequestItem>): RequestItem {
 }
 
 describe("resolvePreviewStatus", () => {
-  it("the accountant's approval on the item wins over AI flags", () => {
-    expect(resolvePreviewStatus(file({ ai_rejected: true }), "approved")).toBe(
-      "approved",
-    );
-  });
-  it("the accountant's rejection on the item wins over an AI-usable verdict", () => {
+  it("the accountant's per-file approval wins over AI flags", () => {
     expect(
-      resolvePreviewStatus(file({ ai_usability: verdict(true) }), "rejected"),
+      resolvePreviewStatus(
+        file({ review_status: "approved", ai_rejected: true }),
+      ),
+    ).toBe("approved");
+  });
+  it("the accountant's per-file rejection wins over an AI-usable verdict", () => {
+    expect(
+      resolvePreviewStatus(
+        file({ review_status: "rejected", ai_usability: verdict(true) }),
+      ),
     ).toBe("rejected");
   });
   it("a system auto-reject flag => rejected", () => {
-    expect(resolvePreviewStatus(file({ ai_rejected: true }), "submitted")).toBe(
-      "rejected",
-    );
+    expect(resolvePreviewStatus(file({ ai_rejected: true }))).toBe("rejected");
   });
-  it("an AI usable verdict (no concern) => approved", () => {
-    expect(
-      resolvePreviewStatus(file({ ai_usability: verdict(true) }), "submitted"),
-    ).toBe("approved");
+  it("an AI usable verdict (no concern) => approved suggestion", () => {
+    expect(resolvePreviewStatus(file({ ai_usability: verdict(true) }))).toBe(
+      "approved",
+    );
   });
   it("a usable doc the AI reads as the WRONG type (looks_correct=false) => flagged, not approved", () => {
     expect(
@@ -104,7 +106,6 @@ describe("resolvePreviewStatus", () => {
             issue_if_any: "Looks like a T4, not a general ledger export.",
           },
         }),
-        "submitted",
       ),
     ).toBe("flagged");
   });
@@ -115,7 +116,6 @@ describe("resolvePreviewStatus", () => {
           ai_usability: verdict(true),
           ai_extracted_fields: { looks_correct: true },
         }),
-        "submitted",
       ),
     ).toBe("approved");
   });
@@ -123,49 +123,43 @@ describe("resolvePreviewStatus", () => {
     expect(
       resolvePreviewStatus(
         file({
+          review_status: "approved",
           ai_usability: verdict(true),
           ai_extracted_fields: { looks_correct: false },
         }),
-        "approved",
       ),
     ).toBe("approved");
   });
   it("an AI unusable verdict that was NOT sent to the client => flagged", () => {
-    expect(
-      resolvePreviewStatus(file({ ai_usability: verdict(false) }), "submitted"),
-    ).toBe("flagged");
+    expect(resolvePreviewStatus(file({ ai_usability: verdict(false) }))).toBe(
+      "flagged",
+    );
   });
   it("an AI-unusable doc the system actually bounced to the client => rejected", () => {
     expect(
       resolvePreviewStatus(
         file({ ai_usability: verdict(false), ai_rejected: true }),
-        "submitted",
       ),
     ).toBe("rejected");
   });
   it("no verdict yet => pending (neutral)", () => {
-    expect(resolvePreviewStatus(file({}), "pending")).toBe("pending");
+    expect(resolvePreviewStatus(file({}))).toBe("pending");
   });
   it("a confident request mismatch => flagged, even on a usable scan", () => {
     expect(
-      resolvePreviewStatus(
-        file({ ai_usability: verdict(true) }),
-        "submitted",
-        true,
-      ),
+      resolvePreviewStatus(file({ ai_usability: verdict(true) }), true),
     ).toBe("flagged");
   });
-  it("the accountant's approval still wins over a request mismatch", () => {
+  it("the accountant's per-file approval still wins over a request mismatch", () => {
     expect(
       resolvePreviewStatus(
-        file({ ai_usability: verdict(true) }),
-        "approved",
+        file({ review_status: "approved", ai_usability: verdict(true) }),
         true,
       ),
     ).toBe("approved");
   });
   it("a request mismatch flags even before a usability verdict lands", () => {
-    expect(resolvePreviewStatus(file({}), "submitted", true)).toBe("flagged");
+    expect(resolvePreviewStatus(file({}), true)).toBe("flagged");
   });
 });
 
@@ -178,7 +172,7 @@ describe("buildPreviewDocs", () => {
     const uploads = [
       file({ id: "a", request_item_id: "i1", ai_usability: verdict(false) }),
       file({ id: "b", request_item_id: "i1", ai_usability: verdict(true) }),
-      file({ id: "c", request_item_id: "i2" }),
+      file({ id: "c", request_item_id: "i2", review_status: "approved" }),
     ];
     const docs = buildPreviewDocs(uploads, items);
     expect(docs).toHaveLength(3);
@@ -188,7 +182,7 @@ describe("buildPreviewDocs", () => {
     expect(a.siblingCount).toBe(2);
 
     const c = docs.find((d) => d.fileId === "c")!;
-    expect(c.status).toBe("approved"); // item is approved -> all its files green
+    expect(c.status).toBe("approved"); // this file was approved by the accountant
     expect(c.siblingCount).toBe(1);
   });
 
@@ -262,16 +256,12 @@ describe("buildPreviewDocs — request matching (flag docs that don't match)", (
     expect(docs[0].status).toBe("approved");
   });
 
-  it("the accountant's explicit approval still wins over a request mismatch", () => {
-    const approved = item({
-      id: "i1",
-      doc_type: "gl_export",
-      status: "approved",
-    });
-    const docs = buildPreviewDocs([glFile()], [approved], {
-      expectedYear: 2025,
-      clientName: "Acme Corp",
-    });
+  it("the accountant's explicit per-file approval still wins over a request mismatch", () => {
+    const docs = buildPreviewDocs(
+      [{ ...glFile(), review_status: "approved" }],
+      [glItem],
+      { expectedYear: 2025, clientName: "Acme Corp" },
+    );
     expect(docs[0].status).toBe("approved");
   });
 
@@ -386,15 +376,16 @@ describe("applyOverrides", () => {
     expect(applyOverrides(docs, new Map())).toBe(docs);
   });
 
-  it("flips every sibling under an overridden item, leaving others untouched", () => {
-    const out = applyOverrides(docs, new Map([["i1", "approved"]]));
+  it("flips only the overridden FILE, leaving its siblings untouched", () => {
+    // a and b are siblings under item i1; overriding file "a" must not move "b".
+    const out = applyOverrides(docs, new Map([["a", "approved"]]));
     expect(out.find((d) => d.fileId === "a")!.status).toBe("approved");
-    expect(out.find((d) => d.fileId === "b")!.status).toBe("approved");
+    expect(out.find((d) => d.fileId === "b")!.status).toBe("flagged");
     expect(out.find((d) => d.fileId === "c")!.status).toBe("flagged");
     expect(previewCounts(out)).toEqual({
       all: 3,
-      approved: 2,
-      flagged: 1,
+      approved: 1,
+      flagged: 2,
       rejected: 0,
       pending: 0,
     });
