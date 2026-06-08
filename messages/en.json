@@ -164,6 +164,7 @@
     "nav_for_firms": "FOR FIRMS",
     "nav_book_demo": "BOOK A DEMO",
     "nav_login": "LOGIN",
+    "nav_contact": "CONTACT",
     "follow": "FOLLOW",
     "form_title": "Tell us about your firm",
     "form_sub": "We'll connect your client portal, learn what every client still owes, and start chasing — then verify or reject each document as it lands.",
@@ -201,11 +202,11 @@
     "footer_book_demo": "Book a demo",
     "footer_login": "Login",
     "footer_contact": "Contact",
-    "contact_title": "Get in touch",
+    "contact_title": "Contact us",
     "contact_email_label": "Email",
     "contact_phone_label": "Call us",
     "contact_location_label": "Where we are",
-    "contact_location_value": "Greater Montréal, Québec · Canada",
+    "contact_location_value": "Montréal, Québec · Canada",
     "footer_copyright": "© 2026 Vylan, Inc."
   },
   "VylanManifesto": {

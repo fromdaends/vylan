@@ -23,13 +23,12 @@ export type VylanMenuStrings = {
   navForFirms: string;
   navBookDemo: string;
   navLogin: string;
+  navContact: string;
   follow: string;
 };
 
-function scrollToForm() {
-  document
-    .getElementById("vy-get-access")
-    ?.scrollIntoView({ behavior: "smooth" });
+function scrollToId(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 }
 
 export function VylanMenu({ s }: { s: VylanMenuStrings }) {
@@ -74,7 +73,11 @@ export function VylanMenu({ s }: { s: VylanMenuStrings }) {
   // reads the timer ref in the render path.
   const closeAndJump = () => {
     closeNow();
-    scrollToForm();
+    scrollToId("vy-get-access");
+  };
+  const closeAndJumpContact = () => {
+    closeNow();
+    scrollToId("vy-contact");
   };
 
   return (
@@ -144,6 +147,9 @@ export function VylanMenu({ s }: { s: VylanMenuStrings }) {
             </a>
             <a href="#vy-get-access" onClick={closeAndJump}>
               {s.navBookDemo} <span className="vy-arr">→</span>
+            </a>
+            <a href="#vy-contact" onClick={closeAndJumpContact}>
+              {s.navContact} <span className="vy-arr">→</span>
             </a>
             <Link href="/login" onClick={closeNow}>
               {s.navLogin} <span className="vy-arr">→</span>
