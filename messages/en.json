@@ -1549,6 +1549,7 @@
     "preview_close": "Close",
     "preview_prev": "Previous",
     "preview_next": "Next",
+    "preview_open_pdf": "Open full PDF",
     "ai_rejected_title": "This file looks wrong — please try again",
     "ai_rejected_help": "Take a fresh photo or upload the correct document.",
     "ai_rejected_generic": "We couldn't read that document clearly. Please try again with a fresh photo or the correct file.",
