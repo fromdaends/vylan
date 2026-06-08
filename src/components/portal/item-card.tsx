@@ -332,69 +332,87 @@ export function ItemCard({
             </div>
           )}
 
-          {/* The documents the client has sent for this line, each with a
-              simple status. Hidden once the line is fully approved (no
-              file-by-file noise — just the "All set" confirmation below). */}
+          {/* The documents the client has sent for this line. On an active line
+              each shows its filename + simple status (and a per-file reason if
+              it needs a fix). On an APPROVED line we drop the status noise and
+              just show a compact strip of the pictures they sent, so they can
+              still see (and enlarge) their own documents. */}
           {ds !== "approved" && files.length > 0 && (
-            <>
-              <ul className="mt-3 space-y-2.5">
-                {files.map((f) => {
-                  // Each rejected file shows its OWN plain reason (French
-                  // default), so the client knows exactly what is wrong with
-                  // that file. Only rejected files carry a reason.
-                  const fileReason =
-                    f.status === "rejected" && f.reason
-                      ? locale === "fr"
-                        ? f.reason.fr
-                        : f.reason.en
-                      : null;
-                  // An image opens the enlarge view at its position among this
-                  // item's image files; non-images (PDFs) have no enlarge.
-                  const imageIndex = imageFiles.findIndex((x) => x.id === f.id);
-                  return (
-                    <li
-                      key={f.id}
-                      className="flex items-center gap-2.5 text-sm"
-                    >
-                      <PortalFileThumb
-                        token={token}
-                        file={f}
-                        onOpen={
-                          imageIndex >= 0
-                            ? () => setLightboxIndex(imageIndex)
-                            : undefined
-                        }
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="min-w-0 flex-1 truncate text-foreground/80"
-                            title={f.name}
-                          >
-                            {f.name}
-                          </span>
-                          <FileStatusPill status={f.status} />
-                        </div>
-                        {fileReason && (
-                          <p className="mt-1 text-xs leading-relaxed text-warning">
-                            {fileReason}
-                          </p>
-                        )}
+            <ul className="mt-3 space-y-2.5">
+              {files.map((f) => {
+                // Each rejected file shows its OWN plain reason (French
+                // default), so the client knows exactly what is wrong with
+                // that file. Only rejected files carry a reason.
+                const fileReason =
+                  f.status === "rejected" && f.reason
+                    ? locale === "fr"
+                      ? f.reason.fr
+                      : f.reason.en
+                    : null;
+                // An image opens the enlarge view at its position among this
+                // item's image files; non-images (PDFs) have no enlarge.
+                const imageIndex = imageFiles.findIndex((x) => x.id === f.id);
+                return (
+                  <li key={f.id} className="flex items-center gap-2.5 text-sm">
+                    <PortalFileThumb
+                      token={token}
+                      file={f}
+                      onOpen={
+                        imageIndex >= 0
+                          ? () => setLightboxIndex(imageIndex)
+                          : undefined
+                      }
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="min-w-0 flex-1 truncate text-foreground/80"
+                          title={f.name}
+                        >
+                          {f.name}
+                        </span>
+                        <FileStatusPill status={f.status} />
                       </div>
-                    </li>
-                  );
-                })}
-              </ul>
-              {lightboxIndex !== null && imageFiles[lightboxIndex] && (
-                <PortalImageLightbox
-                  token={token}
-                  images={imageFiles.map((f) => ({ id: f.id, name: f.name }))}
-                  index={lightboxIndex}
-                  onClose={() => setLightboxIndex(null)}
-                  onIndexChange={setLightboxIndex}
-                />
-              )}
-            </>
+                      {fileReason && (
+                        <p className="mt-1 text-xs leading-relaxed text-warning">
+                          {fileReason}
+                        </p>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          {ds === "approved" && files.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {files.map((f) => {
+                const imageIndex = imageFiles.findIndex((x) => x.id === f.id);
+                return (
+                  <PortalFileThumb
+                    key={f.id}
+                    token={token}
+                    file={f}
+                    onOpen={
+                      imageIndex >= 0
+                        ? () => setLightboxIndex(imageIndex)
+                        : undefined
+                    }
+                  />
+                );
+              })}
+            </div>
+          )}
+
+          {lightboxIndex !== null && imageFiles[lightboxIndex] && (
+            <PortalImageLightbox
+              token={token}
+              images={imageFiles.map((f) => ({ id: f.id, name: f.name }))}
+              index={lightboxIndex}
+              onClose={() => setLightboxIndex(null)}
+              onIndexChange={setLightboxIndex}
+            />
           )}
 
           {error && <ErrorLine error={error} />}
@@ -625,6 +643,7 @@ function PortalFileThumb({
 }) {
   const t = useTranslations("Portal");
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const isImage = !!file.mime && file.mime.startsWith("image/");
 
   if (!isImage || failed || !onOpen) {
@@ -640,8 +659,15 @@ function PortalFileThumb({
       type="button"
       onClick={onOpen}
       aria-label={t("preview_open", { name: file.name })}
-      className="group/thumb size-10 shrink-0 overflow-hidden rounded-md ring-1 ring-border/60 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="group/thumb relative size-10 shrink-0 overflow-hidden rounded-md bg-muted/40 ring-1 ring-border/60 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
+      {/* Gentle placeholder until the thumbnail has decoded. */}
+      {!loaded && (
+        <span
+          className="absolute inset-0 animate-pulse bg-muted/60"
+          aria-hidden
+        />
+      )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`/api/portal/files/${file.id}/thumb?token=${encodeURIComponent(
@@ -649,8 +675,12 @@ function PortalFileThumb({
         )}&w=144`}
         alt=""
         loading="lazy"
+        onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
-        className="size-full object-cover transition-transform duration-200 group-hover/thumb:scale-105"
+        className={cn(
+          "size-full object-cover transition-[transform,opacity] duration-200 group-hover/thumb:scale-105",
+          loaded ? "opacity-100" : "opacity-0",
+        )}
       />
     </button>
   );
