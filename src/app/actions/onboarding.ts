@@ -9,7 +9,7 @@ import { getCurrentFirm, updateCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { getPathname } from "@/i18n/navigation";
 import { parseEmailList } from "@/lib/validators";
-import { seedDemoData } from "@/lib/demo-seed";
+import { trialEndsAtFrom } from "@/lib/trial";
 import { notifyFounderNewSignup } from "@/lib/demo-notify";
 import { createInvite } from "@/app/actions/team";
 
@@ -84,9 +84,11 @@ export async function submitStep1(
     // policies on `firms` and `users`, so first-time onboarding must bypass
     // RLS through the server-side service-role path.
     const admin = getServiceRoleSupabase();
-    // Every firm created from the public signup flow is a demo until
-    // the founder converts it manually. Existing firms keep is_demo
-    // = false from the migration default.
+    // Every firm created from the public signup flow starts a 14-day free
+    // trial with full access. is_demo = true marks it "unconverted" (drives
+    // the trial banner + the day-14 "book a meeting" gate) until they convert
+    // to a paid plan. Existing/paid firms keep is_demo = false from the
+    // migration default.
     const { data: firm, error: firmErr } = await admin
       .from("firms")
       .insert({
@@ -95,6 +97,7 @@ export async function submitStep1(
         locale_default: userMetaLocale,
         plan: "trial",
         is_demo: true,
+        trial_ends_at: trialEndsAtFrom(Date.now()),
       })
       .select("id")
       .single();
@@ -113,17 +116,8 @@ export async function submitStep1(
     if (userErr) {
       return { error: "create_failed" };
     }
-
-    // Seed demo data so the dashboard / clients / engagements pages
-    // have something realistic on first visit. Best-effort: a failed
-    // seed shouldn't block onboarding from completing.
-    after(async () => {
-      try {
-        await seedDemoData(admin, firm.id);
-      } catch (e) {
-        console.error("[onboarding] demo seed failed:", e);
-      }
-    });
+    // No demo seeding: a free-trial firm gets a real, empty workspace and
+    // brings in its own clients.
   } else {
     await updateCurrentFirm({
       name: parsed.data.firm_name,

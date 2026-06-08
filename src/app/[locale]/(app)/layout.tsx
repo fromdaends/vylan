@@ -2,13 +2,14 @@ import { redirect } from "next/navigation";
 import { getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { isTrialExpired, trialDaysLeft } from "@/lib/trial";
 import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { getTranslations } from "next-intl/server";
 import { HelpSidebar } from "@/components/help/help-sidebar";
 import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 import { AppShell } from "@/components/app/app-shell";
-import { DemoBanner } from "@/components/app/demo-banner";
+import { TrialBanner } from "@/components/app/demo-banner";
 import { Toaster } from "@/components/ui/sonner";
 import { getEngagementBadges } from "@/lib/engagements/badges";
 
@@ -76,6 +77,12 @@ export default async function AppLayout({
     getEngagementBadges(),
   ]);
 
+  // Free-trial banner state (only rendered for unconverted trial firms).
+  // isTrialExpired / trialDaysLeft default "now" internally so Date.now()
+  // stays out of the render path (react-hooks purity).
+  const trialExpired = isTrialExpired(firm);
+  const trialDays = trialDaysLeft(firm);
+
   return (
     <AppShell
       brandColor={firm.brand_color}
@@ -85,7 +92,11 @@ export default async function AppLayout({
       firmName={firm.name}
       firmLogoUrl={firmLogoUrl}
       isOwner={dbUser.role === "owner"}
-      topBar={firm.is_demo ? <DemoBanner /> : undefined}
+      topBar={
+        firm.is_demo ? (
+          <TrialBanner expired={trialExpired} daysLeft={trialDays} />
+        ) : undefined
+      }
       engagementBadges={{
         ready: badges.readyToReview,
         deleted: badges.recentlyDeleted,

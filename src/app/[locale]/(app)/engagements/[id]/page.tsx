@@ -40,6 +40,7 @@ import { RecordEngagementOpen } from "@/components/engagements/record-engagement
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { isTrialExpired } from "@/lib/trial";
 import {
   getCurrentUser,
   listFirmUsers,
@@ -94,7 +95,9 @@ export default async function EngagementDetailPage({
   if (!engagement) notFound();
   const client = await getClient(engagement.client_id);
   const { uploads, urlByPath } = uploadData;
-  const isDemo = firm?.is_demo === true;
+  // Send / reminder are locked only once the free trial has expired; an active
+  // trial has full access.
+  const trialLocked = firm ? isTrialExpired(firm) : false;
   // Delete (incl. delete-draft) is owner-only — hide both controls from staff.
   // The server actions enforce this too; this is the matching UI gate.
   const canDelete = user ? canDeleteEngagements(user.role) : false;
@@ -210,7 +213,7 @@ export default async function EngagementDetailPage({
         <div className="flex items-center gap-2 flex-wrap">
           {isDraft && (
             <>
-              {isDemo ? (
+              {trialLocked ? (
                 <DemoBlockButton
                   label={t("send")}
                   icon={<Send className="size-4" />}
@@ -250,7 +253,7 @@ export default async function EngagementDetailPage({
           )}
           {isLive && (
             <>
-              {isDemo ? (
+              {trialLocked ? (
                 <DemoBlockButton
                   label={t("send_reminder")}
                   icon={<Bell className="size-4" />}

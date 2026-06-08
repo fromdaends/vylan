@@ -6,7 +6,7 @@
 
 import { getServerSupabase } from "@/lib/supabase/server";
 import { PLANS, type PlanId } from "./plans";
-import { BILLING_ENABLED } from "./billing-mode";
+import { isTrialExpired } from "./trial";
 
 export type LimitState = {
   plan: PlanId;
@@ -31,7 +31,7 @@ export async function getFirmLimits(): Promise<LimitState | null> {
   if (!u?.firm_id) return null;
   const { data: firm } = await sb
     .from("firms")
-    .select("plan, trial_ends_at, subscription_status")
+    .select("plan, trial_ends_at, subscription_status, is_demo")
     .eq("id", u.firm_id)
     .single();
   if (!firm) return null;
@@ -51,16 +51,11 @@ export async function getFirmLimits(): Promise<LimitState | null> {
     .select("id", { count: "exact", head: true })
     .eq("firm_id", u.firm_id);
 
-  // While BILLING_ENABLED is false we're selling 1-on-1; nobody's
-  // demo should hit an expiration wall pushing them to a Stripe page
-  // that doesn't render. Force it off until billing comes back online.
-  const trialExpired =
-    BILLING_ENABLED &&
-    plan === "trial" &&
-    firm.trial_ends_at != null &&
-    new Date(firm.trial_ends_at) < new Date() &&
-    firm.subscription_status !== "active" &&
-    firm.subscription_status !== "trialing";
+  // Free-trial gate: an unconverted trial firm (is_demo) whose 14-day clock
+  // has passed — and that isn't covered by an active/trialing subscription —
+  // is locked out of write actions until they book a pricing call. Independent
+  // of BILLING_ENABLED: the gate now routes to "book a meeting", not Stripe.
+  const trialExpired = isTrialExpired(firm);
 
   const canCreateEngagement =
     !trialExpired &&
