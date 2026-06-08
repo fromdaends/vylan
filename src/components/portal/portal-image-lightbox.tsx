@@ -182,6 +182,7 @@ function LightboxImage({
   alt: string;
 }) {
   const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
   return (
     // Fill the available area so the image renders large; object-contain keeps
     // aspect and upscales the small placeholder. (Sizing the box to the tiny
@@ -200,12 +201,15 @@ function LightboxImage({
         src={large}
         alt={alt}
         onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
         className={cn(
           "absolute inset-0 size-full object-contain transition-opacity duration-300",
           loaded ? "opacity-100" : "opacity-0",
         )}
       />
-      {!loaded && (
+      {/* Spinner only while genuinely loading; on failure we stop spinning and
+          leave the blurred preview rather than spin forever. */}
+      {!loaded && !failed && (
         <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <Loader2 className="size-8 animate-spin text-white/70" aria-hidden />
         </span>
