@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { cn } from "@/lib/cn";
 
 // Full-screen enlarge view for the client's own uploaded photos. Loads the
 // larger render from the same token-scoped endpoint as the thumbnails. Plain by
@@ -55,9 +56,9 @@ export function PortalImageLightbox({
 
   if (!current) return null;
 
-  const src = `/api/portal/files/${current.id}/thumb?token=${encodeURIComponent(
-    token,
-  )}&w=1600`;
+  const enc = encodeURIComponent(token);
+  const large = `/api/portal/files/${current.id}/thumb?token=${enc}&w=1600`;
+  const small = `/api/portal/files/${current.id}/thumb?token=${enc}&w=144`;
 
   return (
     <div
@@ -89,13 +90,11 @@ export function PortalImageLightbox({
       </div>
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 pb-6">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <LightboxImage
           key={current.id}
-          src={src}
+          small={small}
+          large={large}
           alt={current.name}
-          onClick={(e) => e.stopPropagation()}
-          className="max-h-full max-w-full rounded-lg object-contain shadow-2xl"
         />
 
         {count > 1 && (
@@ -128,6 +127,46 @@ export function PortalImageLightbox({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// The enlarged image. Keyed by file id in the parent, so its `loaded` state
+// resets automatically on prev/next (no set-state-in-effect needed). Shows the
+// already-cached small thumbnail (blurred) instantly, then fades the full-size
+// render in on top once it decodes.
+function LightboxImage({
+  small,
+  large,
+  alt,
+}: {
+  small: string;
+  large: string;
+  alt: string;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <div
+      className="relative flex items-center justify-center"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={small}
+        alt=""
+        aria-hidden
+        className="max-h-[82vh] max-w-full rounded-lg object-contain shadow-2xl blur-md"
+      />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={large}
+        alt={alt}
+        onLoad={() => setLoaded(true)}
+        className={cn(
+          "absolute inset-0 size-full rounded-lg object-contain transition-opacity duration-300",
+          loaded ? "opacity-100" : "opacity-0",
+        )}
+      />
     </div>
   );
 }
