@@ -1,4 +1,4 @@
-// Vercel Cron handler — runs every 15 minutes (see vercel.json).
+// Vercel Cron handler — runs every 2 minutes (see vercel.json).
 //
 // Auth model:
 //   * In production: Vercel injects `Authorization: Bearer <CRON_SECRET>` from
@@ -8,7 +8,12 @@
 //     so `curl localhost:3000/api/cron/...` works without forging headers.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { claimDueJobs, markJobDone, markJobFailed } from "@/lib/db/jobs";
+import {
+  claimDueJobs,
+  markJobDone,
+  markJobFailed,
+  type Job,
+} from "@/lib/db/jobs";
 import { processReminderJob } from "@/lib/reminders";
 import { processClassifyJob } from "@/lib/ai/process";
 import { processNotifyClientRetryJob } from "@/lib/notify-retry";
@@ -16,6 +21,19 @@ import { processNotifyClientRetryJob } from "@/lib/notify-retry";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+// Tuning. The function is capped at maxDuration (60s); we stop starting new work
+// well before that (SOFT_DEADLINE_MS) and process WAVE_SIZE reads concurrently,
+// so a burst of uploads drains fast WITHOUT ever overrunning the limit and
+// orphaning half-processed jobs (the old "stuck on AI Analyzing" bug).
+const SOFT_DEADLINE_MS = 50_000;
+const MIN_WAVE_HEADROOM_MS = 15_000;
+const WAVE_SIZE = 4;
+
+// Classify skips that are TRANSIENT (a storage hiccup or an empty model reply)
+// must be retried, not marked done — otherwise the file is stuck on "Analyzing"
+// forever. Permanent skips (no API key, file gone, no expected type) are done.
+const RETRYABLE_SKIPS = new Set(["download_failed", "no_classification"]);
 
 export async function GET(request: NextRequest) {
   const expected = process.env.CRON_SECRET;
@@ -32,49 +50,70 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const claimed = await claimDueJobs(25);
-  const results: {
-    id: string;
-    kind: string;
-    ok: boolean;
-    detail?: unknown;
-  }[] = [];
+  // Drain the queue in small concurrent waves until we run low on time. Each
+  // wave only claims what it is about to run, and we stop before the soft
+  // deadline — so a run NEVER abandons claimed jobs mid-flight. Anything a hard
+  // crash still strands is reclaimed by the lease in claimDueJobs on a later run.
+  const startedAt = Date.now();
+  const remaining = () => SOFT_DEADLINE_MS - (Date.now() - startedAt);
+  const results: { id: string; kind: string; ok: boolean; detail?: unknown }[] =
+    [];
+  let claimedTotal = 0;
 
-  for (const job of claimed) {
-    try {
-      if (job.kind === "send_reminder") {
-        const r = await processReminderJob(job.payload);
-        results.push({ id: job.id, kind: job.kind, ok: true, detail: r });
-      } else if (job.kind === "classify_document") {
-        const r = await processClassifyJob(job.payload);
-        results.push({ id: job.id, kind: job.kind, ok: true, detail: r });
-      } else if (job.kind === "notify_client_retry") {
-        const r = await processNotifyClientRetryJob(job.payload);
-        results.push({ id: job.id, kind: job.kind, ok: true, detail: r });
-      } else {
-        results.push({
-          id: job.id,
-          kind: job.kind,
-          ok: false,
-          detail: "unknown_kind",
-        });
-      }
-      await markJobDone(job.id);
-    } catch (e) {
-      console.error("[cron] job failed:", job.id, e);
-      await markJobFailed(job.id, (e as Error).message ?? String(e));
-      results.push({
-        id: job.id,
-        kind: job.kind,
-        ok: false,
-        detail: (e as Error).message,
-      });
-    }
+  while (remaining() > MIN_WAVE_HEADROOM_MS) {
+    const wave = await claimDueJobs(WAVE_SIZE);
+    if (wave.length === 0) break;
+    claimedTotal += wave.length;
+    const settled = await Promise.all(wave.map((job) => runJob(job)));
+    results.push(...settled);
   }
 
   return NextResponse.json({
     ranAt: new Date().toISOString(),
-    claimed: claimed.length,
+    claimed: claimedTotal,
     results,
   });
+}
+
+// Run one job, then mark it done / failed. NEVER throws: a thrown job would
+// reject the whole wave's Promise.all and could leave its siblings leased but
+// unresolved until reclaim. Every failure path routes through markJobFailed so
+// attempts + backoff stay consistent.
+async function runJob(
+  job: Job,
+): Promise<{ id: string; kind: string; ok: boolean; detail?: unknown }> {
+  try {
+    if (job.kind === "send_reminder") {
+      const detail = await processReminderJob(job.payload);
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: true, detail };
+    }
+    if (job.kind === "classify_document") {
+      const detail = await processClassifyJob(job.payload);
+      if (detail.skipped && RETRYABLE_SKIPS.has(detail.skipped)) {
+        // Transient — send it back for another pass instead of marking done.
+        await markJobFailed(job.id, `skip:${detail.skipped}`);
+        return { id: job.id, kind: job.kind, ok: false, detail };
+      }
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: true, detail };
+    }
+    if (job.kind === "notify_client_retry") {
+      const detail = await processNotifyClientRetryJob(job.payload);
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: true, detail };
+    }
+    // Unknown kind: nothing to do — mark done so it doesn't spin.
+    await markJobDone(job.id);
+    return { id: job.id, kind: job.kind, ok: false, detail: "unknown_kind" };
+  } catch (e) {
+    console.error("[cron] job failed:", job.id, e);
+    await markJobFailed(job.id, (e as Error).message ?? String(e));
+    return {
+      id: job.id,
+      kind: job.kind,
+      ok: false,
+      detail: (e as Error).message,
+    };
+  }
 }
