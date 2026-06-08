@@ -218,12 +218,13 @@ export function ItemCard({
 
   const canUpload = item.status !== "na";
 
-  // Single rejection banner, two sources in priority order:
-  //   1. `aiRejection` — set during the current upload turn so the client sees
-  //      the verdict the instant the API replies, before the page refetches.
-  //   2. `item.rejection_reason` — the persistent server column that survives a
-  //      reload. The upload route clears it on every new upload, so it never
-  //      goes stale across attempts.
+  // The line-level banner is the "needs a fix" call to action. It still appears
+  // whenever there's an outstanding rejection (live OR persisted), but it only
+  // PRINTS the live current-turn verdict (`aiRejection`); the persisted per-file
+  // reasons now render under each file in the list below, so the banner never
+  // repeats them. `bannerMsg` still drives WHEN the banner (and `hasIssue`)
+  // shows. The upload route clears `item.rejection_reason` on every new upload,
+  // so it never goes stale across attempts.
   const reasonSet =
     item.rejection_reason != null && item.rejection_reason.trim() !== "";
   const bannerMsg =
@@ -309,7 +310,12 @@ export function ItemCard({
                   ? t("rejected_action_needed")
                   : t("ai_rejected_title")}
               </div>
-              <p className="mt-1 text-foreground/80">{bannerMsg}</p>
+              {/* Only the LIVE current-turn verdict prints here; persisted
+                  per-file reasons render under each file below, so the banner
+                  never repeats them. */}
+              {aiRejection && (
+                <p className="mt-1 text-foreground/80">{aiRejection}</p>
+              )}
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("ai_rejected_help")}
               </p>
