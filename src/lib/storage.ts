@@ -73,6 +73,22 @@ export function storagePath(parts: {
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/items/${parts.itemId}/${parts.uuid}-${safeName}`;
 }
 
+// Storage path for the blank document an accountant uploads to be signed. Sits
+// under the same firm prefix as client uploads (so the firm-scoped bucket RLS
+// applies) but in a `signing/` folder, separate from the client's returned copy.
+export function signingDocPath(parts: {
+  firmId: string;
+  engagementId: string;
+  uuid: string;
+  filename: string;
+}): string {
+  const safeName = parts.filename
+    .replace(/[/\\]/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 120);
+  return `firms/${parts.firmId}/engagements/${parts.engagementId}/signing/${parts.uuid}-${safeName}`;
+}
+
 export type BrandingKind = "firm_logo" | "user_avatar";
 
 // Storage paths for branding images. Both sit under the firm prefix so the
