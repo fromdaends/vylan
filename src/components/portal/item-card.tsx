@@ -653,10 +653,18 @@ function PortalFileThumb({
   const t = useTranslations("Portal");
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  // Image tiles load straight from storage (file.url). If that ever fails (e.g.
+  // a legacy HEIC original a browser can't decode) we fall back to the on-the-fly
+  // render route, then to a plain icon.
+  const [useRenderRoute, setUseRenderRoute] = useState(false);
   const isImage = !!file.mime && file.mime.startsWith("image/");
   const isPdf = file.mime === "application/pdf";
+  const renderRouteSrc = `/api/portal/files/${file.id}/thumb?token=${encodeURIComponent(
+    token,
+  )}&w=144`;
+  const imageSrc = file.url && !useRenderRoute ? file.url : renderRouteSrc;
 
-  // Photo with a working thumbnail: the real picture tile.
+  // Photo: the real picture tile, served straight from storage when possible.
   if (isImage && onOpen && !failed) {
     return (
       <button
@@ -674,13 +682,14 @@ function PortalFileThumb({
         )}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={`/api/portal/files/${file.id}/thumb?token=${encodeURIComponent(
-            token,
-          )}&w=144`}
+          src={imageSrc}
           alt=""
           loading="lazy"
           onLoad={() => setLoaded(true)}
-          onError={() => setFailed(true)}
+          onError={() => {
+            if (file.url && !useRenderRoute) setUseRenderRoute(true);
+            else setFailed(true);
+          }}
           className={cn(
             "size-full object-cover transition-[transform,opacity] duration-200 group-hover/thumb:scale-105",
             loaded ? "opacity-100" : "opacity-0",

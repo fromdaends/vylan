@@ -66,14 +66,16 @@ export function PortalShell({
       ...prev,
       [itemId]: [
         ...(prev[itemId] ?? []),
-        // A just-sent file is in review with no reason yet. Its mime lets the
-        // thumbnail render immediately (the file is already stored server-side).
+        // A just-sent file is in review with no reason yet. No signed storage
+        // URL yet (the server signs those on load), so its tile falls back to
+        // the render route until the next refresh; its mime drives the tile.
         {
           id: file.id,
           name: file.name,
           status: "pending" as const,
           reason: null,
           mime: file.mime,
+          url: null,
         },
       ],
     }));
