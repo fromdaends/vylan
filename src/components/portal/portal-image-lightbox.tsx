@@ -1,30 +1,48 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  FileText,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 
-// Full-screen enlarge view for the client's own uploaded photos. Loads the
-// larger render from the same token-scoped endpoint as the thumbnails. Plain by
-// design: just the client's own document and its filename, no status, no notes.
+// pdf.js renderer (client-only). Dynamically imported so a portal with only
+// photos never pulls the PDF engine into the bundle; it loads the first time a
+// client opens a PDF.
+const PreviewPdfThumb = dynamic(
+  () => import("@/components/engagements/engagement-preview/preview-pdf-thumb"),
+  { ssr: false },
+);
+
+export type LightboxItem = { id: string; name: string; kind: "image" | "pdf" };
+
+// Full-screen enlarge view for the client's own uploaded documents. Photos show
+// progressively (cached small thumbnail first, full render fades in); PDFs show
+// their first page at a readable size with a link to open the full document.
+// Plain by design: just the client's own file and its name, no status, no notes.
 export function PortalImageLightbox({
   token,
-  images,
+  items,
   index,
   onClose,
   onIndexChange,
 }: {
   token: string;
-  images: { id: string; name: string }[];
+  items: LightboxItem[];
   index: number;
   onClose: () => void;
   onIndexChange: (i: number) => void;
 }) {
   const t = useTranslations("Portal");
   const closeRef = useRef<HTMLButtonElement>(null);
-  const count = images.length;
-  const current = images[index];
+  const count = items.length;
+  const current = items[index];
 
   const go = useCallback(
     (delta: number) => {
@@ -57,6 +75,7 @@ export function PortalImageLightbox({
   if (!current) return null;
 
   const enc = encodeURIComponent(token);
+  const fileUrl = `/api/portal/files/${current.id}?token=${enc}`;
   const large = `/api/portal/files/${current.id}/thumb?token=${enc}&w=1600`;
   const small = `/api/portal/files/${current.id}/thumb?token=${enc}&w=144`;
 
@@ -78,24 +97,41 @@ export function PortalImageLightbox({
         >
           {current.name}
         </span>
-        <button
-          ref={closeRef}
-          type="button"
-          onClick={onClose}
-          aria-label={t("preview_close")}
-          className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-        >
-          <X className="size-5" aria-hidden />
-        </button>
+        <div className="flex shrink-0 items-center gap-2">
+          {current.kind === "pdf" && (
+            <a
+              href={fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white/10 px-3 text-sm text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+            >
+              <ExternalLink className="size-4" aria-hidden />
+              {t("preview_open_pdf")}
+            </a>
+          )}
+          <button
+            ref={closeRef}
+            type="button"
+            onClick={onClose}
+            aria-label={t("preview_close")}
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+          >
+            <X className="size-5" aria-hidden />
+          </button>
+        </div>
       </div>
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 pb-6">
-        <LightboxImage
-          key={current.id}
-          small={small}
-          large={large}
-          alt={current.name}
-        />
+        {current.kind === "pdf" ? (
+          <LightboxPdf key={current.id} url={fileUrl} />
+        ) : (
+          <LightboxImage
+            key={current.id}
+            small={small}
+            large={large}
+            alt={current.name}
+          />
+        )}
 
         {count > 1 && (
           <>
@@ -131,7 +167,7 @@ export function PortalImageLightbox({
   );
 }
 
-// The enlarged image. Keyed by file id in the parent, so its `loaded` state
+// The enlarged photo. Keyed by file id in the parent, so its `loaded` state
 // resets automatically on prev/next (no set-state-in-effect needed). Shows the
 // already-cached small thumbnail (blurred) instantly, then fades the full-size
 // render in on top once it decodes.
@@ -167,6 +203,42 @@ function LightboxImage({
           loaded ? "opacity-100" : "opacity-0",
         )}
       />
+    </div>
+  );
+}
+
+// The enlarged PDF: its first page rendered at a readable width on white, with
+// a link in the top bar to open the full document. Falls back to a plain
+// "open the PDF" affordance if the page can't be rendered in-browser.
+function LightboxPdf({ url }: { url: string }) {
+  const t = useTranslations("Portal");
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <div
+        className="flex flex-col items-center gap-3 text-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <FileText className="size-10 opacity-70" aria-hidden />
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-full bg-white/10 px-4 py-2 text-sm transition-colors hover:bg-white/20"
+        >
+          {t("preview_open_pdf")}
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="max-h-[82vh] w-full max-w-3xl overflow-auto rounded-lg bg-white shadow-2xl"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <PreviewPdfThumb url={url} onError={() => setFailed(true)} />
     </div>
   );
 }

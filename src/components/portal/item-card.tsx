@@ -74,12 +74,13 @@ export function ItemCard({
   const [dragging, setDragging] = useState(false);
   // Which uploaded photo (if any) is open in the full-screen enlarge view.
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  // The image files (oldest-first) the client can preview; drives the
-  // thumbnails and the enlarge lightbox. Non-image files (PDFs) get a plain
-  // tile and aren't enlargeable in this version.
-  const imageFiles = files.filter(
-    (f) => !!f.mime && f.mime.startsWith("image/"),
-  );
+  // The files the client can preview (oldest-first): photos show a real
+  // thumbnail, PDFs a first-page view on tap. Both are tappable tiles and
+  // appear in the enlarge view. Drives the tiles + the lightbox.
+  const isPdfFile = (f: PortalFile) => f.mime === "application/pdf";
+  const isImageFile = (f: PortalFile) =>
+    !!f.mime && f.mime.startsWith("image/");
+  const previewableFiles = files.filter((f) => isImageFile(f) || isPdfFile(f));
 
   // Cancel any in-flight poll when the component unmounts.
   useEffect(() => {
@@ -349,17 +350,19 @@ export function ItemCard({
                       ? f.reason.fr
                       : f.reason.en
                     : null;
-                // An image opens the enlarge view at its position among this
-                // item's image files; non-images (PDFs) have no enlarge.
-                const imageIndex = imageFiles.findIndex((x) => x.id === f.id);
+                // A previewable file (photo or PDF) opens the enlarge view at
+                // its position among this item's previewable files.
+                const previewIndex = previewableFiles.findIndex(
+                  (x) => x.id === f.id,
+                );
                 return (
                   <li key={f.id} className="flex items-center gap-2.5 text-sm">
                     <PortalFileThumb
                       token={token}
                       file={f}
                       onOpen={
-                        imageIndex >= 0
-                          ? () => setLightboxIndex(imageIndex)
+                        previewIndex >= 0
+                          ? () => setLightboxIndex(previewIndex)
                           : undefined
                       }
                     />
@@ -388,15 +391,17 @@ export function ItemCard({
           {ds === "approved" && files.length > 0 && (
             <div className="mt-3 flex flex-wrap gap-2">
               {files.map((f) => {
-                const imageIndex = imageFiles.findIndex((x) => x.id === f.id);
+                const previewIndex = previewableFiles.findIndex(
+                  (x) => x.id === f.id,
+                );
                 return (
                   <PortalFileThumb
                     key={f.id}
                     token={token}
                     file={f}
                     onOpen={
-                      imageIndex >= 0
-                        ? () => setLightboxIndex(imageIndex)
+                      previewIndex >= 0
+                        ? () => setLightboxIndex(previewIndex)
                         : undefined
                     }
                   />
@@ -405,10 +410,14 @@ export function ItemCard({
             </div>
           )}
 
-          {lightboxIndex !== null && imageFiles[lightboxIndex] && (
+          {lightboxIndex !== null && previewableFiles[lightboxIndex] && (
             <PortalImageLightbox
               token={token}
-              images={imageFiles.map((f) => ({ id: f.id, name: f.name }))}
+              items={previewableFiles.map((f) => ({
+                id: f.id,
+                name: f.name,
+                kind: isPdfFile(f) ? "pdf" : "image",
+              }))}
               index={lightboxIndex}
               onClose={() => setLightboxIndex(null)}
               onIndexChange={setLightboxIndex}
@@ -645,43 +654,61 @@ function PortalFileThumb({
   const [failed, setFailed] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const isImage = !!file.mime && file.mime.startsWith("image/");
+  const isPdf = file.mime === "application/pdf";
 
-  if (!isImage || failed || !onOpen) {
+  // Photo with a working thumbnail: the real picture tile.
+  if (isImage && onOpen && !failed) {
     return (
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted/50 text-muted-foreground ring-1 ring-border/60">
-        <FileText className="size-4" aria-hidden />
-      </span>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={t("preview_open", { name: file.name })}
+        className="group/thumb relative size-10 shrink-0 overflow-hidden rounded-md bg-muted/40 ring-1 ring-border/60 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        {/* Gentle placeholder until the thumbnail has decoded. */}
+        {!loaded && (
+          <span
+            className="absolute inset-0 animate-pulse bg-muted/60"
+            aria-hidden
+          />
+        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`/api/portal/files/${file.id}/thumb?token=${encodeURIComponent(
+            token,
+          )}&w=144`}
+          alt=""
+          loading="lazy"
+          onLoad={() => setLoaded(true)}
+          onError={() => setFailed(true)}
+          className={cn(
+            "size-full object-cover transition-[transform,opacity] duration-200 group-hover/thumb:scale-105",
+            loaded ? "opacity-100" : "opacity-0",
+          )}
+        />
+      </button>
     );
   }
 
+  // PDF: a clear, tappable document tile that opens the first-page view.
+  if (isPdf && onOpen) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={t("preview_open", { name: file.name })}
+        className="flex size-10 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent ring-1 ring-border/60 transition hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <FileText className="size-4" aria-hidden />
+      </button>
+    );
+  }
+
+  // Non-previewable file, or a photo whose thumbnail failed to load: a plain
+  // static tile.
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={t("preview_open", { name: file.name })}
-      className="group/thumb relative size-10 shrink-0 overflow-hidden rounded-md bg-muted/40 ring-1 ring-border/60 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-    >
-      {/* Gentle placeholder until the thumbnail has decoded. */}
-      {!loaded && (
-        <span
-          className="absolute inset-0 animate-pulse bg-muted/60"
-          aria-hidden
-        />
-      )}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={`/api/portal/files/${file.id}/thumb?token=${encodeURIComponent(
-          token,
-        )}&w=144`}
-        alt=""
-        loading="lazy"
-        onLoad={() => setLoaded(true)}
-        onError={() => setFailed(true)}
-        className={cn(
-          "size-full object-cover transition-[transform,opacity] duration-200 group-hover/thumb:scale-105",
-          loaded ? "opacity-100" : "opacity-0",
-        )}
-      />
-    </button>
+    <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted/50 text-muted-foreground ring-1 ring-border/60">
+      <FileText className="size-4" aria-hidden />
+    </span>
   );
 }
