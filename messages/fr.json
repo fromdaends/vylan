@@ -200,6 +200,12 @@
     "footer_for_firms": "Pour les cabinets",
     "footer_book_demo": "Réserver une démo",
     "footer_login": "Connexion",
+    "footer_contact": "Contact",
+    "contact_title": "Nous joindre",
+    "contact_email_label": "Courriel",
+    "contact_phone_label": "Téléphone",
+    "contact_location_label": "Où nous sommes",
+    "contact_location_value": "Grand Montréal, Québec · Canada",
     "footer_copyright": "© 2026 Vylan, Inc."
   },
   "VylanManifesto": {
