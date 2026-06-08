@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { approveItemAction, rejectItemAction } from "@/app/actions/items";
+import { approveFileAction, rejectFileAction } from "@/app/actions/files";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import {
   applyOverrides,
@@ -65,11 +65,11 @@ export function PreviewOverlay({
   const [query, setQuery] = useState("");
   // The checklist-item filter ("all" or a specific request_item id).
   const [itemFilter, setItemFilter] = useState<string>("all");
-  // Optimistic, in-session approve/reject, keyed by checklist item.
+  // Optimistic, in-session approve/reject, keyed by FILE id (per-file review).
   const [overrides, setOverrides] = useState<Map<string, PreviewStatus>>(
     () => new Map(),
   );
-  const [pendingItems, setPendingItems] = useState<Set<string>>(
+  const [pendingFiles, setPendingFiles] = useState<Set<string>>(
     () => new Set(),
   );
   const [rejectTarget, setRejectTarget] = useState<PreviewDoc | null>(null);
@@ -158,55 +158,55 @@ export function PreviewOverlay({
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose, rejectTarget, selectedFileId]);
 
-  function setItemPending(itemId: string, on: boolean) {
-    setPendingItems((prev) => {
+  function setFilePending(fileId: string, on: boolean) {
+    setPendingFiles((prev) => {
       const next = new Set(prev);
-      if (on) next.add(itemId);
-      else next.delete(itemId);
+      if (on) next.add(fileId);
+      else next.delete(fileId);
       return next;
     });
   }
 
-  function clearOverride(itemId: string) {
+  function clearOverride(fileId: string) {
     setOverrides((prev) => {
       const next = new Map(prev);
-      next.delete(itemId);
+      next.delete(fileId);
       return next;
     });
   }
 
   async function approve(doc: PreviewDoc) {
-    setOverrides((prev) => new Map(prev).set(doc.itemId, "approved"));
-    setItemPending(doc.itemId, true);
+    setOverrides((prev) => new Map(prev).set(doc.fileId, "approved"));
+    setFilePending(doc.fileId, true);
     try {
       const fd = new FormData();
-      fd.set("id", doc.itemId);
-      await approveItemAction(fd);
+      fd.set("id", doc.fileId);
+      await approveFileAction(fd);
     } catch {
-      clearOverride(doc.itemId);
+      clearOverride(doc.fileId);
       toast.error(t("action_failed"));
     } finally {
-      setItemPending(doc.itemId, false);
+      setFilePending(doc.fileId, false);
     }
   }
 
   async function reject(doc: PreviewDoc, reason: string) {
     setRejectTarget(null);
-    setOverrides((prev) => new Map(prev).set(doc.itemId, "rejected"));
-    setItemPending(doc.itemId, true);
+    setOverrides((prev) => new Map(prev).set(doc.fileId, "rejected"));
+    setFilePending(doc.fileId, true);
     try {
       const fd = new FormData();
-      fd.set("id", doc.itemId);
+      fd.set("id", doc.fileId);
       fd.set("reason", reason);
-      const res = await rejectItemAction(null, fd);
+      const res = await rejectFileAction(null, fd);
       if (res && (res.fieldErrors || res.error)) {
         throw new Error("reject_failed");
       }
     } catch {
-      clearOverride(doc.itemId);
+      clearOverride(doc.fileId);
       toast.error(t("action_failed"));
     } finally {
-      setItemPending(doc.itemId, false);
+      setFilePending(doc.fileId, false);
     }
   }
 
@@ -416,7 +416,7 @@ export function PreviewOverlay({
                         key={doc.fileId}
                         doc={doc}
                         locale={locale}
-                        pending={pendingItems.has(doc.itemId)}
+                        pending={pendingFiles.has(doc.fileId)}
                         onOpen={() => setSelectedFileId(doc.fileId)}
                         onApprove={() => approve(doc)}
                         onReject={() => setRejectTarget(doc)}
@@ -440,7 +440,7 @@ export function PreviewOverlay({
             expectedYear={expectedYear}
             clientName={clientName}
             locale={locale}
-            pending={pendingItems.has(selectedDoc.itemId)}
+            pending={pendingFiles.has(selectedDoc.fileId)}
             onApprove={() => approve(selectedDoc)}
             onReject={() => setRejectTarget(selectedDoc)}
             onBack={() => {
@@ -455,7 +455,7 @@ export function PreviewOverlay({
       {rejectTarget && (
         <PreviewRejectPrompt
           docHeader={previewCardTitle(rejectTarget, locale)}
-          busy={pendingItems.has(rejectTarget.itemId)}
+          busy={pendingFiles.has(rejectTarget.fileId)}
           onCancel={() => setRejectTarget(null)}
           onConfirm={(reason) => reject(rejectTarget, reason)}
         />

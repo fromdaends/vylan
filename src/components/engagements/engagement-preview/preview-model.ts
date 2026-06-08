@@ -29,10 +29,9 @@ export type PreviewDoc = {
   uploadedAt: string;
   status: PreviewStatus;
   itemStatus: RequestItemStatus;
-  // How many files were uploaded under the SAME checklist item. Vylan stores
-  // approve/reject on the item, not the file, so when this is > 1 approving or
-  // rejecting one card moves its siblings too — the UI surfaces this count so
-  // it is never a surprise.
+  // How many files were uploaded under the SAME checklist item. Approve/reject
+  // is now per FILE, so this is purely informational ("3 files on this line")
+  // and the count badge no longer implies siblings move together.
   siblingCount: number;
   // Stable 1-based sequence number within this document's checklist item, with
   // the OLDEST upload as #1. Computed once from the full upload set so a
@@ -66,42 +65,38 @@ export function normalizeText(s: string): string {
     .toLowerCase();
 }
 
-// Resolve the single status a document shows. Order matters:
-//   1. The accountant's explicit decision on the checklist item wins
-//      (approved, or rejected = they sent it back to the client).
+// Resolve the single status a document card shows. Order matters:
+//   1. The accountant's explicit per-file decision wins (they approved THIS
+//      file, or rejected it = sent this one back to the client).
 //   2. Otherwise the system's auto-reject flag — a TRUE rejection the client
 //      was notified about.
 //   3. Otherwise a confident mismatch with what the item asked for (wrong doc
 //      type / tax year / a stranger's name) => "flagged". A perfectly legible
 //      scan of the WRONG document must never pass as a green "looks good".
-//   4. Otherwise the AI's usability verdict: usable -> approved; not usable ->
-//      "flagged" (a suggestion for the accountant, NOT a client rejection).
+//   4. Otherwise the AI's usability verdict, shown as a SUGGESTION until the
+//      accountant reviews: usable -> "approved" (green hint); not usable ->
+//      "flagged".
 //   5. Otherwise it simply hasn't been analysed yet (neutral "pending").
 export function resolvePreviewStatus(
   file: Pick<
     UploadedFile,
-    "ai_usability" | "ai_rejected" | "ai_extracted_fields"
+    "review_status" | "ai_usability" | "ai_rejected" | "ai_extracted_fields"
   >,
-  itemStatus: RequestItemStatus,
   // True when the AI's read confidently disagrees with the request (wrong
   // type / year / client). Computed by buildPreviewDocs via `matchDocument` —
   // the SAME comparator the detail view's "Doesn't match the request" panel
-  // uses — so the grid badge and that panel can never disagree. Defaults to
-  // false so a bare file with no engagement context still resolves cleanly.
+  // uses — so the grid badge and that panel can never disagree.
   hasRequestMismatch = false,
 ): PreviewStatus {
-  if (itemStatus === "approved") return "approved";
-  if (itemStatus === "rejected") return "rejected";
+  // The accountant's own decision on THIS file is final.
+  if (file.review_status === "approved") return "approved";
+  if (file.review_status === "rejected") return "rejected";
+  // Not yet reviewed — surface the system / AI read so the accountant can
+  // triage: a confident mismatch or an unusable scan flags; a clean read shows
+  // a green "looks good" SUGGESTION (it is not yet an accountant approval).
   if (file.ai_rejected) return "rejected";
-  // A confident request mismatch flags even a crystal-clear scan: the document
-  // is readable but it is not the one that was asked for, so it needs the
-  // accountant's eye rather than a silent green "looks good".
   if (hasRequestMismatch) return "flagged";
   if (file.ai_usability) {
-    // Not usable, OR the AI flagged a content concern (looks_correct === false,
-    // e.g. a T4 uploaded for a "General Ledger Export" item). A
-    // readable-but-wrong document must NOT auto-"approve"; it needs the
-    // accountant's eye, so it's "flagged". A clean, matching read is "approved".
     if (!file.ai_usability.usable || aiFlaggedConcern(file)) return "flagged";
     return "approved";
   }
@@ -260,7 +255,7 @@ export function buildPreviewDocs(
       mimeType: u.mime_type,
       sizeBytes: u.size_bytes,
       uploadedAt: u.uploaded_at,
-      status: resolvePreviewStatus(u, itemStatus, mismatch),
+      status: resolvePreviewStatus(u, mismatch),
       itemStatus,
       siblingCount: siblingCounts.get(u.request_item_id) ?? 1,
       seq: seqByFile.get(u.id) ?? 1,
@@ -349,9 +344,9 @@ export function searchDocs(docs: PreviewDoc[], query: string): PreviewDoc[] {
   return docs.filter((d) => tokens.every((tok) => d.searchText.includes(tok)));
 }
 
-// Apply optimistic, in-session status changes (keyed by checklist item, since
-// that is where approve/reject lives) on top of the server-derived docs. Lets
-// an approve/reject reflect instantly in the grid + tab counts before the page
+// Apply optimistic, in-session status changes (keyed by FILE id, since
+// approve/reject is now per file) on top of the server-derived docs. Lets an
+// approve/reject reflect instantly in the grid + tab counts before the page
 // data refreshes.
 export function applyOverrides(
   docs: PreviewDoc[],
@@ -359,8 +354,8 @@ export function applyOverrides(
 ): PreviewDoc[] {
   if (overrides.size === 0) return docs;
   return docs.map((d) =>
-    overrides.has(d.itemId)
-      ? { ...d, status: overrides.get(d.itemId)! }
+    overrides.has(d.fileId)
+      ? { ...d, status: overrides.get(d.fileId)! }
       : d,
   );
 }
