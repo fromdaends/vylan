@@ -63,7 +63,8 @@ export function PortalShell({
       ...prev,
       [itemId]: [
         ...(prev[itemId] ?? []),
-        { id: file.id, name: file.name, status: "pending" as const },
+        // A just-sent file is in review with no reason yet.
+        { id: file.id, name: file.name, status: "pending" as const, reason: null },
       ],
     }));
   }

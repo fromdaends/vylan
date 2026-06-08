@@ -218,12 +218,13 @@ export function ItemCard({
 
   const canUpload = item.status !== "na";
 
-  // Single rejection banner, two sources in priority order:
-  //   1. `aiRejection` — set during the current upload turn so the client sees
-  //      the verdict the instant the API replies, before the page refetches.
-  //   2. `item.rejection_reason` — the persistent server column that survives a
-  //      reload. The upload route clears it on every new upload, so it never
-  //      goes stale across attempts.
+  // The line-level banner is the "needs a fix" call to action. It still appears
+  // whenever there's an outstanding rejection (live OR persisted), but it only
+  // PRINTS the live current-turn verdict (`aiRejection`); the persisted per-file
+  // reasons now render under each file in the list below, so the banner never
+  // repeats them. `bannerMsg` still drives WHEN the banner (and `hasIssue`)
+  // shows. The upload route clears `item.rejection_reason` on every new upload,
+  // so it never goes stale across attempts.
   const reasonSet =
     item.rejection_reason != null && item.rejection_reason.trim() !== "";
   const bannerMsg =
@@ -309,7 +310,12 @@ export function ItemCard({
                   ? t("rejected_action_needed")
                   : t("ai_rejected_title")}
               </div>
-              <p className="mt-1 text-foreground/80">{bannerMsg}</p>
+              {/* Only the LIVE current-turn verdict prints here; persisted
+                  per-file reasons render under each file below, so the banner
+                  never repeats them. */}
+              {aiRejection && (
+                <p className="mt-1 text-foreground/80">{aiRejection}</p>
+              )}
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("ai_rejected_help")}
               </p>
@@ -321,21 +327,39 @@ export function ItemCard({
               file-by-file noise — just the "All set" confirmation below). */}
           {ds !== "approved" && files.length > 0 && (
             <ul className="mt-3 space-y-1.5">
-              {files.map((f) => (
-                <li key={f.id} className="flex items-center gap-2 text-sm">
-                  <FileText
-                    className="size-3.5 shrink-0 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <span
-                    className="min-w-0 flex-1 truncate text-foreground/80"
-                    title={f.name}
-                  >
-                    {f.name}
-                  </span>
-                  <FileStatusPill status={f.status} />
-                </li>
-              ))}
+              {files.map((f) => {
+                // Each rejected file shows its OWN plain reason (French default),
+                // so the client knows exactly what is wrong with that file. Only
+                // rejected files carry a reason; it's always plain language.
+                const fileReason =
+                  f.status === "rejected" && f.reason
+                    ? locale === "fr"
+                      ? f.reason.fr
+                      : f.reason.en
+                    : null;
+                return (
+                  <li key={f.id} className="text-sm">
+                    <div className="flex items-center gap-2">
+                      <FileText
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
+                      <span
+                        className="min-w-0 flex-1 truncate text-foreground/80"
+                        title={f.name}
+                      >
+                        {f.name}
+                      </span>
+                      <FileStatusPill status={f.status} />
+                    </div>
+                    {fileReason && (
+                      <p className="mt-1 pl-[1.375rem] text-xs leading-relaxed text-warning">
+                        {fileReason}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
 

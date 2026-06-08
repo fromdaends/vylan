@@ -373,6 +373,7 @@
     "check_email_title": "Check your email",
     "check_email_body": "We sent a confirmation link to {email}. Click it to finish creating your account — we'll take you straight to setup.",
     "check_email_spam": "Don't see it? Check your spam folder.",
+    "check_email_waiting": "Waiting for you to confirm — this page will continue on its own.",
     "check_email_back": "Back to sign in",
     "forgot_link": "Forgot password?",
     "remember_me": "Keep me signed in",
@@ -1538,7 +1539,7 @@
     }
   },
   "Portal": {
-    "rejected_action_needed": "Your accountant asked for a different document:",
+    "rejected_action_needed": "Your accountant asked for a different document.",
     "ai_rejected_title": "This file looks wrong — please try again",
     "ai_rejected_help": "Take a fresh photo or upload the correct document.",
     "ai_rejected_generic": "We couldn't read that document clearly. Please try again with a fresh photo or the correct file.",
