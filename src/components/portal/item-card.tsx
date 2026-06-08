@@ -321,21 +321,39 @@ export function ItemCard({
               file-by-file noise — just the "All set" confirmation below). */}
           {ds !== "approved" && files.length > 0 && (
             <ul className="mt-3 space-y-1.5">
-              {files.map((f) => (
-                <li key={f.id} className="flex items-center gap-2 text-sm">
-                  <FileText
-                    className="size-3.5 shrink-0 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <span
-                    className="min-w-0 flex-1 truncate text-foreground/80"
-                    title={f.name}
-                  >
-                    {f.name}
-                  </span>
-                  <FileStatusPill status={f.status} />
-                </li>
-              ))}
+              {files.map((f) => {
+                // Each rejected file shows its OWN plain reason (French default),
+                // so the client knows exactly what is wrong with that file. Only
+                // rejected files carry a reason; it's always plain language.
+                const fileReason =
+                  f.status === "rejected" && f.reason
+                    ? locale === "fr"
+                      ? f.reason.fr
+                      : f.reason.en
+                    : null;
+                return (
+                  <li key={f.id} className="text-sm">
+                    <div className="flex items-center gap-2">
+                      <FileText
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
+                      <span
+                        className="min-w-0 flex-1 truncate text-foreground/80"
+                        title={f.name}
+                      >
+                        {f.name}
+                      </span>
+                      <FileStatusPill status={f.status} />
+                    </div>
+                    {fileReason && (
+                      <p className="mt-1 pl-[1.375rem] text-xs leading-relaxed text-warning">
+                        {fileReason}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
