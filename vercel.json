@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/process-jobs",
-      "schedule": "*/15 * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/demo-leads",

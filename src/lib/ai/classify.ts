@@ -519,15 +519,22 @@ export async function classifyDocument(opts: {
           { type: "text", text: userText },
         ];
 
-    const resp = await c.messages.create({
-      model: MODEL,
-      max_tokens: 1200,
-      system: systemPrompt,
-      tools: [CLASSIFY_TOOL],
-      tool_choice: { type: "tool", name: "classify_document" },
-      // sdk types are strict but the SDK accepts this content shape at runtime
-      messages: [{ role: "user", content: content as never }],
-    });
+    const resp = await c.messages.create(
+      {
+        model: MODEL,
+        max_tokens: 1200,
+        system: systemPrompt,
+        tools: [CLASSIFY_TOOL],
+        tool_choice: { type: "tool", name: "classify_document" },
+        // sdk types are strict but the SDK accepts this content shape at runtime
+        messages: [{ role: "user", content: content as never }],
+      },
+      // Bound each call so one slow or hung read can't eat the whole worker
+      // run (the SDK default timeout is 10 minutes). One retry absorbs a
+      // transient blip; anything past that falls through to the durable
+      // job-queue retry rather than blocking the batch.
+      { timeout: 40_000, maxRetries: 1 },
+    );
 
     // Cost/latency visibility — token counts per classification (Phase 7).
     console.info(
