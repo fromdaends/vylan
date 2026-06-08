@@ -13,6 +13,7 @@ import type { Client } from "./clients";
 import type { Firm } from "./firms";
 import type { RequestItem, RequestItemStatus } from "./request-items";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
+import { resolveFileReason } from "@/lib/review/file-reason";
 
 const TOKEN_REGEX = /^[0-9A-Za-z]{43}$/;
 
@@ -114,24 +115,14 @@ export async function loadPortalContext(
     const fr = v?.issue_summary_fr?.trim();
     const en = v?.issue_summary_en?.trim();
     const status = (u.review_status as PortalFile["status"]) ?? "pending";
-    // Per-file client-facing reason — populated ONLY for a file that was sent
-    // back (review_status='rejected'). Prefer the AI's bilingual client summary;
-    // otherwise fall back to the accountant's typed single-language reason,
-    // mirrored into both languages so the toggle still works. null otherwise.
-    let reason: { fr: string; en: string } | null = null;
-    if (status === "rejected") {
-      if (fr || en) {
-        reason = { fr: fr || en || "", en: en || fr || "" };
-      } else {
-        const typed = (u.rejection_reason as string | null)?.trim();
-        if (typed) reason = { fr: typed, en: typed };
-      }
-    }
     (filesByItem[u.request_item_id] ??= []).push({
       id: u.id as string,
       name: (u.original_filename as string) ?? "",
       status,
-      reason,
+      // Per-file client-facing reason, only for a rejected file. See
+      // resolveFileReason for the priority (AI summary > accountant's typed
+      // reason) and the no-jargon guarantee.
+      reason: resolveFileReason(status, v, u.rejection_reason as string | null),
     });
     if (fr || en) {
       rejectionSummaryByItem[u.request_item_id] = {
