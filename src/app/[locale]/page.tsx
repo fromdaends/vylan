@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { Link, getPathname } from "@/i18n/navigation";
+import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { schibsted } from "@/components/vylan-landing/fonts";
@@ -10,8 +10,7 @@ import {
   type LandingShellStrings,
 } from "@/components/vylan-landing/landing-shell";
 import { LeadForm } from "@/components/vylan-landing/lead-form";
-import { brand } from "@/lib/brand";
-import { Mail, Phone, MapPin } from "lucide-react";
+import { VylanFooter } from "@/components/vylan-landing/vylan-footer";
 import "@/styles/vylan-landing.css";
 
 export async function generateMetadata({
@@ -67,6 +66,17 @@ export default async function Home({
     follow: t("follow"),
   };
 
+  const footer = {
+    brand: t("brand_word"),
+    manifesto: t("footer_manifesto"),
+    forFirms: t("footer_for_firms"),
+    bookDemo: t("footer_book_demo"),
+    contact: t("footer_contact"),
+    login: t("footer_login"),
+    copyright: t("footer_copyright"),
+    location: t("contact_location_value"),
+  };
+
   return (
     <main className={`vy-root ${schibsted.variable}`}>
       <LandingShell s={shellStrings} />
@@ -95,49 +105,9 @@ export default async function Home({
         </div>
       </div>
 
-      {/* CONTACT */}
-      <section className="vy-contact" id="vy-contact">
-        <h2 className="vy-contact-title">{t("contact_title")}</h2>
-        <div className="vy-contact-grid">
-          <a className="vy-contact-card" href={`mailto:${brand.supportEmail}`}>
-            <span className="vy-contact-ic" aria-hidden>
-              <Mail className="size-[18px]" />
-            </span>
-            <span className="vy-contact-k">{t("contact_email_label")}</span>
-            <span className="vy-contact-v">{brand.supportEmail}</span>
-          </a>
-          <div className="vy-contact-card">
-            <span className="vy-contact-ic" aria-hidden>
-              <Phone className="size-[18px]" />
-            </span>
-            <span className="vy-contact-k">{t("contact_phone_label")}</span>
-            <span className="vy-contact-v">
-              <a href="tel:+14508306455">450-830-6455</a>
-              <a href="tel:+14383415160">438-341-5160</a>
-            </span>
-          </div>
-          <div className="vy-contact-card">
-            <span className="vy-contact-ic" aria-hidden>
-              <MapPin className="size-[18px]" />
-            </span>
-            <span className="vy-contact-k">{t("contact_location_label")}</span>
-            <span className="vy-contact-v">{t("contact_location_value")}</span>
-          </div>
-        </div>
-      </section>
-
-      {/* FOOTER */}
-      <footer className="vy-footer">
-        <div className="vy-fbrand">{t("brand_word")}</div>
-        <div className="vy-links">
-          <Link href="/manifesto">{t("footer_manifesto")}</Link>
-          <a href="#vy-get-access">{t("footer_for_firms")}</a>
-          <a href="#vy-get-access">{t("footer_book_demo")}</a>
-          <a href="#vy-contact">{t("footer_contact")}</a>
-          <Link href="/login">{t("footer_login")}</Link>
-        </div>
-        <div className="vy-cr">{t("footer_copyright")}</div>
-      </footer>
+      {/* FOOTER (Contact now lives on its own /contact page; the footer keeps
+          the details in a small faint line) */}
+      <VylanFooter s={footer} />
     </main>
   );
 }

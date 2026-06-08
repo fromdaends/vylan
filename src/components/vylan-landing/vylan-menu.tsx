@@ -75,10 +75,6 @@ export function VylanMenu({ s }: { s: VylanMenuStrings }) {
     closeNow();
     scrollToId("vy-get-access");
   };
-  const closeAndJumpContact = () => {
-    closeNow();
-    scrollToId("vy-contact");
-  };
 
   return (
     <>
@@ -148,9 +144,9 @@ export function VylanMenu({ s }: { s: VylanMenuStrings }) {
             <a href="#vy-get-access" onClick={closeAndJump}>
               {s.navBookDemo} <span className="vy-arr">→</span>
             </a>
-            <a href="#vy-contact" onClick={closeAndJumpContact}>
+            <Link href="/contact" onClick={closeNow}>
               {s.navContact} <span className="vy-arr">→</span>
-            </a>
+            </Link>
             <Link href="/login" onClick={closeNow}>
               {s.navLogin} <span className="vy-arr">→</span>
             </Link>
