@@ -94,7 +94,7 @@ export function buildSystemPrompt(ctx: AssistantContext): string {
     ctx.userDisplayName ? `User: ${ctx.userDisplayName}.` : "",
     ctx.firmName ? `Firm: ${ctx.firmName}.` : "",
     ctx.isDemoFirm
-      ? "This firm is a DEMO firm — the data they see is fake. They are evaluating Vylan."
+      ? "This firm is on a free trial — they have full access to the real product and the data they see is their own real data. They haven't converted to a paid plan yet."
       : "",
   ]
     .filter(Boolean)

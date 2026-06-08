@@ -33,9 +33,13 @@ describe("buildSystemPrompt", () => {
     expect(s).toContain("Alice");
   });
 
-  it("flags demo firms so the assistant knows the data is fake", () => {
+  it("tells the assistant a trial firm is on a free trial with their own real data", () => {
     const s = buildSystemPrompt({ locale: "en", isDemoFirm: true });
-    expect(s).toContain("DEMO firm");
+    expect(s).toContain("free trial");
+    expect(s).toContain("real data");
+    // Guard against regressing to the old (wrong) "data is fake" framing —
+    // trial firms now use the real product with their own data.
+    expect(s).not.toContain("fake");
   });
 
   it("contains the do-not-quote-prices guardrail", () => {

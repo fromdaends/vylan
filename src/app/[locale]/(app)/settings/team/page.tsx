@@ -7,6 +7,7 @@ import {
   userDisplayLabel,
 } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { isOnTrial } from "@/lib/trial";
 import { listFirmInvites } from "@/lib/db/invites";
 import { getFirmSeatUsage } from "@/lib/billing/seats";
 import { inviteState } from "@/lib/team/invites";
@@ -121,6 +122,7 @@ export default async function TeamPage({
       <TeamManager
         firmName={firm.name}
         canManage={canManage}
+        onTrial={isOnTrial(firm)}
         seat={seat}
         activeMembers={activeMembers}
         deactivatedMembers={deactivatedMembers}
