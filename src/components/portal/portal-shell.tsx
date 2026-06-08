@@ -22,9 +22,11 @@ export function PortalShell({
   const [uploads, setUploads] = useState(ctx.uploaded_count_by_item);
 
   const total = items.length;
+  // "Done" means the accountant APPROVED it (or the client marked it not
+  // applicable). A document that was merely uploaded is "in review", NOT done —
+  // counting uploads here was the original bug that filled the ring on upload.
   const done = items.filter(
-    (i) =>
-      i.status === "submitted" || i.status === "approved" || i.status === "na",
+    (i) => i.status === "approved" || i.status === "na",
   ).length;
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
   const remaining = total - done;

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Upload, Check, FileCheck2, X, RotateCcw, AlertTriangle, Loader2 } from "lucide-react";
+import { Upload, Check, FileCheck2, X, RotateCcw, AlertTriangle, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
@@ -228,6 +228,9 @@ export function ItemCard({
           : rejection.en
         : item.rejection_reason!.trim());
   const hasIssue = item.status === "rejected" || bannerMsg !== null;
+  // The single client-facing state shown on this card — drives the icon, the
+  // badge, and the tint. Approval-based, never upload-based.
+  const ds = displayState(item.status, hasIssue);
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -253,15 +256,19 @@ export function ItemCard({
         "group rounded-xl border p-4 transition-all duration-200 sm:p-5",
         dragging
           ? "border-accent bg-accent/[0.05] ring-2 ring-accent/25"
-          : item.status === "submitted" || item.status === "approved"
+          : ds === "approved"
             ? "border-success/30 bg-success/[0.04]"
-            : item.status === "na"
-              ? "border-border/60 bg-muted/30"
-              : "border-border/60 bg-card/40 hover:border-border hover:bg-card hover:shadow-sm",
+            : ds === "needs_attention"
+              ? "border-warning/30 bg-warning/[0.05]"
+              : ds === "in_review"
+                ? "border-accent/25 bg-accent/[0.03]"
+                : ds === "na"
+                  ? "border-border/60 bg-muted/30"
+                  : "border-border/60 bg-card/40 hover:border-border hover:bg-card hover:shadow-sm",
       )}
     >
       <div className="flex items-start gap-3 sm:gap-4">
-        <StatusIcon status={item.status} hasIssue={hasIssue} />
+        <StatusIcon state={ds} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -283,7 +290,7 @@ export function ItemCard({
                 </p>
               )}
             </div>
-            <StatusBadge status={item.status} uploadedCount={uploadedCount} />
+            <StatusBadge state={ds} />
           </div>
 
           {bannerMsg && (
@@ -386,44 +393,61 @@ function ErrorLine({ error }: { error: string }) {
   return <p className="text-xs text-destructive mt-2">{message}</p>;
 }
 
-function StatusIcon({
-  status,
-  hasIssue,
-}: {
-  status: RequestItemStatus;
-  hasIssue: boolean;
-}) {
+// The single client-facing state shown on a card. Approval-based (section 6):
+// an AI auto-reject leaves the item 'pending' but carries a reason (hasIssue),
+// which must read as "needs attention", not "not started".
+type DisplayState =
+  | "approved"
+  | "needs_attention"
+  | "in_review"
+  | "not_started"
+  | "na";
+
+function displayState(
+  status: RequestItemStatus,
+  hasIssue: boolean,
+): DisplayState {
+  if (status === "na") return "na";
+  if (status === "approved") return "approved";
+  if (status === "rejected" || hasIssue) return "needs_attention";
+  if (status === "submitted") return "in_review";
+  return "not_started";
+}
+
+function StatusIcon({ state }: { state: DisplayState }) {
   const ring =
     "mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full";
-  if (hasIssue) {
-    return (
-      <span className={cn(ring, "bg-warning/15 text-warning")}>
-        <AlertTriangle className="size-3.5" aria-hidden />
-      </span>
-    );
-  }
-  if (status === "approved") {
+  if (state === "approved") {
     return (
       <span className={cn(ring, "bg-success text-white")}>
         <Check className="size-3.5" aria-hidden />
       </span>
     );
   }
-  if (status === "submitted") {
+  if (state === "needs_attention") {
     return (
-      <span className={cn(ring, "bg-accent text-white")}>
-        <Check className="size-3.5" aria-hidden />
+      <span className={cn(ring, "bg-warning/15 text-warning")}>
+        <AlertTriangle className="size-3.5" aria-hidden />
       </span>
     );
   }
-  if (status === "na") {
+  if (state === "in_review") {
+    // A clock, NOT a check — uploaded but not yet accepted, so it must not look
+    // done (the old green check on upload was the original bug).
+    return (
+      <span className={cn(ring, "bg-accent/15 text-accent")}>
+        <Clock className="size-3.5" aria-hidden />
+      </span>
+    );
+  }
+  if (state === "na") {
     return (
       <span className={cn(ring, "border-2 border-muted-foreground/20 text-muted-foreground")}>
         <X className="size-3" aria-hidden />
       </span>
     );
   }
-  // pending — hollow ring
+  // not_started — hollow ring
   return (
     <span
       className="mt-0.5 size-6 shrink-0 rounded-full border-2 border-muted-foreground/25"
@@ -432,35 +456,39 @@ function StatusIcon({
   );
 }
 
-function StatusBadge({
-  status,
-  uploadedCount,
-}: {
-  status: RequestItemStatus;
-  uploadedCount: number;
-}) {
+function StatusBadge({ state }: { state: DisplayState }) {
   const t = useTranslations("Portal");
   const base =
     "inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-xs font-medium";
-  if (status === "approved")
+  if (state === "approved")
     return (
       <span className={cn(base, "bg-success/15 text-success")}>
         {t("status_approved")}
       </span>
     );
-  if (status === "submitted")
+  if (state === "needs_attention")
     return (
-      <span className={cn(base, "bg-accent/15 text-accent")}>
-        {t("status_submitted", { count: uploadedCount })}
+      <span className={cn(base, "bg-warning/15 text-warning")}>
+        {t("status_needs_attention")}
       </span>
     );
-  // No "rejected" pill: the amber status icon + the re-upload banner carry it,
-  // and the full string would crowd the title on a phone.
-  if (status === "na")
+  if (state === "in_review")
+    return (
+      <span className={cn(base, "bg-accent/15 text-accent")}>
+        {t("status_in_review")}
+      </span>
+    );
+  if (state === "na")
     return (
       <span className={cn(base, "bg-muted text-muted-foreground")}>
         {t("status_na")}
       </span>
     );
-  return null;
+  // not_started — a quiet neutral pill; the prominent Upload button is the real
+  // call to action.
+  return (
+    <span className={cn(base, "bg-muted/60 text-muted-foreground")}>
+      {t("status_not_started")}
+    </span>
+  );
 }
