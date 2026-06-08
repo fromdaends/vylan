@@ -39,11 +39,14 @@ export const PORTAL_MUTATION_PER_TOKEN: LimitSpec = { limit: 120, window: "1 h" 
 // trips it: 30 polls × 30 uploads = 900 in the worst case, but realistic
 // usage is well under that.
 export const PORTAL_STATUS_PER_TOKEN: LimitSpec = { limit: 600, window: "1 h" };
-// View a file thumbnail — one request per image on the portal's first paint
-// (then cached in the browser for a day). A line can hold several files, so
-// allow a comfortable burst while still bounding render/resize cost.
-export const PORTAL_FILE_VIEW_PER_TOKEN: LimitSpec = { limit: 600, window: "1 h" };
-export const PORTAL_FILE_VIEW_PER_IP: LimitSpec = { limit: 1200, window: "1 h" };
+// View a file thumbnail / file bytes. Each image is requested once per browser
+// then cached for a day, but an engagement can hold MANY files and a client (or
+// the accountant testing) may reload the portal repeatedly, so the cap must be
+// generous: a too-low cap blocks EVERY thumbnail at once when tripped. These are
+// cheap, scoped, browser-cached reads, so keep the ceiling high and only guard
+// against egregious abuse.
+export const PORTAL_FILE_VIEW_PER_TOKEN: LimitSpec = { limit: 6000, window: "1 h" };
+export const PORTAL_FILE_VIEW_PER_IP: LimitSpec = { limit: 12000, window: "1 h" };
 
 // AI / cost-bound endpoints.
 export const AI_CLASSIFY_PER_FIRM_DAILY: LimitSpec = { limit: 500, window: "1 d" };
