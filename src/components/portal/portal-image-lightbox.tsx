@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ExternalLink,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -182,16 +183,17 @@ function LightboxImage({
 }) {
   const [loaded, setLoaded] = useState(false);
   return (
-    <div
-      className="relative flex items-center justify-center"
-      onClick={(e) => e.stopPropagation()}
-    >
+    // Fill the available area so the image renders large; object-contain keeps
+    // aspect and upscales the small placeholder. (Sizing the box to the tiny
+    // thumbnail's natural width was the "why so small / blank" bug.) No
+    // stopPropagation, so tapping the photo also closes the viewer.
+    <div className="relative size-full">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={small}
         alt=""
         aria-hidden
-        className="max-h-[82vh] max-w-full rounded-lg object-contain shadow-2xl blur-md"
+        className="absolute inset-0 size-full object-contain blur-md"
       />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -199,10 +201,15 @@ function LightboxImage({
         alt={alt}
         onLoad={() => setLoaded(true)}
         className={cn(
-          "absolute inset-0 size-full rounded-lg object-contain transition-opacity duration-300",
+          "absolute inset-0 size-full object-contain transition-opacity duration-300",
           loaded ? "opacity-100" : "opacity-0",
         )}
       />
+      {!loaded && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <Loader2 className="size-8 animate-spin text-white/70" aria-hidden />
+        </span>
+      )}
     </div>
   );
 }
