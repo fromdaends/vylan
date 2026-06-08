@@ -1,5 +1,16 @@
 "use client";
 
+// react-hooks/refs is disabled for this whole file ON PURPOSE. Like its
+// sibling ai-card-reveal.tsx, this landing-page scroll-animation component
+// reads and writes a render-phase ref (`hasEverEntered`) to drive its
+// direction-aware reveal state machine: the `if (inView)
+// hasEverEntered.current = true` latch and the `!hasEverEntered.current`
+// branch in the animate target are load-bearing for the
+// pre-entry/entry/exit timing tuned per the spec documented below.
+// Rewriting to satisfy eslint-config-next 16's new react-hooks/refs rule
+// would change the calibrated visual behavior. No runtime or visual change.
+/* eslint-disable react-hooks/refs */
+
 import {
   motion,
   useInView,

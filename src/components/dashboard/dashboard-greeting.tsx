@@ -1,16 +1,43 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
+
+type GreetingKey =
+  | "greeting_morning"
+  | "greeting_afternoon"
+  | "greeting_evening"
+  | "greeting_night";
+
+// Time-of-day greeting key from the user's LOCAL clock. Used only as the
+// client snapshot below (runs in the client render phase after hydration),
+// never on the server — so reading the machine's local hour here is safe.
+function localGreetingKey(): GreetingKey {
+  const hour = new Date().getHours();
+  if (hour < 5) return "greeting_night";
+  if (hour < 12) return "greeting_morning";
+  if (hour < 18) return "greeting_afternoon";
+  if (hour < 22) return "greeting_evening";
+  return "greeting_night";
+}
+
+// There is no external store to watch — the greeting only needs to be
+// read once the client takes over after hydration. So the subscribe
+// callback is a no-op that returns an empty unsubscribe.
+const subscribeNever = () => () => {};
 
 // Personalized "Good morning, Zach." greeting at the top of the
 // dashboard. The time-of-day part is computed client-side from the
 // user's local clock (the user's machine, not the server timezone or
 // the firm timezone — important when the accountant is travelling).
 //
-// SSR renders a stable "welcome" fallback so there's no hydration
-// mismatch; the useEffect upgrades to the time-aware version on mount.
-// The fallback only shows for one paint, then settles.
+// Hydration safety: useSyncExternalStore renders the SERVER snapshot
+// (null → the stable "welcome" fallback) on the server AND on the
+// client's first paint, so the two match and there's no hydration
+// mismatch. React then swaps to the CLIENT snapshot (the local-hour
+// greeting) right after hydration. Same fallback-then-upgrade behavior
+// the previous effect+state version had, but computed during render with
+// no effect and no setState (satisfies react-hooks/set-state-in-effect).
 export function DashboardGreeting({
   firstName,
   subtitle,
@@ -23,20 +50,13 @@ export function DashboardGreeting({
   variant?: "default" | "hero";
 }) {
   const t = useTranslations("Dashboard");
-  const [greeting, setGreeting] = useState<string | null>(null);
+  const greetingKey = useSyncExternalStore<GreetingKey | null>(
+    subscribeNever,
+    localGreetingKey, // client snapshot: local time-of-day greeting
+    () => null, // server snapshot + first client paint: stable fallback
+  );
 
-  useEffect(() => {
-    const hour = new Date().getHours();
-    let key: "greeting_morning" | "greeting_afternoon" | "greeting_evening" | "greeting_night";
-    if (hour < 5) key = "greeting_night";
-    else if (hour < 12) key = "greeting_morning";
-    else if (hour < 18) key = "greeting_afternoon";
-    else if (hour < 22) key = "greeting_evening";
-    else key = "greeting_night";
-    setGreeting(t(key));
-  }, [t]);
-
-  const headline = greeting ?? t("greeting_welcome");
+  const headline = greetingKey ? t(greetingKey) : t("greeting_welcome");
   // Append a comma + name when we have one. Use a thin period so the
   // line reads conversationally without feeling stiff.
   const withName = firstName ? `${headline}, ${firstName}.` : `${headline}.`;
