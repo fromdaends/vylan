@@ -235,6 +235,54 @@ You're in demo mode. No payment required to start.`;
   return { subject, html, text };
 }
 
+// Signup email-confirmation. We send this OURSELVES (via Resend) instead of
+// relying on Supabase's built-in mailer — which is rate-limited to a few per
+// hour and whose default template uses the fragile PKCE link. `confirmUrl`
+// points at /api/auth/confirm with a token_hash (cross-browser-safe). Built in
+// signupAction from admin.generateLink's hashed_token.
+export function buildConfirmEmail(opts: {
+  ownerName: string;
+  confirmUrl: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  if (opts.locale === "fr") {
+    const subject = "Confirmez votre courriel — Vylan";
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Bonjour ${escapeHtml(opts.ownerName)},</p>
+<p>Bienvenue chez <strong>Vylan</strong>. Une dernière étape : confirmez votre courriel pour activer votre compte.</p>
+<p style="margin:24px 0">
+  <a href="${opts.confirmUrl}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Confirmer mon courriel</a>
+</p>
+<p style="color:#64748b;font-size:13px">Ou copiez ce lien dans votre navigateur :<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.confirmUrl}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">Si vous n'avez pas créé de compte Vylan, ignorez ce courriel.</p>
+</body></html>`;
+    const text = `Bonjour ${opts.ownerName},
+
+Bienvenue chez Vylan. Confirmez votre courriel pour activer votre compte :
+${opts.confirmUrl}
+
+Si vous n'avez pas créé de compte Vylan, ignorez ce courriel.`;
+    return { subject, html, text };
+  }
+  const subject = "Confirm your email — Vylan";
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Hi ${escapeHtml(opts.ownerName)},</p>
+<p>Welcome to <strong>Vylan</strong>. One last step — confirm your email to activate your account.</p>
+<p style="margin:24px 0">
+  <a href="${opts.confirmUrl}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Confirm my email</a>
+</p>
+<p style="color:#64748b;font-size:13px">Or paste this link into your browser:<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.confirmUrl}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">If you didn't create a Vylan account, you can ignore this email.</p>
+</body></html>`;
+  const text = `Hi ${opts.ownerName},
+
+Welcome to Vylan. Confirm your email to activate your account:
+${opts.confirmUrl}
+
+If you didn't create a Vylan account, you can ignore this email.`;
+  return { subject, html, text };
+}
+
 // Teammate invitation email. Internal (a firm member joining), so it's
 // Vylan-branded like the welcome email rather than firm-branded. The accept
 // link points at /{locale}/invite/{token} (the page is built in Phase 3).
