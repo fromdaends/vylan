@@ -87,6 +87,19 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.redirect(`${origin}${next}`);
     }
+    // Exchange failed — log WHY so "invalid or expired link" is debuggable in
+    // prod. The usual culprit is the PKCE flow: the code_verifier cookie is
+    // bound to the browser/tab that started signup, so opening the link
+    // anywhere else (or after an email scanner pre-fetched the one-time link)
+    // fails here. The robust fix is the token_hash flow (/api/auth/confirm).
+    console.error("[auth/callback] exchangeCodeForSession failed", {
+      message: error.message,
+      status: (error as { status?: number }).status,
+      code: (error as { code?: string }).code,
+      next,
+    });
+  } else {
+    console.error("[auth/callback] no `code` param in callback URL", { next });
   }
   const locale = localeFromNext(next);
   return NextResponse.redirect(`${origin}/${locale}/login?error=callback`);
