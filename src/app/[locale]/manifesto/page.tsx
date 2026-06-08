@@ -57,6 +57,7 @@ export default async function ManifestoPage({
     navForFirms: tv("nav_for_firms"),
     navBookDemo: tv("nav_book_demo"),
     navLogin: tv("nav_login"),
+    navContact: tv("nav_contact"),
     follow: tv("follow"),
   };
 

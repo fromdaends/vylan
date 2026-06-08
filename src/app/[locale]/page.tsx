@@ -63,6 +63,7 @@ export default async function Home({
     navForFirms: t("nav_for_firms"),
     navBookDemo: t("nav_book_demo"),
     navLogin: t("nav_login"),
+    navContact: t("nav_contact"),
     follow: t("follow"),
   };
 

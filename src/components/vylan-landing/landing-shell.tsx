@@ -26,6 +26,7 @@ export type LandingShellStrings = {
   navForFirms: string;
   navBookDemo: string;
   navLogin: string;
+  navContact: string;
   follow: string;
 };
 
