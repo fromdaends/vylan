@@ -113,7 +113,7 @@ export default async function Home({
             <span className="vy-contact-k">{t("contact_phone_label")}</span>
             <span className="vy-contact-v">
               <a href="tel:+14508306455">450-830-6455</a>
-              <a href="tel:+14383415160">438 341 5160</a>
+              <a href="tel:+14383415160">438-341-5160</a>
             </span>
           </div>
           <div className="vy-contact-card">
