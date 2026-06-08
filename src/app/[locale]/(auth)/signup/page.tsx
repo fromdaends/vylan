@@ -12,15 +12,15 @@
 // in, in onboarding.
 
 import "@/styles/vylan-landing.css";
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
-import { Link } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { signupAction, type AuthActionState } from "@/app/actions/auth";
 import { GoogleSignInButton } from "@/components/auth/google-sign-in-button";
 import { schibsted } from "@/components/vylan-landing/fonts";
 import { brand } from "@/lib/brand";
-import { ArrowRight, Mail } from "lucide-react";
+import { ArrowRight, Mail, Loader2 } from "lucide-react";
 
 export default function SignupPage() {
   const t = useTranslations("Auth");
@@ -36,6 +36,37 @@ export default function SignupPage() {
     AuthActionState,
     FormData
   >(signupAction, null);
+
+  // Once we're on the "check your email" screen, poll for confirmation. If the
+  // user clicks the email link in this same browser, the session cookie is set
+  // (shared across tabs), so this tab detects it and advances into the app
+  // automatically — no manual reload. (Confirming on a different device can't
+  // be auto-detected here, since no session lands on this one.)
+  const router = useRouter();
+  const awaitingConfirmation = state?.checkEmail === true;
+  useEffect(() => {
+    if (!awaitingConfirmation) return;
+    let active = true;
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch("/api/auth/session-poll", {
+          cache: "no-store",
+        });
+        if (!res.ok) return;
+        const { loggedIn } = (await res.json()) as { loggedIn: boolean };
+        if (loggedIn && active) {
+          clearInterval(id);
+          router.replace("/onboarding");
+        }
+      } catch {
+        // transient network hiccup — keep polling
+      }
+    }, 4000);
+    return () => {
+      active = false;
+      clearInterval(id);
+    };
+  }, [awaitingConfirmation, router]);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -77,6 +108,10 @@ export default function SignupPage() {
                 </p>
                 <p className="mt-4 text-sm text-white/60">
                   {t("check_email_spam")}
+                </p>
+                <p className="mt-5 flex items-center justify-center gap-2 text-sm text-white/45">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  {t("check_email_waiting")}
                 </p>
                 <p className="mt-6 text-center text-sm text-white/75">
                   <Link
