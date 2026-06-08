@@ -15,8 +15,9 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { formatBytes } from "@/lib/format";
 import { useInView } from "./use-in-view";
-import { previewHeader, type PreviewDoc, type PreviewStatus } from "./preview-model";
+import { previewCardTitle, type PreviewDoc, type PreviewStatus } from "./preview-model";
 
 const PreviewPdfThumb = dynamic(() => import("./preview-pdf-thumb"), {
   ssr: false,
@@ -78,7 +79,14 @@ export function PreviewCard({
   const [imgError, setImgError] = useState(false);
   const [pdfError, setPdfError] = useState(false);
 
-  const header = previewHeader(doc, locale);
+  const title = previewCardTitle(doc, locale);
+  // Compact, locale-aware "when it landed" for the card's secondary line, e.g.
+  // "Jun 7, 02:30 PM" / "7 juin, 14 h 30". Day + month + time is enough to
+  // distinguish same-item uploads; the stable #N is the real identifier.
+  const uploadedLabel = new Intl.DateTimeFormat(
+    locale === "fr" ? "fr-CA" : "en-CA",
+    { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" },
+  ).format(new Date(doc.uploadedAt));
   const s = STATUS_UI[doc.status];
   const statusLabel = t(`status_${doc.status}`);
   const isOther = !doc.isImage && !doc.isPdf;
@@ -129,7 +137,7 @@ export function PreviewCard({
         <button
           type="button"
           onClick={onOpen}
-          aria-label={`${t("open")} ${header}`}
+          aria-label={`${t("open")} ${title}`}
           className="absolute inset-0 z-10 cursor-pointer rounded-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none focus-visible:ring-inset"
         />
 
@@ -189,16 +197,28 @@ export function PreviewCard({
         </div>
       </div>
 
-      {/* Couple-word header + labelled status line (icon + text, not colour
-          alone). */}
+      {/* Identity-first footer: the stable "[item] #N" handle, then the
+          client's original filename, then when it landed + size, then the
+          labelled status line (icon + text, never colour alone). Every line
+          truncates with a title fallback so it stays clean at the smallest
+          card width. */}
       <div className="min-w-0 px-2 py-1.5">
         <div
           className="truncate text-xs font-medium text-foreground"
-          title={header}
+          title={title}
         >
-          {header}
+          {title}
         </div>
-        <div className={cn("mt-0.5 flex items-center gap-1 text-[11px]", s.text)}>
+        <div
+          className="mt-0.5 truncate text-[11px] text-muted-foreground"
+          title={doc.fileName}
+        >
+          {doc.fileName}
+        </div>
+        <div className="mt-px truncate text-[10px] text-muted-foreground tabular-nums">
+          {uploadedLabel} · {formatBytes(doc.sizeBytes)}
+        </div>
+        <div className={cn("mt-1 flex items-center gap-1 text-[11px]", s.text)}>
           <s.Icon className="size-3 shrink-0" aria-hidden />
           <span className="truncate">{statusLabel}</span>
         </div>

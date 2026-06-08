@@ -24,7 +24,7 @@ import {
   groupDocsByItem,
   groupLabel,
   previewCounts,
-  previewHeader,
+  previewCardTitle,
   searchDocs,
   type PreviewDoc,
   type PreviewGroup,
@@ -454,7 +454,7 @@ export function PreviewOverlay({
 
       {rejectTarget && (
         <PreviewRejectPrompt
-          docHeader={previewHeader(rejectTarget, locale)}
+          docHeader={previewCardTitle(rejectTarget, locale)}
           busy={pendingItems.has(rejectTarget.itemId)}
           onCancel={() => setRejectTarget(null)}
           onConfirm={(reason) => reject(rejectTarget, reason)}

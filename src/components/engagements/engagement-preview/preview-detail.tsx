@@ -19,7 +19,7 @@ import { cn } from "@/lib/cn";
 import { formatCurrency, type AppLocale } from "@/lib/format";
 import { matchDocument, type MatchFlag } from "@/lib/ai/matching";
 import { DOC_TYPE_LABELS, docTypeLabel } from "@/lib/doc-types";
-import { previewHeader, type PreviewDoc, type PreviewStatus } from "./preview-model";
+import { previewCardTitle, type PreviewDoc, type PreviewStatus } from "./preview-model";
 import { PreviewDocViewer } from "./preview-doc-viewer";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
@@ -98,7 +98,7 @@ export function PreviewDetail({
     rootRef.current?.focus();
   }, []);
 
-  const header = previewHeader(doc, locale);
+  const header = previewCardTitle(doc, locale);
   const pill = STATUS_PILL[doc.status];
   const statusLabel = t(`status_${doc.status}`);
 

@@ -8,6 +8,7 @@ import {
   groupDocsByItem,
   groupLabel,
   previewHeader,
+  previewCardTitle,
   applyOverrides,
   searchDocs,
   normalizeText,
@@ -307,6 +308,7 @@ describe("previewHeader", () => {
     status: "pending",
     itemStatus: "submitted",
     siblingCount: 1,
+    seq: 1,
     classification: null,
     extractedYear: null,
     itemLabel: "Trial Balance",
@@ -529,5 +531,116 @@ describe("filterByItem", () => {
     const scoped = filterByItem(searched, "i1");
     expect(previewCounts(scoped).all).toBe(2);
     expect(filterDocs(scoped, "all").map((d) => d.fileId)).toEqual(["a", "b"]);
+  });
+});
+
+describe("buildPreviewDocs — sequence numbering + ordering", () => {
+  it("numbers uploads per item oldest-first, regardless of input order", () => {
+    const items = [item({ id: "i1" })];
+    // Provided newest-first, as listUploadedFilesForEngagement returns them.
+    const uploads = [
+      file({ id: "c", request_item_id: "i1", uploaded_at: "2026-03-03T00:00:00Z" }),
+      file({ id: "b", request_item_id: "i1", uploaded_at: "2026-02-02T00:00:00Z" }),
+      file({ id: "a", request_item_id: "i1", uploaded_at: "2026-01-01T00:00:00Z" }),
+    ];
+    const docs = buildPreviewDocs(uploads, items);
+    const seqOf = (id: string) => docs.find((d) => d.fileId === id)!.seq;
+    expect(seqOf("a")).toBe(1); // oldest
+    expect(seqOf("b")).toBe(2);
+    expect(seqOf("c")).toBe(3); // newest
+  });
+
+  it("numbers each checklist item independently", () => {
+    const items = [item({ id: "i1" }), item({ id: "i2" })];
+    const uploads = [
+      file({ id: "a", request_item_id: "i1", uploaded_at: "2026-01-01T00:00:00Z" }),
+      file({ id: "b", request_item_id: "i2", uploaded_at: "2026-01-02T00:00:00Z" }),
+      file({ id: "c", request_item_id: "i1", uploaded_at: "2026-01-03T00:00:00Z" }),
+    ];
+    const docs = buildPreviewDocs(uploads, items);
+    const seqOf = (id: string) => docs.find((d) => d.fileId === id)!.seq;
+    expect(seqOf("a")).toBe(1);
+    expect(seqOf("c")).toBe(2); // second under i1
+    expect(seqOf("b")).toBe(1); // first under i2
+  });
+
+  it("groups the present docs oldest-first by sequence", () => {
+    const items = [item({ id: "i1" })];
+    const uploads = [
+      file({ id: "c", request_item_id: "i1", uploaded_at: "2026-03-03T00:00:00Z" }),
+      file({ id: "a", request_item_id: "i1", uploaded_at: "2026-01-01T00:00:00Z" }),
+      file({ id: "b", request_item_id: "i1", uploaded_at: "2026-02-02T00:00:00Z" }),
+    ];
+    const docs = buildPreviewDocs(uploads, items);
+    const [group] = groupDocsByItem(docs, items);
+    expect(group.docs.map((d) => d.fileId)).toEqual(["a", "b", "c"]);
+  });
+
+  it("keeps a number stable when a filter hides an earlier doc (non-contiguous is correct)", () => {
+    const items = [item({ id: "i1" })];
+    const uploads = [
+      file({ id: "a", request_item_id: "i1", uploaded_at: "2026-01-01T00:00:00Z" }),
+      file({ id: "b", request_item_id: "i1", uploaded_at: "2026-02-02T00:00:00Z" }),
+    ];
+    const docs = buildPreviewDocs(uploads, items);
+    const filtered = docs.filter((d) => d.fileId === "b"); // a search hid "a"
+    const [group] = groupDocsByItem(filtered, items);
+    expect(group.docs[0].seq).toBe(2); // still "#2", never renumbered to "#1"
+  });
+});
+
+describe("previewCardTitle", () => {
+  function mk(over: Partial<PreviewDoc>): PreviewDoc {
+    return {
+      fileId: "f",
+      itemId: "i",
+      fileName: "scan.jpg",
+      mimeType: "image/jpeg",
+      sizeBytes: 1,
+      uploadedAt: "2026-01-01T00:00:00Z",
+      status: "pending",
+      itemStatus: "submitted",
+      siblingCount: 1,
+      seq: 1,
+      classification: null,
+      extractedYear: null,
+      itemLabel: "Trial Balance",
+      itemLabelFr: "Balance de vérification",
+      isImage: true,
+      isPdf: false,
+      searchText: "",
+      ...over,
+    };
+  }
+
+  it("is the localized item name plus the sequence number", () => {
+    expect(previewCardTitle(mk({ seq: 2 }), "en")).toBe("Trial Balance #2");
+    expect(previewCardTitle(mk({ seq: 2 }), "fr")).toBe(
+      "Balance de vérification #2",
+    );
+  });
+
+  it("falls back to the doc-type header for an orphan with no item label", () => {
+    expect(
+      previewCardTitle(
+        mk({
+          itemLabel: "",
+          itemLabelFr: null,
+          classification: "t4",
+          extractedYear: 2024,
+          seq: 1,
+        }),
+        "en",
+      ),
+    ).toBe("T4 · 2024 #1");
+  });
+
+  it("falls back to the filename when there is neither label nor classification", () => {
+    expect(
+      previewCardTitle(
+        mk({ itemLabel: "", itemLabelFr: null, fileName: "mystery.pdf", seq: 3 }),
+        "en",
+      ),
+    ).toBe("mystery.pdf #3");
   });
 });
