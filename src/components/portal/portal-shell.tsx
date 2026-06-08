@@ -55,7 +55,10 @@ export function PortalShell({
       prev.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
     );
   }
-  function handleUploaded(itemId: string, file: { id: string; name: string }) {
+  function handleUploaded(
+    itemId: string,
+    file: { id: string; name: string; mime: string },
+  ) {
     setUploads((prev) => ({ ...prev, [itemId]: (prev[itemId] ?? 0) + 1 }));
     handleItemUpdated(itemId, { status: "submitted" });
     // Optimistically show the just-sent file in the per-file list as pending.
@@ -63,8 +66,15 @@ export function PortalShell({
       ...prev,
       [itemId]: [
         ...(prev[itemId] ?? []),
-        // A just-sent file is in review with no reason yet.
-        { id: file.id, name: file.name, status: "pending" as const, reason: null },
+        // A just-sent file is in review with no reason yet. Its mime lets the
+        // thumbnail render immediately (the file is already stored server-side).
+        {
+          id: file.id,
+          name: file.name,
+          status: "pending" as const,
+          reason: null,
+          mime: file.mime,
+        },
       ],
     }));
   }

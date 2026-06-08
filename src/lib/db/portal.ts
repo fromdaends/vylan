@@ -32,6 +32,9 @@ export type PortalFile = {
   // approved / in-review file, and on a rejected file with no reason recorded.
   // Client-safe: never an AI code, score, or the word "flagged".
   reason: { fr: string; en: string } | null;
+  // The stored MIME type, so the portal can show a real picture for image files
+  // (and a labelled tile for PDFs / other types). Null only for legacy rows.
+  mime: string | null;
 };
 
 export type PortalContext = {
@@ -99,7 +102,7 @@ export async function loadPortalContext(
   const { data: uploaded } = await sb
     .from("uploaded_files")
     .select(
-      "id, request_item_id, original_filename, review_status, rejection_reason, uploaded_at, ai_usability",
+      "id, request_item_id, original_filename, review_status, rejection_reason, mime_type, uploaded_at, ai_usability",
     )
     .eq("engagement_id", engagement.id)
     .order("uploaded_at", { ascending: true });
@@ -123,6 +126,7 @@ export async function loadPortalContext(
       // resolveFileReason for the priority (AI summary > accountant's typed
       // reason) and the no-jargon guarantee.
       reason: resolveFileReason(status, v, u.rejection_reason as string | null),
+      mime: (u.mime_type as string | null) ?? null,
     });
     if (fr || en) {
       rejectionSummaryByItem[u.request_item_id] = {
