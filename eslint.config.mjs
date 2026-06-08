@@ -15,6 +15,11 @@ const eslintConfig = defineConfig([
     // Local-only git worktrees (gitignored). Scanning them double-reports
     // every issue and there's nothing actionable inside them.
     ".claude/worktrees/**",
+    // Vendored, minified third-party assets served statically (e.g. the
+    // pdf.js worker `public/pdf/pdf.worker.min.mjs`). This is not our
+    // source code and must never be linted — minified vendor bundles trip
+    // rules like no-this-alias / no-unused-expressions by design.
+    "public/**",
   ]),
 ]);
 

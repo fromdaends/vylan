@@ -1,5 +1,19 @@
 "use client";
 
+// react-hooks/refs and react-hooks/purity are disabled for this whole
+// file ON PURPOSE. This landing-page scroll-animation component drives a
+// direction-aware reveal state machine by reading refs (_scrollDownRef,
+// wasInViewRef, lastExitTimeRef, hasEverEntered) and calling Date.now()
+// DURING render — see the detailed comments throughout. These render-phase
+// reads are load-bearing for the swoop/linger timing, which was tuned over
+// many iterations (see the AiCardReveal entries in .active-sessions.md).
+// Rewriting to satisfy eslint-config-next 16's new react-hooks rules would
+// change the calibrated visual behavior. The violations span the entire
+// render body of both AiCardReveal and AiSideReveal, so a file-level
+// disable is cleaner than ~14 inline disables inside nested ternaries.
+// No runtime or visual behavior change.
+/* eslint-disable react-hooks/refs, react-hooks/purity */
+
 import { motion, useInView, useReducedMotion } from "framer-motion";
 import {
   useEffect,

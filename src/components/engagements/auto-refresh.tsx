@@ -20,6 +20,14 @@ import { useRouter } from "next/navigation";
 export function AutoRefresh({ intervalMs = 5000 }: { intervalMs?: number }) {
   const router = useRouter();
   const intervalRef = useRef(intervalMs);
+  // The poll loop below intentionally re-subscribes only on `router`
+  // change (never on `intervalMs`), so we mirror the latest interval into
+  // a ref instead of adding it to the effect deps — that keeps a future
+  // re-subscribe on the current value WITHOUT restarting the timer every
+  // time the prop changes. Nothing reads this ref during render, so the
+  // write is safe; react-hooks/refs flags ref writes during render
+  // regardless, hence the targeted disable. No behavior change.
+  // eslint-disable-next-line react-hooks/refs
   intervalRef.current = intervalMs;
 
   useEffect(() => {
