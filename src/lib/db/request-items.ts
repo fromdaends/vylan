@@ -1,4 +1,5 @@
 import { getServerSupabase } from "@/lib/supabase/server";
+import { setAllFilesReviewForItem } from "./file-review";
 import type { DocType } from "./templates";
 
 export type RequestItemStatus =
@@ -42,19 +43,20 @@ export async function listRequestItems(
   return (data ?? []) as RequestItem[];
 }
 
+// Per-file model: the item-level approve/reject/reopen fan their verdict out to
+// EVERY file under the item (siblings move together, as before), then the item
+// status is re-derived from those files by recomputeItemStatus — so the item
+// summary stays a true roll-up no matter which path made the decision.
 export async function approveItem(itemId: string): Promise<void> {
   const supabase = await getServerSupabase();
   const { data: auth } = await supabase.auth.getUser();
-  const { error } = await supabase
-    .from("request_items")
-    .update({
-      status: "approved",
-      approved_by: auth.user?.id ?? null,
-      approved_at: new Date().toISOString(),
-      rejection_reason: null,
-    })
-    .eq("id", itemId);
-  if (error) throw error;
+  await setAllFilesReviewForItem(
+    supabase,
+    itemId,
+    "approved",
+    null,
+    auth.user?.id ?? null,
+  );
 }
 
 export async function rejectItem(
@@ -62,30 +64,19 @@ export async function rejectItem(
   reason: string,
 ): Promise<void> {
   const supabase = await getServerSupabase();
-  const { error } = await supabase
-    .from("request_items")
-    .update({
-      status: "rejected",
-      rejection_reason: reason,
-      approved_by: null,
-      approved_at: null,
-    })
-    .eq("id", itemId);
-  if (error) throw error;
+  const { data: auth } = await supabase.auth.getUser();
+  await setAllFilesReviewForItem(
+    supabase,
+    itemId,
+    "rejected",
+    reason,
+    auth.user?.id ?? null,
+  );
 }
 
 export async function reopenItem(itemId: string): Promise<void> {
   const supabase = await getServerSupabase();
-  const { error } = await supabase
-    .from("request_items")
-    .update({
-      status: "pending",
-      rejection_reason: null,
-      approved_by: null,
-      approved_at: null,
-    })
-    .eq("id", itemId);
-  if (error) throw error;
+  await setAllFilesReviewForItem(supabase, itemId, "pending", null, null);
 }
 
 export type NewItemInput = {

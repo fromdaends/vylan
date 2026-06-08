@@ -43,6 +43,10 @@ function file(over: Partial<UploadedFile>): UploadedFile {
     ai_extracted_fields: null,
     ai_usability: null,
     ai_rejected: false,
+    review_status: "pending",
+    rejection_reason: null,
+    reviewed_by: null,
+    reviewed_at: null,
     uploaded_at: "2026-01-01T00:00:00Z",
     ...over,
   };
