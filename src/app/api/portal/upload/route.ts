@@ -3,10 +3,10 @@ import { after } from "next/server";
 import { nanoid } from "nanoid";
 import {
   findItemForToken,
-  setItemStatus,
   markEngagementInProgress,
   logActivity,
 } from "@/lib/db/portal";
+import { recomputeItemStatus } from "@/lib/db/file-review";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { enqueueJob } from "@/lib/db/jobs";
 import { processClassifyJob } from "@/lib/ai/process";
@@ -162,7 +162,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "db_failed" }, { status: 500 });
   }
 
-  await setItemStatus(item.id, "submitted", item.engagement_id);
+  // Re-derive the item summary from its files now that this new (pending) file
+  // exists. A fresh upload answers any prior rejection, so the item moves to
+  // "in review"; recomputeItemStatus also clears any stale rejection reason
+  // (the old item-level setItemStatus("submitted") + manual reason-clear).
+  await recomputeItemStatus(sb, item.id);
   await markEngagementInProgress(item.engagement_id);
   // Activity-log metadata MUST NOT contain client PII (Phase 5). The
   // log row is retained for 2 years; filenames frequently contain
@@ -175,18 +179,6 @@ export async function POST(request: NextRequest) {
     file_id: inserted.id,
     size_bytes: storedBytes.length,
   });
-
-  // Clear any stale AI rejection_reason from a previous bad upload BEFORE
-  // the classifier runs. After this point the column reflects the latest
-  // verdict only:
-  //   - usable → stays cleared
-  //   - auto-rejected → router sets the new bilingual summary
-  // This is what makes the portal banner correct after a reload (the
-  // server-side row is the source of truth, not React state).
-  await sb
-    .from("request_items")
-    .update({ rejection_reason: null })
-    .eq("id", item.id);
 
   // Enqueue an AI classification job as a durable fallback (cron retries).
   // We ALSO kick off the same work via after() so the verdict lands within

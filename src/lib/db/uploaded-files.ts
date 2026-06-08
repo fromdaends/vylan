@@ -19,6 +19,12 @@ export type UploadedFile = {
   // (Even when true, the file stays in storage — accountants can
   // override via Phase 5's UI.)
   ai_rejected: boolean;
+  // Per-file accountant review (migration 0240). Each file carries its OWN
+  // decision; the parent item's status is a roll-up of these (deriveItemStatus).
+  review_status: "pending" | "approved" | "rejected";
+  rejection_reason: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
   uploaded_at: string;
 };
 

@@ -4,6 +4,7 @@ import {
   setItemStatus,
   logActivity,
 } from "@/lib/db/portal";
+import { recomputeItemStatus } from "@/lib/db/file-review";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import {
   checkRateLimit,
@@ -31,17 +32,11 @@ export async function POST(request: NextRequest) {
   const item = await findItemForToken(token, itemId);
   if (!item) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  // If files exist for this item, flip back to submitted; otherwise pending.
+  // Clear the 'na' choice, then re-derive the item summary from its files
+  // (which may be approved / rejected / pending under the per-file model).
   const sb = getServiceRoleSupabase();
-  const { count } = await sb
-    .from("uploaded_files")
-    .select("*", { count: "exact", head: true })
-    .eq("request_item_id", item.id);
-  await setItemStatus(
-    item.id,
-    (count ?? 0) > 0 ? "submitted" : "pending",
-    item.engagement_id,
-  );
+  await setItemStatus(item.id, "pending", item.engagement_id);
+  await recomputeItemStatus(sb, item.id);
 
   const { data: e } = await sb
     .from("engagements")
