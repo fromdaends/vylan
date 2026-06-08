@@ -144,6 +144,56 @@ No password required. Link valid for 90 days.`;
   return { subject, html, text };
 }
 
+export function buildSignatureRequestEmail(opts: {
+  clientName: string;
+  firmName: string;
+  firmLogoUrl?: string | null;
+  documentName: string;
+  url: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  const logoBlock = buildLogoBlock(opts.firmLogoUrl, opts.firmName);
+  if (opts.locale === "fr") {
+    const subject = `${opts.firmName} a un document à faire signer`;
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+${logoBlock}<p>Bonjour ${escapeHtml(opts.clientName)},</p>
+<p>${escapeHtml(opts.firmName)} a un document à faire signer : <strong>${escapeHtml(opts.documentName)}</strong>.</p>
+<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Ouvrez votre portail pour le télécharger, le signer à votre façon, puis téléverser la copie signée.</p>
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Ouvrir mon portail</a>
+</p>
+<p style="color:#64748b;font-size:13px">Ou copiez ce lien dans votre navigateur : <br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.url}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">Aucun mot de passe à créer.</p>
+</body></html>`;
+    const text = `Bonjour ${opts.clientName},
+
+${opts.firmName} a un document à faire signer : ${opts.documentName}.
+Ouvrez votre portail pour le télécharger, le signer, puis téléverser la copie signée : ${opts.url}
+
+Aucun mot de passe à créer.`;
+    return { subject, html, text };
+  }
+
+  const subject = `${opts.firmName} has a document for you to sign`;
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+${logoBlock}<p>Hi ${escapeHtml(opts.clientName)},</p>
+<p>${escapeHtml(opts.firmName)} has a document for you to sign: <strong>${escapeHtml(opts.documentName)}</strong>.</p>
+<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Open your portal to download it, sign it your own way, and upload the signed copy back.</p>
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Open my portal</a>
+</p>
+<p style="color:#64748b;font-size:13px">Or copy this link into your browser:<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.url}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">No password required.</p>
+</body></html>`;
+  const text = `Hi ${opts.clientName},
+
+${opts.firmName} has a document for you to sign: ${opts.documentName}.
+Open your portal to download it, sign it, and upload the signed copy back: ${opts.url}
+
+No password required.`;
+  return { subject, html, text };
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

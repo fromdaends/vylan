@@ -34,6 +34,8 @@ import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
+import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
+import { signedUrl } from "@/lib/storage";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { RecordEngagementOpen } from "@/components/engagements/record-engagement-open";
@@ -59,6 +61,7 @@ import {
   RotateCcw,
   Bell,
   BellOff,
+  Download,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -116,6 +119,12 @@ export default async function EngagementDetailPage({
     arr.push({ ...u, url: urlByPath.get(u.storage_path) ?? "#" });
     filesByItem.set(u.request_item_id, arr);
   }
+
+  // Prompt B: signature items (the accountant supplies a document, the client
+  // returns a signed copy) render in their own "Signatures" group, separate
+  // from the document-collection checklist.
+  const signatureItems = items.filter((i) => i.kind === "signature");
+  const collectionItems = items.filter((i) => i.kind !== "signature");
 
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -333,7 +342,7 @@ export default async function EngagementDetailPage({
               <h2 className="text-base font-semibold tracking-tight text-foreground">
                 {t("checklist")}{" "}
                 <span className="text-muted-foreground font-normal">
-                  ({items.length})
+                  ({collectionItems.length})
                 </span>
               </h2>
               <div className="flex items-center gap-2">
@@ -350,13 +359,13 @@ export default async function EngagementDetailPage({
                 {isLive && <AddItemDialog engagementId={engagement.id} />}
               </div>
             </div>
-            {items.length === 0 ? (
+            {collectionItems.length === 0 ? (
               <div className="text-sm text-muted-foreground py-4">
                 {t("checklist_empty")}
               </div>
             ) : (
               <ul className="divide-y divide-border border-t border-border">
-                {items.map((item) => (
+                {collectionItems.map((item) => (
                   <ItemRow
                     key={item.id}
                     item={item}
@@ -371,6 +380,39 @@ export default async function EngagementDetailPage({
               </ul>
             )}
           </div>
+
+          {(isLive || signatureItems.length > 0) && (
+            <div className="space-y-3">
+              <div className="flex flex-row items-center justify-between gap-3">
+                <h2 className="text-base font-semibold tracking-tight text-foreground">
+                  {t("signatures")}{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({signatureItems.length})
+                  </span>
+                </h2>
+                {isLive && <AddSignatureDialog engagementId={engagement.id} />}
+              </div>
+              {signatureItems.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4">
+                  {t("signatures_empty")}
+                </div>
+              ) : (
+                <ul className="divide-y divide-border border-t border-border">
+                  {signatureItems.map((item) => (
+                    <SignatureRow
+                      key={item.id}
+                      item={item}
+                      files={filesByItem.get(item.id) ?? []}
+                      locale={locale}
+                      canEdit={isLive}
+                      clientName={client?.display_name ?? null}
+                      engagementTitle={engagement.title}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </section>
 
         <aside className="space-y-4">
@@ -516,6 +558,120 @@ async function ItemRow({
       )}
     </li>
   );
+}
+
+// Prompt B: a signature item rendered for the accountant. Same machinery as a
+// collection item, relabelled: "Sent to client" -> "Signed copy returned" ->
+// "Signed". Confirm = approve the returned copy. No legal / e-signature claims.
+async function SignatureRow({
+  item,
+  files,
+  locale,
+  canEdit,
+  clientName,
+}: {
+  item: RequestItem;
+  files: (UploadedFile & { url: string })[];
+  locale: "fr" | "en";
+  canEdit: boolean;
+  clientName: string | null;
+  engagementTitle: string;
+}) {
+  const t = await getTranslations("Engagements");
+  const label = locale === "fr" && item.label_fr ? item.label_fr : item.label;
+  const hasReturned = files.length > 0;
+  // Short-lived link for the accountant to re-open the blank document they
+  // uploaded to be signed.
+  let signingDocUrl: string | null = null;
+  if (item.signing_doc_path) {
+    try {
+      signingDocUrl = await signedUrl(item.signing_doc_path, 3600);
+    } catch {
+      signingDocUrl = null;
+    }
+  }
+
+  return (
+    <li className="py-3 space-y-2">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div className="font-medium truncate">{label}</div>
+          {signingDocUrl && (
+            <a
+              href={signingDocUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Download className="size-3.5" />
+              {t("view_document_to_sign")}
+            </a>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Badge variant={itemBadgeVariant(item.status)}>
+            {t(signatureStatusKey(item.status))}
+          </Badge>
+          {item.status === "submitted" && canEdit && (
+            <form action={approveItemAction}>
+              <input type="hidden" name="id" value={item.id} />
+              <Button
+                type="submit"
+                size="sm"
+                className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
+              >
+                <CheckCircle2 className="size-4" />
+                {t("confirm_signed")}
+              </Button>
+            </form>
+          )}
+          {canEdit &&
+            !hasReturned &&
+            (item.status === "pending" || item.status === "na") && (
+              <form action={removeItemAction}>
+                <input type="hidden" name="id" value={item.id} />
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("remove_item")}
+                  title={t("remove_item")}
+                >
+                  <Trash2 className="size-4 text-muted-foreground" />
+                </Button>
+              </form>
+            )}
+        </div>
+      </div>
+
+      {files.length > 0 && (
+        <ul className="space-y-1 mt-2">
+          {files.map((f) => (
+            <FilePreviewRow
+              key={f.id}
+              file={f}
+              url={f.url}
+              expectedDocType={item.doc_type}
+              expectedYear={null}
+              clientName={clientName}
+              rejectionCount={item.ai_rejection_count ?? 0}
+            />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+function signatureStatusKey(status: string): string {
+  switch (status) {
+    case "approved":
+      return "sig_status_signed";
+    case "submitted":
+      return "sig_status_returned";
+    default:
+      return "sig_status_sent"; // pending / na / fallback
+  }
 }
 
 function statusVariant(

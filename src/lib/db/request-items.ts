@@ -27,6 +27,15 @@ export type RequestItem = {
   // for this specific request item. Used by the Phase 3 router to
   // escalate after 2 strikes and by Phase 5's red badge.
   ai_rejection_count: number;
+  // Prompt B: 'signature' flips the direction — the accountant supplies a
+  // document and the client returns a signed copy. 'collection' (the default)
+  // is the existing document-collection item.
+  kind: "collection" | "signature";
+  // Signature items only: the blank document the accountant uploaded to be
+  // signed (storage path + original filename + mime). Null for collection items.
+  signing_doc_path: string | null;
+  signing_doc_name: string | null;
+  signing_doc_mime: string | null;
   created_at: string;
 };
 
@@ -115,6 +124,53 @@ export async function addItemToEngagement(
       required: input.required,
       order_index: nextIdx,
       status: "pending",
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return data as RequestItem;
+}
+
+export type NewSignatureItemInput = {
+  engagement_id: string;
+  label: string;
+  label_fr?: string | null;
+  signing_doc_path: string;
+  signing_doc_name: string;
+  signing_doc_mime: string;
+};
+
+// Create a SIGNATURE item: the accountant supplies a document and the client
+// returns a signed copy. Mirrors addItemToEngagement but marks kind='signature'
+// and stores where the blank document lives. doc_type is the neutral 'other'
+// (the column is NOT NULL and a signature isn't an AI-classified document type).
+export async function addSignatureItemToEngagement(
+  input: NewSignatureItemInput,
+): Promise<RequestItem> {
+  const supabase = await getServerSupabase();
+  const { data: last } = await supabase
+    .from("request_items")
+    .select("order_index")
+    .eq("engagement_id", input.engagement_id)
+    .order("order_index", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const nextIdx = (last?.order_index ?? -1) + 1;
+
+  const { data, error } = await supabase
+    .from("request_items")
+    .insert({
+      engagement_id: input.engagement_id,
+      kind: "signature",
+      label: input.label,
+      label_fr: input.label_fr ?? null,
+      doc_type: "other",
+      required: true,
+      order_index: nextIdx,
+      status: "pending",
+      signing_doc_path: input.signing_doc_path,
+      signing_doc_name: input.signing_doc_name,
+      signing_doc_mime: input.signing_doc_mime,
     })
     .select("*")
     .single();

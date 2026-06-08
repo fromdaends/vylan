@@ -68,6 +68,10 @@ function item(over: Partial<RequestItem>): RequestItem {
     approved_at: null,
     rejection_reason: null,
     ai_rejection_count: 0,
+    kind: "collection",
+    signing_doc_path: null,
+    signing_doc_name: null,
+    signing_doc_mime: null,
     created_at: "2026-01-01T00:00:00Z",
     ...over,
   };

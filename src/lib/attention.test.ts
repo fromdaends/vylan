@@ -50,6 +50,10 @@ function item(overrides: Partial<RequestItem> = {}): RequestItem {
     approved_at: null,
     rejection_reason: null,
     ai_rejection_count: 0,
+    kind: "collection",
+    signing_doc_path: null,
+    signing_doc_name: null,
+    signing_doc_mime: null,
     created_at: NOW.toISOString(),
     ...overrides,
   };
