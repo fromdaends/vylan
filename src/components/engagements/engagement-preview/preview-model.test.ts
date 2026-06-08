@@ -141,6 +141,27 @@ describe("resolvePreviewStatus", () => {
   it("no verdict yet => pending (neutral)", () => {
     expect(resolvePreviewStatus(file({}), "pending")).toBe("pending");
   });
+  it("a confident request mismatch => flagged, even on a usable scan", () => {
+    expect(
+      resolvePreviewStatus(
+        file({ ai_usability: verdict(true) }),
+        "submitted",
+        true,
+      ),
+    ).toBe("flagged");
+  });
+  it("the accountant's approval still wins over a request mismatch", () => {
+    expect(
+      resolvePreviewStatus(
+        file({ ai_usability: verdict(true) }),
+        "approved",
+        true,
+      ),
+    ).toBe("approved");
+  });
+  it("a request mismatch flags even before a usability verdict lands", () => {
+    expect(resolvePreviewStatus(file({}), "submitted", true)).toBe("flagged");
+  });
 });
 
 describe("buildPreviewDocs", () => {
@@ -188,6 +209,90 @@ describe("buildPreviewDocs", () => {
     const docs = buildPreviewDocs([file({ request_item_id: "ghost" })], []);
     expect(docs[0].status).toBe("pending");
     expect(docs[0].itemStatus).toBe("pending");
+  });
+});
+
+describe("buildPreviewDocs — request matching (flag docs that don't match)", () => {
+  // A General Ledger export that READS fine on its own but doesn't match the
+  // engagement: from the founder's report (status was wrongly "Looks good").
+  const glItem = item({ id: "i1", doc_type: "gl_export", status: "submitted" });
+  function glFile(): UploadedFile {
+    return file({
+      id: "a",
+      request_item_id: "i1",
+      ai_classification: "gl_export",
+      ai_confidence: 0.95,
+      ai_usability: verdict(true),
+      ai_extracted_fields: {
+        extracted_year: 2024,
+        party_name: "G-Accon LLC",
+        fields_confidence: 0.9,
+      },
+    });
+  }
+
+  it("flags a usable doc whose YEAR doesn't match the expected tax year", () => {
+    // Same name (isolates the year mismatch): expected 2025, reads 2024.
+    const docs = buildPreviewDocs([glFile()], [glItem], {
+      expectedYear: 2025,
+      clientName: "G-Accon LLC",
+    });
+    expect(docs[0].status).toBe("flagged");
+  });
+
+  it("flags a usable doc whose CLIENT NAME is a stranger to the engagement", () => {
+    // Same year (isolates the identity mismatch): client Acme vs doc G-Accon.
+    const docs = buildPreviewDocs([glFile()], [glItem], {
+      expectedYear: 2024,
+      clientName: "Acme Corp",
+    });
+    expect(docs[0].status).toBe("flagged");
+  });
+
+  it("keeps a usable doc that matches type + year + client as approved", () => {
+    const docs = buildPreviewDocs([glFile()], [glItem], {
+      expectedYear: 2024,
+      clientName: "G-Accon LLC",
+    });
+    expect(docs[0].status).toBe("approved");
+  });
+
+  it("the accountant's explicit approval still wins over a request mismatch", () => {
+    const approved = item({
+      id: "i1",
+      doc_type: "gl_export",
+      status: "approved",
+    });
+    const docs = buildPreviewDocs([glFile()], [approved], {
+      expectedYear: 2025,
+      clientName: "Acme Corp",
+    });
+    expect(docs[0].status).toBe("approved");
+  });
+
+  it("does NOT flag a recognised doc under a freeform 'other' item on type alone", () => {
+    const otherItem = item({ id: "i1", doc_type: "other", status: "submitted" });
+    const docs = buildPreviewDocs(
+      [
+        file({
+          id: "a",
+          request_item_id: "i1",
+          ai_classification: "bank_statement",
+          ai_confidence: 0.95,
+          ai_usability: verdict(true),
+          ai_extracted_fields: { fields_confidence: 0.9 },
+        }),
+      ],
+      [otherItem],
+      { expectedYear: null, clientName: null },
+    );
+    expect(docs[0].status).toBe("approved");
+  });
+
+  it("without engagement context (no opts) a usable, type-matching doc stays approved", () => {
+    // The old 2-arg call (existing callers/tests) must not start flagging.
+    const docs = buildPreviewDocs([glFile()], [glItem]);
+    expect(docs[0].status).toBe("approved");
   });
 });
 

@@ -77,9 +77,20 @@ export function PreviewOverlay({
   const panelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // The expected tax year, read off the engagement title (e.g. "Smith — T1
+  // 2024"). Feeds the per-document request-match check inside buildPreviewDocs
+  // (so a wrong-year doc shows "Flagged" in the grid, not "Looks good").
+  const expectedYear = useMemo(
+    () => expectedYearFromTitle(engagementTitle),
+    [engagementTitle],
+  );
   const docs = useMemo(
-    () => applyOverrides(buildPreviewDocs(uploads, items), overrides),
-    [uploads, items, overrides],
+    () =>
+      applyOverrides(
+        buildPreviewDocs(uploads, items, { expectedYear, clientName }),
+        overrides,
+      ),
+    [uploads, items, overrides, expectedYear, clientName],
   );
   // Search first, then the status tabs filter the search results — so the tab
   // counts + the grid both reflect the current search.
@@ -116,10 +127,6 @@ export function PreviewOverlay({
         ? (uploads.find((u) => u.id === selectedFileId) ?? null)
         : null,
     [uploads, selectedFileId],
-  );
-  const expectedYear = useMemo(
-    () => expectedYearFromTitle(engagementTitle),
-    [engagementTitle],
   );
 
   // Lock the page behind the overlay from scrolling and move focus into the
