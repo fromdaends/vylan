@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import {
@@ -53,13 +54,17 @@ export function PortalImageLightbox({
     [count, index, onIndexChange],
   );
 
-  // Move focus into the dialog and lock background scroll while open.
+  // Move focus into the dialog and lock background scroll while open; restore
+  // both on close so the portal page stays exactly where the client left it
+  // (same scroll position, focus back on the file they tapped).
   useEffect(() => {
-    closeRef.current?.focus();
-    const prev = document.body.style.overflow;
+    const prevOverflow = document.body.style.overflow;
+    const prevFocus = document.activeElement as HTMLElement | null;
     document.body.style.overflow = "hidden";
+    closeRef.current?.focus();
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevOverflow;
+      prevFocus?.focus?.();
     };
   }, []);
 
@@ -80,92 +85,107 @@ export function PortalImageLightbox({
   const large = `/api/portal/files/${current.id}/thumb?token=${enc}&w=1600`;
   const small = `/api/portal/files/${current.id}/thumb?token=${enc}&w=144`;
 
-  return (
+  // A centred, floating panel over a dimmed + blurred backdrop, matching the
+  // accountant-side PreviewOverlay. It renders through a portal on <body>
+  // (see the return) so it floats above the whole page instead of inside the
+  // checklist row.
+  const overlay = (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={current.name}
-      className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm"
-      onClick={onClose}
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in-0"
+      onMouseDown={(e) => {
+        // Close only when the press starts on the backdrop itself — never on a
+        // click inside the panel or a drag that happens to end on the backdrop.
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
-        className="flex items-center justify-between gap-3 px-4 py-3 text-white"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={current.name}
+        className="relative flex h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-200"
       >
-        <span
-          className="min-w-0 flex-1 truncate text-sm font-medium"
-          title={current.name}
-        >
-          {current.name}
-        </span>
-        <div className="flex shrink-0 items-center gap-2">
-          {current.kind === "pdf" && (
-            <a
-              href={fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-white/10 px-3 text-sm text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-            >
-              <ExternalLink className="size-4" aria-hidden />
-              {t("preview_open_pdf")}
-            </a>
-          )}
-          <button
-            ref={closeRef}
-            type="button"
-            onClick={onClose}
-            aria-label={t("preview_close")}
-            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+        {/* Header: the client's own file name, an open-in-tab link for PDFs,
+            and the close button. */}
+        <div className="flex items-center justify-between gap-3 border-b border-border/50 px-4 py-3">
+          <span
+            className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+            title={current.name}
           >
-            <X className="size-5" aria-hidden />
-          </button>
+            {current.name}
+          </span>
+          <div className="flex shrink-0 items-center gap-2">
+            {current.kind === "pdf" && (
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ExternalLink className="size-4" aria-hidden />
+                {t("preview_open_pdf")}
+              </a>
+            )}
+            <button
+              ref={closeRef}
+              type="button"
+              onClick={onClose}
+              aria-label={t("preview_close")}
+              className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <X className="size-5" aria-hidden />
+            </button>
+          </div>
         </div>
-      </div>
 
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-4 pb-6">
-        {current.kind === "pdf" ? (
-          <LightboxPdf key={current.id} url={fileUrl} />
-        ) : (
-          <LightboxImage
-            key={current.id}
-            small={small}
-            large={large}
-            alt={current.name}
-          />
-        )}
+        {/* Body: ONE document at a time (image, or a PDF's first page), centred
+            on a soft mat. Never renders all of an item's files at once. */}
+        <div className="relative flex min-h-0 flex-1 items-center justify-center bg-muted/30 p-3">
+          {current.kind === "pdf" ? (
+            <LightboxPdf key={current.id} url={fileUrl} />
+          ) : (
+            <LightboxImage
+              key={current.id}
+              small={small}
+              large={large}
+              alt={current.name}
+            />
+          )}
 
-        {count > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                go(-1);
-              }}
-              aria-label={t("preview_prev")}
-              className="absolute left-3 top-1/2 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-            >
-              <ChevronLeft className="size-6" aria-hidden />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                go(1);
-              }}
-              aria-label={t("preview_next")}
-              className="absolute right-3 top-1/2 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-            >
-              <ChevronRight className="size-6" aria-hidden />
-            </button>
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-2.5 py-0.5 text-xs text-white tabular-nums">
-              {index + 1} / {count}
-            </div>
-          </>
-        )}
+          {count > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => go(-1)}
+                aria-label={t("preview_prev")}
+                className="absolute left-2 top-1/2 inline-flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-card/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ChevronLeft className="size-6" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => go(1)}
+                aria-label={t("preview_next")}
+                className="absolute right-2 top-1/2 inline-flex size-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-border bg-card/90 text-foreground shadow-sm backdrop-blur-sm transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ChevronRight className="size-6" aria-hidden />
+              </button>
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border border-border bg-card/90 px-2.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums backdrop-blur-sm">
+                {index + 1} / {count}
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
+
+  // Portal to <body>: lifts the overlay out of the checklist row, whose
+  // entrance animation (fade-up with animation-fill-mode: both) leaves a
+  // lingering transform that would otherwise make the row a containing block —
+  // trapping this `fixed` overlay inside the row and, with scroll locked,
+  // freezing the page. This is the actual fix for the "opens inside the row /
+  // frozen" bug.
+  return createPortal(overlay, document.body);
 }
 
 // The enlarged photo. Keyed by file id in the parent, so its `loaded` state
