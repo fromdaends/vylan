@@ -20,12 +20,23 @@ export function isValidTokenShape(token: string): boolean {
   return TOKEN_REGEX.test(token);
 }
 
+export type PortalFile = {
+  id: string;
+  name: string;
+  status: "pending" | "approved" | "rejected";
+};
+
 export type PortalContext = {
   engagement: Engagement;
   client: Client;
   firm: Firm;
   items: RequestItem[];
   uploaded_count_by_item: Record<string, number>;
+  // The files the client has actually sent for each item (oldest first), each
+  // with the accountant's per-file decision. Powers the portal's per-document
+  // list + re-upload. Client-safe: only the client's own filename + a simple
+  // status (never AI codes, scores, or the word "flagged").
+  files_by_item: Record<string, PortalFile[]>;
   // Bilingual AI rejection summary per item, taken from the latest upload's
   // usability verdict (the model writes it in both languages). Lets the
   // portal's re-upload banner follow the language toggle instead of being stuck
@@ -79,15 +90,24 @@ export async function loadPortalContext(
 
   const { data: uploaded } = await sb
     .from("uploaded_files")
-    .select("request_item_id, uploaded_at, ai_usability")
+    .select(
+      "id, request_item_id, original_filename, review_status, uploaded_at, ai_usability",
+    )
     .eq("engagement_id", engagement.id)
     .order("uploaded_at", { ascending: true });
   const counts: Record<string, number> = {};
   // Ascending order → the last write per item wins, so this reflects the
   // LATEST upload's verdict. A later clean upload supersedes an earlier flag.
   const rejectionSummaryByItem: Record<string, { fr: string; en: string }> = {};
+  // The per-item file list (oldest first, matching the query order).
+  const filesByItem: Record<string, PortalFile[]> = {};
   for (const u of uploaded ?? []) {
     counts[u.request_item_id] = (counts[u.request_item_id] ?? 0) + 1;
+    (filesByItem[u.request_item_id] ??= []).push({
+      id: u.id as string,
+      name: (u.original_filename as string) ?? "",
+      status: (u.review_status as PortalFile["status"]) ?? "pending",
+    });
     const v = u.ai_usability as UsabilityVerdict | null;
     const fr = v?.issue_summary_fr?.trim();
     const en = v?.issue_summary_en?.trim();
@@ -131,6 +151,7 @@ export async function loadPortalContext(
     firm: firm as Firm,
     items: items as RequestItem[],
     uploaded_count_by_item: counts,
+    files_by_item: filesByItem,
     rejection_summary_by_item: rejectionSummaryByItem,
     accountant_email: accountantEmail,
   };

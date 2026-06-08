@@ -20,6 +20,7 @@ export function PortalShell({
   const t = useTranslations("Portal");
   const [items, setItems] = useState(ctx.items);
   const [uploads, setUploads] = useState(ctx.uploaded_count_by_item);
+  const [filesByItem, setFilesByItem] = useState(ctx.files_by_item);
 
   const total = items.length;
   // "Done" means the accountant APPROVED it (or the client marked it not
@@ -54,9 +55,17 @@ export function PortalShell({
       prev.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
     );
   }
-  function handleUploaded(itemId: string) {
+  function handleUploaded(itemId: string, file: { id: string; name: string }) {
     setUploads((prev) => ({ ...prev, [itemId]: (prev[itemId] ?? 0) + 1 }));
     handleItemUpdated(itemId, { status: "submitted" });
+    // Optimistically show the just-sent file in the per-file list as pending.
+    setFilesByItem((prev) => ({
+      ...prev,
+      [itemId]: [
+        ...(prev[itemId] ?? []),
+        { id: file.id, name: file.name, status: "pending" as const },
+      ],
+    }));
   }
 
   return (
@@ -171,8 +180,9 @@ export function PortalShell({
               item={item}
               locale={locale}
               uploadedCount={uploads[item.id] ?? 0}
+              files={filesByItem[item.id] ?? []}
               rejection={ctx.rejection_summary_by_item[item.id] ?? null}
-              onUploaded={() => handleUploaded(item.id)}
+              onUploaded={(f) => handleUploaded(item.id, f)}
               onStatusChange={(status) => handleItemUpdated(item.id, { status })}
             />
           ))}

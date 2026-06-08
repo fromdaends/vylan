@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { Upload, Check, FileCheck2, X, RotateCcw, AlertTriangle, Clock, Loader2 } from "lucide-react";
+import { Upload, Check, FileCheck2, FileText, X, RotateCcw, AlertTriangle, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
+import type { PortalFile } from "@/lib/db/portal";
 
 // Shape returned by /api/portal/upload-status once the background classifier
 // has written its verdict to the uploaded_files row.
@@ -31,6 +32,7 @@ export function ItemCard({
   item,
   locale,
   uploadedCount,
+  files,
   rejection,
   onUploaded,
   onStatusChange,
@@ -39,13 +41,16 @@ export function ItemCard({
   item: RequestItem;
   locale: "fr" | "en";
   uploadedCount: number;
+  // The files the client has sent for this item (oldest first), each with the
+  // accountant's per-file decision.
+  files: PortalFile[];
   // Bilingual AI rejection summary for this item (from the latest upload's
   // usability verdict). Lets the re-upload banner follow the language toggle
   // instead of being stuck in the single language `item.rejection_reason` was
   // written in. Null for manual / legacy rejections — those fall back to the
   // column text.
   rejection: { fr: string; en: string } | null;
-  onUploaded: () => void;
+  onUploaded: (file: { id: string; name: string }) => void;
   onStatusChange: (s: RequestItemStatus) => void;
 }) {
   const t = useTranslations("Portal");
@@ -166,7 +171,10 @@ export function ItemCard({
         // Always count the upload — the file IS saved server-side. The
         // verdict only governs whether we surface a "try again" message
         // on top of that.
-        onUploaded();
+        onUploaded({
+          id: body?.file_id ?? `pending-${Date.now()}-${file.name}`,
+          name: file.name,
+        });
         // Kick off polling for the AI verdict. We don't await it — the
         // user gets immediate "upload complete" feedback and the verdict
         // banner (if any) appears within a few seconds. Polling is
@@ -308,10 +316,38 @@ export function ItemCard({
             </div>
           )}
 
+          {/* The documents the client has sent for this line, each with a
+              simple status. Hidden once the line is fully approved (no
+              file-by-file noise — just the "All set" confirmation below). */}
+          {ds !== "approved" && files.length > 0 && (
+            <ul className="mt-3 space-y-1.5">
+              {files.map((f) => (
+                <li key={f.id} className="flex items-center gap-2 text-sm">
+                  <FileText
+                    className="size-3.5 shrink-0 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <span
+                    className="min-w-0 flex-1 truncate text-foreground/80"
+                    title={f.name}
+                  >
+                    {f.name}
+                  </span>
+                  <FileStatusPill status={f.status} />
+                </li>
+              ))}
+            </ul>
+          )}
+
           {error && <ErrorLine error={error} />}
 
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
-            {item.status === "na" ? (
+            {ds === "approved" ? (
+              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
+                <Check className="size-4" aria-hidden />
+                {t("status_all_set")}
+              </span>
+            ) : item.status === "na" ? (
               <Button variant="outline" size="sm" onClick={undoNa} disabled={pendingNa}>
                 <RotateCcw className="size-4" />
                 {t("undo_na")}
@@ -359,7 +395,7 @@ export function ItemCard({
                 )}
               </>
             )}
-            {uploadedCount > 0 && item.status !== "na" && (
+            {ds !== "approved" && uploadedCount > 0 && item.status !== "na" && (
               <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                 <FileCheck2 className="size-3.5" />
                 {t("uploaded_count", { count: uploadedCount })}
@@ -489,6 +525,30 @@ function StatusBadge({ state }: { state: DisplayState }) {
   return (
     <span className={cn(base, "bg-muted/60 text-muted-foreground")}>
       {t("status_not_started")}
+    </span>
+  );
+}
+
+// A tiny per-file status pill in the document list. Reuses the line-level
+// status words so the client reads consistent language.
+function FileStatusPill({ status }: { status: PortalFile["status"] }) {
+  const t = useTranslations("Portal");
+  const base = "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium";
+  if (status === "approved")
+    return (
+      <span className={cn(base, "bg-success/15 text-success")}>
+        {t("status_approved")}
+      </span>
+    );
+  if (status === "rejected")
+    return (
+      <span className={cn(base, "bg-warning/15 text-warning")}>
+        {t("status_needs_attention")}
+      </span>
+    );
+  return (
+    <span className={cn(base, "bg-accent/10 text-accent")}>
+      {t("status_in_review")}
     </span>
   );
 }
