@@ -4,7 +4,8 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { cookies, headers } from "next/headers";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import { buildConfirmEmail, sendEmail } from "@/lib/email";
 import { getPathname } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
 import {
@@ -175,32 +176,30 @@ export async function signupAction(
   if (!rl.ok) {
     return { error: "rate_limited" };
   }
-  const supabase = await getServerSupabase();
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  // Email confirmation is enabled on this project, so the account can only be
-  // activated by clicking the link we email. Point that link at our OAuth-style
-  // callback with the post-confirmation destination (/onboarding) AND
-  // continue=onboarding — the callback exchanges the code for a session and,
-  // because of that flag, skips the new-user → /demo funnel and lands the user
-  // straight in firm setup, signed in.
   const onboardingNext = localPath(parsed.data.locale, "/onboarding");
-  const emailRedirectTo =
-    `${appUrl}/api/auth/callback?next=${encodeURIComponent(onboardingNext)}` +
-    `&continue=onboarding`;
-  const { error } = await supabase.auth.signUp({
+
+  // We send the confirmation email OURSELVES (via Resend), not through
+  // Supabase's built-in mailer. Two reasons it was failing:
+  //   1. Supabase's built-in mailer is rate-limited to a few per hour, so a
+  //      burst of (test) signups silently stops sending — "no email at all".
+  //   2. Its default template uses the fragile PKCE link, which dies when the
+  //      link opens in a different browser/tab or an email scanner pre-fetches
+  //      it — "invalid or expired link".
+  // admin.generateLink CREATES the user (unconfirmed) and returns a
+  // `hashed_token` WITHOUT sending anything; we mint a token_hash confirm link
+  // (cross-browser-safe — no PKCE code_verifier needed) and email it via Resend.
+  const admin = getServiceRoleSupabase();
+  const { data: link, error } = await admin.auth.admin.generateLink({
+    type: "signup",
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
       data: { name: parsed.data.name, locale: parsed.data.locale },
-      emailRedirectTo,
     },
   });
   if (error) {
-    // Log enough context to debug the "Couldn't create the account"
-    // generic without leaking the password itself. Supabase Auth
-    // returns error.code (newer SDKs) plus a human-readable message;
-    // both go in for whichever the SDK supplies on the day.
-    console.error("[auth.signup] supabase.auth.signUp failed", {
+    console.error("[auth.signup] generateLink failed", {
       message: error.message,
       status: (error as { status?: number }).status,
       code: (error as { code?: string }).code,
@@ -208,12 +207,14 @@ export async function signupAction(
     });
     const msg = error.message.toLowerCase();
     const code = (error as { code?: string }).code ?? "";
-    if (msg.includes("registered") || code === "user_already_exists") {
+    if (
+      msg.includes("registered") ||
+      msg.includes("already") ||
+      code === "user_already_exists" ||
+      code === "email_exists"
+    ) {
       return { error: "email_taken" };
     }
-    // Detect password-policy rejections by keyword. Supabase returns
-    // messages like "Password should contain at least one character of
-    // each: lowercase, uppercase, digits…" — covers most variants.
     if (
       msg.includes("password") ||
       code === "weak_password" ||
@@ -223,12 +224,42 @@ export async function signupAction(
     }
     return { error: "signup_failed" };
   }
-  // signUp() can't establish a session while email confirmation is on — the
-  // account is activated only when the user clicks the link we just emailed.
-  // Rather than bouncing them to a login screen they can't use yet (the old
-  // "why am I logging in twice?" confusion), return a success state so the
-  // signup page renders a "check your email" view. The link (emailRedirectTo
-  // above) routes through the callback and lands them signed in, in onboarding.
+
+  const hashedToken = link?.properties?.hashed_token;
+  if (!hashedToken) {
+    console.error("[auth.signup] generateLink returned no hashed_token");
+    return { error: "signup_failed" };
+  }
+
+  // token_hash confirm link → /api/auth/confirm runs verifyOtp (no PKCE cookie
+  // needed), lands the user signed-in in onboarding, and our welcome email
+  // fires from there as before.
+  const confirmUrl =
+    `${appUrl}/api/auth/confirm?token_hash=${encodeURIComponent(hashedToken)}` +
+    `&type=signup&next=${encodeURIComponent(onboardingNext)}`;
+
+  const { subject, html, text } = buildConfirmEmail({
+    ownerName: parsed.data.name,
+    confirmUrl,
+    locale: parsed.data.locale,
+  });
+  const sent = await sendEmail({ to: parsed.data.email, subject, html, text });
+  if (!sent.sent) {
+    if (sent.reason === "not_configured") {
+      // Local/dev without Resend: log the link so you can confirm by hand.
+      console.warn(
+        `[auth.signup] Resend not configured — confirm link: ${confirmUrl}`,
+      );
+    } else {
+      console.error("[auth.signup] confirmation email failed", {
+        reason: sent.reason,
+      });
+      return { error: "signup_failed" };
+    }
+  }
+
+  // Account exists but is unconfirmed — they activate it by clicking the link
+  // we just emailed. Render the "check your email" view.
   return { checkEmail: true, email: parsed.data.email };
 }
 

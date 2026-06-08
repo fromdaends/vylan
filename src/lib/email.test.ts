@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildEngagementInviteEmail, resolveSender } from "./email";
+import {
+  buildEngagementInviteEmail,
+  buildConfirmEmail,
+  resolveSender,
+} from "./email";
 
 describe("buildEngagementInviteEmail", () => {
   const base = {
@@ -102,5 +106,45 @@ describe("resolveSender", () => {
     expect(resolveSender("onboarding@resend.dev")).toBe(
       "Vylan <hello@vylan.app>",
     );
+  });
+});
+
+describe("buildConfirmEmail", () => {
+  const confirmUrl =
+    "https://vylan.app/api/auth/confirm?token_hash=abc123&type=signup&next=%2Fen%2Fonboarding";
+
+  it("embeds the confirm link in both the button and the copy-paste fallback (en)", () => {
+    const { subject, html, text } = buildConfirmEmail({
+      ownerName: "Phil",
+      confirmUrl,
+      locale: "en",
+    });
+    expect(subject).toMatch(/confirm/i);
+    // Link present in the HTML href and in the plain-text body.
+    expect(html).toContain(`href="${confirmUrl}"`);
+    expect(html).toContain(confirmUrl); // copy-paste fallback too
+    expect(text).toContain(confirmUrl);
+    expect(html).toContain("Phil");
+  });
+
+  it("emits French copy when locale=fr", () => {
+    const { subject, html } = buildConfirmEmail({
+      ownerName: "Marie",
+      confirmUrl,
+      locale: "fr",
+    });
+    expect(subject).toMatch(/confirmez/i);
+    expect(html).toContain("Confirmer mon courriel");
+    expect(html).toContain(`href="${confirmUrl}"`);
+  });
+
+  it("escapes the owner name to avoid HTML injection", () => {
+    const { html } = buildConfirmEmail({
+      ownerName: "<script>x</script>",
+      confirmUrl,
+      locale: "en",
+    });
+    expect(html).not.toContain("<script>x</script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 });
