@@ -200,6 +200,12 @@
     "footer_for_firms": "For firms",
     "footer_book_demo": "Book a demo",
     "footer_login": "Login",
+    "footer_contact": "Contact",
+    "contact_title": "Get in touch",
+    "contact_email_label": "Email",
+    "contact_phone_label": "Call us",
+    "contact_location_label": "Where we are",
+    "contact_location_value": "Greater Montréal, Québec · Canada",
     "footer_copyright": "© 2026 Vylan, Inc."
   },
   "VylanManifesto": {
