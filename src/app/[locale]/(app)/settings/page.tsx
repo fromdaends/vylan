@@ -4,11 +4,12 @@ import { getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { isTrialExpired, trialDaysLeft } from "@/lib/trial";
 import { getFirmAiUsage } from "@/lib/ai/usage";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { assertLocale } from "@/lib/locale";
 import { SettingsShell } from "./settings-form";
-import { GoLiveCard } from "@/components/settings/go-live-card";
+import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
 
 export const dynamic = "force-dynamic";
@@ -58,6 +59,11 @@ export default async function SettingsPage({
   const t = await getTranslations("Settings");
   const isOwner = user.role === "owner";
 
+  // Free-trial status card state (owner-only, unconverted trial firms).
+  // The helpers default "now" internally (keeps Date.now() out of render).
+  const trialExpired = isTrialExpired(firm);
+  const trialDays = trialDaysLeft(firm);
+
   // The subscription summary is an async server component; render it here and
   // hand it to the (client) settings shell as a slot for the Billing tab.
   const billingSlot = isOwner ? (
@@ -77,9 +83,12 @@ export default async function SettingsPage({
         <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>
       </header>
 
-      {/* Go-live promotion — owner-only, only while the firm is still a demo.
+      {/* Free-trial status — owner-only, only while the firm is an unconverted
+          trial. Surfaces days-left + a booking CTA (no free self-upgrade).
           Sits above the sectioned settings so it can't be missed. */}
-      {firm.is_demo && user.role === "owner" && <GoLiveCard />}
+      {firm.is_demo && user.role === "owner" && (
+        <TrialStatusCard expired={trialExpired} daysLeft={trialDays} />
+      )}
 
       <SettingsShell
         currentLocale={user.locale}

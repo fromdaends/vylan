@@ -17,6 +17,7 @@ import {
 } from "@/components/clients/owner";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { isTrialExpired } from "@/lib/trial";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { getBrandingImageUrl } from "@/lib/storage";
 import type {
@@ -74,7 +75,9 @@ export default async function ClientsPage({
       getCurrentUser(),
       listFirmUsers(),
     ]);
-  const isDemo = firm?.is_demo === true;
+  // Write actions are locked only once the free trial has expired; an active
+  // trial has full access.
+  const trialLocked = firm ? isTrialExpired(firm) : false;
   const currentUserId = currentUser?.id ?? "";
 
   // Default to the accountant's OWN clients ("mine") when they actually own at
@@ -193,7 +196,7 @@ export default async function ClientsPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {isDemo ? (
+          {trialLocked ? (
             <>
               <DemoBlockButton
                 label={t("import_csv")}
