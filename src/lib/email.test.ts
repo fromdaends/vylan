@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildEngagementInviteEmail,
   buildConfirmEmail,
+  buildSignedCopyReturnedEmail,
   resolveSender,
 } from "./email";
 
@@ -146,5 +147,69 @@ describe("buildConfirmEmail", () => {
     });
     expect(html).not.toContain("<script>x</script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+});
+
+describe("buildSignedCopyReturnedEmail", () => {
+  const base = {
+    accountantName: "Marie",
+    clientName: "Jean Tremblay",
+    documentName: "Lettre de mission",
+    engagementTitle: "Déclaration T1 2025",
+    reviewUrl: "https://vylan.app/fr/engagements/eng-123",
+    locale: "fr" as const,
+  };
+
+  it("names the client + document and embeds the review link (fr)", () => {
+    const { subject, html, text } = buildSignedCopyReturnedEmail(base);
+    expect(subject).toContain("Jean Tremblay");
+    expect(html).toContain("Bonjour Marie,");
+    expect(html).toContain("Lettre de mission");
+    expect(html).toContain("Déclaration T1 2025");
+    expect(html).toContain(`href="${base.reviewUrl}"`);
+    expect(html).toContain(base.reviewUrl); // copy-paste fallback
+    expect(text).toContain(base.reviewUrl);
+  });
+
+  it("emits English copy when locale=en", () => {
+    const { subject, html } = buildSignedCopyReturnedEmail({
+      ...base,
+      locale: "en",
+    });
+    expect(subject).toContain("Signed copy returned");
+    expect(html).toContain("Hi Marie,");
+    expect(html).toContain("Review in Vylan");
+  });
+
+  it("falls back to a nameless greeting when the accountant has no name", () => {
+    const fr = buildSignedCopyReturnedEmail({ ...base, accountantName: null });
+    expect(fr.html).toContain("<p>Bonjour,</p>");
+    const en = buildSignedCopyReturnedEmail({
+      ...base,
+      accountantName: null,
+      locale: "en",
+    });
+    expect(en.html).toContain("<p>Hi,</p>");
+  });
+
+  it("escapes client/document/title to avoid HTML injection", () => {
+    const { html } = buildSignedCopyReturnedEmail({
+      ...base,
+      clientName: "<script>x</script>",
+    });
+    expect(html).not.toContain("<script>x</script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("makes NO legal / e-signature-validity claim", () => {
+    const fr = buildSignedCopyReturnedEmail(base);
+    const en = buildSignedCopyReturnedEmail({ ...base, locale: "en" });
+    for (const out of [fr, en]) {
+      const blob = `${out.subject}\n${out.html}\n${out.text}`.toLowerCase();
+      expect(blob).not.toContain("legally binding");
+      expect(blob).not.toContain("certified");
+      expect(blob).not.toContain("juridiquement");
+      expect(blob).not.toContain("certifié");
+    }
   });
 });
