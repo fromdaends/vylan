@@ -62,6 +62,19 @@ describe("matchDocument — type", () => {
       }),
     ).toEqual([]);
   });
+
+  it("never flags a type mismatch when the item expects 'other' (freeform item)", () => {
+    // "other" is the default doc type for custom/freeform checklist items, i.e.
+    // no specific type was requested — any recognised document is acceptable.
+    expect(
+      matchDocument({
+        expectedDocType: "other",
+        expectedYear: null,
+        clientName: null,
+        classification: { ...base, document_type: "bank_statement" },
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe("matchDocument — year", () => {

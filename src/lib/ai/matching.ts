@@ -49,10 +49,14 @@ export function matchDocument(input: MatchInput): MatchFlag[] {
   const flags: MatchFlag[] = [];
   const c = input.classification;
 
-  // TYPE — detected type differs from the requested one. "unknown" is a
-  // "couldn't tell", not a mismatch (it's surfaced separately).
+  // TYPE — detected type differs from the requested one. Two non-mismatches:
+  //   * "unknown" is a "couldn't tell", not a mismatch (surfaced separately);
+  //   * an expected type of "other" means the checklist item didn't ask for a
+  //     specific document — it's the default for freeform/custom items — so any
+  //     recognised type is acceptable and must never raise a type mismatch.
   if (
     c.document_type !== "unknown" &&
+    input.expectedDocType !== "other" &&
     c.document_type !== input.expectedDocType &&
     c.confidence >= MIN_FLAG_CONFIDENCE
   ) {

@@ -2,6 +2,7 @@ import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
 import type { DocType } from "@/lib/db/templates";
 import { DOC_TYPE_LABELS, docTypeLabel } from "@/lib/doc-types";
+import { matchDocument } from "@/lib/ai/matching";
 
 // The at-a-glance states a document can show in the Preview grid:
 //   * approved — the accountant accepted it, OR the AI read it as usable AND
@@ -65,23 +66,35 @@ export function normalizeText(s: string): string {
 //      (approved, or rejected = they sent it back to the client).
 //   2. Otherwise the system's auto-reject flag — a TRUE rejection the client
 //      was notified about.
-//   3. Otherwise the AI's usability verdict: usable -> approved; not usable ->
+//   3. Otherwise a confident mismatch with what the item asked for (wrong doc
+//      type / tax year / a stranger's name) => "flagged". A perfectly legible
+//      scan of the WRONG document must never pass as a green "looks good".
+//   4. Otherwise the AI's usability verdict: usable -> approved; not usable ->
 //      "flagged" (a suggestion for the accountant, NOT a client rejection).
-//   4. Otherwise it simply hasn't been analysed yet (neutral "pending").
+//   5. Otherwise it simply hasn't been analysed yet (neutral "pending").
 export function resolvePreviewStatus(
   file: Pick<
     UploadedFile,
     "ai_usability" | "ai_rejected" | "ai_extracted_fields"
   >,
   itemStatus: RequestItemStatus,
+  // True when the AI's read confidently disagrees with the request (wrong
+  // type / year / client). Computed by buildPreviewDocs via `matchDocument` —
+  // the SAME comparator the detail view's "Doesn't match the request" panel
+  // uses — so the grid badge and that panel can never disagree. Defaults to
+  // false so a bare file with no engagement context still resolves cleanly.
+  hasRequestMismatch = false,
 ): PreviewStatus {
   if (itemStatus === "approved") return "approved";
   if (itemStatus === "rejected") return "rejected";
   if (file.ai_rejected) return "rejected";
+  // A confident request mismatch flags even a crystal-clear scan: the document
+  // is readable but it is not the one that was asked for, so it needs the
+  // accountant's eye rather than a silent green "looks good".
+  if (hasRequestMismatch) return "flagged";
   if (file.ai_usability) {
-    // Not usable, OR the AI flagged a content concern — most importantly the
-    // WRONG DOCUMENT TYPE (e.g. a T4 uploaded for a "General Ledger Export"
-    // item), which the classifier records as looks_correct === false. A
+    // Not usable, OR the AI flagged a content concern (looks_correct === false,
+    // e.g. a T4 uploaded for a "General Ledger Export" item). A
     // readable-but-wrong document must NOT auto-"approve"; it needs the
     // accountant's eye, so it's "flagged". A clean, matching read is "approved".
     if (!file.ai_usability.usable || aiFlaggedConcern(file)) return "flagged";
@@ -99,6 +112,47 @@ function aiFlaggedConcern(
 ): boolean {
   const f = file.ai_extracted_fields as { looks_correct?: unknown } | null;
   return f?.looks_correct === false;
+}
+
+// Does the AI's read confidently disagree with what the checklist item asked
+// for — wrong document type, wrong tax year, or a completely different party
+// name? Reuses the SAME `matchDocument` comparator that powers the detail
+// view's "Doesn't match the request" panel, so the grid status and that panel
+// can never disagree. matchDocument applies its own confidence floor, so this
+// stays quiet unless the AI was reasonably sure; it needs a finished
+// classification (a type code + a confidence) to say anything at all.
+function mismatchesRequest(
+  file: Pick<
+    UploadedFile,
+    "ai_classification" | "ai_confidence" | "ai_extracted_fields"
+  >,
+  expectedDocType: DocType,
+  expectedYear: number | null,
+  clientName: string | null,
+): boolean {
+  const classification = file.ai_classification;
+  const conf = file.ai_confidence;
+  if (!classification || conf == null) return false;
+  const f = (file.ai_extracted_fields ?? {}) as {
+    extracted_year?: unknown;
+    party_name?: unknown;
+    fields_confidence?: unknown;
+  };
+  const flags = matchDocument({
+    expectedDocType,
+    expectedYear,
+    clientName,
+    classification: {
+      document_type: classification as DocType | "unknown",
+      confidence: conf,
+      extracted_year:
+        typeof f.extracted_year === "number" ? f.extracted_year : null,
+      party_name: typeof f.party_name === "string" ? f.party_name : null,
+      fields_confidence:
+        typeof f.fields_confidence === "number" ? f.fields_confidence : 0,
+    },
+  });
+  return flags.length > 0;
 }
 
 function buildSearchText(
@@ -138,10 +192,18 @@ function buildSearchText(
 // Build the Preview view-model from the raw uploads + checklist items the
 // engagement page already loaded. Pure + serialisable so it can run inside the
 // client overlay (via useMemo) and be unit-tested directly.
+//
+// `opts` carries the engagement-level expectations the per-document match check
+// needs: the tax year (read off the engagement title) and the client's name.
+// Both are optional so callers / tests that don't care about matching keep
+// working; without them only a wrong-doc-type mismatch can ever surface.
 export function buildPreviewDocs(
   uploads: UploadedFile[],
   items: RequestItem[],
+  opts: { expectedYear?: number | null; clientName?: string | null } = {},
 ): PreviewDoc[] {
+  const expectedYear = opts.expectedYear ?? null;
+  const clientName = opts.clientName ?? null;
   const itemById = new Map(items.map((i) => [i.id, i]));
   const siblingCounts = new Map<string, number>();
   for (const u of uploads) {
@@ -158,6 +220,15 @@ export function buildPreviewDocs(
     };
     const year =
       typeof fields.extracted_year === "number" ? fields.extracted_year : null;
+    // What the checklist item asked for; "other" (the freeform-item default)
+    // means no specific type was requested — matchDocument treats it as such.
+    const expectedDocType: DocType = item?.doc_type ?? "other";
+    const mismatch = mismatchesRequest(
+      u,
+      expectedDocType,
+      expectedYear,
+      clientName,
+    );
     return {
       fileId: u.id,
       itemId: u.request_item_id,
@@ -165,7 +236,7 @@ export function buildPreviewDocs(
       mimeType: u.mime_type,
       sizeBytes: u.size_bytes,
       uploadedAt: u.uploaded_at,
-      status: resolvePreviewStatus(u, itemStatus),
+      status: resolvePreviewStatus(u, itemStatus, mismatch),
       itemStatus,
       siblingCount: siblingCounts.get(u.request_item_id) ?? 1,
       classification: u.ai_classification,
