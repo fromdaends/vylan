@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { sendWelcomeOnce } from "@/lib/welcome";
 
 // Handles all Supabase auth callbacks that funnel through PKCE code
 // exchange:
@@ -43,32 +44,43 @@ export async function GET(request: NextRequest) {
     const supabase = await getServerSupabase();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      // Funnel discipline: every brand-new account must go through the
-      // /demo qualification questionnaire before reaching the app. We
-      // detect "brand new" by checking whether a public.users row
-      // exists for this auth user — email signup creates that row in
-      // step1Action, so it's the canonical "have they finished
-      // onboarding their firm" signal. Google OAuth creates only an
-      // auth.users row, so first-time Google users will land here
-      // without a public.users row and get routed to /demo.
-      //
-      // Existing users (email confirm, password reset, returning OAuth)
-      // already have a public.users row → honor the requested `next`.
-      //
-      // The `continueOnboarding` flag short-circuits this for users who
-      // came from /demo's "Try the demo" CTA — they already qualified,
-      // no point looping them back.
       const { data: authData } = await supabase.auth.getUser();
-      const userId = authData?.user?.id;
+      const authUser = authData?.user;
       const locale = localeFromNext(next);
 
-      if (userId && !continueOnboarding) {
+      if (authUser) {
+        // Detect "brand new" by checking whether a public.users row exists
+        // for this auth user — email signup creates that row in step1Action,
+        // so it's the canonical "have they set up their firm yet" signal.
+        // Google OAuth creates only an auth.users row, so first-time Google
+        // users land here without one. We use this single lookup for both the
+        // welcome email and the /demo funnel routing below.
         const { data: row } = await supabase
           .from("users")
           .select("id")
-          .eq("id", userId)
+          .eq("id", authUser.id)
           .maybeSingle();
-        if (!row) {
+        const hasUsersRow = !!row;
+
+        // Welcome the user the instant they first land signed-in — even if
+        // they never finish onboarding. Self-gating (brand-new + not a reset
+        // + not already welcomed), deduped, and fully deferred via after(),
+        // so it never blocks or breaks this redirect.
+        sendWelcomeOnce({
+          authUser,
+          hasUsersRow,
+          isPasswordReset: next.includes("/reset-password"),
+          fallbackLocale: locale,
+          appUrl: origin,
+        });
+
+        // Funnel discipline: every brand-new account goes through the /demo
+        // qualification questionnaire before reaching the app. The
+        // `continueOnboarding` flag short-circuits this for users who came
+        // from /demo's "Try the demo" CTA — they already qualified. Existing
+        // users (email confirm, password reset, returning OAuth) already have
+        // a public.users row → honor the requested `next`.
+        if (!hasUsersRow && !continueOnboarding) {
           return NextResponse.redirect(`${origin}/${locale}/demo`);
         }
       }

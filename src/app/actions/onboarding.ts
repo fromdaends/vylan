@@ -9,7 +9,6 @@ import { getCurrentFirm, updateCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { getPathname } from "@/i18n/navigation";
 import { parseEmailList } from "@/lib/validators";
-import { buildWelcomeEmail, sendEmail } from "@/lib/email";
 import { seedDemoData } from "@/lib/demo-seed";
 import { notifyFounderNewSignup } from "@/lib/demo-notify";
 import { createInvite } from "@/app/actions/team";
@@ -164,7 +163,7 @@ export async function submitStep3(
   }
   const emails = parseEmailList(parsed.data.emails);
   await updateCurrentFirm({ onboarded_at: new Date().toISOString() });
-  await sendWelcomeEmail();
+  await notifyFounderOfSignup();
   // Send real invitations for any colleagues entered (Phase 7 — replaces the
   // old "invites coming soon" stub that only stashed them in invited_emails).
   // Best-effort: onboarding must not fail on an email hiccup, and createInvite
@@ -184,41 +183,27 @@ export async function submitStep3(
   redirect(localPath(locale, "/dashboard"));
 }
 
-async function sendWelcomeEmail(): Promise<void> {
-  // Fire-and-forget: don't block onboarding redirect on a slow Resend call.
+// Notify the founder that a prospect just finished signing up — with the firm
+// ID + login email needed to bill + activate them in Stripe. Demo signups
+// only: those are the accounts that go through the manual sales/activation
+// flow. The welcome-to-the-user email is no longer sent from here — it now
+// goes out the moment the user first lands signed-in, even if they never
+// reach this step (see src/lib/welcome.ts).
+async function notifyFounderOfSignup(): Promise<void> {
   const [user, firm] = await Promise.all([
     getCurrentUser(),
     getCurrentFirm(),
   ]);
   if (!user?.email || !firm) return;
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const { subject, html, text } = buildWelcomeEmail({
-    firmName: firm.name,
-    ownerName: user.name || user.email.split("@")[0],
-    appUrl,
-    locale: firm.locale_default,
-  });
-  after(async () => {
-    try {
-      await sendEmail({ to: user.email, subject, html, text });
-    } catch (e) {
-      console.error("[welcome email] failed:", e);
-    }
-  });
-
-  // Notify the founder that a prospect just signed up — with the firm ID +
-  // login email needed to bill + activate them in Stripe. Demo signups only:
-  // those are the accounts that go through the manual sales/activation flow.
-  if (firm.is_demo) {
-    after(() =>
-      notifyFounderNewSignup({
-        firmId: firm.id,
-        firmName: firm.name,
-        ownerName: user.name || user.email.split("@")[0],
-        ownerEmail: user.email,
-      }),
-    );
-  }
+  if (!firm.is_demo) return;
+  after(() =>
+    notifyFounderNewSignup({
+      firmId: firm.id,
+      firmName: firm.name,
+      ownerName: user.name || user.email.split("@")[0],
+      ownerEmail: user.email,
+    }),
+  );
 }
 
 export async function skipStep(formData: FormData) {
@@ -227,7 +212,7 @@ export async function skipStep(formData: FormData) {
 
   if (step >= 3) {
     await updateCurrentFirm({ onboarded_at: new Date().toISOString() });
-    await sendWelcomeEmail();
+    await notifyFounderOfSignup();
     revalidatePath("/", "layout");
     redirect(localPath(locale, "/dashboard"));
   }

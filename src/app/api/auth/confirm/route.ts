@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { sendWelcomeOnce } from "@/lib/welcome";
 
 // Cross-device email confirmation.
 //
@@ -54,8 +55,32 @@ export async function GET(request: NextRequest) {
       // opened the email may have no locale cookie, so derive it from the user
       // metadata the signup stored).
       const { data: auth } = await supabase.auth.getUser();
+      const authUser = auth?.user;
       const userLocale =
-        auth?.user?.user_metadata?.locale === "en" ? "en" : "fr";
+        authUser?.user_metadata?.locale === "en" ? "en" : "fr";
+
+      // Welcome the user the instant they confirm. This is the cross-device
+      // signup-confirmation entry point, so for email signups it's where they
+      // first land signed-in — mirrors /api/auth/callback (the PKCE / Google
+      // path). The shared once-only dedupe (welcomed_at marker) means a user
+      // is welcomed exactly once regardless of which route they came through.
+      // `recovery` = a password reset, which never gets a welcome.
+      if (authUser) {
+        const { data: row } = await supabase
+          .from("users")
+          .select("id")
+          .eq("id", authUser.id)
+          .maybeSingle();
+        sendWelcomeOnce({
+          authUser,
+          hasUsersRow: !!row,
+          isPasswordReset:
+            rawType === "recovery" || next.includes("/reset-password"),
+          fallbackLocale: userLocale,
+          appUrl: origin,
+        });
+      }
+
       const dest = /^\/(fr|en)(\/|$)/.test(next)
         ? next
         : `/${userLocale}${next}`;
