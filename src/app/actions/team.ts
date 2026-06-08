@@ -14,6 +14,7 @@ import {
 } from "@/lib/supabase/server";
 import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { isOnTrial } from "@/lib/trial";
 import { logUserActivity } from "@/lib/db/activity";
 import { getPathname } from "@/i18n/navigation";
 import { checkRateLimit, SIGNUP_LIMIT } from "@/lib/rate-limit";
@@ -58,6 +59,7 @@ export type CreateInviteResult =
       error:
         | "no_session"
         | "owner_only"
+        | "trial_locked_team"
         | "invalid_email"
         | "seat_limit"
         | "email_exists"
@@ -75,6 +77,10 @@ export async function createInvite(
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) return { ok: false, error: "no_session" };
   if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  // Free-trial firms are owner-only: inviting teammates / adding seats unlocks
+  // when they convert to a paid plan. The UI hides the invite control; this is
+  // the server-side backstop.
+  if (isOnTrial(firm)) return { ok: false, error: "trial_locked_team" };
 
   const parsed = parseInviteEmail(formData.get("email"));
   if (!parsed.ok) return { ok: false, error: "invalid_email" };

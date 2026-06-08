@@ -12,6 +12,7 @@ import {
   Mail,
   Clock,
   Check,
+  Lock,
 } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ import {
   reactivateUser,
   transferOwnership,
 } from "@/app/actions/team";
+import { BookCallButton } from "@/components/booking/book-call-button";
 
 type Seat = { used: number; cap: number | null; atCap: boolean };
 type ActiveMember = {
@@ -85,6 +87,8 @@ function useErrorMessage() {
         return t("error_cannot_deactivate_only_owner");
       case "owner_only":
         return t("error_owner_only");
+      case "trial_locked_team":
+        return t("error_trial_locked_team");
       default:
         return t("error_generic");
     }
@@ -94,6 +98,7 @@ function useErrorMessage() {
 export function TeamManager({
   firmName,
   canManage,
+  onTrial,
   seat,
   activeMembers,
   deactivatedMembers,
@@ -105,6 +110,9 @@ export function TeamManager({
   // Owners see the full manager; staff get a read-only roster (no invite,
   // deactivate, transfer, or seat controls).
   canManage: boolean;
+  // On an active free trial the team feature stays visible but locked: invites
+  // and extra seats unlock once the firm converts to a paid plan.
+  onTrial: boolean;
   seat: Seat;
   activeMembers: ActiveMember[];
   deactivatedMembers: DeactivatedMember[];
@@ -139,49 +147,61 @@ export function TeamManager({
           <Button
             type="button"
             size="sm"
-            disabled={seat.atCap}
+            disabled={onTrial || seat.atCap}
             title={
-              seat.atCap ? t("seats_at_cap", { cap: seat.cap ?? 0 }) : undefined
+              onTrial
+                ? t("trial_locked_short")
+                : seat.atCap
+                  ? t("seats_at_cap", { cap: seat.cap ?? 0 })
+                  : undefined
             }
             onClick={() => setInviteOpen(true)}
           >
-            <UserPlus className="size-4" />
+            {onTrial ? (
+              <Lock className="size-4" />
+            ) : (
+              <UserPlus className="size-4" />
+            )}
             {t("invite_button")}
           </Button>
         )}
       </div>
 
-      {/* Seat usage (owner-only) */}
-      {canManage && (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-medium">{seatLabel}</span>
-            {seat.atCap && (
-              <span className="text-xs text-warning">
-                {t("seats_at_cap", { cap: seat.cap ?? 0 })}
-              </span>
+      {/* Seat usage (owner-only). On an active free trial we swap the seat
+          meter for a "locked — book a call to unlock your team" panel. */}
+      {canManage &&
+        (onTrial ? (
+          <TrialTeamLock />
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium">{seatLabel}</span>
+              {seat.atCap && (
+                <span className="text-xs text-warning">
+                  {t("seats_at_cap", { cap: seat.cap ?? 0 })}
+                </span>
+              )}
+            </div>
+            {seat.cap != null && (
+              <div
+                className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-valuenow={pct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label={seatLabel}
+              >
+                <div
+                  className={
+                    "h-full rounded-full transition-all " +
+                    (seat.atCap ? "bg-warning" : "bg-primary")
+                  }
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
             )}
           </div>
-          {seat.cap != null && (
-            <div
-              className="h-1.5 w-full overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-valuenow={pct}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label={seatLabel}
-            >
-              <div
-                className={
-                  "h-full rounded-full transition-all " +
-                  (seat.atCap ? "bg-warning" : "bg-primary")
-                }
-                style={{ width: `${pct}%` }}
-              />
-            </div>
-          )}
-        </div>
-      )}
+        ))}
 
       {/* Active members */}
       <div>
@@ -197,8 +217,8 @@ export function TeamManager({
         </div>
       </div>
 
-      {/* Pending invitations (owner-only) */}
-      {canManage && (
+      {/* Pending invitations (owner-only; hidden on trial — none can exist) */}
+      {canManage && !onTrial && (
         <div>
           <h2 className="text-sm font-semibold">{t("section_pending")}</h2>
           {pendingInvites.length === 0 ? (
@@ -238,6 +258,35 @@ export function TeamManager({
         />
       )}
     </section>
+  );
+}
+
+// Free-trial lock for the team feature: the roster stays visible (just the
+// owner) but inviting teammates / adding seats is gated behind converting to a
+// paid plan. Rendered in place of the seat meter while the firm is on trial.
+function TrialTeamLock() {
+  const t = useTranslations("Team");
+  return (
+    <div className="rounded-xl border border-border/60 bg-muted/30 p-5">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-background text-muted-foreground">
+          <Lock className="size-4" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-semibold">{t("trial_locked_title")}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("trial_locked_body")}
+          </p>
+          <div className="mt-3">
+            <BookCallButton
+              label={t("trial_locked_cta")}
+              variant="default"
+              size="sm"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
