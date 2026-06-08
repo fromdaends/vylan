@@ -7,6 +7,7 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
 import type { PortalFile } from "@/lib/db/portal";
+import { PortalImageLightbox } from "./portal-image-lightbox";
 
 // Shape returned by /api/portal/upload-status once the background classifier
 // has written its verdict to the uploaded_files row.
@@ -50,7 +51,7 @@ export function ItemCard({
   // written in. Null for manual / legacy rejections — those fall back to the
   // column text.
   rejection: { fr: string; en: string } | null;
-  onUploaded: (file: { id: string; name: string }) => void;
+  onUploaded: (file: { id: string; name: string; mime: string }) => void;
   onStatusChange: (s: RequestItemStatus) => void;
 }) {
   const t = useTranslations("Portal");
@@ -71,6 +72,14 @@ export function ItemCard({
   // Drag-and-drop a file straight onto the card (desktop nicety; the Upload
   // button is the primary path and works everywhere).
   const [dragging, setDragging] = useState(false);
+  // Which uploaded photo (if any) is open in the full-screen enlarge view.
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // The image files (oldest-first) the client can preview; drives the
+  // thumbnails and the enlarge lightbox. Non-image files (PDFs) get a plain
+  // tile and aren't enlargeable in this version.
+  const imageFiles = files.filter(
+    (f) => !!f.mime && f.mime.startsWith("image/"),
+  );
 
   // Cancel any in-flight poll when the component unmounts.
   useEffect(() => {
@@ -174,6 +183,7 @@ export function ItemCard({
         onUploaded({
           id: body?.file_id ?? `pending-${Date.now()}-${file.name}`,
           name: file.name,
+          mime: file.type,
         });
         // Kick off polling for the AI verdict. We don't await it — the
         // user gets immediate "upload complete" feedback and the verdict
@@ -326,41 +336,65 @@ export function ItemCard({
               simple status. Hidden once the line is fully approved (no
               file-by-file noise — just the "All set" confirmation below). */}
           {ds !== "approved" && files.length > 0 && (
-            <ul className="mt-3 space-y-1.5">
-              {files.map((f) => {
-                // Each rejected file shows its OWN plain reason (French default),
-                // so the client knows exactly what is wrong with that file. Only
-                // rejected files carry a reason; it's always plain language.
-                const fileReason =
-                  f.status === "rejected" && f.reason
-                    ? locale === "fr"
-                      ? f.reason.fr
-                      : f.reason.en
-                    : null;
-                return (
-                  <li key={f.id} className="text-sm">
-                    <div className="flex items-center gap-2">
-                      <FileText
-                        className="size-3.5 shrink-0 text-muted-foreground"
-                        aria-hidden
+            <>
+              <ul className="mt-3 space-y-2.5">
+                {files.map((f) => {
+                  // Each rejected file shows its OWN plain reason (French
+                  // default), so the client knows exactly what is wrong with
+                  // that file. Only rejected files carry a reason.
+                  const fileReason =
+                    f.status === "rejected" && f.reason
+                      ? locale === "fr"
+                        ? f.reason.fr
+                        : f.reason.en
+                      : null;
+                  // An image opens the enlarge view at its position among this
+                  // item's image files; non-images (PDFs) have no enlarge.
+                  const imageIndex = imageFiles.findIndex((x) => x.id === f.id);
+                  return (
+                    <li
+                      key={f.id}
+                      className="flex items-center gap-2.5 text-sm"
+                    >
+                      <PortalFileThumb
+                        token={token}
+                        file={f}
+                        onOpen={
+                          imageIndex >= 0
+                            ? () => setLightboxIndex(imageIndex)
+                            : undefined
+                        }
                       />
-                      <span
-                        className="min-w-0 flex-1 truncate text-foreground/80"
-                        title={f.name}
-                      >
-                        {f.name}
-                      </span>
-                      <FileStatusPill status={f.status} />
-                    </div>
-                    {fileReason && (
-                      <p className="mt-1 pl-[1.375rem] text-xs leading-relaxed text-warning">
-                        {fileReason}
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="min-w-0 flex-1 truncate text-foreground/80"
+                            title={f.name}
+                          >
+                            {f.name}
+                          </span>
+                          <FileStatusPill status={f.status} />
+                        </div>
+                        {fileReason && (
+                          <p className="mt-1 text-xs leading-relaxed text-warning">
+                            {fileReason}
+                          </p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              {lightboxIndex !== null && imageFiles[lightboxIndex] && (
+                <PortalImageLightbox
+                  token={token}
+                  images={imageFiles.map((f) => ({ id: f.id, name: f.name }))}
+                  index={lightboxIndex}
+                  onClose={() => setLightboxIndex(null)}
+                  onIndexChange={setLightboxIndex}
+                />
+              )}
+            </>
           )}
 
           {error && <ErrorLine error={error} />}
@@ -574,5 +608,50 @@ function FileStatusPill({ status }: { status: PortalFile["status"] }) {
     <span className={cn(base, "bg-accent/10 text-accent")}>
       {t("status_in_review")}
     </span>
+  );
+}
+
+// A small preview tile in the per-file list. For an image it renders a real
+// thumbnail (token-scoped endpoint) that opens the enlarge view on click; for a
+// PDF / other type, or if the thumbnail fails to load, a plain document tile.
+function PortalFileThumb({
+  token,
+  file,
+  onOpen,
+}: {
+  token: string;
+  file: PortalFile;
+  onOpen?: () => void;
+}) {
+  const t = useTranslations("Portal");
+  const [failed, setFailed] = useState(false);
+  const isImage = !!file.mime && file.mime.startsWith("image/");
+
+  if (!isImage || failed || !onOpen) {
+    return (
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-muted/50 text-muted-foreground ring-1 ring-border/60">
+        <FileText className="size-4" aria-hidden />
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={t("preview_open", { name: file.name })}
+      className="group/thumb size-10 shrink-0 overflow-hidden rounded-md ring-1 ring-border/60 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/api/portal/files/${file.id}/thumb?token=${encodeURIComponent(
+          token,
+        )}&w=144`}
+        alt=""
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className="size-full object-cover transition-transform duration-200 group-hover/thumb:scale-105"
+      />
+    </button>
   );
 }
