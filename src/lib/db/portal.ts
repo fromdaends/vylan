@@ -14,6 +14,7 @@ import type { Firm } from "./firms";
 import type { RequestItem, RequestItemStatus } from "./request-items";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
+import { BUCKET } from "@/lib/storage";
 
 const TOKEN_REGEX = /^[0-9A-Za-z]{43}$/;
 
@@ -35,6 +36,12 @@ export type PortalFile = {
   // The stored MIME type, so the portal can show a real picture for image files
   // (and a labelled tile for PDFs / other types). Null only for legacy rows.
   mime: string | null;
+  // For an IMAGE file: a signed URL straight to the stored file in Supabase
+  // storage, so the portal serves it directly (which stays reliable when a line
+  // has many files firing requests at once) instead of rendering each thumbnail
+  // on the fly. Null for non-images and on any signing failure (the tile then
+  // falls back to the render route, then to an icon).
+  url: string | null;
 };
 
 export type PortalContext = {
@@ -102,10 +109,38 @@ export async function loadPortalContext(
   const { data: uploaded } = await sb
     .from("uploaded_files")
     .select(
-      "id, request_item_id, original_filename, review_status, rejection_reason, mime_type, uploaded_at, ai_usability",
+      "id, request_item_id, original_filename, review_status, rejection_reason, mime_type, storage_path, uploaded_at, ai_usability",
     )
     .eq("engagement_id", engagement.id)
     .order("uploaded_at", { ascending: true });
+
+  // Sign direct storage URLs for image files so the portal loads them straight
+  // from Supabase storage (which serves many concurrent requests reliably)
+  // rather than rendering every thumbnail on the fly — a line with 20+ files
+  // fired that many render requests at once and overran the image route. PDFs
+  // are served via the bytes endpoint, not here. Generous TTL so the URLs
+  // outlive a long portal session.
+  const imagePaths = Array.from(
+    new Set(
+      (uploaded ?? [])
+        .filter(
+          (u) =>
+            typeof u.mime_type === "string" &&
+            (u.mime_type as string).startsWith("image/"),
+        )
+        .map((u) => u.storage_path as string),
+    ),
+  );
+  const urlByPath = new Map<string, string>();
+  if (imagePaths.length > 0) {
+    const { data: signed } = await sb.storage
+      .from(BUCKET)
+      .createSignedUrls(imagePaths, 60 * 60 * 4);
+    for (const s of signed ?? []) {
+      if (s.signedUrl && !s.error && s.path) urlByPath.set(s.path, s.signedUrl);
+    }
+  }
+
   const counts: Record<string, number> = {};
   // Ascending order → the last write per item wins, so this reflects the
   // LATEST upload's verdict. A later clean upload supersedes an earlier flag.
@@ -127,6 +162,10 @@ export async function loadPortalContext(
       // reason) and the no-jargon guarantee.
       reason: resolveFileReason(status, v, u.rejection_reason as string | null),
       mime: (u.mime_type as string | null) ?? null,
+      url:
+        typeof u.mime_type === "string" && u.mime_type.startsWith("image/")
+          ? (urlByPath.get(u.storage_path as string) ?? null)
+          : null,
     });
     if (fr || en) {
       rejectionSummaryByItem[u.request_item_id] = {
