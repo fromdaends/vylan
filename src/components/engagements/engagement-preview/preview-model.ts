@@ -34,6 +34,11 @@ export type PreviewDoc = {
   // rejecting one card moves its siblings too — the UI surfaces this count so
   // it is never a surprise.
   siblingCount: number;
+  // Stable 1-based sequence number within this document's checklist item, with
+  // the OLDEST upload as #1. Computed once from the full upload set so a
+  // document keeps the same number regardless of the active search / tab / item
+  // filter — the accountant can always say "Trial Balance #2" and mean one file.
+  seq: number;
   // What the AI read this document as (a DocType code, "unknown", or null when
   // not analysed) + the year it pulled, used for the couple-word header.
   classification: string | null;
@@ -212,6 +217,25 @@ export function buildPreviewDocs(
       (siblingCounts.get(u.request_item_id) ?? 0) + 1,
     );
   }
+  // Stable per-item sequence numbers (oldest upload = #1), computed from the
+  // FULL set so search / tab / item filters never renumber a document.
+  // Tie-break on file id when two uploads share a timestamp, for determinism.
+  const seqByFile = new Map<string, number>();
+  {
+    const byItem = new Map<string, UploadedFile[]>();
+    for (const u of uploads) {
+      const arr = byItem.get(u.request_item_id);
+      if (arr) arr.push(u);
+      else byItem.set(u.request_item_id, [u]);
+    }
+    for (const arr of byItem.values()) {
+      arr.sort((a, b) => {
+        const t = a.uploaded_at.localeCompare(b.uploaded_at);
+        return t !== 0 ? t : a.id.localeCompare(b.id);
+      });
+      arr.forEach((u, i) => seqByFile.set(u.id, i + 1));
+    }
+  }
   return uploads.map((u) => {
     const item = itemById.get(u.request_item_id);
     const itemStatus: RequestItemStatus = item?.status ?? "pending";
@@ -239,6 +263,7 @@ export function buildPreviewDocs(
       status: resolvePreviewStatus(u, itemStatus, mismatch),
       itemStatus,
       siblingCount: siblingCounts.get(u.request_item_id) ?? 1,
+      seq: seqByFile.get(u.id) ?? 1,
       classification: u.ai_classification,
       extractedYear: year,
       itemLabel: item?.label ?? "",
@@ -263,6 +288,18 @@ export function previewHeader(doc: PreviewDoc, locale: string): string {
   const label =
     locale === "fr" && doc.itemLabelFr ? doc.itemLabelFr : doc.itemLabel;
   return label || doc.fileName;
+}
+
+// The accountant's at-a-glance handle for a document card: the checklist item
+// name plus the document's stable sequence number within that item, e.g.
+// "Trial Balance #2". Falls back to the doc-type/year header, then the
+// filename, for orphan files whose checklist item was deleted — so a number is
+// always paired with SOMETHING recognisable.
+export function previewCardTitle(doc: PreviewDoc, locale: string): string {
+  const itemName =
+    locale === "fr" && doc.itemLabelFr ? doc.itemLabelFr : doc.itemLabel;
+  const base = itemName || previewHeader(doc, locale);
+  return base ? `${base} #${doc.seq}` : `#${doc.seq}`;
 }
 
 export type PreviewCounts = {
@@ -364,7 +401,7 @@ export function groupDocsByItem(
         label: it.label,
         labelFr: it.label_fr,
         docType: it.doc_type,
-        docs: ds,
+        docs: [...ds].sort((a, b) => a.seq - b.seq),
       });
       seen.add(it.id);
     }
@@ -376,7 +413,7 @@ export function groupDocsByItem(
         label: ds[0]?.itemLabel ?? "",
         labelFr: ds[0]?.itemLabelFr ?? null,
         docType: ds[0]?.classification ?? null,
-        docs: ds,
+        docs: [...ds].sort((a, b) => a.seq - b.seq),
       });
     }
   }
