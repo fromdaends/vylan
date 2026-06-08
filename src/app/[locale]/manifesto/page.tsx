@@ -6,6 +6,7 @@ import { schibsted } from "@/components/vylan-landing/fonts";
 import { BirdVideo } from "@/components/vylan-landing/bird-video";
 import { VylanMenu } from "@/components/vylan-landing/vylan-menu";
 import { LeadForm } from "@/components/vylan-landing/lead-form";
+import { VylanFooter } from "@/components/vylan-landing/vylan-footer";
 import "@/styles/vylan-landing.css";
 
 export async function generateMetadata({
@@ -61,6 +62,17 @@ export default async function ManifestoPage({
     follow: tv("follow"),
   };
 
+  const footer = {
+    brand: tv("brand_word"),
+    manifesto: tv("footer_manifesto"),
+    forFirms: tv("footer_for_firms"),
+    bookDemo: tv("footer_book_demo"),
+    contact: tv("footer_contact"),
+    login: tv("footer_login"),
+    copyright: tv("footer_copyright"),
+    location: tv("contact_location_value"),
+  };
+
   return (
     <div className={`vy-manifesto ${schibsted.variable}`}>
       <BirdVideo />
@@ -107,16 +119,7 @@ export default async function ManifestoPage({
       </section>
 
       {/* FOOTER */}
-      <footer className="vy-footer">
-        <div className="vy-fbrand">{tv("brand_word")}</div>
-        <div className="vy-links">
-          <Link href="/manifesto">{tv("footer_manifesto")}</Link>
-          <a href="#vy-get-access">{tv("footer_for_firms")}</a>
-          <a href="#vy-get-access">{tv("footer_book_demo")}</a>
-          <Link href="/login">{tv("footer_login")}</Link>
-        </div>
-        <div className="vy-cr">{tv("footer_copyright")}</div>
-      </footer>
+      <VylanFooter s={footer} />
     </div>
   );
 }

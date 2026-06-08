@@ -697,6 +697,36 @@ a.vy-contact-card:hover {
   opacity: 0.6;
   font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
 }
+/* Subtle, always-there contact line under the footer row — phones / email /
+   location. Faint on purpose ("there if you really look"); dimming is via a
+   low-alpha colour (not opacity) so hovered links can lift to full white. The
+   flex-basis:100% drops it onto its own row below the brand/links/copyright. */
+.vy-fcontact {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.42);
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", monospace;
+}
+.vy-fcontact > * + *::before {
+  content: "·";
+  padding: 0 10px;
+  color: rgba(255, 255, 255, 0.3);
+}
+.vy-fcontact a {
+  color: inherit;
+  text-decoration: none;
+}
+.vy-fcontact a:hover {
+  color: #fff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /* ---------- Menu overlay ---------- */
 .vy-overlay {
