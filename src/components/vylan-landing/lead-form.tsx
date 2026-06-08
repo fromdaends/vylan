@@ -11,7 +11,7 @@
 // it writes only columns that already exist (no migration needed) and
 // lands in the same demo_requests pipeline the /demo page uses.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { saveDemoStep } from "@/app/actions/demo-request";
@@ -44,29 +44,74 @@ const TOOLS = [
   "nothing",
 ] as const;
 
+// In-memory draft of the lead form, kept at module scope so the prospect's
+// progress survives the component unmounting + remounting during in-tab
+// navigation (they scroll away, click to the manifesto, come back to the form)
+// — they don't have to re-fill. Deliberately NOT written to storage: a full
+// page refresh or a new tab reloads this module and starts fresh, matching the
+// ask ("remember my spot until I refresh or open a new tab"). submitting/error
+// stay transient and are not kept.
+type LeadDraft = {
+  view: View;
+  rowId: string | null;
+  s1: { contact_name: string; email: string; firm_name: string };
+  s2: {
+    firm_size: string;
+    client_volume: string;
+    current_tool: string;
+    current_tool_other: string;
+  };
+  s3: {
+    phone: string;
+    province: Province;
+    preferred_language: Locale;
+    marketing_opt_in: boolean;
+  };
+};
+
+let leadDraft: LeadDraft | undefined;
+
+function readLeadDraft(locale: Locale): LeadDraft {
+  return (leadDraft ??= {
+    view: 1,
+    rowId: null,
+    s1: { contact_name: "", email: "", firm_name: "" },
+    s2: {
+      firm_size: "",
+      client_volume: "",
+      current_tool: "",
+      current_tool_other: "",
+    },
+    s3: {
+      phone: "",
+      province: "QC",
+      preferred_language: locale,
+      marketing_opt_in: false,
+    },
+  });
+}
+
 export function LeadForm() {
   const t = useTranslations("Vylan");
   const td = useTranslations("Demo");
-  const locale = useLocale();
+  const lng: Locale = useLocale() === "fr" ? "fr" : "en";
 
-  const [view, setView] = useState<View>(1);
-  const [rowId, setRowId] = useState<string | null>(null);
+  const [view, setView] = useState<View>(() => readLeadDraft(lng).view);
+  const [rowId, setRowId] = useState<string | null>(
+    () => readLeadDraft(lng).rowId,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [s1, setS1] = useState({ contact_name: "", email: "", firm_name: "" });
-  const [s2, setS2] = useState({
-    firm_size: "",
-    client_volume: "",
-    current_tool: "",
-    current_tool_other: "",
-  });
-  const [s3, setS3] = useState({
-    phone: "",
-    province: "QC" as Province,
-    preferred_language: (locale === "fr" ? "fr" : "en") as Locale,
-    marketing_opt_in: false,
-  });
+  const [s1, setS1] = useState(() => readLeadDraft(lng).s1);
+  const [s2, setS2] = useState(() => readLeadDraft(lng).s2);
+  const [s3, setS3] = useState(() => readLeadDraft(lng).s3);
+
+  // Mirror the live state into the module draft so an in-tab remount restores
+  // exactly where the prospect left off.
+  useEffect(() => {
+    leadDraft = { view, rowId, s1, s2, s3 };
+  }, [view, rowId, s1, s2, s3]);
 
   function showError(code: string) {
     const key = `errors.${code}` as const;
