@@ -109,7 +109,7 @@ export async function loadPortalContext(
   const { data: uploaded } = await sb
     .from("uploaded_files")
     .select(
-      "id, request_item_id, original_filename, review_status, rejection_reason, mime_type, storage_path, uploaded_at, ai_usability",
+      "id, request_item_id, original_filename, review_status, rejection_reason, mime_type, storage_path, uploaded_at, ai_usability, is_duplicate",
     )
     .eq("engagement_id", engagement.id)
     .order("uploaded_at", { ascending: true });
@@ -148,6 +148,10 @@ export async function loadPortalContext(
   // The per-item file list (oldest first, matching the query order).
   const filesByItem: Record<string, PortalFile[]> = {};
   for (const u of uploaded ?? []) {
+    // A detected duplicate is hidden from the client: their original copy still
+    // shows, so they never see the same file listed twice (or a confusing
+    // "rejected" on an accidental re-upload). The accountant still sees it.
+    if (u.is_duplicate) continue;
     counts[u.request_item_id] = (counts[u.request_item_id] ?? 0) + 1;
     const v = u.ai_usability as UsabilityVerdict | null;
     const fr = v?.issue_summary_fr?.trim();

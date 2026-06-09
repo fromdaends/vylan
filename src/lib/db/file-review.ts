@@ -41,7 +41,7 @@ export async function recomputeItemStatus(
   const { data: rows } = await sb
     .from("uploaded_files")
     .select(
-      "review_status, uploaded_at, reviewed_at, rejection_reason, reviewed_by",
+      "review_status, uploaded_at, reviewed_at, rejection_reason, reviewed_by, is_duplicate",
     )
     .eq("request_item_id", itemId);
   const files = (rows ?? []) as FileRow[];

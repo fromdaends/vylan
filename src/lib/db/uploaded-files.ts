@@ -26,6 +26,13 @@ export type UploadedFile = {
   reviewed_by: string | null;
   reviewed_at: string | null;
   uploaded_at: string;
+  // Duplicate detection (migration 0270). content_hash is the SHA-256 of the
+  // stored bytes; is_duplicate marks an exact-content re-upload; the earlier
+  // file it duplicates is duplicate_of_file_id. A duplicate is ignored by the
+  // item-status roll-up (deriveItemStatus) and hidden from the client portal.
+  content_hash: string | null;
+  is_duplicate: boolean;
+  duplicate_of_file_id: string | null;
 };
 
 export async function listUploadedFilesForEngagement(

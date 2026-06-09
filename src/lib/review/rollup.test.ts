@@ -117,4 +117,42 @@ describe("deriveItemStatus", () => {
       ]),
     ).toBe("rejected");
   });
+
+  it("ignores a duplicate — an approved item is NOT dragged to needs-attention by a rejected duplicate re-upload", () => {
+    // The critical case: a byte-identical re-upload auto-rejected as a duplicate
+    // must not flip the already-good item to "needs attention" (the original is
+    // what counts).
+    expect(
+      deriveItemStatus([
+        f({
+          review_status: "approved",
+          uploaded_at: "2026-01-01T00:00:00Z",
+          reviewed_at: "2026-01-02T00:00:00Z",
+        }),
+        f({
+          review_status: "rejected",
+          uploaded_at: "2026-01-03T00:00:00Z",
+          reviewed_at: "2026-01-03T00:00:00Z",
+          is_duplicate: true,
+        }),
+      ]),
+    ).toBe("approved");
+  });
+
+  it("ignores a duplicate — a pending original + a pending duplicate stays submitted (the duplicate adds nothing)", () => {
+    expect(
+      deriveItemStatus([
+        f({ review_status: "pending", uploaded_at: "2026-01-01T00:00:00Z" }),
+        f({
+          review_status: "pending",
+          uploaded_at: "2026-01-02T00:00:00Z",
+          is_duplicate: true,
+        }),
+      ]),
+    ).toBe("submitted");
+  });
+
+  it("a lone duplicate (its original lives on another item) counts as no files => pending", () => {
+    expect(deriveItemStatus([f({ is_duplicate: true })])).toBe("pending");
+  });
 });

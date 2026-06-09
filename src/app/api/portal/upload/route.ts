@@ -10,6 +10,12 @@ import {
 import type { RequestItem } from "@/lib/db/request-items";
 import { sendEmail, buildSignedCopyReturnedEmail } from "@/lib/email";
 import { recomputeItemStatus } from "@/lib/db/file-review";
+import { computeContentHash } from "@/lib/files/content-hash";
+import {
+  findDuplicateOriginalId,
+  decideDuplicate,
+  applyDuplicateDecision,
+} from "@/lib/duplicates";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { enqueueJob } from "@/lib/db/jobs";
 import { processClassifyJob } from "@/lib/ai/process";
@@ -150,6 +156,23 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "upload_failed" }, { status: 500 });
   }
 
+  // Duplicate detection: fingerprint the STORED bytes and look for an exact
+  // match already in THIS engagement. Queried BEFORE the insert, so it only sees
+  // the EARLIER files; a match means this upload is a byte-identical re-upload.
+  const contentHash = computeContentHash(storedBytes);
+  const { data: dupCandidates } = await sb
+    .from("uploaded_files")
+    .select("id, content_hash, uploaded_at")
+    .eq("engagement_id", item.engagement_id);
+  const duplicateOfId = findDuplicateOriginalId(
+    contentHash,
+    (dupCandidates ?? []) as {
+      id: string;
+      content_hash: string | null;
+      uploaded_at: string;
+    }[],
+  );
+
   const { data: inserted, error: insertErr } = await sb
     .from("uploaded_files")
     .insert({
@@ -159,6 +182,7 @@ export async function POST(request: NextRequest) {
       original_filename: safeOriginalName,
       mime_type: storedMime,
       size_bytes: storedBytes.length,
+      content_hash: contentHash,
       uploaded_by_ip: ipForDb,
     })
     .select("id")
@@ -185,6 +209,41 @@ export async function POST(request: NextRequest) {
     file_id: inserted.id,
     size_bytes: storedBytes.length,
   });
+
+  // Duplicate: this upload is a byte-identical re-upload of an earlier file in
+  // the engagement. Set it aside (it won't affect the item's status — the
+  // original is what counts) and either auto-reject it or just flag it for
+  // review, per the firm's SEPARATE duplicate setting. Skip the AI classify +
+  // the signature notify; a duplicate needs neither.
+  if (duplicateOfId) {
+    const { data: firmRow } = await sb
+      .from("firms")
+      .select("auto_reject_duplicates")
+      .eq("id", engagement.firm_id)
+      .single();
+    const { data: dupClient } = await sb
+      .from("clients")
+      .select("locale")
+      .eq("id", engagement.client_id)
+      .maybeSingle();
+    const clientLocale: "fr" | "en" =
+      dupClient?.locale === "en" ? "en" : "fr";
+    await applyDuplicateDecision({
+      supabase: sb,
+      decision: decideDuplicate(Boolean(firmRow?.auto_reject_duplicates)),
+      fileId: inserted.id,
+      originalFileId: duplicateOfId,
+      requestItemId: item.id,
+      engagementId: item.engagement_id,
+      firmId: engagement.firm_id,
+      clientLocale,
+    });
+    return NextResponse.json({
+      ok: true,
+      file_id: inserted.id,
+      duplicate: true,
+    });
+  }
 
   // Signature items take a different path: the client's upload IS the signed
   // copy of a document the accountant supplied, not a tax document to classify.

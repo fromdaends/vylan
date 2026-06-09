@@ -94,6 +94,7 @@ export default async function SettingsPage({
         currentLocale={user.locale}
         currentTimezone={firm.timezone}
         autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
+        autoRejectDuplicates={firm.auto_reject_duplicates}
         aiUsage={aiUsage}
         isOwner={isOwner}
         billingSlot={billingSlot}

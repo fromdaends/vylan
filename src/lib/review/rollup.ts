@@ -26,6 +26,10 @@ export type FileReview = {
   // when the accountant approved/rejected it (null until reviewed).
   uploaded_at: string;
   reviewed_at: string | null;
+  // A detected duplicate (an exact-content re-upload) is set ASIDE: it never
+  // affects the item's status — the ORIGINAL upload it duplicates is what
+  // counts. Optional; absent/false on every non-duplicate file.
+  is_duplicate?: boolean | null;
 };
 
 export type RolledUpStatus = Exclude<RequestItemStatus, "na">;
@@ -48,9 +52,14 @@ function isOutstandingRejection(file: FileReview, all: FileReview[]): boolean {
 }
 
 export function deriveItemStatus(files: FileReview[]): RolledUpStatus {
-  if (files.length === 0) return "pending";
-  if (files.some((f) => isOutstandingRejection(f, files))) return "rejected";
-  if (files.some((f) => f.review_status === "approved")) return "approved";
+  // Duplicates are set aside before any roll-up: a byte-identical re-upload
+  // never drags the item into "needs attention" and never counts as progress —
+  // the original upload it duplicates is what matters. (A rejection is therefore
+  // only "answered" by a newer NON-duplicate upload.)
+  const real = files.filter((f) => !f.is_duplicate);
+  if (real.length === 0) return "pending";
+  if (real.some((f) => isOutstandingRejection(f, real))) return "rejected";
+  if (real.some((f) => f.review_status === "approved")) return "approved";
   // Files exist with no outstanding rejection and nothing approved → still
   // waiting on the accountant (pending uploads, or an answered re-upload).
   return "submitted";
