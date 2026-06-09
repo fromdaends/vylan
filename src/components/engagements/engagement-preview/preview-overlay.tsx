@@ -117,10 +117,6 @@ export function PreviewOverlay({
     [searched, itemFilter],
   );
   const counts = useMemo(() => previewCounts(itemScoped), [itemScoped]);
-  // Whether this engagement has any duplicates at all — drives showing the
-  // Duplicates tab. Computed from the full set (not the filtered counts) so the
-  // tab doesn't blink in / out as you search or switch checklist items.
-  const hasDuplicates = useMemo(() => docs.some((d) => d.isDuplicate), [docs]);
   const visible = useMemo(
     () => filterDocs(itemScoped, view),
     [itemScoped, view],
@@ -390,16 +386,16 @@ export function PreviewOverlay({
                 onClick={() => setView("rejected")}
                 tone="destructive"
               />
-              {/* Duplicates is its own bucket, shown only when this engagement
-                  actually has duplicates (so most previews don't carry a "0"). */}
-              {hasDuplicates && (
-                <PreviewTab
-                  label={t("tab_duplicates")}
-                  count={counts.duplicates}
-                  active={view === "duplicates"}
-                  onClick={() => setView("duplicates")}
-                />
-              )}
+              {/* Duplicates is its own bucket. ALWAYS rendered, zero count
+                  included — same contract as Looks good / Flagged, so every
+                  engagement's Preview carries the same tab set instead of the
+                  tab appearing on some engagements and not others. */}
+              <PreviewTab
+                label={t("tab_duplicates")}
+                count={counts.duplicates}
+                active={view === "duplicates"}
+                onClick={() => setView("duplicates")}
+              />
             </div>
           </div>
           <div className="relative py-2">

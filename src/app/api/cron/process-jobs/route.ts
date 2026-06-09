@@ -17,6 +17,11 @@ import {
 import { processReminderJob } from "@/lib/reminders";
 import { processClassifyJob } from "@/lib/ai/process";
 import { processNotifyClientRetryJob } from "@/lib/notify-retry";
+import {
+  backfillContentHashes,
+  type BackfillResult,
+} from "@/lib/files/backfill-content-hash";
+import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,10 +73,25 @@ export async function GET(request: NextRequest) {
     results.push(...settled);
   }
 
+  // Duplicate-detection backfill: hash a small batch of legacy uploads
+  // (content_hash IS NULL, pre-migration-0270) per run until none remain, so
+  // duplicate detection covers EVERY engagement's history, not just files
+  // uploaded after the feature shipped. Runs only with budget left over after
+  // the job queue; a no-op once drained (one cheap SELECT).
+  let backfill: BackfillResult | null = null;
+  if (remaining() > MIN_WAVE_HEADROOM_MS) {
+    try {
+      backfill = await backfillContentHashes(getServiceRoleSupabase());
+    } catch (e) {
+      console.error("[cron] content-hash backfill failed:", e);
+    }
+  }
+
   return NextResponse.json({
     ranAt: new Date().toISOString(),
     claimed: claimedTotal,
     results,
+    backfill,
   });
 }
 

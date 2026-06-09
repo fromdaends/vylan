@@ -11,7 +11,7 @@ Status legend: DONE / IN PROGRESS / SKIPPED / NOT STARTED.
 | B. Overview hierarchy rework | DONE |
 | C. Needs attention 2.0 | DONE |
 | D. Team page: Edit firm + seat caps | DONE |
-| E. Duplicates everywhere | NOT STARTED |
+| E. Duplicates everywhere | DONE |
 | F. Browser QA sweep | NOT STARTED |
 
 ---
@@ -167,6 +167,25 @@ What changed, in plain English:
 Where it lives: src/lib/plans.ts (the numbers), src/components/settings/team/team-manager.tsx (the button), src/lib/db/firms.ts (type gap fixed: seat_cap_override added to the Firm type), messages/en.json + fr.json.
 
 Verification: typecheck PASS, 810 tests PASS (two test files had locked the OLD caps and were updated to the new locked tiers), lint 0 errors, production build PASS.
+
+---
+
+## Workstream E: Duplicates everywhere (DONE)
+
+Why the tab showed on only one engagement (the cause, confirmed in code):
+
+1. The tab was deliberately rendered ONLY when the engagement already had at least one detected duplicate ("so most previews don't carry a 0", from PR #502). That contradicted the other tabs, which always show with zero counts.
+2. Deeper: duplicate detection is fingerprint-based (a SHA-256 of the file bytes, stored as content_hash since migration 0270) and only runs when a NEW file is uploaded. Files uploaded BEFORE that migration have no fingerprint and are skipped as comparison candidates. So only engagements with post-feature uploads could ever have duplicates detected; everything older was invisible to detection.
+
+What changed:
+
+1. The Duplicates tab now ALWAYS renders, with its count, zero included, exactly like Looks good 0 / Flagged 0. Every engagement's Preview carries the same tab set.
+2. A self-draining backfill now fingerprints legacy files: every run of the existing 2-minute background cron hashes up to 6 of the oldest files that have no fingerprint, until none remain. After that, duplicate detection genuinely covers every engagement going forward. A file whose bytes can't be downloaded anymore gets a harmless marker instead (it can never be mistaken for a real fingerprint, proven by a unit test) so the sweep never gets stuck.
+3. Deliberately NOT done: retroactively marking old files as duplicates of each other. That would re-bucket documents accountants already reviewed (decision D3). Only NEW uploads compare against the backfilled fingerprints.
+
+Where it lives: src/components/engagements/engagement-preview/preview-overlay.tsx (tab), src/lib/files/backfill-content-hash.ts (sweep, unit-tested), src/app/api/cron/process-jobs/route.ts (runs the sweep with leftover budget).
+
+Verification: typecheck PASS, 815 tests PASS (5 new), lint 0 errors, production build PASS.
 
 ---
 
