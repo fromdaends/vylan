@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import {
   ChevronDown,
   ChevronRight,
+  Copy,
   Download,
   ExternalLink,
   FileText,
@@ -195,6 +196,17 @@ export function FilePreviewRow({
         )}
         {actions}
       </div>
+      {/* Detected duplicate (an exact-content re-upload). Always shown, even for
+          signature copies (which hide the AI chrome). The file is set aside, so
+          it doesn't affect the checklist item's status. */}
+      {file.is_duplicate && (
+        <div className="px-2.5 pb-1.5">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-warning/15 px-2 py-1 text-xs font-medium text-warning">
+            <Copy className="size-3.5" aria-hidden />
+            {t("duplicate_badge")}
+          </span>
+        </div>
+      )}
       {!hideAi && (
         <div className="px-2.5 pb-1.5 space-y-1">
           {/* While re-checking, an explicit pill makes it obvious the AI is

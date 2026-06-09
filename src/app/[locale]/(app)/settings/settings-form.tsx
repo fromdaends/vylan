@@ -80,6 +80,7 @@ export function SettingsShell({
   currentLocale,
   currentTimezone,
   autoRejectUnusableDocs,
+  autoRejectDuplicates,
   aiUsage,
   isOwner,
   billingSlot,
@@ -93,6 +94,7 @@ export function SettingsShell({
   currentLocale: "fr" | "en";
   currentTimezone: string;
   autoRejectUnusableDocs: boolean;
+  autoRejectDuplicates: boolean;
   aiUsage: { used: number; cap: number; paused: boolean; resetsAt: string };
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -187,6 +189,7 @@ export function SettingsShell({
         {section === "documents" && isOwner && (
           <DocumentsSection
             autoRejectUnusableDocs={autoRejectUnusableDocs}
+            autoRejectDuplicates={autoRejectDuplicates}
             aiUsage={aiUsage}
             locale={currentLocale}
             t={t}
@@ -567,17 +570,43 @@ function TimezoneSection({
 
 function DocumentsSection({
   autoRejectUnusableDocs,
+  autoRejectDuplicates,
   aiUsage,
   locale,
   t,
 }: {
   autoRejectUnusableDocs: boolean;
+  autoRejectDuplicates: boolean;
   aiUsage: { used: number; cap: number; paused: boolean; resetsAt: string };
   locale: "fr" | "en";
   t: Translate;
 }) {
   const [enabled, setEnabled] = useState(autoRejectUnusableDocs);
   const [error, setError] = useState<string | null>(null);
+  // SEPARATE toggle from the unusable-docs one above: auto-reject exact-duplicate
+  // re-uploads. Optimistic save via its own POST route; revert on failure.
+  const [dupEnabled, setDupEnabled] = useState(autoRejectDuplicates);
+  const [dupError, setDupError] = useState<string | null>(null);
+
+  async function onDuplicatesToggle(next: boolean) {
+    setDupError(null);
+    setDupEnabled(next);
+    try {
+      const res = await fetch("/api/firm/auto-reject-duplicates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!res.ok) {
+        setDupError(t("save_failed"));
+        setDupEnabled(!next);
+      }
+    } catch (e) {
+      console.error("[onToggle] auto-reject-duplicates save failed:", e);
+      setDupError(t("save_failed"));
+      setDupEnabled(!next);
+    }
+  }
 
   const pct = Math.min(
     100,
@@ -673,6 +702,25 @@ function DocumentsSection({
         />
       </div>
       {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+
+      {/* Separate setting: auto-reject exact-duplicate re-uploads (vs the
+          unusable-docs toggle above). */}
+      <div className="mt-3 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border/50 px-4 py-3">
+        <div className="space-y-1">
+          <div className="text-sm font-medium">
+            {t("auto_reject_duplicates_label")}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("auto_reject_duplicates_help")}
+          </p>
+        </div>
+        <Switch
+          checked={dupEnabled}
+          onCheckedChange={onDuplicatesToggle}
+          ariaLabel={t("auto_reject_duplicates_label")}
+        />
+      </div>
+      {dupError && <p className="mt-2 text-xs text-destructive">{dupError}</p>}
     </section>
   );
 }
