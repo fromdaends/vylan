@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import {
@@ -54,6 +54,7 @@ export function FilePreviewRow({
   clientName,
   rejectionCount,
   hideAi = false,
+  actions,
 }: {
   file: UploadedFile;
   // Legacy signed-URL prop (still passed by the engagement page). It's
@@ -71,6 +72,9 @@ export function FilePreviewRow({
   // (the badges + the re-check button) — otherwise the badges would sit in a
   // permanent "Analyzing…" state waiting for a verdict that never comes.
   hideAi?: boolean;
+  // Extra controls rendered at the end of the header row (e.g. the per-copy
+  // approve/reject icons for a returned signed copy).
+  actions?: ReactNode;
 }) {
   const t = useTranslations("Engagements");
   const [open, setOpen] = useState(false);
@@ -189,6 +193,7 @@ export function FilePreviewRow({
             <RefreshCw className={cn("size-3.5", rechecking && "animate-spin")} />
           </button>
         )}
+        {actions}
       </div>
       {!hideAi && (
         <div className="px-2.5 pb-1.5 space-y-1">

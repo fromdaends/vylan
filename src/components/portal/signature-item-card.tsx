@@ -193,7 +193,12 @@ export function SignatureItemCard({
                         >
                           {f.name}
                         </span>
-                        <SignFileStatusPill status={f.status} />
+                        {/* The card already shows the overall status, so a
+                            per-copy pill is only useful to tell several copies
+                            apart. With one copy it would just repeat the card. */}
+                        {files.length > 1 && (
+                          <SignFileStatusPill status={f.status} />
+                        )}
                       </div>
                       {fileReason && (
                         <p className="mt-1 text-xs leading-relaxed text-warning">
