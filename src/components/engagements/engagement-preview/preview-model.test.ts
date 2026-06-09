@@ -410,10 +410,10 @@ describe("previewCounts + filterDocs — duplicates as their own bucket", () => 
     items,
   );
 
-  it("counts a duplicate only under `duplicates`, never under rejected", () => {
+  it("excludes a duplicate from `all`; counts it only under `duplicates`", () => {
     const c = previewCounts(docs);
     expect(c).toEqual({
-      all: 2,
+      all: 1, // the real document only — the duplicate is NOT part of "All"
       approved: 1,
       flagged: 0,
       rejected: 0, // 'b' is rejected underneath, but it's a duplicate
@@ -422,19 +422,21 @@ describe("previewCounts + filterDocs — duplicates as their own bucket", () => 
     });
   });
 
-  it("partitions exactly: status buckets + duplicates === all", () => {
+  it("`all` is the non-duplicate total; all + duplicates === every file", () => {
     const c = previewCounts(docs);
-    expect(c.approved + c.flagged + c.rejected + c.pending + c.duplicates).toBe(
-      c.all,
-    );
+    // The status buckets partition `all` (the real documents)...
+    expect(c.approved + c.flagged + c.rejected + c.pending).toBe(c.all);
+    // ...and duplicates sit alongside, so together they cover every upload.
+    expect(c.all + c.duplicates).toBe(docs.length);
   });
 
-  it("the duplicates view shows only the re-upload; status views exclude it", () => {
+  it("the duplicates view shows only the re-upload; ALL and the status views exclude it", () => {
     expect(filterDocs(docs, "duplicates").map((d) => d.fileId)).toEqual(["b"]);
     // 'b' is rejected underneath but a duplicate, so Rejected must not show it.
     expect(filterDocs(docs, "rejected")).toHaveLength(0);
     expect(filterDocs(docs, "approved").map((d) => d.fileId)).toEqual(["a"]);
-    expect(filterDocs(docs, "all")).toHaveLength(2);
+    // ...and "All" now shows the real document only, not the duplicate.
+    expect(filterDocs(docs, "all").map((d) => d.fileId)).toEqual(["a"]);
   });
 });
 
