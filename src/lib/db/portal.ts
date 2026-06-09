@@ -177,29 +177,15 @@ export async function loadPortalContext(
     }
   }
 
-  // Resolve the accountant contact for the footer: the user assigned to this
-  // engagement if one is set, otherwise the firm owner (earliest-created, in
-  // case of multiple owners). Service-role read — the portal is unauthenticated.
-  let accountantEmail: string | null = null;
-  if (engagement.assigned_user_id) {
-    const { data: assigned } = await sb
-      .from("users")
-      .select("email")
-      .eq("id", engagement.assigned_user_id)
-      .maybeSingle();
-    accountantEmail = (assigned?.email as string | undefined) ?? null;
-  }
-  if (!accountantEmail) {
-    const { data: owner } = await sb
-      .from("users")
-      .select("email")
-      .eq("firm_id", engagement.firm_id)
-      .eq("role", "owner")
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    accountantEmail = (owner?.email as string | undefined) ?? null;
-  }
+  // Resolve the accountant contact for the footer. Shared with the signed-copy
+  // notification (the upload route) so the footer contact and that email reach
+  // the SAME person: the user assigned to this engagement, falling back to the
+  // firm owner.
+  const accountantContact = await resolveAccountantContact(sb, {
+    assignedUserId: (engagement.assigned_user_id as string | null) ?? null,
+    firmId: engagement.firm_id as string,
+  });
+  const accountantEmail = accountantContact?.email ?? null;
 
   return {
     engagement: engagement as Engagement,
@@ -211,6 +197,58 @@ export async function loadPortalContext(
     rejection_summary_by_item: rejectionSummaryByItem,
     accountant_email: accountantEmail,
   };
+}
+
+export type AccountantContact = {
+  email: string;
+  // The accountant's preferred language — drives the language of notifications
+  // sent to them (e.g. the "signed copy returned" email).
+  locale: "fr" | "en";
+  // Best display name (display_name > name), or null if neither is set.
+  name: string | null;
+};
+
+// Resolve the "your accountant" contact for an engagement: the user assigned to
+// it if one is set, otherwise the firm owner (earliest-created, in case of
+// multiple owners). Service-role read — used by the UNAUTHENTICATED portal AND
+// its API routes, so it lives here as the single source of truth: the portal
+// footer contact and the "signed copy returned" notification must resolve the
+// same person. Returns null only if neither has an email on file (shouldn't
+// happen — users.email is NOT NULL — but callers degrade gracefully).
+export async function resolveAccountantContact(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  opts: { assignedUserId: string | null; firmId: string },
+): Promise<AccountantContact | null> {
+  type Row = {
+    email: string | null;
+    locale: string | null;
+    name: string | null;
+    display_name: string | null;
+  };
+  const pick = (row: Row | null): AccountantContact | null => {
+    if (!row?.email) return null;
+    const name = row.display_name?.trim() || row.name?.trim() || null;
+    return { email: row.email, locale: row.locale === "en" ? "en" : "fr", name };
+  };
+
+  if (opts.assignedUserId) {
+    const { data } = await sb
+      .from("users")
+      .select("email, locale, name, display_name")
+      .eq("id", opts.assignedUserId)
+      .maybeSingle();
+    const contact = pick(data as Row | null);
+    if (contact) return contact;
+  }
+  const { data: owner } = await sb
+    .from("users")
+    .select("email, locale, name, display_name")
+    .eq("firm_id", opts.firmId)
+    .eq("role", "owner")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return pick(owner as Row | null);
 }
 
 // Used exclusively by write endpoints (upload, mark-na, undo-na). Blocks

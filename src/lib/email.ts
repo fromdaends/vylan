@@ -194,6 +194,59 @@ No password required.`;
   return { subject, html, text };
 }
 
+// Notify the ACCOUNTANT that a client returned the signed copy of a signature
+// item, with a link to review it in Vylan. Internal (accountant-facing), so it
+// is Vylan-branded rather than firm-branded and uses the accountant's own
+// language. No legal / e-signature-validity wording: the accountant confirms the
+// returned copy; Vylan only transports it. Copy is em-dash-free per house style.
+export function buildSignedCopyReturnedEmail(opts: {
+  accountantName: string | null;
+  clientName: string;
+  documentName: string;
+  engagementTitle: string;
+  reviewUrl: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  const greetName = opts.accountantName?.trim();
+  if (opts.locale === "fr") {
+    const subject = `Copie signée reçue de ${opts.clientName} : ${opts.documentName}`;
+    const greeting = greetName
+      ? `Bonjour ${escapeHtml(greetName)},`
+      : "Bonjour,";
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>${greeting}</p>
+<p>${escapeHtml(opts.clientName)} a retourné la copie signée de <strong>${escapeHtml(opts.documentName)}</strong> pour <strong>${escapeHtml(opts.engagementTitle)}</strong>.</p>
+<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Ouvrez Vylan pour la consulter et confirmer la signature.</p>
+<p style="margin:24px 0">
+  <a href="${opts.reviewUrl}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Revoir dans Vylan</a>
+</p>
+<p style="color:#64748b;font-size:13px">Ou copiez ce lien dans votre navigateur : <br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.reviewUrl}</span></p>
+</body></html>`;
+    const text = `${greetName ? `Bonjour ${greetName},` : "Bonjour,"}
+
+${opts.clientName} a retourné la copie signée de ${opts.documentName} pour ${opts.engagementTitle}.
+Ouvrez Vylan pour la consulter et confirmer la signature : ${opts.reviewUrl}`;
+    return { subject, html, text };
+  }
+
+  const subject = `Signed copy returned by ${opts.clientName}: ${opts.documentName}`;
+  const greeting = greetName ? `Hi ${escapeHtml(greetName)},` : "Hi,";
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>${greeting}</p>
+<p>${escapeHtml(opts.clientName)} returned the signed copy of <strong>${escapeHtml(opts.documentName)}</strong> for <strong>${escapeHtml(opts.engagementTitle)}</strong>.</p>
+<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Open Vylan to review it and confirm the signature.</p>
+<p style="margin:24px 0">
+  <a href="${opts.reviewUrl}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Review in Vylan</a>
+</p>
+<p style="color:#64748b;font-size:13px">Or copy this link into your browser:<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.reviewUrl}</span></p>
+</body></html>`;
+  const text = `${greetName ? `Hi ${greetName},` : "Hi,"}
+
+${opts.clientName} returned the signed copy of ${opts.documentName} for ${opts.engagementTitle}.
+Open Vylan to review it and confirm: ${opts.reviewUrl}`;
+  return { subject, html, text };
+}
+
 export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

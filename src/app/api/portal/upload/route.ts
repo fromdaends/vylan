@@ -5,7 +5,10 @@ import {
   findItemForToken,
   markEngagementInProgress,
   logActivity,
+  resolveAccountantContact,
 } from "@/lib/db/portal";
+import type { RequestItem } from "@/lib/db/request-items";
+import { sendEmail, buildSignedCopyReturnedEmail } from "@/lib/email";
 import { recomputeItemStatus } from "@/lib/db/file-review";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { enqueueJob } from "@/lib/db/jobs";
@@ -95,11 +98,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  // Look up firm_id once — we already have a validated item.engagement_id.
+  // Look up the engagement once — we already have a validated
+  // item.engagement_id. firm_id powers storage paths + activity logs; the other
+  // fields are only used to notify the accountant when a signature item's signed
+  // copy is returned (see the signature branch below).
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb
     .from("engagements")
-    .select("firm_id")
+    .select("id, firm_id, title, assigned_user_id, client_id")
     .eq("id", item.engagement_id)
     .single();
   if (!engagement) {
@@ -180,6 +186,30 @@ export async function POST(request: NextRequest) {
     size_bytes: storedBytes.length,
   });
 
+  // Signature items take a different path: the client's upload IS the signed
+  // copy of a document the accountant supplied, not a tax document to classify.
+  // Skip AI classification entirely (it would wrongly flag a signed form as the
+  // "wrong document") and instead notify the accountant that the signed copy
+  // came back. recomputeItemStatus already moved the item to "in review".
+  if (item.kind === "signature") {
+    const engForEmail = {
+      id: engagement.id as string,
+      firm_id: engagement.firm_id as string,
+      title: (engagement.title as string) ?? "",
+      assigned_user_id: (engagement.assigned_user_id as string | null) ?? null,
+      client_id: engagement.client_id as string,
+    };
+    // Best-effort, off the response path — never fail the upload on email.
+    after(async () => {
+      try {
+        await notifyAccountantSignedCopyReturned(engForEmail, item);
+      } catch (e) {
+        console.error("[portal/upload] signed-copy notification failed:", e);
+      }
+    });
+    return NextResponse.json({ ok: true, file_id: inserted.id });
+  }
+
   // Enqueue an AI classification job as a durable fallback (cron retries).
   // We ALSO kick off the same work via after() so the verdict lands within
   // seconds, but the response returns to the client immediately — the
@@ -223,4 +253,56 @@ export async function POST(request: NextRequest) {
   });
 
   return NextResponse.json({ ok: true, file_id: insertedFileId });
+}
+
+// Email the accountant that a client returned the signed copy of a signature
+// item. Service-role reads only (the portal is unauthenticated). Resolves the
+// SAME "your accountant" contact the portal footer uses (assigned user, falling
+// back to the firm owner) and writes in that accountant's own language. The
+// document name follows the accountant's language too. Throws are swallowed by
+// the caller's try/catch — a notification must never break the upload.
+async function notifyAccountantSignedCopyReturned(
+  engagement: {
+    id: string;
+    firm_id: string;
+    title: string;
+    assigned_user_id: string | null;
+    client_id: string;
+  },
+  item: RequestItem,
+): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const contact = await resolveAccountantContact(sb, {
+    assignedUserId: engagement.assigned_user_id,
+    firmId: engagement.firm_id,
+  });
+  if (!contact?.email) return;
+
+  const { data: client } = await sb
+    .from("clients")
+    .select("display_name")
+    .eq("id", engagement.client_id)
+    .maybeSingle();
+
+  const documentName =
+    (contact.locale === "fr"
+      ? item.label_fr || item.label
+      : item.label || item.label_fr) ||
+    item.signing_doc_name ||
+    "document";
+
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const reviewUrl = `${appUrl}/${contact.locale}/engagements/${engagement.id}`;
+
+  const { subject, html, text } = buildSignedCopyReturnedEmail({
+    accountantName: contact.name,
+    clientName:
+      (client?.display_name as string | undefined) ||
+      (contact.locale === "fr" ? "Votre client" : "Your client"),
+    documentName,
+    engagementTitle: engagement.title,
+    reviewUrl,
+    locale: contact.locale,
+  });
+  await sendEmail({ to: contact.email, subject, html, text });
 }

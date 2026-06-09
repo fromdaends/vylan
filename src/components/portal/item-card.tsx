@@ -641,7 +641,8 @@ function FileStatusPill({ status }: { status: PortalFile["status"] }) {
 // A small preview tile in the per-file list. For an image it renders a real
 // thumbnail (token-scoped endpoint) that opens the enlarge view on click; for a
 // PDF / other type, or if the thumbnail fails to load, a plain document tile.
-function PortalFileThumb({
+// Exported so the signature card reuses the exact same tile (no second thumb).
+export function PortalFileThumb({
   token,
   file,
   onOpen,

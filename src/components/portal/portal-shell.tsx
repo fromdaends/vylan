@@ -2,9 +2,17 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, ShieldCheck } from "lucide-react";
+import {
+  CheckCircle2,
+  ShieldCheck,
+  PenLine,
+  FileText,
+  type LucideIcon,
+} from "lucide-react";
 import type { PortalContext } from "@/lib/db/portal";
 import { ItemCard } from "./item-card";
+import { SignatureItemCard } from "./signature-item-card";
+import { splitPortalItems } from "@/lib/portal/split-items";
 import { PortalFooter } from "./portal-footer";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
@@ -21,6 +29,13 @@ export function PortalShell({
   const [items, setItems] = useState(ctx.items);
   const [uploads, setUploads] = useState(ctx.uploaded_count_by_item);
   const [filesByItem, setFilesByItem] = useState(ctx.files_by_item);
+
+  // Split into the "To sign" group (signature items) and the document list.
+  // When there are no signatures (the common case) the documents render exactly
+  // as before, with no group headers.
+  const { collection: collectionItems, signatures: signatureItems } =
+    splitPortalItems(items);
+  const hasSignatures = signatureItems.length > 0;
 
   const total = items.length;
   // "Done" means the accountant APPROVED it (or the client marked it not
@@ -185,20 +200,54 @@ export function PortalShell({
           </section>
         )}
 
-        <section className="animate-in-stagger space-y-3">
-          {items.map((item) => (
-            <ItemCard
-              key={item.id}
-              token={ctx.engagement.magic_token ?? ""}
-              item={item}
-              locale={locale}
-              uploadedCount={uploads[item.id] ?? 0}
-              files={filesByItem[item.id] ?? []}
-              rejection={ctx.rejection_summary_by_item[item.id] ?? null}
-              onUploaded={(f) => handleUploaded(item.id, f)}
-              onStatusChange={(status) => handleItemUpdated(item.id, { status })}
+        {/* "To sign" group — only shown when the engagement has signature
+            items. Placed above the documents because a signature (an
+            authorization or engagement letter) is usually a quick, important
+            step. */}
+        {hasSignatures && (
+          <section className="space-y-3">
+            <SectionHeader icon={PenLine} title={t("sign_section_title")} />
+            <div className="animate-in-stagger space-y-3">
+              {signatureItems.map((item) => (
+                <SignatureItemCard
+                  key={item.id}
+                  token={ctx.engagement.magic_token ?? ""}
+                  item={item}
+                  locale={locale}
+                  files={filesByItem[item.id] ?? []}
+                  onUploaded={(f) => handleUploaded(item.id, f)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="space-y-3">
+          {/* Only label the documents group when the "To sign" group is also
+              present; otherwise the list stands alone exactly as before. */}
+          {hasSignatures && (
+            <SectionHeader
+              icon={FileText}
+              title={t("documents_section_title")}
             />
-          ))}
+          )}
+          <div className="animate-in-stagger space-y-3">
+            {collectionItems.map((item) => (
+              <ItemCard
+                key={item.id}
+                token={ctx.engagement.magic_token ?? ""}
+                item={item}
+                locale={locale}
+                uploadedCount={uploads[item.id] ?? 0}
+                files={filesByItem[item.id] ?? []}
+                rejection={ctx.rejection_summary_by_item[item.id] ?? null}
+                onUploaded={(f) => handleUploaded(item.id, f)}
+                onStatusChange={(status) =>
+                  handleItemUpdated(item.id, { status })
+                }
+              />
+            ))}
+          </div>
         </section>
 
         <PortalFooter
@@ -207,6 +256,26 @@ export function PortalShell({
           body={helpBody}
         />
       </main>
+    </div>
+  );
+}
+
+// A quiet group label (icon + title) above a section. Shown only when the
+// portal has BOTH a "To sign" group and a documents group, so the client can
+// tell them apart. Understated to match the portal's "mesh, don't box" feel.
+function SectionHeader({
+  icon: Icon,
+  title,
+}: {
+  icon: LucideIcon;
+  title: string;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-0.5">
+      <Icon className="size-4 text-accent" aria-hidden />
+      <h2 className="text-sm font-semibold tracking-tight text-foreground">
+        {title}
+      </h2>
     </div>
   );
 }

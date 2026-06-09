@@ -62,3 +62,10 @@ next-env.d.ts
 __pycache__/
 *.pyc
 
+# Windows folder metadata
+desktop.ini
+
+# Local-only scratch folders (founder's test docs + agent uploads) — never tracked
+/CLAUDE UPLOADS/
+/VYLAN TESTS/
+
