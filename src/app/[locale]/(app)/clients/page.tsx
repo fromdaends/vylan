@@ -146,17 +146,20 @@ export default async function ClientsPage({
     });
     engagementsByClient[e.client_id] = list;
   }
-  // Sort each client's engagements: live first (sent / in_progress),
-  // then drafts, then completed, then cancelled. Within a status group,
-  // newest first by id (ids are uuids but listEngagements already
-  // returns newest first, so we just preserve insertion order in each
-  // status bucket).
+  // Sort each client's engagements: live first (ready to review /
+  // in progress / sent), then drafts, then completed, then cancelled.
+  // Within a status group, newest first by id (ids are uuids but
+  // listEngagements already returns newest first, so we just preserve
+  // insertion order in each status bucket). ready_to_review is the unified
+  // display status a live engagement gets when the accountant holds the
+  // ball — it leads the list, never trails it.
   const STATUS_RANK: Record<string, number> = {
-    in_progress: 0,
-    sent: 1,
-    draft: 2,
-    complete: 3,
-    cancelled: 4,
+    ready_to_review: 0,
+    in_progress: 1,
+    sent: 2,
+    draft: 3,
+    complete: 4,
+    cancelled: 5,
   };
   for (const id of Object.keys(engagementsByClient)) {
     engagementsByClient[id].sort(

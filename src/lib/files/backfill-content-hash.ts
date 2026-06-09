@@ -23,6 +23,30 @@ export const BACKFILL_FAILED_SENTINEL = "backfill_unavailable";
 // files within a day at the 2-minute cadence.
 export const BACKFILL_BATCH_SIZE = 6;
 
+// Per-file download budget. A stalled storage download must never push the
+// cron past its 60s hard limit — past this, the file is marked with the
+// sentinel (same as a failed download) and the sweep moves on.
+const DOWNLOAD_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error("download_timeout")),
+      ms,
+    );
+    p.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 export type BackfillResult = {
   scanned: number;
   hashed: number;
@@ -48,9 +72,10 @@ export async function backfillContentHashes(
   for (const row of data as { id: string; storage_path: string }[]) {
     let hash: string;
     try {
-      const { data: blob, error: dlErr } = await supabase.storage
-        .from("client-uploads")
-        .download(row.storage_path);
+      const { data: blob, error: dlErr } = await withTimeout(
+        supabase.storage.from("client-uploads").download(row.storage_path),
+        DOWNLOAD_TIMEOUT_MS,
+      );
       if (dlErr || !blob) throw dlErr ?? new Error("download_empty");
       hash = computeContentHash(Buffer.from(await blob.arrayBuffer()));
       hashed++;

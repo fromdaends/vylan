@@ -4,7 +4,10 @@ import { getClient } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
 import { loadEngagementSignals } from "@/lib/dashboard/worklist";
 import { deriveEngagementStatus } from "@/lib/attention";
-import { engagementStatusPillClass } from "@/lib/engagements/status-pill";
+import {
+  engagementStatusPillClass,
+  engagementStatusVariant,
+} from "@/lib/engagements/status-pill";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -155,7 +158,7 @@ export default async function ClientDetailPage({
                       </div>
                     </div>
                     <Badge
-                      variant={statusVariant(
+                      variant={engagementStatusVariant(
                         derivedStatusById.get(e.id) ?? e.status,
                       )}
                       className={engagementStatusPillClass(
@@ -203,11 +206,3 @@ function DetailRow({
   );
 }
 
-function statusVariant(
-  status: string,
-): "default" | "secondary" | "outline" | "destructive" {
-  if (status === "complete") return "default";
-  if (status === "cancelled") return "destructive";
-  if (status === "draft") return "outline";
-  return "secondary";
-}
