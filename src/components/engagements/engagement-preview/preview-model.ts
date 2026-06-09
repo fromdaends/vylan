@@ -325,11 +325,12 @@ export type PreviewCounts = {
   duplicates: number;
 };
 
-// Count docs per bucket. A duplicate is a SEPARATE bucket: it's counted only
-// under `duplicates`, never under approved/flagged/rejected/pending — even though
-// its underlying review_status may be "rejected" (auto-rejected as a dup). So
-// approved + flagged + rejected + pending + duplicates === all: the tab counts
-// partition the set exactly, which keeps the numbers honest for the accountant.
+// Count docs per bucket. Duplicates are SET ASIDE from the main review flow:
+// `all` is the count of REAL (non-duplicate) documents and equals
+// approved + flagged + rejected + pending, while `duplicates` is a separate
+// side-bucket with its own tab (so all + duplicates === docs.length). A
+// duplicate is never counted under approved/flagged/rejected/pending even if its
+// underlying review_status is "rejected" — it only ever counts as a duplicate.
 export function previewCounts(docs: PreviewDoc[]): PreviewCounts {
   let approved = 0;
   let flagged = 0;
@@ -346,15 +347,23 @@ export function previewCounts(docs: PreviewDoc[]): PreviewCounts {
     else if (d.status === "rejected") rejected++;
     else pending++;
   }
-  return { all: docs.length, approved, flagged, rejected, pending, duplicates };
+  return {
+    all: approved + flagged + rejected + pending,
+    approved,
+    flagged,
+    rejected,
+    pending,
+    duplicates,
+  };
 }
 
-// Filter the docs to a view. "all" returns everything; "duplicates" returns only
+// Filter the docs to a view. "all" returns the REAL documents — duplicates are
+// excluded, they live ONLY under the Duplicates tab; "duplicates" returns only
 // the exact re-uploads; the status tabs return only NON-duplicate docs of that
-// status (a duplicate lives in the Duplicates bucket, not under its underlying
-// review status — mirrors previewCounts).
+// status. Mirrors previewCounts: duplicates are set aside, never shown alongside
+// the real documents in any view but their own.
 export function filterDocs(docs: PreviewDoc[], view: PreviewView): PreviewDoc[] {
-  if (view === "all") return docs;
+  if (view === "all") return docs.filter((d) => !d.isDuplicate);
   if (view === "duplicates") return docs.filter((d) => d.isDuplicate);
   return docs.filter((d) => !d.isDuplicate && d.status === view);
 }
