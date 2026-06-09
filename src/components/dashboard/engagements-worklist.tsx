@@ -226,6 +226,7 @@ export function EngagementsWorklist({
         locale={locale}
         emptyText={emptyText()}
         canDelete={canDelete}
+        growNameColumn
       />
     </section>
   );
@@ -240,6 +241,7 @@ export function WorklistTable({
   emptyText,
   canDelete = false,
   countdownFor,
+  growNameColumn = false,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -248,6 +250,10 @@ export function WorklistTable({
   // Optional per-row caption (e.g. the Recently Deleted "deleted in N days"
   // countdown). Returns null for rows that shouldn't show one.
   countdownFor?: (row: WorklistRow) => string | null;
+  // Let the Engagement (name) column absorb all the extra horizontal space so
+  // the other columns stay at their natural widths instead of drifting apart.
+  // On by default only on the wide Overview; other tables keep even spacing.
+  growNameColumn?: boolean;
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -294,7 +300,9 @@ export function WorklistTable({
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <TableHead className="px-4">{t("wl_col_engagement")}</TableHead>
+            <TableHead className={cn("px-4", growNameColumn && "w-full")}>
+              {t("wl_col_engagement")}
+            </TableHead>
             <TableHead className="hidden px-4 sm:table-cell">
               {t("wl_col_due")}
             </TableHead>

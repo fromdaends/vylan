@@ -83,7 +83,7 @@ export default async function DashboardPage({
   const subtitle = firm?.name ? `${firm.name} · ${dateStr}` : dateStr;
 
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-10">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-10 min-[1800px]:grid-cols-[minmax(0,1fr)_360px]">
       {/* Main column */}
       <div className="min-w-0 space-y-10 sm:space-y-12">
         <DashboardHeader firstName={firstName} subtitle={subtitle} />
@@ -103,11 +103,16 @@ export default async function DashboardPage({
 
         {/* Needs attention — prominent, accent-tinted action block. Always
             rendered (shows a calm "all caught up" line when empty). Rows carry
-            the same right-click / "..." menu as the My-engagements table. */}
-        <NeedsAttention
-          rows={attentionRows}
-          canDelete={user ? canDeleteEngagements(user.role) : false}
-        />
+            the same right-click / "..." menu as the My-engagements table.
+            Capped so this focused block stays contained on a wide monitor
+            instead of stretching its rows apart — self-gating: the column is
+            ~1176px at the 1600 cap, so this only bites once the page widens. */}
+        <div className="max-w-[80rem]">
+          <NeedsAttention
+            rows={attentionRows}
+            canDelete={user ? canDeleteEngagements(user.role) : false}
+          />
+        </div>
 
         <TemplatesGallery templates={templateCards} />
 

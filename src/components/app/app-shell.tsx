@@ -260,7 +260,18 @@ export function AppShell({
           </div>
         )}
 
-        <main className="flex-1 mx-auto w-full max-w-[1600px] px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8 animate-in-fade">
+        <main
+          className={cn(
+            "flex-1 mx-auto w-full px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8 animate-in-fade",
+            // The Overview alone gets a wider cap on large monitors (>=1800px)
+            // so it fills a 27" screen instead of letterboxing. Every other page
+            // — and every smaller screen (MacBooks, laptops, phones) — stays at
+            // 1600px, byte-identical to before.
+            pathname === "/dashboard"
+              ? "max-w-[1600px] min-[1800px]:max-w-[2100px]"
+              : "max-w-[1600px]",
+          )}
+        >
           {children}
         </main>
       </div>
