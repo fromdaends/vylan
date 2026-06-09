@@ -53,6 +53,14 @@ export type PreviewDoc = {
   // checklist label — lower-cased and accent-stripped so search is language- and
   // accent-insensitive.
   searchText: string;
+  // Duplicate detection (migration 0270): true when this upload is an exact
+  // byte-for-byte re-send of an earlier file in the same engagement. The grid
+  // lifts these OUT of their checklist-item section into a single "Duplicates"
+  // section (groupDocsForGrid) so an item's real documents read clean.
+  // duplicateOfFileId points at the ORIGINAL it copies, used to label the
+  // duplicate card "Copy of [item] #N".
+  isDuplicate: boolean;
+  duplicateOfFileId: string | null;
 };
 
 // Strip accents + lower-case so "Rémunération" matches "remuneration" and
@@ -266,6 +274,8 @@ export function buildPreviewDocs(
       isImage: u.mime_type.startsWith("image/"),
       isPdf: u.mime_type === "application/pdf",
       searchText: buildSearchText(u, item),
+      isDuplicate: u.is_duplicate,
+      duplicateOfFileId: u.duplicate_of_file_id,
     };
   });
 }
@@ -411,6 +421,42 @@ export function groupDocsByItem(
         docs: [...ds].sort((a, b) => a.seq - b.seq),
       });
     }
+  }
+  return groups;
+}
+
+// Sentinel id for the synthetic "Duplicates" section — not a real request item,
+// so it can never collide with a checklist item's UUID. The overlay swaps in a
+// localized heading for it ("Duplicates" / "Doublons").
+export const DUPLICATES_SECTION_ID = "__duplicates__";
+
+// Group docs for the Preview GRID: the usual one-section-per-checklist-item
+// layout, then a single trailing "Duplicates" section gathering every
+// exact-content re-upload (is_duplicate). A duplicate is REMOVED from its item
+// section and shown ONLY here — one file, one place — so an item's real
+// documents never read as cluttered by repeats. Pass already-filtered docs
+// (tabs / search / item filter); empty sections don't render, and the Duplicates
+// section is omitted entirely when there are no duplicates.
+export function groupDocsForGrid(
+  docs: PreviewDoc[],
+  items: RequestItem[],
+): PreviewGroup[] {
+  const duplicates = docs.filter((d) => d.isDuplicate);
+  const originals = docs.filter((d) => !d.isDuplicate);
+  const groups = groupDocsByItem(originals, items);
+  if (duplicates.length > 0) {
+    groups.push({
+      itemId: DUPLICATES_SECTION_ID,
+      label: "",
+      labelFr: null,
+      docType: null,
+      // Oldest upload first (tie-break on file id) so the order is stable across
+      // renders, mirroring the per-item seq ordering elsewhere in the grid.
+      docs: [...duplicates].sort((a, b) => {
+        const t = a.uploadedAt.localeCompare(b.uploadedAt);
+        return t !== 0 ? t : a.fileId.localeCompare(b.fileId);
+      }),
+    });
   }
   return groups;
 }
