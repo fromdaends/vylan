@@ -10,7 +10,7 @@ Status legend: DONE / IN PROGRESS / SKIPPED / NOT STARTED.
 | A. Unified status engine + stuck Analyzing chips | DONE |
 | B. Overview hierarchy rework | DONE |
 | C. Needs attention 2.0 | DONE |
-| D. Team page: Edit firm + seat caps | NOT STARTED |
+| D. Team page: Edit firm + seat caps | DONE |
 | E. Duplicates everywhere | NOT STARTED |
 | F. Browser QA sweep | NOT STARTED |
 
@@ -155,6 +155,21 @@ Verification: typecheck PASS, 810 tests PASS (15 new), lint 0 errors, production
 
 ---
 
+## Workstream D: Team page Edit firm + seat caps (DONE)
+
+What changed, in plain English:
+
+1. Settings > Team now has an "Edit firm" button (next to "Invite teammate") that jumps to the existing Firm settings section (Settings > Account: logo, name, brand color, client language). Owners only; staff never see it, and the underlying settings save action was already blocked server-side for staff (verified, untouched).
+2. Seat caps now follow the locked plan tiers: Solo 2, Cabinet 6, Cabinet+ 15. The trial plan keeps its 5 seats. A per-firm override (seat_cap_override, which already existed in the database) still wins over the plan number when set.
+3. Where the "1 of 5 seats" came from: the current firm is on the default trial plan, whose cap is 5. Trial was not changed, so the firm's effective cap is still exactly 5. NO database write or override was needed to preserve it (the decision default about setting override=5 was written for a firm with no plan; this firm has one).
+4. The public pricing page also said "1 user" (Solo) and "Up to 10 users" (Cabinet), which would have contradicted the now-enforced caps. Updated to "Up to 2 users" and "Up to 6 users" in both languages. FOUNDER: this touches pricing-page copy, normally an ask-first area; the brief locked these tiers, so the displayed numbers were aligned with the enforced ones. Flag if you wanted the old copy.
+
+Where it lives: src/lib/plans.ts (the numbers), src/components/settings/team/team-manager.tsx (the button), src/lib/db/firms.ts (type gap fixed: seat_cap_override added to the Firm type), messages/en.json + fr.json.
+
+Verification: typecheck PASS, 810 tests PASS (two test files had locked the OLD caps and were updated to the new locked tiers), lint 0 errors, production build PASS.
+
+---
+
 ## Decision log
 
 | # | Decision | Why | Where |
@@ -173,6 +188,9 @@ Verification: typecheck PASS, 810 tests PASS (15 new), lint 0 errors, production
 | D12 | No migration for Workstream C | all five signals computable from existing columns (review_status + uploaded_at + ai_rejected + ai_usability + kind); "sitting unreviewed since" IS the pending file's upload time, so no new timestamp was needed; keeps the shared prod DB untouched | src/lib/dashboard/action-signals.ts |
 | D13 | "Flagged twice" interpreted as: any AI-flagged or escalated upload awaiting the accountant's call, plus outstanding auto-rejects | the file-level flags don't record strike counts; the escalation flag (ai_rejected on a still-pending file) IS the flagged-twice marker the router writes; superseded bounces excluded | src/lib/dashboard/action-signals.ts |
 | D14 | Preview deep-link is ?preview=1 / ?preview=flagged on the engagement URL | smallest possible plumbing for "open the Preview where that is clearly the better landing"; only the header Preview button auto-opens | src/components/engagements/engagement-preview/engagement-preview.tsx |
+| D15 | No seat_cap_override written for the current firm | the firm is on plan='trial' (cap 5, unchanged), so its effective cap is preserved with zero DB writes; the decision default's override=5 instruction was for a firm with NO plan | src/lib/plans.ts |
+| D16 | Pricing page seat copy aligned to the locked tiers (Solo "Up to 2 users", Cabinet "Up to 6 users", EN + FR) | the brief locked the tiers; advertising 10 seats while enforcing 6 would mislead buyers; normally ask-first territory, so flagged loudly in the Workstream D summary | messages/en.json, messages/fr.json |
+| D17 | Edit firm links to /settings?tab=account | that is where the existing firm settings section lives (the old /firm page already redirects there); no duplicated form | src/components/settings/team/team-manager.tsx |
 
 (More decisions appended as workstreams complete.)
 

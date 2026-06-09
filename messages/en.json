@@ -42,6 +42,7 @@
     "manage_team": "Manage team",
     "view_team": "View team",
     "invite_button": "Invite teammate",
+    "edit_firm": "Edit firm",
     "invite_modal_title": "Invite a teammate",
     "invite_modal_hint": "They'll get an email to create their account and join your firm.",
     "invite_email_label": "Email",
@@ -1300,12 +1301,12 @@
     "plan_solo_name": "Solo",
     "plan_solo_tagline": "For independent accountants and bookkeepers.",
     "plan_solo_engagements": "Up to 50 active engagements",
-    "plan_solo_users": "1 user",
+    "plan_solo_users": "Up to 2 users",
     "plan_solo_features": "All features included",
     "plan_cabinet_name": "Cabinet",
     "plan_cabinet_tagline": "For small firms with a few teammates.",
     "plan_cabinet_engagements": "Unlimited active engagements",
-    "plan_cabinet_users": "Up to 10 users",
+    "plan_cabinet_users": "Up to 6 users",
     "plan_cabinet_features": "Everything + priority email support"
   },
   "Billing": {
@@ -1334,11 +1335,11 @@
     "disabled_price": "Price not configured",
     "plan_solo_name": "Solo",
     "plan_solo_engagements": "Up to 50 active engagements",
-    "plan_solo_users": "1 user",
+    "plan_solo_users": "Up to 2 users",
     "plan_solo_features": "All features",
     "plan_cabinet_name": "Cabinet",
     "plan_cabinet_engagements": "Unlimited active engagements",
-    "plan_cabinet_users": "Up to 10 users",
+    "plan_cabinet_users": "Up to 6 users",
     "plan_cabinet_features": "Everything + priority support"
   },
   "Footer": {

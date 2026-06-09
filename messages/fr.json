@@ -42,6 +42,7 @@
     "manage_team": "Gérer l'équipe",
     "view_team": "Voir l'équipe",
     "invite_button": "Inviter un membre",
+    "edit_firm": "Modifier le cabinet",
     "invite_modal_title": "Inviter un membre",
     "invite_modal_hint": "Il recevra un courriel pour créer son compte et rejoindre votre cabinet.",
     "invite_email_label": "Courriel",
@@ -1300,12 +1301,12 @@
     "plan_solo_name": "Solo",
     "plan_solo_tagline": "Pour les comptables et teneurs de livres indépendants.",
     "plan_solo_engagements": "Jusqu'à 50 engagements actifs",
-    "plan_solo_users": "1 utilisateur",
+    "plan_solo_users": "Jusqu'à 2 utilisateurs",
     "plan_solo_features": "Toutes les fonctionnalités incluses",
     "plan_cabinet_name": "Cabinet",
     "plan_cabinet_tagline": "Pour les petits cabinets avec quelques coéquipiers.",
     "plan_cabinet_engagements": "Engagements actifs illimités",
-    "plan_cabinet_users": "Jusqu'à 10 utilisateurs",
+    "plan_cabinet_users": "Jusqu'à 6 utilisateurs",
     "plan_cabinet_features": "Tout + soutien courriel prioritaire"
   },
   "Billing": {
@@ -1334,11 +1335,11 @@
     "disabled_price": "Prix non configuré",
     "plan_solo_name": "Solo",
     "plan_solo_engagements": "Jusqu'à 50 engagements actifs",
-    "plan_solo_users": "1 utilisateur",
+    "plan_solo_users": "Jusqu'à 2 utilisateurs",
     "plan_solo_features": "Toutes les fonctionnalités",
     "plan_cabinet_name": "Cabinet",
     "plan_cabinet_engagements": "Engagements actifs illimités",
-    "plan_cabinet_users": "Jusqu'à 10 utilisateurs",
+    "plan_cabinet_users": "Jusqu'à 6 utilisateurs",
     "plan_cabinet_features": "Tout + soutien prioritaire"
   },
   "Footer": {

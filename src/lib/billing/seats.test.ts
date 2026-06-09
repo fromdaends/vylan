@@ -10,10 +10,11 @@ import {
 
 describe("resolveSeatCap", () => {
   it("uses the plan's maxUsers when no override is set", () => {
-    // Mirrors PLANS in src/lib/plans.ts.
+    // Mirrors PLANS in src/lib/plans.ts — locked tiers: Solo 2 / Cabinet 6 /
+    // Cabinet+ 15 (trial keeps 5).
     expect(resolveSeatCap("trial", null)).toBe(5);
-    expect(resolveSeatCap("solo", null)).toBe(1);
-    expect(resolveSeatCap("cabinet", null)).toBe(10);
+    expect(resolveSeatCap("solo", null)).toBe(2);
+    expect(resolveSeatCap("cabinet", null)).toBe(6);
     expect(resolveSeatCap("cabinet_plus", null)).toBe(15);
   });
 
@@ -23,9 +24,9 @@ describe("resolveSeatCap", () => {
   });
 
   it("ignores a null / zero / negative override and falls back to the plan", () => {
-    expect(resolveSeatCap("cabinet", null)).toBe(10);
-    expect(resolveSeatCap("cabinet", 0)).toBe(10);
-    expect(resolveSeatCap("cabinet", -3)).toBe(10);
+    expect(resolveSeatCap("cabinet", null)).toBe(6);
+    expect(resolveSeatCap("cabinet", 0)).toBe(6);
+    expect(resolveSeatCap("cabinet", -3)).toBe(6);
   });
 
   it("floors a fractional override", () => {
