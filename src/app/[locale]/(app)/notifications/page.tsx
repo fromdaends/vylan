@@ -12,6 +12,7 @@ import {
   Bell,
   CheckCheck,
   ChevronRight,
+  FileSignature,
   FileUp,
   Sparkles,
   type LucideIcon,
@@ -168,6 +169,8 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: Sparkles, tone: "bg-primary/15 text-primary" };
     case "document_uploaded":
       return { Icon: FileUp, tone: "bg-primary/15 text-primary" };
+    case "signed_copy_uploaded":
+      return { Icon: FileSignature, tone: "bg-primary/15 text-primary" };
     case "ready_to_review":
       return { Icon: CheckCheck, tone: "bg-success/15 text-success" };
     case "overdue":
