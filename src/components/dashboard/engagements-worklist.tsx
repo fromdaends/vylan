@@ -250,9 +250,10 @@ export function WorklistTable({
   // Optional per-row caption (e.g. the Recently Deleted "deleted in N days"
   // countdown). Returns null for rows that shouldn't show one.
   countdownFor?: (row: WorklistRow) => string | null;
-  // Let the Engagement (name) column absorb all the extra horizontal space so
-  // the other columns stay at their natural widths instead of drifting apart.
-  // On by default only on the wide Overview; other tables keep even spacing.
+  // On the WIDE Overview (>=1800px viewport) only, let the Engagement (name)
+  // column absorb the extra horizontal space so the other columns stay at their
+  // natural widths instead of drifting apart. Below 1800px — and on any table
+  // that doesn't pass this — the layout is unchanged.
   growNameColumn?: boolean;
 }) {
   const t = useTranslations("Dashboard");
@@ -300,7 +301,15 @@ export function WorklistTable({
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
-            <TableHead className={cn("px-4", growNameColumn && "w-full")}>
+            <TableHead
+              className={cn(
+                "px-4",
+                // Only let the name column go greedy on the WIDE canvas
+                // (>=1800px). Below that the table stays exactly as it was, so
+                // MacBooks / laptops are byte-identical.
+                growNameColumn && "min-[1800px]:w-full",
+              )}
+            >
               {t("wl_col_engagement")}
             </TableHead>
             <TableHead className="hidden px-4 sm:table-cell">
