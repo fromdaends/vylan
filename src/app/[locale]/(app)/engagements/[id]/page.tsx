@@ -616,15 +616,38 @@ async function SignatureRow({
             {t(signatureStatusKey(item.status))}
           </Badge>
           {item.status === "submitted" && canEdit && (
-            <form action={approveItemAction}>
+            <>
+              <form action={approveItemAction}>
+                <input type="hidden" name="id" value={item.id} />
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
+                >
+                  <CheckCircle2 className="size-4" />
+                  {t("confirm_signed")}
+                </Button>
+              </form>
+              {/* Send the signed copy back if it isn't acceptable (not actually
+                  signed, wrong document, unreadable). Reuses the same reject
+                  action documents use; the client then re-uploads a new copy. */}
+              <RejectModal
+                itemId={item.id}
+                itemLabel={label}
+                suggestions={[
+                  t("sig_reject_not_signed"),
+                  t("sig_reject_wrong_doc"),
+                  t("sig_reject_unclear"),
+                ]}
+              />
+            </>
+          )}
+          {item.status === "rejected" && canEdit && (
+            <form action={reopenItemAction}>
               <input type="hidden" name="id" value={item.id} />
-              <Button
-                type="submit"
-                size="sm"
-                className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
-              >
-                <CheckCircle2 className="size-4" />
-                {t("confirm_signed")}
+              <Button type="submit" variant="outline" size="sm">
+                <RotateCcw className="size-4" />
+                {t("reopen_item")}
               </Button>
             </form>
           )}
@@ -647,6 +670,15 @@ async function SignatureRow({
         </div>
       </div>
 
+      {item.status === "rejected" && item.rejection_reason && (
+        <Alert variant="destructive">
+          <AlertDescription className="text-xs">
+            <span className="font-medium">{t("rejection_reason")}: </span>
+            {item.rejection_reason}
+          </AlertDescription>
+        </Alert>
+      )}
+
       {files.length > 0 && (
         <ul className="space-y-1 mt-2">
           {files.map((f) => (
@@ -658,6 +690,7 @@ async function SignatureRow({
               expectedYear={null}
               clientName={clientName}
               rejectionCount={item.ai_rejection_count ?? 0}
+              hideAi
             />
           ))}
         </ul>
@@ -672,6 +705,8 @@ function signatureStatusKey(status: string): string {
       return "sig_status_signed";
     case "submitted":
       return "sig_status_returned";
+    case "rejected":
+      return "sig_status_rejected";
     default:
       return "sig_status_sent"; // pending / na / fallback
   }

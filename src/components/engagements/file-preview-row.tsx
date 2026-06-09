@@ -53,6 +53,7 @@ export function FilePreviewRow({
   expectedYear,
   clientName,
   rejectionCount,
+  hideAi = false,
 }: {
   file: UploadedFile;
   // Legacy signed-URL prop (still passed by the engagement page). It's
@@ -65,6 +66,11 @@ export function FilePreviewRow({
   expectedYear?: number | null;
   clientName?: string | null;
   rejectionCount: number;
+  // Signature signed-copies are NOT AI-classified (they aren't tax documents),
+  // so they never get a usability/type verdict. Set this to hide all AI chrome
+  // (the badges + the re-check button) — otherwise the badges would sit in a
+  // permanent "Analyzing…" state waiting for a verdict that never comes.
+  hideAi?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const [open, setOpen] = useState(false);
@@ -166,53 +172,57 @@ export function FilePreviewRow({
         >
           <Download className="size-3.5" />
         </a>
-        <button
-          type="button"
-          onClick={recheck}
-          disabled={rechecking}
-          className={cn(
-            "rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
-            rechecking
-              ? "text-primary"
-              : "text-muted-foreground hover:text-foreground",
-          )}
-          aria-label={t("reclassify")}
-          title={t("reclassify")}
-        >
-          <RefreshCw className={cn("size-3.5", rechecking && "animate-spin")} />
-        </button>
-      </div>
-      <div className="px-2.5 pb-1.5 space-y-1">
-        {/* While re-checking, an explicit pill makes it obvious the AI is
-            running again (the verdict badges keep their previous value until a
-            fresh result lands). */}
-        {rechecking && (
-          <span
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
-            aria-live="polite"
+        {!hideAi && (
+          <button
+            type="button"
+            onClick={recheck}
+            disabled={rechecking}
+            className={cn(
+              "rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
+              rechecking
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+            aria-label={t("reclassify")}
+            title={t("reclassify")}
           >
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-            {t("rechecking")}
-          </span>
+            <RefreshCw className={cn("size-3.5", rechecking && "animate-spin")} />
+          </button>
         )}
-        {/* Usability lives above the document-type badge — separate
-            concerns: "is this readable?" vs "is this the right slip?"
-            UsabilityBadge renders null when there's no actionable
-            verdict so well-readable files don't get extra chrome. */}
-        <UsabilityBadge
-          fileId={file.id}
-          verdict={file.ai_usability}
-          aiRejected={file.ai_rejected}
-          rejectionCount={rejectionCount}
-        />
-        <AiBadge
-          file={file}
-          expectedDocType={expectedDocType}
-          expectedYear={expectedYear}
-          clientName={clientName}
-          quiet={Boolean(file.ai_usability && !file.ai_usability.usable)}
-        />
       </div>
+      {!hideAi && (
+        <div className="px-2.5 pb-1.5 space-y-1">
+          {/* While re-checking, an explicit pill makes it obvious the AI is
+              running again (the verdict badges keep their previous value until a
+              fresh result lands). */}
+          {rechecking && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
+              aria-live="polite"
+            >
+              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+              {t("rechecking")}
+            </span>
+          )}
+          {/* Usability lives above the document-type badge — separate
+              concerns: "is this readable?" vs "is this the right slip?"
+              UsabilityBadge renders null when there's no actionable
+              verdict so well-readable files don't get extra chrome. */}
+          <UsabilityBadge
+            fileId={file.id}
+            verdict={file.ai_usability}
+            aiRejected={file.ai_rejected}
+            rejectionCount={rejectionCount}
+          />
+          <AiBadge
+            file={file}
+            expectedDocType={expectedDocType}
+            expectedYear={expectedYear}
+            clientName={clientName}
+            quiet={Boolean(file.ai_usability && !file.ai_usability.usable)}
+          />
+        </div>
+      )}
       {open && canPreview && (
         <div className="border-t border-border p-2 bg-muted/30">
           {isImage ? (
