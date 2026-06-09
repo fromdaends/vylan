@@ -80,7 +80,10 @@ export function buildDisplayName(
   locale: "en" | "fr" = "en",
 ): string | null {
   const code = input.documentType;
-  if (!code || code === "unknown") return null;
+  // "unknown" = AI couldn't identify it; "other" = the freeform catch-all type
+  // (no specific document). In both cases the client's original filename is more
+  // useful than a generic "Other - 2024.pdf", so we keep it.
+  if (!code || code === "unknown" || code === "other") return null;
   if ((input.confidence ?? 0) < MIN_CONFIDENCE) return null;
   // Only rename to a type we have an official label for (guards against a
   // stray code the catalog doesn't know).

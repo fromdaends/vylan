@@ -68,9 +68,14 @@ describe("buildDisplayName", () => {
     expect(buildDisplayName(base, "x.pdf")).toBe("T4.pdf");
   });
 
-  it("returns null (keep original) for an unknown type", () => {
+  it("returns null (keep original) for unknown / other / null types", () => {
     expect(
       buildDisplayName({ documentType: "unknown", confidence: 0.99 }, "x.pdf"),
+    ).toBeNull();
+    // "other" is the freeform catch-all — a generic "Other - …" name is worse
+    // than the client's filename, so keep the original.
+    expect(
+      buildDisplayName({ documentType: "other", confidence: 0.99, extractedYear: 2024 }, "x.pdf"),
     ).toBeNull();
     expect(
       buildDisplayName({ documentType: null, confidence: 0.99 }, "x.pdf"),
