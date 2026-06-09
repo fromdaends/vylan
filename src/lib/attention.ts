@@ -34,6 +34,18 @@ export type AttentionResult = {
   // verdict (submitted / approved / rejected / AI-bounced all count; "na" and a
   // truly-pending item do not).
   itemsUploaded: number;
+  // Required items the CLIENT still owes something usable on: truly pending
+  // (nothing uploaded, not AI-bounced) or rejected-awaiting-replacement (the
+  // accountant sent the file back, no newer upload yet). While any required
+  // item is blocked the engagement cannot be Ready to review — the unified
+  // status reads "In progress" because the ball is in the client's court.
+  itemsRequiredBlocked: number;
+  // Required-item totals for the "everything approved, awaiting Mark complete"
+  // arm of Ready to review: when every required item is approved (or excused
+  // via N/A) the client's part is done and the engagement parks in Ready to
+  // review until the accountant completes it.
+  requiredCount: number;
+  itemsRequiredApprovedOrNa: number;
   // Engagement is live (sent / in_progress) — i.e. the client can still act and
   // there's something to collect/review. Terminal statuses (draft, complete,
   // cancelled) are not live.
@@ -76,6 +88,17 @@ export function computeAttention(opts: {
   const itemsReadyToReview = items.filter(
     (i) => i.status === "submitted" || isAiBounced(i),
   ).length;
+  // Blocked = the client still owes something usable: truly pending, or
+  // rejected (sent back, awaiting the replacement upload). An AI-bounced item
+  // is NOT blocked — a file exists and the accountant can override the AI.
+  const itemsRequiredBlocked = requiredItems.filter(
+    (i) =>
+      (i.status === "pending" && !isAiBounced(i)) || i.status === "rejected",
+  ).length;
+  const requiredCount = requiredItems.length;
+  const itemsRequiredApprovedOrNa = requiredItems.filter(
+    (i) => i.status === "approved" || i.status === "na",
+  ).length;
   // Files the client has actually provided — independent of the AI's call.
   // submitted/approved/rejected all have a file behind them, as does an
   // AI-bounced item (uploaded → flagged → reopened). "na" and a truly-pending
@@ -100,6 +123,9 @@ export function computeAttention(opts: {
       itemsPendingRequired,
       itemsReadyToReview,
       itemsUploaded,
+      itemsRequiredBlocked,
+      requiredCount,
+      itemsRequiredApprovedOrNa,
       isLive,
     };
   }
@@ -154,6 +180,9 @@ export function computeAttention(opts: {
     itemsPendingRequired,
     itemsReadyToReview,
     itemsUploaded,
+    itemsRequiredBlocked,
+    requiredCount,
+    itemsRequiredApprovedOrNa,
     isLive,
   };
 }
@@ -170,11 +199,41 @@ export function attentionScore(a: AttentionResult): number {
   return score;
 }
 
+// The ONE checklist-side "Ready to review" rule, shared by every surface (the
+// unified status pill, the sidebar bucket + badge, the Inbox queue, Needs
+// attention). Ready means the accountant — not the client — holds the ball:
+//   * no required item is blocked on the client (nothing usable yet, or a
+//     rejected file awaiting its replacement), AND
+//   * something awaits an accountant decision (a submitted file or an
+//     AI-bounced upload), OR every required item is already approved/N/A —
+//     the "all approved, park here until Mark complete" state.
+// Optional items never block readiness; a submission on an optional item DOES
+// count as work awaiting the accountant (covers zero-required engagements).
 export function isReadyToReview(a: AttentionResult): boolean {
-  // All required items are non-pending AND at least one item is submitted
-  // (i.e. needs an approve/reject decision). Drives the dashboard "Ready to
-  // review" action queue + the engagement's sub-page routing.
-  return a.itemsPendingRequired === 0 && a.itemsReadyToReview > 0;
+  if (a.itemsRequiredBlocked > 0) return false;
+  if (a.itemsReadyToReview > 0) return true;
+  return (
+    a.requiredCount > 0 && a.itemsRequiredApprovedOrNa === a.requiredCount
+  );
+}
+
+// The unified engagement status every surface displays. Layered on the stored
+// lifecycle column: draft / complete / cancelled pass through untouched, and a
+// live engagement (sent / in_progress) is re-read as "ready_to_review" the
+// moment the checklist says the accountant holds the ball (isReadyToReview).
+// Server-side derivation — no surface keeps private status math.
+export type DerivedEngagementStatus =
+  | Engagement["status"]
+  | "ready_to_review";
+
+export function deriveEngagementStatus(
+  status: Engagement["status"],
+  a: AttentionResult,
+): DerivedEngagementStatus {
+  if ((status === "sent" || status === "in_progress") && isReadyToReview(a)) {
+    return "ready_to_review";
+  }
+  return status;
 }
 
 // "The client has finished their part." Every required item is in (nothing

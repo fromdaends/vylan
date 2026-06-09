@@ -10,6 +10,7 @@ import {
   computeAttention,
   attentionScore,
   isReadyToReview,
+  deriveEngagementStatus,
   type AttentionResult,
 } from "@/lib/attention";
 import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
@@ -122,6 +123,7 @@ export const loadEngagementWorklist = cache(
         title: e.title,
         clientName: clientsById.get(e.client_id)?.display_name ?? "—",
         status: e.status,
+        derivedStatus: deriveEngagementStatus(e.status, a),
         dueDate: e.due_date,
         assigneeUserId: e.assigned_user_id,
         assigneeName: e.assigned_user_id

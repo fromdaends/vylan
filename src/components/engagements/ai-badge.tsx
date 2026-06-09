@@ -56,8 +56,38 @@ export function AiBadge({
   const t = useTranslations("Ai");
   const locale = useLocale() as AppLocale;
   const [open, setOpen] = useState(false);
+  // Snapshot of "now" at mount, for the staleness check below (a pure render
+  // can't call Date.now() directly; mount-time precision is plenty here).
+  const [mountedAt] = useState(() => Date.now());
 
   if (file.ai_classification == null || file.ai_confidence == null) {
+    // The accountant already made the call on this file — their decision
+    // supersedes the (never-finished) AI read. Showing "Analyzing…" on an
+    // approved document is wrong; show nothing at all.
+    if (file.review_status === "approved" || file.review_status === "rejected") {
+      return null;
+    }
+    // NULL analysis fields can mean "in flight" OR "never ran and never will"
+    // (AI quota exhausted, missing config, a silent failure — skips are not
+    // persisted anywhere). Analysis normally lands in seconds and the job cron
+    // retries every 2 minutes, so past a generous window this is not in flight
+    // anymore: show a calm static "Not analyzed" instead of an eternal spinner.
+    const ANALYSIS_FRESH_MS = 15 * 60 * 1000;
+    const stale =
+      mountedAt - new Date(file.uploaded_at).getTime() > ANALYSIS_FRESH_MS;
+    if (stale) {
+      return (
+        <div
+          className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-muted-foreground/30 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"
+          title={t("not_analyzed_tooltip")}
+        >
+          <span className="font-medium uppercase tracking-wide text-[10px]">
+            {t("label")}
+          </span>
+          <span>{t("not_analyzed")}</span>
+        </div>
+      );
+    }
     return (
       <div
         className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-muted-foreground/30 bg-muted/40 px-2 py-1 text-xs text-muted-foreground"

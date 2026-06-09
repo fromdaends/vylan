@@ -37,6 +37,8 @@ import type { Client } from "@/lib/db/clients";
 import type { EngagementStatus } from "@/lib/db/engagements";
 import type { EngagementType } from "@/lib/db/templates";
 import { formatDate, type AppLocale } from "@/lib/format";
+import { cn } from "@/lib/cn";
+import { engagementStatusPillClass } from "@/lib/engagements/status-pill";
 
 export type ClientEngagementSummary = {
   draft: number;
@@ -55,7 +57,9 @@ export type ClientEngagementRow = {
   id: string;
   title: string;
   type: EngagementType;
-  status: EngagementStatus;
+  // Unified display status (lib/attention deriveEngagementStatus) — the page
+  // passes the derived value so the drawer pill matches every other surface.
+  status: EngagementStatus | "ready_to_review";
   due_date: string | null;
 };
 
@@ -298,7 +302,13 @@ function ExpandedDrawer({
                     )}
                   </span>
                 </span>
-                <Badge variant={statusVariant(e.status)} className="shrink-0">
+                <Badge
+                  variant={statusVariant(e.status)}
+                  className={cn(
+                    "shrink-0",
+                    engagementStatusPillClass(e.status),
+                  )}
+                >
                   {tStatus(e.status)}
                 </Badge>
                 <ArrowUpRight
@@ -325,11 +335,12 @@ function ExpandedDrawer({
 // Map engagement status to the existing Badge variant set so the
 // drawer's status pills match the rest of the app.
 function statusVariant(
-  status: EngagementStatus,
+  status: EngagementStatus | "ready_to_review",
 ): "default" | "secondary" | "outline" | "destructive" {
   switch (status) {
     case "in_progress":
     case "sent":
+    case "ready_to_review":
       return "secondary";
     case "draft":
       return "outline";

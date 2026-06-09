@@ -11,10 +11,19 @@ import {
 function row(
   over: Partial<WorklistRow> & Pick<WorklistRow, "id">,
 ): WorklistRow {
+  // Mirror the loader: derivedStatus re-reads a live ready row as
+  // ready_to_review, otherwise echoes the stored status.
+  const status = over.status ?? "in_progress";
+  const derivedStatus =
+    over.derivedStatus ??
+    (over.readyToReview && (status === "sent" || status === "in_progress")
+      ? "ready_to_review"
+      : status);
   return {
     title: `Engagement ${over.id}`,
     clientName: "Client",
     status: "in_progress",
+    derivedStatus,
     dueDate: null,
     assigneeUserId: null,
     assigneeName: null,

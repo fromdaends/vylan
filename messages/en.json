@@ -1134,6 +1134,8 @@
     "label": "AI",
     "pending": "Analyzing…",
     "pending_tooltip": "AI is reviewing this document. Takes a few seconds.",
+    "not_analyzed": "Not analyzed",
+    "not_analyzed_tooltip": "The automatic read didn't run for this document. You can still review it normally.",
     "likely": "Looks like {type}",
     "type_label": "Type: {type}",
     "mismatch": "Expected {expected}, got {detected}",
@@ -1262,7 +1264,8 @@
     "in_progress": "In progress",
     "complete": "Complete",
     "cancelled": "Cancelled",
-    "overdue": "Overdue"
+    "overdue": "Overdue",
+    "ready_to_review": "Ready to review"
   },
   "Pricing": {
     "title": "Simple, flat pricing",

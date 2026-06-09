@@ -1134,6 +1134,8 @@
     "label": "IA",
     "pending": "Analyse en cours…",
     "pending_tooltip": "L'IA examine ce document. Ça prend quelques secondes.",
+    "not_analyzed": "Non analysé",
+    "not_analyzed_tooltip": "La lecture automatique n'a pas été effectuée pour ce document. Vous pouvez le réviser normalement.",
     "likely": "Probablement {type}",
     "type_label": "Type : {type}",
     "mismatch": "Attendu {expected}, détecté {detected}",
@@ -1262,7 +1264,8 @@
     "in_progress": "En cours",
     "complete": "Complété",
     "cancelled": "Annulé",
-    "overdue": "En retard"
+    "overdue": "En retard",
+    "ready_to_review": "À réviser"
   },
   "Pricing": {
     "title": "Tarification simple et claire",

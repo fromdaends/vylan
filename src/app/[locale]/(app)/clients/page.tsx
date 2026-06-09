@@ -1,6 +1,8 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listClients, type Client } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
+import { loadEngagementSignals } from "@/lib/dashboard/worklist";
+import { deriveEngagementStatus } from "@/lib/attention";
 
 // Real-time data: never serve a cached version after Mark complete /
 // archive / etc.
@@ -67,14 +69,23 @@ export default async function ClientsPage({
     ? (sp.owner as OwnerFilter)
     : null;
 
-  const [clientsRaw, engagements, firm, currentUser, members] =
+  const [clientsRaw, engagements, firm, currentUser, members, signals] =
     await Promise.all([
       listClients({ type, includeArchived }),
       listEngagements(),
       getCurrentFirm(),
       getCurrentUser(),
       listFirmUsers(),
+      // Unified status for the drawer pills: the same cached signal load the
+      // Overview uses, so a "Ready to review" engagement reads ready here too.
+      loadEngagementSignals("active"),
     ]);
+  const derivedStatusById = new Map(
+    signals.map((s) => [
+      s.engagement.id,
+      deriveEngagementStatus(s.engagement.status, s.attention),
+    ]),
+  );
   // Write actions are locked only once the free trial has expired; an active
   // trial has full access.
   const trialLocked = firm ? isTrialExpired(firm) : false;
@@ -130,7 +141,7 @@ export default async function ClientsPage({
       id: e.id,
       title: e.title,
       type: e.type,
-      status: e.status,
+      status: derivedStatusById.get(e.id) ?? e.status,
       due_date: e.due_date,
     });
     engagementsByClient[e.client_id] = list;

@@ -7,7 +7,7 @@ Status legend: DONE / IN PROGRESS / SKIPPED / NOT STARTED.
 | Workstream | Status |
 | --- | --- |
 | Phase 0 verification | DONE |
-| A. Unified status engine + stuck Analyzing chips | NOT STARTED |
+| A. Unified status engine + stuck Analyzing chips | DONE |
 | B. Overview hierarchy rework | NOT STARTED |
 | C. Needs attention 2.0 | NOT STARTED |
 | D. Team page: Edit firm + seat caps | NOT STARTED |
@@ -99,6 +99,25 @@ Sitting-unreviewed threshold 3 days; seat caps Solo 2 / Cabinet 6 / Cabinet+ 15 
 
 ---
 
+## Workstream A: unified status engine + Analyzing chips (DONE)
+
+What changed, in plain English:
+
+1. There is now ONE rule, computed on the server, that decides what status an engagement shows. Every status pill in the app reads it: the engagement page header, the Overview table, the engagements lists, the sidebar buckets, and the pills on client pages. The David Chen case now shows "Ready to review" (a green pill) everywhere at once instead of "In progress" in one place and "Ready" in another.
+2. The rule, exactly: an engagement that was sent shows "Ready to review" when no required document is still owed by the client (nothing missing, nothing sent back awaiting a re-upload) AND something awaits the accountant's decision. If every required document is already approved, it STAYS in "Ready to review" until the accountant clicks Mark complete (per the decision defaults). Draft, Complete, and Cancelled are untouched.
+3. New green "Ready to review" pill style (success tint), clearly different from the gray "In progress".
+4. The "AI Analyzing..." chip can no longer get stuck: a file the accountant already approved or rejected never shows it (their decision supersedes the AI), and a file whose analysis never finished within 15 minutes shows a calm "Not analyzed" label instead of an animated spinner, in both languages, with a tooltip explaining the accountant can still review it normally.
+
+Where it lives: the rule is deriveEngagementStatus + isReadyToReview in src/lib/attention.ts; pill styling shared from src/lib/engagements/status-pill.ts; chip fix in src/components/engagements/ai-badge.tsx. New unit tests cover the David Chen case and every edge case in the decision defaults.
+
+Verification: typecheck PASS, lint 0 errors, all 795 unit tests PASS (includes component render tests of the table pills), production build PASS. Browser spot-check note: this machine's .env.local has no Supabase keys, so a local dev server cannot reach the database; visual checks happen against the Vercel preview in Workstream F instead.
+
+Behavior changes to be aware of (all deliberate, per the brief):
+- An engagement whose required items are ALL approved now counts as Ready to review (it used to fall out of the Ready bucket entirely). It parks there until Mark complete.
+- An engagement with a rejected required document (client owes a replacement) no longer counts as Ready to review even if another file awaits a decision; it reads In progress because the ball is in the client's court. Files awaiting review on such engagements will surface through Needs attention's "sitting unreviewed" chip (Workstream C).
+
+---
+
 ## Decision log
 
 | # | Decision | Why | Where |
@@ -106,6 +125,11 @@ Sitting-unreviewed threshold 3 days; seat caps Solo 2 / Cabinet 6 / Cabinet+ 15 
 | D1 | npm install before baseline (lockfile was ahead of node_modules) | main added fflate; baseline must reflect main | package-lock.json (no change by me) |
 | D2 | Workstream D will NOT write a seat_cap_override for the current firm | firm is on plan='trial' whose cap stays 5; effective cap unchanged without any DB write | src/lib/plans.ts |
 | D3 | Workstream E will NOT retroactively mark legacy files as duplicates | re-bucketing already-reviewed documents is a data-semantics change too risky without supervision; hash backfill + on-upload detection covers the future | src/lib/duplicates.ts |
+| D4 | All-approved engagements park in Ready to review until Mark complete | explicit decision default in the brief; conservative (surfaces work) | src/lib/attention.ts isReadyToReview |
+| D5 | A rejected REQUIRED item makes the engagement In progress, not Ready | the brief's In-progress definition: "only rejected files awaiting replacement" means the client owes work; the per-file review work still surfaces via Workstream C's sitting-unreviewed chip | src/lib/attention.ts itemsRequiredBlocked |
+| D6 | Stuck Analyzing chips fixed in the UI only, NO migration, NO re-running of old analyses | the data is not wrong (NULL analysis is a real terminal state when the AI quota or config skipped a job); re-running analysis on old files could auto-reject and NOTIFY clients, which is banned in this run; staleness window 15 min, adjustable constant | src/components/engagements/ai-badge.tsx |
+| D7 | Client pages' engagement pills also unified | the brief says the unified status applies everywhere it shows; reuses the same cached query the Overview uses, negligible cost | src/app/[locale]/(app)/clients/page.tsx, clients/[id]/page.tsx |
+| D8 | Progress % formula unchanged | with the pill now reading Ready to review, "100% + Ready" is coherent; changing the formula would move numbers the founder did not ask to move | src/lib/attention.ts |
 
 (More decisions appended as workstreams complete.)
 
