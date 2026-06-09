@@ -380,6 +380,7 @@ describe("previewCounts + filterDocs", () => {
       flagged: 1,
       rejected: 0,
       pending: 1,
+      duplicates: 0,
     });
   });
 
@@ -388,6 +389,52 @@ describe("previewCounts + filterDocs", () => {
     expect(filterDocs(docs, "approved").map((d) => d.fileId)).toEqual(["a"]);
     expect(filterDocs(docs, "flagged").map((d) => d.fileId)).toEqual(["b"]);
     expect(filterDocs(docs, "rejected")).toHaveLength(0);
+  });
+});
+
+describe("previewCounts + filterDocs — duplicates as their own bucket", () => {
+  const items = [item({ id: "i1", status: "submitted" })];
+  // 'a' is an approved original; 'b' is its exact re-upload, auto-rejected as a
+  // duplicate (review_status rejected). 'b' must read as a DUPLICATE everywhere.
+  const docs = buildPreviewDocs(
+    [
+      file({ id: "a", request_item_id: "i1", review_status: "approved" }),
+      file({
+        id: "b",
+        request_item_id: "i1",
+        review_status: "rejected",
+        is_duplicate: true,
+        duplicate_of_file_id: "a",
+      }),
+    ],
+    items,
+  );
+
+  it("counts a duplicate only under `duplicates`, never under rejected", () => {
+    const c = previewCounts(docs);
+    expect(c).toEqual({
+      all: 2,
+      approved: 1,
+      flagged: 0,
+      rejected: 0, // 'b' is rejected underneath, but it's a duplicate
+      pending: 0,
+      duplicates: 1,
+    });
+  });
+
+  it("partitions exactly: status buckets + duplicates === all", () => {
+    const c = previewCounts(docs);
+    expect(c.approved + c.flagged + c.rejected + c.pending + c.duplicates).toBe(
+      c.all,
+    );
+  });
+
+  it("the duplicates view shows only the re-upload; status views exclude it", () => {
+    expect(filterDocs(docs, "duplicates").map((d) => d.fileId)).toEqual(["b"]);
+    // 'b' is rejected underneath but a duplicate, so Rejected must not show it.
+    expect(filterDocs(docs, "rejected")).toHaveLength(0);
+    expect(filterDocs(docs, "approved").map((d) => d.fileId)).toEqual(["a"]);
+    expect(filterDocs(docs, "all")).toHaveLength(2);
   });
 });
 
@@ -419,6 +466,7 @@ describe("applyOverrides", () => {
       flagged: 2,
       rejected: 0,
       pending: 0,
+      duplicates: 0,
     });
   });
 });
