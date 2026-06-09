@@ -7,14 +7,25 @@ import {
   ShieldCheck,
   PenLine,
   FileText,
-  type LucideIcon,
+  ChevronLeft,
 } from "lucide-react";
 import type { PortalContext } from "@/lib/db/portal";
 import { ItemCard } from "./item-card";
 import { SignatureItemCard } from "./signature-item-card";
+import { PortalHub, type HubCardData } from "./portal-hub";
 import { splitPortalItems } from "@/lib/portal/split-items";
+import {
+  summarizeSignatures,
+  summarizeDocuments,
+} from "@/lib/portal/group-summary";
 import { PortalFooter } from "./portal-footer";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+
+// Which screen the portal is showing. When the engagement has BOTH signatures
+// and documents, the landing is the two-card hub and tapping a card drills into
+// that group. When it has only one group, that list is shown straight away (no
+// hub, no extra tap) and this never leaves its forced value.
+type PortalView = "hub" | "signatures" | "documents";
 
 export function PortalShell({
   ctx,
@@ -29,24 +40,76 @@ export function PortalShell({
   const [items, setItems] = useState(ctx.items);
   const [uploads, setUploads] = useState(ctx.uploaded_count_by_item);
   const [filesByItem, setFilesByItem] = useState(ctx.files_by_item);
+  const [view, setView] = useState<PortalView>("hub");
 
-  // Split into the "To sign" group (signature items) and the document list.
-  // When there are no signatures (the common case) the documents render exactly
-  // as before, with no group headers.
+  // Split into the signature group ("To sign") and the document group.
   const { collection: collectionItems, signatures: signatureItems } =
     splitPortalItems(items);
   const hasSignatures = signatureItems.length > 0;
+  const hasDocuments = collectionItems.length > 0;
+  // The hub only appears when there's genuinely both kinds of work. Otherwise
+  // the client goes straight to the one list, exactly as the portal did before.
+  const showHub = hasSignatures && hasDocuments;
+  const effectiveView: PortalView = showHub
+    ? view
+    : hasSignatures && !hasDocuments
+      ? "signatures"
+      : "documents";
 
-  const total = items.length;
-  // "Done" means the accountant APPROVED it (or the client marked it not
-  // applicable). A document that was merely uploaded is "in review", NOT done —
-  // counting uploads here was the original bug that filled the ring on upload.
-  const done = items.filter(
+  // Progress ring numbers reflect the DOCUMENTS only — signatures carry their
+  // own state on their card / in their list. With no signatures this equals the
+  // whole checklist, so the long-standing single-list portal is unchanged.
+  const docTotal = collectionItems.length;
+  const docDone = collectionItems.filter(
     (i) => i.status === "approved" || i.status === "na",
   ).length;
-  const pct = total === 0 ? 0 : Math.round((done / total) * 100);
-  const remaining = total - done;
-  const allDone = total > 0 && remaining === 0;
+  const docPct = docTotal === 0 ? 0 : Math.round((docDone / docTotal) * 100);
+  const docRemaining = docTotal - docDone;
+
+  const signSummary = summarizeSignatures(signatureItems);
+  const docSummary = summarizeDocuments(collectionItems);
+
+  const hubCards: HubCardData[] = [
+    {
+      key: "sign",
+      icon: PenLine,
+      title: t("sign_section_title"),
+      line:
+        signSummary.kind === "to_sign"
+          ? t("card_sign_to_sign", { count: signSummary.count })
+          : signSummary.kind === "in_review"
+            ? t("status_in_review")
+            : t("card_sign_all_signed"),
+      tone:
+        signSummary.kind === "to_sign"
+          ? "accent"
+          : signSummary.kind === "all_signed"
+            ? "success"
+            : "muted",
+      onSelect: () => setView("signatures"),
+    },
+    {
+      key: "documents",
+      icon: FileText,
+      title: t("documents_section_title"),
+      line:
+        docSummary.kind === "needs_attention"
+          ? t("card_docs_needs_attention", { count: docSummary.count })
+          : docSummary.kind === "outstanding"
+            ? t("card_docs_progress", {
+                done: docSummary.done,
+                total: docSummary.total,
+              })
+            : t("card_docs_all_set"),
+      tone:
+        docSummary.kind === "needs_attention"
+          ? "warning"
+          : docSummary.kind === "outstanding"
+            ? "accent"
+            : "success",
+      onSelect: () => setView("documents"),
+    },
+  ];
 
   const brand = ctx.firm.brand_color;
 
@@ -155,59 +218,28 @@ export function PortalShell({
       </header>
 
       <main className="animate-in-up mx-auto w-full max-w-2xl flex-1 space-y-8 px-4 py-8 sm:px-6 sm:py-10">
-        <section className="space-y-2.5">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {t("greeting", { name: ctx.client.display_name })}
-          </h1>
-          <p className="max-w-prose text-[15px] leading-relaxed text-muted-foreground">
-            {t("subhead", { firm: ctx.firm.name })}
-          </p>
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
-            {t("trust", { firm: ctx.firm.name })}
-          </p>
-        </section>
-
-        {total > 0 && (
-          <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
-            {allDone ? (
-              <div className="flex items-center gap-3.5">
-                <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
-                  <CheckCircle2 className="size-6" aria-hidden />
-                </span>
-                <div className="min-w-0">
-                  <div className="text-[15px] font-semibold tracking-tight">
-                    {t("all_done_title")}
-                  </div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {t("all_done_hint", { firm: ctx.firm.name })}
-                  </div>
-                </div>
-              </div>
+        {effectiveView === "hub" ? (
+          <>
+            <GreetingSection
+              clientName={ctx.client.display_name}
+              firmName={ctx.firm.name}
+            />
+            <PortalHub cards={hubCards} />
+          </>
+        ) : effectiveView === "signatures" ? (
+          <>
+            {showHub ? (
+              <BackBar
+                title={t("sign_section_title")}
+                onBack={() => setView("hub")}
+              />
             ) : (
-              <div className="flex items-center gap-4">
-                <ProgressRing pct={pct} brand={brand} />
-                <div className="min-w-0">
-                  <div className="text-base font-semibold tracking-tight text-foreground">
-                    {t("progress", { done, total })}
-                  </div>
-                  <div className="mt-0.5 text-sm text-muted-foreground">
-                    {t("items_remaining", { count: remaining })}
-                  </div>
-                </div>
-              </div>
+              <GreetingSection
+                clientName={ctx.client.display_name}
+                firmName={ctx.firm.name}
+              />
             )}
-          </section>
-        )}
-
-        {/* "To sign" group — only shown when the engagement has signature
-            items. Placed above the documents because a signature (an
-            authorization or engagement letter) is usually a quick, important
-            step. */}
-        {hasSignatures && (
-          <section className="space-y-3">
-            <SectionHeader icon={PenLine} title={t("sign_section_title")} />
-            <div className="animate-in-stagger space-y-3">
+            <section className="animate-in-stagger space-y-3">
               {signatureItems.map((item) => (
                 <SignatureItemCard
                   key={item.id}
@@ -218,37 +250,50 @@ export function PortalShell({
                   onUploaded={(f) => handleUploaded(item.id, f)}
                 />
               ))}
-            </div>
-          </section>
-        )}
-
-        <section className="space-y-3">
-          {/* Only label the documents group when the "To sign" group is also
-              present; otherwise the list stands alone exactly as before. */}
-          {hasSignatures && (
-            <SectionHeader
-              icon={FileText}
-              title={t("documents_section_title")}
-            />
-          )}
-          <div className="animate-in-stagger space-y-3">
-            {collectionItems.map((item) => (
-              <ItemCard
-                key={item.id}
-                token={ctx.engagement.magic_token ?? ""}
-                item={item}
-                locale={locale}
-                uploadedCount={uploads[item.id] ?? 0}
-                files={filesByItem[item.id] ?? []}
-                rejection={ctx.rejection_summary_by_item[item.id] ?? null}
-                onUploaded={(f) => handleUploaded(item.id, f)}
-                onStatusChange={(status) =>
-                  handleItemUpdated(item.id, { status })
-                }
+            </section>
+          </>
+        ) : (
+          <>
+            {showHub ? (
+              <BackBar
+                title={t("documents_section_title")}
+                onBack={() => setView("hub")}
               />
-            ))}
-          </div>
-        </section>
+            ) : (
+              <GreetingSection
+                clientName={ctx.client.display_name}
+                firmName={ctx.firm.name}
+              />
+            )}
+            {docTotal > 0 && (
+              <ProgressCard
+                done={docDone}
+                total={docTotal}
+                pct={docPct}
+                remaining={docRemaining}
+                brand={brand}
+                firmName={ctx.firm.name}
+              />
+            )}
+            <section className="animate-in-stagger space-y-3">
+              {collectionItems.map((item) => (
+                <ItemCard
+                  key={item.id}
+                  token={ctx.engagement.magic_token ?? ""}
+                  item={item}
+                  locale={locale}
+                  uploadedCount={uploads[item.id] ?? 0}
+                  files={filesByItem[item.id] ?? []}
+                  rejection={ctx.rejection_summary_by_item[item.id] ?? null}
+                  onUploaded={(f) => handleUploaded(item.id, f)}
+                  onStatusChange={(status) =>
+                    handleItemUpdated(item.id, { status })
+                  }
+                />
+              ))}
+            </section>
+          </>
+        )}
 
         <PortalFooter
           email={ctx.accountant_email}
@@ -260,23 +305,102 @@ export function PortalShell({
   );
 }
 
-// A quiet group label (icon + title) above a section. Shown only when the
-// portal has BOTH a "To sign" group and a documents group, so the client can
-// tell them apart. Understated to match the portal's "mesh, don't box" feel.
-function SectionHeader({
-  icon: Icon,
-  title,
+// The greeting block shown on the hub and on a single-group portal: a warm
+// hello, one line of context, and a quiet trust note.
+function GreetingSection({
+  clientName,
+  firmName,
 }: {
-  icon: LucideIcon;
-  title: string;
+  clientName: string;
+  firmName: string;
 }) {
+  const t = useTranslations("Portal");
   return (
-    <div className="flex items-center gap-2 px-0.5">
-      <Icon className="size-4 text-accent" aria-hidden />
-      <h2 className="text-sm font-semibold tracking-tight text-foreground">
+    <section className="space-y-2.5">
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        {t("greeting", { name: clientName })}
+      </h1>
+      <p className="max-w-prose text-[15px] leading-relaxed text-muted-foreground">
+        {t("subhead", { firm: firmName })}
+      </p>
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
+        {t("trust", { firm: firmName })}
+      </p>
+    </section>
+  );
+}
+
+// A back link + title shown atop a drill-in view, so the client can always
+// return to the two-card hub.
+function BackBar({ title, onBack }: { title: string; onBack: () => void }) {
+  const t = useTranslations("Portal");
+  return (
+    <div className="space-y-3">
+      <button
+        type="button"
+        onClick={onBack}
+        className="inline-flex items-center gap-1 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ChevronLeft className="size-4" aria-hidden />
+        {t("hub_back")}
+      </button>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
         {title}
-      </h2>
+      </h1>
     </div>
+  );
+}
+
+// The documents progress card: a celebratory "all done" state, otherwise the
+// ring + a remaining count. Approval-based (an upload alone does not fill it).
+function ProgressCard({
+  done,
+  total,
+  pct,
+  remaining,
+  brand,
+  firmName,
+}: {
+  done: number;
+  total: number;
+  pct: number;
+  remaining: number;
+  brand: string;
+  firmName: string;
+}) {
+  const t = useTranslations("Portal");
+  const allDone = total > 0 && remaining === 0;
+  return (
+    <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+      {allDone ? (
+        <div className="flex items-center gap-3.5">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+            <CheckCircle2 className="size-6" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[15px] font-semibold tracking-tight">
+              {t("all_done_title")}
+            </div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              {t("all_done_hint", { firm: firmName })}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center gap-4">
+          <ProgressRing pct={pct} brand={brand} />
+          <div className="min-w-0">
+            <div className="text-base font-semibold tracking-tight text-foreground">
+              {t("progress", { done, total })}
+            </div>
+            <div className="mt-0.5 text-sm text-muted-foreground">
+              {t("items_remaining", { count: remaining })}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
