@@ -13,6 +13,8 @@
 //   - ai_quality_flagged       (AI flagged a file for review)
 //   - document_uploaded        (client uploaded a document — partial
 //                               progress, before the whole set is in)
+//   - signed_copy_uploaded     (client returned a SIGNED copy of a signature
+//                               item — distinct from a plain document upload)
 //   - ready_to_review          (client has uploaded every required item —
 //                               regardless of the AI's verdict on them)
 //   - overdue                  (engagement's due_date has passed)
@@ -31,6 +33,7 @@ export type HomeNotificationKind =
   | "ai_escalated_to_accountant"
   | "ai_quality_flagged"
   | "document_uploaded"
+  | "signed_copy_uploaded"
   | "ready_to_review"
   | "overdue";
 
@@ -130,20 +133,38 @@ export async function listHomeNotifications(
       sb.from("request_items").select("*").in("engagement_id", liveIds),
       sb
         .from("uploaded_files")
-        .select("engagement_id, uploaded_at")
+        .select("engagement_id, uploaded_at, request_item_id")
         .in("engagement_id", liveIds),
     ]);
     const itemsByEng = new Map<string, NonNullable<typeof itemsResp.data>>();
+    // Which request items are signature items — lets us tell a returned SIGNED
+    // copy apart from a normal document upload below.
+    const signatureItemIds = new Set<string>();
     for (const it of itemsResp.data ?? []) {
       const arr = itemsByEng.get(it.engagement_id) ?? [];
       arr.push(it as never);
       itemsByEng.set(it.engagement_id, arr as never);
+      if ((it as { kind?: string }).kind === "signature") {
+        signatureItemIds.add((it as { id: string }).id);
+      }
     }
-    const lastActByEng = new Map<string, string>();
+    // Most-recent upload per engagement, split by what arrived: ANY file (drives
+    // attention + ready-to-review), a document-collection file (drives "document
+    // uploaded"), and a signed copy of a signature item (drives the new "signed
+    // copy uploaded").
+    const lastAnyByEng = new Map<string, string>();
+    const lastCollectionByEng = new Map<string, string>();
+    const lastSignatureByEng = new Map<string, string>();
+    const bump = (m: Map<string, string>, eng: string, at: string) => {
+      const prev = m.get(eng);
+      if (!prev || at > prev) m.set(eng, at);
+    };
     for (const u of lastActivityResp.data ?? []) {
-      const prev = lastActByEng.get(u.engagement_id);
-      if (!prev || u.uploaded_at > prev) {
-        lastActByEng.set(u.engagement_id, u.uploaded_at);
+      bump(lastAnyByEng, u.engagement_id, u.uploaded_at);
+      if (signatureItemIds.has(u.request_item_id)) {
+        bump(lastSignatureByEng, u.engagement_id, u.uploaded_at);
+      } else {
+        bump(lastCollectionByEng, u.engagement_id, u.uploaded_at);
       }
     }
 
@@ -152,11 +173,13 @@ export async function listHomeNotifications(
       const attention = computeAttention({
         engagement: e,
         items: (itemsByEng.get(e.id) ?? []) as never,
-        lastClientActivityAt: lastActByEng.get(e.id) ?? null,
+        lastClientActivityAt: lastAnyByEng.get(e.id) ?? null,
       });
       const clientName =
         clientsById.get(e.client_id)?.display_name ?? null;
-      const lastUploadAt = lastActByEng.get(e.id);
+      const lastAnyAt = lastAnyByEng.get(e.id);
+      const lastCollectionAt = lastCollectionByEng.get(e.id);
+      const lastSignatureAt = lastSignatureByEng.get(e.id);
       // Fire the moment the client has uploaded a file for every required
       // item — regardless of whether the AI approved, rejected, or hasn't
       // weighed in yet. (The dashboard's "Ready to review" queue still uses the
@@ -170,22 +193,36 @@ export async function listHomeNotifications(
           client_display_name: clientName,
           // Use the most recent client upload as the "fresh"
           // timestamp; falls back to sent_at if nothing has uploaded.
-          timestamp: lastUploadAt ?? e.sent_at ?? new Date().toISOString(),
+          timestamp: lastAnyAt ?? e.sent_at ?? new Date().toISOString(),
           href: `/engagements/${e.id}`,
         });
-      } else if (lastUploadAt && lastUploadAt >= recentSinceISO) {
-        // Set isn't complete yet, but the client uploaded something
-        // recently — surface that progress so the feed shows movement as
-        // documents trickle in, not only when everything is finally in.
-        // One row per engagement at its newest upload; naturally replaced
-        // by ready_to_review above once the collection completes.
+      } else if (lastCollectionAt && lastCollectionAt >= recentSinceISO) {
+        // Set isn't complete yet, but the client uploaded a DOCUMENT recently —
+        // surface that progress so the feed shows movement as documents trickle
+        // in, not only when everything is finally in. One row per engagement at
+        // its newest document upload; naturally replaced by ready_to_review
+        // above once the collection completes. Signed copies are handled
+        // separately below, so this never double-counts a signature return.
         out.push({
           id: `upload:${e.id}`,
           kind: "document_uploaded",
           engagement_id: e.id,
           engagement_title: e.title,
           client_display_name: clientName,
-          timestamp: lastUploadAt,
+          timestamp: lastCollectionAt,
+          href: `/engagements/${e.id}`,
+        });
+      }
+      // A returned SIGNED copy is its own event, independent of document
+      // collection — surface it whenever a signature item got a recent upload.
+      if (lastSignatureAt && lastSignatureAt >= recentSinceISO) {
+        out.push({
+          id: `signed:${e.id}`,
+          kind: "signed_copy_uploaded",
+          engagement_id: e.id,
+          engagement_title: e.title,
+          client_display_name: clientName,
+          timestamp: lastSignatureAt,
           href: `/engagements/${e.id}`,
         });
       }
