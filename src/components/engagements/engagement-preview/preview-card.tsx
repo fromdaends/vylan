@@ -8,6 +8,7 @@ import {
   Check,
   CheckCircle2,
   Clock,
+  Copy,
   Download,
   FileText,
   Loader2,
@@ -53,6 +54,18 @@ const STATUS_UI: Record<
   },
 };
 
+// A duplicate gets its OWN neutral treatment regardless of the underlying
+// review_status: it's not an error to fix, it's an exact re-upload set aside.
+// Mirrors the "Duplicate" badge the engagement file-row already shows, so the
+// two views agree. The Copy icon + "Duplicate" label distinguish it from the
+// (same-coloured) not-analyzed state.
+const DUPLICATE_UI = {
+  border: "border-border/50",
+  badge: "bg-muted-foreground/70",
+  text: "text-muted-foreground",
+  Icon: Copy,
+};
+
 // One document in the grid: a recognisable thumbnail (image rendition or PDF
 // first page, lazy-loaded), a couple-word header, an unmistakable colour status
 // (border + corner icon + labelled line — never colour alone), and hover/focus
@@ -91,8 +104,13 @@ export function PreviewCard({
     locale === "fr" ? "fr-CA" : "en-CA",
     { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" },
   ).format(new Date(doc.uploadedAt));
-  const s = STATUS_UI[doc.status];
-  const statusLabel = t(`status_${doc.status}`);
+  // A duplicate reads as a "Duplicate" (its own bucket), not as its underlying
+  // rejected/flagged review status — keeps the card, the Duplicates section, and
+  // the Duplicates tab all telling the same story.
+  const s = doc.isDuplicate ? DUPLICATE_UI : STATUS_UI[doc.status];
+  const statusLabel = doc.isDuplicate
+    ? t("status_duplicate")
+    : t(`status_${doc.status}`);
   const isOther = !doc.isImage && !doc.isPdf;
   const fallback =
     isOther || (doc.isImage && imgError) || (doc.isPdf && pdfError);

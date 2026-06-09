@@ -17,8 +17,17 @@ import { matchDocument } from "@/lib/ai/matching";
 //   * pending  — the AI hasn't finished analysing yet. There is NO "unsure".
 export type PreviewStatus = "approved" | "rejected" | "flagged" | "pending";
 
-// The grid's view tabs. "all" shows everything; the others filter by status.
-export type PreviewView = "all" | "approved" | "flagged" | "rejected";
+// The grid's view tabs. "all" shows everything; "duplicates" shows only the
+// exact re-uploads; the rest filter by status. A duplicate is its OWN bucket —
+// it's excluded from the approved/flagged/rejected views + counts (see
+// previewCounts + filterDocs) so the numbers partition cleanly and a duplicate
+// reads as a duplicate, not as "just another rejected file".
+export type PreviewView =
+  | "all"
+  | "approved"
+  | "flagged"
+  | "rejected"
+  | "duplicates";
 
 export type PreviewDoc = {
   fileId: string;
@@ -313,27 +322,41 @@ export type PreviewCounts = {
   flagged: number;
   rejected: number;
   pending: number;
+  duplicates: number;
 };
 
+// Count docs per bucket. A duplicate is a SEPARATE bucket: it's counted only
+// under `duplicates`, never under approved/flagged/rejected/pending — even though
+// its underlying review_status may be "rejected" (auto-rejected as a dup). So
+// approved + flagged + rejected + pending + duplicates === all: the tab counts
+// partition the set exactly, which keeps the numbers honest for the accountant.
 export function previewCounts(docs: PreviewDoc[]): PreviewCounts {
   let approved = 0;
   let flagged = 0;
   let rejected = 0;
   let pending = 0;
+  let duplicates = 0;
   for (const d of docs) {
+    if (d.isDuplicate) {
+      duplicates++;
+      continue;
+    }
     if (d.status === "approved") approved++;
     else if (d.status === "flagged") flagged++;
     else if (d.status === "rejected") rejected++;
     else pending++;
   }
-  return { all: docs.length, approved, flagged, rejected, pending };
+  return { all: docs.length, approved, flagged, rejected, pending, duplicates };
 }
 
-// Filter the docs to a view. "all" returns everything; the status tabs return
-// only matching docs.
+// Filter the docs to a view. "all" returns everything; "duplicates" returns only
+// the exact re-uploads; the status tabs return only NON-duplicate docs of that
+// status (a duplicate lives in the Duplicates bucket, not under its underlying
+// review status — mirrors previewCounts).
 export function filterDocs(docs: PreviewDoc[], view: PreviewView): PreviewDoc[] {
   if (view === "all") return docs;
-  return docs.filter((d) => d.status === view);
+  if (view === "duplicates") return docs.filter((d) => d.isDuplicate);
+  return docs.filter((d) => !d.isDuplicate && d.status === view);
 }
 
 // Filter to a single checklist item, or "all" to keep everything. Combines with
