@@ -337,8 +337,12 @@ export default async function EngagementDetailPage({
           </Alert>
         ))}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <section className="lg:col-span-2 space-y-4">
+      {/* On a wide monitor (>=1800px) the Activity rail becomes a fixed 360px
+          column instead of a proportional third (which would balloon to ~670px);
+          the checklist column takes the rest. Below 1800px it's the original
+          3-column proportional grid, unchanged. */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-[1800px]:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="lg:col-span-2 space-y-4 min-[1800px]:col-span-1">
           {/* Signatures first: a signature (an authorization or engagement
               letter) is usually a quick, important action, so it sits above the
               longer document checklist rather than buried beneath it. */}

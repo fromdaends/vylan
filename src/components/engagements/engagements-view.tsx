@@ -195,6 +195,7 @@ export function EngagementsView({
         locale={locale}
         emptyText={q !== "" ? tDash("wl_empty_search") : t(`view_${view}_empty`)}
         canDelete={canDelete}
+        growNameColumn
         countdownFor={
           view === "deleted"
             ? (r) =>

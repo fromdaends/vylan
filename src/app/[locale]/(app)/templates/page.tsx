@@ -51,7 +51,7 @@ export default async function TemplatesPage({
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-10">
+    <div className="mx-auto max-w-5xl space-y-10 min-[1800px]:max-w-[90rem]">
       <header className="animate-in-up">
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="mt-1.5 max-w-xl text-sm text-muted-foreground">
@@ -185,7 +185,7 @@ function Section({
 
 function CardGrid({ children }: { children: ReactNode }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 min-[1800px]:grid-cols-4">
       {children}
     </div>
   );
