@@ -8,7 +8,7 @@ Status legend: DONE / IN PROGRESS / SKIPPED / NOT STARTED.
 | --- | --- |
 | Phase 0 verification | DONE |
 | A. Unified status engine + stuck Analyzing chips | DONE |
-| B. Overview hierarchy rework | NOT STARTED |
+| B. Overview hierarchy rework | DONE |
 | C. Needs attention 2.0 | NOT STARTED |
 | D. Team page: Edit firm + seat caps | NOT STARTED |
 | E. Duplicates everywhere | NOT STARTED |
@@ -118,6 +118,22 @@ Behavior changes to be aware of (all deliberate, per the brief):
 
 ---
 
+## Workstream B: Overview hierarchy rework (DONE)
+
+What changed, in plain English:
+
+1. The Overview now reads in priority order: act first (Jump back in + Needs attention together in the top region), then your work (the My engagements table, moved up), then starting something new (the template strip, demoted to the bottom of the main column).
+2. On a wide monitor (2xl breakpoint, 1536px and up) Jump back in and Needs attention share the first row side by side, which also fixes Jump back in floating alone in empty space. On laptops and phones they stack as before. When there is no recent engagement to jump back to, Needs attention takes the whole row by itself.
+3. Needs attention still opens expanded by default, shows up to 5 rows plus View all, and shows the one-line "all caught up" message when empty. If the founder previously collapsed it on a device, that saved preference is still honored (collapsing it again works the same way).
+4. The template strip is now visually quiet: a muted small heading, slim pill-shaped items (icon + name + document count) instead of big preview cards, and a subdued Browse all link. Same templates, same links, just clearly secondary.
+5. The What's new rail was not touched: same component, same position, same behavior, on desktop and mobile.
+
+Where it lives: src/app/[locale]/(app)/dashboard/page.tsx (ordering + top row), src/components/dashboard/templates-gallery.tsx (compact strip).
+
+Verification: typecheck PASS, all 795 tests PASS (including the existing TemplatesGallery tests, which assert links and content that the compact strip preserves), lint 0 errors, production build PASS.
+
+---
+
 ## Decision log
 
 | # | Decision | Why | Where |
@@ -130,6 +146,8 @@ Behavior changes to be aware of (all deliberate, per the brief):
 | D6 | Stuck Analyzing chips fixed in the UI only, NO migration, NO re-running of old analyses | the data is not wrong (NULL analysis is a real terminal state when the AI quota or config skipped a job); re-running analysis on old files could auto-reject and NOTIFY clients, which is banned in this run; staleness window 15 min, adjustable constant | src/components/engagements/ai-badge.tsx |
 | D7 | Client pages' engagement pills also unified | the brief says the unified status applies everywhere it shows; reuses the same cached query the Overview uses, negligible cost | src/app/[locale]/(app)/clients/page.tsx, clients/[id]/page.tsx |
 | D8 | Progress % formula unchanged | with the pill now reading Ready to review, "100% + Ready" is coherent; changing the formula would move numbers the founder did not ask to move | src/lib/attention.ts |
+| D9 | Top-row side-by-side kicks in at 2xl (1536px), stacked below | at smaller widths the main column (after sidebar + rail) leaves too little room for two readable blocks; measured against the shell's 1600/2100 caps | src/app/[locale]/(app)/dashboard/page.tsx |
+| D10 | Needs attention keeps its saved collapse preference | the brief says "opens expanded by default", which is already the default; silently deleting the founder's saved preference would be surprising | src/components/dashboard/needs-attention-collapsible.tsx (untouched) |
 
 (More decisions appended as workstreams complete.)
 
