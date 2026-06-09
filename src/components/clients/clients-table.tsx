@@ -109,7 +109,12 @@ export function ClientsTable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-8" />
-            <TableHead className="py-3">{t("col_name")}</TableHead>
+            {/* On a wide monitor (>=1800px) the Name column absorbs the extra
+                space so Type / Email / Phone / Engagements / Owner stay grouped
+                at natural widths instead of drifting apart. Unchanged below. */}
+            <TableHead className="py-3 min-[1800px]:w-full">
+              {t("col_name")}
+            </TableHead>
             <TableHead className="py-3">{t("col_type")}</TableHead>
             <TableHead className="py-3">{t("col_email")}</TableHead>
             <TableHead className="py-3">{t("col_phone")}</TableHead>
