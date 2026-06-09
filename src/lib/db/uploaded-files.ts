@@ -7,6 +7,12 @@ export type UploadedFile = {
   engagement_id: string;
   storage_path: string;
   original_filename: string;
+  // Clean, AI-generated name (e.g. "T4 - 2024 - Hydro-Quebec.pdf") set by the
+  // classify worker once it confidently recognises the document. NULL = AI
+  // unsure / not yet classified → callers fall back to original_filename
+  // (`display_name ?? original_filename`). Accountant-facing only; the client
+  // portal always shows original_filename. Migration 0280.
+  display_name: string | null;
   mime_type: string;
   size_bytes: number;
   ai_classification: string | null;

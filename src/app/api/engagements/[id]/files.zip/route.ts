@@ -4,18 +4,22 @@
 // that the engagement belongs to their firm before doing any work — a
 // stale `id` from another firm returns 404.
 //
-// The response streams: we fetch each signed URL on demand and pipe it
-// into the archiver. The browser's download starts as soon as the
-// first byte hits the wire. Memory stays flat regardless of total
-// archive size.
+// We fetch each file from its signed URL, then build the ZIP in memory with
+// fflate (see src/lib/zip.ts) so every entry gets a clean, macOS-openable
+// local header. Files here are individual tax documents, so the in-memory
+// peak is modest.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { Readable } from "node:stream";
 import { format } from "date-fns";
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { signedUrl } from "@/lib/storage";
-import { streamZip, sanitizeFilenamePart, type ZipEntry } from "@/lib/zip";
+import {
+  buildZipArchive,
+  sanitizeFilenamePart,
+  macZipEntryName,
+  type ZipEntry,
+} from "@/lib/zip";
 import { logUserActivity } from "@/lib/db/activity";
 
 export const runtime = "nodejs";
@@ -58,7 +62,7 @@ export async function GET(
       .maybeSingle(),
     sb
       .from("uploaded_files")
-      .select("id, storage_path, original_filename")
+      .select("id, storage_path, original_filename, display_name")
       .eq("engagement_id", engagement.id)
       .order("uploaded_at", { ascending: true }),
   ]);
@@ -84,42 +88,27 @@ export async function GET(
   });
 
   async function* entries(): AsyncGenerator<ZipEntry> {
-    // Track filename collisions inside the archive — multiple uploads
-    // for the same item can have the same original_filename. Suffix
-    // collisions so the ZIP itself stays valid.
-    const seen = new Map<string, number>();
     for (const f of files!) {
       const url = await signedUrl(f.storage_path, 60).catch(() => null);
       if (!url) continue;
       const res = await fetch(url);
-      if (!res.ok || !res.body) continue;
-
-      let name = f.original_filename;
-      const n = seen.get(name) ?? 0;
-      seen.set(name, n + 1);
-      if (n > 0) {
-        const dot = name.lastIndexOf(".");
-        if (dot > 0) {
-          name = `${name.slice(0, dot)} (${n})${name.slice(dot)}`;
-        } else {
-          name = `${name} (${n})`;
-        }
-      }
-
-      yield {
-        name,
-        stream: Readable.fromWeb(res.body as never),
-      };
+      if (!res.ok) continue;
+      const data = new Uint8Array(await res.arrayBuffer());
+      // Prefer the AI's clean name; fall back to what the client uploaded.
+      // Then make it safe for every unzip tool (ASCII, no path chars).
+      // buildZipArchive de-duplicates any colliding names.
+      yield { name: macZipEntryName(f.display_name ?? f.original_filename), data };
     }
   }
 
-  const zipStream = streamZip(entries());
+  const zipBytes = await buildZipArchive(entries());
 
-  return new Response(zipStream as unknown as BodyInit, {
+  return new Response(zipBytes as unknown as BodyInit, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${archiveName}"`,
+      "Content-Length": String(zipBytes.byteLength),
       "Cache-Control": "no-store",
     },
   });

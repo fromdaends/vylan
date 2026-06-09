@@ -88,18 +88,24 @@ export function FilePreviewRow({
   const isPdf = file.mime_type === "application/pdf";
   const canPreview = isImage || isPdf;
 
+  // The name we show + download as: the AI's clean auto-name when it has one,
+  // else the name the client uploaded. (Kept inline — uploaded-files.ts pulls
+  // in server-only code, so a client component can't import a helper from it.)
+  const displayName = file.display_name ?? file.original_filename;
+
   // Bytes are served by the authenticated, same-origin proxy keyed by file id.
-  // inline = view / open-in-new-tab; ?download=1 = force-download with the
-  // original filename.
+  // inline = view / open-in-new-tab; ?download=1 = force-download. The route
+  // sets the download filename from display_name too, so this `download` attr
+  // and the server agree.
   const source = useMemo(
     () => ({
       url: `/api/files/${file.id}`,
       openHref: `/api/files/${file.id}`,
       downloadUrl: `/api/files/${file.id}?download=1`,
-      filename: file.original_filename,
+      filename: displayName,
       isImage,
     }),
-    [file.id, file.original_filename, isImage],
+    [file.id, displayName, isImage],
   );
 
   // A fingerprint of the AI verdict. It changes when a fresh classification
@@ -152,8 +158,8 @@ export function FilePreviewRow({
           <span className="w-[14px]" aria-hidden />
         )}
         <FileText className="size-3.5 text-muted-foreground shrink-0" aria-hidden />
-        <span className="truncate flex-1 font-medium">
-          {file.original_filename}
+        <span className="truncate flex-1 font-medium" title={displayName}>
+          {displayName}
         </span>
         <span className="font-mono text-muted-foreground shrink-0">
           {formatBytes(file.size_bytes)}
@@ -170,7 +176,7 @@ export function FilePreviewRow({
         </a>
         <a
           href={source.downloadUrl}
-          download={file.original_filename}
+          download={displayName}
           className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
           aria-label={t("download_file")}
           title={t("download_file")}
@@ -247,7 +253,7 @@ export function FilePreviewRow({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={source.url}
-                alt={file.original_filename}
+                alt={displayName}
                 className="max-h-[480px] w-auto mx-auto rounded"
               />
               <button

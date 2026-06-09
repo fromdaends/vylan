@@ -38,6 +38,7 @@ function file(over: Partial<UploadedFile>): UploadedFile {
     engagement_id: "e1",
     storage_path: "p",
     original_filename: "doc.pdf",
+    display_name: null,
     mime_type: "application/pdf",
     size_bytes: 100,
     ai_classification: null,

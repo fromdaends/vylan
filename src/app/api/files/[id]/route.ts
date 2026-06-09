@@ -52,7 +52,7 @@ export async function GET(
   // A file from another firm is an indistinguishable 404 — no existence oracle.
   const { data: file } = await sb
     .from("uploaded_files")
-    .select("storage_path, original_filename, mime_type, engagement_id")
+    .select("storage_path, original_filename, display_name, mime_type, engagement_id")
     .eq("id", id)
     .maybeSingle();
   if (!file) {
@@ -99,9 +99,13 @@ export async function GET(
   // — combined with the global `nosniff` header this makes the browser render
   // PDFs/images inline correctly and never sniff something unexpected.
   headers.set("Content-Type", file.mime_type || "application/octet-stream");
+  // Download/open as the AI's clean name when we have one, else the original.
   headers.set(
     "Content-Disposition",
-    buildContentDisposition(file.original_filename, wantsDownload),
+    buildContentDisposition(
+      file.display_name ?? file.original_filename,
+      wantsDownload,
+    ),
   );
   headers.set("Accept-Ranges", "bytes");
   // Private bytes: cache only in the user's browser, never on a shared CDN.
