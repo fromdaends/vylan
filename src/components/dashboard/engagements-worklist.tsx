@@ -59,6 +59,15 @@ export type WorklistRow = {
   // in the accountant's court reads "ready_to_review". EVERY status pill
   // renders this; `status` stays for lifecycle filtering (complete/cancelled).
   derivedStatus: EngagementStatus | "ready_to_review";
+  // Needs attention 2.0 file-level signals (lib/dashboard/action-signals):
+  // flagged uploads awaiting the accountant's call, returned signed copies
+  // awaiting confirmation, and how long the oldest undecided submission has
+  // been waiting (sittingUnreviewed = past the threshold).
+  flaggedFilesCount: number;
+  signedCopiesToConfirm: number;
+  waitingSince: string | null;
+  waitingDays: number | null;
+  sittingUnreviewed: boolean;
   dueDate: string | null;
   assigneeUserId: string | null;
   assigneeName: string | null;

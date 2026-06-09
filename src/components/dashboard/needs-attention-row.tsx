@@ -6,6 +6,9 @@ import {
   Clock,
   FileWarning,
   CheckCheck,
+  Flag,
+  Hourglass,
+  PenLine,
   MoreHorizontal,
   type LucideIcon,
 } from "lucide-react";
@@ -33,6 +36,9 @@ const BADGE_ICONS: Record<NeedsAttentionBadge["iconKey"], LucideIcon> = {
   due_soon: Clock,
   stale: FileWarning,
   ready: CheckCheck,
+  flagged: Flag,
+  signed_copy: PenLine,
+  sitting: Hourglass,
 };
 
 // One Needs-attention row. Reuses the exact same engagement row menu as the
@@ -45,12 +51,17 @@ export function NeedsAttentionRow({
   row,
   canDelete,
   menuActionsLabel,
-  badge,
+  badges,
+  href,
 }: {
   row: WorklistRow;
   canDelete: boolean;
   menuActionsLabel: string;
-  badge: NeedsAttentionBadge | null;
+  // Reason chips, one per signal that applies (already ordered by urgency).
+  badges: NeedsAttentionBadge[];
+  // Row destination — the engagement page, or the Preview deep-link when
+  // flagged files make that the better landing.
+  href?: string;
 }) {
   // Needs-attention only ever lists active engagements, but derive the state
   // the same way the worklist does so the menu options always match.
@@ -66,16 +77,15 @@ export function NeedsAttentionRow({
     canDelete,
   });
 
-  const BadgeIcon = badge ? BADGE_ICONS[badge.iconKey] : null;
-
   return (
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <li className="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-accent/10">
-            {/* Full-row link overlay — clicking the row opens the engagement. */}
+            {/* Full-row link overlay — clicking the row opens the engagement
+                (or the Preview deep-link when that's the better landing). */}
             <Link
-              href={`/engagements/${row.id}`}
+              href={href ?? `/engagements/${row.id}`}
               className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label={row.title}
             />
@@ -87,15 +97,23 @@ export function NeedsAttentionRow({
                 {row.clientName}
               </div>
             </div>
-            {badge && BadgeIcon && (
-              <span
-                className={
-                  "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
-                  badge.tone
-                }
-              >
-                <BadgeIcon className="h-3 w-3" aria-hidden />
-                {badge.label}
+            {badges.length > 0 && (
+              <span className="flex max-w-[60%] shrink-0 flex-wrap items-center justify-end gap-1">
+                {badges.map((badge) => {
+                  const BadgeIcon = BADGE_ICONS[badge.iconKey];
+                  return (
+                    <span
+                      key={badge.iconKey}
+                      className={
+                        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
+                        badge.tone
+                      }
+                    >
+                      <BadgeIcon className="h-3 w-3" aria-hidden />
+                      {badge.label}
+                    </span>
+                  );
+                })}
               </span>
             )}
             <DropdownMenu>

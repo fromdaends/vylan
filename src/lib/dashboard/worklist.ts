@@ -13,6 +13,11 @@ import {
   deriveEngagementStatus,
   type AttentionResult,
 } from "@/lib/attention";
+import {
+  computeActionSignals,
+  type ActionSignals,
+  type SignalFile,
+} from "@/lib/dashboard/action-signals";
 import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
 import { getServerSupabase } from "@/lib/supabase/server";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
@@ -34,6 +39,10 @@ import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 export type EngagementSignal = {
   engagement: Engagement;
   attention: AttentionResult;
+  // Needs attention 2.0 file-level signals (flagged uploads, signed copies to
+  // confirm, oldest undecided submission). Computed from the same per-file
+  // rows the activity stamp already needed.
+  action: ActionSignals;
   lastActivityAt: string | null;
   recencyAt: string;
 };
@@ -48,14 +57,18 @@ export const loadEngagementSignals = cache(
       .filter((e) => e.status === "sent" || e.status === "in_progress")
       .map((e) => e.id);
 
-    const [allItemsResp, lastActivityResp] = await Promise.all([
+    const [allItemsResp, filesResp] = await Promise.all([
       sb
         .from("request_items")
         .select("*")
         .in("engagement_id", liveIds.length ? liveIds : [""]),
+      // Per-file review/AI state for the action signals + the last-activity
+      // stamp. Still one query; just a few more small columns than before.
       sb
         .from("uploaded_files")
-        .select("engagement_id, uploaded_at")
+        .select(
+          "engagement_id, request_item_id, uploaded_at, review_status, ai_rejected, ai_usability, is_duplicate, reviewed_by",
+        )
         .in("engagement_id", liveIds.length ? liveIds : [""]),
     ]);
 
@@ -65,8 +78,15 @@ export const loadEngagementSignals = cache(
       arr.push(it as never);
       itemsByEng.set(it.engagement_id, arr as never);
     }
+    const files = (filesResp.data ?? []) as (SignalFile & {
+      engagement_id: string;
+    })[];
+    const filesByEng = new Map<string, SignalFile[]>();
     const lastActByEng = new Map<string, string>();
-    for (const u of lastActivityResp.data ?? []) {
+    for (const u of files) {
+      const arr = filesByEng.get(u.engagement_id);
+      if (arr) arr.push(u);
+      else filesByEng.set(u.engagement_id, [u]);
       const prev = lastActByEng.get(u.engagement_id);
       if (!prev || u.uploaded_at > prev) {
         lastActByEng.set(u.engagement_id, u.uploaded_at);
@@ -90,6 +110,10 @@ export const loadEngagementSignals = cache(
         items: (itemsByEng.get(e.id) ?? []) as never,
         lastClientActivityAt: lastActByEng.get(e.id) ?? null,
       }),
+      action: computeActionSignals(
+        filesByEng.get(e.id) ?? [],
+        (itemsByEng.get(e.id) ?? []) as never,
+      ),
       lastActivityAt: lastActByEng.get(e.id) ?? null,
       recencyAt: recencyOf(e),
     }));
@@ -117,13 +141,18 @@ export const loadEngagementWorklist = cache(
       firmUsers.map((u) => [u.id, userDisplayLabel(u)]),
     );
 
-    return signals.map(({ engagement: e, attention: a, recencyAt }) => {
+    return signals.map(({ engagement: e, attention: a, action, recencyAt }) => {
       return {
         id: e.id,
         title: e.title,
         clientName: clientsById.get(e.client_id)?.display_name ?? "—",
         status: e.status,
         derivedStatus: deriveEngagementStatus(e.status, a),
+        flaggedFilesCount: action.flaggedFiles,
+        signedCopiesToConfirm: action.signedCopiesToConfirm,
+        waitingSince: action.waitingSince,
+        waitingDays: action.waitingDays,
+        sittingUnreviewed: action.sittingUnreviewed,
         dueDate: e.due_date,
         assigneeUserId: e.assigned_user_id,
         assigneeName: e.assigned_user_id

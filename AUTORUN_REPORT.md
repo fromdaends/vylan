@@ -9,7 +9,7 @@ Status legend: DONE / IN PROGRESS / SKIPPED / NOT STARTED.
 | Phase 0 verification | DONE |
 | A. Unified status engine + stuck Analyzing chips | DONE |
 | B. Overview hierarchy rework | DONE |
-| C. Needs attention 2.0 | NOT STARTED |
+| C. Needs attention 2.0 | DONE |
 | D. Team page: Edit firm + seat caps | NOT STARTED |
 | E. Duplicates everywhere | NOT STARTED |
 | F. Browser QA sweep | NOT STARTED |
@@ -134,6 +134,27 @@ Verification: typecheck PASS, all 795 tests PASS (including the existing Templat
 
 ---
 
+## Workstream C: Needs attention 2.0 (DONE)
+
+What changed, in plain English:
+
+1. Needs attention now surfaces everything that requires the ACCOUNTANT to act, not just quiet engagements. An engagement appears when any of these are true, each shown as its own small chip on the row:
+   - Ready to review (green, from the Workstream A engine; says "N items ready", or just "Ready to review" when everything is already approved and only Mark complete remains)
+   - Flagged files (amber, with the count: files the AI flagged or auto-bounced that still await the accountant's own call; a bounce the client already replaced does not count)
+   - Signed copy to confirm (blue, with the count of signature items where the client returned a signed copy)
+   - Waiting N days (amber hourglass: a submission has sat undecided for more than 3 days, the decision-default threshold)
+   - The existing chase chips stay: overdue (red), due soon, and quiet (kept at the existing 5-day threshold)
+2. One row per engagement, several chips when several reasons apply. Never duplicate rows.
+3. Sorting is oldest-waiting-first: the engagement whose undecided submission has waited longest leads. Engagements with nothing undecided (purely overdue or quiet) follow, most urgent first.
+4. Clicking a row opens the engagement. Rows whose reason is flagged files open the engagement with the Preview overlay already open on its Flagged tab (new deep-link: any engagement URL can now end with ?preview=flagged or ?preview=1 to auto-open the Preview).
+5. NO database migration was needed. All five signals were computable from columns that already exist (per-file review status, upload timestamps, AI flags, signature item kind). The dashboard query now reads a few more columns from the same table it already queried; still one query.
+
+Where it lives: src/lib/dashboard/action-signals.ts (the new pure signal computation, fully unit-tested), src/lib/dashboard/worklist-select.ts (membership + sort), src/components/dashboard/needs-attention.tsx and needs-attention-row.tsx (chips), src/components/engagements/engagement-preview/engagement-preview.tsx (deep-link).
+
+Verification: typecheck PASS, 810 tests PASS (15 new), lint 0 errors, production build PASS.
+
+---
+
 ## Decision log
 
 | # | Decision | Why | Where |
@@ -148,6 +169,10 @@ Verification: typecheck PASS, all 795 tests PASS (including the existing Templat
 | D8 | Progress % formula unchanged | with the pill now reading Ready to review, "100% + Ready" is coherent; changing the formula would move numbers the founder did not ask to move | src/lib/attention.ts |
 | D9 | Top-row side-by-side kicks in at 2xl (1536px), stacked below | at smaller widths the main column (after sidebar + rail) leaves too little room for two readable blocks; measured against the shell's 1600/2100 caps | src/app/[locale]/(app)/dashboard/page.tsx |
 | D10 | Needs attention keeps its saved collapse preference | the brief says "opens expanded by default", which is already the default; silently deleting the founder's saved preference would be surprising | src/components/dashboard/needs-attention-collapsible.tsx (untouched) |
+| D11 | Overdue and due-soon chips KEPT in Needs attention 2.0 | the brief's five signals don't list them, but removing them would HIDE work the block surfaces today; chasing a late client is accountant work too; conservative bias says keep | src/lib/dashboard/worklist-select.ts |
+| D12 | No migration for Workstream C | all five signals computable from existing columns (review_status + uploaded_at + ai_rejected + ai_usability + kind); "sitting unreviewed since" IS the pending file's upload time, so no new timestamp was needed; keeps the shared prod DB untouched | src/lib/dashboard/action-signals.ts |
+| D13 | "Flagged twice" interpreted as: any AI-flagged or escalated upload awaiting the accountant's call, plus outstanding auto-rejects | the file-level flags don't record strike counts; the escalation flag (ai_rejected on a still-pending file) IS the flagged-twice marker the router writes; superseded bounces excluded | src/lib/dashboard/action-signals.ts |
+| D14 | Preview deep-link is ?preview=1 / ?preview=flagged on the engagement URL | smallest possible plumbing for "open the Preview where that is clearly the better landing"; only the header Preview button auto-opens | src/components/engagements/engagement-preview/engagement-preview.tsx |
 
 (More decisions appended as workstreams complete.)
 

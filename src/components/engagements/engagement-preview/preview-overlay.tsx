@@ -44,6 +44,9 @@ type Props = EngagementPreviewProps & {
   // documents. The engagement-wide "Download all" is hidden in that case so it
   // never implies it'll zip the whole engagement from a one-item view.
   scoped?: boolean;
+  // Tab to land on when the overlay opens (deep-links: the Needs-attention
+  // "flagged files" rows open straight on the Flagged tab). Default "all".
+  initialView?: PreviewView;
 };
 
 // The focused review workspace: an ~85% overlay floating over the dimmed
@@ -59,11 +62,12 @@ export function PreviewOverlay({
   clientName,
   locale,
   scoped,
+  initialView,
   onClose,
 }: Props) {
   const t = useTranslations("Preview");
   const tEng = useTranslations("Engagements");
-  const [view, setView] = useState<PreviewView>("all");
+  const [view, setView] = useState<PreviewView>(initialView ?? "all");
   const [query, setQuery] = useState("");
   // The checklist-item filter ("all" or a specific request_item id).
   const [itemFilter, setItemFilter] = useState<string>("all");
