@@ -18,6 +18,7 @@ import {
   type ClassificationResult,
 } from "./classify";
 import { shouldActOnUsability } from "./usability";
+import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 
@@ -136,6 +137,40 @@ export async function processClassifyJob(
       ai_usability: result.usability,
     })
     .eq("id", file.id);
+
+  // Auto-name (migration 0280): when the classifier is confident, give the file
+  // a clean, human name (e.g. "T4 - 2024 - Hydro-Quebec.pdf") so the accountant
+  // isn't staring at "IMG_2931.pdf". null when unsure → callers fall back to the
+  // original. Recomputed on every (re)classification so it tracks the latest
+  // verdict. English short label (slip codes like T4/RL-1 are identical FR/EN;
+  // only a few descriptive types differ) keeps the stored name deterministic
+  // without an extra locale lookup.
+  //
+  // Deliberately a SEPARATE, best-effort write: if the display_name column
+  // isn't there yet (0280 not applied to this environment), the core
+  // classification above still lands — auto-naming just stays off until the
+  // column exists. So the feature is safe to ship before/after the migration.
+  const displayName = buildDisplayName(
+    {
+      documentType: result.document_type,
+      confidence: result.confidence,
+      extractedYear: result.extracted_year,
+      issuerName: result.issuer_name,
+      partyName: result.party_name,
+    },
+    file.original_filename,
+  );
+  try {
+    const { error: nameErr } = await sb
+      .from("uploaded_files")
+      .update({ display_name: displayName })
+      .eq("id", file.id);
+    if (nameErr) {
+      console.warn("[classify] display_name not written (migration 0280?):", nameErr.message);
+    }
+  } catch (err) {
+    console.warn("[classify] display_name update threw:", err);
+  }
 
   // A real AI check ran — count it against the firm's monthly cap (best-effort,
   // never blocks). Drives the auto-pause once the firm reaches ai_monthly_cap.

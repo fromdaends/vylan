@@ -9,7 +9,6 @@
 // `data_export` activity entry before the stream starts.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { Readable } from "node:stream";
 import { format } from "date-fns";
 import {
   getServerSupabase,
@@ -18,7 +17,12 @@ import {
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { signedUrl } from "@/lib/storage";
-import { streamZip, sanitizeFilenamePart, type ZipEntry } from "@/lib/zip";
+import {
+  buildZipArchive,
+  sanitizeFilenamePart,
+  macZipEntryName,
+  type ZipEntry,
+} from "@/lib/zip";
 import { csvDocument } from "@/lib/csv";
 import { logUserActivity } from "@/lib/db/activity";
 import { checkRateLimit, FIRM_EXPORT_LIMIT } from "@/lib/rate-limit";
@@ -154,31 +158,31 @@ export async function GET(_request: NextRequest) {
       const url = await signedUrl(f.storage_path, 60).catch(() => null);
       if (!url) continue;
       const res = await fetch(url);
-      if (!res.ok || !res.body) continue;
-      const safeName = sanitizeFilenamePart(f.original_filename, 120);
+      if (!res.ok) continue;
+      const data = new Uint8Array(await res.arrayBuffer());
+      // Export keeps the ORIGINAL filename (the CSVs map rows by it); only the
+      // leaf is made archive-safe, the engagement/item UUID folders are intact.
+      const safeName = macZipEntryName(f.original_filename);
       yield {
         name: `files/${f.engagement_id}/${f.request_item_id}/${safeName}`,
-        stream: Readable.fromWeb(res.body as never),
+        data,
       };
     }
   }
 
-  const zipStream = streamZip(entries());
+  const zipBytes = await buildZipArchive(entries());
 
-  return new Response(zipStream as unknown as BodyInit, {
+  return new Response(zipBytes as unknown as BodyInit, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${archiveName}"`,
+      "Content-Length": String(zipBytes.byteLength),
       "Cache-Control": "no-store",
     },
   });
 }
 
 function csvEntry(name: string, body: string): ZipEntry {
-  return {
-    name,
-    stream: Readable.from(Buffer.from(body, "utf8")),
-    size: Buffer.byteLength(body, "utf8"),
-  };
+  return { name, data: new TextEncoder().encode(body) };
 }

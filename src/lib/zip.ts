@@ -1,64 +1,64 @@
-// ZIP streaming primitive + filename sanitization.
+// ZIP building primitive + filename sanitization.
 //
-// `archiver` is Node-streams native. Next.js / Vercel route handlers
-// return a Web `Response` with a Web `ReadableStream` body. We bridge
-// the two with `Readable.toWeb()` so the route handler can pipe a ZIP
-// straight to the client without buffering the whole archive in
-// memory.
+// We use fflate's `zipSync` (not archiver) for two reasons:
 //
-// Each entry is consumed lazily — we kick off the archiver pump in a
-// detached async task and return the Web stream synchronously. If a
-// per-entry stream fails mid-pump, the archiver finalize() rejects and
-// the consumer sees a truncated body; that's the same behaviour as
-// any other "stream died mid-flight" response and is acceptable for
-// bulk-download UX (browser shows a partial file the user can retry).
+//   1. macOS compatibility. zipSync has every file's bytes up front, so it
+//      writes each entry's CRC + size into a plain local file header — NO
+//      streaming "data descriptor" (general-purpose bit 3). Streaming zippers
+//      (archiver, fflate's streaming Zip) can't know the size up front so they
+//      MUST use a data descriptor, and macOS Archive Utility frequently fails
+//      on those — the classic ".zip → .cpgz → .zip" expand loop. zipSync's
+//      output opens cleanly in Archive Utility, Windows Explorer, and `unzip`.
+//
+//   2. archiver 8.x dropped its callable `archiver("zip", …)` factory (it now
+//      exports ESM classes only), which silently broke our old call at runtime
+//      while the stale @types/archiver kept the build green. Moving to fflate
+//      removes that landmine.
+//
+// Trade-off: zipSync builds the whole archive in memory. Our archives are
+// individual tax documents (single-digit MB each, a handful per engagement;
+// the firm export is owner-only + rate-limited), so the peak is modest. If a
+// future use case needs giant archives, revisit with a chunked approach.
 
-import { Readable } from "node:stream";
-import archiver from "archiver";
+import { zipSync } from "fflate";
 
 export type ZipEntry = {
   /** Filename inside the ZIP. Forward slashes create folders. */
   name: string;
-  /** Stream of bytes for the file's contents. */
-  stream: Readable;
-  /** Optional byte size — passed to archiver as a hint. */
-  size?: number;
+  /** The file's full contents. */
+  data: Uint8Array;
 };
 
-export function streamZip(
+// Insert a " (n)" disambiguator before the extension: "x.pdf" → "x (1).pdf".
+// Used to keep colliding entry names unique (a Record can't hold duplicates).
+function suffixName(name: string, n: number): string {
+  const dot = name.lastIndexOf(".");
+  if (dot > 0) return `${name.slice(0, dot)} (${n})${name.slice(dot)}`;
+  return `${name} (${n})`;
+}
+
+/**
+ * Consume an async stream of entries and build a single ZIP archive (returned
+ * as bytes). Duplicate entry names are disambiguated with a " (n)" suffix so
+ * every file survives. Throws if fflate rejects an entry; callers surface that
+ * as a failed download.
+ */
+export async function buildZipArchive(
   entries: AsyncIterable<ZipEntry>,
-): ReadableStream<Uint8Array> {
-  // Level 6 = default compression. Level 9 wastes CPU on already-
-  // compressed inputs (JPEG, PDF) which dominate our payload.
-  const archive = archiver("zip", { zlib: { level: 6 } });
-
-  // archiver streams as a normal Node Readable.
-  const webStream = Readable.toWeb(archive) as ReadableStream<Uint8Array>;
-
-  // Pump entries in the background. Errors are forwarded to archive,
-  // which propagates them to the Web stream consumer as a stream
-  // error — the route handler's Response stream surfaces that to
-  // the client as a closed connection.
-  (async () => {
-    try {
-      for await (const entry of entries) {
-        archive.append(entry.stream, {
-          name: entry.name,
-          ...(entry.size !== undefined ? { stats: { size: entry.size } as never } : {}),
-        });
-      }
-      await archive.finalize();
-    } catch (err) {
-      console.error("[zip] streaming aborted:", err);
-      try {
-        archive.abort();
-      } catch {
-        // best-effort; archiver may already be done.
-      }
-    }
-  })();
-
-  return webStream;
+): Promise<Uint8Array> {
+  const files: Record<string, Uint8Array> = {};
+  const seen = new Map<string, number>();
+  for await (const entry of entries) {
+    let name = entry.name;
+    const n = seen.get(name) ?? 0;
+    seen.set(name, n + 1);
+    if (n > 0) name = suffixName(name, n);
+    files[name] = entry.data;
+  }
+  // level 6 = balanced. Most of our payload (PDF/JPEG) is already compressed,
+  // so this mostly just packages; fflate is fast enough that it's not worth
+  // per-file tuning.
+  return zipSync(files, { level: 6 });
 }
 
 /**
@@ -82,4 +82,39 @@ export function sanitizeFilenamePart(input: string, maxLen = 80): string {
     .replace(/^\.+/, "")
     .trim();
   return cleaned.slice(0, maxLen) || "untitled";
+}
+
+/**
+ * Sanitize ONE ZIP entry name segment (no folders) for maximum unzip
+ * compatibility — macOS Archive Utility in particular. On top of
+ * sanitizeFilenamePart this also transliterates accents to ASCII
+ * ("Hydro-Québec" → "Hydro-Quebec") and drops any remaining non-ASCII, so the
+ * archive never depends on the reader honouring the UTF-8 filename flag (fflate
+ * doesn't set it). The file extension is preserved (lower-cased) so files still
+ * open by type.
+ *
+ * Note: this is for the bytes WRITTEN INTO the archive. The pretty, accented
+ * name still lives on the file's display_name and is used for single-file
+ * (UTF-8 Content-Disposition) downloads.
+ */
+export function macZipEntryName(input: string, maxLen = 120): string {
+  // Decompose accents (é → "e" + a combining mark), then strip everything
+  // outside printable ASCII — that removes the combining marks (leaving the
+  // base letter) plus any other non-ASCII (emoji, CJK, …).
+  const ascii = input
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7e]/g, "");
+
+  // Preserve a real extension (short alphanumeric tail) so type is kept.
+  const dot = ascii.lastIndexOf(".");
+  const hasExt =
+    dot > 0 &&
+    dot < ascii.length - 1 &&
+    /^[A-Za-z0-9]{1,8}$/.test(ascii.slice(dot + 1));
+  const rawBase = hasExt ? ascii.slice(0, dot) : ascii;
+  const ext = hasExt ? `.${ascii.slice(dot + 1).toLowerCase()}` : "";
+
+  const base = sanitizeFilenamePart(rawBase, maxLen - ext.length);
+  // base is never empty (sanitizeFilenamePart falls back to "untitled").
+  return `${base}${ext}`;
 }

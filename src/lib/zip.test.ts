@@ -1,5 +1,48 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeFilenamePart } from "./zip";
+import {
+  sanitizeFilenamePart,
+  macZipEntryName,
+  buildZipArchive,
+  type ZipEntry,
+} from "./zip";
+
+// Walk the ZIP's central directory (via the End Of Central Directory record)
+// and return each entry's name + whether it uses a streaming data descriptor
+// (general-purpose bit 3). Navigating by the directory offsets is robust
+// against header signatures appearing inside compressed data.
+function centralDirectory(zip: Uint8Array): { name: string; usesDataDescriptor: boolean }[] {
+  const b = Buffer.from(zip);
+  let eocd = -1;
+  for (let i = b.length - 22; i >= 0; i--) {
+    if (b.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd === -1) throw new Error("no End Of Central Directory record");
+  const total = b.readUInt16LE(eocd + 10);
+  let p = b.readUInt32LE(eocd + 16);
+  const out: { name: string; usesDataDescriptor: boolean }[] = [];
+  for (let n = 0; n < total; n++) {
+    if (b.readUInt32LE(p) !== 0x02014b50) throw new Error("bad central header");
+    const flag = b.readUInt16LE(p + 8);
+    const nameLen = b.readUInt16LE(p + 28);
+    const extraLen = b.readUInt16LE(p + 30);
+    const commentLen = b.readUInt16LE(p + 32);
+    out.push({
+      name: b.toString("utf8", p + 46, p + 46 + nameLen),
+      usesDataDescriptor: Boolean(flag & 0x08),
+    });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return out;
+}
+
+async function* gen(entries: ZipEntry[]): AsyncGenerator<ZipEntry> {
+  for (const e of entries) yield e;
+}
+
+const bytes = (s: string) => new TextEncoder().encode(s);
 
 describe("sanitizeFilenamePart", () => {
   it("removes slashes and backslashes outright", () => {
@@ -40,5 +83,72 @@ describe("sanitizeFilenamePart", () => {
 
   it("preserves accented characters and dashes", () => {
     expect(sanitizeFilenamePart("Tremblay-Côté")).toBe("Tremblay-Côté");
+  });
+});
+
+describe("macZipEntryName", () => {
+  it("transliterates accents to ASCII and keeps the extension", () => {
+    expect(macZipEntryName("Hydro-Québec.pdf")).toBe("Hydro-Quebec.pdf");
+    expect(macZipEntryName("Tremblay-Côté.PDF")).toBe("Tremblay-Cote.pdf");
+  });
+
+  it("lower-cases the extension but leaves the base name's case", () => {
+    expect(macZipEntryName("T4 - 2024 - ACME.PDF")).toBe("T4 - 2024 - ACME.pdf");
+  });
+
+  it("drops non-Latin / emoji and collapses the gap it leaves", () => {
+    expect(macZipEntryName("reçu 🧾 café.jpg")).toBe("recu cafe.jpg");
+  });
+
+  it("removes path separators (and leading dots) so an entry can't escape its folder", () => {
+    expect(macZipEntryName("../../etc/passwd.pdf")).toBe("etcpasswd.pdf");
+  });
+
+  it("keeps a name that has no extension", () => {
+    expect(macZipEntryName("scan-document")).toBe("scan-document");
+  });
+
+  it("does not treat a long dotted tail as an extension", () => {
+    expect(macZipEntryName("notes.superlongword")).toBe("notes.superlongword");
+  });
+
+  it("falls back to 'untitled' when the whole name sanitizes to nothing", () => {
+    expect(macZipEntryName("✦✦✦")).toBe("untitled");
+  });
+});
+
+describe("buildZipArchive (macOS-openable format)", () => {
+  it("produces a valid ZIP (starts with a local file header)", async () => {
+    const zip = await buildZipArchive(
+      gen([{ name: "a.txt", data: bytes("hello world") }]),
+    );
+    expect(zip.byteLength).toBeGreaterThan(0);
+    expect(Buffer.from(zip).readUInt32LE(0)).toBe(0x04034b50); // PK\x03\x04
+  });
+
+  it("writes NO streaming data descriptor — every entry has GP bit 3 clear", async () => {
+    // The macOS Archive Utility fix: fflate's zipSync writes the CRC + size in
+    // each local header (no data descriptor / no ".zip → .cpgz" loop).
+    const zip = await buildZipArchive(
+      gen([
+        { name: "T4 - 2024.pdf", data: bytes("one") },
+        { name: "folder/RL-1 - 2024.pdf", data: bytes("two") },
+      ]),
+    );
+    const dir = centralDirectory(zip);
+    expect(dir.map((e) => e.name)).toEqual(["T4 - 2024.pdf", "folder/RL-1 - 2024.pdf"]);
+    for (const e of dir) expect(e.usesDataDescriptor).toBe(false);
+  });
+
+  it("de-duplicates colliding entry names with a ' (n)' suffix", async () => {
+    const zip = await buildZipArchive(
+      gen([
+        { name: "T4 - 2024.pdf", data: bytes("a") },
+        { name: "T4 - 2024.pdf", data: bytes("b") },
+        { name: "T4 - 2024.pdf", data: bytes("c") },
+      ]),
+    );
+    const names = centralDirectory(zip).map((e) => e.name);
+    expect(names).toEqual(["T4 - 2024.pdf", "T4 - 2024 (1).pdf", "T4 - 2024 (2).pdf"]);
   });
 });
