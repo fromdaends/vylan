@@ -48,6 +48,9 @@ function file(over: Partial<UploadedFile>): UploadedFile {
     reviewed_by: null,
     reviewed_at: null,
     uploaded_at: "2026-01-01T00:00:00Z",
+    content_hash: null,
+    is_duplicate: false,
+    duplicate_of_file_id: null,
     ...over,
   };
 }
