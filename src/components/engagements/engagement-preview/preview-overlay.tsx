@@ -19,9 +19,11 @@ import { expectedYearFromTitle } from "@/lib/ai/matching";
 import {
   applyOverrides,
   buildPreviewDocs,
+  DUPLICATES_SECTION_ID,
   filterByItem,
   filterDocs,
   groupDocsByItem,
+  groupDocsForGrid,
   groupLabel,
   previewCounts,
   previewCardTitle,
@@ -97,8 +99,13 @@ export function PreviewOverlay({
   const searched = useMemo(() => searchDocs(docs, query), [docs, query]);
   // Stable list of checklist items that have uploads, for the item-filter
   // dropdown — built from the full set (not search/tab) so the options don't
-  // flicker as you type or switch tabs.
-  const itemOptions = useMemo(() => groupDocsByItem(docs, items), [docs, items]);
+  // flicker as you type or switch tabs. Duplicates are excluded: they live in
+  // their own section, not under a checklist item, so the filter only lists
+  // items that have real (non-duplicate) documents.
+  const itemOptions = useMemo(
+    () => groupDocsByItem(docs.filter((d) => !d.isDuplicate), items),
+    [docs, items],
+  );
   // The checklist-item filter applies on top of search; the tab counts + grid
   // both reflect it ("all" keeps everything).
   const itemScoped = useMemo(
@@ -111,9 +118,21 @@ export function PreviewOverlay({
     [itemScoped, view],
   );
   // Group the visible docs into one section per checklist item (in checklist
-  // order). Composes with the item filter + tabs + search — only items with
-  // matching docs show.
-  const groups = useMemo(() => groupDocsByItem(visible, items), [visible, items]);
+  // order), plus a trailing "Duplicates" section that gathers every exact re-send
+  // out of its item. Composes with the item filter + tabs + search — only
+  // sections with matching docs show.
+  const groups = useMemo(
+    () => groupDocsForGrid(visible, items),
+    [visible, items],
+  );
+  // Stable map of every document's display handle ("[item] #N"), so a duplicate
+  // card can name the original it copies ("Copy of T4 #1"). Built from the full
+  // set so the original is found even when a tab / search hides it.
+  const titleByFileId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const d of docs) m.set(d.fileId, previewCardTitle(d, locale));
+    return m;
+  }, [docs, locale]);
   const selectedDoc = useMemo(
     () =>
       selectedFileId
@@ -398,33 +417,51 @@ export function PreviewOverlay({
             </div>
           ) : (
             <div className="space-y-7">
-              {groups.map((g) => (
-                <section key={g.itemId} aria-label={groupLabel(g, locale)}>
-                  {/* Section header — the checklist item these documents belong
-                      to. Hairline divider, not a box (mesh, don't box). */}
-                  <div className="mb-3 flex items-baseline gap-2 border-b border-border/30 pb-2">
-                    <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
-                      {groupLabel(g, locale)}
-                    </h3>
-                    <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                      {t("doc_count", { count: g.docs.length })}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
-                    {g.docs.map((doc) => (
-                      <PreviewCard
-                        key={doc.fileId}
-                        doc={doc}
-                        locale={locale}
-                        pending={pendingFiles.has(doc.fileId)}
-                        onOpen={() => setSelectedFileId(doc.fileId)}
-                        onApprove={() => approve(doc)}
-                        onReject={() => setRejectTarget(doc)}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
+              {groups.map((g) => {
+                const isDuplicates = g.itemId === DUPLICATES_SECTION_ID;
+                const heading = isDuplicates
+                  ? t("duplicates_heading")
+                  : groupLabel(g, locale);
+                return (
+                  <section key={g.itemId} aria-label={heading}>
+                    {/* Section header — the checklist item these documents
+                        belong to, or the catch-all Duplicates section. Hairline
+                        divider, not a box (mesh, don't box). */}
+                    <div className="mb-3 flex items-baseline gap-2 border-b border-border/30 pb-2">
+                      <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
+                        {heading}
+                      </h3>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {t("doc_count", { count: g.docs.length })}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+                      {g.docs.map((doc) => {
+                        const dupOf =
+                          doc.isDuplicate && doc.duplicateOfFileId
+                            ? titleByFileId.get(doc.duplicateOfFileId)
+                            : null;
+                        return (
+                          <PreviewCard
+                            key={doc.fileId}
+                            doc={doc}
+                            locale={locale}
+                            pending={pendingFiles.has(doc.fileId)}
+                            note={
+                              dupOf
+                                ? t("duplicate_of", { title: dupOf })
+                                : null
+                            }
+                            onOpen={() => setSelectedFileId(doc.fileId)}
+                            onApprove={() => approve(doc)}
+                            onReject={() => setRejectTarget(doc)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
           )}
         </div>

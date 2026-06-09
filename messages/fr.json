@@ -113,6 +113,8 @@
     "status_rejected": "Rejeté",
     "status_flagged": "Signalé",
     "status_pending": "Pas encore analysé",
+    "duplicates_heading": "Doublons",
+    "duplicate_of": "Copie de {title}",
     "empty_all": "Aucun document téléversé pour l'instant.",
     "empty_approved": "Rien ici pour l'instant.",
     "empty_rejected": "Rien de rejeté.",

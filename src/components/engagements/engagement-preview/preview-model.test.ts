@@ -6,6 +6,8 @@ import {
   filterDocs,
   filterByItem,
   groupDocsByItem,
+  groupDocsForGrid,
+  DUPLICATES_SECTION_ID,
   groupLabel,
   previewHeader,
   previewCardTitle,
@@ -211,6 +213,26 @@ describe("buildPreviewDocs", () => {
     expect(docs[0].isPdf).toBe(false);
   });
 
+  it("carries the duplicate flags through to the doc", () => {
+    const docs = buildPreviewDocs(
+      [
+        file({ id: "orig" }),
+        file({
+          id: "dup",
+          is_duplicate: true,
+          duplicate_of_file_id: "orig",
+        }),
+      ],
+      [item({ id: "i1" })],
+    );
+    const orig = docs.find((d) => d.fileId === "orig")!;
+    const dup = docs.find((d) => d.fileId === "dup")!;
+    expect(orig.isDuplicate).toBe(false);
+    expect(orig.duplicateOfFileId).toBeNull();
+    expect(dup.isDuplicate).toBe(true);
+    expect(dup.duplicateOfFileId).toBe("orig");
+  });
+
   it("defaults a file whose item is missing to pending", () => {
     const docs = buildPreviewDocs([file({ request_item_id: "ghost" })], []);
     expect(docs[0].status).toBe("pending");
@@ -317,6 +339,8 @@ describe("previewHeader", () => {
     isImage: true,
     isPdf: false,
     searchText: "",
+    isDuplicate: false,
+    duplicateOfFileId: null,
   };
 
   it("uses the short doc-type name + year when classified", () => {
@@ -486,6 +510,115 @@ describe("groupDocsByItem", () => {
   });
 });
 
+describe("groupDocsForGrid (Duplicates section)", () => {
+  it("lifts a duplicate OUT of its item section into a trailing Duplicates section (the screenshot case)", () => {
+    // Same file uploaded twice under one item: 'a' is the original, 'b' the
+    // exact re-send. The duplicate must leave the item and live only under
+    // Duplicates — one file, one place.
+    const items = [item({ id: "i1", label: "T4 Slip" })];
+    const uploads = [
+      file({ id: "a", request_item_id: "i1", uploaded_at: "2026-01-01T00:00:00Z" }),
+      file({
+        id: "b",
+        request_item_id: "i1",
+        uploaded_at: "2026-01-02T00:00:00Z",
+        is_duplicate: true,
+        duplicate_of_file_id: "a",
+      }),
+    ];
+    const docs = buildPreviewDocs(uploads, items);
+    const groups = groupDocsForGrid(docs, items);
+    expect(groups.map((g) => g.itemId)).toEqual(["i1", DUPLICATES_SECTION_ID]);
+    // The item keeps ONLY the original; the duplicate is gone from it.
+    expect(groups[0].docs.map((d) => d.fileId)).toEqual(["a"]);
+    // ...and shows up exclusively in the Duplicates section.
+    expect(groups[1].docs.map((d) => d.fileId)).toEqual(["b"]);
+  });
+
+  it("omits the Duplicates section entirely when nothing is a duplicate", () => {
+    const items = [item({ id: "i1" })];
+    const docs = buildPreviewDocs(
+      [file({ id: "a", request_item_id: "i1" })],
+      items,
+    );
+    const groups = groupDocsForGrid(docs, items);
+    expect(groups.map((g) => g.itemId)).toEqual(["i1"]);
+  });
+
+  it("moves a duplicate even when its original is under a DIFFERENT item", () => {
+    // Duplicates are detected engagement-wide, so the original can sit under
+    // another checklist item. The dup still collapses into Duplicates, and the
+    // item that held only the dup ('i2') disappears (it has no real docs).
+    const items = [
+      item({ id: "i1", label: "T4 Slip" }),
+      item({ id: "i2", label: "RL-1" }),
+    ];
+    const uploads = [
+      file({ id: "a", request_item_id: "i1", uploaded_at: "2026-01-01T00:00:00Z" }),
+      file({
+        id: "b",
+        request_item_id: "i2",
+        uploaded_at: "2026-01-02T00:00:00Z",
+        is_duplicate: true,
+        duplicate_of_file_id: "a",
+      }),
+    ];
+    const docs = buildPreviewDocs(uploads, items);
+    const groups = groupDocsForGrid(docs, items);
+    expect(groups.map((g) => g.itemId)).toEqual(["i1", DUPLICATES_SECTION_ID]);
+    expect(groups.find((g) => g.itemId === "i2")).toBeUndefined();
+    expect(groups[1].docs.map((d) => d.fileId)).toEqual(["b"]);
+  });
+
+  it("orders the Duplicates section oldest-first, regardless of input order", () => {
+    const items = [item({ id: "i1" })];
+    const uploads = [
+      file({ id: "orig", request_item_id: "i1", uploaded_at: "2026-01-01T00:00:00Z" }),
+      file({
+        id: "dupNew",
+        request_item_id: "i1",
+        uploaded_at: "2026-03-03T00:00:00Z",
+        is_duplicate: true,
+        duplicate_of_file_id: "orig",
+      }),
+      file({
+        id: "dupOld",
+        request_item_id: "i1",
+        uploaded_at: "2026-02-02T00:00:00Z",
+        is_duplicate: true,
+        duplicate_of_file_id: "orig",
+      }),
+    ];
+    const docs = buildPreviewDocs(uploads, items);
+    const dupGroup = groupDocsForGrid(docs, items).find(
+      (g) => g.itemId === DUPLICATES_SECTION_ID,
+    )!;
+    expect(dupGroup.docs.map((d) => d.fileId)).toEqual(["dupOld", "dupNew"]);
+  });
+
+  it("composes with a pre-filtered set (tabs/search already applied)", () => {
+    // The overlay passes already-filtered docs. A set narrowed to just the
+    // duplicate yields only the Duplicates section, no item sections.
+    const items = [item({ id: "i1" })];
+    const docs = buildPreviewDocs(
+      [
+        file({ id: "a", request_item_id: "i1" }),
+        file({
+          id: "b",
+          request_item_id: "i1",
+          is_duplicate: true,
+          duplicate_of_file_id: "a",
+        }),
+      ],
+      items,
+    );
+    const onlyDup = docs.filter((d) => d.isDuplicate);
+    const groups = groupDocsForGrid(onlyDup, items);
+    expect(groups.map((g) => g.itemId)).toEqual([DUPLICATES_SECTION_ID]);
+    expect(groups[0].docs.map((d) => d.fileId)).toEqual(["b"]);
+  });
+});
+
 describe("groupLabel", () => {
   it("uses the FR label under fr locale, EN otherwise", () => {
     const items = [
@@ -611,6 +744,8 @@ describe("previewCardTitle", () => {
       isImage: true,
       isPdf: false,
       searchText: "",
+      isDuplicate: false,
+      duplicateOfFileId: null,
       ...over,
     };
   }

@@ -63,6 +63,7 @@ export function PreviewCard({
   doc,
   locale,
   pending,
+  note,
   onOpen,
   onApprove,
   onReject,
@@ -70,6 +71,9 @@ export function PreviewCard({
   doc: PreviewDoc;
   locale: string;
   pending: boolean;
+  // Optional supplementary line under the status (e.g. "Copy of T4 #1" on a
+  // duplicate card). Hidden when null/undefined.
+  note?: string | null;
   onOpen: () => void;
   onApprove: () => void;
   onReject: () => void;
@@ -223,6 +227,14 @@ export function PreviewCard({
           <s.Icon className="size-3 shrink-0" aria-hidden />
           <span className="truncate">{statusLabel}</span>
         </div>
+        {note && (
+          <div
+            className="mt-0.5 truncate text-[10px] text-muted-foreground"
+            title={note}
+          >
+            {note}
+          </div>
+        )}
       </div>
     </article>
   );
