@@ -177,7 +177,7 @@ export function FilePreviewRow({
         >
           <Download className="size-3.5" />
         </a>
-        {!hideAi && (
+        {!hideAi && !file.is_duplicate && (
           <button
             type="button"
             onClick={recheck}
@@ -207,7 +207,7 @@ export function FilePreviewRow({
           </span>
         </div>
       )}
-      {!hideAi && (
+      {!hideAi && !file.is_duplicate && (
         <div className="px-2.5 pb-1.5 space-y-1">
           {/* While re-checking, an explicit pill makes it obvious the AI is
               running again (the verdict badges keep their previous value until a
