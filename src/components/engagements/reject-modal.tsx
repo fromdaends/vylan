@@ -25,9 +25,14 @@ import {
 export function RejectModal({
   itemId,
   itemLabel,
+  suggestions: customSuggestions,
 }: {
   itemId: string;
   itemLabel: string;
+  // Optional override for the quick-fill reason chips. Defaults to the
+  // document-collection suggestions; a signature reject passes its own (a
+  // signed copy can't be "the wrong year" or "missing pages").
+  suggestions?: string[];
 }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
@@ -48,7 +53,7 @@ export function RejectModal({
     });
   }, [state, router]);
 
-  const suggestions = [
+  const suggestions = customSuggestions ?? [
     t("reject_suggestion_wrong_doc"),
     t("reject_suggestion_wrong_year"),
     t("reject_suggestion_illegible"),
