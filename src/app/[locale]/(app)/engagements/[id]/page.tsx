@@ -337,6 +337,42 @@ export default async function EngagementDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <section className="lg:col-span-2 space-y-4">
+          {/* Signatures first: a signature (an authorization or engagement
+              letter) is usually a quick, important action, so it sits above the
+              longer document checklist rather than buried beneath it. */}
+          {(isLive || signatureItems.length > 0) && (
+            <div className="space-y-3">
+              <div className="flex flex-row items-center justify-between gap-3">
+                <h2 className="text-base font-semibold tracking-tight text-foreground">
+                  {t("signatures")}{" "}
+                  <span className="text-muted-foreground font-normal">
+                    ({signatureItems.length})
+                  </span>
+                </h2>
+                {isLive && <AddSignatureDialog engagementId={engagement.id} />}
+              </div>
+              {signatureItems.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4">
+                  {t("signatures_empty")}
+                </div>
+              ) : (
+                <ul className="divide-y divide-border border-t border-border">
+                  {signatureItems.map((item) => (
+                    <SignatureRow
+                      key={item.id}
+                      item={item}
+                      files={filesByItem.get(item.id) ?? []}
+                      locale={locale}
+                      canEdit={isLive}
+                      clientName={client?.display_name ?? null}
+                      engagementTitle={engagement.title}
+                    />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           <div className="space-y-3">
             <div className="flex flex-row items-center justify-between gap-3">
               <h2 className="text-base font-semibold tracking-tight text-foreground">
@@ -380,39 +416,6 @@ export default async function EngagementDetailPage({
               </ul>
             )}
           </div>
-
-          {(isLive || signatureItems.length > 0) && (
-            <div className="space-y-3">
-              <div className="flex flex-row items-center justify-between gap-3">
-                <h2 className="text-base font-semibold tracking-tight text-foreground">
-                  {t("signatures")}{" "}
-                  <span className="text-muted-foreground font-normal">
-                    ({signatureItems.length})
-                  </span>
-                </h2>
-                {isLive && <AddSignatureDialog engagementId={engagement.id} />}
-              </div>
-              {signatureItems.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-4">
-                  {t("signatures_empty")}
-                </div>
-              ) : (
-                <ul className="divide-y divide-border border-t border-border">
-                  {signatureItems.map((item) => (
-                    <SignatureRow
-                      key={item.id}
-                      item={item}
-                      files={filesByItem.get(item.id) ?? []}
-                      locale={locale}
-                      canEdit={isLive}
-                      clientName={client?.display_name ?? null}
-                      engagementTitle={engagement.title}
-                    />
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
         </section>
 
         <aside className="space-y-4">
