@@ -21,14 +21,27 @@ import {
   rejectItemAction,
   type ItemActionState,
 } from "@/app/actions/items";
+import { rejectFileAction } from "@/app/actions/files";
 
 export function RejectModal({
   itemId,
   itemLabel,
+  fileId,
+  compact = false,
+  active = false,
   suggestions: customSuggestions,
 }: {
   itemId: string;
   itemLabel: string;
+  // When set, reject just this ONE file (per-document) via rejectFileAction
+  // instead of the whole item.
+  fileId?: string;
+  // Render an icon-only trigger (a compact X) instead of the full "Reject"
+  // button — used per signed-copy so the controls stay tight.
+  compact?: boolean;
+  // The file is already rejected — show the icon trigger in its active (red)
+  // state so the current decision is visible at a glance.
+  active?: boolean;
   // Optional override for the quick-fill reason chips. Defaults to the
   // document-collection suggestions; a signature reject passes its own (a
   // signed copy can't be "the wrong year" or "missing pages").
@@ -39,8 +52,14 @@ export function RejectModal({
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const router = useRouter();
+  // Per-file and item-level reject share the same FormData shape ({id, reason})
+  // and result shape, so the modal just switches the action + the id it sends.
+  const rejectAction = (
+    fileId ? rejectFileAction : rejectItemAction
+  ) as typeof rejectItemAction;
+  const rejectId = fileId ?? itemId;
   const [state, action, pending] = useActionState<ItemActionState, FormData>(
-    rejectItemAction,
+    rejectAction,
     null,
   );
 
@@ -63,10 +82,26 @@ export function RejectModal({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <X className="size-4" />
-          {t("reject")}
-        </Button>
+        {compact ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={t("reject")}
+            title={t("reject")}
+            className={
+              active
+                ? "bg-destructive text-white hover:bg-destructive/90"
+                : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            }
+          >
+            <X className="size-4" />
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm">
+            <X className="size-4" />
+            {t("reject")}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -76,7 +111,7 @@ export function RejectModal({
           </DialogDescription>
         </DialogHeader>
         <form action={action} className="space-y-3">
-          <input type="hidden" name="id" value={itemId} />
+          <input type="hidden" name="id" value={rejectId} />
           {state?.error && (
             <Alert variant="destructive">
               <AlertDescription>{state.error}</AlertDescription>

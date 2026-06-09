@@ -25,6 +25,7 @@ import {
   reopenItemAction,
   removeItemAction,
 } from "@/app/actions/items";
+import { approveFileAction } from "@/app/actions/files";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
@@ -57,6 +58,7 @@ import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
   Send,
   Trash2,
+  Check,
   CheckCircle2,
   RotateCcw,
   Bell,
@@ -615,42 +617,9 @@ async function SignatureRow({
           <Badge variant={itemBadgeVariant(item.status)}>
             {t(signatureStatusKey(item.status))}
           </Badge>
-          {item.status === "submitted" && canEdit && (
-            <>
-              <form action={approveItemAction}>
-                <input type="hidden" name="id" value={item.id} />
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
-                >
-                  <CheckCircle2 className="size-4" />
-                  {t("confirm_signed")}
-                </Button>
-              </form>
-              {/* Send the signed copy back if it isn't acceptable (not actually
-                  signed, wrong document, unreadable). Reuses the same reject
-                  action documents use; the client then re-uploads a new copy. */}
-              <RejectModal
-                itemId={item.id}
-                itemLabel={label}
-                suggestions={[
-                  t("sig_reject_not_signed"),
-                  t("sig_reject_wrong_doc"),
-                  t("sig_reject_unclear"),
-                ]}
-              />
-            </>
-          )}
-          {item.status === "rejected" && canEdit && (
-            <form action={reopenItemAction}>
-              <input type="hidden" name="id" value={item.id} />
-              <Button type="submit" variant="outline" size="sm">
-                <RotateCcw className="size-4" />
-                {t("reopen_item")}
-              </Button>
-            </form>
-          )}
+          {/* Approve / reject is per signed copy (the icons on each file row
+              below), so a client who sends several copies can have some accepted
+              and others sent back — no single "confirm all". */}
           {canEdit &&
             !hasReturned &&
             (item.status === "pending" || item.status === "na") && (
@@ -691,6 +660,44 @@ async function SignatureRow({
               clientName={clientName}
               rejectionCount={item.ai_rejection_count ?? 0}
               hideAi
+              actions={
+                canEdit ? (
+                  <>
+                    {/* Approve this copy. Filled green once approved. */}
+                    <form action={approveFileAction}>
+                      <input type="hidden" name="id" value={f.id} />
+                      <Button
+                        type="submit"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={t("approve")}
+                        title={t("approve")}
+                        className={
+                          f.review_status === "approved"
+                            ? "bg-success text-white hover:bg-success/90"
+                            : "text-muted-foreground hover:bg-success/10 hover:text-success"
+                        }
+                      >
+                        <Check className="size-4" />
+                      </Button>
+                    </form>
+                    {/* Send this copy back with a reason. Filled red once sent
+                        back. Rejects just this file, not the whole signature. */}
+                    <RejectModal
+                      itemId={item.id}
+                      itemLabel={f.original_filename}
+                      fileId={f.id}
+                      compact
+                      active={f.review_status === "rejected"}
+                      suggestions={[
+                        t("sig_reject_not_signed"),
+                        t("sig_reject_wrong_doc"),
+                        t("sig_reject_unclear"),
+                      ]}
+                    />
+                  </>
+                ) : undefined
+              }
             />
           ))}
         </ul>
