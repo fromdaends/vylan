@@ -4,17 +4,26 @@
 //
 // This is intentionally pure + dependency-light so it can be unit-tested
 // directly and called from the classify worker. The result is stored on
-// uploaded_files.display_name; callers fall back to original_filename when it's
-// null (see fileDisplayName in db/uploaded-files).
+// uploaded_files.display_name; callers still fall back to original_filename
+// for legacy rows where it's null (see fileDisplayName in db/uploaded-files),
+// but every new classification writes a name — unidentifiable documents get
+// a generic "Document - …" one.
 
 import type { DocType } from "@/lib/db/templates";
 import { DOC_TYPE_LABELS, docTypeLabel } from "@/lib/doc-types";
 
-// Below this classifier confidence — or when the type is "unknown" — we DON'T
-// rename. A messy-but-honest original name beats a confidently wrong one (e.g.
-// labelling a T4A as "T4 - ...""). Tuned to match the UI, which already treats
-// sub-0.5 as "not sure" elsewhere.
+// Below this classifier confidence — or when the type is "unknown"/"other" —
+// we don't trust the TYPE enough to put it in the name (labelling a T4A as
+// "T4 - …" would be confidently wrong). The file is still renamed: it falls
+// back to the locale-neutral GENERIC_LABEL with whatever fields the AI did
+// read. Tuned to match the UI, which already treats sub-0.5 as "not sure".
 const MIN_CONFIDENCE = 0.5;
+
+// Fallback label when the type can't be trusted. Every upload gets renamed —
+// even ones the AI flags as wrong or can't identify — so the accountant never
+// stares at "IMG_2931.jpg". Same word in EN and FR, keeping the stored name
+// locale-neutral.
+const GENERIC_LABEL = "Document";
 
 // Keep each name part short so the whole filename stays manageable and never
 // trips an OS filename-length limit once the doc-type + year are added.
@@ -64,35 +73,40 @@ function cleanPart(value: string | null | undefined): string | null {
 }
 
 /**
- * Compute the auto-generated display name, or null to keep the original
- * filename. Pure: same inputs always give the same output.
+ * Compute the auto-generated display name. Pure: same inputs always give the
+ * same output. ALWAYS returns a name — wrong, unidentifiable, and low-
+ * confidence documents are renamed too, using the generic label.
  *
  * Format: "<Type> - <Year> - <Issuer/Party><.ext>", dropping any part that's
  * missing. Examples:
- *   T4, 2024, Hydro-Québec   -> "T4 - 2024 - Hydro-Québec.pdf"
- *   RL-1, 2024, (no issuer)  -> "RL-1 - 2024.pdf"
- *   Receipt, (no year), Costco -> "Receipt - Costco.pdf"
- *   unknown / low confidence -> null (keep original)
+ *   T4, 2024, Hydro-Québec      -> "T4 - 2024 - Hydro-Québec.pdf"
+ *   RL-1, 2024, (no issuer)     -> "RL-1 - 2024.pdf"
+ *   unknown, 2024, Desjardins   -> "Document - 2024 - Desjardins.pdf"
+ *   unknown, nothing read       -> "Document.pdf"
  */
 export function buildDisplayName(
   input: DisplayNameInput,
   originalFilename: string,
   locale: "en" | "fr" = "en",
-): string | null {
+): string {
   const code = input.documentType;
-  // "unknown" = AI couldn't identify it; "other" = the freeform catch-all type
-  // (no specific document). In both cases the client's original filename is more
-  // useful than a generic "Other - 2024.pdf", so we keep it.
-  if (!code || code === "unknown" || code === "other") return null;
-  if ((input.confidence ?? 0) < MIN_CONFIDENCE) return null;
-  // Only rename to a type we have an official label for (guards against a
-  // stray code the catalog doesn't know).
-  if (!(code in DOC_TYPE_LABELS)) return null;
+  // The classified type goes in the name only when it's a catalogued code the
+  // AI is confident about. "unknown" (couldn't identify), "other" (freeform
+  // catch-all — "Other - 2024.pdf" tells nobody anything), a low-confidence
+  // guess, or a stray code all fall back to the generic label instead: a
+  // wrong-but-confident label is worse than a vague-but-honest one.
+  const trustedType =
+    !!code &&
+    code !== "unknown" &&
+    code !== "other" &&
+    (input.confidence ?? 0) >= MIN_CONFIDENCE &&
+    code in DOC_TYPE_LABELS;
 
   // The short handle is the part before the " — " in the official title, e.g.
   // "T4", "RL-1", "Bank statements" — exactly what the preview grid shows.
-  const shortLabel = docTypeLabel(code as DocType, locale).split(" — ")[0].trim();
-  if (!shortLabel) return null;
+  const shortLabel = trustedType
+    ? docTypeLabel(code as DocType, locale).split(" — ")[0].trim() || GENERIC_LABEL
+    : GENERIC_LABEL;
 
   // Prefer the issuer (employer / bank) — that's what tells two T4s apart
   // within one client's file; fall back to the taxpayer's name.
@@ -102,6 +116,12 @@ export function buildDisplayName(
       ? String(input.extractedYear)
       : null;
 
-  const base = [shortLabel, year, who].filter(Boolean).join(" - ");
+  // Trim trailing dots before the extension goes on: an issuer like
+  // "Maple Tech Inc." would otherwise yield "… Inc..pdf" (and Windows
+  // rejects names ending in a period).
+  const base = [shortLabel, year, who]
+    .filter(Boolean)
+    .join(" - ")
+    .replace(/[. ]+$/, "");
   return `${base}${fileExtension(originalFilename)}`;
 }
