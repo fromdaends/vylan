@@ -5,10 +5,13 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import {
   MAX_BYTES,
   MAX_HEIC_INPUT_BYTES,
+  MAX_UPLOAD_PARTS,
   isAllowedMime,
   isHeic,
+  isValidUploadId,
   truncateFilename,
   stagingPrefixForItem,
+  stagingPartPath,
   downloadObject,
   removeObjectQuiet,
 } from "@/lib/storage";
@@ -22,14 +25,18 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-// Step 2 of the direct-to-storage portal upload: the browser already PUT the
-// raw bytes to the staging path issued by /api/portal/upload-url. Validate
-// that the echoed path belongs to THIS token's checklist item (the prefix is
+// Step 2 of the staged portal upload: the browser already delivered the raw
+// bytes to staging — today as sequential ~3.5 MB parts via
+// /api/portal/upload-chunk (same-origin, fits the platform body cap), or via
+// the older single-object signed-URL PUT (kept for cached clients; browsers
+// can't actually complete that one because the storage gateway 400s its CORS
+// preflight, but the contract still works server-side). Validate that the
+// staging location belongs to THIS token's checklist item (the prefix is
 // re-derived server-side, so a caller can never finalize someone else's
-// object), download the real bytes, enforce the real size/mime limits, then
-// run the exact same pipeline as the legacy in-request route (HEIC convert,
-// canonical storage write, duplicate detection, DB row, notifications, AI).
-// The staging object is deleted on every outcome.
+// object), reassemble + download the real bytes, enforce the real size/mime
+// limits, then run the exact same pipeline as the legacy in-request route
+// (HEIC convert, canonical storage write, duplicate detection, DB row,
+// notifications, AI). Staging objects are deleted on every outcome.
 
 function tooMany(retryAfter?: number) {
   const res = NextResponse.json({ error: "rate_limited" }, { status: 429 });
@@ -45,6 +52,8 @@ export async function POST(request: NextRequest) {
     token?: unknown;
     item_id?: unknown;
     path?: unknown;
+    upload_id?: unknown;
+    total_parts?: unknown;
     filename?: unknown;
     mime?: unknown;
   } | null = null;
@@ -56,16 +65,30 @@ export async function POST(request: NextRequest) {
   const token = body?.token;
   const itemId = body?.item_id;
   const path = body?.path;
+  const uploadId = body?.upload_id;
+  const totalParts = body?.total_parts;
   const filename = body?.filename;
   const mime = body?.mime;
+
+  const partsMode =
+    typeof uploadId === "string" && typeof totalParts === "number";
   if (
     typeof token !== "string" ||
     typeof itemId !== "string" ||
-    typeof path !== "string" ||
     typeof filename !== "string" ||
-    typeof mime !== "string"
+    typeof mime !== "string" ||
+    (!partsMode && typeof path !== "string")
   ) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
+  }
+  if (
+    partsMode &&
+    (!isValidUploadId(uploadId as string) ||
+      !Number.isInteger(totalParts) ||
+      (totalParts as number) < 1 ||
+      (totalParts as number) > MAX_UPLOAD_PARTS)
+  ) {
+    return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
 
   const rlToken = await checkRateLimit({
@@ -97,41 +120,55 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "engagement_gone" }, { status: 404 });
   }
 
-  // The ownership gate: the path must sit in the staging prefix derived from
-  // OUR token→item lookup, not from anything the client claims.
-  const expectedPrefix = stagingPrefixForItem({
+  const scope = {
     firmId: engagement.firm_id,
     engagementId: item.engagement_id,
     itemId: item.id,
-  });
-  if (!path.startsWith(expectedPrefix) || path.includes("..")) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
+  };
 
-  let bytes: Buffer;
-  try {
-    bytes = await downloadObject(path);
-  } catch {
-    // Nothing was uploaded to the staging path (or it already expired).
-    return NextResponse.json({ error: "missing_file" }, { status: 400 });
-  }
-
-  // Enforce the REAL limits on the REAL bytes — the upload-url pre-checks
-  // were client-declared. Oversize/empty objects are deleted on the spot.
-  if (bytes.length === 0) {
-    await removeObjectQuiet(path);
-    return NextResponse.json({ error: "empty_file" }, { status: 400 });
-  }
-  if (bytes.length > MAX_BYTES) {
-    await removeObjectQuiet(path);
-    return NextResponse.json({ error: "too_large" }, { status: 413 });
-  }
-  if (isHeic(mime) && bytes.length > MAX_HEIC_INPUT_BYTES) {
-    await removeObjectQuiet(path);
-    return NextResponse.json({ error: "heic_too_large" }, { status: 413 });
+  // Resolve the staging object(s) for this upload. Every path is derived
+  // from OUR token→item lookup — the ownership gate.
+  let stagingPaths: string[];
+  if (partsMode) {
+    stagingPaths = Array.from({ length: totalParts as number }, (_, seq) =>
+      stagingPartPath({ ...scope, uploadId: uploadId as string, seq }),
+    );
+  } else {
+    const expectedPrefix = stagingPrefixForItem(scope);
+    const p = path as string;
+    if (!p.startsWith(expectedPrefix) || p.includes("..")) {
+      return NextResponse.json({ error: "not_found" }, { status: 404 });
+    }
+    stagingPaths = [p];
   }
 
   try {
+    // Download in order and reassemble. A missing part means the upload
+    // never finished (or a lost-response retry already consumed it).
+    let bytes: Buffer;
+    try {
+      const parts: Buffer[] = [];
+      for (const p of stagingPaths) {
+        parts.push(await downloadObject(p));
+      }
+      bytes = parts.length === 1 ? parts[0] : Buffer.concat(parts);
+    } catch {
+      return NextResponse.json({ error: "missing_file" }, { status: 400 });
+    }
+
+    // Enforce the REAL limits on the REAL bytes — client-declared sizes were
+    // only pre-checks. Oversize/empty assemblies are deleted on the spot
+    // (the finally below).
+    if (bytes.length === 0) {
+      return NextResponse.json({ error: "empty_file" }, { status: 400 });
+    }
+    if (bytes.length > MAX_BYTES) {
+      return NextResponse.json({ error: "too_large" }, { status: 413 });
+    }
+    if (isHeic(mime) && bytes.length > MAX_HEIC_INPUT_BYTES) {
+      return NextResponse.json({ error: "heic_too_large" }, { status: 413 });
+    }
+
     const result = await ingestPortalUpload({
       bytes,
       declaredMime: mime,
@@ -150,7 +187,9 @@ export async function POST(request: NextRequest) {
     });
   } finally {
     // The canonical object (written by ingest) is what the app reads; the
-    // staging copy is dead weight either way.
-    await removeObjectQuiet(path);
+    // staging copies are dead weight on every outcome.
+    for (const p of stagingPaths) {
+      await removeObjectQuiet(p);
+    }
   }
 }

@@ -105,6 +105,33 @@ export function stagingPrefixForItem(parts: {
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/items/${parts.itemId}/staging/`;
 }
 
+// Chunked staging (the path that actually works from browsers): the portal
+// posts a big file as sequential ~3.5 MB parts through OUR domain — each
+// request fits the hosting platform's ~4.5 MB function-body cap, and being
+// same-origin there is no CORS preflight to fail (the browser→Supabase
+// signed-URL PUT dies in preflight: the storage gateway answers OPTIONS on
+// /object/upload/sign/* with 400 "Bucket not found", so no browser will send
+// the bytes — verified against production 2026-06-10). The complete route
+// reassembles the parts in order and runs the normal pipeline.
+export const UPLOAD_PART_BYTES = 3.5 * 1024 * 1024; // client chunk size
+export const MAX_UPLOAD_PARTS = 8; // ceil(25 MB / 3.5 MB)
+
+// Client-supplied upload ids are embedded in storage paths — accept only a
+// strict charset so they can't traverse or collide with anything.
+export function isValidUploadId(id: string): boolean {
+  return /^[A-Za-z0-9-]{8,40}$/.test(id);
+}
+
+export function stagingPartPath(parts: {
+  firmId: string;
+  engagementId: string;
+  itemId: string;
+  uploadId: string;
+  seq: number;
+}): string {
+  return `${stagingPrefixForItem(parts)}${parts.uploadId}/part-${parts.seq}`;
+}
+
 // Short-lived signed URL the browser PUTs the file to. Service-role: the
 // portal is unauthenticated; the route that calls this has already validated
 // the magic token and generated the path itself.
