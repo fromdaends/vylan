@@ -188,8 +188,10 @@ export function ItemCard({
   // request bodies at ~4.5 MB — far below our 25 MB limit — so phone photos
   // and scanned PDFs sent through the legacy form route died with a generic
   // "upload failed". Returns null when the direct path is unavailable
-  // (older deployment, storage hiccup) so the caller can fall back to the
-  // legacy route; THROWS for real answers (too large, bad type, rate limit).
+  // (older deployment) so the caller can fall back to the legacy route;
+  // THROWS for real answers (too large, bad type, rate limit, exhausted
+  // retries). Every network step retries — portal uploads happen on flaky
+  // phone connections, where a single dropped request is normal.
   async function directUpload(file: File): Promise<UploadResponse | null> {
     let urlRes: Response;
     try {
@@ -205,7 +207,7 @@ export function ItemCard({
         }),
       });
     } catch {
-      return null; // network blip — let the legacy path try
+      return null; // network blip before any bytes moved — legacy may try
     }
     if (urlRes.status === 404 && !urlRes.headers.get("content-type")?.includes("json")) {
       return null; // endpoint doesn't exist yet (deployment skew)
@@ -222,36 +224,70 @@ export function ItemCard({
     } | null;
     if (!issued?.signed_url || !issued.path) return null;
 
-    // The bytes go straight to storage — no function in the middle.
-    let put: Response;
-    try {
-      put = await fetch(issued.signed_url, {
-        method: "PUT",
-        headers: {
-          "content-type": file.type || "application/octet-stream",
-        },
-        body: file,
-      });
-    } catch {
+    // The bytes go straight to storage — no function in the middle. Up to 3
+    // tries with a short backoff: a dropped PUT on one-bar cellular should
+    // not fail the whole upload. A 409 means a previous try DID land (the
+    // success response was lost) — that is a success.
+    let stored = false;
+    for (let attempt = 0; attempt < 3 && !stored; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 400 * attempt));
+      try {
+        const put = await fetch(issued.signed_url, {
+          method: "PUT",
+          headers: {
+            "content-type": file.type || "application/octet-stream",
+          },
+          body: file,
+        });
+        stored = put.ok || put.status === 409;
+      } catch {
+        // retry
+      }
+    }
+    if (!stored) {
+      // The direct path is the ONLY one that can carry a big file (the
+      // legacy route dies at the platform's ~4.5 MB cap), so don't hand a
+      // big file to a guaranteed failure — tell the user to retry instead.
+      if (file.size > 4 * 1024 * 1024) throw new Error("upload_failed");
       return null;
     }
-    if (!put.ok) return null;
 
-    const fin = await fetch("/api/portal/upload-complete", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        token,
-        item_id: item.id,
-        path: issued.path,
-        filename: file.name,
-        mime: file.type,
-      }),
-    });
+    // Finalize. Retried on NETWORK failures only (an HTTP error is a real
+    // answer). If a retry reports the staging file missing, the previous
+    // attempt very likely completed server-side and its response got lost —
+    // refresh the page data so the truth shows, instead of a false error.
+    let fin: Response | null = null;
+    for (let attempt = 0; attempt < 3 && !fin; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 400 * attempt));
+      try {
+        fin = await fetch("/api/portal/upload-complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token,
+            item_id: item.id,
+            path: issued.path,
+            filename: file.name,
+            mime: file.type,
+          }),
+        });
+        if (!fin.ok && fin.status >= 500 && attempt < 2) fin = null; // retry 5xx
+      } catch {
+        fin = null; // network drop — retry
+      }
+    }
+    if (!fin) throw new Error("upload_failed");
     if (!fin.ok) {
       const j = (await fin.json().catch(() => null)) as {
         error?: string;
       } | null;
+      if (j?.error === "missing_file") {
+        // Staging already consumed — a lost-response double-finalize. Pull
+        // fresh server data; if the file landed it shows up, with no scary
+        // error over a successful upload.
+        router.refresh();
+        return {};
+      }
       throw new Error(j?.error ?? "upload_failed");
     }
     return (await fin.json().catch(() => null)) as UploadResponse;
