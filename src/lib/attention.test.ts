@@ -182,6 +182,108 @@ describe("computeAttention", () => {
   });
 });
 
+describe("approvedPct / awaitingPct (the accountant-side display progress)", () => {
+  it("counts only APPROVED required items — submitted is 67%, not 100%", () => {
+    // The brief's example: required T4 approved, RRSP approved, T5 submitted
+    // awaiting decision = 67%. The awaiting share fills the dim segment.
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "approved" }),
+        item({ status: "approved" }),
+        item({ status: "submitted" }),
+      ],
+      lastClientActivityAt: null,
+      now: NOW,
+    });
+    expect(r.approvedPct).toBeCloseTo(2 / 3);
+    expect(r.awaitingPct).toBeCloseTo(1 / 3);
+  });
+
+  it("excludes optional items entirely", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "approved" }),
+        item({ status: "submitted", required: false }),
+        item({ status: "pending", required: false }),
+      ],
+      lastClientActivityAt: null,
+      now: NOW,
+    });
+    expect(r.approvedPct).toBe(1);
+    expect(r.awaitingPct).toBe(0);
+  });
+
+  it("zero required items: approved share of ALL items", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "approved", required: false }),
+        item({ status: "submitted", required: false }),
+      ],
+      lastClientActivityAt: null,
+      now: NOW,
+    });
+    expect(r.approvedPct).toBeCloseTo(0.5);
+    expect(r.awaitingPct).toBeCloseTo(0.5);
+  });
+
+  it("no items at all: 0%", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [],
+      lastClientActivityAt: null,
+      now: NOW,
+    });
+    expect(r.approvedPct).toBe(0);
+    expect(r.awaitingPct).toBe(0);
+  });
+
+  it("excused (N/A) items count neither for nor against", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "approved" }),
+        item({ status: "na" }), // excused — out of both sides
+      ],
+      lastClientActivityAt: null,
+      now: NOW,
+    });
+    expect(r.approvedPct).toBe(1);
+  });
+
+  it("an AI-bounced upload counts as awaiting the accountant's call", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "approved" }),
+        item({ status: "pending", rejection_reason: "Blurry." }),
+      ],
+      lastClientActivityAt: null,
+      now: NOW,
+    });
+    expect(r.approvedPct).toBeCloseTo(0.5);
+    expect(r.awaitingPct).toBeCloseTo(0.5);
+  });
+
+  it("rejected / truly-pending required items count against (drive neither bar segment)", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "approved" }),
+        item({ status: "rejected" }),
+        item({ status: "pending" }),
+        item({ status: "approved" }),
+      ],
+      lastClientActivityAt: null,
+      now: NOW,
+    });
+    expect(r.approvedPct).toBeCloseTo(0.5);
+    expect(r.awaitingPct).toBe(0);
+  });
+});
+
 describe("attentionScore + sorting", () => {
   it("ranks overdue higher than stale", () => {
     const a = computeAttention({

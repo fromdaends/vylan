@@ -71,7 +71,12 @@ export type WorklistRow = {
   dueDate: string | null;
   assigneeUserId: string | null;
   assigneeName: string | null;
-  completionPct: number; // 0..1, only meaningful for live engagements
+  // Two-tone display progress (0..1 each, only meaningful for live
+  // engagements): approvedPct = required items the accountant APPROVED (the
+  // % shown + the solid fill); awaitingPct = required items submitted and
+  // awaiting a decision (the dimmer second segment). See lib/attention.
+  approvedPct: number;
+  awaitingPct: number;
   itemsDone: number;
   itemsTotal: number;
   attentionScore: number;
@@ -423,8 +428,13 @@ function WorklistRowView({
   const router = useRouter();
   // Completed engagements are 100% by definition; we don't fetch their
   // request items, so trust the status over the (empty) item counts.
+  // Otherwise the % is the APPROVED share of required items; the dimmer
+  // second segment is the submitted-awaiting-review share, so "everything's
+  // in but not yet cleared" reads at a glance instead of a premature 100%.
   const pct =
-    row.status === "complete" ? 100 : Math.round(row.completionPct * 100);
+    row.status === "complete" ? 100 : Math.round(row.approvedPct * 100);
+  const awaitingPctValue =
+    row.status === "complete" ? 0 : Math.round(row.awaitingPct * 100);
   // Drafts haven't been sent and cancelled work is moot — neither has a
   // meaningful progress bar (and an unfetched-items draft would otherwise
   // read as 100%).
@@ -539,16 +549,21 @@ function WorklistRowView({
               ) : (
                 <div className="flex items-center gap-2">
                   <div
-                    className="h-1.5 w-20 overflow-hidden rounded-full bg-muted"
+                    className="flex h-1.5 w-20 overflow-hidden rounded-full bg-muted"
                     role="progressbar"
                     aria-valuenow={pct}
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-label={pctLabel(pct)}
                   >
+                    {/* Solid = approved; dim = submitted, awaiting review. */}
                     <div
-                      className="h-full rounded-full bg-primary transition-all"
+                      className="h-full bg-primary transition-all"
                       style={{ width: `${pct}%` }}
+                    />
+                    <div
+                      className="h-full bg-primary/35 transition-all"
+                      style={{ width: `${awaitingPctValue}%` }}
                     />
                   </div>
                   <span className="text-xs tabular-nums text-muted-foreground">

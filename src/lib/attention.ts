@@ -26,6 +26,19 @@ export type AttentionResult = {
   daysUntilDue: number | null;
   daysSinceClientActivity: number | null;
   completionPct: number;
+  // DISPLAY progress for accountant-side bars (the Overview table + engagement
+  // lists): the share of REQUIRED items the accountant has APPROVED (a
+  // signature item counts once its signed copy is confirmed, which sets it
+  // approved). Optional items are excluded; "na" items are excused and count
+  // neither way. Zero required items -> approved share of ALL items; no items
+  // at all -> 0. Separate from completionPct on purpose: completionPct keeps
+  // measuring the CLIENT's part (drives the due-soon / quiet triggers), while
+  // approvedPct measures the accountant's clearance, so a fully-submitted
+  // engagement reads 67% awaiting review instead of a premature 100%.
+  approvedPct: number;
+  // The share (same denominator) submitted and awaiting an accountant
+  // decision — the dimmer second segment of the two-tone progress bar.
+  awaitingPct: number;
   itemsTotal: number;
   itemsDone: number;
   itemsPendingRequired: number;
@@ -106,6 +119,22 @@ export function computeAttention(opts: {
   const itemsUploaded = items.filter(
     (i) => isAiBounced(i) || (i.status !== "pending" && i.status !== "na"),
   ).length;
+  // Display progress (see the AttentionResult comment): approved share of the
+  // required items, excused (na) items out of both sides, optionals excluded
+  // unless there are no required items at all. No countable items -> 0.
+  const countable = (
+    requiredItems.length > 0 ? requiredItems : items
+  ).filter((i) => i.status !== "na");
+  const approvedPct =
+    countable.length === 0
+      ? 0
+      : countable.filter((i) => i.status === "approved").length /
+        countable.length;
+  const awaitingPct =
+    countable.length === 0
+      ? 0
+      : countable.filter((i) => i.status === "submitted" || isAiBounced(i))
+          .length / countable.length;
   const isLive = e.status === "sent" || e.status === "in_progress";
 
   // No requested documents → nothing to collect, chase, or be overdue on.
@@ -118,6 +147,8 @@ export function computeAttention(opts: {
       daysUntilDue: null,
       daysSinceClientActivity: null,
       completionPct,
+      approvedPct,
+      awaitingPct,
       itemsTotal,
       itemsDone,
       itemsPendingRequired,
@@ -175,6 +206,8 @@ export function computeAttention(opts: {
     daysUntilDue,
     daysSinceClientActivity,
     completionPct,
+    approvedPct,
+    awaitingPct,
     itemsTotal,
     itemsDone,
     itemsPendingRequired,

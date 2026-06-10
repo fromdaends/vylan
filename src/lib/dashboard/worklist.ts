@@ -158,7 +158,8 @@ export const loadEngagementWorklist = cache(
         assigneeName: e.assigned_user_id
           ? (userLabelById.get(e.assigned_user_id) ?? null)
           : null,
-        completionPct: a.completionPct,
+        approvedPct: a.approvedPct,
+        awaitingPct: a.awaitingPct,
         itemsDone: a.itemsDone,
         itemsTotal: a.itemsTotal,
         attentionScore: attentionScore(a),
