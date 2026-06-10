@@ -33,6 +33,17 @@ export const MFA_VERIFY_LIMIT: LimitSpec = { limit: 5, window: "5 m" };
 // Portal endpoints — token-scoped (the magic token is the identity).
 export const PORTAL_UPLOAD_PER_TOKEN: LimitSpec = { limit: 30, window: "1 h" };
 export const PORTAL_UPLOAD_PER_IP: LimitSpec = { limit: 60, window: "1 h" };
+// Chunked upload parts — a single 25 MB file arrives as up to 8 ~3.5 MB
+// chunks, so the per-request budget must be several times the whole-file
+// budget (30 files/h × 8 parts = 240).
+export const PORTAL_UPLOAD_CHUNK_PER_TOKEN: LimitSpec = {
+  limit: 240,
+  window: "1 h",
+};
+export const PORTAL_UPLOAD_CHUNK_PER_IP: LimitSpec = {
+  limit: 480,
+  window: "1 h",
+};
 export const PORTAL_MUTATION_PER_TOKEN: LimitSpec = { limit: 120, window: "1 h" };
 // Poll status — called by the portal after every upload at ~2s intervals
 // for up to ~30s. Generous limit so a normal upload-heavy session never

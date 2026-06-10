@@ -27,6 +27,21 @@ const ACCEPT =
 // round-trip so an oversize pick gets the translated "larger than 25 MB"
 // message instantly instead of a doomed upload.
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+// Part size for the chunked flow — mirrors UPLOAD_PART_BYTES in lib/storage
+// (kept literal here: this is a client component and the server constant
+// lives in a server module). Must stay comfortably under the platform's
+// ~4.5 MB request cap including form-encoding overhead.
+const UPLOAD_PART_BYTES = 3.5 * 1024 * 1024;
+
+// Path-safe random id for one chunked upload (the server validates
+// [A-Za-z0-9-]{8,40} and scopes it under this item's staging prefix).
+function newUploadId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `u${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+  }
+}
 
 type UploadResponse = { ok?: boolean; file_id?: string } | null;
 
@@ -183,82 +198,73 @@ export function ItemCard({
       ? item.description_fr
       : item.description;
 
-  // Preferred upload path: browser → storage DIRECTLY via a signed URL, then
-  // a light finalize call. Exists because the hosting platform caps function
-  // request bodies at ~4.5 MB — far below our 25 MB limit — so phone photos
-  // and scanned PDFs sent through the legacy form route died with a generic
-  // "upload failed". Returns null when the direct path is unavailable
-  // (older deployment) so the caller can fall back to the legacy route;
-  // THROWS for real answers (too large, bad type, rate limit, exhausted
-  // retries). Every network step retries — portal uploads happen on flaky
-  // phone connections, where a single dropped request is normal.
-  async function directUpload(file: File): Promise<UploadResponse | null> {
-    let urlRes: Response;
-    try {
-      urlRes = await fetch("/api/portal/upload-url", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          item_id: item.id,
-          filename: file.name,
-          mime: file.type,
-          size: file.size,
-        }),
-      });
-    } catch {
-      return null; // network blip before any bytes moved — legacy may try
-    }
-    if (urlRes.status === 404 && !urlRes.headers.get("content-type")?.includes("json")) {
-      return null; // endpoint doesn't exist yet (deployment skew)
-    }
-    if (!urlRes.ok) {
-      const j = (await urlRes.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-      throw new Error(j?.error ?? "upload_failed");
-    }
-    const issued = (await urlRes.json().catch(() => null)) as {
-      signed_url?: string;
-      path?: string;
-    } | null;
-    if (!issued?.signed_url || !issued.path) return null;
+  // Preferred upload path: the file travels as sequential ~3.5 MB parts
+  // through OUR domain (each request fits the hosting platform's ~4.5 MB
+  // function-body cap, and same-origin requests have no CORS preflight to
+  // fail — the earlier browser→storage signed PUT died in preflight, see
+  // lib/storage.ts). The finalize call reassembles the parts server-side and
+  // runs the normal pipeline. Every step retries with backoff: portal
+  // uploads happen on flaky phone connections, where a dropped request is
+  // normal, and the part route is idempotent so retries are safe. Returns
+  // null only when the endpoints don't exist yet (deployment skew) so the
+  // caller can fall back to the legacy route; THROWS for real answers (too
+  // large, bad type, rate limit, exhausted retries).
+  async function chunkedUpload(file: File): Promise<UploadResponse | null> {
+    const uploadId = newUploadId();
+    const totalParts = Math.max(1, Math.ceil(file.size / UPLOAD_PART_BYTES));
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-    // The bytes go straight to storage — no function in the middle. Up to 3
-    // tries with a short backoff: a dropped PUT on one-bar cellular should
-    // not fail the whole upload. A 409 means a previous try DID land (the
-    // success response was lost) — that is a success.
-    let stored = false;
-    for (let attempt = 0; attempt < 3 && !stored; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 400 * attempt));
-      try {
-        const put = await fetch(issued.signed_url, {
-          method: "PUT",
-          headers: {
-            "content-type": file.type || "application/octet-stream",
-          },
-          body: file,
-        });
-        stored = put.ok || put.status === 409;
-      } catch {
-        // retry
+    for (let seq = 0; seq < totalParts; seq++) {
+      const part = file.slice(
+        seq * UPLOAD_PART_BYTES,
+        (seq + 1) * UPLOAD_PART_BYTES,
+      );
+      let stored = false;
+      for (let attempt = 0; attempt < 3 && !stored; attempt++) {
+        if (attempt > 0) await sleep(400 * attempt);
+        let res: Response;
+        try {
+          const fd = new FormData();
+          fd.append("token", token);
+          fd.append("item_id", item.id);
+          fd.append("upload_id", uploadId);
+          fd.append("seq", String(seq));
+          fd.append("mime", file.type);
+          fd.append("chunk", part, `part-${seq}`);
+          res = await fetch("/api/portal/upload-chunk", {
+            method: "POST",
+            body: fd,
+          });
+        } catch {
+          continue; // network drop — retry this part
+        }
+        if (res.ok) {
+          stored = true;
+          break;
+        }
+        if (
+          res.status === 404 &&
+          !res.headers.get("content-type")?.includes("json")
+        ) {
+          return null; // endpoint doesn't exist yet (deployment skew)
+        }
+        if (res.status >= 500) continue; // transient — retry
+        const j = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(j?.error ?? "upload_failed"); // 4xx = real answer
       }
-    }
-    if (!stored) {
-      // The direct path is the ONLY one that can carry a big file (the
-      // legacy route dies at the platform's ~4.5 MB cap), so don't hand a
-      // big file to a guaranteed failure — tell the user to retry instead.
-      if (file.size > 4 * 1024 * 1024) throw new Error("upload_failed");
-      return null;
+      if (!stored) throw new Error("upload_failed");
     }
 
-    // Finalize. Retried on NETWORK failures only (an HTTP error is a real
-    // answer). If a retry reports the staging file missing, the previous
-    // attempt very likely completed server-side and its response got lost —
-    // refresh the page data so the truth shows, instead of a false error.
+    // Finalize: reassemble + run the pipeline. Retried on network drops and
+    // 5xx. If a retry reports the staging parts missing, the previous
+    // attempt very likely completed server-side (it deletes the parts) and
+    // its response got lost — refresh the page data so the truth shows,
+    // instead of a false error over a successful upload.
     let fin: Response | null = null;
     for (let attempt = 0; attempt < 3 && !fin; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 400 * attempt));
+      if (attempt > 0) await sleep(400 * attempt);
       try {
         fin = await fetch("/api/portal/upload-complete", {
           method: "POST",
@@ -266,7 +272,8 @@ export function ItemCard({
           body: JSON.stringify({
             token,
             item_id: item.id,
-            path: issued.path,
+            upload_id: uploadId,
+            total_parts: totalParts,
             filename: file.name,
             mime: file.type,
           }),
@@ -282,9 +289,6 @@ export function ItemCard({
         error?: string;
       } | null;
       if (j?.error === "missing_file") {
-        // Staging already consumed — a lost-response double-finalize. Pull
-        // fresh server data; if the file landed it shows up, with no scary
-        // error over a successful upload.
         router.refresh();
         return {};
       }
@@ -326,7 +330,7 @@ export function ItemCard({
       }
       setUploading(true);
       try {
-        const body = (await directUpload(file)) ?? (await legacyUpload(file));
+        const body = (await chunkedUpload(file)) ?? (await legacyUpload(file));
         // Always count the upload — the file IS saved server-side. The
         // verdict only governs whether we surface a "try again" message
         // on top of that.
