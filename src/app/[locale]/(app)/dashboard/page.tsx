@@ -5,7 +5,6 @@ import { listTemplates, BLANK_TEMPLATE_ID } from "@/lib/db/templates";
 
 export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
-import { formatDate } from "@/lib/format";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { selectAssignedTo } from "@/lib/dashboard/worklist-select";
 import { listHomeNotifications } from "@/lib/home/notifications";
@@ -77,10 +76,11 @@ export default async function DashboardPage({
   const rawName = user?.display_name?.trim() || user?.name?.trim() || null;
   const firstName = rawName ? (rawName.split(/\s+/)[0] ?? null) : null;
 
-  // Greeting subtitle: firm name · today's date (carried over from the old
-  // Home page greeting).
-  const dateStr = formatDate(new Date(), locale, "long");
-  const subtitle = firm?.name ? `${firm.name} · ${dateStr}` : dateStr;
+  // Greeting subtitle: the firm name only. Today's date is appended CLIENT-
+  // side by DashboardGreeting from the user's local clock — rendering it here
+  // would bake in the server's UTC "today", which is already tomorrow during
+  // a Quebec evening.
+  const subtitle = firm?.name ?? "";
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-10 min-[1800px]:grid-cols-[minmax(0,1fr)_360px]">

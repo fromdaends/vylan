@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { DashboardHeader } from "./dashboard-header";
+import { formatDate } from "@/lib/format";
 import en from "../../../messages/en.json";
 
 // next-intl's locale-aware <Link> pulls in next/navigation, which has no
@@ -24,21 +25,19 @@ function renderHeader(props: { firstName: string | null; subtitle: string }) {
 }
 
 describe("DashboardHeader", () => {
-  it("greets the user by first name, shows the subtitle, and links to the two primary actions", () => {
-    renderHeader({
-      firstName: "Zach",
-      subtitle: "Acme Co · Friday, May 29, 2026",
-    });
+  it("greets the user by first name, shows firm + LOCAL today's date, and links to the two primary actions", () => {
+    renderHeader({ firstName: "Zach", subtitle: "Acme Co" });
 
     // The greeting is time-aware (the exact word depends on the clock), so we
     // just assert the heading carries the first name.
     const heading = screen.getByRole("heading", { level: 1 });
     expect(heading.textContent ?? "").toMatch(/Zach/);
 
-    // Firm name · date subtitle.
-    expect(
-      screen.getByText("Acme Co · Friday, May 29, 2026"),
-    ).toBeInTheDocument();
+    // Firm name · today's date, formatted from THIS machine's clock (the
+    // component appends the user-local date itself; the page no longer bakes
+    // in the server's UTC "today").
+    const localToday = formatDate(new Date(), "en", "long");
+    expect(screen.getByText(`Acme Co · ${localToday}`)).toBeInTheDocument();
 
     // New engagement → the engagement creation flow.
     const newEng = screen.getByRole("link", { name: en.Engagements.new });
@@ -53,10 +52,11 @@ describe("DashboardHeader", () => {
     );
   });
 
-  it("still renders a greeting + subtitle when the user has no name", () => {
-    renderHeader({ firstName: null, subtitle: "Acme Co · Friday" });
+  it("still renders a greeting + the local date when the user has no name", () => {
+    renderHeader({ firstName: null, subtitle: "Acme Co" });
 
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
-    expect(screen.getByText("Acme Co · Friday")).toBeInTheDocument();
+    const localToday = formatDate(new Date(), "en", "long");
+    expect(screen.getByText(`Acme Co · ${localToday}`)).toBeInTheDocument();
   });
 });

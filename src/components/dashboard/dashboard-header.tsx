@@ -15,6 +15,8 @@ export function DashboardHeader({
   subtitle,
 }: {
   firstName: string | null;
+  // Static subtitle part (the firm name); the greeting appends today's date
+  // from the USER's clock client-side (not the server's UTC "today").
   subtitle: string;
 }) {
   const tEng = useTranslations("Engagements");
@@ -22,7 +24,11 @@ export function DashboardHeader({
 
   return (
     <header className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-      <DashboardGreeting firstName={firstName} subtitle={subtitle} />
+      <DashboardGreeting
+        firstName={firstName}
+        subtitle={subtitle}
+        showLocalDate
+      />
 
       <div className="flex flex-wrap items-center gap-2.5">
         <Button asChild>
