@@ -2,6 +2,12 @@ import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getClient } from "@/lib/db/clients";
 import { listEngagements } from "@/lib/db/engagements";
+import { loadEngagementSignals } from "@/lib/dashboard/worklist";
+import { deriveEngagementStatus } from "@/lib/attention";
+import {
+  engagementStatusPillClass,
+  engagementStatusVariant,
+} from "@/lib/engagements/status-pill";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +34,15 @@ export default async function ClientDetailPage({
   if (!client) notFound();
 
   const engagements = await listEngagements({ client_id: id });
+  // Unified status for the pills below — same derivation every other surface
+  // reads, via the cached active-scope signal load.
+  const signals = await loadEngagementSignals("active");
+  const derivedStatusById = new Map(
+    signals.map((s) => [
+      s.engagement.id,
+      deriveEngagementStatus(s.engagement.status, s.attention),
+    ]),
+  );
   const t = await getTranslations("Clients");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -142,8 +157,15 @@ export default async function ClientDetailPage({
                         {e.due_date && ` · ${formatDate(e.due_date, locale, "medium")}`}
                       </div>
                     </div>
-                    <Badge variant={statusVariant(e.status)}>
-                      {tStatus(e.status)}
+                    <Badge
+                      variant={engagementStatusVariant(
+                        derivedStatusById.get(e.id) ?? e.status,
+                      )}
+                      className={engagementStatusPillClass(
+                        derivedStatusById.get(e.id) ?? e.status,
+                      )}
+                    >
+                      {tStatus(derivedStatusById.get(e.id) ?? e.status)}
                     </Badge>
                   </Link>
                 </li>
@@ -184,11 +206,3 @@ function DetailRow({
   );
 }
 
-function statusVariant(
-  status: string,
-): "default" | "secondary" | "outline" | "destructive" {
-  if (status === "complete") return "default";
-  if (status === "cancelled") return "destructive";
-  if (status === "draft") return "outline";
-  return "secondary";
-}

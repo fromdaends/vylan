@@ -8,9 +8,12 @@ import { NeedsAttentionCollapsible } from "@/components/dashboard/needs-attentio
 
 const MAX_VISIBLE = 5;
 
-// Needs attention — the prominent, accent-tinted action block near the top of
-// the Overview. Visually distinct from the My-engagements table (it's the
-// urgent subset). Shows the top few; "View all" links to the full engagements
+// Needs attention — the prominent, accent-tinted action block in the top
+// region of the Overview. The actionable to-do list: every engagement that
+// requires the ACCOUNTANT to act, with a reason chip per signal (ready to
+// review, flagged files, signed copy to confirm, sitting unreviewed, overdue /
+// due soon / quiet). One row per engagement, multiple chips when multiple
+// reasons apply. Shows the top few; "View all" links to the full engagements
 // list when there are more. Calm, compact empty state. Each row carries the
 // same right-click / "..." Open-Archive-Delete menu as the My-engagements rows
 // (NeedsAttentionRow is a client component reusing useEngagementRowMenu).
@@ -58,7 +61,15 @@ export async function NeedsAttention({
               row={r}
               canDelete={canDelete}
               menuActionsLabel={tEng("menu_actions")}
-              badge={badgeProps(r, t)}
+              badges={badgesFor(r, t)}
+              // Flagged uploads are reviewed in the Preview overlay's Flagged
+              // tab — land there directly. Every other reason lands on the
+              // engagement page itself.
+              href={
+                r.flaggedFilesCount > 0
+                  ? `/engagements/${r.id}?preview=flagged`
+                  : `/engagements/${r.id}`
+              }
             />
           ))}
         </ul>
@@ -67,19 +78,17 @@ export async function NeedsAttention({
   );
 }
 
-// The single reason we surface per row — the most urgent one, matching the
-// prioritisation: overdue > due soon > quiet > ready to review. Resolved on the
-// server (so the row badge wording reuses the Attention namespace) and passed
-// to the client row as plain props.
-type ReasonKind = "overdue" | "due_soon" | "stale" | "ready";
-
-function primaryReason(r: WorklistRow): ReasonKind | null {
-  if (r.reasons.includes("overdue")) return "overdue";
-  if (r.reasons.includes("due_soon")) return "due_soon";
-  if (r.reasons.includes("stale")) return "stale";
-  if (r.readyToReview) return "ready";
-  return null;
-}
+// The reason chips on one row, in display order: hard deadlines first, then
+// the review queue signals, then the soft chase signals. One chip per signal
+// that applies — never duplicate rows, one row per engagement.
+type ReasonKind =
+  | "overdue"
+  | "sitting"
+  | "flagged"
+  | "signed_copy"
+  | "ready"
+  | "due_soon"
+  | "stale";
 
 export type NeedsAttentionBadge = {
   label: string;
@@ -87,36 +96,62 @@ export type NeedsAttentionBadge = {
   tone: string;
 };
 
-function badgeProps(
+function badgesFor(
   row: WorklistRow,
   t: Awaited<ReturnType<typeof getTranslations<"Attention">>>,
-): NeedsAttentionBadge | null {
-  const kind = primaryReason(row);
-  if (!kind) return null;
-  switch (kind) {
-    case "overdue":
-      return {
-        label: t("overdue_by", { days: row.daysOverdue ?? 0 }),
-        iconKey: "overdue",
-        tone: "bg-destructive/15 text-destructive",
-      };
-    case "due_soon":
-      return {
-        label: t("due_in", { days: row.daysUntilDue ?? 0 }),
-        iconKey: "due_soon",
-        tone: "bg-warning/15 text-warning",
-      };
-    case "stale":
-      return {
-        label: t("stale_days", { days: row.daysSinceClientActivity ?? 0 }),
-        iconKey: "stale",
-        tone: "bg-muted text-muted-foreground",
-      };
-    case "ready":
-      return {
-        label: t("items_ready", { count: row.itemsReadyToReview }),
-        iconKey: "ready",
-        tone: "bg-success/15 text-success",
-      };
+): NeedsAttentionBadge[] {
+  const badges: NeedsAttentionBadge[] = [];
+  if (row.reasons.includes("overdue")) {
+    badges.push({
+      label: t("overdue_by", { days: row.daysOverdue ?? 0 }),
+      iconKey: "overdue",
+      tone: "bg-destructive/15 text-destructive",
+    });
   }
+  if (row.sittingUnreviewed) {
+    badges.push({
+      label: t("chip_sitting", { days: row.waitingDays ?? 0 }),
+      iconKey: "sitting",
+      tone: "bg-warning/15 text-warning",
+    });
+  }
+  if (row.flaggedFilesCount > 0) {
+    badges.push({
+      label: t("chip_flagged", { count: row.flaggedFilesCount }),
+      iconKey: "flagged",
+      tone: "bg-warning/15 text-warning",
+    });
+  }
+  if (row.signedCopiesToConfirm > 0) {
+    badges.push({
+      label: t("chip_signed_copy", { count: row.signedCopiesToConfirm }),
+      iconKey: "signed_copy",
+      tone: "bg-accent/15 text-accent",
+    });
+  }
+  if (row.readyToReview) {
+    badges.push({
+      label:
+        row.itemsReadyToReview > 0
+          ? t("items_ready", { count: row.itemsReadyToReview })
+          : t("chip_ready"),
+      iconKey: "ready",
+      tone: "bg-success/15 text-success",
+    });
+  }
+  if (row.reasons.includes("due_soon")) {
+    badges.push({
+      label: t("due_in", { days: row.daysUntilDue ?? 0 }),
+      iconKey: "due_soon",
+      tone: "bg-warning/15 text-warning",
+    });
+  }
+  if (row.reasons.includes("stale")) {
+    badges.push({
+      label: t("stale_days", { days: row.daysSinceClientActivity ?? 0 }),
+      iconKey: "stale",
+      tone: "bg-muted text-muted-foreground",
+    });
+  }
+  return badges;
 }

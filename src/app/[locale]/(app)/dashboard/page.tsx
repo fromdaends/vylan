@@ -84,37 +84,43 @@ export default async function DashboardPage({
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-10 min-[1800px]:grid-cols-[minmax(0,1fr)_360px]">
-      {/* Main column */}
+      {/* Main column. Hierarchy (top to bottom) = the accountant's actual
+          priority: act (Jump back in + Needs attention), work (My
+          engagements), start something new (templates, demoted to a slim
+          secondary strip). */}
       <div className="min-w-0 space-y-10 sm:space-y-12">
         <DashboardHeader firstName={firstName} subtitle={subtitle} />
 
-        {/* Jump back in — sits right under the header (fast path back to work).
-            Shows only when the user has opened an engagement recently (tracked
-            client-side); the component resolves which one + self-hides. */}
-        <JumpBackIn
-          engagements={worklistRows.map((r) => ({
-            id: r.id,
-            title: r.title,
-            clientName: r.clientName,
-            recencyAt: r.recencyAt,
-          }))}
-          locale={locale}
-        />
+        {/* Top row: Jump back in + Needs attention share the first row on a
+            wide canvas (2xl+), so neither floats alone in empty space. Below
+            2xl they stack, Jump back in first (its historical spot). The
+            Jump-back-in card self-hides when there's nothing recent; the
+            empty: wrapper collapses with it so Needs attention takes the
+            whole row. */}
+        <div className="flex flex-col gap-8 2xl:flex-row 2xl:items-start 2xl:gap-10">
+          <div className="shrink-0 empty:hidden 2xl:w-[21rem]">
+            <JumpBackIn
+              engagements={worklistRows.map((r) => ({
+                id: r.id,
+                title: r.title,
+                clientName: r.clientName,
+                recencyAt: r.recencyAt,
+              }))}
+              locale={locale}
+            />
+          </div>
 
-        {/* Needs attention — prominent, accent-tinted action block. Always
-            rendered (shows a calm "all caught up" line when empty). Rows carry
-            the same right-click / "..." menu as the My-engagements table.
-            Capped so this focused block stays contained on a wide monitor
-            instead of stretching its rows apart — self-gating: the column is
-            ~1176px at the 1600 cap, so this only bites once the page widens. */}
-        <div className="max-w-[80rem]">
-          <NeedsAttention
-            rows={attentionRows}
-            canDelete={user ? canDeleteEngagements(user.role) : false}
-          />
+          {/* Needs attention — the prominent, accent-tinted action block,
+              expanded by default. Always rendered (calm "all caught up" line
+              when empty). Rows carry the same right-click / "..." menu as the
+              My-engagements table. */}
+          <div className="min-w-0 flex-1">
+            <NeedsAttention
+              rows={attentionRows}
+              canDelete={user ? canDeleteEngagements(user.role) : false}
+            />
+          </div>
         </div>
-
-        <TemplatesGallery templates={templateCards} />
 
         {/* Recent/Mine show active work; the Complete tab surfaces finished
             engagements. The worklist filters per-tab, so it gets every row. */}
@@ -125,6 +131,10 @@ export default async function DashboardPage({
           locale={locale}
           canDelete={user ? canDeleteEngagements(user.role) : false}
         />
+
+        {/* Start from a template — deliberately demoted BELOW the work: a
+            slim, quiet quick-start strip, clearly secondary to engagements. */}
+        <TemplatesGallery templates={templateCards} />
 
         {/* What's new — on mobile/tablet the right rail collapses to here,
             under My engagements. Hidden on lg where the sticky rail shows it. */}

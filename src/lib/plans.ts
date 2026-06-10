@@ -27,14 +27,16 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "solo",
     monthlyCadCents: 7900,
     maxActiveEngagements: 50,
-    maxUsers: 1,
+    // Locked tier seat caps (2026-06): Solo 2 / Cabinet 6 / Cabinet+ 15.
+    // Per-firm firms.seat_cap_override still wins over any of these.
+    maxUsers: 2,
     stripePriceEnv: "STRIPE_PRICE_SOLO",
   },
   cabinet: {
     id: "cabinet",
     monthlyCadCents: 15900,
     maxActiveEngagements: null,
-    maxUsers: 10,
+    maxUsers: 6,
     stripePriceEnv: "STRIPE_PRICE_CABINET",
   },
   cabinet_plus: {

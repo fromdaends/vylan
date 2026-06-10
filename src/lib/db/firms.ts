@@ -14,6 +14,10 @@ export type Firm = {
   current_period_end: string | null;
   trial_ends_at: string | null;
   plan: "trial" | "solo" | "cabinet" | "cabinet_plus";
+  // Per-firm seat-cap override (migration 0190). NULL = use the plan's
+  // maxUsers; a positive value wins over the plan (resolveSeatCap). Service-
+  // role-only — deliberately NOT in the authenticated UPDATE whitelist.
+  seat_cap_override: number | null;
   onboarded_at: string | null;
   invited_emails: string[];
   business_hours: Record<string, unknown>;

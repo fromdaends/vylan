@@ -42,6 +42,7 @@
     "manage_team": "Manage team",
     "view_team": "View team",
     "invite_button": "Invite teammate",
+    "edit_firm": "Edit firm",
     "invite_modal_title": "Invite a teammate",
     "invite_modal_hint": "They'll get an email to create their account and join your firm.",
     "invite_email_label": "Email",
@@ -1117,6 +1118,10 @@
     "overdue_by": "{days, plural, one {# day overdue} other {# days overdue}}",
     "due_in": "Due in {days, plural, one {# day} other {# days}}",
     "stale_days": "Quiet for {days, plural, one {# day} other {# days}}",
+    "chip_ready": "Ready to review",
+    "chip_flagged": "{count, plural, one {# flagged file} other {# flagged files}}",
+    "chip_signed_copy": "{count, plural, one {Signed copy to confirm} other {# signed copies to confirm}}",
+    "chip_sitting": "{days, plural, one {Waiting # day} other {Waiting # days}}",
     "other_engagements": "Other engagements",
     "ai_activity_section_title": "AI activity",
     "ai_activity_section_hint": "AI verdicts from the last 7 days. Search by client name to focus on a specific one. Click any row to open the engagement.",
@@ -1134,6 +1139,8 @@
     "label": "AI",
     "pending": "Analyzing…",
     "pending_tooltip": "AI is reviewing this document. Takes a few seconds.",
+    "not_analyzed": "Not analyzed",
+    "not_analyzed_tooltip": "The automatic read didn't run for this document. You can still review it normally.",
     "likely": "Looks like {type}",
     "type_label": "Type: {type}",
     "mismatch": "Expected {expected}, got {detected}",
@@ -1262,7 +1269,8 @@
     "in_progress": "In progress",
     "complete": "Complete",
     "cancelled": "Cancelled",
-    "overdue": "Overdue"
+    "overdue": "Overdue",
+    "ready_to_review": "Ready to review"
   },
   "Pricing": {
     "title": "Simple, flat pricing",
@@ -1293,12 +1301,12 @@
     "plan_solo_name": "Solo",
     "plan_solo_tagline": "For independent accountants and bookkeepers.",
     "plan_solo_engagements": "Up to 50 active engagements",
-    "plan_solo_users": "1 user",
+    "plan_solo_users": "Up to 2 users",
     "plan_solo_features": "All features included",
     "plan_cabinet_name": "Cabinet",
     "plan_cabinet_tagline": "For small firms with a few teammates.",
     "plan_cabinet_engagements": "Unlimited active engagements",
-    "plan_cabinet_users": "Up to 10 users",
+    "plan_cabinet_users": "Up to 6 users",
     "plan_cabinet_features": "Everything + priority email support"
   },
   "Billing": {
@@ -1327,11 +1335,11 @@
     "disabled_price": "Price not configured",
     "plan_solo_name": "Solo",
     "plan_solo_engagements": "Up to 50 active engagements",
-    "plan_solo_users": "1 user",
+    "plan_solo_users": "Up to 2 users",
     "plan_solo_features": "All features",
     "plan_cabinet_name": "Cabinet",
     "plan_cabinet_engagements": "Unlimited active engagements",
-    "plan_cabinet_users": "Up to 10 users",
+    "plan_cabinet_users": "Up to 6 users",
     "plan_cabinet_features": "Everything + priority support"
   },
   "Footer": {

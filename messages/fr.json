@@ -42,6 +42,7 @@
     "manage_team": "Gérer l'équipe",
     "view_team": "Voir l'équipe",
     "invite_button": "Inviter un membre",
+    "edit_firm": "Modifier le cabinet",
     "invite_modal_title": "Inviter un membre",
     "invite_modal_hint": "Il recevra un courriel pour créer son compte et rejoindre votre cabinet.",
     "invite_email_label": "Courriel",
@@ -1117,6 +1118,10 @@
     "overdue_by": "{days, plural, one {# jour de retard} other {# jours de retard}}",
     "due_in": "Dû dans {days, plural, one {# jour} other {# jours}}",
     "stale_days": "Silence depuis {days, plural, one {# jour} other {# jours}}",
+    "chip_ready": "Prêt à réviser",
+    "chip_flagged": "{count, plural, one {# fichier signalé} other {# fichiers signalés}}",
+    "chip_signed_copy": "{count, plural, one {Copie signée à confirmer} other {# copies signées à confirmer}}",
+    "chip_sitting": "{days, plural, one {En attente depuis # jour} other {En attente depuis # jours}}",
     "other_engagements": "Autres engagements",
     "ai_activity_section_title": "Activité de l'IA",
     "ai_activity_section_hint": "Verdicts de l'IA des 7 derniers jours. Cherchez par nom de client pour vous concentrer sur un seul. Cliquez une ligne pour ouvrir l'engagement.",
@@ -1134,6 +1139,8 @@
     "label": "IA",
     "pending": "Analyse en cours…",
     "pending_tooltip": "L'IA examine ce document. Ça prend quelques secondes.",
+    "not_analyzed": "Non analysé",
+    "not_analyzed_tooltip": "La lecture automatique n'a pas été effectuée pour ce document. Vous pouvez le réviser normalement.",
     "likely": "Probablement {type}",
     "type_label": "Type : {type}",
     "mismatch": "Attendu {expected}, détecté {detected}",
@@ -1262,7 +1269,8 @@
     "in_progress": "En cours",
     "complete": "Complété",
     "cancelled": "Annulé",
-    "overdue": "En retard"
+    "overdue": "En retard",
+    "ready_to_review": "À réviser"
   },
   "Pricing": {
     "title": "Tarification simple et claire",
@@ -1293,12 +1301,12 @@
     "plan_solo_name": "Solo",
     "plan_solo_tagline": "Pour les comptables et teneurs de livres indépendants.",
     "plan_solo_engagements": "Jusqu'à 50 engagements actifs",
-    "plan_solo_users": "1 utilisateur",
+    "plan_solo_users": "Jusqu'à 2 utilisateurs",
     "plan_solo_features": "Toutes les fonctionnalités incluses",
     "plan_cabinet_name": "Cabinet",
     "plan_cabinet_tagline": "Pour les petits cabinets avec quelques coéquipiers.",
     "plan_cabinet_engagements": "Engagements actifs illimités",
-    "plan_cabinet_users": "Jusqu'à 10 utilisateurs",
+    "plan_cabinet_users": "Jusqu'à 6 utilisateurs",
     "plan_cabinet_features": "Tout + soutien courriel prioritaire"
   },
   "Billing": {
@@ -1327,11 +1335,11 @@
     "disabled_price": "Prix non configuré",
     "plan_solo_name": "Solo",
     "plan_solo_engagements": "Jusqu'à 50 engagements actifs",
-    "plan_solo_users": "1 utilisateur",
+    "plan_solo_users": "Jusqu'à 2 utilisateurs",
     "plan_solo_features": "Toutes les fonctionnalités",
     "plan_cabinet_name": "Cabinet",
     "plan_cabinet_engagements": "Engagements actifs illimités",
-    "plan_cabinet_users": "Jusqu'à 10 utilisateurs",
+    "plan_cabinet_users": "Jusqu'à 6 utilisateurs",
     "plan_cabinet_features": "Tout + soutien prioritaire"
   },
   "Footer": {

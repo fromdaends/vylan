@@ -13,10 +13,19 @@ import {
 function row(
   over: Partial<WorklistRow> & Pick<WorklistRow, "id">,
 ): WorklistRow {
+  // Mirror the loader: derivedStatus re-reads a live ready row as
+  // ready_to_review, otherwise echoes the stored status.
+  const status = over.status ?? "in_progress";
+  const derivedStatus =
+    over.derivedStatus ??
+    (over.readyToReview && (status === "sent" || status === "in_progress")
+      ? "ready_to_review"
+      : status);
   return {
     title: `Engagement ${over.id}`,
     clientName: "Client",
     status: "in_progress",
+    derivedStatus,
     dueDate: null,
     assigneeUserId: null,
     assigneeName: null,
@@ -30,6 +39,11 @@ function row(
     daysSinceClientActivity: null,
     readyToReview: false,
     itemsReadyToReview: 0,
+    flaggedFilesCount: 0,
+    signedCopiesToConfirm: 0,
+    waitingSince: null,
+    waitingDays: null,
+    sittingUnreviewed: false,
     recencyAt: "2026-01-01T00:00:00.000Z",
     archivedAt: null,
     deletedAt: null,
@@ -120,6 +134,48 @@ describe("selectNeedsAttentionRows (Overview block)", () => {
     expect(
       selectNeedsAttentionRows([row({ id: "a" }), row({ id: "b" })]),
     ).toEqual([]);
+  });
+
+  it("2.0 signals each pull a row in: flagged files, signed copy, sitting unreviewed", () => {
+    const rows = [
+      row({ id: "clean" }),
+      row({ id: "flagged", flaggedFilesCount: 2 }),
+      row({ id: "signed", signedCopiesToConfirm: 1 }),
+      row({
+        id: "sitting",
+        sittingUnreviewed: true,
+        waitingSince: "2026-06-01T00:00:00.000Z",
+        waitingDays: 8,
+      }),
+    ];
+    const ids = selectNeedsAttentionRows(rows).map((r) => r.id);
+    expect(ids).toContain("flagged");
+    expect(ids).toContain("signed");
+    expect(ids).toContain("sitting");
+    expect(ids).not.toContain("clean");
+  });
+
+  it("sorts oldest-waiting first; rows with nothing undecided follow by urgency", () => {
+    const rows = [
+      row({ id: "overdue-only", reasons: ["overdue"], attentionScore: 1003 }),
+      row({
+        id: "waited-2d",
+        readyToReview: true,
+        waitingSince: "2026-06-07T00:00:00.000Z",
+      }),
+      row({
+        id: "waited-9d",
+        sittingUnreviewed: true,
+        waitingSince: "2026-05-31T00:00:00.000Z",
+      }),
+      row({ id: "stale-only", reasons: ["stale"], attentionScore: 130 }),
+    ];
+    expect(selectNeedsAttentionRows(rows).map((r) => r.id)).toEqual([
+      "waited-9d",
+      "waited-2d",
+      "overdue-only",
+      "stale-only",
+    ]);
   });
 });
 

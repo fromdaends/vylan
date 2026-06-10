@@ -14,6 +14,7 @@ import {
   DUPLICATE_REASON,
   type DuplicateCandidate,
 } from "./duplicates";
+import { BACKFILL_FAILED_SENTINEL } from "@/lib/files/backfill-content-hash";
 
 const cand = (
   id: string,
@@ -53,6 +54,19 @@ describe("findDuplicateOriginalId", () => {
   it("never matches when the new upload has no fingerprint", () => {
     expect(
       findDuplicateOriginalId(null, [cand("a", "h-1", "2026-01-01T00:00:00Z")]),
+    ).toBeNull();
+  });
+
+  it("backfill sentinel rows are inert — they can never match a real hash", () => {
+    // The content-hash backfill marks undownloadable legacy files with a
+    // sentinel instead of NULL. A real upload's hash is 64-hex SHA-256, so a
+    // sentinel candidate must never be reported as its original.
+    const realHash = "a".repeat(64);
+    expect(
+      findDuplicateOriginalId(realHash, [
+        cand("broken", BACKFILL_FAILED_SENTINEL, "2026-01-01T00:00:00Z"),
+        cand("broken2", BACKFILL_FAILED_SENTINEL, "2026-01-02T00:00:00Z"),
+      ]),
     ).toBeNull();
   });
 

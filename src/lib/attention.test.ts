@@ -4,6 +4,7 @@ import {
   attentionScore,
   isReadyToReview,
   isCollectionComplete,
+  deriveEngagementStatus,
 } from "./attention";
 import type { Engagement } from "@/lib/db/engagements";
 import type { RequestItem } from "@/lib/db/request-items";
@@ -278,6 +279,98 @@ describe("isReadyToReview", () => {
     expect(r.itemsPendingRequired).toBe(1);
     expect(isReadyToReview(r)).toBe(false);
   });
+
+  it("false when a REQUIRED item was rejected and awaits the client's replacement", () => {
+    // The accountant sent a file back: the client owes a re-upload, so the
+    // ball is in the client's court even though another file awaits review.
+    const r = computeAttention({
+      engagement: eng(),
+      items: [item({ status: "submitted" }), item({ status: "rejected" })],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(r.itemsRequiredBlocked).toBe(1);
+    expect(isReadyToReview(r)).toBe(false);
+  });
+
+  it("true when every required item is approved (parked until Mark complete)", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "approved" }),
+        item({ status: "na" }),
+        item({ status: "pending", required: false }), // untouched optional
+      ],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(isReadyToReview(r)).toBe(true);
+  });
+
+  it("zero-required engagement: ready once any optional submission awaits a decision", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [
+        item({ status: "submitted", required: false }),
+        item({ status: "pending", required: false }),
+      ],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(isReadyToReview(r)).toBe(true);
+  });
+
+  it("zero-required engagement: NOT ready while nothing awaits a decision", () => {
+    const r = computeAttention({
+      engagement: eng(),
+      items: [item({ status: "pending", required: false })],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(isReadyToReview(r)).toBe(false);
+  });
+});
+
+describe("deriveEngagementStatus (the unified status every surface reads)", () => {
+  const readyAttention = () =>
+    computeAttention({
+      engagement: eng({ status: "in_progress" }),
+      items: [
+        item({ status: "approved" }),
+        item({ status: "approved" }),
+        item({ status: "submitted" }),
+        item({ status: "pending", required: false }),
+        item({ status: "pending", required: false }),
+      ],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+
+  it("re-reads a live engagement as ready_to_review (the David Chen case)", () => {
+    // 3 required all in (2 approved, 1 awaiting decision), 2 optionals
+    // untouched: header pill, table pill, and sidebar must ALL say ready.
+    const a = readyAttention();
+    expect(a.completionPct).toBe(1);
+    expect(deriveEngagementStatus("in_progress", a)).toBe("ready_to_review");
+    expect(deriveEngagementStatus("sent", a)).toBe("ready_to_review");
+  });
+
+  it("keeps the stored status when the client still owes something", () => {
+    const a = computeAttention({
+      engagement: eng({ status: "in_progress" }),
+      items: [item({ status: "submitted" }), item({ status: "pending" })],
+      lastClientActivityAt: NOW.toISOString(),
+      now: NOW,
+    });
+    expect(deriveEngagementStatus("in_progress", a)).toBe("in_progress");
+  });
+
+  it("never overrides draft / complete / cancelled", () => {
+    const a = readyAttention();
+    expect(deriveEngagementStatus("draft", a)).toBe("draft");
+    expect(deriveEngagementStatus("complete", a)).toBe("complete");
+    expect(deriveEngagementStatus("cancelled", a)).toBe("cancelled");
+  });
 });
 
 describe("itemsUploaded + isCollectionComplete (client finished, AI-independent)", () => {
@@ -299,7 +392,7 @@ describe("itemsUploaded + isCollectionComplete (client finished, AI-independent)
     expect(r.itemsUploaded).toBe(4);
   });
 
-  it("fires once the AI has APPROVED every upload — the case isReadyToReview misses", () => {
+  it("fires once the AI has APPROVED every upload (engagement also parks in Ready to review)", () => {
     const r = computeAttention({
       engagement: eng(),
       items: [item({ status: "approved" }), item({ status: "approved" })],
@@ -307,10 +400,12 @@ describe("itemsUploaded + isCollectionComplete (client finished, AI-independent)
       now: NOW,
     });
     expect(r.itemsPendingRequired).toBe(0);
-    expect(r.itemsReadyToReview).toBe(0); // nothing awaiting a decision...
-    expect(isReadyToReview(r)).toBe(false); // ...so the action queue stays quiet
+    expect(r.itemsReadyToReview).toBe(0); // nothing awaiting a per-file decision
+    // Unified status engine: all required approved => stays Ready to review
+    // (with the Mark complete affordance) until the accountant completes it.
+    expect(isReadyToReview(r)).toBe(true);
     expect(r.itemsUploaded).toBe(2);
-    expect(isCollectionComplete(r)).toBe(true); // ...but the client IS done
+    expect(isCollectionComplete(r)).toBe(true); // the client IS done
   });
 
   it("fires even when the AI REJECTED every upload", () => {

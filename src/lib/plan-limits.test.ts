@@ -13,8 +13,10 @@ describe("plan catalog", () => {
   });
 
   it("locks in seat caps per the spec", () => {
-    expect(PLANS.solo.maxUsers).toBe(1);
-    expect(PLANS.cabinet.maxUsers).toBe(10);
+    // Locked tiers (2026-06 autorun): Solo 2 / Cabinet 6 / Cabinet+ 15.
+    expect(PLANS.solo.maxUsers).toBe(2);
+    expect(PLANS.cabinet.maxUsers).toBe(6);
+    expect(PLANS.cabinet_plus.maxUsers).toBe(15);
   });
 
   it("trial gets a soft cap + 5 seats", () => {

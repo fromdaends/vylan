@@ -37,6 +37,10 @@ import {
   useEngagementRowMenu,
   type EngagementLifecycleState,
 } from "@/components/engagements/engagement-row-menu";
+import {
+  engagementStatusVariant,
+  READY_PILL_CLASS,
+} from "@/lib/engagements/status-pill";
 
 export type EngagementStatus =
   | "draft"
@@ -50,6 +54,20 @@ export type WorklistRow = {
   title: string;
   clientName: string;
   status: EngagementStatus;
+  // The unified display status (deriveEngagementStatus in lib/attention):
+  // same as `status` except a live engagement whose checklist puts the ball
+  // in the accountant's court reads "ready_to_review". EVERY status pill
+  // renders this; `status` stays for lifecycle filtering (complete/cancelled).
+  derivedStatus: EngagementStatus | "ready_to_review";
+  // Needs attention 2.0 file-level signals (lib/dashboard/action-signals):
+  // flagged uploads awaiting the accountant's call, returned signed copies
+  // awaiting confirmation, and how long the oldest undecided submission has
+  // been waiting (sittingUnreviewed = past the threshold).
+  flaggedFilesCount: number;
+  signedCopiesToConfirm: number;
+  waitingSince: string | null;
+  waitingDays: number | null;
+  sittingUnreviewed: boolean;
   dueDate: string | null;
   assigneeUserId: string | null;
   assigneeName: string | null;
@@ -334,7 +352,7 @@ export function WorklistTable({
               row={r}
               locale={locale}
               onOptimisticRemoval={removeRow}
-              statusLabel={tStatus(r.status)}
+              statusLabel={tStatus(r.derivedStatus)}
               overdueText={
                 r.reasons.includes("overdue")
                   ? tAttention("overdue_by", { days: r.daysOverdue ?? 0 })
@@ -353,7 +371,9 @@ export function WorklistTable({
                   : null
               }
               readyText={
-                r.readyToReview
+                // All-approved engagements are ready with 0 items awaiting a
+                // decision — the status pill says it; skip a "0 items" badge.
+                r.readyToReview && r.itemsReadyToReview > 0
                   ? tAttention("items_ready", {
                       count: r.itemsReadyToReview,
                     })
@@ -371,14 +391,6 @@ export function WorklistTable({
   );
 }
 
-function statusVariant(
-  status: EngagementStatus,
-): "default" | "secondary" | "outline" | "destructive" {
-  if (status === "complete") return "default";
-  if (status === "cancelled") return "destructive";
-  if (status === "draft") return "outline";
-  return "secondary";
-}
 
 function WorklistRowView({
   row,
@@ -548,8 +560,11 @@ function WorklistRowView({
 
             <TableCell className="px-4 py-3 align-top">
               <Badge
-                variant={statusVariant(row.status)}
-                className="font-normal"
+                variant={engagementStatusVariant(row.derivedStatus)}
+                className={cn(
+                  "font-normal",
+                  row.derivedStatus === "ready_to_review" && READY_PILL_CLASS,
+                )}
               >
                 {statusLabel}
               </Badge>

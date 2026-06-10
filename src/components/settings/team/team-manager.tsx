@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "@/i18n/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
 import {
   UserPlus,
@@ -13,6 +13,7 @@ import {
   Clock,
   Check,
   Lock,
+  Building2,
 } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
@@ -144,26 +145,38 @@ export function TeamManager({
           </p>
         </div>
         {canManage && (
-          <Button
-            type="button"
-            size="sm"
-            disabled={onTrial || seat.atCap}
-            title={
-              onTrial
-                ? t("trial_locked_short")
-                : seat.atCap
-                  ? t("seats_at_cap", { cap: seat.cap ?? 0 })
-                  : undefined
-            }
-            onClick={() => setInviteOpen(true)}
-          >
-            {onTrial ? (
-              <Lock className="size-4" />
-            ) : (
-              <UserPlus className="size-4" />
-            )}
-            {t("invite_button")}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Owner-only shortcut to the existing Firm settings section
+                (Settings > Account: logo, name, brand color, client
+                language). No duplicated form — just a clean jump. Staff never
+                see it, and the settings routes stay owner-gated server-side. */}
+            <Link href="/settings?tab=account">
+              <Button type="button" size="sm" variant="outline">
+                <Building2 className="size-4" />
+                {t("edit_firm")}
+              </Button>
+            </Link>
+            <Button
+              type="button"
+              size="sm"
+              disabled={onTrial || seat.atCap}
+              title={
+                onTrial
+                  ? t("trial_locked_short")
+                  : seat.atCap
+                    ? t("seats_at_cap", { cap: seat.cap ?? 0 })
+                    : undefined
+              }
+              onClick={() => setInviteOpen(true)}
+            >
+              {onTrial ? (
+                <Lock className="size-4" />
+              ) : (
+                <UserPlus className="size-4" />
+              )}
+              {t("invite_button")}
+            </Button>
+          </div>
         )}
       </div>
 

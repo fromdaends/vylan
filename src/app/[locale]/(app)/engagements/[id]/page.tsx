@@ -52,7 +52,12 @@ import {
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { engagementToView } from "@/lib/navigation/active-nav";
 import { viewHref, viewLabelKey } from "@/lib/engagements/views";
-import { computeAttention, isReadyToReview } from "@/lib/attention";
+import {
+  computeAttention,
+  isReadyToReview,
+  deriveEngagementStatus,
+} from "@/lib/attention";
+import { engagementStatusPillClass } from "@/lib/engagements/status-pill";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
@@ -136,10 +141,16 @@ export default async function EngagementDetailPage({
   // Which All-Engagements sub-page this engagement belongs to — drives both the
   // sidebar highlight (via SetEngagementDetailView) and the breadcrumb. Derived
   // the same way the list pages categorize engagements (lifecycle predicates +
-  // readyToReview), so the sidebar always agrees with the lists.
-  const readyToReview = isReadyToReview(
-    computeAttention({ engagement, items, lastClientActivityAt: null }),
-  );
+  // readyToReview), so the sidebar always agrees with the lists. The SAME
+  // attention result also feeds the header's unified status pill, so the pill
+  // and the sidebar bucket can never disagree.
+  const attention = computeAttention({
+    engagement,
+    items,
+    lastClientActivityAt: null,
+  });
+  const readyToReview = isReadyToReview(attention);
+  const derivedStatus = deriveEngagementStatus(engagement.status, attention);
   const view = engagementToView(engagement, { readyToReview });
 
   const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
@@ -186,8 +197,11 @@ export default async function EngagementDetailPage({
             {engagement.title}
           </h1>
           <div className="flex items-center gap-2 mt-2.5 text-sm flex-wrap">
-            <Badge variant={statusVariant(engagement.status)}>
-              {tStatus(engagement.status)}
+            <Badge
+              variant={statusVariant(derivedStatus)}
+              className={engagementStatusPillClass(derivedStatus)}
+            >
+              {tStatus(derivedStatus)}
             </Badge>
             {client && (
               <Link

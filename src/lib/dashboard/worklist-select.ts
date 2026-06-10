@@ -13,16 +13,35 @@ export function selectNeedsAttention(rows: WorklistRow[]): WorklistRow[] {
     .sort((a, b) => b.attentionScore - a.attentionScore);
 }
 
-// Overview "Needs attention" block: broader than selectNeedsAttention — any
-// attention reason (overdue / due soon / quiet) OR ready-to-review. Sorted by
-// attentionScore (which encodes overdue > due_soon > stale; ready-to-review
-// rows score 0 so they sort last — the intended priority), tie-broken by
-// recency so the queue feels current. AI-rejected uploads aren't included here
-// — they surface in the What's-new feed (right rail), so we don't duplicate.
+// Overview "Needs attention" block (2.0): everything that requires the
+// ACCOUNTANT to act, one row per engagement — ready to review, flagged files
+// awaiting a call, a returned signed copy to confirm, submissions sitting
+// unreviewed past the threshold, plus the existing chase signals (overdue /
+// due soon / quiet). The actionable to-do list; What's new stays the passive
+// log.
+//
+// Sort: oldest waiting first — engagements whose undecided submissions have
+// waited longest lead the queue. Rows with nothing undecided (purely
+// overdue/quiet) follow, most urgent first, then freshest.
 export function selectNeedsAttentionRows(rows: WorklistRow[]): WorklistRow[] {
   return rows
-    .filter((r) => r.reasons.length > 0 || r.readyToReview)
+    .filter(
+      (r) =>
+        r.reasons.length > 0 ||
+        r.readyToReview ||
+        r.flaggedFilesCount > 0 ||
+        r.signedCopiesToConfirm > 0 ||
+        r.sittingUnreviewed,
+    )
     .sort((a, b) => {
+      if (a.waitingSince && b.waitingSince) {
+        const t = a.waitingSince.localeCompare(b.waitingSince);
+        if (t !== 0) return t; // older waiting first
+      } else if (a.waitingSince) {
+        return -1;
+      } else if (b.waitingSince) {
+        return 1;
+      }
       if (b.attentionScore !== a.attentionScore) {
         return b.attentionScore - a.attentionScore;
       }
