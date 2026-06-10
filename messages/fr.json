@@ -1648,7 +1648,9 @@
       "upload_failed": "Échec du téléversement. Veuillez réessayer.",
       "db_failed": "Erreur du serveur. Veuillez réessayer.",
       "mark_na_failed": "Impossible de marquer comme non applicable.",
-      "undo_failed": "Impossible d’annuler."
+      "undo_failed": "Impossible d’annuler.",
+      "heic_too_large": "Cette photo dépasse 10 Mo. Reprenez la photo ou choisissez une copie plus légère.",
+      "rate_limited": "Trop de tentatives. Attendez une minute puis réessayez."
     }
   }
 }

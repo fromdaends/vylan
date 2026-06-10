@@ -73,6 +73,70 @@ export function storagePath(parts: {
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/items/${parts.itemId}/${parts.uuid}-${safeName}`;
 }
 
+// Staging area for DIRECT browser uploads (the /api/portal/upload-url →
+// /upload-complete flow). The browser PUTs raw bytes here via a short-lived
+// signed upload URL — bypassing the hosting platform's ~4.5 MB function-body
+// cap — and the complete route then validates, converts (HEIC), and writes
+// the canonical object via storagePath() before deleting the staging copy.
+// Same firm prefix as everything else so the bucket's RLS scoping applies.
+export function stagingUploadPath(parts: {
+  firmId: string;
+  engagementId: string;
+  itemId: string;
+  uuid: string;
+  filename: string;
+}): string {
+  const safeName = parts.filename
+    .replace(/[/\\]/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 120);
+  return `${stagingPrefixForItem(parts)}${parts.uuid}-${safeName}`;
+}
+
+// The prefix every staging object for one checklist item lives under. The
+// complete route REQUIRES the client-echoed path to start with the prefix
+// derived from its own token→item lookup, so a caller can never finalize an
+// object outside the item their magic link grants.
+export function stagingPrefixForItem(parts: {
+  firmId: string;
+  engagementId: string;
+  itemId: string;
+}): string {
+  return `firms/${parts.firmId}/engagements/${parts.engagementId}/items/${parts.itemId}/staging/`;
+}
+
+// Short-lived signed URL the browser PUTs the file to. Service-role: the
+// portal is unauthenticated; the route that calls this has already validated
+// the magic token and generated the path itself.
+export async function createUploadUrl(
+  path: string,
+): Promise<{ signedUrl: string; token: string }> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb.storage
+    .from(BUCKET)
+    .createSignedUploadUrl(path);
+  if (error || !data) throw error ?? new Error("signed_upload_url_failed");
+  return { signedUrl: data.signedUrl, token: data.token };
+}
+
+export async function downloadObject(path: string): Promise<Buffer> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb.storage.from(BUCKET).download(path);
+  if (error || !data) throw error ?? new Error("download_failed");
+  return Buffer.from(await data.arrayBuffer());
+}
+
+// Best-effort delete (staging cleanup). Never throws — an orphaned staging
+// object is harmless and invisible to every reader (nothing references it).
+export async function removeObjectQuiet(path: string): Promise<void> {
+  try {
+    const sb = getServiceRoleSupabase();
+    await sb.storage.from(BUCKET).remove([path]);
+  } catch (e) {
+    console.warn("[storage] staging cleanup failed for", path, e);
+  }
+}
+
 // Storage path for the blank document an accountant uploads to be signed. Sits
 // under the same firm prefix as client uploads (so the firm-scoped bucket RLS
 // applies) but in a `signing/` folder, separate from the client's returned copy.

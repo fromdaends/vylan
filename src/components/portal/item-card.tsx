@@ -23,6 +23,13 @@ type UploadVerdict = {
 const ACCEPT =
   "application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif";
 
+// Mirrors the server's MAX_BYTES (lib/storage). Checked before any network
+// round-trip so an oversize pick gets the translated "larger than 25 MB"
+// message instantly instead of a doomed upload.
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+type UploadResponse = { ok?: boolean; file_id?: string } | null;
+
 // AI runs in the background after the upload response. The verdict usually
 // lands in seconds, but when the immediate run fails (a transient error, a
 // busy queue) the durable fallback is a cron that retries every 2 MINUTES —
@@ -176,6 +183,100 @@ export function ItemCard({
       ? item.description_fr
       : item.description;
 
+  // Preferred upload path: browser → storage DIRECTLY via a signed URL, then
+  // a light finalize call. Exists because the hosting platform caps function
+  // request bodies at ~4.5 MB — far below our 25 MB limit — so phone photos
+  // and scanned PDFs sent through the legacy form route died with a generic
+  // "upload failed". Returns null when the direct path is unavailable
+  // (older deployment, storage hiccup) so the caller can fall back to the
+  // legacy route; THROWS for real answers (too large, bad type, rate limit).
+  async function directUpload(file: File): Promise<UploadResponse | null> {
+    let urlRes: Response;
+    try {
+      urlRes = await fetch("/api/portal/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          item_id: item.id,
+          filename: file.name,
+          mime: file.type,
+          size: file.size,
+        }),
+      });
+    } catch {
+      return null; // network blip — let the legacy path try
+    }
+    if (urlRes.status === 404 && !urlRes.headers.get("content-type")?.includes("json")) {
+      return null; // endpoint doesn't exist yet (deployment skew)
+    }
+    if (!urlRes.ok) {
+      const j = (await urlRes.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      throw new Error(j?.error ?? "upload_failed");
+    }
+    const issued = (await urlRes.json().catch(() => null)) as {
+      signed_url?: string;
+      path?: string;
+    } | null;
+    if (!issued?.signed_url || !issued.path) return null;
+
+    // The bytes go straight to storage — no function in the middle.
+    let put: Response;
+    try {
+      put = await fetch(issued.signed_url, {
+        method: "PUT",
+        headers: {
+          "content-type": file.type || "application/octet-stream",
+        },
+        body: file,
+      });
+    } catch {
+      return null;
+    }
+    if (!put.ok) return null;
+
+    const fin = await fetch("/api/portal/upload-complete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token,
+        item_id: item.id,
+        path: issued.path,
+        filename: file.name,
+        mime: file.type,
+      }),
+    });
+    if (!fin.ok) {
+      const j = (await fin.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      throw new Error(j?.error ?? "upload_failed");
+    }
+    return (await fin.json().catch(() => null)) as UploadResponse;
+  }
+
+  // Legacy single-request path (bytes in the form body). Still the fallback
+  // when the direct flow is unreachable; fine for smaller files.
+  async function legacyUpload(file: File): Promise<UploadResponse> {
+    const fd = new FormData();
+    fd.append("token", token);
+    fd.append("item_id", item.id);
+    fd.append("file", file);
+    const res = await fetch("/api/portal/upload", {
+      method: "POST",
+      body: fd,
+    });
+    if (!res.ok) {
+      const j = (await res.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      throw new Error(j?.error ?? "upload_failed");
+    }
+    return (await res.json().catch(() => null)) as UploadResponse;
+  }
+
   async function uploadFiles(files: FileList) {
     setError(null);
     setAiRejection(null);
@@ -183,26 +284,13 @@ export function ItemCard({
     pollAbortRef.current?.abort();
     setChecking(false);
     for (const file of Array.from(files)) {
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setError("too_large");
+        break;
+      }
       setUploading(true);
       try {
-        const fd = new FormData();
-        fd.append("token", token);
-        fd.append("item_id", item.id);
-        fd.append("file", file);
-        const res = await fetch("/api/portal/upload", {
-          method: "POST",
-          body: fd,
-        });
-        if (!res.ok) {
-          const j = (await res.json().catch(() => null)) as {
-            error?: string;
-          } | null;
-          throw new Error(j?.error ?? "upload_failed");
-        }
-        const body = (await res.json().catch(() => null)) as {
-          ok?: boolean;
-          file_id?: string;
-        } | null;
+        const body = (await directUpload(file)) ?? (await legacyUpload(file));
         // Always count the upload — the file IS saved server-side. The
         // verdict only governs whether we surface a "try again" message
         // on top of that.
