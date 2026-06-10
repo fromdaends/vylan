@@ -55,7 +55,12 @@ export function SearchableSelect({
     <>
       {/* The real form value — Object.fromEntries(formData) reads this. */}
       <input type="hidden" name={name} value={value} />
-      <Popover open={open} onOpenChange={setOpen}>
+      {/* modal: this combobox opens INSIDE the add/edit-client modal dialog,
+          whose scroll lock blocks wheel/touch scrolling on anything portaled
+          outside it — the industry list showed a scrollbar but wouldn't
+          scroll. Modal mode makes the popover manage its own scroll layer,
+          re-enabling scrolling inside the list. */}
+      <Popover open={open} onOpenChange={setOpen} modal>
         <PopoverTrigger asChild>
           <Button
             type="button"
