@@ -3,6 +3,7 @@
 // Twilio; production fills in the secrets.
 
 import twilio from "twilio";
+import { normalizeToE164 } from "@/lib/phone";
 import { redactPhone } from "@/lib/redact";
 
 type SendArgs = {
@@ -26,18 +27,28 @@ export async function sendSms({
 }: SendArgs): Promise<
   { sent: true; sid: string } | { sent: false; reason: string }
 > {
+  // Phones are stored free-form ("514 555-1234"); Twilio only accepts
+  // E.164, so normalize at send time. Checked before the config check so
+  // dev (no Twilio) surfaces bad numbers in the logs too.
+  const to164 = normalizeToE164(to);
+  if (!to164) {
+    console.warn(
+      `[sms] invalid phone number ${redactPhone(to)} — skipping send`,
+    );
+    return { sent: false, reason: "invalid_phone" };
+  }
   const c = client();
   const from = process.env.TWILIO_FROM_NUMBER;
   if (!c || !from) {
     // Redact the phone number so a misconfigured prod doesn't dump
     // client PII into the function logs. See lib/redact for the policy.
     console.warn(
-      `[sms] Twilio not configured — would send to ${redactPhone(to)}: ${body}`,
+      `[sms] Twilio not configured — would send to ${redactPhone(to164)}: ${body}`,
     );
     return { sent: false, reason: "not_configured" };
   }
   try {
-    const msg = await c.messages.create({ to, from, body });
+    const msg = await c.messages.create({ to: to164, from, body });
     return { sent: true, sid: msg.sid };
   } catch (e) {
     console.error("[sms] Twilio error:", e);
