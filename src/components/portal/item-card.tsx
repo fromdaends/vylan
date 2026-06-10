@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Upload, Check, FileCheck2, FileText, X, RotateCcw, AlertTriangle, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -22,11 +23,27 @@ type UploadVerdict = {
 const ACCEPT =
   "application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif";
 
-// AI runs in the background after the upload response. Poll for up to
-// ~30s so even slow PDFs surface the verdict inline. If the AI takes
-// longer (rare), the cron + retry email pick it up.
-const POLL_INTERVAL_MS = 1500;
-const POLL_TIMEOUT_MS = 30_000;
+// AI runs in the background after the upload response. The verdict usually
+// lands in seconds, but when the immediate run fails (a transient error, a
+// busy queue) the durable fallback is a cron that retries every 2 MINUTES —
+// so a hard 30s poll cutoff meant the verdict sometimes appeared only after
+// a manual page reload. Poll fast while it's likely quick, then back off and
+// keep listening for up to 10 minutes (covers several cron retries) before
+// going quiet. The schedule is exported as a pure function for tests.
+const POLL_PHASES: { untilMs: number; intervalMs: number }[] = [
+  { untilMs: 30_000, intervalMs: 1_500 },
+  { untilMs: 2 * 60_000, intervalMs: 5_000 },
+  { untilMs: 10 * 60_000, intervalMs: 15_000 },
+];
+
+// The wait before the next verdict poll given how long we've been polling,
+// or null once it's time to give up (the email/SMS fallback covers the rest).
+export function pollIntervalFor(elapsedMs: number): number | null {
+  for (const phase of POLL_PHASES) {
+    if (elapsedMs < phase.untilMs) return phase.intervalMs;
+  }
+  return null;
+}
 
 export function ItemCard({
   token,
@@ -55,6 +72,7 @@ export function ItemCard({
   onStatusChange: (s: RequestItemStatus) => void;
 }) {
   const t = useTranslations("Portal");
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,7 +115,8 @@ export function ItemCard({
     const startedAt = Date.now();
     try {
       while (!ctl.signal.aborted) {
-        if (Date.now() - startedAt >= POLL_TIMEOUT_MS) break;
+        const interval = pollIntervalFor(Date.now() - startedAt);
+        if (interval == null) break; // gave up — the email/SMS fallback covers it
         try {
           const res = await fetch("/api/portal/upload-status", {
             method: "POST",
@@ -124,20 +143,26 @@ export function ItemCard({
                       body.verdict.issue_summary_fr;
                 setAiRejection(msg || t("ai_rejected_generic"));
               }
+              // Re-pull the server-rendered portal data so EVERYTHING the
+              // verdict touched (item status, file states, progress, banners)
+              // updates in place — no manual reload. The portal page is
+              // force-dynamic, so refresh() refetches for real. Client state
+              // (this card's banners, scroll) is preserved.
+              if (!ctl.signal.aborted) router.refresh();
               break;
             }
           }
-          // Non-OK responses (404 on a deleted file, 429 on rate limit,
-          // etc.) just abort the poll silently — the email/SMS fallback
-          // still works.
-          else if (res.status === 404 || res.status === 429) {
+          // A 404 means the file is gone (deleted) — stop. A rate-limited
+          // response (429) is transient: keep waiting, the next attempt is
+          // already on a slower schedule.
+          else if (res.status === 404) {
             break;
           }
         } catch (e) {
           if ((e as Error).name === "AbortError") return;
-          // Network blip — wait and retry until timeout.
+          // Network blip — wait and retry until the schedule gives up.
         }
-        await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+        await new Promise((r) => setTimeout(r, interval));
       }
     } finally {
       if (!ctl.signal.aborted) setChecking(false);
