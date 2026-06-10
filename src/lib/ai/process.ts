@@ -138,13 +138,14 @@ export async function processClassifyJob(
     })
     .eq("id", file.id);
 
-  // Auto-name (migration 0280): when the classifier is confident, give the file
-  // a clean, human name (e.g. "T4 - 2024 - Hydro-Quebec.pdf") so the accountant
-  // isn't staring at "IMG_2931.pdf". null when unsure → callers fall back to the
-  // original. Recomputed on every (re)classification so it tracks the latest
-  // verdict. English short label (slip codes like T4/RL-1 are identical FR/EN;
-  // only a few descriptive types differ) keeps the stored name deterministic
-  // without an extra locale lookup.
+  // Auto-name (migration 0280): give the file a clean, human name (e.g.
+  // "T4 - 2024 - Hydro-Quebec.pdf") so the accountant isn't staring at
+  // "IMG_2931.pdf". EVERY classified file gets one — wrong or unidentifiable
+  // documents fall back to a generic "Document - …" built from whatever
+  // fields were read. Recomputed on every (re)classification so it tracks
+  // the latest verdict. English short label (slip codes like T4/RL-1 are
+  // identical FR/EN; only a few descriptive types differ) keeps the stored
+  // name deterministic without an extra locale lookup.
   //
   // Deliberately a SEPARATE, best-effort write: if the display_name column
   // isn't there yet (0280 not applied to this environment), the core

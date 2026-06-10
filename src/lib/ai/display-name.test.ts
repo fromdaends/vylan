@@ -68,39 +68,81 @@ describe("buildDisplayName", () => {
     expect(buildDisplayName(base, "x.pdf")).toBe("T4.pdf");
   });
 
-  it("returns null (keep original) for unknown / other / null types", () => {
+  // Every file gets renamed — even ones the AI can't identify or flags as
+  // wrong. When the TYPE can't be trusted, the name falls back to the
+  // generic "Document" label built from whatever fields were read.
+  it("renames unknown / other / null types with the generic label", () => {
     expect(
       buildDisplayName({ documentType: "unknown", confidence: 0.99 }, "x.pdf"),
-    ).toBeNull();
-    // "other" is the freeform catch-all — a generic "Other - …" name is worse
-    // than the client's filename, so keep the original.
+    ).toBe("Document.pdf");
     expect(
-      buildDisplayName({ documentType: "other", confidence: 0.99, extractedYear: 2024 }, "x.pdf"),
-    ).toBeNull();
+      buildDisplayName(
+        { documentType: "other", confidence: 0.99, extractedYear: 2024 },
+        "x.pdf",
+      ),
+    ).toBe("Document - 2024.pdf");
     expect(
       buildDisplayName({ documentType: null, confidence: 0.99 }, "x.pdf"),
-    ).toBeNull();
+    ).toBe("Document.pdf");
   });
 
-  it("returns null when confidence is below the threshold", () => {
+  it("uses extracted fields in the generic name when available", () => {
+    expect(
+      buildDisplayName(
+        {
+          documentType: "unknown",
+          confidence: 0.2,
+          extractedYear: 2024,
+          issuerName: "Desjardins",
+        },
+        "IMG_4412.jpeg",
+      ),
+    ).toBe("Document - 2024 - Desjardins.jpeg");
+    expect(
+      buildDisplayName(
+        { documentType: "unknown", confidence: null, partyName: "Marie Tremblay" },
+        "scan 3.pdf",
+      ),
+    ).toBe("Document - Marie Tremblay.pdf");
+  });
+
+  it("falls back to the generic label (not the guessed type) below the confidence threshold", () => {
+    // A 40%-sure "t4" must NOT be named "T4 - …" — confidently wrong is
+    // worse than vague. But it still gets renamed.
     expect(
       buildDisplayName({ documentType: "t4", confidence: 0.4, extractedYear: 2024 }, "x.pdf"),
-    ).toBeNull();
+    ).toBe("Document - 2024.pdf");
     expect(
       buildDisplayName({ documentType: "t4", confidence: null }, "x.pdf"),
-    ).toBeNull();
+    ).toBe("Document.pdf");
   });
 
-  it("returns null for a code the catalog doesn't know", () => {
+  it("falls back to the generic label for a code the catalog doesn't know", () => {
     expect(
       buildDisplayName({ documentType: "not_a_real_code", confidence: 0.99 }, "x.pdf"),
-    ).toBeNull();
+    ).toBe("Document.pdf");
+  });
+
+  it("keeps the generic name extension-less when the original had none", () => {
+    expect(
+      buildDisplayName({ documentType: "unknown", confidence: 0 }, "scan"),
+    ).toBe("Document");
   });
 
   it("works without an extension on the original", () => {
     expect(
       buildDisplayName({ ...base, extractedYear: 2024 }, "scan"),
     ).toBe("T4 - 2024");
+  });
+
+  it("trims a trailing period off the issuer so the extension doesn't double-dot", () => {
+    // Found by the live E2E run: "Maple Tech Inc." + ".png" → "Inc..png".
+    expect(
+      buildDisplayName(
+        { ...base, extractedYear: 2024, issuerName: "Maple Tech Inc." },
+        "IMG_2931.PNG",
+      ),
+    ).toBe("T4 - 2024 - Maple Tech Inc.png");
   });
 
   it("sanitizes path separators / reserved chars out of the issuer", () => {
