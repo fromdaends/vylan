@@ -1,48 +1,19 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from "react";
+import { useState, type ReactNode } from "react";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
-
-const STORAGE_KEY = "vylan:needs-attention-collapsed";
-const COLLAPSE_EVENT = "vylan:needs-attention-collapsed-changed";
-
-// Persisted collapse state read through an external store (same pattern as the
-// sidebar collapse) so there's no setState-in-effect and it stays in sync
-// across tabs. The toggle writes localStorage + dispatches the event below.
-function subscribe(callback: () => void) {
-  window.addEventListener(COLLAPSE_EVENT, callback);
-  window.addEventListener("storage", callback);
-  return () => {
-    window.removeEventListener(COLLAPSE_EVENT, callback);
-    window.removeEventListener("storage", callback);
-  };
-}
-
-function getSnapshot(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEY) === "true";
-  } catch {
-    return false;
-  }
-}
-
-// Expanded on the server + first client paint (so hydration matches); the
-// stored preference is applied immediately after.
-function getServerSnapshot(): boolean {
-  return false;
-}
 
 // Collapsible shell for the Overview "Needs attention" block. Keeps the
 // accent-tinted panel + an always-visible header (warning icon + title + count
 // badge + optional "View all"); the body (the rows, passed as children) slides
-// open/closed via the grid-rows technique used elsewhere in the app. Default
-// EXPANDED — it's the most useful block on the page, so collapsing is opt-in.
+// open/closed via the grid-rows technique used elsewhere in the app.
+//
+// ALWAYS opens EXPANDED on page load — it's the most useful block on the page.
+// The toggle still lets the user close it for the current view, but the choice
+// is deliberately NOT persisted: an old saved "collapsed" preference used to
+// keep the block shut on every load, which buried the to-do list. (The old
+// localStorage key "vylan:needs-attention-collapsed" is simply ignored now.)
 export function NeedsAttentionCollapsible({
   title,
   count,
@@ -54,31 +25,9 @@ export function NeedsAttentionCollapsible({
   viewAll?: ReactNode;
   children: ReactNode;
 }) {
-  const collapsed = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getServerSnapshot,
-  );
+  const [collapsed, setCollapsed] = useState(false);
   const open = !collapsed;
-  // Gate the height transition until after mount so restoring a collapsed
-  // state snaps shut instead of animating closed on every page load.
-  const [animate, setAnimate] = useState(false);
   const bodyId = "needs-attention-body";
-
-  useEffect(() => {
-    const raf = window.requestAnimationFrame(() => setAnimate(true));
-    return () => window.cancelAnimationFrame(raf);
-  }, []);
-
-  const toggle = () => {
-    const next = !collapsed;
-    try {
-      localStorage.setItem(STORAGE_KEY, String(next));
-    } catch {
-      // localStorage unavailable (private mode / blocked) — non-fatal.
-    }
-    window.dispatchEvent(new Event(COLLAPSE_EVENT));
-  };
 
   return (
     <section
@@ -88,7 +37,7 @@ export function NeedsAttentionCollapsible({
       <div className="flex items-center justify-between gap-3">
         <button
           type="button"
-          onClick={toggle}
+          onClick={() => setCollapsed((c) => !c)}
           aria-expanded={open}
           aria-controls={bodyId}
           className="-mx-2 -my-1 flex min-w-0 items-center gap-2 rounded-lg px-2 py-1 text-base font-semibold tracking-tight text-foreground transition-colors hover:bg-accent/10"
@@ -113,13 +62,11 @@ export function NeedsAttentionCollapsible({
         {viewAll}
       </div>
 
+      {/* Always mounts open, so the transition only ever runs on a real user
+          toggle — no snap-shut gating needed anymore. */}
       <div
         id={bodyId}
-        className={cn(
-          "grid",
-          animate &&
-            "transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
-        )}
+        className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
         style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
       >
         <div className="overflow-hidden">{children}</div>
