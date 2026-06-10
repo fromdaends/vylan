@@ -258,13 +258,13 @@ export function ItemCard({
     }
 
     // Finalize: reassemble + run the pipeline. Retried on network drops and
-    // 5xx. If a retry reports the staging parts missing, the previous
-    // attempt very likely completed server-side (it deletes the parts) and
-    // its response got lost — refresh the page data so the truth shows,
-    // instead of a false error over a successful upload.
+    // 5xx (the server keeps the staged parts on transient failures and is
+    // idempotent via a success marker, so retrying is always safe — a retry
+    // after a lost success response returns the SAME success). missing_file
+    // is therefore a REAL failure now, never a phantom success.
     let fin: Response | null = null;
-    for (let attempt = 0; attempt < 3 && !fin; attempt++) {
-      if (attempt > 0) await sleep(400 * attempt);
+    for (let attempt = 0; attempt < 4 && !fin; attempt++) {
+      if (attempt > 0) await sleep(500 * attempt);
       try {
         fin = await fetch("/api/portal/upload-complete", {
           method: "POST",
@@ -278,7 +278,7 @@ export function ItemCard({
             mime: file.type,
           }),
         });
-        if (!fin.ok && fin.status >= 500 && attempt < 2) fin = null; // retry 5xx
+        if (!fin.ok && fin.status >= 500 && attempt < 3) fin = null; // retry 5xx
       } catch {
         fin = null; // network drop — retry
       }
@@ -288,10 +288,6 @@ export function ItemCard({
       const j = (await fin.json().catch(() => null)) as {
         error?: string;
       } | null;
-      if (j?.error === "missing_file") {
-        router.refresh();
-        return {};
-      }
       throw new Error(j?.error ?? "upload_failed");
     }
     return (await fin.json().catch(() => null)) as UploadResponse;

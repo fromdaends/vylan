@@ -14,6 +14,7 @@ import {
   stagingPartPath,
   downloadObject,
   removeObjectQuiet,
+  uploadObject,
 } from "@/lib/storage";
 import {
   checkRateLimit,
@@ -142,54 +143,101 @@ export async function POST(request: NextRequest) {
     stagingPaths = [p];
   }
 
-  try {
-    // Download in order and reassemble. A missing part means the upload
-    // never finished (or a lost-response retry already consumed it).
-    let bytes: Buffer;
-    try {
-      const parts: Buffer[] = [];
-      for (const p of stagingPaths) {
-        parts.push(await downloadObject(p));
-      }
-      bytes = parts.length === 1 ? parts[0] : Buffer.concat(parts);
-    } catch {
-      return NextResponse.json({ error: "missing_file" }, { status: 400 });
-    }
-
-    // Enforce the REAL limits on the REAL bytes — client-declared sizes were
-    // only pre-checks. Oversize/empty assemblies are deleted on the spot
-    // (the finally below).
-    if (bytes.length === 0) {
-      return NextResponse.json({ error: "empty_file" }, { status: 400 });
-    }
-    if (bytes.length > MAX_BYTES) {
-      return NextResponse.json({ error: "too_large" }, { status: 413 });
-    }
-    if (isHeic(mime) && bytes.length > MAX_HEIC_INPUT_BYTES) {
-      return NextResponse.json({ error: "heic_too_large" }, { status: 413 });
-    }
-
-    const result = await ingestPortalUpload({
-      bytes,
-      declaredMime: mime,
-      originalFilename: truncateFilename(filename),
-      item,
-      engagement,
-      uploadedByIp: ipForDb,
-    });
-    if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: 500 });
-    }
-    return NextResponse.json({
-      ok: true,
-      file_id: result.fileId,
-      ...(result.duplicate ? { duplicate: true } : {}),
-    });
-  } finally {
-    // The canonical object (written by ingest) is what the app reads; the
-    // staging copies are dead weight on every outcome.
+  const cleanupStaging = async () => {
     for (const p of stagingPaths) {
       await removeObjectQuiet(p);
     }
+  };
+
+  // Idempotency marker: written on success BEFORE the parts are deleted. A
+  // finalize RETRY whose response was lost (flaky phone networks drop
+  // responses after the server already committed) finds the parts gone but
+  // the marker present, and returns the original success instead of a false
+  // "missing_file" — without this, the first ship of the chunked flow showed
+  // a phantom "uploaded" state client-side while the accountant saw nothing.
+  const markerPath = partsMode
+    ? `${stagingPrefixForItem(scope)}${uploadId as string}/done`
+    : null;
+
+  // Download in order and reassemble. Parts are KEPT on transient failures
+  // (a retry must be able to succeed); they are only deleted on success or
+  // on terminal validation rejections where a retry would be pointless.
+  let bytes: Buffer;
+  try {
+    const parts: Buffer[] = [];
+    for (const p of stagingPaths) {
+      parts.push(await downloadObject(p));
+    }
+    bytes = parts.length === 1 ? parts[0] : Buffer.concat(parts);
+  } catch {
+    // Nothing staged. If the success marker exists, a previous attempt
+    // already finished the job — return that success (idempotent retry).
+    if (markerPath) {
+      try {
+        const fileId = (await downloadObject(markerPath)).toString("utf8");
+        if (fileId) {
+          return NextResponse.json({ ok: true, file_id: fileId });
+        }
+      } catch {
+        // no marker either — genuinely nothing was uploaded
+      }
+    }
+    return NextResponse.json({ error: "missing_file" }, { status: 400 });
   }
+
+  // Enforce the REAL limits on the REAL bytes — client-declared sizes were
+  // only pre-checks. These rejections are terminal: retrying the same parts
+  // gives the same answer, so the staging is deleted on the spot.
+  if (bytes.length === 0) {
+    await cleanupStaging();
+    return NextResponse.json({ error: "empty_file" }, { status: 400 });
+  }
+  if (bytes.length > MAX_BYTES) {
+    await cleanupStaging();
+    return NextResponse.json({ error: "too_large" }, { status: 413 });
+  }
+  if (isHeic(mime) && bytes.length > MAX_HEIC_INPUT_BYTES) {
+    await cleanupStaging();
+    return NextResponse.json({ error: "heic_too_large" }, { status: 413 });
+  }
+
+  const result = await ingestPortalUpload({
+    bytes,
+    declaredMime: mime,
+    originalFilename: truncateFilename(filename),
+    item,
+    engagement,
+    uploadedByIp: ipForDb,
+  });
+  if (!result.ok) {
+    // Transient server-side failure: KEEP the parts so the client's retry
+    // has something to finalize.
+    return NextResponse.json({ error: result.error }, { status: 500 });
+  }
+
+  // Success: write the idempotency marker, then clear the parts. The tiny
+  // marker object stays behind (a few bytes, invisible to every reader) so
+  // late duplicate retries keep resolving to this same success.
+  if (markerPath) {
+    try {
+      await uploadObject({
+        path: markerPath,
+        body: Buffer.from(result.fileId, "utf8"),
+        // The bucket's allowed_mime_types list has no text type, so the
+        // marker borrows an allowed one. Nothing ever renders this object;
+        // only the retry path above reads its bytes.
+        contentType: "application/pdf",
+      });
+    } catch {
+      // marker is best-effort; worst case a lost-response retry sees
+      // missing_file, same as before
+    }
+  }
+  await cleanupStaging();
+
+  return NextResponse.json({
+    ok: true,
+    file_id: result.fileId,
+    ...(result.duplicate ? { duplicate: true } : {}),
+  });
 }
