@@ -48,12 +48,13 @@ export function toStrictSchema(node: unknown): unknown {
   return node;
 }
 
-// Reasoning effort. "medium" was stable but occasionally ran long enough on
-// Vercel to exceed the 60s function limit, leaving uploads stuck on
-// "Analyzing…". "low" is fast (~5-15s) and bounded — and legible-read accuracy
-// comes mostly from normalizing images (webp→jpeg), not from heavy reasoning —
-// so default to "low" for reliable, timely analysis. Tunable via
-// OPENAI_REASONING_EFFORT (minimal | medium | high) without a code change.
+// Reasoning effort. "low" is the default and is fast (~5-15s). The big wins for
+// reading fine detail come from full-resolution images (MAX_IMAGE_EDGE in
+// classify.ts) + the strong obscured-values prompt — NOT from heavy reasoning —
+// so low keeps cost and latency down without giving up the detection. If subtle
+// cases still slip through, raise to "medium" or "high" via OPENAI_REASONING_EFFORT
+// (more thorough, but more tokens/$ and slower; bounded by the 40s client timeout
+// above + the 15-minute cron retry).
 const REASONING_EFFORT =
   (process.env.OPENAI_REASONING_EFFORT?.trim() as
     | "minimal"
