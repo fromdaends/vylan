@@ -481,6 +481,84 @@ describe("parseClassification — unreadable owner rule", () => {
     expect(out?.usability.usable).toBe(true);
     expect(out?.party_name).toBe("Sarah Fielding");
   });
+});
+
+describe("parseClassification — obscured key-values rule", () => {
+  const base = {
+    document_type: "other",
+    confidence: 0.95,
+    extracted_year: null,
+    extracted_amount_or_total: null,
+    looks_correct: true,
+    issue_if_any: null,
+    party_name: "Zachary Thresh",
+    owner_identifiable: true,
+  };
+
+  it("forces an unusable verdict when the key numbers are blacked out (the void-cheque case)", () => {
+    // The exact failure: a clean void cheque whose account number is scribbled
+    // out — owner readable, quality 'looks good', but key_values_obscured.
+    const out = parseClassification({
+      ...base,
+      key_values_obscured: true,
+      usable: true,
+      usability_confidence: 0.9,
+      primary_issue: null,
+      all_issues: [],
+      issue_summary_fr: "",
+      issue_summary_en: "",
+    });
+    expect(out?.usability.usable).toBe(false);
+    expect(out?.usability.primary_issue).toBe("key_fields_obscured");
+    expect(out?.usability.all_issues).toContain("key_fields_obscured");
+    // above the 0.80 auto-act threshold so it auto-bounces to the client
+    expect(out?.usability.confidence).toBeGreaterThanOrEqual(0.85);
+    // a client-facing message is always present, about the numbers (no jargon)
+    expect(out?.usability.issue_summary_en).toMatch(/numbers/i);
+    expect(out?.usability.issue_summary_fr).not.toBe("");
+  });
+
+  it("keeps a worse primary issue but still adds key_fields_obscured", () => {
+    const out = parseClassification({
+      ...base,
+      key_values_obscured: true,
+      usable: false,
+      usability_confidence: 0.95,
+      primary_issue: "text_unreadable",
+      all_issues: ["text_unreadable"],
+      issue_summary_en: "Too blurry to read.",
+      issue_summary_fr: "Trop floue.",
+    });
+    expect(out?.usability.primary_issue).toBe("text_unreadable");
+    expect(out?.usability.all_issues).toEqual(
+      expect.arrayContaining(["text_unreadable", "key_fields_obscured"]),
+    );
+    // an existing client message is preserved, not overwritten
+    expect(out?.usability.issue_summary_en).toBe("Too blurry to read.");
+  });
+
+  it("leaves the verdict untouched when key values are readable", () => {
+    const out = parseClassification({
+      ...base,
+      key_values_obscured: false,
+      usable: true,
+      usability_confidence: 0.9,
+      primary_issue: null,
+      all_issues: [],
+      issue_summary_fr: "",
+      issue_summary_en: "",
+    });
+    expect(out?.usability.usable).toBe(true);
+  });
+
+  it("does not over-reject when the signal is absent (fail-safe)", () => {
+    const out = parseClassification({
+      ...base,
+      usable: true,
+      usability_confidence: 0.9,
+    });
+    expect(out?.usability.usable).toBe(true);
+  });
 
   it("rejects when no owner name is extracted, even if owner_identifiable is true", () => {
     // The model can contradict itself — claim the owner is identifiable while

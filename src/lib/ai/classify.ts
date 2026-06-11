@@ -200,6 +200,11 @@ const CLASSIFY_TOOL = {
         description:
           "Can you clearly READ the name of the person or business this document is about (employee, recipient, taxpayer, account holder, or company)? Return false if that name is missing, blank, covered, blacked out, redacted, scribbled over, or otherwise not clearly legible. A document whose owner cannot be identified must be treated as unusable.",
       },
+      key_values_obscured: {
+        type: "boolean",
+        description:
+          "Is ANY of the document's DEFINING numbers/values blacked out, scribbled over, taped/whited out, redacted, covered, cut off, or otherwise unreadable — e.g. the bank ACCOUNT / transit / institution number on a void cheque or direct-deposit form, the account number or balances on a statement, the box amounts on a tax slip, the figures on an assessment? Return true even if the rest of the page is perfectly clear and even if the client redacted it deliberately. Do NOT return true for incidental marks that don't touch the document's own key values. A document whose defining numbers are obscured must be treated as unusable.",
+      },
       account_or_period: {
         type: ["string", "null"],
         description:
@@ -292,6 +297,7 @@ const CLASSIFY_TOOL = {
       "issuer_name",
       "party_name",
       "owner_identifiable",
+      "key_values_obscured",
       "account_or_period",
       "form_identifier",
       "amounts",
@@ -446,7 +452,7 @@ clearly readable. Mark it unusable if ANY of the following are true:
 If the document is borderline (mildly blurry but readable), prefer USABLE.
 Only mark UNUSABLE if a human accountant would clearly reject it.
 
-IDENTITY IS THE ONE HARD EXCEPTION to that leniency. You must be able to read
+IDENTITY IS A HARD EXCEPTION to that leniency. You must be able to read
 the name of the person or business the document is about. Set owner_identifiable
 to false whenever that name is missing, blank, covered, blacked out, redacted,
 or scribbled over. When owner_identifiable is false you MUST also set
@@ -454,6 +460,21 @@ usable=false, primary_issue=key_fields_obscured, set party_name to null (do not
 describe the redaction in party_name), and use a usability_confidence of at
 least 0.85 — a document whose owner cannot be confirmed is never acceptable,
 even if everything else on it is perfectly legible.
+
+OBSCURED KEY NUMBERS ARE THE SECOND HARD EXCEPTION. A document exists to convey
+specific values, and if those are hidden the document is worthless no matter how
+clean the rest of the page is. A void cheque or direct-deposit form exists to
+convey the bank ACCOUNT, TRANSIT, and INSTITUTION numbers; a bank or credit-card
+statement its account number and balances; a tax slip its box amounts; a Notice
+of Assessment its figures. Set key_values_obscured to true whenever ANY of those
+DEFINING numbers is blacked out, scribbled over, taped or whited out, redacted,
+covered, cut off, or otherwise unreadable — EVEN IF everything else is perfectly
+legible, and EVEN IF the client clearly redacted it on purpose to "protect"
+their information. When key_values_obscured is true you MUST also set
+usable=false, primary_issue=key_fields_obscured, and a usability_confidence of
+at least 0.85. A void cheque with a blacked-out account number is useless and
+must be sent back. (Do NOT trip this for incidental marks that don't touch the
+document's own defining values.)
 
 For financial statements (trial balance, income statement, balance sheet,
 general ledger), the owner is the COMPANY named in the header — read it into
@@ -651,6 +672,13 @@ export function parseClassification(
   const ownerUnreadable =
     hasOwnerSignal && (raw.owner_identifiable === false || partyName === null);
 
+  // Hard key-values rule (see withObscuredKeyValues): a document whose DEFINING
+  // numbers are blacked out / redacted / unreadable is unusable, however clean
+  // the rest is. Like the owner rule, only enforced when the model returned the
+  // signal — older responses keep prior behavior, so a usable verdict is never
+  // silently flipped.
+  const keyValuesObscured = raw.key_values_obscured === true;
+
   return {
     document_type: (KNOWN_DOC_TYPES as string[]).includes(doc)
       ? (doc as DocType)
@@ -684,9 +712,15 @@ export function parseClassification(
       typeof raw.issue_if_any === "string" && raw.issue_if_any.trim() !== ""
         ? raw.issue_if_any.trim()
         : null,
-    usability: ownerUnreadable
-      ? withUnreadableOwner(parseUsability(raw))
-      : parseUsability(raw),
+    // Both hard rules force the same shape (unusable + key_fields_obscured +
+    // confidence floor); they differ only in the client message. Key-values
+    // first so a void cheque with a blacked-out account number reads "your
+    // numbers are hidden", not "we couldn't read the name".
+    usability: keyValuesObscured
+      ? withObscuredKeyValues(parseUsability(raw))
+      : ownerUnreadable
+        ? withUnreadableOwner(parseUsability(raw))
+        : parseUsability(raw),
   };
 }
 
@@ -751,13 +785,18 @@ function parseUsability(raw: Record<string, unknown>): UsabilityVerdict {
   };
 }
 
-// Hard rule: a document whose owner cannot be identified (name missing, covered,
-// blacked out, or redacted) is never usable — Vylan can't confirm whose document
-// it is. The prompt tells the model to flag this, but we ALSO enforce it here so
-// a redacted identity can never slip through as "usable". We surface it above the
-// auto-act threshold (so it routes like any other firm-controlled auto-reject)
-// with a clear, client-facing fallback message when the model didn't write one.
-function withUnreadableOwner(v: UsabilityVerdict): UsabilityVerdict {
+// Force an "unusable — key fields obscured" verdict, surfaced ABOVE the auto-act
+// threshold so it routes like any other firm-controlled auto-reject, adding the
+// key_fields_obscured issue and a client-facing fallback message when the model
+// didn't write one. Shared core of the two hard rules below (identity + key
+// values), which differ only in their fallback wording. The prompt tells the
+// model to flag these, but we ALSO enforce here so a redacted document can never
+// slip through as "usable".
+function forceFieldsObscured(
+  v: UsabilityVerdict,
+  fallbackEn: string,
+  fallbackFr: string,
+): UsabilityVerdict {
   const all_issues: UsabilityIssue[] = v.all_issues.includes(
     "key_fields_obscured",
   )
@@ -768,13 +807,31 @@ function withUnreadableOwner(v: UsabilityVerdict): UsabilityVerdict {
     confidence: Math.max(v.confidence, USABILITY_CONFIDENCE_THRESHOLD + 0.05),
     primary_issue: v.primary_issue ?? "key_fields_obscured",
     all_issues,
-    issue_summary_en:
-      v.issue_summary_en ||
-      "We couldn't read the name on this document, so we can't confirm whose it is. Please re-upload a copy with the name fully visible.",
-    issue_summary_fr:
-      v.issue_summary_fr ||
-      "Nous n'avons pas pu lire le nom sur ce document, donc nous ne pouvons pas confirmer à qui il appartient. Veuillez téléverser une copie où le nom est entièrement visible.",
+    issue_summary_en: v.issue_summary_en || fallbackEn,
+    issue_summary_fr: v.issue_summary_fr || fallbackFr,
   };
+}
+
+// Hard rule #1: a document whose owner cannot be identified (name missing,
+// covered, blacked out, or redacted) is never usable — Vylan can't confirm
+// whose document it is.
+function withUnreadableOwner(v: UsabilityVerdict): UsabilityVerdict {
+  return forceFieldsObscured(
+    v,
+    "We couldn't read the name on this document, so we can't confirm whose it is. Please re-upload a copy with the name fully visible.",
+    "Nous n'avons pas pu lire le nom sur ce document, donc nous ne pouvons pas confirmer à qui il appartient. Veuillez téléverser une copie où le nom est entièrement visible.",
+  );
+}
+
+// Hard rule #2: a document whose DEFINING numbers are blacked out / redacted /
+// unreadable (a void cheque's account number, a statement's balances, a slip's
+// box amounts) is useless however clean the rest is.
+function withObscuredKeyValues(v: UsabilityVerdict): UsabilityVerdict {
+  return forceFieldsObscured(
+    v,
+    "Some of the key numbers on this document are blacked out or unreadable, so we can't use it. Please re-upload a copy with all the numbers fully visible.",
+    "Certains chiffres importants de ce document sont masqués ou illisibles, donc nous ne pouvons pas l'utiliser. Veuillez téléverser une copie où tous les chiffres sont entièrement visibles.",
+  );
 }
 
 // Fetch uploaded file bytes from Supabase storage by signed-URL fetch.
