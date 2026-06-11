@@ -51,6 +51,39 @@ type FileRow = {
 // in src/lib/ai/usability.ts, change this too.
 const USABILITY_CONFIDENCE_THRESHOLD = 0.8;
 
+// Pure decision: has the AI verdict fully settled, or should the client keep
+// polling? Exported for tests. "Settled" needs two things:
+//   1. The classifier actually ran (wrote a classification or usability) — OR
+//      the file is already terminally rejected. The ai_rejected escape hatch
+//      matters because a MALFORMED AI read can leave ai_classification AND
+//      ai_usability null while the router still flips ai_rejected=true; without
+//      it the client would poll for the full 10 minutes and never resolve.
+//   2. The router won't still add an auto-reject banner we'd miss. The router
+//      only writes (ai_rejected + reason) when the doc is unusable + confident
+//      + the firm has auto-reject on; in that one combination we wait until
+//      ai_rejected lands so the banner isn't missed by a reload-less client.
+export function isVerdictSettled(
+  f: {
+    ai_classification: string | null;
+    ai_usability: { usable?: unknown; confidence?: unknown } | null;
+    ai_rejected: boolean | null;
+  },
+  firmAutoRejectOn: boolean,
+): boolean {
+  const u = f.ai_usability ?? {};
+  const usable = u.usable !== false; // true or unknown → treat as usable
+  const confident =
+    typeof u.confidence === "number" &&
+    u.confidence >= USABILITY_CONFIDENCE_THRESHOLD;
+  const routerWillSkipWrites = usable || !confident || !firmAutoRejectOn;
+  const aiRan =
+    f.ai_classification !== null ||
+    f.ai_usability !== null ||
+    f.ai_rejected === true;
+  const routerStillPending = !routerWillSkipWrites && f.ai_rejected !== true;
+  return aiRan && !routerStillPending;
+}
+
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const token = body?.token;
@@ -136,14 +169,7 @@ export async function POST(request: NextRequest) {
   // entirely or runs queue_for_accountant which writes nothing visible to
   // the client. So we keep polling only in that one specific combination.
   const u = f.ai_usability ?? {};
-  const usable = u.usable !== false; // true or unknown → treat as usable
-  const confident =
-    typeof u.confidence === "number" && u.confidence >= USABILITY_CONFIDENCE_THRESHOLD;
-  const routerWillSkipWrites = usable || !confident || !firmAutoRejectOn;
-  const aiRan = f.ai_classification !== null || f.ai_usability !== null;
-  const routerStillPending =
-    !routerWillSkipWrites && f.ai_rejected !== true;
-  if (!aiRan || routerStillPending) {
+  if (!isVerdictSettled(f, firmAutoRejectOn)) {
     return NextResponse.json({ status: "pending" });
   }
 
