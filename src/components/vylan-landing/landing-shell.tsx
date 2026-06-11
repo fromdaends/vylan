@@ -45,7 +45,7 @@ const REEL_END = 0.42; // scroll fraction across which the 4 words cycle
 // remains, and hold that (HOLD_BRAND); (3) dissolve "vylan" like a normal word.
 // Both holds are tuned for readability and easy to tweak.
 const HOLD_FULL = 700; // shorter hold so the header clears ~0.5s sooner once "vylan" appears
-const HOLD_BRAND = 1000;
+const HOLD_BRAND = 500; // founder: the standalone "vylan" should dissolve ~0.5s sooner (was 1000)
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 function scrollToForm() {
