@@ -79,6 +79,10 @@ export type WorklistRow = {
   awaitingPct: number;
   itemsDone: number;
   itemsTotal: number;
+  // Required items the CLIENT still owes something usable on (truly pending or
+  // rejected-awaiting-replacement) — straight from lib/attention. Powers the
+  // Overview stats strip's "Waiting on clients" count; no surface re-derives it.
+  itemsRequiredBlocked: number;
   attentionScore: number;
   reasons: ("overdue" | "due_soon" | "stale")[];
   daysOverdue: number | null;

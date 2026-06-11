@@ -162,6 +162,7 @@ export const loadEngagementWorklist = cache(
         awaitingPct: a.awaitingPct,
         itemsDone: a.itemsDone,
         itemsTotal: a.itemsTotal,
+        itemsRequiredBlocked: a.itemsRequiredBlocked,
         attentionScore: attentionScore(a),
         reasons: a.reasons,
         daysOverdue: a.daysOverdue,

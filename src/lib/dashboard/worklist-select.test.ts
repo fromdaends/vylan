@@ -33,6 +33,7 @@ function row(
     awaitingPct: 0,
     itemsDone: 1,
     itemsTotal: 2,
+    itemsRequiredBlocked: 0,
     attentionScore: 0,
     reasons: [],
     daysOverdue: null,
