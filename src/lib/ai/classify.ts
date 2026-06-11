@@ -308,10 +308,51 @@ const CLASSIFY_TOOL = {
   },
 };
 
-function buildSystemPrompt(expected: DocType): string {
+// What the accountant actually asked for, in words — the checklist item's
+// label (and the engagement's client/year when known). Without this the model
+// only saw a doc-type CODE; for free-form items (doc_type "other", e.g.
+// "Void cheque (direct deposit)") that code carries no meaning, so a clearly
+// wrong upload (a driver's licence under a void-cheque request) sailed
+// through as "quality looks good" and was never auto-bounced.
+export type RequestContext = {
+  requestLabel?: string | null;
+  requestLabelFr?: string | null;
+  clientName?: string | null;
+  expectedYear?: number | null;
+};
+
+export function buildSystemPrompt(
+  expected: DocType,
+  ctx: RequestContext = {},
+): string {
+  const label = ctx.requestLabel?.trim() || ctx.requestLabelFr?.trim() || null;
+  const requestLines = [
+    label
+      ? `The accountant asked the client for: "${label}"${
+          ctx.requestLabelFr?.trim() && ctx.requestLabelFr.trim() !== label
+            ? ` (French label: "${ctx.requestLabelFr.trim()}")`
+            : ""
+        }.`
+      : null,
+    expected !== "other"
+      ? `The expected document type code is "${expected}".`
+      : label
+        ? `No specific tax-form code was set for this item — judge the upload against the request wording above.`
+        : `The accountant requested a "${expected}" document.`,
+    ctx.clientName?.trim()
+      ? `The engagement's client is: ${ctx.clientName.trim()}.`
+      : null,
+    ctx.expectedYear != null
+      ? `The engagement concerns tax year ${ctx.expectedYear}.`
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
   return `You are a document classifier for a small Canadian accounting firm.
 
-The accountant requested a "${expected}" document from the client. The client just uploaded what you're about to see.
+${requestLines}
+The client just uploaded what you're about to see.
 
 Canadian tax document reference (use these exact identifiers):
 ${DOC_TYPES.map((c) => `- ${c} = ${DOC_TYPE_LABELS[c].ai}`).join("\n")}
@@ -366,8 +407,28 @@ clearly readable. Mark it unusable if ANY of the following are true:
   of a page visible
 - glare_or_shadow: reflections, bright spots, or shadows obscure
   important content
-- wrong_document_type: the document is clearly not what was expected
-  (e.g., a screenshot of a payment app where a T4 was requested)
+- wrong_document_type: the document clearly CANNOT satisfy what the
+  accountant asked for, judged against the request wording above (e.g. a
+  driver's licence or a payment-app screenshot where a void cheque was
+  requested; a restaurant receipt where a T4 was requested). Apply this even
+  when no tax-form code was set — the request wording is the contract.
+  Guardrails, because a false bounce nags an innocent client:
+  * A name that differs from the client's is NOT, by itself,
+    wrong_document_type — spouses, dependants, and businesses legitimately
+    appear on requested documents (a dependant's birth certificate under
+    "Dependant information" is CORRECT).
+  * An older tax year is NOT, by itself, wrong_document_type — prior-year
+    documents are often exactly what was asked (a prior-year Notice of
+    Assessment). Only treat the year as disqualifying when the request
+    explicitly names a year AND the document is a year-specific slip for a
+    different year.
+  * When the document plausibly satisfies the request but you have doubts,
+    leave it usable and express the doubt via looks_correct/issue_if_any —
+    the accountant reviews those.
+  * When it clearly cannot satisfy the request (like an identity card in
+    place of a banking document), mark wrong_document_type with high
+    confidence so the client is asked to re-send the right thing now, not
+    days later.
 - corrupt_or_blank: the file appears blank, corrupted, or contains no
   meaningful document content
 - wrong_orientation: the page is sideways or upside-down AND that makes the
@@ -408,7 +469,11 @@ uncertain — Vylan only auto-acts above that threshold.
 When unusable, write issue_summary_fr and issue_summary_en as one short,
 friendly, SPECIFIC sentence written for the client. The client will read
 the exact words. Prefer "the right-side amount is cut off" over generic
-phrasing like "blurry image".
+phrasing like "blurry image". For wrong_document_type, NAME what was
+requested in plain words (e.g. FR "Nous avons besoin d'un spécimen de
+chèque — ce document semble être un permis de conduire." / EN "We need a
+void cheque — this looks like a driver's licence."). Never mention AI,
+codes, or confidence to the client.
 
 Always call the classify_document tool. Never reply with prose.`;
 }
@@ -432,6 +497,12 @@ export async function classifyDocument(opts: {
   expectedDocType: DocType;
   fileBytes: Buffer;
   mimeType: string;
+  // The request in words (checklist label + engagement client/year) — lets
+  // the model judge "is this even the requested document" for free-form
+  // items whose doc-type code ("other") says nothing. Optional so existing
+  // callers/tests keep working; without it the model falls back to the
+  // code-only behavior.
+  request?: RequestContext;
 }): Promise<ClassificationResult | null> {
   const mt = normalizeMimeType(opts.mimeType);
   const isPdf = mt === "application/pdf";
@@ -471,8 +542,12 @@ export async function classifyDocument(opts: {
     ? await normalizeImageForAi(opts.fileBytes, mt)
     : { bytes: opts.fileBytes, mimeType: mt };
   const base64 = prepared.bytes.toString("base64");
-  const systemPrompt = buildSystemPrompt(opts.expectedDocType);
-  const userText = `The accountant requested a "${opts.expectedDocType}". Classify this document.`;
+  const systemPrompt = buildSystemPrompt(opts.expectedDocType, opts.request);
+  const requestedAs =
+    opts.request?.requestLabel?.trim() ||
+    opts.request?.requestLabelFr?.trim() ||
+    opts.expectedDocType;
+  const userText = `The accountant requested: "${requestedAs}". Classify this document and judge whether it can satisfy that request.`;
 
   // Both providers return the same raw object shape; parseClassification (with
   // all its tolerant defaults) is the single source of truth for turning it

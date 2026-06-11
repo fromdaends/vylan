@@ -3,8 +3,46 @@ import {
   parseClassification,
   normalizeMimeType,
   isSupportedAiMime,
+  buildSystemPrompt,
 } from "./classify";
 import { USABLE_BY_DEFAULT } from "./usability";
+
+describe("buildSystemPrompt — the request in words", () => {
+  it("names the requested item, client, and year so wrong uploads can bounce", () => {
+    const p = buildSystemPrompt("other", {
+      requestLabel: "Void cheque (direct deposit)",
+      requestLabelFr: "Spécimen de chèque (dépôt direct)",
+      clientName: "Zachary Thresh",
+      expectedYear: 2026,
+    });
+    expect(p).toContain('asked the client for: "Void cheque (direct deposit)"');
+    expect(p).toContain("Spécimen de chèque");
+    expect(p).toContain("Zachary Thresh");
+    expect(p).toContain("tax year 2026");
+    // For free-form items the doc-type code carries no meaning — the prompt
+    // must steer the model to the wording, not the code.
+    expect(p).toContain("judge the upload against the request wording");
+  });
+
+  it("still includes the type code for typed items", () => {
+    const p = buildSystemPrompt("t4", {
+      requestLabel: "T4 slip",
+    });
+    expect(p).toContain('expected document type code is "t4"');
+  });
+
+  it("falls back to the legacy code-only phrasing without context", () => {
+    const p = buildSystemPrompt("other");
+    expect(p).toContain('The accountant requested a "other" document.');
+  });
+
+  it("guards against false bounces on family names and older years", () => {
+    const p = buildSystemPrompt("other", { requestLabel: "X" });
+    expect(p).toContain("NOT, by itself,\n    wrong_document_type");
+    expect(p).toContain("dependants");
+    expect(p).toContain("older tax year is NOT");
+  });
+});
 
 describe("normalizeMimeType / isSupportedAiMime", () => {
   it("strips charset params, trims, and lowercases", () => {
