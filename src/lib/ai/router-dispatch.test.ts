@@ -16,7 +16,7 @@ vi.mock("@/lib/db/file-review", () => ({
   recomputeItemStatus: (...args: unknown[]) => recomputeMock(...args),
 }));
 
-import { applyDecision, decide } from "./router";
+import { applyDecision, decide, AUTO_REJECT_STRIKE_LIMIT } from "./router";
 
 const VERDICT: UsabilityVerdict = {
   usable: false,
@@ -233,13 +233,15 @@ describe("applyDecision — queue_for_accountant", () => {
 describe("applyDecision — end-to-end matrix via decide()", () => {
   beforeEach(() => enqueueJobMock.mockClear());
 
+  // Expectations reference AUTO_REJECT_STRIKE_LIMIT so they track the policy
+  // (founder set it to 5) instead of breaking each time the threshold changes.
   it.each([
     ["off, count 0", false, 0, "queue_for_accountant"],
-    ["off, count 99", false, 99, "queue_for_accountant"],
+    ["off, above limit", false, AUTO_REJECT_STRIKE_LIMIT + 99, "queue_for_accountant"],
     ["on, count 0", true, 0, "auto_reject_and_notify_client"],
-    ["on, count 1", true, 1, "auto_reject_and_notify_client"],
-    ["on, count 2", true, 2, "escalate_to_accountant"],
-    ["on, count 5", true, 5, "escalate_to_accountant"],
+    ["on, just below limit", true, AUTO_REJECT_STRIKE_LIMIT - 1, "auto_reject_and_notify_client"],
+    ["on, at limit", true, AUTO_REJECT_STRIKE_LIMIT, "escalate_to_accountant"],
+    ["on, above limit", true, AUTO_REJECT_STRIKE_LIMIT + 1, "escalate_to_accountant"],
   ])(
     "%s → %s",
     async (_label, autoRejectOn, rejectionCount, expectedDecision) => {
