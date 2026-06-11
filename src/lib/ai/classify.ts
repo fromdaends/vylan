@@ -411,8 +411,10 @@ After identifying the document type, also assess whether this document is
 USABLE for an accountant. A document is usable if all key information is
 clearly readable. Mark it unusable if ANY of the following are true:
 
-- text_unreadable: blur, low resolution, or pixelation makes key text
-  illegible
+- text_unreadable: blur, low resolution, pixelation, or faint/fading ink makes
+  key text illegible — including when the page looks fine overall but one
+  critical value (an amount, account/transit number, name, or date) is too soft,
+  small, or fuzzy to read every character with confidence
 - key_fields_obscured: important fields (amounts, names, dates, account
   numbers) are covered, scratched out, redacted, blacked out, or missing.
   This ALWAYS includes the case where the NAME of the person or business the
@@ -489,6 +491,18 @@ that whole number counts as obscured. Do NOT infer, guess, or reconstruct a
 hidden digit from context and then call the number readable — a partially
 struck-through transit number (e.g. a black mark over the leading digits with
 only the last few showing) is OBSCURED, full stop.
+
+Treat the smallest print as the most important pixels on the page — examine the
+key numbers at the highest scrutiny you can and never skim them. The mark that
+hides a value is often subtle, so look specifically for ALL of these sitting on
+or across a defining number: a faint or localized blur on just that value, a
+scratch-off or scraped/abraded patch, a smudge or ink-bleed, thinning or fading
+ink, correction fluid or correction tape (white-out), a stray pen stroke or
+highlighter, pixelation concentrated on the value, or a fold, crease, staple, or
+tear that crosses a digit. If you cannot read every character of a key value
+with FULL confidence because of any of these, do not guess the value — treat it
+as obscured (key_values_obscured), or unreadable (text_unreadable) when the
+whole value is too soft or small to make out.
 
 When key_values_obscured is true you MUST also set usable=false,
 primary_issue=key_fields_obscured, and a usability_confidence of at least 0.85.

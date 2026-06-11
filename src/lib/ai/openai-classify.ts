@@ -48,19 +48,21 @@ export function toStrictSchema(node: unknown): unknown {
   return node;
 }
 
-// Reasoning effort. "medium" was stable but occasionally ran long enough on
-// Vercel to exceed the 60s function limit, leaving uploads stuck on
-// "Analyzing…". "low" is fast (~5-15s) and bounded — and legible-read accuracy
-// comes mostly from normalizing images (webp→jpeg), not from heavy reasoning —
-// so default to "low" for reliable, timely analysis. Tunable via
-// OPENAI_REASONING_EFFORT (minimal | medium | high) without a code change.
+// Reasoning effort. Catching subtle defects — a smudge or scratch-off on a
+// single digit, a value that is just slightly too soft to read — rewards the
+// model actually scrutinizing the image, so default to "medium". The downside
+// (medium can occasionally run long) is bounded: the 40s client timeout above
+// fails a slow call cleanly and the 15-minute cron re-runs it, so the worst case
+// is a delayed verdict, not an upload stuck forever. Drop to "low" via
+// OPENAI_REASONING_EFFORT if analysis starts lagging; raise to "high" for even
+// deeper inspection (slower + pricier).
 const REASONING_EFFORT =
   (process.env.OPENAI_REASONING_EFFORT?.trim() as
     | "minimal"
     | "low"
     | "medium"
     | "high"
-    | undefined) || "low";
+    | undefined) || "medium";
 
 export async function classifyWithOpenAI(opts: {
   model: string;
