@@ -1,10 +1,9 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 import { selectNeedsAttentionRows } from "@/lib/dashboard/worklist-select";
 import { NeedsAttentionRow } from "@/components/dashboard/needs-attention-row";
-import { NeedsAttentionCollapsible } from "@/components/dashboard/needs-attention-collapsible";
 
 const MAX_VISIBLE = 5;
 
@@ -43,12 +42,30 @@ export async function NeedsAttention({
       </Link>
     ) : null;
 
+  // Always expanded — this is the most useful block on the page, so there is
+  // deliberately no collapse toggle (an earlier chevron + saved preference
+  // used to bury the to-do list; both are gone).
   return (
-    <NeedsAttentionCollapsible
-      title={t("needs_attention")}
-      count={items.length}
-      viewAll={viewAll}
+    <section
+      aria-labelledby="needs-attention-title"
+      className="border-l-2 border-accent/40 pl-4 sm:pl-5"
     >
+      <div className="flex items-center justify-between gap-3">
+        <h2
+          id="needs-attention-title"
+          className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-tight text-foreground"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0 text-accent" aria-hidden />
+          <span className="truncate">{t("needs_attention")}</span>
+          {items.length > 0 && (
+            <span className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-accent/20 px-1.5 text-xs font-semibold tabular-nums text-accent">
+              {items.length}
+            </span>
+          )}
+        </h2>
+        {viewAll}
+      </div>
+
       {items.length === 0 ? (
         <p className="mt-2 text-sm text-muted-foreground">
           {t("all_caught_up")}
@@ -74,7 +91,7 @@ export async function NeedsAttention({
           ))}
         </ul>
       )}
-    </NeedsAttentionCollapsible>
+    </section>
   );
 }
 
