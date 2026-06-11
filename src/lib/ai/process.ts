@@ -18,6 +18,7 @@ import {
   type ClassificationResult,
 } from "./classify";
 import { shouldActOnUsability } from "./usability";
+import { expectedYearFromTitle } from "./matching";
 import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
@@ -41,22 +42,22 @@ export async function processClassifyJob(
   const { data: file } = await sb
     .from("uploaded_files")
     .select(
-      "id, request_item_id, engagement_id, storage_path, mime_type, original_filename, request_items!inner(doc_type, engagement_id)",
+      "id, request_item_id, engagement_id, storage_path, mime_type, original_filename, request_items!inner(doc_type, engagement_id, label, label_fr)",
     )
     .eq("id", fileId)
     .maybeSingle();
   if (!file) return { skipped: "file_not_found" };
 
-  type Row = {
-    request_items:
-      | { doc_type: string; engagement_id: string }
-      | { doc_type: string; engagement_id: string }[]
-      | null;
+  type ItemRow = {
+    doc_type: string;
+    engagement_id: string;
+    label: string | null;
+    label_fr: string | null;
   };
-  const item = (file as unknown as Row).request_items;
-  const expectedDocType = (Array.isArray(item) ? item[0]?.doc_type : item?.doc_type) as
-    | string
-    | undefined;
+  type Row = { request_items: ItemRow | ItemRow[] | null };
+  const itemRaw = (file as unknown as Row).request_items;
+  const item = Array.isArray(itemRaw) ? itemRaw[0] : itemRaw;
+  const expectedDocType = item?.doc_type as string | undefined;
   if (!expectedDocType) return { skipped: "no_expected_doc_type" };
 
   // Cap AI spend per firm per day. We look up firm_id from the engagement
@@ -65,10 +66,29 @@ export async function processClassifyJob(
   // (skipped) — the next day's cron run can pick it up if still needed.
   const { data: engagementForLimit } = await sb
     .from("engagements")
-    .select("firm_id")
+    .select("firm_id, title, clients!inner(display_name)")
     .eq("id", file.engagement_id)
     .single();
   const limitFirmId: string | null = engagementForLimit?.firm_id ?? null;
+  // Request context for the classifier: the item's human label plus the
+  // engagement's client + tax year, so the model can judge "is this even the
+  // requested document" (drives the wrong_document_type auto-bounce). Year
+  // read off the title with the SAME helper the accountant UI's match panel
+  // uses, so the two judgments share their inputs.
+  type EngagementCtx = {
+    title?: string | null;
+    clients?: { display_name?: string | null } | { display_name?: string | null }[];
+  };
+  const engCtx = engagementForLimit as unknown as EngagementCtx | null;
+  const ctxClient = Array.isArray(engCtx?.clients)
+    ? engCtx?.clients[0]
+    : engCtx?.clients;
+  const requestContext = {
+    requestLabel: item?.label ?? null,
+    requestLabelFr: item?.label_fr ?? null,
+    clientName: ctxClient?.display_name ?? null,
+    expectedYear: expectedYearFromTitle(engCtx?.title ?? ""),
+  };
   if (limitFirmId) {
     const rl = await checkRateLimit({
       key: `ai:classify:firm:${limitFirmId}`,
@@ -104,6 +124,7 @@ export async function processClassifyJob(
     expectedDocType: expectedDocType as never,
     fileBytes: bytes,
     mimeType,
+    request: requestContext,
   });
   if (!result) return { skipped: "no_classification" };
 
