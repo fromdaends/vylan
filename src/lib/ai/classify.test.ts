@@ -42,6 +42,20 @@ describe("buildSystemPrompt — the request in words", () => {
     expect(p).toContain("dependants");
     expect(p).toContain("older tax year is NOT");
   });
+
+  it("treats PARTIAL obscuring of a key number as disqualifying", () => {
+    const p = buildSystemPrompt("other", {
+      requestLabel: "Void cheque (direct deposit)",
+    });
+    // The transit-scribble case: one struck digit must obscure the whole number.
+    expect(p).toContain("PARTIAL obscuring");
+    // \s+ not a literal space: the prompt wraps "SINGLE\ndigit" across a line.
+    expect(p).toMatch(/single\s+digit/i);
+    expect(p).toContain("Do NOT infer, guess, or reconstruct");
+    // ...but the VOID stamp / logo / signature must NOT trip it.
+    expect(p).toMatch(/VOID/);
+    expect(p).toContain("EXPECTED printed elements are NOT redactions");
+  });
 });
 
 describe("normalizeMimeType / isSupportedAiMime", () => {
