@@ -44,9 +44,18 @@ async function getEngagementFirm(
 // changed + the dashboard (whose "attention" counts depend on item
 // status). Replaces the previous `revalidatePath("/", "layout")` which
 // invalidated every cache across the whole app on every approve/reject.
+//
+// Routes are localized under /[locale], so a bare "/engagements/[id]" never
+// matches the real "/fr/engagements/[id]" — the old narrow path silently
+// revalidated nothing, so a freshly added item only showed up because of the
+// client's router.refresh(). We revalidate every locale's concrete path so the
+// server cache is actually busted (the route group "(app)" is not in the URL).
+const LOCALES = ["en", "fr"] as const;
 function revalidateItemPaths(engagementId: string | undefined) {
-  if (engagementId) revalidatePath(`/engagements/${engagementId}`);
-  revalidatePath("/dashboard");
+  for (const loc of LOCALES) {
+    if (engagementId) revalidatePath(`/${loc}/engagements/${engagementId}`);
+    revalidatePath(`/${loc}/dashboard`);
+  }
 }
 
 export async function approveItemAction(formData: FormData) {

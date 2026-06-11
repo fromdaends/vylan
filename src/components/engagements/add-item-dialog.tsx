@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -38,12 +39,23 @@ export function AddItemDialog({ engagementId }: { engagementId: string }) {
 
   useEffect(() => {
     if (!state?.ok) return;
+    // Defer the state writes out of the effect body (queueMicrotask) to satisfy
+    // the set-state-in-effect rule. Close + reset, confirm with a toast (so a
+    // new row landing far down a long list still reads as success), then refresh
+    // the server-rendered checklist (the action also revalidates the cache).
     queueMicrotask(() => {
       setOpen(false);
       setDocType("other");
+      toast.success(t("item_added"));
       router.refresh();
     });
-  }, [state, router]);
+  }, [state, router, t]);
+
+  // Any validation problem (e.g. a label that slipped through empty) used to
+  // fail silently — the dialog only rendered state.error. Surface a single
+  // clear message so "nothing happens" never happens again.
+  const hasFieldErrors =
+    !!state?.fieldErrors && Object.keys(state.fieldErrors).length > 0;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -60,9 +72,11 @@ export function AddItemDialog({ engagementId }: { engagementId: string }) {
         </DialogHeader>
         <form action={action} className="space-y-3">
           <input type="hidden" name="engagement_id" value={engagementId} />
-          {state?.error && (
+          {(state?.error || hasFieldErrors) && (
             <Alert variant="destructive">
-              <AlertDescription>{state.error}</AlertDescription>
+              <AlertDescription>
+                {hasFieldErrors ? t("add_item_check_fields") : t("add_item_error")}
+              </AlertDescription>
             </Alert>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
