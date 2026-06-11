@@ -1161,7 +1161,19 @@
     "detail_period": "Période",
     "detail_form": "Formulaire",
     "detail_amounts": "Montants",
-    "detail_also_possible": "Aussi possible"
+    "detail_also_possible": "Aussi possible",
+    "status_looks_right": "Conforme",
+    "status_low_confidence": "Confiance faible",
+    "status_wrong_type": "Mauvais document",
+    "status_auto_rejected": "Rejeté automatiquement",
+    "status_escalated": "À revoir",
+    "status_flagged": "À vérifier",
+    "status_analyzing": "Lecture…",
+    "status_not_analyzed": "Non analysé",
+    "client_notified": "Client averti",
+    "summary_details": "Détails",
+    "full_in_preview": "Ouvrez l'aperçu pour l'analyse complète",
+    "override_approve": "L'IA s'est trompée — approuver"
   },
   "Usability": {
     "label": "Qualité IA",

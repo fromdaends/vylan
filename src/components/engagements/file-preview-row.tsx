@@ -16,8 +16,7 @@ import {
   RefreshCw,
   Trash2,
 } from "lucide-react";
-import { AiBadge } from "./ai-badge";
-import { UsabilityBadge } from "./usability-badge";
+import { FileAiSummary } from "./file-ai-summary";
 import { reclassifyFileAction } from "@/app/actions/ai";
 import { deleteFileAction } from "@/app/actions/files";
 import { formatBytes } from "@/lib/format";
@@ -314,22 +313,14 @@ export function FilePreviewRow({
               {t("rechecking")}
             </span>
           )}
-          {/* Usability lives above the document-type badge — separate
-              concerns: "is this readable?" vs "is this the right slip?"
-              UsabilityBadge renders null when there's no actionable
-              verdict so well-readable files don't get extra chrome. */}
-          <UsabilityBadge
-            fileId={file.id}
-            verdict={file.ai_usability}
-            aiRejected={file.ai_rejected}
-            rejectionCount={rejectionCount}
-          />
-          <AiBadge
+          {/* One compact, at-a-glance AI verdict (usability + type folded into
+              a single line). The deep read lives on the Preview page now. */}
+          <FileAiSummary
             file={file}
             expectedDocType={expectedDocType}
             expectedYear={expectedYear}
             clientName={clientName}
-            quiet={Boolean(file.ai_usability && !file.ai_usability.usable)}
+            rejectionCount={rejectionCount}
           />
         </div>
       )}
