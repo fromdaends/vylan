@@ -787,7 +787,12 @@
     "wl_status_completed": "Terminés",
     "wl_status_all": "Tous",
     "wl_empty_active": "Aucun engagement actif.",
-    "wl_empty_completed": "Aucun engagement terminé pour l’instant."
+    "wl_empty_completed": "Aucun engagement terminé pour l’instant.",
+    "stats_label": "En un coup d’œil",
+    "stats_active": "Actifs",
+    "stats_ready": "À réviser",
+    "stats_waiting_clients": "En attente des clients",
+    "stats_due_soon": "Échéance sous 7 jours"
   },
   "App": {
     "dashboard_title": "Aperçu",

@@ -787,7 +787,12 @@
     "wl_status_completed": "Completed",
     "wl_status_all": "All",
     "wl_empty_active": "No active engagements.",
-    "wl_empty_completed": "No completed engagements yet."
+    "wl_empty_completed": "No completed engagements yet.",
+    "stats_label": "At a glance",
+    "stats_active": "Active",
+    "stats_ready": "Ready to review",
+    "stats_waiting_clients": "Waiting on clients",
+    "stats_due_soon": "Due within 7 days"
   },
   "App": {
     "dashboard_title": "Overview",
