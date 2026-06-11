@@ -1,5 +1,7 @@
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
+import { safeStorageName } from "@/lib/files/safe-name";
+
 export const BUCKET = "client-uploads";
 export const MAX_BYTES = 25 * 1024 * 1024;
 // HEIC decoder allocates `width * height * 4` bytes during decode, so a small
@@ -66,10 +68,11 @@ export function storagePath(parts: {
   uuid: string;
   filename: string;
 }): string {
-  const safeName = parts.filename
-    .replace(/[/\\]/g, "_")
-    .replace(/\s+/g, "_")
-    .slice(0, 120);
+  // safeStorageName, not just slash/space cleanup: Supabase rejects keys with
+  // accented characters, so "Régie de l'assurance.jpeg" must become
+  // "Regie_de_l_assurance.jpeg" or the storage write fails outright. The
+  // DB keeps the original filename for display.
+  const safeName = safeStorageName(parts.filename);
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/items/${parts.itemId}/${parts.uuid}-${safeName}`;
 }
 
@@ -86,10 +89,7 @@ export function stagingUploadPath(parts: {
   uuid: string;
   filename: string;
 }): string {
-  const safeName = parts.filename
-    .replace(/[/\\]/g, "_")
-    .replace(/\s+/g, "_")
-    .slice(0, 120);
+  const safeName = safeStorageName(parts.filename);
   return `${stagingPrefixForItem(parts)}${parts.uuid}-${safeName}`;
 }
 
@@ -173,10 +173,9 @@ export function signingDocPath(parts: {
   uuid: string;
   filename: string;
 }): string {
-  const safeName = parts.filename
-    .replace(/[/\\]/g, "_")
-    .replace(/\s+/g, "_")
-    .slice(0, 120);
+  // Same accent-safe key rule as storagePath — accountants name signature
+  // documents in French too ("Procuration spéciale.pdf").
+  const safeName = safeStorageName(parts.filename);
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/signing/${parts.uuid}-${safeName}`;
 }
 

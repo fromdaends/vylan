@@ -53,7 +53,19 @@ describe("storage helpers", () => {
       filename: "../../etc/passwd",
     });
     expect(path).not.toContain("../");
-    // Slashes become underscores; dots are preserved (they belong in extensions).
-    expect(path.endsWith("u-.._.._etc_passwd")).toBe(true);
+    // safeStorageName neutralizes the traversal entirely: slashes become
+    // underscores and the leading dot-runs are trimmed away.
+    expect(path.endsWith("u-etc_passwd")).toBe(true);
+  });
+
+  it("storagePath strips accents so the key stays inside Supabase's charset", () => {
+    const path = storagePath({
+      firmId: "F",
+      engagementId: "E",
+      itemId: "I",
+      uuid: "u",
+      filename: "Régie de l'assurance maladie.jpeg",
+    });
+    expect(path.endsWith("u-Regie_de_l_assurance_maladie.jpeg")).toBe(true);
   });
 });
