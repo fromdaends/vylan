@@ -30,15 +30,25 @@ function getProvider(): "anthropic" | "openai" {
     : "anthropic";
 }
 
-// The OpenAI model id, overridable via env (e.g. "gpt-5.4-mini").
+// The OpenAI model id, overridable via env. Default is gpt-5.4 (full): it's the
+// cheapest GPT-5 revision whose vision reads images at full fidelity ("high"
+// detail goes up to ~2.56M px / 2048px on the long edge). The older gpt-5-mini
+// and base gpt-5 down-sample images to ~768px on the short edge before they
+// "see" them, which hid subtle redactions (a scribble over a void cheque's
+// transit digits sailed through as "looks good"). Override per-deployment with
+// OPENAI_MODEL (e.g. "gpt-5.4-mini" cheaper, or "gpt-5.5" newer) with no code change.
 function getOpenAiModel(): string {
-  return process.env.OPENAI_MODEL?.trim() || "gpt-5-mini";
+  return process.env.OPENAI_MODEL?.trim() || "gpt-5.4";
 }
 
-// Anthropic's vision sweet spot — images past this are downscaled by the API
-// anyway, so capping here is accuracy-neutral while cutting the upload payload
-// and token cost (a phone photo is often 3000-4000px on the long edge).
-const MAX_IMAGE_EDGE = 1568;
+// Cap the long edge before the model sees it. 2048px matches the high-detail
+// input ceiling of the current vision models (GPT-5.4+ "high" reads up to
+// ~2.56M px / 2048px; Opus reads higher still), so we preserve the fine detail
+// a classifier needs to catch a scribble over a cheque's transit digits, while
+// still bounding the upload payload + token cost (a phone photo is often
+// 3000-4000px on the long edge). The previous 1568px cap predated full-fidelity
+// vision and threw that detail away, which is how partial redactions slipped by.
+const MAX_IMAGE_EDGE = 2048;
 
 // Downscale an oversized image (and honour EXIF rotation) before it goes to the
 // model. Fail-soft: ANY error falls back to the original bytes so analysis
