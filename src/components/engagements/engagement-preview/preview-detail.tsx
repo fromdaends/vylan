@@ -8,13 +8,24 @@ import {
   CheckCircle2,
   Clock,
   Download,
+  Loader2,
   Maximize2,
   Minimize2,
   Sparkles,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { deleteFileAction } from "@/app/actions/files";
 import { cn } from "@/lib/cn";
 import { formatCurrency, type AppLocale } from "@/lib/format";
 import { matchDocument, type MatchFlag } from "@/lib/ai/matching";
@@ -74,6 +85,7 @@ export function PreviewDetail({
   onReject,
   onBack,
   onCloseOverlay,
+  onDeleted,
 }: {
   doc: PreviewDoc;
   file: UploadedFile;
@@ -86,11 +98,37 @@ export function PreviewDetail({
   onReject: () => void;
   onBack: () => void;
   onCloseOverlay: () => void;
+  // Called after a successful PERMANENT delete; the overlay drops the doc
+  // from its grid and closes this detail panel.
+  onDeleted: (fileId: string) => void;
 }) {
   const t = useTranslations("Preview");
+  const tEng = useTranslations("Engagements");
   const tAi = useTranslations("Ai");
   const [fullscreen, setFullscreen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteFailed, setDeleteFailed] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  async function confirmDelete() {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteFailed(false);
+    try {
+      const fd = new FormData();
+      fd.append("id", file.id);
+      const res = await deleteFileAction(fd);
+      if (!res?.ok) throw new Error(res?.error ?? "delete_failed");
+      setConfirmDeleteOpen(false);
+      onDeleted(file.id);
+    } catch (e) {
+      console.error("[file delete] failed:", e);
+      setDeleteFailed(true);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   // Move focus into the detail when it opens, so keyboard users land on the
   // document's actions rather than behind the panel.
@@ -251,6 +289,23 @@ export function PreviewDetail({
               <Download className="size-4" />
             </Button>
           </a>
+          {/* Permanent delete — erases the document outright (storage + DB),
+              which also removes it from the client portal. Confirmed below. */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            disabled={pending || deleting}
+            aria-label={tEng("file_delete")}
+            title={tEng("file_delete")}
+            className="text-muted-foreground hover:text-destructive"
+            onClick={() => {
+              setDeleteFailed(false);
+              setConfirmDeleteOpen(true);
+            }}
+          >
+            <Trash2 className="size-4" />
+          </Button>
           <Button
             type="button"
             variant="ghost"
@@ -262,6 +317,43 @@ export function PreviewDetail({
           </Button>
         </div>
       </div>
+
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent className="z-[60] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tEng("file_delete_confirm_title")}</DialogTitle>
+            <DialogDescription>
+              {tEng("file_delete_confirm_body", {
+                name: file.display_name ?? file.original_filename,
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteFailed && (
+            <p className="text-sm text-destructive">
+              {tEng("file_delete_failed")}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmDeleteOpen(false)}
+              disabled={deleting}
+            >
+              {tEng("cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting}
+            >
+              {deleting && <Loader2 className="size-4 animate-spin" />}
+              {tEng("file_delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Split body */}
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">

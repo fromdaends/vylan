@@ -124,6 +124,10 @@ function describe(
     }
     case "reopen_item":
       return t("reopen_item");
+    case "delete_file":
+      // Deliberately no filename: the file row is erased, and the log keeps
+      // no PII (see the Phase 5 rule on client_uploaded).
+      return t("delete_file");
     case "add_item":
       return t("add_item", { label: meta.label ?? "—" });
     case "remove_item":

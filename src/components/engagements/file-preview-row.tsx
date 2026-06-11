@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   ChevronDown,
@@ -13,14 +14,25 @@ import {
   Loader2,
   Maximize2,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { AiBadge } from "./ai-badge";
 import { UsabilityBadge } from "./usability-badge";
 import { reclassifyFileAction } from "@/app/actions/ai";
+import { deleteFileAction } from "@/app/actions/files";
 import { formatBytes } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // The document viewer pulls in react-pdf / pdf.js — browser-only and a sizeable
 // chunk — so load it lazily (ssr:false). It ships only when an accountant
@@ -78,9 +90,14 @@ export function FilePreviewRow({
   actions?: ReactNode;
 }) {
   const t = useTranslations("Engagements");
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [rechecking, setRechecking] = useState(false);
+  // Permanent per-file delete: confirm dialog + in-flight/error state.
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteFailed, setDeleteFailed] = useState(false);
   const [, startTransition] = useTransition();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -118,6 +135,29 @@ export function FilePreviewRow({
     // (guarded by prevSig so it can't loop). Verdict refreshed → stop spinning.
     setPrevSig(sig);
     if (rechecking) setRechecking(false);
+  }
+
+  function confirmDelete() {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteFailed(false);
+    const fd = new FormData();
+    fd.append("id", file.id);
+    startTransition(async () => {
+      try {
+        const res = await deleteFileAction(fd);
+        if (!res?.ok) throw new Error(res?.error ?? "delete_failed");
+        setConfirmDeleteOpen(false);
+        // The action revalidated the page; refresh drops this row from the
+        // server-rendered list (and the portal stops serving the file too).
+        router.refresh();
+      } catch (e) {
+        console.error("[file delete] failed:", e);
+        setDeleteFailed(true);
+      } finally {
+        setDeleting(false);
+      }
+    });
   }
 
   function recheck() {
@@ -201,7 +241,54 @@ export function FilePreviewRow({
           </button>
         )}
         {actions}
+        {/* Permanent delete — last, destructive tone. Confirmed in a dialog;
+            the document is erased outright and disappears from the client
+            portal (no recycle bin, by design). */}
+        <button
+          type="button"
+          onClick={() => {
+            setDeleteFailed(false);
+            setConfirmDeleteOpen(true);
+          }}
+          className="text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+          aria-label={t("file_delete")}
+          title={t("file_delete")}
+        >
+          <Trash2 className="size-3.5" />
+        </button>
       </div>
+      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("file_delete_confirm_title")}</DialogTitle>
+            <DialogDescription>
+              {t("file_delete_confirm_body", { name: displayName })}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteFailed && (
+            <p className="text-sm text-destructive">{t("file_delete_failed")}</p>
+          )}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmDeleteOpen(false)}
+              disabled={deleting}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={deleting}
+            >
+              {deleting && <Loader2 className="size-4 animate-spin" />}
+              {t("file_delete")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Detected duplicate (an exact-content re-upload). Always shown, even for
           signature copies (which hide the AI chrome). The file is set aside, so
           it doesn't affect the checklist item's status. */}
