@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Bell, BellOff, Download, MoreHorizontal, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
+import { Bell, BellOff, Download, Loader2, MoreHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -52,6 +53,44 @@ export function EngagementMoreMenu({
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  // Download-all used to be a plain <a download> inside the dropdown item. The
+  // menu closes on click, which UNMOUNTS the anchor before the browser starts
+  // the download — Safari then cancels it (the "does nothing" bug). Fetch the
+  // ZIP as a blob and save it programmatically instead, so it survives the menu
+  // closing and we can surface a real error (no files / network) as a toast.
+  // Works identically on macOS Safari/Chrome and Windows.
+  async function downloadAll() {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/engagements/${engagementId}/files.zip`);
+      if (!res.ok) {
+        toast.error(
+          res.status === 404 ? t("download_all_empty") : t("download_all_failed"),
+        );
+        return;
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") ?? "";
+      const match = /filename="?([^"]+)"?/.exec(cd);
+      const filename = match?.[1] ?? "documents.zip";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke after the click has been handed to the browser.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      toast.error(t("download_all_failed"));
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   const isLive = status === "live";
   const hasItems = isLive || hasUploads || canDelete;
@@ -92,11 +131,17 @@ export function EngagementMoreMenu({
             </DropdownMenuItem>
           )}
           {hasUploads && (
-            <DropdownMenuItem asChild>
-              <a href={`/api/engagements/${engagementId}/files.zip`} download>
-                <Download />
-                {t("download_all")}
-              </a>
+            <DropdownMenuItem
+              // Keep the menu from closing-and-cancelling: run the blob
+              // download instead of navigating an anchor.
+              onSelect={(e) => {
+                e.preventDefault();
+                void downloadAll();
+              }}
+              disabled={downloading}
+            >
+              {downloading ? <Loader2 className="animate-spin" /> : <Download />}
+              {t("download_all")}
             </DropdownMenuItem>
           )}
           {isLive && (
