@@ -108,6 +108,11 @@ export function ItemCard({
   // upload itself).
   const [checking, setChecking] = useState(false);
   const pollAbortRef = useRef<AbortController | null>(null);
+  // The most recent upload still waiting on a verdict. Phones SUSPEND the page
+  // (lock screen / app switch), which freezes the in-flight poll — so the
+  // background verdict can land unseen while the page sleeps. We re-poll this
+  // file when the page becomes visible again. Cleared once a verdict settles.
+  const awaitingVerdictRef = useRef<string | null>(null);
   const [pendingNa, startNa] = useTransition();
   // Drag-and-drop a file straight onto the card (desktop nicety; the Upload
   // button is the primary path and works everywhere).
@@ -121,6 +126,29 @@ export function ItemCard({
   const isImageFile = (f: PortalFile) =>
     !!f.mime && f.mime.startsWith("image/");
   const previewableFiles = files.filter((f) => isImageFile(f) || isPdfFile(f));
+
+  // Re-check the verdict when the page comes back to the foreground. On phones
+  // the poll is frozen while the page is backgrounded, so a verdict delivered
+  // by the background worker meanwhile would otherwise never surface until a
+  // manual reload. pollVerdict() aborts any prior poll and restarts cleanly, so
+  // calling it again is safe; its first request resolves instantly if the
+  // verdict already landed. No-op on cards with no upload awaiting a verdict.
+  useEffect(() => {
+    function recheckOnReturn() {
+      if (document.visibilityState !== "visible") return;
+      const fileId = awaitingVerdictRef.current;
+      if (fileId) void pollVerdict(fileId);
+    }
+    document.addEventListener("visibilitychange", recheckOnReturn);
+    window.addEventListener("focus", recheckOnReturn);
+    return () => {
+      document.removeEventListener("visibilitychange", recheckOnReturn);
+      window.removeEventListener("focus", recheckOnReturn);
+    };
+    // pollVerdict is stable for our purposes (it reads refs/state, not props
+    // that change between renders); re-subscribing every render is needless.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Cancel any in-flight poll when the component unmounts.
   useEffect(() => {
@@ -164,6 +192,11 @@ export function ItemCard({
                     : body.verdict.issue_summary_en ||
                       body.verdict.issue_summary_fr;
                 setAiRejection(msg || t("ai_rejected_generic"));
+              }
+              // Verdict has settled — stop the foreground re-check from
+              // re-polling a file that's already resolved.
+              if (awaitingVerdictRef.current === fileId) {
+                awaitingVerdictRef.current = null;
               }
               // Re-pull the server-rendered portal data so EVERYTHING the
               // verdict touched (item status, file states, progress, banners)
@@ -340,6 +373,9 @@ export function ItemCard({
         // banner (if any) appears within a few seconds. Polling is
         // cancelled if a new upload starts or the component unmounts.
         if (typeof body?.file_id === "string") {
+          // Remember it so a foreground-return can resume the check if a
+          // phone suspended the page mid-poll (see the visibility effect).
+          awaitingVerdictRef.current = body.file_id;
           void pollVerdict(body.file_id);
         }
       } catch (e) {
