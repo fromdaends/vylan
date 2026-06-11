@@ -203,7 +203,7 @@ const CLASSIFY_TOOL = {
       key_values_obscured: {
         type: "boolean",
         description:
-          "Is ANY of the document's DEFINING numbers/values blacked out, scribbled over, taped/whited out, redacted, covered, cut off, or otherwise unreadable — e.g. the bank ACCOUNT / transit / institution number on a void cheque or direct-deposit form, the account number or balances on a statement, the box amounts on a tax slip, the figures on an assessment? Return true even if the rest of the page is perfectly clear and even if the client redacted it deliberately. Do NOT return true for incidental marks that don't touch the document's own key values. A document whose defining numbers are obscured must be treated as unusable.",
+          "Is ANY of the document's DEFINING numbers/values blacked out, scribbled over, penned through, taped/whited out, redacted, smudged, covered, cut off, or otherwise unreadable — e.g. the bank ACCOUNT / transit / institution number on a void cheque or direct-deposit form, the account number or balances on a statement, the box amounts on a tax slip, the figures on an assessment? PARTIAL obscuring counts: if even a single digit of a key number is covered by a mark, return true — do not guess the hidden digit and call it readable. Return true even if the rest of the page is perfectly clear and even if the client redacted it deliberately. Do NOT return true for expected printed elements (a VOID stamp, a logo, a signature, a watermark) or incidental marks that don't sit on top of a value. A document whose defining numbers are obscured must be treated as unusable.",
       },
       account_or_period: {
         type: ["string", "null"],
@@ -466,15 +466,30 @@ specific values, and if those are hidden the document is worthless no matter how
 clean the rest of the page is. A void cheque or direct-deposit form exists to
 convey the bank ACCOUNT, TRANSIT, and INSTITUTION numbers; a bank or credit-card
 statement its account number and balances; a tax slip its box amounts; a Notice
-of Assessment its figures. Set key_values_obscured to true whenever ANY of those
-DEFINING numbers is blacked out, scribbled over, taped or whited out, redacted,
-covered, cut off, or otherwise unreadable — EVEN IF everything else is perfectly
+of Assessment its figures.
+
+Inspect EVERY key number character by character. Set key_values_obscured to
+true whenever ANY of those defining numbers is blacked out, scribbled over,
+penned through, taped or whited out, redacted, smudged, covered by a sticker or
+finger, cut off, or otherwise unreadable — EVEN IF everything else is perfectly
 legible, and EVEN IF the client clearly redacted it on purpose to "protect"
-their information. When key_values_obscured is true you MUST also set
-usable=false, primary_issue=key_fields_obscured, and a usability_confidence of
-at least 0.85. A void cheque with a blacked-out account number is useless and
-must be sent back. (Do NOT trip this for incidental marks that don't touch the
-document's own defining values.)
+their information. CRITICAL: this includes PARTIAL obscuring — if even a SINGLE
+digit or character of a key number is covered by a mark, scribble, or smudge,
+that whole number counts as obscured. Do NOT infer, guess, or reconstruct a
+hidden digit from context and then call the number readable — a partially
+struck-through transit number (e.g. a black mark over the leading digits with
+only the last few showing) is OBSCURED, full stop.
+
+When key_values_obscured is true you MUST also set usable=false,
+primary_issue=key_fields_obscured, and a usability_confidence of at least 0.85.
+A void cheque with any struck-out digit in its account, transit, or institution
+number is useless and must be sent back.
+
+Guardrail so you don't over-reject: EXPECTED printed elements are NOT redactions
+— a "VOID" stamp or watermark across a cheque, the bank's logo, a signature, a
+faint security pattern, or shading that does not sit ON TOP OF a value are all
+normal. Only count a mark as obscuring when it actually covers part of a value
+the document is meant to show.
 
 For financial statements (trial balance, income statement, balance sheet,
 general ledger), the owner is the COMPANY named in the header — read it into
