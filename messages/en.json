@@ -1161,7 +1161,19 @@
     "detail_period": "Period",
     "detail_form": "Form",
     "detail_amounts": "Amounts",
-    "detail_also_possible": "Also possible"
+    "detail_also_possible": "Also possible",
+    "status_looks_right": "Looks right",
+    "status_low_confidence": "Low confidence",
+    "status_wrong_type": "Wrong document",
+    "status_auto_rejected": "Auto-rejected",
+    "status_escalated": "Needs review",
+    "status_flagged": "Flag for review",
+    "status_analyzing": "Reading…",
+    "status_not_analyzed": "Not analyzed",
+    "client_notified": "Client notified",
+    "summary_details": "Details",
+    "full_in_preview": "Open Preview for the full analysis",
+    "override_approve": "AI was wrong — approve"
   },
   "Usability": {
     "label": "AI quality",
