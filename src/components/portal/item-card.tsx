@@ -14,7 +14,6 @@ import { PortalImageLightbox } from "./portal-image-lightbox";
 // has written its verdict to the uploaded_files row.
 type UploadVerdict = {
   usable: boolean;
-  primary_issue: string | null;
   issue_summary_fr: string;
   issue_summary_en: string;
   auto_rejected: boolean;
