@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pickAiHeadline } from "./file-ai-headline";
+import { deriveFileAi, pickAiHeadline, type FileAiInput } from "./file-ai-headline";
 
 const base = {
   analyzed: true,
@@ -81,5 +81,103 @@ describe("pickAiHeadline", () => {
     expect(
       pickAiHeadline({ ...base, usable: null, typeConcern: true }),
     ).toEqual({ kind: "wrong_type", tone: "bad" });
+  });
+});
+
+describe("deriveFileAi", () => {
+  const NOW = 1_700_000_000_000;
+  const fresh = new Date(NOW - 60_000).toISOString();
+  const file = (over: Partial<FileAiInput>): FileAiInput => ({
+    ai_classification: "t4",
+    ai_confidence: 0.95,
+    ai_usability: { usable: true },
+    ai_rejected: false,
+    ai_extracted_fields: { extracted_year: 2024, issuer_name: "Hydro-Québec" },
+    review_status: "pending",
+    uploaded_at: fresh,
+    ...over,
+  });
+  const ctx = {
+    expectedDocType: "t4" as const,
+    expectedYear: 2024,
+    clientName: null,
+    rejectionCount: 0,
+  };
+
+  it("greenlights a confident, correct, usable document", () => {
+    const v = deriveFileAi(file({}), ctx, NOW);
+    expect(v.show).toBe(true);
+    expect(v.headline).toEqual({ kind: "looks_right", tone: "good" });
+    expect(v.detected).toBe("t4");
+    expect(v.year).toBe(2024);
+    expect(v.confidence).toBe(0.95);
+  });
+
+  it("flags the wrong document type with the mismatch", () => {
+    const v = deriveFileAi(file({}), { ...ctx, expectedDocType: "rl1" }, NOW);
+    expect(v.headline.kind).toBe("wrong_type");
+    expect(v.headline.tone).toBe("bad");
+    expect(v.mismatch?.kind).toBe("type_mismatch");
+  });
+
+  it("surfaces a usability auto-rejection with its summary", () => {
+    const v = deriveFileAi(
+      file({
+        ai_usability: {
+          usable: false,
+          issue_summary_en: "Not a T4 — a screenshot.",
+          issue_summary_fr: "Pas un T4 — une capture.",
+        },
+        ai_rejected: true,
+      }),
+      ctx,
+      NOW,
+    );
+    expect(v.headline.kind).toBe("auto_rejected");
+    expect(v.isUsabilityProblem).toBe(true);
+    expect(v.summaryEn).toContain("Not a T4");
+  });
+
+  it("escalates after two strikes", () => {
+    const v = deriveFileAi(
+      file({ ai_usability: { usable: false }, ai_rejected: true }),
+      { ...ctx, rejectionCount: 2 },
+      NOW,
+    );
+    expect(v.headline.kind).toBe("escalated");
+  });
+
+  it("shows nothing when an unanalyzed file was already decided", () => {
+    const v = deriveFileAi(
+      file({
+        ai_classification: null,
+        ai_confidence: null,
+        ai_usability: null,
+        review_status: "approved",
+      }),
+      ctx,
+      NOW,
+    );
+    expect(v.show).toBe(false);
+  });
+
+  it("treats a long-unanalyzed file as not_analyzed, an in-flight one as analyzing", () => {
+    const stale = deriveFileAi(
+      file({
+        ai_classification: null,
+        ai_confidence: null,
+        ai_usability: null,
+        uploaded_at: new Date(NOW - 60 * 60 * 1000).toISOString(),
+      }),
+      ctx,
+      NOW,
+    );
+    expect(stale.headline.kind).toBe("not_analyzed");
+    const inflight = deriveFileAi(
+      file({ ai_classification: null, ai_confidence: null, ai_usability: null }),
+      ctx,
+      NOW,
+    );
+    expect(inflight.headline.kind).toBe("analyzing");
   });
 });

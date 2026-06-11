@@ -30,6 +30,7 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
+import { ChecklistItemShell } from "@/components/engagements/checklist-item-shell";
 import { EngagementPreview } from "@/components/engagements/engagement-preview/engagement-preview";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
@@ -420,7 +421,7 @@ export default async function EngagementDetailPage({
                 {t("checklist_empty")}
               </div>
             ) : (
-              <ul className="divide-y divide-border border-t border-border">
+              <ul className="space-y-2">
                 {collectionItems.map((item) => (
                   <ItemRow
                     key={item.id}
@@ -477,9 +478,16 @@ async function ItemRow({
   const label =
     locale === "fr" && item.label_fr ? item.label_fr : item.label;
   const hasSubmittedFiles = files.length > 0;
+  const hasReason = item.status === "rejected" && !!item.rejection_reason;
+  // Collapsible only when there's something to reveal. Items needing the
+  // accountant's eye (submitted = awaiting review, rejected = shows the reason)
+  // start open; resolved/empty items start collapsed so a long list stays calm.
+  const hasBody = hasSubmittedFiles || hasReason;
+  const defaultOpen =
+    item.status === "submitted" || item.status === "rejected";
 
-  return (
-    <li className="py-3 space-y-2">
+  const summary = (
+    <>
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="font-medium truncate">{label}</div>
@@ -554,8 +562,16 @@ async function ItemRow({
             )}
         </div>
       </div>
+    </>
+  );
 
-      {item.status === "rejected" && item.rejection_reason && (
+  return (
+    <ChecklistItemShell
+      defaultOpen={defaultOpen}
+      collapsible={hasBody}
+      summary={summary}
+    >
+      {hasReason && (
         <Alert variant="destructive">
           <AlertDescription className="text-xs">
             <span className="font-medium">{t("rejection_reason")}: </span>
@@ -563,9 +579,8 @@ async function ItemRow({
           </AlertDescription>
         </Alert>
       )}
-
-      {files.length > 0 && (
-        <ul className="space-y-1 mt-2">
+      {hasSubmittedFiles && (
+        <ul className="space-y-1.5">
           {files.map((f) => (
             <FilePreviewRow
               key={f.id}
@@ -579,7 +594,7 @@ async function ItemRow({
           ))}
         </ul>
       )}
-    </li>
+    </ChecklistItemShell>
   );
 }
 
