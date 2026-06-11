@@ -35,6 +35,7 @@ type FileRow = {
   ai_classification: string | null;
   ai_rejected: boolean | null;
   ai_usability: Usability | null;
+  ai_extracted_fields: Record<string, unknown> | null;
   request_items: {
     id: string;
     status: string;
@@ -62,6 +63,21 @@ const USABILITY_CONFIDENCE_THRESHOLD = 0.8;
 //      only writes (ai_rejected + reason) when the doc is unusable + confident
 //      + the firm has auto-reject on; in that one combination we wait until
 //      ai_rejected lands so the banner isn't missed by a reload-less client.
+// Positive confirmation: the AI affirmatively judged this upload to be the
+// requested document. Drives the client's green "received — looks right"
+// note. Deliberately conservative: it needs an explicit looks_correct=true
+// read off the document (a missing or garbled read confirms nothing), a
+// usable document, and no auto-reject. Exported for tests.
+export function isConfirmedVerdict(f: {
+  ai_extracted_fields: Record<string, unknown> | null;
+  ai_usability: { usable?: unknown } | null;
+  ai_rejected: boolean | null;
+}): boolean {
+  if (f.ai_rejected === true) return false;
+  if ((f.ai_usability ?? {}).usable === false) return false;
+  return (f.ai_extracted_fields ?? {}).looks_correct === true;
+}
+
 export function isVerdictSettled(
   f: {
     ai_classification: string | null;
@@ -144,7 +160,7 @@ export async function POST(request: NextRequest) {
   const { data: file } = await sb
     .from("uploaded_files")
     .select(
-      "id, request_item_id, engagement_id, ai_classification, ai_rejected, ai_usability, request_items!inner(id, status, rejection_reason)",
+      "id, request_item_id, engagement_id, ai_classification, ai_rejected, ai_usability, ai_extracted_fields, request_items!inner(id, status, rejection_reason)",
     )
     .eq("id", fileId)
     .eq("engagement_id", engagement.id)
@@ -197,6 +213,9 @@ export async function POST(request: NextRequest) {
     issue_summary_en:
       typeof u.issue_summary_en === "string" ? u.issue_summary_en : "",
     auto_rejected: autoRejected,
+    // The green "received — looks like the right document" note. Never true
+    // together with auto_rejected (a rejected file fails isConfirmedVerdict).
+    confirmed: !autoRejected && isConfirmedVerdict(f),
   };
 
   return NextResponse.json({ status: "done", verdict });

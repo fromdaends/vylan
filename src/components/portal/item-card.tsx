@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Upload, Check, FileCheck2, FileText, X, RotateCcw, AlertTriangle, Clock, Loader2 } from "lucide-react";
+import { Upload, Check, CheckCircle2, FileCheck2, FileText, X, RotateCcw, AlertTriangle, Clock, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
@@ -18,6 +18,10 @@ type UploadVerdict = {
   issue_summary_fr: string;
   issue_summary_en: string;
   auto_rejected: boolean;
+  // The AI affirmatively recognised the upload as the requested document —
+  // drives the green "received, looks right" note. Optional so a cached
+  // pre-deploy server response (without the field) reads as not-confirmed.
+  confirmed?: boolean;
 };
 
 const ACCEPT =
@@ -102,6 +106,10 @@ export function ItemCard({
   // wrong document or otherwise unusable. Lets the client retry without
   // having to wait for the email/SMS.
   const [aiRejection, setAiRejection] = useState<string | null>(null);
+  // The flip side: the AI affirmatively recognised the latest upload as the
+  // right document. Live-turn-only (like aiRejection) — after a reload the
+  // per-file "In review" pill takes over; this is the instant reassurance.
+  const [aiConfirmed, setAiConfirmed] = useState(false);
   // True while we're polling /api/portal/upload-status for the latest
   // upload's verdict. Shows a small "Checking…" hint so the client knows
   // the document is being reviewed (without making them wait on the
@@ -192,6 +200,8 @@ export function ItemCard({
                     : body.verdict.issue_summary_en ||
                       body.verdict.issue_summary_fr;
                 setAiRejection(msg || t("ai_rejected_generic"));
+              } else if (body.verdict?.confirmed) {
+                setAiConfirmed(true);
               }
               // Verdict has settled — stop the foreground re-check from
               // re-polling a file that's already resolved.
@@ -349,6 +359,7 @@ export function ItemCard({
   async function uploadFiles(files: FileList) {
     setError(null);
     setAiRejection(null);
+    setAiConfirmed(false);
     // Cancel any prior poll — the new upload is what we care about now.
     pollAbortRef.current?.abort();
     setChecking(false);
@@ -514,6 +525,21 @@ export function ItemCard({
               )}
               <p className="mt-1 text-xs text-muted-foreground">
                 {t("ai_rejected_help")}
+              </p>
+            </div>
+          )}
+
+          {/* The flip side of the warning banner: instant reassurance when the
+              check recognised the upload as the right document. Suppressed the
+              moment any issue banner is active — never both at once. */}
+          {aiConfirmed && !bannerMsg && (
+            <div className="mt-3 rounded-lg border border-success/30 bg-success/[0.08] px-3 py-2.5 text-sm">
+              <div className="flex items-center gap-1.5 font-medium text-success">
+                <CheckCircle2 className="size-4 shrink-0" aria-hidden />
+                {t("ai_confirmed_title")}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("ai_confirmed_help")}
               </p>
             </div>
           )}

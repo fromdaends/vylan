@@ -1583,6 +1583,8 @@
     "ai_rejected_title": "Ce fichier ne semble pas valide — veuillez réessayer",
     "ai_rejected_help": "Reprenez une nouvelle photo ou téléversez le bon document.",
     "ai_rejected_generic": "Nous n'arrivons pas à lire ce document clairement. Veuillez réessayer avec une nouvelle photo ou le bon fichier.",
+    "ai_confirmed_title": "Bien reçu !",
+    "ai_confirmed_help": "Ce document semble être le bon. Votre comptable s'en occupe.",
     "checking_document": "Vérification de votre document…",
     "greeting": "Bonjour {name},",
     "subhead": "Voici les documents dont {firm} a besoin.",
