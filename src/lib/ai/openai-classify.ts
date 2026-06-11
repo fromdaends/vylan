@@ -48,21 +48,20 @@ export function toStrictSchema(node: unknown): unknown {
   return node;
 }
 
-// Reasoning effort. Catching subtle defects — a smudge or scratch-off on a
-// single digit, a value that is just slightly too soft to read — rewards the
-// model actually scrutinizing the image, so default to "medium". The downside
-// (medium can occasionally run long) is bounded: the 40s client timeout above
-// fails a slow call cleanly and the 15-minute cron re-runs it, so the worst case
-// is a delayed verdict, not an upload stuck forever. Drop to "low" via
-// OPENAI_REASONING_EFFORT if analysis starts lagging; raise to "high" for even
-// deeper inspection (slower + pricier).
+// Reasoning effort. "low" is the default and is fast (~5-15s). The big wins for
+// reading fine detail come from full-resolution images (MAX_IMAGE_EDGE in
+// classify.ts) + the strong obscured-values prompt — NOT from heavy reasoning —
+// so low keeps cost and latency down without giving up the detection. If subtle
+// cases still slip through, raise to "medium" or "high" via OPENAI_REASONING_EFFORT
+// (more thorough, but more tokens/$ and slower; bounded by the 40s client timeout
+// above + the 15-minute cron retry).
 const REASONING_EFFORT =
   (process.env.OPENAI_REASONING_EFFORT?.trim() as
     | "minimal"
     | "low"
     | "medium"
     | "high"
-    | undefined) || "medium";
+    | undefined) || "low";
 
 export async function classifyWithOpenAI(opts: {
   model: string;
