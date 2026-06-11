@@ -23,9 +23,12 @@ export type RouterDecision =
   | "escalate_to_accountant"
   | "queue_for_accountant";
 
-// Two strikes-and-escalate threshold. Tunable in one place if we want
-// to change the policy later.
-export const AUTO_REJECT_STRIKE_LIMIT = 2;
+// Strikes-and-escalate threshold: how many times a flagged document is
+// auto-bounced back to the client before it routes to the accountant instead
+// (the safety net for when the AI is wrong and the client can't get it right).
+// Founder set this to 5 — favour sending bad documents back to the client over
+// landing them in the accountant's queue. Tunable in one place.
+export const AUTO_REJECT_STRIKE_LIMIT = 5;
 
 export function decide(opts: {
   autoRejectOn: boolean;
@@ -35,11 +38,11 @@ export function decide(opts: {
   if (opts.rejectionCount < AUTO_REJECT_STRIKE_LIMIT) {
     return "auto_reject_and_notify_client";
   }
-  // Two strikes already on this item — likely the AI is being too
-  // picky or the client can't get a clean shot. Either way, the
-  // accountant should look at it instead of the client getting a
-  // third nag. Counter intentionally NOT incremented here so the
-  // override flow can decrement it back to a sensible 1.
+  // The limit's worth of strikes is already on this item — likely the AI is
+  // being too picky or the client can't get a clean shot. Either way, the
+  // accountant should look at it instead of the client getting nagged again.
+  // Counter intentionally NOT incremented here so the override flow can
+  // decrement it back to a sensible 1.
   return "escalate_to_accountant";
 }
 
