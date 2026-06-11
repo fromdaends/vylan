@@ -204,10 +204,12 @@ export async function POST(request: NextRequest) {
     typeof rejectionReason === "string" &&
     rejectionReason.trim() !== "";
 
+  // Deliberately NO primary_issue here: that's the AI's internal issue code
+  // (e.g. "text_unreadable"). No portal screen ever showed it, but it used to
+  // ride along in this JSON where a curious client could spot it in dev tools —
+  // the portal only ever needs the plain-language bilingual summaries.
   const verdict = {
     usable: typeof u.usable === "boolean" ? u.usable : true,
-    primary_issue:
-      typeof u.primary_issue === "string" ? u.primary_issue : null,
     issue_summary_fr:
       typeof u.issue_summary_fr === "string" ? u.issue_summary_fr : "",
     issue_summary_en:
