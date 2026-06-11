@@ -3,10 +3,12 @@
 import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import {
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
+  CircleHelp,
   Copy,
   Download,
   ExternalLink,
@@ -14,13 +16,19 @@ import {
   Loader2,
   Maximize2,
   RefreshCw,
+  Sparkles,
   Trash2,
+  TriangleAlert,
 } from "lucide-react";
-import { FileAiSummary } from "./file-ai-summary";
 import { reclassifyFileAction } from "@/app/actions/ai";
 import { deleteFileAction } from "@/app/actions/files";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, type AppLocale } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import {
+  deriveFileAi,
+  type AiHeadlineKind,
+  type AiHeadlineTone,
+} from "@/lib/engagements/file-ai-headline";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
 import { Button } from "@/components/ui/button";
@@ -59,6 +67,62 @@ const InlinePdfPreview = dynamic(
 // change, the page's auto-refresh brings it sooner and we stop immediately.
 const RECHECK_TIMEOUT_MS = 12_000;
 
+// The AI verdict now tints the WHOLE file row (border + faint fill) instead of
+// sitting in a separate box below it — so the status reads as part of the
+// document, not an afterthought. Soft tints keep a long checklist calm.
+const TONE: Record<
+  AiHeadlineTone,
+  { row: string; text: string; dot: string }
+> = {
+  good: {
+    row: "border-success/30 bg-success/[0.04]",
+    text: "text-success",
+    dot: "bg-success",
+  },
+  warn: {
+    row: "border-warning/30 bg-warning/[0.05]",
+    text: "text-warning",
+    dot: "bg-warning",
+  },
+  bad: {
+    row: "border-destructive/30 bg-destructive/[0.05]",
+    text: "text-destructive",
+    dot: "bg-destructive",
+  },
+  neutral: {
+    row: "border-border/40 bg-card/40",
+    text: "text-muted-foreground",
+    dot: "bg-muted-foreground/40",
+  },
+};
+const NEUTRAL_ROW = "border-border/40 bg-card/40";
+
+// Returns the verdict icon as static JSX (no component-in-render) so each arm
+// is a plain element the linter is happy with.
+function AiStatusIcon({
+  kind,
+  className,
+}: {
+  kind: AiHeadlineKind;
+  className?: string;
+}) {
+  switch (kind) {
+    case "looks_right":
+      return <CheckCircle2 className={className} aria-hidden />;
+    case "analyzing":
+      return <Loader2 className={cn(className, "animate-spin")} aria-hidden />;
+    case "not_analyzed":
+      return <CircleHelp className={className} aria-hidden />;
+    case "wrong_type":
+    case "auto_rejected":
+    case "escalated":
+    case "flagged":
+      return <TriangleAlert className={className} aria-hidden />;
+    default:
+      return <Sparkles className={className} aria-hidden />;
+  }
+}
+
 export function FilePreviewRow({
   file,
   expectedDocType,
@@ -89,6 +153,11 @@ export function FilePreviewRow({
   actions?: ReactNode;
 }) {
   const t = useTranslations("Engagements");
+  const tAi = useTranslations("Ai");
+  const locale = useLocale() as AppLocale;
+  // Snapshot "now" once for the staleness check (a pure render can't call
+  // Date.now() repeatedly without churn; mount precision is plenty).
+  const [nowMs] = useState(() => Date.now());
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -176,8 +245,76 @@ export function FilePreviewRow({
     });
   }
 
+  // The AI verdict, folded into the row itself (tone + a compact status chip in
+  // the header, plus a one-line reason when there's a problem). Signature
+  // copies (hideAi) and duplicates get no AI chrome.
+  const aiView =
+    hideAi || file.is_duplicate
+      ? null
+      : deriveFileAi(
+          file,
+          {
+            expectedDocType,
+            expectedYear: expectedYear ?? null,
+            clientName: clientName ?? null,
+            rejectionCount,
+          },
+          nowMs,
+        );
+  const showAi = !!aiView?.show;
+  const tone = showAi ? TONE[aiView!.headline.tone] : null;
+
+  // Short detail next to the status word: type · year for good reads; the
+  // mismatch / "not a <type>" / model note for type problems; the localized
+  // usability summary for usability problems.
+  const aiDetail = (() => {
+    if (!aiView || !showAi) return "";
+    const typeUpper = aiView.detected ? aiView.detected.toUpperCase() : "";
+    const yr = aiView.year != null ? String(aiView.year) : null;
+    switch (aiView.headline.kind) {
+      case "looks_right":
+      case "low_confidence":
+        return [typeUpper, yr].filter(Boolean).join(" · ");
+      case "wrong_type":
+        if (aiView.isUnknown)
+          return tAi("not_a_document", { expected: expectedDocType.toUpperCase() });
+        if (aiView.mismatch?.kind === "type_mismatch")
+          return tAi("mismatch", {
+            expected: aiView.mismatch.expected.toUpperCase(),
+            detected: aiView.mismatch.actual.toUpperCase(),
+          });
+        return aiView.modelConcern ?? "";
+      case "auto_rejected":
+      case "escalated":
+      case "flagged":
+        return locale === "fr"
+          ? aiView.summaryFr || aiView.summaryEn
+          : aiView.summaryEn || aiView.summaryFr;
+      default:
+        return "";
+    }
+  })();
+  const aiStatusLabel = showAi ? tAi(`status_${aiView!.headline.kind}`) : "";
+  const aiKind = aiView?.headline.kind;
+  // Clean reads keep their "type · year" inline in the chip. Anything that
+  // needs the accountant's eye (wrong document, or a usability problem) puts the
+  // reason on its own calm line inside the tinted row — the deep read + override
+  // still live on the Preview page.
+  const isProblemRow =
+    aiKind === "wrong_type" ||
+    aiKind === "auto_rejected" ||
+    aiKind === "escalated" ||
+    aiKind === "flagged";
+  const chipDetail = showAi && !isProblemRow ? aiDetail : "";
+  const showReasonLine = showAi && isProblemRow && !!aiDetail;
+
   return (
-    <li className="rounded-md border border-border/40 bg-card/40">
+    <li
+      className={cn(
+        "rounded-md border transition-colors",
+        tone ? tone.row : NEUTRAL_ROW,
+      )}
+    >
       <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs">
         {canPreview ? (
           <button
@@ -197,9 +334,35 @@ export function FilePreviewRow({
           <span className="w-[14px]" aria-hidden />
         )}
         <FileText className="size-3.5 text-muted-foreground shrink-0" aria-hidden />
-        <span className="truncate flex-1 font-medium" title={displayName}>
+        <span className="min-w-0 flex-1 truncate font-medium" title={displayName}>
           {displayName}
         </span>
+        {showAi && tone && aiKind && (
+          <span
+            className={cn(
+              "inline-flex max-w-[45%] shrink-0 items-center gap-1 font-medium",
+              tone.text,
+            )}
+          >
+            <AiStatusIcon kind={aiKind} className="size-3.5 shrink-0" />
+            <span className="shrink-0">{aiStatusLabel}</span>
+            {chipDetail && (
+              <span className="truncate font-normal text-muted-foreground">
+                · {chipDetail}
+              </span>
+            )}
+            {aiKind === "auto_rejected" && (
+              <span className="shrink-0 rounded-sm bg-muted px-1 py-0.5 text-[10px] font-normal text-muted-foreground">
+                {tAi("client_notified")}
+              </span>
+            )}
+            {aiView!.analyzed && (
+              <span className="shrink-0 font-mono opacity-70">
+                {Math.round(aiView!.confidence * 100)}%
+              </span>
+            )}
+          </span>
+        )}
         <span className="font-mono text-muted-foreground shrink-0">
           {formatBytes(file.size_bytes)}
         </span>
@@ -299,30 +462,33 @@ export function FilePreviewRow({
           </span>
         </div>
       )}
-      {!hideAi && !file.is_duplicate && (
-        <div className="px-2.5 pb-1.5 space-y-1">
-          {/* While re-checking, an explicit pill makes it obvious the AI is
-              running again (the verdict badges keep their previous value until a
-              fresh result lands). */}
-          {rechecking && (
-            <span
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
-              aria-live="polite"
-            >
-              <Loader2 className="size-3.5 animate-spin" aria-hidden />
-              {t("rechecking")}
-            </span>
-          )}
-          {/* One compact, at-a-glance AI verdict (usability + type folded into
-              a single line). The deep read lives on the Preview page now. */}
-          <FileAiSummary
-            file={file}
-            expectedDocType={expectedDocType}
-            expectedYear={expectedYear}
-            clientName={clientName}
-            rejectionCount={rejectionCount}
-          />
+      {/* While re-checking, an explicit pill makes it obvious the AI is running
+          again (the header chip keeps its previous value until a fresh result
+          lands). */}
+      {!hideAi && !file.is_duplicate && rechecking && (
+        <div className="px-2.5 pb-1.5">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
+            aria-live="polite"
+          >
+            <Loader2 className="size-3.5 animate-spin" aria-hidden />
+            {t("rechecking")}
+          </span>
         </div>
+      )}
+      {/* The reason a document needs the accountant's eye reads as a calm line
+          INSIDE the tinted row (not a separate box). The deep read + override
+          live on the Preview page. */}
+      {showReasonLine && tone && (
+        <p
+          className={cn(
+            "border-t px-2.5 py-1.5 text-xs leading-snug",
+            tone.row,
+            tone.text,
+          )}
+        >
+          {aiDetail}
+        </p>
       )}
       {open && canPreview && (
         <div className="border-t border-border p-2 bg-muted/30">

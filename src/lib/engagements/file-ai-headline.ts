@@ -24,6 +24,147 @@ export type AiHeadlineKind =
 
 export type AiHeadline = { kind: AiHeadlineKind; tone: AiHeadlineTone };
 
+// ---------------------------------------------------------------------------
+// deriveFileAi: turn one uploaded file + its checklist context into the verdict
+// view the engagement row renders (status chip + whole-row tone). Pure so it's
+// unit-tested directly; the component layers i18n + colour on top. Mirrors the
+// gating the old FileAiSummary did, minus the framework.
+// ---------------------------------------------------------------------------
+
+import { matchDocument } from "@/lib/ai/matching";
+import type { DocType } from "@/lib/db/templates";
+
+// 15 min: past this an un-run analysis is treated as "never ran", not in-flight.
+const ANALYSIS_FRESH_MS = 15 * 60 * 1000;
+
+export type FileAiInput = {
+  ai_classification: string | null;
+  ai_confidence: number | null;
+  ai_usability:
+    | { usable?: boolean; issue_summary_fr?: string; issue_summary_en?: string }
+    | null;
+  ai_rejected: boolean;
+  ai_extracted_fields: Record<string, unknown> | null;
+  review_status: "pending" | "approved" | "rejected";
+  uploaded_at: string;
+};
+
+export type FileAiView = {
+  /** false → render no AI chrome (accountant already decided, read never ran). */
+  show: boolean;
+  headline: AiHeadline;
+  analyzed: boolean;
+  confidence: number;
+  detected: string;
+  year: number | null;
+  issuer: string | null;
+  party: string | null;
+  isUnknown: boolean;
+  isUsabilityProblem: boolean;
+  /** First type/year/identity mismatch, for the inline detail. */
+  mismatch: { kind: string; expected: string; actual: string } | null;
+  modelConcern: string | null;
+  summaryFr: string;
+  summaryEn: string;
+};
+
+export function deriveFileAi(
+  file: FileAiInput,
+  ctx: {
+    expectedDocType: DocType;
+    expectedYear: number | null;
+    clientName: string | null;
+    /** Strike counter on the item — drives the "escalated" headline. */
+    rejectionCount: number;
+  },
+  nowMs: number,
+): FileAiView {
+  const analyzed =
+    file.ai_classification != null && file.ai_confidence != null;
+
+  // Accountant already ruled on a file the read never finished → stay silent.
+  const supersededUnanalyzed =
+    !analyzed &&
+    (file.review_status === "approved" || file.review_status === "rejected");
+
+  const fields = (file.ai_extracted_fields ?? {}) as {
+    extracted_year?: unknown;
+    looks_correct?: unknown;
+    issue_if_any?: unknown;
+    issuer_name?: unknown;
+    party_name?: unknown;
+  };
+  const detected = file.ai_classification ?? "";
+  const conf = file.ai_confidence ?? 0;
+  const isUnknown = detected === "unknown";
+  const year =
+    typeof fields.extracted_year === "number" ? fields.extracted_year : null;
+  const issuer = typeof fields.issuer_name === "string" ? fields.issuer_name : null;
+  const party = typeof fields.party_name === "string" ? fields.party_name : null;
+
+  const flags = analyzed
+    ? matchDocument({
+        expectedDocType: ctx.expectedDocType,
+        expectedYear: ctx.expectedYear,
+        clientName: ctx.clientName,
+        classification: {
+          document_type: detected as DocType | "unknown",
+          confidence: conf,
+          extracted_year: year,
+          party_name: party,
+          fields_confidence: 0,
+        },
+      })
+    : [];
+  const modelConcern =
+    fields.looks_correct === false && typeof fields.issue_if_any === "string"
+      ? fields.issue_if_any
+      : null;
+  const typeConcern = isUnknown || flags.length > 0 || modelConcern !== null;
+
+  const stale =
+    !analyzed &&
+    nowMs - new Date(file.uploaded_at).getTime() > ANALYSIS_FRESH_MS;
+
+  const usable = file.ai_usability ? (file.ai_usability.usable ?? null) : null;
+
+  const headline = pickAiHeadline({
+    analyzed,
+    stale,
+    usable,
+    aiRejected: file.ai_rejected,
+    rejectionCount: ctx.rejectionCount,
+    typeConcern,
+    lowConfidence: conf < 0.5,
+  });
+
+  const isUsabilityProblem =
+    headline.kind === "auto_rejected" ||
+    headline.kind === "escalated" ||
+    headline.kind === "flagged";
+
+  const firstFlag = flags[0] ?? null;
+
+  return {
+    show: !supersededUnanalyzed,
+    headline,
+    analyzed,
+    confidence: conf,
+    detected,
+    year,
+    issuer,
+    party,
+    isUnknown,
+    isUsabilityProblem,
+    mismatch: firstFlag
+      ? { kind: firstFlag.kind, expected: firstFlag.expected, actual: firstFlag.actual }
+      : null,
+    modelConcern,
+    summaryFr: file.ai_usability?.issue_summary_fr ?? "",
+    summaryEn: file.ai_usability?.issue_summary_en ?? "",
+  };
+}
+
 export function pickAiHeadline(p: {
   /** ai_classification AND ai_confidence are both present. */
   analyzed: boolean;
