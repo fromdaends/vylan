@@ -10,7 +10,9 @@ import { selectActive } from "@/lib/dashboard/worklist-select";
 //   * waitingOnClients — live engagements where NOTHING awaits the accountant
 //     (no undecided submission at either the item or file level, no flagged
 //     uploads, no signed copies to confirm) AND the client still owes at least
-//     one required document. The "ball is entirely in the client's court" set.
+//     one document (required items when the checklist has any; ALL items on
+//     optional-only checklists, mirroring the engine's own denominator
+//     fallback). The "ball is entirely in the client's court" set.
 //   * dueSoon — live engagements whose due date falls within the next 7 days.
 //     A calendar fact, deliberately NOT the chase chip's rule (the chip also
 //     requires <80% completion; the stat counts every approaching deadline).
@@ -41,10 +43,18 @@ export function isWaitingOnClient(r: WorklistRow): boolean {
     // …no flagged uploads, no returned signed copies.
     r.flaggedFilesCount === 0 &&
     r.signedCopiesToConfirm === 0 &&
-    // And the client still owes at least one required document. This also
-    // excludes the "all approved, awaiting Mark complete" parked state and
-    // engagements that request nothing.
-    r.itemsRequiredBlocked > 0
+    // And the client still owes at least one document. itemsTotal/itemsDone
+    // come from the engine's own denominator — required items, FALLING BACK to
+    // all items when the checklist has no required ones (custom checklists
+    // default every item to optional; without the fallback those engagements
+    // would read "waiting on clients: 0" while Needs attention chases them).
+    // Under the itemsReadyToReview === 0 guard above, total − done is exactly
+    // the engine's "blocked on the client" count (pending + rejected; the
+    // AI-bounced case the engine excludes from blocked can't occur here, since
+    // a bounce counts in itemsReadyToReview). Also excludes the "all approved,
+    // awaiting Mark complete" parked state (done === total) and engagements
+    // that request nothing (total === 0).
+    r.itemsTotal - r.itemsDone > 0
   );
 }
 

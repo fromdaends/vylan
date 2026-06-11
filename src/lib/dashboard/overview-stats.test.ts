@@ -23,9 +23,11 @@ function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id">): WorklistRow 
     assigneeName: null,
     approvedPct: 0,
     awaitingPct: 0,
+    // Default: the client owes both items (itemsTotal/itemsDone use the
+    // engine's denominator — required items, or ALL items on an optional-only
+    // checklist, so the same numbers cover both shapes).
     itemsDone: 0,
     itemsTotal: 2,
-    itemsRequiredBlocked: 0,
     attentionScore: 0,
     reasons: [],
     daysOverdue: null,
@@ -47,12 +49,27 @@ function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id">): WorklistRow 
 
 // The pure "ball is entirely in the client's court" predicate.
 describe("isWaitingOnClient", () => {
-  const waiting = row({ id: "w", status: "sent", itemsRequiredBlocked: 1 });
+  const waiting = row({ id: "w", status: "sent" });
 
-  it("true for a live engagement where the client owes a required doc and nothing awaits the accountant", () => {
+  it("true for a live engagement where the client owes a doc and nothing awaits the accountant", () => {
     expect(isWaitingOnClient(waiting)).toBe(true);
     expect(
-      isWaitingOnClient(row({ id: "w2", status: "in_progress", itemsRequiredBlocked: 3 })),
+      isWaitingOnClient(
+        row({ id: "w2", status: "in_progress", itemsDone: 1, itemsTotal: 3 }),
+      ),
+    ).toBe(true);
+  });
+
+  it("true for an optional-only checklist the client hasn't acted on (engine denominator fallback)", () => {
+    // Custom checklists default every item to optional. The engine's
+    // itemsTotal/itemsDone fall back to ALL items when none are required, so
+    // an untouched all-optional engagement still counts as waiting — the same
+    // engagement Needs attention chases via due_soon/stale. Regression test
+    // for the review finding that a required-items-only rule read 0 here.
+    expect(
+      isWaitingOnClient(
+        row({ id: "opt", status: "sent", itemsDone: 0, itemsTotal: 4 }),
+      ),
     ).toBe(true);
   });
 
@@ -78,10 +95,16 @@ describe("isWaitingOnClient", () => {
     );
   });
 
-  it("false when the client owes nothing (all approved / parked / nothing requested)", () => {
-    expect(isWaitingOnClient({ ...waiting, itemsRequiredBlocked: 0 })).toBe(
-      false,
-    );
+  it("false when the client owes nothing (everything done / parked awaiting Mark complete)", () => {
+    expect(
+      isWaitingOnClient({ ...waiting, itemsDone: 2, itemsTotal: 2 }),
+    ).toBe(false);
+  });
+
+  it("false when the engagement requests no documents at all", () => {
+    expect(
+      isWaitingOnClient({ ...waiting, itemsDone: 0, itemsTotal: 0 }),
+    ).toBe(false);
   });
 
   it("false for drafts and terminal statuses (not live)", () => {
@@ -128,19 +151,21 @@ describe("isDueSoon", () => {
 describe("computeOverviewStats", () => {
   it("counts each stat independently from the same rows", () => {
     const rows: WorklistRow[] = [
-      // Active + waiting on client.
-      row({ id: "a", status: "sent", itemsRequiredBlocked: 1 }),
-      // Active + ready to review.
-      row({ id: "b", status: "in_progress", readyToReview: true }),
-      // Active + due soon + waiting on client (counts in both).
+      // Active + waiting on client (owes both items, per factory default).
+      row({ id: "a", status: "sent" }),
+      // Active + ready to review (nothing owed; a submission awaits).
       row({
-        id: "c",
-        status: "sent",
-        itemsRequiredBlocked: 2,
-        daysUntilDue: 5,
+        id: "b",
+        status: "in_progress",
+        readyToReview: true,
+        itemsReadyToReview: 1,
+        itemsDone: 2,
+        itemsTotal: 2,
       }),
+      // Active + due soon + waiting on client (counts in both).
+      row({ id: "c", status: "sent", daysUntilDue: 5 }),
       // Draft: active, but never waiting/due.
-      row({ id: "d", status: "draft", itemsRequiredBlocked: 1, daysUntilDue: 2 }),
+      row({ id: "d", status: "draft", daysUntilDue: 2 }),
       // Complete: counts nowhere.
       row({ id: "e", status: "complete", derivedStatus: "complete" }),
       // Cancelled: counts nowhere.
