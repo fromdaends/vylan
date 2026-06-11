@@ -89,7 +89,13 @@ export async function classifyWithOpenAI(opts: {
       }
     : {
         type: "image_url" as const,
-        image_url: { url: `data:${opts.mediaType};base64,${opts.base64}` },
+        image_url: {
+          url: `data:${opts.mediaType};base64,${opts.base64}`,
+          // Force full-detail tiling. The default ("auto") can quietly
+          // down-sample the image, which blinded the model to small redactions;
+          // "high" makes GPT-5.4+ read it at full fidelity (up to ~2.56M px).
+          detail: "high" as const,
+        },
       };
 
   const resp = await c.chat.completions.create({
