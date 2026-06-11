@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { approveFile, rejectFile } from "@/lib/db/file-review";
+import { deleteUploadedFilePermanently } from "@/lib/db/uploaded-files";
 import { logUserActivity } from "@/lib/db/activity";
 import { getServerSupabase } from "@/lib/supabase/server";
 
@@ -69,6 +70,35 @@ export async function approveFileAction(formData: FormData) {
     });
   }
   revalidate(ctx?.engagementId);
+}
+
+// PERMANENT per-file delete (no recycle bin). The session-scoped
+// getFileContext lookup is the authorization: RLS only returns the row when
+// the caller belongs to the file's firm. The destructive work then runs
+// service-role (uploaded_files has no authenticated DELETE policy) — storage
+// object + DB row erased, duplicate pointers re-homed, item status
+// recomputed, so the document also disappears from the client portal.
+export async function deleteFileAction(
+  formData: FormData,
+): Promise<FileActionState> {
+  const id = formData.get("id");
+  if (typeof id !== "string" || !id) return { error: "missing_fields" };
+  const sb = await getServerSupabase();
+  const { data: auth } = await sb.auth.getUser();
+  if (!auth.user) return { error: "unauth" };
+  const ctx = await getFileContext(id);
+  if (!ctx) return { error: "not_found" };
+
+  const result = await deleteUploadedFilePermanently(id);
+  if (!result.ok) return { error: "delete_failed" };
+
+  // PII rule: ids only, never the filename (the log outlives the file).
+  await logUserActivity(ctx.firmId, ctx.engagementId, "delete_file", {
+    item_id: ctx.itemId,
+    file_id: id,
+  });
+  revalidate(ctx.engagementId);
+  return { ok: true };
 }
 
 const RejectSchema = z.object({

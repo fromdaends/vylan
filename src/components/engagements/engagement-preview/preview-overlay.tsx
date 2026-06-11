@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
@@ -67,6 +68,7 @@ export function PreviewOverlay({
 }: Props) {
   const t = useTranslations("Preview");
   const tEng = useTranslations("Engagements");
+  const router = useRouter();
   const [view, setView] = useState<PreviewView>(initialView ?? "all");
   const [query, setQuery] = useState("");
   // The checklist-item filter ("all" or a specific request_item id).
@@ -80,6 +82,10 @@ export function PreviewOverlay({
   );
   const [rejectTarget, setRejectTarget] = useState<PreviewDoc | null>(null);
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  // Files PERMANENTLY deleted during this overlay session (the action already
+  // erased them server-side; this hides them instantly while the page's
+  // server data refreshes underneath).
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(() => new Set());
   const panelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -90,13 +96,22 @@ export function PreviewOverlay({
     () => expectedYearFromTitle(engagementTitle),
     [engagementTitle],
   );
+  // Deleted files drop out before the view-model builds, so counts, tabs,
+  // groups, and seq numbers all agree with the post-delete reality.
+  const liveUploads = useMemo(
+    () =>
+      deletedIds.size === 0
+        ? uploads
+        : uploads.filter((u) => !deletedIds.has(u.id)),
+    [uploads, deletedIds],
+  );
   const docs = useMemo(
     () =>
       applyOverrides(
-        buildPreviewDocs(uploads, items, { expectedYear, clientName }),
+        buildPreviewDocs(liveUploads, items, { expectedYear, clientName }),
         overrides,
       ),
-    [uploads, items, overrides, expectedYear, clientName],
+    [liveUploads, items, overrides, expectedYear, clientName],
   );
   // Search first, then the status tabs filter the search results — so the tab
   // counts + the grid both reflect the current search.
@@ -147,9 +162,9 @@ export function PreviewOverlay({
   const selectedFile = useMemo(
     () =>
       selectedFileId
-        ? (uploads.find((u) => u.id === selectedFileId) ?? null)
+        ? (liveUploads.find((u) => u.id === selectedFileId) ?? null)
         : null,
-    [uploads, selectedFileId],
+    [liveUploads, selectedFileId],
   );
 
   // Lock the page behind the overlay from scrolling and move focus into the
@@ -501,6 +516,15 @@ export function PreviewOverlay({
               panelRef.current?.focus();
             }}
             onCloseOverlay={onClose}
+            onDeleted={(fileId) => {
+              // Server-side erase already happened (the detail's confirm).
+              // Drop it from this session's grid, close the detail, and pull
+              // fresh server data so the page underneath agrees.
+              setDeletedIds((prev) => new Set(prev).add(fileId));
+              setSelectedFileId(null);
+              panelRef.current?.focus();
+              router.refresh();
+            }}
           />
         )}
       </div>
