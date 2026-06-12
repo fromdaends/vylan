@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   ChevronDown,
   Download,
+  FileSignature,
   FolderOpen,
   ListFilter,
   Search,
@@ -62,6 +63,7 @@ export function PreviewOverlay({
   engagementTitle,
   clientName,
   locale,
+  signingDocs,
   scoped,
   initialView,
   onClose,
@@ -124,6 +126,19 @@ export function PreviewOverlay({
   const itemOptions = useMemo(
     () => groupDocsByItem(docs.filter((d) => !d.isDuplicate), items),
     [docs, items],
+  );
+  // Which checklist items are signature lines (the client signs a document the
+  // accountant supplied). The grid + item filter mark them, otherwise a
+  // signature item is indistinguishable from a same-named collection item.
+  const signatureItemIds = useMemo(
+    () => new Set(items.filter((i) => i.kind === "signature").map((i) => i.id)),
+    [items],
+  );
+  // The "document to sign" per signature item (keyed by item id), so each
+  // signature section can surface the blank/template the accountant uploaded.
+  const signingDocByItem = useMemo(
+    () => new Map((signingDocs ?? []).map((s) => [s.itemId, s])),
+    [signingDocs],
   );
   // The checklist-item filter applies on top of search; the tab counts + grid
   // both reflect it ("all" keeps everything).
@@ -366,6 +381,7 @@ export function PreviewOverlay({
                   value={itemFilter}
                   onChange={setItemFilter}
                   locale={locale}
+                  signatureItemIds={signatureItemIds}
                 />
                 <span
                   aria-hidden
@@ -462,11 +478,36 @@ export function PreviewOverlay({
                       <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
                         {heading}
                       </h3>
+                      {signatureItemIds.has(g.itemId) && (
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent/15 px-1.5 py-0.5 text-[0.65rem] font-semibold tracking-wide text-accent uppercase">
+                          <FileSignature className="size-3" aria-hidden />
+                          {t("signature_badge")}
+                        </span>
+                      )}
                       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
                         {t("doc_count", { count: g.docs.length })}
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
+                      {/* The blank "document to sign" the accountant supplied —
+                          not an uploaded file, so it's a link tile (opens the
+                          signed doc in a new tab) rather than a review card. */}
+                      {signingDocByItem.has(g.itemId) && (
+                        <a
+                          href={signingDocByItem.get(g.itemId)!.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group flex aspect-3/4 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 bg-card/40 p-3 text-center transition-colors hover:border-accent/60 hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                        >
+                          <FileSignature
+                            className="size-7 text-muted-foreground transition-colors group-hover:text-accent"
+                            aria-hidden
+                          />
+                          <span className="line-clamp-2 text-xs font-medium text-foreground">
+                            {t("doc_to_sign")}
+                          </span>
+                        </a>
+                      )}
                       {g.docs.map((doc) => {
                         const dupOf =
                           doc.isDuplicate && doc.duplicateOfFileId
@@ -552,11 +593,13 @@ function PreviewItemFilter({
   value,
   onChange,
   locale,
+  signatureItemIds,
 }: {
   options: PreviewGroup[];
   value: string;
   onChange: (v: string) => void;
   locale: string;
+  signatureItemIds: Set<string>;
 }) {
   const t = useTranslations("Preview");
   return (
@@ -572,6 +615,7 @@ function PreviewItemFilter({
         {options.map((g) => (
           <option key={g.itemId} value={g.itemId}>
             {groupLabel(g, locale)}
+            {signatureItemIds.has(g.itemId) ? ` · ${t("signature_badge")}` : ""}
           </option>
         ))}
       </select>
