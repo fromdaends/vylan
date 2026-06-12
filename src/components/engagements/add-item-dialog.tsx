@@ -37,54 +37,45 @@ export function AddItemDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
-  // Controlled inputs. The previous version submitted via the native form +
-  // HTML `required`, but in Safari the doc-type picker / dialog could fire the
-  // submit before the labels were captured — so the action ran with empty
-  // labels and (once we surfaced it) showed "fill in both labels" even though
-  // the user had typed them. Owning the values + validating + calling the
-  // action explicitly removes every one of those failure paths.
-  const [labelFr, setLabelFr] = useState("");
-  const [labelEn, setLabelEn] = useState("");
-  const [descFr, setDescFr] = useState("");
+  // The label/description fields are UNCONTROLLED and read straight from the
+  // form at submit time via FormData. This is deliberate: Safari autofill (and
+  // some IME paths) set an input's value WITHOUT firing React's onChange, so a
+  // controlled mirror could read empty while the box visibly shows text — which
+  // is exactly the "fill in both labels even though they're filled" bug (it
+  // only "worked" after ticking Required because that re-render synced state).
+  // Reading the live DOM value sidesteps that entirely. doc_type stays
+  // controlled (the picker needs it) and rides along via a hidden input.
   const [docType, setDocType] = useState<DocType>("other");
-  const [required, setRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  function reset() {
-    setLabelFr("");
-    setLabelEn("");
-    setDescFr("");
-    setDocType("other");
-    setRequired(false);
-    setError(null);
-  }
-
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (pending) return;
     setError(null);
 
-    // Validate the actual current values — not the DOM at submit time.
-    if (!labelFr.trim() || !labelEn.trim()) {
+    const formEl = e.currentTarget;
+    const fd = new FormData(formEl);
+    const labelFr = String(fd.get("label_fr") ?? "").trim();
+    const labelEn = String(fd.get("label_en") ?? "").trim();
+
+    // Validate the REAL field values (typed or autofilled), not React state.
+    if (!labelFr || !labelEn) {
       setError(t("add_item_check_fields"));
       return;
     }
+    // Normalize trimmed values + ensure the picker's choice is included.
+    fd.set("label_fr", labelFr);
+    fd.set("label_en", labelEn);
+    fd.set("doc_type", docType);
 
     setPending(true);
     try {
-      const fd = new FormData();
-      fd.set("engagement_id", engagementId);
-      fd.set("label_fr", labelFr.trim());
-      fd.set("label_en", labelEn.trim());
-      fd.set("description_fr", descFr.trim());
-      fd.set("doc_type", docType);
-      if (required) fd.set("required", "on");
-
       const res = await addItemAction(null, fd);
       if (res?.ok) {
+        formEl.reset();
+        setDocType("other");
         setOpen(false);
-        reset();
         // Toast confirms success even when the new row lands far down a long
         // checklist; the action revalidated the cache, refresh re-renders it.
         toast.success(t("item_added"));
@@ -106,7 +97,12 @@ export function AddItemDialog({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) reset();
+        // Radix unmounts the content on close, so the uncontrolled fields reset
+        // themselves; just clear the bits that live in React state.
+        if (!next) {
+          setDocType("other");
+          setError(null);
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -121,6 +117,7 @@ export function AddItemDialog({
           <DialogDescription>{t("add_item_subtitle")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-3">
+          <input type="hidden" name="engagement_id" value={engagementId} />
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
@@ -129,22 +126,12 @@ export function AddItemDialog({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="label_fr">{t("label_fr_placeholder")}</Label>
-              <Input
-                id="label_fr"
-                value={labelFr}
-                onChange={(e) => setLabelFr(e.target.value)}
-                maxLength={200}
-                autoFocus
-              />
+              {/* Uncontrolled — read from the form at submit (autofill-safe). */}
+              <Input id="label_fr" name="label_fr" maxLength={200} autoFocus />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="label_en">{t("label_en_placeholder")}</Label>
-              <Input
-                id="label_en"
-                value={labelEn}
-                onChange={(e) => setLabelEn(e.target.value)}
-                maxLength={200}
-              />
+              <Input id="label_en" name="label_en" maxLength={200} />
             </div>
           </div>
           <div className="space-y-1.5">
@@ -153,8 +140,7 @@ export function AddItemDialog({
             </Label>
             <Textarea
               id="description_fr"
-              value={descFr}
-              onChange={(e) => setDescFr(e.target.value)}
+              name="description_fr"
               rows={2}
               maxLength={500}
             />
@@ -171,11 +157,7 @@ export function AddItemDialog({
               />
             </div>
             <label className="flex items-center gap-1.5 select-none cursor-pointer pt-5">
-              <input
-                type="checkbox"
-                checked={required}
-                onChange={(e) => setRequired(e.target.checked)}
-              />
+              <input type="checkbox" name="required" />
               {t("required")}
             </label>
           </div>
