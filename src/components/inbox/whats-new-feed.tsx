@@ -1,6 +1,5 @@
 import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
-import { WhatsNewCollapsible } from "./whats-new-collapsible";
 import { formatRelative, type AppLocale } from "@/lib/format";
 import type { HomeNotification } from "@/lib/home/notifications";
 import {
@@ -13,12 +12,13 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-// "What's new" — the calm, informational activity feed in the Overview's right
-// rail (AI flags, ready-to-review, overdue, …). Presented as a deliberate but
-// quiet panel: a subtle neutral card (NOT the accent tint of the Needs-attention
-// block), a crisp title tier + a muted metadata tier, and clearly-sized event
-// icons. It answers "what happened", not "what to do" — so it stays secondary to
-// the main column. Data comes from listHomeNotifications; this just renders it.
+// "What's new" — the calm, informational activity feed (AI flags, ready-to-
+// review, overdue, …) with a crisp title tier, a muted metadata tier, and
+// clearly-sized event icons. It answers "what happened", not "what to do".
+// The Overview's permanent right rail is gone: these rows are server-rendered
+// and passed as children into the bell-summoned slide-out (WhatsNewBell),
+// which owns the title/count/View-all chrome. Data comes from
+// listHomeNotifications; this just renders it.
 export async function WhatsNewFeed({
   notifications,
   locale,
@@ -28,37 +28,20 @@ export async function WhatsNewFeed({
 }) {
   const t = await getTranslations("Home");
 
-  // Collapsible (default open, remembered) — the header title is the toggle.
-  // The body (rows / empty state) is server-rendered and passed as children to
-  // the client shell. Renders twice on the Overview (mobile inline + desktop
-  // rail); the shell's useId keeps the aria ids unique and both share one
-  // collapse preference.
+  if (notifications.length === 0) {
+    return (
+      <p className="py-3 text-sm text-muted-foreground">
+        {t("whats_new_empty")}
+      </p>
+    );
+  }
+
   return (
-    <WhatsNewCollapsible
-      title={t("whats_new")}
-      count={notifications.length}
-      viewAll={
-        notifications.length > 0 ? (
-          <Link
-            href="/notifications"
-            className="inline-flex items-center gap-0.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            {t("view_all")}
-            <ChevronRight className="h-3 w-3" aria-hidden />
-          </Link>
-        ) : undefined
-      }
-    >
-      {notifications.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{t("whats_new_empty")}</p>
-      ) : (
-        <ol className="divide-y divide-border/50">
-          {notifications.map((n) => (
-            <WhatsNewRow key={n.id} n={n} locale={locale} t={t} />
-          ))}
-        </ol>
-      )}
-    </WhatsNewCollapsible>
+    <ol className="divide-y divide-border/50">
+      {notifications.map((n) => (
+        <WhatsNewRow key={n.id} n={n} locale={locale} t={t} />
+      ))}
+    </ol>
   );
 }
 

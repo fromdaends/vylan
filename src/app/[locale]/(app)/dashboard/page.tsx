@@ -17,13 +17,14 @@ import {
 import { EngagementsWorklist } from "@/components/dashboard/engagements-worklist";
 import { OverviewStatsStrip } from "@/components/dashboard/overview-stats-strip";
 import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
+import { WhatsNewBell } from "@/components/inbox/whats-new-bell";
 import { NeedsAttention } from "@/components/dashboard/needs-attention";
 
 // The Overview is the single home that answers all three of an accountant's
-// questions: what to do now (Needs attention), what's my work (My engagements),
-// and what just happened (What's new). Two-column on desktop — a wide main
-// column + a sticky ~320px right rail for What's new; stacks to one column
-// below lg (the right rail drops under My engagements).
+// questions: what to do now (stats + Needs attention), what's my work (My
+// engagements), and what just happened (What's new — summoned from the
+// header bell as a right slide-out, not a permanent rail). One main column;
+// Needs attention and the table get the full width the old rail used to take.
 export default async function DashboardPage({
   params,
 }: {
@@ -82,66 +83,60 @@ export default async function DashboardPage({
   // a Quebec evening.
   const subtitle = firm?.name ?? "";
 
+  // Hierarchy (top to bottom) = the accountant's actual priority: glance
+  // (stats) + act (Needs attention), work (My engagements), start something
+  // new (templates, demoted to a slim secondary strip).
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-10 min-[1800px]:grid-cols-[minmax(0,1fr)_360px]">
-      {/* Main column. Hierarchy (top to bottom) = the accountant's actual
-          priority: glance (stats) + act (Needs attention), work (My
-          engagements), start something new (templates, demoted to a slim
-          secondary strip). */}
-      <div className="min-w-0 space-y-10 sm:space-y-12">
-        <DashboardHeader firstName={firstName} subtitle={subtitle} />
+    <div className="space-y-10 sm:space-y-12">
+      {/* The What's-new feed rides in the header bell: rows render on the
+          server here and slide out from the right edge on demand. */}
+      <DashboardHeader
+        firstName={firstName}
+        subtitle={subtitle}
+        bell={
+          <WhatsNewBell count={notifications.length}>
+            <WhatsNewFeed notifications={notifications} locale={locale} />
+          </WhatsNewBell>
+        }
+      />
 
-        {/* Top row: the stats strip anchors the top-left and Needs attention
-            fills the rest of the row on a wide canvas (2xl+), so neither
-            floats alone in empty space. Below 2xl they stack, stats first. */}
-        <div className="flex flex-col gap-8 2xl:flex-row 2xl:items-start 2xl:gap-10">
-          {/* At-a-glance counts — quiet, clickable, computed from the same
-              worklist rows (and the same status engine) as everything else.
-              Firm-wide on purpose: the linked views are firm-wide too, so a
-              staff member's click always lands on a list matching the count. */}
-          <div className="shrink-0 2xl:w-[21rem]">
-            <OverviewStatsStrip rows={worklistRows} />
-          </div>
-
-          {/* Needs attention — the prominent, accent-tinted action block,
-              expanded by default. Always rendered (calm "all caught up" line
-              when empty). Rows carry the same right-click / "..." menu as the
-              My-engagements table. */}
-          <div className="min-w-0 flex-1">
-            <NeedsAttention
-              rows={attentionRows}
-              canDelete={user ? canDeleteEngagements(user.role) : false}
-            />
-          </div>
+      {/* Top row: the stats strip anchors the top-left and Needs attention
+          fills the rest of the row on a wide canvas (2xl+), so neither
+          floats alone in empty space. Below 2xl they stack, stats first. */}
+      <div className="flex flex-col gap-8 2xl:flex-row 2xl:items-start 2xl:gap-10">
+        {/* At-a-glance counts — quiet, clickable, computed from the same
+            worklist rows (and the same status engine) as everything else.
+            Firm-wide on purpose: the linked views are firm-wide too, so a
+            staff member's click always lands on a list matching the count. */}
+        <div className="shrink-0 2xl:w-[21rem]">
+          <OverviewStatsStrip rows={worklistRows} />
         </div>
 
-        {/* Recent/Mine show active work; the Complete tab surfaces finished
-            engagements. The worklist filters per-tab, so it gets every row. */}
-        <EngagementsWorklist
-          rows={worklistRows}
-          currentUserId={user?.id ?? null}
-          isOwner={user?.role === "owner"}
-          locale={locale}
-          canDelete={user ? canDeleteEngagements(user.role) : false}
-        />
-
-        {/* Start from a template — deliberately demoted BELOW the work: a
-            slim, quiet quick-start strip, clearly secondary to engagements. */}
-        <TemplatesGallery templates={templateCards} />
-
-        {/* What's new — on mobile/tablet the right rail collapses to here,
-            under My engagements. Hidden on lg where the sticky rail shows it. */}
-        <div className="lg:hidden">
-          <WhatsNewFeed notifications={notifications} locale={locale} />
+        {/* Needs attention — the prominent, accent-tinted action block,
+            expanded by default. Always rendered (calm "all caught up" line
+            when empty). Rows carry the same right-click / "..." menu as the
+            My-engagements table. */}
+        <div className="min-w-0 flex-1">
+          <NeedsAttention
+            rows={attentionRows}
+            canDelete={user ? canDeleteEngagements(user.role) : false}
+          />
         </div>
       </div>
 
-      {/* Right rail — sticky on desktop; hidden below lg (shown inline above). */}
-      <aside className="hidden lg:block">
-        <div className="sticky top-8">
-          <WhatsNewFeed notifications={notifications} locale={locale} />
-        </div>
-      </aside>
+      {/* Recent/Mine show active work; the Complete tab surfaces finished
+          engagements. The worklist filters per-tab, so it gets every row. */}
+      <EngagementsWorklist
+        rows={worklistRows}
+        currentUserId={user?.id ?? null}
+        isOwner={user?.role === "owner"}
+        locale={locale}
+        canDelete={user ? canDeleteEngagements(user.role) : false}
+      />
+
+      {/* Start from a template — deliberately demoted BELOW the work: a
+          slim, quiet quick-start strip, clearly secondary to engagements. */}
+      <TemplatesGallery templates={templateCards} />
     </div>
   );
 }
