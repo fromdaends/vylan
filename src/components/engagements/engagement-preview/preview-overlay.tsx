@@ -63,7 +63,6 @@ export function PreviewOverlay({
   engagementTitle,
   clientName,
   locale,
-  signingDocs,
   scoped,
   initialView,
   onClose,
@@ -133,12 +132,6 @@ export function PreviewOverlay({
   const signatureItemIds = useMemo(
     () => new Set(items.filter((i) => i.kind === "signature").map((i) => i.id)),
     [items],
-  );
-  // The "document to sign" per signature item (keyed by item id), so each
-  // signature section can surface the blank/template the accountant uploaded.
-  const signingDocByItem = useMemo(
-    () => new Map((signingDocs ?? []).map((s) => [s.itemId, s])),
-    [signingDocs],
   );
   // The checklist-item filter applies on top of search; the tab counts + grid
   // both reflect it ("all" keeps everything).
@@ -489,25 +482,6 @@ export function PreviewOverlay({
                       </span>
                     </div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
-                      {/* The blank "document to sign" the accountant supplied —
-                          not an uploaded file, so it's a link tile (opens the
-                          signed doc in a new tab) rather than a review card. */}
-                      {signingDocByItem.has(g.itemId) && (
-                        <a
-                          href={signingDocByItem.get(g.itemId)!.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="group flex aspect-3/4 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/60 bg-card/40 p-3 text-center transition-colors hover:border-accent/60 hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
-                        >
-                          <FileSignature
-                            className="size-7 text-muted-foreground transition-colors group-hover:text-accent"
-                            aria-hidden
-                          />
-                          <span className="line-clamp-2 text-xs font-medium text-foreground">
-                            {t("doc_to_sign")}
-                          </span>
-                        </a>
-                      )}
                       {g.docs.map((doc) => {
                         const dupOf =
                           doc.isDuplicate && doc.duplicateOfFileId
