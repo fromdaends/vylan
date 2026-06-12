@@ -86,6 +86,10 @@ export function AddItemDialog({
         // checklist; the action revalidated the cache, refresh re-renders it.
         toast.success(t("item_added"));
         router.refresh();
+      } else if (res?.detail) {
+        // Show the raw server reason (diagnostic) so a hidden DB/RLS error is
+        // visible instead of a useless generic message.
+        setError(res.detail);
       } else if (res?.fieldErrors) {
         // The label is already validated above, so unexpected field errors mean
         // a stale page talking to a new/old server — ask for a refresh.

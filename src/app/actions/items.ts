@@ -17,6 +17,9 @@ import { pickAddItemFields } from "@/lib/engagements/add-item-fields";
 export type ItemActionState = {
   ok?: boolean;
   error?: string;
+  // The raw server-side reason, surfaced to the UI so a hidden DB/RLS error
+  // isn't invisible. (Diagnostic; safe — it's the accountant's own data.)
+  detail?: string;
   fieldErrors?: Record<string, string>;
 } | null;
 
@@ -166,8 +169,20 @@ export async function addItemAction(
     doc_type: d.doc_type as NewItemInput["doc_type"],
     required: d.required,
   };
+  // The insert is the ONLY thing that decides success. If it fails, surface the
+  // real reason. (Previously a bare catch wrapped the insert AND the logging +
+  // revalidation, so a hiccup in either of those reported a failed add even
+  // when the row was written — and hid why an insert actually failed.)
+  let item: Awaited<ReturnType<typeof addItemToEngagement>>;
   try {
-    const item = await addItemToEngagement(input);
+    item = await addItemToEngagement(input);
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    console.error("[add_item] insert failed:", detail, e);
+    return { error: "add_failed", detail };
+  }
+  // Best-effort: activity log + cache revalidation must never fail the add.
+  try {
     const sb = await getServerSupabase();
     const { data: e } = await sb
       .from("engagements")
@@ -181,8 +196,8 @@ export async function addItemAction(
       });
     }
     revalidateItemPaths(item.engagement_id);
-  } catch {
-    return { error: "add_failed" };
+  } catch (e) {
+    console.error("[add_item] post-insert step failed (item WAS added):", e);
   }
   return { ok: true };
 }
