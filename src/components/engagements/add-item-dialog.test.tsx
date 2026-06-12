@@ -65,6 +65,10 @@ describe("AddItemDialog", () => {
     await waitFor(() => expect(addItemAction).toHaveBeenCalledTimes(1));
     const fd = addItemAction.mock.calls[0][1] as FormData;
     expect(fd.get("label")).toBe("Bank statement");
+    // Bridge: the same value is sent under the legacy names too, so the add
+    // works whether the server runs the new or old action (deploy skew).
+    expect(fd.get("label_fr")).toBe("Bank statement");
+    expect(fd.get("label_en")).toBe("Bank statement");
     expect(fd.get("required")).toBeNull(); // unchecked
     expect(
       screen.queryByText(en.Engagements.add_item_check_field),
