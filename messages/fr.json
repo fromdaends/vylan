@@ -736,6 +736,7 @@
     "new_engagement": "Nouvel engagement",
     "whats_new": "Nouveautés",
     "whats_new_empty": "Rien de nouveau pour l'instant.",
+    "whats_new_bell_label": "Nouveautés : {count, plural, =0 {aucune mise à jour récente} one {# mise à jour récente} other {# mises à jour récentes}}",
     "view_all": "Voir tout",
     "quick_links_label": "Raccourcis",
     "quick_clients": "Clients",
