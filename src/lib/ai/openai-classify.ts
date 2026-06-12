@@ -48,20 +48,21 @@ export function toStrictSchema(node: unknown): unknown {
   return node;
 }
 
-// Reasoning effort. "low" is the default and is fast (~5-15s). The big wins for
-// reading fine detail come from full-resolution images (MAX_IMAGE_EDGE in
-// classify.ts) + the strong obscured-values prompt — NOT from heavy reasoning —
-// so low keeps cost and latency down without giving up the detection. If subtle
-// cases still slip through, raise to "medium" or "high" via OPENAI_REASONING_EFFORT
-// (more thorough, but more tokens/$ and slower; bounded by the 40s client timeout
-// above + the 15-minute cron retry).
+// Reasoning effort. Default "medium". "low" glanced and missed subtle reads
+// that the SAME model (gpt-5.4) catches in the ChatGPT app, where it thinks
+// harder before answering — e.g. a photographed health card whose faint
+// embossed number it couldn't fully read, yet passed at 95%. Medium restores
+// that scrutiny at a sane cost (~2x low's output tokens; the next step, "high",
+// costs more per doc than Opus, so it's not the default). Bounded by the 40s
+// client timeout above + the 15-minute cron retry, so a slow run degrades to a
+// delayed verdict, not a stuck upload. Tune via OPENAI_REASONING_EFFORT.
 const REASONING_EFFORT =
   (process.env.OPENAI_REASONING_EFFORT?.trim() as
     | "minimal"
     | "low"
     | "medium"
     | "high"
-    | undefined) || "low";
+    | undefined) || "medium";
 
 export async function classifyWithOpenAI(opts: {
   model: string;
