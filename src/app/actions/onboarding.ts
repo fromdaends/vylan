@@ -36,8 +36,10 @@ const Step3Schema = z.object({
 });
 
 function pickLocale(formData: FormData): "fr" | "en" {
+  // English is the default for a new firm/client unless French is explicitly
+  // chosen (Vylan serves all of Canada; French stays a first-class option).
   const v = formData.get("locale");
-  return v === "en" ? "en" : "fr";
+  return v === "fr" ? "fr" : "en";
 }
 
 function fieldErrorsFromZod(error: z.ZodError): Record<string, string> {
@@ -74,8 +76,10 @@ export async function submitStep1(
   const userMetaName =
     (auth.user.user_metadata?.name as string | undefined)?.trim() ||
     auth.user.email!.split("@")[0];
+  // Default a brand-new firm/owner to English unless French was explicitly set
+  // at signup (Canada-wide default; French stays available in settings).
   const userMetaLocale =
-    auth.user.user_metadata?.locale === "en" ? "en" : "fr";
+    auth.user.user_metadata?.locale === "fr" ? "fr" : "en";
 
   const existingFirm = await getCurrentFirm();
 
