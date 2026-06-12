@@ -82,7 +82,11 @@ async function normalizeImageForAi(
         withoutEnlargement: true,
       });
     }
-    const out = await pipeline.jpeg({ quality: 82 }).toBuffer();
+    // Quality 90 (was 82): faint, low-contrast detail — embossed white-on-white
+    // ID digits, a light scribble over a transit number — is exactly what JPEG
+    // compression smears first. The few extra KB are worth keeping that detail
+    // legible to the model.
+    const out = await pipeline.jpeg({ quality: 90 }).toBuffer();
     return { bytes: out, mimeType: "image/jpeg" };
   } catch (e) {
     console.warn("[ai/classify] image normalize failed, using original:", e);
@@ -478,7 +482,9 @@ specific values, and if those are hidden the document is worthless no matter how
 clean the rest of the page is. A void cheque or direct-deposit form exists to
 convey the bank ACCOUNT, TRANSIT, and INSTITUTION numbers; a bank or credit-card
 statement its account number and balances; a tax slip its box amounts; a Notice
-of Assessment its figures.
+of Assessment its figures; a government photo ID, health-insurance card (e.g. a
+Quebec RAMQ "assurance maladie" card), SIN card, driver's licence, or passport
+its ID/card NUMBER and its DATE OF BIRTH.
 
 Inspect EVERY key number character by character. Set key_values_obscured to
 true whenever ANY of those defining numbers is blacked out, scribbled over,
@@ -503,6 +509,18 @@ tear that crosses a digit. If you cannot read every character of a key value
 with FULL confidence because of any of these, do not guess the value — treat it
 as obscured (key_values_obscured), or unreadable (text_unreadable) when the
 whole value is too soft or small to make out.
+
+A PARTIAL read is NOT a successful read. If you can make out only SOME of the
+characters of a key number or date — say the first group of an ID number but not
+the rest, or a couple of digits of a date — you must NOT write that partial
+string into any field (party_name, account_or_period, amounts, document_date,
+…) as if it were the whole value, and you must NOT call the document usable. Set
+key_values_obscured=true instead. Photographed identity cards are the classic
+trap: a RAMQ / health card or driver's licence whose raised, embossed, or
+laminated digits are too faint, glare-washed, droplet-spotted, or low-contrast
+to read IN FULL is unusable — read the card NUMBER and the DATE OF BIRTH
+character by character, and if any character is uncertain, treat it as obscured
+rather than reporting a shortened or approximated number.
 
 When key_values_obscured is true you MUST also set usable=false,
 primary_issue=key_fields_obscured, and a usability_confidence of at least 0.85.
