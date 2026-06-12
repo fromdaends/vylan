@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pickAddItemFields } from "./add-item-fields";
+import { addItemSchema, pickAddItemFields } from "./add-item-fields";
 
 // Version-proof: whatever field names a cached client bundle posts, the action
 // must find the label + description. This is the guard that ends the
@@ -32,5 +32,32 @@ describe("pickAddItemFields", () => {
     expect(pickAddItemFields({ label: "   " }).label).toBe("");
     expect(pickAddItemFields({}).label).toBe("");
     expect(pickAddItemFields({ description: "" }).description).toBeNull();
+  });
+});
+
+describe("addItemSchema — the 'Required checkbox' bug", () => {
+  const base = { label: "T4", doc_type: "other" };
+
+  it("parses when `required` is ABSENT (unchecked checkbox sends nothing)", () => {
+    const r = addItemSchema.safeParse(base);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.required).toBe(false);
+  });
+
+  it("parses `required` = 'on' (checked) as true", () => {
+    const r = addItemSchema.safeParse({ ...base, required: "on" });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.required).toBe(true);
+  });
+
+  it("still requires a doc_type", () => {
+    expect(addItemSchema.safeParse({ label: "T4" }).success).toBe(false);
+  });
+
+  it("accepts legacy label_fr/label_en with no `required`", () => {
+    expect(
+      addItemSchema.safeParse({ label_fr: "T4", label_en: "T4", doc_type: "t4" })
+        .success,
+    ).toBe(true);
   });
 });

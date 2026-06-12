@@ -6,6 +6,30 @@
 //
 // Pure + framework-free so it's unit-tested directly. It lives here (not in the
 // "use server" actions file, which may only export async server actions).
+import { z } from "zod";
+
+// Shared validation for adding a checklist item, used by BOTH the API route and
+// the (legacy) server action so they can't drift.
+//
+// CRITICAL: `required` MUST be `.optional()`. It comes from a checkbox — when
+// UNCHECKED the browser sends NO `required` field at all, so the key is absent
+// from FormData. A non-optional schema rejects an absent key ("expected
+// nonoptional, received undefined") → the whole add fails unless the box is
+// ticked. This was the real "you have to check Required to add" bug.
+export const addItemSchema = z.object({
+  // label / legacy label_fr|label_en (older cached clients) — picked downstream.
+  label: z.string().max(200).optional().nullable(),
+  label_fr: z.string().max(200).optional().nullable(),
+  label_en: z.string().max(200).optional().nullable(),
+  description: z.string().max(500).optional().nullable(),
+  description_fr: z.string().max(500).optional().nullable(),
+  doc_type: z.string().min(1),
+  required: z
+    .union([z.literal("on"), z.literal("true"), z.literal("false")])
+    .optional()
+    .transform((v) => v === "on" || v === "true"),
+});
+
 export function pickAddItemFields(d: {
   label?: string | null;
   label_fr?: string | null;
