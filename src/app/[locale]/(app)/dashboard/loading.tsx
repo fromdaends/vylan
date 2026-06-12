@@ -1,5 +1,5 @@
 // Overview skeleton — mirrors the two-column shell so there's no layout shift
-// when the real page streams in: main column (header · jump-back-in · needs-
+// when the real page streams in: main column (header · stats + needs-
 // attention · templates · my-engagements) + a sticky right rail (What's new).
 // Collapses to one column below lg, matching the page.
 
@@ -14,13 +14,29 @@ export default function Loading() {
           <div className="h-4 w-48 max-w-full rounded-md bg-muted/60" />
         </div>
 
-        {/* Needs attention block (accent-tinted card) */}
-        <div className="rounded-2xl border border-accent/20 bg-accent/[0.04] p-4 sm:p-5">
-          <div className="h-5 w-40 rounded-md bg-muted" />
-          <div className="mt-3 space-y-2">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-11 rounded-xl bg-muted/40" />
-            ))}
+        {/* Top row: stats strip (left) + Needs attention (right), matching
+            the page's 2xl flex layout so nothing shifts when it streams in. */}
+        <div className="flex flex-col gap-8 2xl:flex-row 2xl:items-start 2xl:gap-10">
+          {/* Stats strip — four hairline-accented counts */}
+          <div className="shrink-0 2xl:w-[21rem]">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 2xl:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="border-l border-border/40 pl-3">
+                  <div className="h-6 w-10 rounded-md bg-muted" />
+                  <div className="mt-1.5 h-3 w-20 rounded bg-muted/50" />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Needs attention block (accent-tinted card) */}
+          <div className="min-w-0 flex-1 rounded-2xl border border-accent/20 bg-accent/[0.04] p-4 sm:p-5">
+            <div className="h-5 w-40 rounded-md bg-muted" />
+            <div className="mt-3 space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-11 rounded-xl bg-muted/40" />
+              ))}
+            </div>
           </div>
         </div>
 

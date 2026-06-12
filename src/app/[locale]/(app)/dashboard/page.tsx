@@ -15,7 +15,6 @@ import {
   type TemplateCard,
 } from "@/components/dashboard/templates-gallery";
 import { EngagementsWorklist } from "@/components/dashboard/engagements-worklist";
-import { JumpBackIn } from "@/components/engagements/jump-back-in";
 import { OverviewStatsStrip } from "@/components/dashboard/overview-stats-strip";
 import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
 import { NeedsAttention } from "@/components/dashboard/needs-attention";
@@ -86,37 +85,21 @@ export default async function DashboardPage({
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-10 min-[1800px]:grid-cols-[minmax(0,1fr)_360px]">
       {/* Main column. Hierarchy (top to bottom) = the accountant's actual
-          priority: act (Jump back in + Needs attention), work (My
+          priority: glance (stats) + act (Needs attention), work (My
           engagements), start something new (templates, demoted to a slim
           secondary strip). */}
       <div className="min-w-0 space-y-10 sm:space-y-12">
         <DashboardHeader firstName={firstName} subtitle={subtitle} />
 
-        {/* Top row: the left column (Jump back in + the stats strip below it)
-            and Needs attention share the first row on a wide canvas (2xl+), so
-            neither floats alone in empty space. Below 2xl everything stacks,
-            Jump back in first (its historical spot). The Jump-back-in card
-            still self-hides when there's nothing recent (its inner empty:
-            wrapper collapses with it); the stats strip keeps the column
-            occupied either way. */}
+        {/* Top row: the stats strip anchors the top-left and Needs attention
+            fills the rest of the row on a wide canvas (2xl+), so neither
+            floats alone in empty space. Below 2xl they stack, stats first. */}
         <div className="flex flex-col gap-8 2xl:flex-row 2xl:items-start 2xl:gap-10">
-          <div className="flex shrink-0 flex-col gap-8 2xl:w-[21rem]">
-            <div className="empty:hidden">
-              <JumpBackIn
-                engagements={worklistRows.map((r) => ({
-                  id: r.id,
-                  title: r.title,
-                  clientName: r.clientName,
-                  recencyAt: r.recencyAt,
-                }))}
-                locale={locale}
-              />
-            </div>
-
-            {/* At-a-glance counts — quiet, clickable, computed from the same
-                worklist rows (and the same status engine) as everything else.
-                Firm-wide on purpose: the linked views are firm-wide too, so a
-                staff member's click always lands on a list matching the count. */}
+          {/* At-a-glance counts — quiet, clickable, computed from the same
+              worklist rows (and the same status engine) as everything else.
+              Firm-wide on purpose: the linked views are firm-wide too, so a
+              staff member's click always lands on a list matching the count. */}
+          <div className="shrink-0 2xl:w-[21rem]">
             <OverviewStatsStrip rows={worklistRows} />
           </div>
 
