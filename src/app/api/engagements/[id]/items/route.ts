@@ -10,29 +10,18 @@
 // (the row-level policy requires the engagement to belong to current_firm_id()).
 
 import { NextResponse, type NextRequest } from "next/server";
-import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { addItemToEngagement, type NewItemInput } from "@/lib/db/request-items";
 import { logUserActivity } from "@/lib/db/activity";
-import { pickAddItemFields } from "@/lib/engagements/add-item-fields";
+import {
+  addItemSchema,
+  pickAddItemFields,
+} from "@/lib/engagements/add-item-fields";
 
 export const runtime = "nodejs";
 
 const LOCALES = ["en", "fr"] as const;
-
-// One label; legacy label_fr/label_en accepted too (older cached clients).
-const Schema = z.object({
-  label: z.string().max(200).optional().nullable(),
-  label_fr: z.string().max(200).optional().nullable(),
-  label_en: z.string().max(200).optional().nullable(),
-  description: z.string().max(500).optional().nullable(),
-  description_fr: z.string().max(500).optional().nullable(),
-  doc_type: z.string().min(1),
-  required: z
-    .union([z.literal("on"), z.literal("true"), z.literal("false"), z.undefined()])
-    .transform((v) => v === "on" || v === "true"),
-});
 
 export async function POST(
   request: NextRequest,
@@ -59,7 +48,7 @@ export async function POST(
     );
   }
 
-  const parsed = Schema.safeParse(Object.fromEntries(form));
+  const parsed = addItemSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
     for (const issue of parsed.error.issues) {
