@@ -18,7 +18,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { signedUrl } from "@/lib/storage";
 import {
-  buildZipArchive,
+  streamZip,
   sanitizeFilenamePart,
   macZipEntryName,
   type ZipEntry,
@@ -155,9 +155,14 @@ export async function GET(_request: NextRequest) {
     // engagement_id + request_item_id as the path lets a downstream
     // restore script reattach files to rows from the CSVs.
     for (const f of files ?? []) {
-      const url = await signedUrl(f.storage_path, 60).catch(() => null);
+      const url = await signedUrl(f.storage_path, 300).catch(() => null);
       if (!url) continue;
-      const res = await fetch(url);
+      let res: Response;
+      try {
+        res = await fetch(url);
+      } catch {
+        continue;
+      }
       if (!res.ok) continue;
       const data = new Uint8Array(await res.arrayBuffer());
       // Export keeps the ORIGINAL filename (the CSVs map rows by it); only the
@@ -170,14 +175,14 @@ export async function GET(_request: NextRequest) {
     }
   }
 
-  const zipBytes = await buildZipArchive(entries());
-
-  return new Response(zipBytes as unknown as BodyInit, {
+  // Streamed (chunked) response: built incrementally one entry at a time, so a
+  // large firm's export never allocates the whole archive in memory, and the
+  // body isn't subject to the ~4.5 MB buffered-response cap.
+  return new Response(streamZip(entries()), {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${archiveName}"`,
-      "Content-Length": String(zipBytes.byteLength),
       "Cache-Control": "no-store",
     },
   });

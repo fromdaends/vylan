@@ -1,13 +1,15 @@
 // Bulk-download every uploaded file for a single engagement as a ZIP.
 //
-// Auth model: the authed firm member is the actor. The route checks
-// that the engagement belongs to their firm before doing any work — a
-// stale `id` from another firm returns 404.
+// Auth model: the authed firm member is the actor. The route checks that the
+// engagement belongs to their firm before doing any work — a stale `id` from
+// another firm returns 404.
 //
-// We fetch each file from its signed URL, then build the ZIP in memory with
-// fflate (see src/lib/zip.ts) so every entry gets a clean, macOS-openable
-// local header. Files here are individual tax documents, so the in-memory
-// peak is modest.
+// The archive is STREAMED file-by-file (src/lib/zip.ts streamZip): fetch one
+// document, write its entry, release it, then pull the next. Peak memory is a
+// single file — never the whole archive. Building the entire zip in one
+// in-memory buffer (fflate zipSync) is what previously THREW on big engagements
+// and surfaced as the "zip_failed" 500. The streamed response also isn't
+// subject to the ~4.5 MB buffered-response cap.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
@@ -15,8 +17,7 @@ import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server
 import { getCurrentFirm } from "@/lib/db/firms";
 import { signedUrl } from "@/lib/storage";
 import {
-  buildZipArchive,
-  zipToStream,
+  streamZip,
   sanitizeFilenamePart,
   macZipEntryName,
   type ZipEntry,
@@ -42,8 +43,8 @@ export async function GET(
     return NextResponse.json({ error: "no_firm" }, { status: 403 });
   }
 
-  // Firm-scope the engagement lookup. A user from another firm gets
-  // an indistinguishable 404 — no existence oracle.
+  // Firm-scope the engagement lookup. A user from another firm gets an
+  // indistinguishable 404 — no existence oracle.
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb
     .from("engagements")
@@ -68,89 +69,61 @@ export async function GET(
       .order("uploaded_at", { ascending: true }),
   ]);
 
-  // Exclude byte-identical re-uploads: the original they duplicate is already
-  // in the archive, so including them only bloats the zip (and the in-memory
-  // build) with redundant copies — a real factor on heavily re-uploaded
-  // engagements. Also drop any row missing a storage path (nothing to fetch).
-  const realFiles = (files ?? []).filter((f) => !f.is_duplicate && f.storage_path);
+  // Exclude byte-identical re-uploads: the original they duplicate is already in
+  // the archive, so they would only add redundant copies. Drop any row missing a
+  // storage path too (nothing to fetch).
+  const realFiles = (files ?? []).filter(
+    (f) => !f.is_duplicate && f.storage_path,
+  );
   if (realFiles.length === 0) {
     return NextResponse.json({ error: "no_files" }, { status: 404 });
   }
 
-  // Build the on-disk filename: client - engagement - YYYY-MM-DD.zip.
-  // Each part is sanitized so paths and special chars can't escape
-  // the Content-Disposition header.
-  const clientPart = sanitizeFilenamePart(
-    client?.display_name ?? "client",
-  );
+  // On-disk filename: client - engagement - YYYY-MM-DD.zip. Each part is
+  // sanitized so paths / special chars can't escape the Content-Disposition.
+  const clientPart = sanitizeFilenamePart(client?.display_name ?? "client");
   const titlePart = sanitizeFilenamePart(engagement.title);
   const datePart = format(new Date(), "yyyy-MM-dd");
   const archiveName = `${clientPart}-${titlePart}-${datePart}.zip`;
 
-  // Record the action up front. If the build dies partway, we still
-  // have a log of who tried to pull what.
+  // Record the action up front, before streaming, so there's always a log of
+  // who pulled what.
   await logUserActivity(firm.id, engagement.id, "bulk_download", {
     file_count: realFiles.length,
   });
 
-  // Pull one file's bytes. A file we can't sign or fetch is skipped (returns
-  // null) so a single stale/erased object never sinks the whole download. The
-  // name is null-safe (macZipEntryName falls back to "untitled").
-  async function fetchEntry(f: {
-    storage_path: string;
-    display_name: string | null;
-    original_filename: string | null;
-  }): Promise<ZipEntry | null> {
-    const url = await signedUrl(f.storage_path, 120).catch(() => null);
-    if (!url) return null;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      const data = new Uint8Array(await res.arrayBuffer());
-      return { name: macZipEntryName(f.display_name ?? f.original_filename), data };
-    } catch {
-      return null;
+  // Stream the archive file-by-file: fetch ONE document, write it, release it,
+  // then pull the next. A document we can't sign or fetch is skipped, so one
+  // stale / erased object never sinks the whole download. The entry name is
+  // null-safe (macZipEntryName falls back to "untitled").
+  async function* entries(): AsyncGenerator<ZipEntry> {
+    for (const f of realFiles) {
+      const url = await signedUrl(f.storage_path, 300).catch(() => null);
+      if (!url) continue;
+      let data: Uint8Array;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        data = new Uint8Array(await res.arrayBuffer());
+      } catch {
+        continue;
+      }
+      yield {
+        name: macZipEntryName(f.display_name ?? f.original_filename),
+        data,
+      };
     }
   }
 
-  try {
-    // Fetch in BOUNDED PARALLEL so a few dozen documents don't blow the 60s
-    // budget on serial round-trips, while capping in-flight bytes (memory).
-    const CONCURRENCY = 6;
-    const collected: ZipEntry[] = [];
-    for (let i = 0; i < realFiles.length; i += CONCURRENCY) {
-      const chunk = realFiles.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(chunk.map(fetchEntry));
-      for (const r of results) if (r) collected.push(r);
-    }
-
-    const zipBytes = await buildZipArchive(collected);
-
-    // STREAM the archive — do not return it as one buffered body. The platform
-    // caps a buffered serverless response at ~4.5 MB (the same cap the
-    // chunked-upload flow dodges on the way in), and a multi-document zip blows
-    // past it — that was the real "couldn't prepare the download" failure. A
-    // ReadableStream body is delivered chunked and isn't subject to that cap,
-    // exactly how /api/files/[id] serves large single files. Content-Length is
-    // still known + set, so the browser keeps an accurate progress bar.
-    return new Response(zipToStream(zipBytes), {
-      status: 200,
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${archiveName}"`,
-        "Content-Length": String(zipBytes.byteLength),
-        "Cache-Control": "no-store",
-      },
-    });
-  } catch (e) {
-    // A build failure used to surface as an opaque crash; return a clean 500
-    // (the client shows "couldn't prepare the download") and log enough to
-    // diagnose without leaking document contents.
-    console.error("[files.zip] build failed", {
-      engagement_id: engagement.id,
-      file_count: realFiles.length,
-      error: e instanceof Error ? e.message : String(e),
-    });
-    return NextResponse.json({ error: "zip_failed" }, { status: 500 });
-  }
+  // Streamed (chunked) response: no Content-Length because the archive is
+  // produced incrementally, and a streamed body isn't subject to the ~4.5 MB
+  // buffered-response cap.
+  return new Response(streamZip(entries()), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${archiveName}"`,
+      "Cache-Control": "no-store",
+    },
+  });
 }
