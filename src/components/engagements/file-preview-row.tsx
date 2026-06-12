@@ -283,6 +283,18 @@ export function FilePreviewRow({
             expected: aiView.mismatch.expected.toUpperCase(),
             detected: aiView.mismatch.actual.toUpperCase(),
           });
+        // Wrong person — the name read off the document isn't the client's.
+        if (aiView.mismatch?.kind === "identity_mismatch")
+          return tAi("identity_mismatch", {
+            expected: aiView.mismatch.expected,
+            actual: aiView.mismatch.actual,
+          });
+        // Right type + person, wrong tax year.
+        if (aiView.mismatch?.kind === "year_mismatch")
+          return tAi("year_mismatch", {
+            expected: aiView.mismatch.expected,
+            actual: aiView.mismatch.actual,
+          });
         return aiView.modelConcern ?? "";
       case "auto_rejected":
       case "escalated":

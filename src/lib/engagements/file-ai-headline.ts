@@ -93,6 +93,7 @@ export function deriveFileAi(
     issue_if_any?: unknown;
     issuer_name?: unknown;
     party_name?: unknown;
+    fields_confidence?: unknown;
   };
   const detected = file.ai_classification ?? "";
   const conf = file.ai_confidence ?? 0;
@@ -101,6 +102,14 @@ export function deriveFileAi(
     typeof fields.extracted_year === "number" ? fields.extracted_year : null;
   const issuer = typeof fields.issuer_name === "string" ? fields.issuer_name : null;
   const party = typeof fields.party_name === "string" ? fields.party_name : null;
+  // The field-extraction confidence the matcher gates its year + identity checks
+  // on (it stays quiet below 0.5). This MUST be the REAL value the AI wrote:
+  // feeding it 0 silenced those checks here, which is exactly why the checklist
+  // read green "looks right" while the Preview — which passes the real value via
+  // mismatchesRequest — flagged the SAME file. Pass it through so the checklist
+  // badge and the Preview can never disagree.
+  const fieldsConf =
+    typeof fields.fields_confidence === "number" ? fields.fields_confidence : 0;
 
   const flags = analyzed
     ? matchDocument({
@@ -112,7 +121,7 @@ export function deriveFileAi(
           confidence: conf,
           extracted_year: year,
           party_name: party,
-          fields_confidence: 0,
+          fields_confidence: fieldsConf,
         },
       })
     : [];
@@ -143,7 +152,12 @@ export function deriveFileAi(
     headline.kind === "escalated" ||
     headline.kind === "flagged";
 
-  const firstFlag = flags[0] ?? null;
+  // Prefer the identity (wrong-person) flag for the one-line row reason when it's
+  // present — a name mismatch is the single most important thing for the
+  // accountant to see — then fall back to the first flag (type / year). The
+  // Preview still lists every flag in full.
+  const firstFlag =
+    flags.find((f) => f.kind === "identity_mismatch") ?? flags[0] ?? null;
 
   return {
     show: !supersededUnanalyzed,

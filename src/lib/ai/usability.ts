@@ -61,3 +61,39 @@ export const USABLE_BY_DEFAULT: UsabilityVerdict = {
 export function shouldActOnUsability(v: UsabilityVerdict): boolean {
   return v.usable === false && v.confidence >= USABILITY_CONFIDENCE_THRESHOLD;
 }
+
+// Founder rule: a clean scan of the WRONG person's document is still the wrong
+// document, and must NEVER be silently accepted. When the deterministic matcher
+// finds the named owner is a stranger to the client (no shared name token, AI
+// reasonably sure), we fold that into a usable=false verdict so the EXISTING
+// reject/notify router handles it exactly like any other unusable upload — and
+// every status surface (checklist badge, Preview, client portal) stays
+// consistent, instead of one view flagging while another reads "looks right".
+//
+// primary_issue reuses "wrong_document_type" — the closest "this is not the
+// requested document" bucket already wired through the UI — and the
+// human-readable summary carries the real explanation (the wrong name). The
+// confidence is floored at the act threshold so the router always acts on it,
+// honouring the "never accepted under any conditions" rule regardless of how
+// the AI scored mere legibility.
+export function wrongRecipientVerdict(
+  base: UsabilityVerdict,
+  clientName: string,
+  detectedName: string,
+  matchConfidence: number,
+): UsabilityVerdict {
+  return {
+    usable: false,
+    confidence: Math.max(
+      base.confidence,
+      matchConfidence,
+      USABILITY_CONFIDENCE_THRESHOLD,
+    ),
+    primary_issue: "wrong_document_type",
+    all_issues: Array.from(
+      new Set<UsabilityIssue>([...base.all_issues, "wrong_document_type"]),
+    ),
+    issue_summary_fr: `Ce document semble appartenir à une autre personne (nous avons lu « ${detectedName} »). Merci de téléverser le document de ${clientName}.`,
+    issue_summary_en: `This document appears to belong to someone else (we read "${detectedName}"). Please upload ${clientName}'s document.`,
+  };
+}
