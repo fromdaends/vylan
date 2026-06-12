@@ -56,17 +56,15 @@ export function AddItemDialog({
 
     const formEl = e.currentTarget;
     const fd = new FormData(formEl);
-    const labelFr = String(fd.get("label_fr") ?? "").trim();
-    const labelEn = String(fd.get("label_en") ?? "").trim();
+    const label = String(fd.get("label") ?? "").trim();
 
-    // Validate the REAL field values (typed or autofilled), not React state.
-    if (!labelFr || !labelEn) {
-      setError(t("add_item_check_fields"));
+    // Validate the REAL field value (typed or autofilled), not React state.
+    if (!label) {
+      setError(t("add_item_check_field"));
       return;
     }
-    // Normalize trimmed values + ensure the picker's choice is included.
-    fd.set("label_fr", labelFr);
-    fd.set("label_en", labelEn);
+    // Normalize the trimmed value + ensure the picker's choice is included.
+    fd.set("label", label);
     fd.set("doc_type", docType);
 
     setPending(true);
@@ -123,24 +121,19 @@ export function AddItemDialog({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="label_fr">{t("label_fr_placeholder")}</Label>
-              {/* Uncontrolled — read from the form at submit (autofill-safe). */}
-              <Input id="label_fr" name="label_fr" maxLength={200} autoFocus />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="label_en">{t("label_en_placeholder")}</Label>
-              <Input id="label_en" name="label_en" maxLength={200} />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="label">{t("label_placeholder")}</Label>
+            {/* One label, uncontrolled — read from the form at submit
+                (autofill-safe). Stored for both client languages. */}
+            <Input id="label" name="label" maxLength={200} autoFocus />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="description_fr">
-              {t("description_fr_placeholder")}
+            <Label htmlFor="description">
+              {t("description_placeholder")}
             </Label>
             <Textarea
-              id="description_fr"
-              name="description_fr"
+              id="description"
+              name="description"
               rows={2}
               maxLength={500}
             />

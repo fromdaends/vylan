@@ -47,65 +47,50 @@ function openDialog() {
 
 function form(): HTMLFormElement {
   const f = screen
-    .getByLabelText(en.Engagements.label_fr_placeholder)
+    .getByLabelText(en.Engagements.label_placeholder)
     .closest("form");
   if (!f) throw new Error("add-item form not found (dialog did not open?)");
   return f;
 }
 
 describe("AddItemDialog", () => {
-  it("adds an item when both labels are filled (Required left unchecked)", async () => {
+  it("adds an item from a single label (Required left unchecked)", async () => {
     openDialog();
-    fireEvent.change(
-      screen.getByLabelText(en.Engagements.label_fr_placeholder),
-      { target: { value: "Relevé bancaire" } },
-    );
-    fireEvent.change(
-      screen.getByLabelText(en.Engagements.label_en_placeholder),
-      { target: { value: "Bank statement" } },
-    );
+    fireEvent.change(screen.getByLabelText(en.Engagements.label_placeholder), {
+      target: { value: "Bank statement" },
+    });
     // Submit WITHOUT touching the Required checkbox — the reported bug.
     fireEvent.submit(form());
 
     await waitFor(() => expect(addItemAction).toHaveBeenCalledTimes(1));
     const fd = addItemAction.mock.calls[0][1] as FormData;
-    expect(fd.get("label_fr")).toBe("Relevé bancaire");
-    expect(fd.get("label_en")).toBe("Bank statement");
+    expect(fd.get("label")).toBe("Bank statement");
     expect(fd.get("required")).toBeNull(); // unchecked
     expect(
-      screen.queryByText(en.Engagements.add_item_check_fields),
+      screen.queryByText(en.Engagements.add_item_check_field),
     ).not.toBeInTheDocument();
   });
 
-  it("captures autofilled values that bypass React onChange (the Safari bug)", async () => {
+  it("captures an autofilled label that bypasses React onChange (the Safari bug)", async () => {
     openDialog();
-    const fr = screen.getByLabelText(
-      en.Engagements.label_fr_placeholder,
-    ) as HTMLInputElement;
-    const enInput = screen.getByLabelText(
-      en.Engagements.label_en_placeholder,
+    const label = screen.getByLabelText(
+      en.Engagements.label_placeholder,
     ) as HTMLInputElement;
     // Simulate Safari autofill: set the DOM value directly with NO change event.
     // A controlled mirror would read empty here; reading the form must not.
-    fr.value = "Relevé bancaire";
-    enInput.value = "Bank statement";
+    label.value = "Bank statement";
     fireEvent.submit(form());
 
     await waitFor(() => expect(addItemAction).toHaveBeenCalledTimes(1));
     const fd = addItemAction.mock.calls[0][1] as FormData;
-    expect(fd.get("label_fr")).toBe("Relevé bancaire");
-    expect(fd.get("label_en")).toBe("Bank statement");
+    expect(fd.get("label")).toBe("Bank statement");
   });
 
-  it("blocks and warns when a label is empty", async () => {
+  it("blocks and warns when the label is empty", async () => {
     openDialog();
-    fireEvent.change(
-      screen.getByLabelText(en.Engagements.label_fr_placeholder),
-      { target: { value: "Only French" } },
-    );
     fireEvent.submit(form());
     expect(
-      await screen.findByText(en.Engagements.add_item_check_fields),
+      await screen.findByText(en.Engagements.add_item_check_field),
     ).toBeInTheDocument();
     expect(addItemAction).not.toHaveBeenCalled();
   });

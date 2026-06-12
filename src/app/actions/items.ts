@@ -118,11 +118,13 @@ export async function reopenItemAction(formData: FormData) {
   revalidateItemPaths(ctx?.engagement_id);
 }
 
+// One label only. The accountant writes it however they like (French or
+// English); we store the same text in both locale columns so it shows as-is
+// to every client regardless of their portal language.
 const AddItemSchema = z.object({
   engagement_id: z.string().min(1),
-  label_fr: z.string().min(1).max(200),
-  label_en: z.string().min(1).max(200),
-  description_fr: z.string().max(500).optional().nullable(),
+  label: z.string().min(1).max(200),
+  description: z.string().max(500).optional().nullable(),
   doc_type: z.string().min(1),
   required: z
     .union([z.literal("on"), z.literal("true"), z.literal("false"), z.undefined()])
@@ -143,12 +145,15 @@ export async function addItemAction(
     }
     return { fieldErrors };
   }
+  // Same text in both locale columns → shown as typed to EN and FR clients.
+  const label = parsed.data.label;
+  const description = parsed.data.description ?? null;
   const input: NewItemInput = {
     engagement_id: parsed.data.engagement_id,
-    label: parsed.data.label_en,
-    label_fr: parsed.data.label_fr,
-    description: null,
-    description_fr: parsed.data.description_fr ?? null,
+    label,
+    label_fr: label,
+    description,
+    description_fr: description,
     doc_type: parsed.data.doc_type as NewItemInput["doc_type"],
     required: parsed.data.required,
   };
