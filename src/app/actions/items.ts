@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/request-items";
 import { logUserActivity } from "@/lib/db/activity";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { pickAddItemFields } from "@/lib/engagements/add-item-fields";
 
 export type ItemActionState = {
   ok?: boolean;
@@ -121,10 +122,17 @@ export async function reopenItemAction(formData: FormData) {
 // One label only. The accountant writes it however they like (French or
 // English); we store the same text in both locale columns so it shows as-is
 // to every client regardless of their portal language.
+// Version-proof: accept the current single `label` AND the legacy
+// `label_fr`/`label_en` (likewise description). A client bundle cached from any
+// recent deploy posts SOME of these — taking whichever is present means the add
+// never fails just because the browser and server are a version apart.
 const AddItemSchema = z.object({
   engagement_id: z.string().min(1),
-  label: z.string().min(1).max(200),
+  label: z.string().max(200).optional().nullable(),
+  label_fr: z.string().max(200).optional().nullable(),
+  label_en: z.string().max(200).optional().nullable(),
   description: z.string().max(500).optional().nullable(),
+  description_fr: z.string().max(500).optional().nullable(),
   doc_type: z.string().min(1),
   required: z
     .union([z.literal("on"), z.literal("true"), z.literal("false"), z.undefined()])
@@ -145,17 +153,18 @@ export async function addItemAction(
     }
     return { fieldErrors };
   }
-  // Same text in both locale columns → shown as typed to EN and FR clients.
-  const label = parsed.data.label;
-  const description = parsed.data.description ?? null;
+  // Take whichever label/description the client sent (new or legacy field name).
+  const { label, description } = pickAddItemFields(parsed.data);
+  if (!label) return { fieldErrors: { label: "required" } };
+  const d = parsed.data;
   const input: NewItemInput = {
-    engagement_id: parsed.data.engagement_id,
+    engagement_id: d.engagement_id,
     label,
     label_fr: label,
     description,
     description_fr: description,
-    doc_type: parsed.data.doc_type as NewItemInput["doc_type"],
-    required: parsed.data.required,
+    doc_type: d.doc_type as NewItemInput["doc_type"],
+    required: d.required,
   };
   try {
     const item = await addItemToEngagement(input);
