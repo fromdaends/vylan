@@ -369,8 +369,8 @@ export function FilePreviewRow({
               </span>
             )}
             {aiView!.analyzed && (
-              <span className="shrink-0 font-mono opacity-70">
-                {Math.round(aiView!.confidence * 100)}%
+              <span className="shrink-0 font-mono text-sm font-bold tabular-nums">
+                {Math.round(aiView!.overallConfidence * 100)}%
               </span>
             )}
           </span>

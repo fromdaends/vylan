@@ -150,6 +150,7 @@
     "viewer_unsupported": "Can't show a preview of this file.",
     "open_new_tab": "Open in new tab",
     "confidence": "{percent}% confidence",
+    "match_score": "Document score",
     "quality_ok": "Quality looks good",
     "quality_issue": "Quality issue",
     "flags_heading": "Doesn't match the request",

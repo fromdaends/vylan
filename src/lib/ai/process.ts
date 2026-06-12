@@ -17,9 +17,8 @@ import {
   isAiConfigured,
   type ClassificationResult,
 } from "./classify";
-import { shouldActOnUsability, wrongRecipientVerdict } from "./usability";
-import { expectedYearFromTitle, matchDocument } from "./matching";
-import type { DocType } from "@/lib/db/templates";
+import { shouldActOnUsability } from "./usability";
+import { expectedYearFromTitle } from "./matching";
 import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
@@ -129,37 +128,6 @@ export async function processClassifyJob(
   });
   if (!result) return { skipped: "no_classification" };
 
-  // FOUNDER RULE — a wrong-PERSON document is never acceptable, however clean
-  // the scan. Re-use the SAME deterministic matcher the accountant's Preview +
-  // checklist use (matchDocument's identity check: the named party shares NO
-  // name token with the client, AI reasonably sure >= 0.5), so this can never
-  // disagree with what the Preview shows. On a stranger name we fold the verdict
-  // into usable=false so the EXISTING reject/notify router (below) auto-rejects
-  // and messages the client — and every status surface stays consistent. Year /
-  // type mismatches stay SOFT flags (surfaced, not bounced); only a wrong NAME
-  // forces the re-send.
-  const identityMismatch = matchDocument({
-    expectedDocType: expectedDocType as DocType,
-    expectedYear: requestContext.expectedYear,
-    clientName: requestContext.clientName,
-    classification: {
-      document_type: result.document_type as DocType | "unknown",
-      confidence: result.confidence,
-      extracted_year: result.extracted_year,
-      party_name: result.party_name,
-      fields_confidence: result.fields_confidence,
-    },
-  }).find((f) => f.kind === "identity_mismatch");
-
-  const usability = identityMismatch
-    ? wrongRecipientVerdict(
-        result.usability,
-        identityMismatch.expected, // the client's name
-        identityMismatch.actual, // the name read off the document
-        identityMismatch.confidence,
-      )
-    : result.usability;
-
   // ai_rejected is intentionally NOT set here. Phase 3's routing logic
   // decides whether the system actually auto-rejects this upload based
   // on the firm's auto_reject_unusable_docs flag + the strike counter.
@@ -186,8 +154,13 @@ export async function processClassifyJob(
         form_identifier: result.form_identifier,
         amounts: result.amounts,
         fields_confidence: result.fields_confidence,
+        // Holistic identity judgment + honest headline score (drive the
+        // checklist/Preview "wrong person" flag and the prominent % meter).
+        belongs_to_client: result.belongs_to_client,
+        belongs_confidence: result.belongs_confidence,
+        overall_confidence: result.overall_confidence,
       },
-      ai_usability: usability,
+      ai_usability: result.usability,
     })
     .eq("id", file.id);
 
@@ -258,9 +231,9 @@ export async function processClassifyJob(
         document_type: result.document_type,
         confidence: result.confidence,
         looks_correct: result.looks_correct,
-        usable: usability.usable,
-        usability_confidence: usability.confidence,
-        primary_issue: usability.primary_issue,
+        usable: result.usability.usable,
+        usability_confidence: result.usability.confidence,
+        primary_issue: result.usability.primary_issue,
       },
     });
   }
@@ -269,7 +242,7 @@ export async function processClassifyJob(
   // The router consults the firm flag + strike counter to decide
   // between auto-reject, escalate, and queue.
   let routed: DispatcherResult | undefined;
-  if (firmId && shouldActOnUsability(usability)) {
+  if (firmId && shouldActOnUsability(result.usability)) {
     const [firmRow, itemRow] = await Promise.all([
       sb
         .from("firms")
@@ -292,7 +265,7 @@ export async function processClassifyJob(
     routed = await applyDecision({
       supabase: sb,
       decision,
-      verdict: usability,
+      verdict: result.usability,
       fileId: file.id,
       requestItemId: file.request_item_id,
       engagementId: file.engagement_id,

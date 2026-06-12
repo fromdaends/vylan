@@ -182,6 +182,74 @@ describe("matchDocument — identity (lenient on family files)", () => {
   });
 });
 
+describe("matchDocument — identity (AI belongs_to_client judgment)", () => {
+  it("flags when the model says the document belongs to someone else", () => {
+    const flags = matchDocument({
+      expectedDocType: "t4",
+      expectedYear: null,
+      clientName: "Tyler Jette",
+      classification: {
+        ...base,
+        party_name: "Jane Smith",
+        belongs_to_client: false,
+        belongs_confidence: 0.92,
+      },
+    });
+    expect(flags).toEqual([
+      {
+        kind: "identity_mismatch",
+        confidence: 0.92,
+        expected: "Tyler Jette",
+        actual: "Jane Smith",
+      },
+    ]);
+  });
+
+  it("stays quiet when the model says it BELONGS — even with NO shared name (the business-doc fix)", () => {
+    // "Smith Plumbing Inc." vs client "Tyler Jette": no shared name token, but
+    // the model reasoned it's the client's own business. The AI judgment
+    // OVERRIDES the blunt name-token heuristic, so no false flag / false bounce.
+    const flags = matchDocument({
+      expectedDocType: "t2125",
+      expectedYear: null,
+      clientName: "Tyler Jette",
+      classification: {
+        ...base,
+        document_type: "t2125",
+        party_name: "Smith Plumbing Inc.",
+        belongs_to_client: true,
+        belongs_confidence: 0.9,
+      },
+    });
+    expect(flags.find((f) => f.kind === "identity_mismatch")).toBeUndefined();
+  });
+
+  it("stays quiet when the model is unsure it belongs (< 0.5)", () => {
+    const flags = matchDocument({
+      expectedDocType: "t4",
+      expectedYear: null,
+      clientName: "Tyler Jette",
+      classification: {
+        ...base,
+        party_name: "Jane Smith",
+        belongs_to_client: false,
+        belongs_confidence: 0.4,
+      },
+    });
+    expect(flags.find((f) => f.kind === "identity_mismatch")).toBeUndefined();
+  });
+
+  it("falls back to the name-token heuristic only when belongs is absent (legacy data)", () => {
+    const legacy = matchDocument({
+      expectedDocType: "t4",
+      expectedYear: null,
+      clientName: "Tyler Jette",
+      classification: { ...base, party_name: "Jane Smith" }, // no belongs signal
+    });
+    expect(legacy.find((f) => f.kind === "identity_mismatch")).toBeDefined();
+  });
+});
+
 describe("expectedYearFromTitle", () => {
   it("reads a single tax year from the title", () => {
     expect(expectedYearFromTitle("Smith — T1 2024")).toBe(2024);
