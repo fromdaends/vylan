@@ -6,6 +6,7 @@ import {
   docTypesByGroup,
   docTypeLabel,
   docTypeGroupLabel,
+  appliesToProvince,
 } from "./doc-types";
 import type { DocType } from "./db/templates";
 
@@ -77,5 +78,45 @@ describe("docTypeLabel / docTypeGroupLabel", () => {
       expect(docTypeGroupLabel(g, "en")).toBeTruthy();
       expect(docTypeGroupLabel(g, "fr")).toBeTruthy();
     }
+  });
+});
+
+describe("appliesToProvince (province-aware document filtering)", () => {
+  it("hides Quebec RL slips for a non-Quebec province", () => {
+    expect(appliesToProvince("rl1", "ON")).toBe(false);
+    expect(appliesToProvince("rl3", "BC")).toBe(false);
+    expect(appliesToProvince("rl31", "AB")).toBe(false);
+  });
+
+  it("keeps Quebec RL slips for a Quebec client", () => {
+    expect(appliesToProvince("rl1", "QC")).toBe(true);
+    expect(appliesToProvince("rl31", "QC")).toBe(true);
+  });
+
+  it("keeps federal slips and national docs everywhere", () => {
+    for (const p of ["ON", "QC", "BC", "AB", "NS"]) {
+      expect(appliesToProvince("t4", p)).toBe(true);
+      expect(appliesToProvince("t5", p)).toBe(true);
+      expect(appliesToProvince("medical", p)).toBe(true);
+      expect(appliesToProvince("noa", p)).toBe(true);
+    }
+  });
+
+  it("shows everything when the province is not set (no regression)", () => {
+    expect(appliesToProvince("rl1", null)).toBe(true);
+    expect(appliesToProvince("rl1", undefined)).toBe(true);
+    expect(appliesToProvince("rl1", "")).toBe(true);
+  });
+
+  it("docTypesByGroup(province) drops the whole quebec group for Ontario", () => {
+    const on = docTypesByGroup("ON");
+    expect(on.some((g) => g.group === "quebec")).toBe(false);
+    expect(on.some((g) => g.group === "federal")).toBe(true);
+
+    const qc = docTypesByGroup("QC");
+    expect(qc.some((g) => g.group === "quebec")).toBe(true);
+
+    // Unfiltered keeps Quebec (existing callers unchanged).
+    expect(docTypesByGroup().some((g) => g.group === "quebec")).toBe(true);
   });
 });

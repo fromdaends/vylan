@@ -57,6 +57,7 @@ export function DocTypePicker({
   onChange,
   id,
   className,
+  province,
 }: {
   value: DocType;
   onChange: (next: DocType) => void;
@@ -64,6 +65,9 @@ export function DocTypePicker({
   id?: string;
   /** Sizing for the trigger button (call sites differ in width). */
   className?: string;
+  /** The client's province. When set to a non-Quebec province, the Quebec RL
+   *  slips are hidden so only the documents that apply there are offered. */
+  province?: string | null;
 }) {
   const t = useTranslations("Engagements");
   const locale = useLocale();
@@ -92,7 +96,7 @@ export function DocTypePicker({
           <CommandInput placeholder={t("doc_type_search")} />
           <CommandList>
             <CommandEmpty>{t("doc_type_empty")}</CommandEmpty>
-            {docTypesByGroup().map((g) => {
+            {docTypesByGroup(province).map((g) => {
               const heading = docTypeGroupLabel(g.group, locale);
               return (
                 <CommandGroup key={g.group} heading={heading}>

@@ -420,12 +420,37 @@ export const DOC_TYPES: DocType[] = (
     DOC_TYPE_GROUP_ORDER.indexOf(DOC_TYPE_LABELS[b].group),
 );
 
-/** Codes bucketed by group, in display order — for grouped <optgroup> pickers. */
-export function docTypesByGroup(): { group: DocTypeGroup; codes: DocType[] }[] {
+// Quebec is the ONLY Canadian province with its own slip system (the RL /
+// Relevé slips). Every other province uses the federal T-slips — the CRA
+// administers provincial tax everywhere except Quebec — so the only
+// province-restricted group is "quebec". An Ontario (or any non-QC) client
+// should never be asked for an RL slip they can't obtain.
+//
+// A null/empty province means "not set" → applies (show everything), so
+// existing clients/firms that never set a province see no change. An explicit
+// non-QC province hides the Quebec-only slips.
+export function appliesToProvince(
+  code: DocType,
+  province: string | null | undefined,
+): boolean {
+  if (!province) return true;
+  return DOC_TYPE_LABELS[code]?.group === "quebec" ? province === "QC" : true;
+}
+
+/**
+ * Codes bucketed by group, in display order — for grouped pickers. Pass a
+ * `province` to show only the document types that apply there (drops the Quebec
+ * RL slips for non-Quebec clients).
+ */
+export function docTypesByGroup(
+  province?: string | null,
+): { group: DocTypeGroup; codes: DocType[] }[] {
   return DOC_TYPE_GROUP_ORDER.map((group) => ({
     group,
     codes: (Object.keys(DOC_TYPE_LABELS) as DocType[]).filter(
-      (code) => DOC_TYPE_LABELS[code].group === group,
+      (code) =>
+        DOC_TYPE_LABELS[code].group === group &&
+        appliesToProvince(code, province),
     ),
   })).filter((g) => g.codes.length > 0);
 }

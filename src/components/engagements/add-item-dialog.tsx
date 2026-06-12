@@ -23,7 +23,15 @@ import { Loader2, Plus } from "lucide-react";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 import type { DocType } from "@/lib/db/templates";
 
-export function AddItemDialog({ engagementId }: { engagementId: string }) {
+export function AddItemDialog({
+  engagementId,
+  province,
+}: {
+  engagementId: string;
+  // The engagement's client province — limits the doc-type picker to the
+  // documents that apply there (no Quebec slips for an Ontario client).
+  province?: string | null;
+}) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
   const router = useRouter();
@@ -159,6 +167,7 @@ export function AddItemDialog({ engagementId }: { engagementId: string }) {
                 value={docType}
                 onChange={setDocType}
                 className="w-full"
+                province={province}
               />
             </div>
             <label className="flex items-center gap-1.5 select-none cursor-pointer pt-5">
