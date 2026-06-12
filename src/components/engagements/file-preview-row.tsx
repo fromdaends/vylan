@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
@@ -15,12 +15,10 @@ import {
   FileText,
   Loader2,
   Maximize2,
-  RefreshCw,
   Sparkles,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { reclassifyFileAction } from "@/app/actions/ai";
 import { deleteFileAction } from "@/app/actions/files";
 import { formatBytes, type AppLocale } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -60,12 +58,6 @@ const InlinePdfPreview = dynamic(
     ),
   },
 );
-
-// How long the "Re-checking…" animation runs if the verdict comes back
-// unchanged (a re-run that confirms the same result produces no signature
-// change to react to, so we stop after a grace period). When the verdict DOES
-// change, the page's auto-refresh brings it sooner and we stop immediately.
-const RECHECK_TIMEOUT_MS = 12_000;
 
 // The AI verdict now tints the WHOLE file row (border + faint fill) instead of
 // sitting in a separate box below it — so the status reads as part of the
@@ -145,7 +137,7 @@ export function FilePreviewRow({
   rejectionCount: number;
   // Signature signed-copies are NOT AI-classified (they aren't tax documents),
   // so they never get a usability/type verdict. Set this to hide all AI chrome
-  // (the badges + the re-check button) — otherwise the badges would sit in a
+  // (the badges) — otherwise the badges would sit in a
   // permanent "Analyzing…" state waiting for a verdict that never comes.
   hideAi?: boolean;
   // Extra controls rendered at the end of the header row (e.g. the per-copy
@@ -161,13 +153,11 @@ export function FilePreviewRow({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [viewerOpen, setViewerOpen] = useState(false);
-  const [rechecking, setRechecking] = useState(false);
   // Permanent per-file delete: confirm dialog + in-flight/error state.
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
   const [, startTransition] = useTransition();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isImage = file.mime_type.startsWith("image/");
   const isPdf = file.mime_type === "application/pdf";
@@ -193,18 +183,6 @@ export function FilePreviewRow({
     [file.id, displayName, isImage],
   );
 
-  // A fingerprint of the AI verdict. It changes when a fresh classification
-  // lands (the engagement page auto-refreshes while live), which is our cue to
-  // stop the animation — so the spinner tracks the real result, not a timer.
-  const sig = `${file.ai_classification}|${file.ai_confidence}|${file.ai_rejected}|${JSON.stringify(file.ai_usability)}`;
-  const [prevSig, setPrevSig] = useState(sig);
-  if (sig !== prevSig) {
-    // Documented React pattern: adjust state during render when a prop changes
-    // (guarded by prevSig so it can't loop). Verdict refreshed → stop spinning.
-    setPrevSig(sig);
-    if (rechecking) setRechecking(false);
-  }
-
   function confirmDelete() {
     if (deleting) return;
     setDeleting(true);
@@ -224,23 +202,6 @@ export function FilePreviewRow({
         setDeleteFailed(true);
       } finally {
         setDeleting(false);
-      }
-    });
-  }
-
-  function recheck() {
-    if (rechecking) return;
-    setRechecking(true);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setRechecking(false), RECHECK_TIMEOUT_MS);
-    const fd = new FormData();
-    fd.append("id", file.id);
-    startTransition(async () => {
-      try {
-        await reclassifyFileAction(fd);
-      } catch (e) {
-        console.error("[reclassify] failed:", e);
-        // The verdict won't change; let the timeout clear the animation.
       }
     });
   }
@@ -397,23 +358,6 @@ export function FilePreviewRow({
         >
           <Download className="size-3.5" />
         </a>
-        {!hideAi && !file.is_duplicate && (
-          <button
-            type="button"
-            onClick={recheck}
-            disabled={rechecking}
-            className={cn(
-              "rounded-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
-              rechecking
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-            aria-label={t("reclassify")}
-            title={t("reclassify")}
-          >
-            <RefreshCw className={cn("size-3.5", rechecking && "animate-spin")} />
-          </button>
-        )}
         {actions}
         {/* Permanent delete — last, destructive tone. Confirmed in a dialog;
             the document is erased outright and disappears from the client
@@ -471,20 +415,6 @@ export function FilePreviewRow({
           <span className="inline-flex items-center gap-1.5 rounded-md bg-warning/15 px-2 py-1 text-xs font-medium text-warning">
             <Copy className="size-3.5" aria-hidden />
             {t("duplicate_badge")}
-          </span>
-        </div>
-      )}
-      {/* While re-checking, an explicit pill makes it obvious the AI is running
-          again (the header chip keeps its previous value until a fresh result
-          lands). */}
-      {!hideAi && !file.is_duplicate && rechecking && (
-        <div className="px-2.5 pb-1.5">
-          <span
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary"
-            aria-live="polite"
-          >
-            <Loader2 className="size-3.5 animate-spin" aria-hidden />
-            {t("rechecking")}
           </span>
         </div>
       )}
