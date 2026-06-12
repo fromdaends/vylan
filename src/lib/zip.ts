@@ -44,7 +44,14 @@ function suffixName(name: string, n: number): string {
  * as a failed download.
  */
 export async function buildZipArchive(
-  entries: AsyncIterable<ZipEntry>,
+  entries: AsyncIterable<ZipEntry> | Iterable<ZipEntry>,
+  // 0 = STORE (no compression). Our payload is tax documents — PDFs and JPEGs,
+  // which are ALREADY compressed — so deflating them buys ~nothing in size but
+  // burns real CPU and time. Storing keeps the single-shot in-memory build fast
+  // and well under the route's time budget (level-6 deflate of a big, heavily
+  // re-uploaded engagement is what was timing the bulk download out). Callers
+  // can opt back into deflate (1-9) if they ever zip compressible content.
+  level: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 = 0,
 ): Promise<Uint8Array> {
   const files: Record<string, Uint8Array> = {};
   const seen = new Map<string, number>();
@@ -55,10 +62,7 @@ export async function buildZipArchive(
     if (n > 0) name = suffixName(name, n);
     files[name] = entry.data;
   }
-  // level 6 = balanced. Most of our payload (PDF/JPEG) is already compressed,
-  // so this mostly just packages; fflate is fast enough that it's not worth
-  // per-file tuning.
-  return zipSync(files, { level: 6 });
+  return zipSync(files, { level });
 }
 
 /**
@@ -97,11 +101,16 @@ export function sanitizeFilenamePart(input: string, maxLen = 80): string {
  * name still lives on the file's display_name and is used for single-file
  * (UTF-8 Content-Disposition) downloads.
  */
-export function macZipEntryName(input: string, maxLen = 120): string {
+export function macZipEntryName(
+  input: string | null | undefined,
+  maxLen = 120,
+): string {
   // Decompose accents (é → "e" + a combining mark), then strip everything
   // outside printable ASCII — that removes the combining marks (leaving the
-  // base letter) plus any other non-ASCII (emoji, CJK, …).
-  const ascii = input
+  // base letter) plus any other non-ASCII (emoji, CJK, …). A null/undefined
+  // name (a file with neither a display_name nor an original_filename) collapses
+  // to the "untitled" fallback below instead of throwing on .normalize().
+  const ascii = (input ?? "")
     .normalize("NFKD")
     .replace(/[^\x20-\x7e]/g, "");
 

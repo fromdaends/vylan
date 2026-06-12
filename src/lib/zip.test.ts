@@ -115,6 +115,14 @@ describe("macZipEntryName", () => {
   it("falls back to 'untitled' when the whole name sanitizes to nothing", () => {
     expect(macZipEntryName("✦✦✦")).toBe("untitled");
   });
+
+  it("is null-safe: a missing name falls back instead of throwing", () => {
+    // A file with neither a display_name nor an original_filename used to crash
+    // the whole bulk download on .normalize() of undefined.
+    expect(macZipEntryName(null)).toBe("untitled");
+    expect(macZipEntryName(undefined)).toBe("untitled");
+    expect(macZipEntryName("")).toBe("untitled");
+  });
 });
 
 describe("buildZipArchive (macOS-openable format)", () => {
@@ -124,6 +132,19 @@ describe("buildZipArchive (macOS-openable format)", () => {
     );
     expect(zip.byteLength).toBeGreaterThan(0);
     expect(Buffer.from(zip).readUInt32LE(0)).toBe(0x04034b50); // PK\x03\x04
+  });
+
+  it("accepts a plain array of entries (sync iterable), not just an async stream", async () => {
+    // The bulk-download route now collects entries into an array (via bounded
+    // parallel fetch) and passes that array straight in.
+    const zip = await buildZipArchive([
+      { name: "a.txt", data: bytes("hello") },
+      { name: "b.txt", data: bytes("world") },
+    ]);
+    expect(Buffer.from(zip).readUInt32LE(0)).toBe(0x04034b50);
+    const dir = centralDirectory(zip);
+    expect(dir.map((e) => e.name)).toEqual(["a.txt", "b.txt"]);
+    for (const e of dir) expect(e.usesDataDescriptor).toBe(false);
   });
 
   it("writes NO streaming data descriptor — every entry has GP bit 3 clear", async () => {
