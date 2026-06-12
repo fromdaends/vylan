@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Vylan — Sales Leads</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --primary: #1e293b;
+    --bg: #fafaf9;
+    --card: #ffffff;
+    --success: #15803d;
+    --warning: #d97706;
+    --danger: #b91c1c;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --accent: #4f46e5;
+    --accent-soft: #eef2ff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--primary);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Header */
+  header {
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    color: #fff;
+    padding: 2.4rem 1.5rem 2rem;
+  }
+  .header-inner { max-width: 1240px; margin: 0 auto; }
+  .brand-row { display: flex; align-items: center; gap: .6rem; margin-bottom: 1.2rem; }
+  .brand-dot {
+    width: 30px; height: 30px; border-radius: 9px;
+    background: linear-gradient(135deg, #6366f1, #a855f7);
+    display: grid; place-items: center; font-weight: 800; font-size: 1rem;
+  }
+  .brand-name { font-weight: 700; font-size: 1.1rem; letter-spacing: -.01em; }
+  h1 { font-size: clamp(1.6rem, 3.5vw, 2.3rem); font-weight: 800; letter-spacing: -.02em; }
+  .subtitle { color: #cbd5e1; margin-top: .5rem; font-size: 1rem; max-width: 640px; }
+
+  /* Stats */
+  .stats { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-top: 1.6rem; }
+  .stat .num { font-size: 1.7rem; font-weight: 800; line-height: 1; }
+  .stat .lbl { font-size: .8rem; color: #94a3b8; margin-top: .25rem; text-transform: uppercase; letter-spacing: .04em; }
+
+  /* Controls */
+  .controls {
+    position: sticky; top: 0; z-index: 20;
+    background: rgba(250,250,249,.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 1.5rem;
+  }
+  .controls-inner { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; gap: .85rem; }
+  .search-wrap { position: relative; }
+  .search-wrap svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  #search {
+    width: 100%; padding: .7rem .9rem .7rem 2.6rem;
+    border: 1px solid var(--border); border-radius: 11px; font-size: .95rem;
+    font-family: inherit; background: #fff; color: var(--primary);
+  }
+  #search:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .filter-row { display: flex; flex-wrap: wrap; gap: .9rem 1.4rem; align-items: center; }
+  .chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+  .chip {
+    border: 1px solid var(--border); background: #fff; color: var(--muted);
+    padding: .4rem .8rem; border-radius: 999px; font-size: .85rem; font-weight: 500;
+    cursor: pointer; transition: all .12s; font-family: inherit;
+  }
+  .chip:hover { border-color: #cbd5e1; }
+  .chip.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .chip .c { opacity: .6; font-weight: 600; margin-left: .15rem; }
+  .toggle-wrap { display: flex; align-items: center; gap: .5rem; font-size: .85rem; color: var(--muted); }
+  .switch { position: relative; width: 42px; height: 24px; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; background: #cbd5e1; border-radius: 999px;
+    cursor: pointer; transition: .2s;
+  }
+  .slider::before {
+    content: ""; position: absolute; height: 18px; width: 18px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: .2s;
+  }
+  .switch input:checked + .slider { background: var(--success); }
+  .switch input:checked + .slider::before { transform: translateX(18px); }
+  select {
+    border: 1px solid var(--border); background: #fff; color: var(--primary);
+    padding: .45rem .7rem; border-radius: 9px; font-size: .85rem; font-family: inherit; cursor: pointer;
+  }
+  .sort-wrap { display: flex; align-items: center; gap: .45rem; font-size: .85rem; color: var(--muted); margin-left: auto; }
+
+  /* Grid */
+  main { max-width: 1240px; margin: 0 auto; padding: 1.6rem 1.5rem 4rem; }
+  .count-line { font-size: .9rem; color: var(--muted); margin-bottom: 1rem; }
+  .count-line b { color: var(--primary); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 1rem; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 1.15rem 1.2rem; display: flex; flex-direction: column; gap: .7rem;
+    transition: box-shadow .15s, transform .15s, border-color .15s; position: relative;
+  }
+  .card:hover { box-shadow: 0 10px 30px -12px rgba(30,41,59,.22); transform: translateY(-2px); border-color: #cbd5e1; }
+  .card.pick { border-color: #c7d2fe; }
+  .card.pick::before {
+    content: "★ Early-stage pick"; position: absolute; top: -1px; right: 14px;
+    background: var(--accent); color: #fff; font-size: .66rem; font-weight: 700;
+    padding: .2rem .55rem; border-radius: 0 0 7px 7px; letter-spacing: .02em;
+  }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: .6rem; }
+  .firm-name { font-size: 1.05rem; font-weight: 700; letter-spacing: -.01em; padding-right: .3rem; }
+  .city { font-size: .82rem; color: var(--muted); margin-top: .1rem; display: flex; align-items: center; gap: .25rem; }
+  .stars { white-space: nowrap; font-size: .82rem; color: var(--warning); font-weight: 600; flex-shrink: 0; margin-top: .15rem; }
+  .stars .off { color: #e2e8f0; }
+  .badges { display: flex; flex-wrap: wrap; gap: .35rem; }
+  .badge {
+    font-size: .7rem; font-weight: 600; padding: .2rem .5rem; border-radius: 6px;
+    letter-spacing: .01em;
+  }
+  .b-region { background: #f1f5f9; color: #475569; }
+  .b-solo { background: #dcfce7; color: #166534; }
+  .b-small { background: #cffafe; color: #155e75; }
+  .b-mid { background: #fef3c7; color: #92400e; }
+  .b-cloud { background: var(--accent-soft); color: var(--accent); }
+  .service { font-size: .8rem; color: #475569; font-weight: 500; }
+  .why { font-size: .87rem; color: #334155; }
+  .card-foot { display: flex; gap: .5rem; margin-top: auto; padding-top: .55rem; }
+  .btn {
+    flex: 1; text-align: center; text-decoration: none; font-size: .82rem; font-weight: 600;
+    padding: .5rem .6rem; border-radius: 9px; transition: all .12s; display: flex;
+    align-items: center; justify-content: center; gap: .3rem;
+  }
+  .btn-web { background: #f8fafc; color: var(--primary); border: 1px solid var(--border); }
+  .btn-web:hover { background: #f1f5f9; }
+  .btn-contact { background: var(--primary); color: #fff; }
+  .btn-contact:hover { background: #0f172a; }
+  .btn-contact.disabled { background: #f1f5f9; color: #94a3b8; pointer-events: none; font-weight: 500; }
+
+  .empty { text-align: center; padding: 4rem 1rem; color: var(--muted); }
+  .empty h3 { color: var(--primary); margin-bottom: .4rem; }
+
+  footer { max-width: 1240px; margin: 0 auto; padding: 1.5rem; color: var(--muted); font-size: .82rem; border-top: 1px solid var(--border); }
+  footer b { color: var(--primary); }
+  a.inline { color: var(--accent); }
+
+  @media (max-width: 560px) {
+    .sort-wrap { margin-left: 0; width: 100%; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div class="brand-row">
+      <div class="brand-dot">V</div>
+      <div class="brand-name">Vylan</div>
+    </div>
+    <h1>Sales Leads — Canadian accounting &amp; bookkeeping firms</h1>
+    <p class="subtitle">Small &amp; mid independent firms that collect documents from clients — the perfect fit for Vylan. Filtered for firms you can realistically land and grow with.</p>
+    <div class="stats" id="stats"></div>
+  </div>
+</header>
+
+<div class="controls">
+  <div class="controls-inner">
+    <div class="search-wrap">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="search" type="text" placeholder="Search firm, city, or service…" autocomplete="off" />
+    </div>
+    <div class="filter-row">
+      <div class="chips" id="region-chips"></div>
+      <label class="toggle-wrap">
+        <span class="switch"><input type="checkbox" id="smallOnly" /><span class="slider"></span></span>
+        Small firms only
+      </label>
+      <div class="sort-wrap">
+        Sort
+        <select id="sort">
+          <option value="fit">Best fit first</option>
+          <option value="size">Smallest first</option>
+          <option value="name">Name (A–Z)</option>
+          <option value="region">Region</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="count-line" id="countLine"></div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">
+    <h3>No firms match those filters</h3>
+    <p>Try clearing the search or switching region.</p>
+  </div>
+</main>
+
+<footer>
+  <p><b>About this list:</b> Built from public sources only — firm websites, Google Business listings, PagesJaunes / Yellow Pages, provincial CPA directories, and chamber listings. No LinkedIn or Facebook logged-in data was used. Where a firm's site blocked automated reading, the contact button is greyed out — grab the email from their "Contact" / "Nous joindre" page before reaching out. Nothing was invented.</p>
+  <p style="margin-top:.6rem"><b>Fit score</b> = product fit (5 = warmest). <b>★ Early-stage pick</b> = a small firm (solo or boutique) with a strong fit — your easiest first wins while you're scaling from zero. Amber "Mid-size" firms are bigger (~10–25 staff) — still SMB, but save them for later.</p>
+</footer>
+
+<script>
+const FIRMS = [
+  // ===== QUEBEC =====
+  {n:"Rémi Pellerin CPA",c:"Montréal, QC",r:"Quebec",w:"pellerincpa.com",s:"small",sv:"Tax · accounting · advisory",y:"Young modern founder-led cabinet serving PME, French-first.",f:5},
+  {n:"AKTIF CPA",c:"Montréal, QC",r:"Quebec",w:"aktif-cpa.com",ct:"tel:5146645554",cl:"514-664-5554",s:"small",v:1,sv:"Accounting · tax · bookkeeping",y:"Xero-certified; serves PME, startups & self-employed.",f:5},
+  {n:"OLOÏD inc.",c:"Montréal, QC",r:"Quebec",w:"oloid.co",s:"small",v:1,sv:"Bookkeeping · QBO setup · tax",y:"Markets as a \"Cabinet 2.0\" — ideal early adopter.",f:5},
+  {n:"JT Comptabilité CPA",c:"Montréal / Longueuil, QC",r:"Quebec",w:"jtcpa.ca",s:"small",v:1,sv:"Bookkeeping (QBO) · payroll · tax",y:"QBO-based, gives clients real-time access.",f:5},
+  {n:"Lemieux Richard CPA",c:"Rive-Sud / Laval, QC",r:"Quebec",w:"lemieuxrichard.ca",s:"small",v:1,sv:"Bookkeeping (QBO + Receipt Bank)",y:"Already digital-doc oriented — perfect fit.",f:5},
+  {n:"Véronique Roy CPA (OutilsPME)",c:"Sherbrooke, QC",r:"Quebec",w:"outilspme.com",s:"solo",sv:"Accounting · tax",y:"Personalized service for PME & self-employed.",f:5},
+  {n:"Tremblay Leblanc CPA",c:"Trois-Rivières, QC",r:"Quebec",w:"tremblayleblanccpa.ca",ct:"tel:8198410589",cl:"819-841-0589",s:"small",sv:"Bookkeeping · statements · tax",y:"Full PME / self-employed services in Mauricie.",f:5},
+  {n:"Rickyel Solutions de gestion",c:"Rive-Nord Montréal, QC",r:"Quebec",w:"rickyel.com",s:"small",v:1,sv:"Bookkeeping (advanced QBO)",y:"Pure-play cloud bookkeeping firm — very tech-forward.",f:5},
+  {n:"monCPAenligne",c:"Quebec (online)",r:"Quebec",w:"moncpaenligne.ca",s:"small",v:1,sv:"Cloud bookkeeping · CPA",y:"Fully cloud \"infonuagique\" service from $200/mo.",f:5},
+  {n:"KVB CPA",c:"Montréal, QC",r:"Quebec",w:"kvbcpa.ca",s:"small",sv:"Bookkeeping · tax · accounting",y:"Flexible remote + on-site bookkeeping for small biz.",f:4},
+  {n:"PL Comptable CPA",c:"Rosemont, Montréal, QC",r:"Quebec",w:"plcomptable-cpa.com",s:"small",sv:"Accounting · tax",y:"Local borough CPA serving PME, French-first.",f:4},
+  {n:"France Lavallée CPA",c:"Rive-Sud, QC",r:"Quebec",w:"francelavalleecpa.ca",s:"solo",sv:"Bookkeeping · statements · tax",y:"Small Rive-Sud CPA serving PME & entrepreneurs.",f:4},
+  {n:"Parenteau Desmarais CPA",c:"Laval, QC",r:"Quebec",w:"parenteaudesmaraiscpa.com",ct:"tel:4506614484",cl:"450-661-4484",s:"small",sv:"Bookkeeping · tax · accounting",y:"PME + self-employed clientele, recurring docs.",f:4},
+  {n:"Jean-François Derome CPA",c:"Longueuil, QC",r:"Quebec",w:"jfderomecpa.ca",s:"solo",sv:"Bookkeeping · tax · accounting",y:"Solo CPA, manageable client base, French-first.",f:4},
+  {n:"Aubier CPA inc.",c:"Sainte-Foy, Québec",r:"Quebec",w:"aubiercpa.ca",ct:"tel:4186529064",cl:"418-652-9064",s:"small",sv:"Accounting · tax · management",y:"Quebec City PME-focused cabinet since 1993.",f:4},
+  {n:"Alter égaux S.E.N.C.",c:"Québec, QC",r:"Quebec",w:"alteregaux.ca",s:"small",sv:"Accounting · finance · tax",y:"Boutique serving PME and non-profits.",f:4},
+  {n:"Lapointe CPA",c:"Sainte-Foy, Québec",r:"Quebec",w:"lapointe-cpa.com",s:"small",sv:"Accounting · tax · certification",y:"Small Quebec City-area cabinet, French-first.",f:4},
+  {n:"Crescendo CPA inc.",c:"Québec / Rivière-du-Loup",r:"Quebec",w:"crescendocpa.com",s:"small",sv:"Accounting · tax",y:"Regional boutique serving entrepreneurs.",f:4},
+  {n:"SBF CPA",c:"Sherbrooke / Drummondville, QC",r:"Quebec",w:"sbf-cpa.ca",ct:"tel:8194775049",cl:"819-477-5049",s:"small",sv:"Certification · tax · advisory",y:"PME specialist in Estrie / Centre-du-Québec.",f:4},
+  {n:"Blouin CPA inc.",c:"Rimouski, QC",r:"Quebec",w:"blouincpa.com",ct:"mailto:info@blouincpa.com",cl:"info@blouincpa.com",s:"small",sv:"Accounting · management · tax",y:"Local Bas-Saint-Laurent PME firm, published email.",f:4},
+  {n:"Tenue de Livres Québec",c:"Quebec",r:"Quebec",w:"tdlqc.com",s:"small",v:1,sv:"Bookkeeping (QuickBooks)",y:"Dedicated QuickBooks practice, recurring docs.",f:4},
+  {n:"DGL-CPA",c:"Trois-Rivières / Mauricie",r:"Quebec",w:"dgl-cpa.ca",ct:"tel:8194152245",cl:"819-415-2245",s:"mid",sv:"Accounting · tax · advisory",y:"Bigger (Top-25 QC, ~5 offices) — save for later.",f:3},
+
+  // ===== ONTARIO =====
+  {n:"Dexado",c:"Ottawa, ON",r:"Ontario",w:"dexado.ca",ct:"tel:6137028671",cl:"613-702-8671",s:"small",v:1,sv:"Cloud accounting · bookkeeping",y:"QBO + Xero certified, real-time cloud.",f:5},
+  {n:"Virtuous Bookkeeping",c:"Etobicoke / Oakville, ON",r:"Ontario",w:"virtuousbookkeeping.com",ct:"mailto:info@virtuousbookkeeping.com",cl:"info@virtuousbookkeeping.com",s:"small",v:1,sv:"Bookkeeping",y:"Runs client virtual portals — doc collection is core.",f:5},
+  {n:"Ashley Reid CPA (rowcpa)",c:"Kitchener–Waterloo, ON",r:"Ontario",w:"rowcpa.ca",ct:"tel:5198887899",cl:"519-888-7899",s:"solo",v:1,sv:"Tax · bookkeeping · payroll",y:"QBO ProAdvisor, cloud SMB solutions.",f:5},
+  {n:"Fern Taxes CPA",c:"Hamilton, ON",r:"Ontario",w:"ferntaxes.com",s:"small",v:1,sv:"Tax · bookkeeping · payroll",y:"Already runs secure client portals for slips/receipts.",f:5},
+  {n:"Zenbooks",c:"Ottawa, ON",r:"Ontario",w:"zenbooks.ca",ct:"mailto:info@zenbooks.ca",cl:"info@zenbooks.ca",s:"mid",v:1,sv:"Bookkeeping · accounting",y:"Cloud-first, Xero-certified (~15 advisors).",f:5},
+  {n:"Envolta",c:"Ottawa / Whitby, ON",r:"Ontario",w:"envolta.ca",ct:"mailto:contact@envolta.ca",cl:"contact@envolta.ca",s:"mid",v:1,sv:"Bookkeeping · tax · cloud",y:"Cloud bookkeeping shop, multi-location.",f:5},
+  {n:"Think Accounting",c:"Mississauga, ON",r:"Ontario",w:"thinkaccounting.ca",s:"mid",v:1,sv:"Cloud accounting · bookkeeping",y:"\"Paperless transactions, virtual meetings.\"",f:5},
+  {n:"Outsourced Finance",c:"London, ON",r:"Ontario",w:"outsourcedfinance.ca",s:"small",v:1,sv:"Bookkeeping · payroll · tax · CFO",y:"CPA-led, tech-enabled, QBO migration specialists.",f:4},
+  {n:"Source Accounting",c:"Mississauga, ON",r:"Ontario",w:"sourceaccounting.ca",s:"small",sv:"Bookkeeping · accounting · tax",y:"QBO cloud access for SMB doc-heavy work.",f:4},
+  {n:"Opengate Accountants",c:"London, ON",r:"Ontario",w:"opengatecpa.com",s:"small",v:1,sv:"Accounting · bookkeeping",y:"Uses tech to simplify bookkeeping, financials anywhere.",f:4},
+  {n:"Misic Accounting",c:"Kitchener, ON",r:"Ontario",w:"misicaccounting.ca",s:"small",sv:"Tax · bookkeeping",y:"QBO Certified ProAdvisor; SMB & corporate.",f:4},
+  {n:"Dedicated Bookkeeping Solutions",c:"Kitchener–Waterloo, ON",r:"Ontario",w:"dedicatedsolutions.ca",s:"small",sv:"Bookkeeping · accounting",y:"Serves SMBs, sole props, startups.",f:4},
+  {n:"Orbit Accountants",c:"Kitchener–Cambridge, ON",r:"Ontario",w:"orbitaccountants.ca",s:"small",v:1,sv:"Cloud bookkeeping",y:"Cloud-based bookkeeping for startups & SMBs.",f:4},
+  {n:"SLH Bookkeeping Solutions",c:"Waterloo Region, ON",r:"Ontario",w:"slhbookkeeping.ca",s:"solo",v:1,sv:"Bookkeeping (virtual)",y:"QBO virtual bookkeeping, remote doc collection.",f:4},
+  {n:"Insight Accounting CPA",c:"Mississauga, ON",r:"Ontario",w:"insightscpa.ca",ct:"tel:9052701873",cl:"905-270-1873",s:"mid",v:1,sv:"Bookkeeping · tax · payroll",y:"Cloud bookkeeping, real-time visibility.",f:4},
+  {n:"NBG CPA",c:"Hamilton, ON",r:"Ontario",w:"nbgcpa.ca",s:"mid",sv:"Accounting · bookkeeping · tax · payroll",y:"\"One-stop shop\" for SMB tax & bookkeeping.",f:4},
+  {n:"Kapty and Associates",c:"Barrie / Simcoe, ON",r:"Ontario",w:"kenkapty.ca",s:"small",sv:"Accounting · tax · planning",y:"Personalized SMB accounting across Simcoe County.",f:3},
+  {n:"Books by Kristi",c:"Kitchener–Waterloo, ON",r:"Ontario",w:"booksbykristi.com",s:"solo",sv:"Bookkeeping · tax",y:"QBO SMB bookkeeping, doc gathering each cycle.",f:3},
+  {n:"Brad Nickle CPA",c:"Hamilton area, ON",r:"Ontario",w:"bradnicklecpa.com",s:"solo",sv:"Bookkeeping · tax · payroll",y:"SMB-focused, helps new businesses get started.",f:3},
+  {n:"Karen Johnson CPA",c:"Barrie, ON",r:"Ontario",w:"kjohnsoncpaprofcorp.ca",s:"solo",sv:"Tax · accounting",y:"Full-service SMB firm in underserved mid-Ontario.",f:3},
+  {n:"Catherine Barrie CPA",c:"Barrie, ON",r:"Ontario",w:"catherinebarrie.com",s:"solo",sv:"Accounting · bookkeeping · payroll",y:"SMB bookkeeping + month-end, document-heavy.",f:3},
+  {n:"Ford Keast LLP",c:"London, ON",r:"Ontario",w:"fordkeast.com",s:"mid",sv:"Accounting · tax · advisory",y:"Mid-size LLP (bigger) — save for later.",f:3},
+
+  // ===== WESTERN CANADA =====
+  {n:"Purpose CPA",c:"Vancouver, BC",r:"Western",w:"purposecpa.ca",s:"small",v:1,sv:"Bookkeeping · accounting · tax",y:"\"Tech-savvy virtual firm\", migrates clients to QBO+Dext.",f:5},
+  {n:"KleenBooks Accounting",c:"Kelowna, BC",r:"Western",w:"kleenbooks.ca",ct:"tel:2508263856",cl:"250-826-3856",s:"small",v:1,sv:"Bookkeeping",y:"CPA-led, exclusively QuickBooks Online.",f:5},
+  {n:"True North Accounting",c:"Calgary / Okotoks, AB",r:"Western",w:"truenorthaccounting.com",ct:"mailto:support@truenorthaccounting.com",cl:"support@truenorthaccounting.com",s:"small",v:1,sv:"Bookkeeping · accounting · tax",y:"Cloud-based (Xero/QBO), small-business focus.",f:5},
+  {n:"Roth Schroder PC",c:"Edmonton, AB",r:"Western",w:"rothschroderpc.ca",ct:"tel:5874009727",cl:"587-400-9727",s:"small",v:1,sv:"Bookkeeping · tax · advisory",y:"Explicitly \"cloud-based, paperless\" — 500+ clients.",f:5},
+  {n:"Go-Get Bookkeeping",c:"Saskatoon & Regina, SK",r:"Western",w:"go-get.ca",ct:"mailto:info@go-get.ca",cl:"info@go-get.ca",s:"small",v:1,sv:"Bookkeeping · tax · payroll",y:"QBO, T1/T2 prep, payroll — recurring doc intake.",f:5},
+  {n:"Compass Accounting CPA",c:"Winnipeg, MB",r:"Western",w:"compass-cpa.com",ct:"mailto:khkundel@compass-cpa.com",cl:"khkundel@compass-cpa.com",s:"small",v:1,sv:"Accounting · tax · bookkeeping",y:"Xero partner since 2013, automates doc collection.",f:5},
+  {n:"CloudKeeping",c:"Vancouver, BC",r:"Western",w:"cloudkeeping.cpa",s:"small",v:1,sv:"Bookkeeping · tax",y:"CPA-led, QBO/Xero/Sage for Lower Mainland SMBs.",f:4},
+  {n:"M. Saini CPA Inc.",c:"Kelowna, BC",r:"Western",w:"sainicpa.com",s:"small",v:1,sv:"Tax · accounting · bookkeeping",y:"Elite QBO ProAdvisor + Xero partner.",f:4},
+  {n:"MHL CPA",c:"Kelowna, BC",r:"Western",w:"minhecpa.ca",s:"small",v:1,sv:"Accounting · bookkeeping",y:"Supports QBO, Sage One, Xero for small biz.",f:4},
+  {n:"CNC Accounting",c:"Coquitlam, BC",r:"Western",w:"cncpa.ca",s:"small",v:1,sv:"Tax · accounting · bookkeeping",y:"Cloud QBO/Xero, Metro Vancouver small biz.",f:4},
+  {n:"Prosper CPA",c:"Victoria, BC",r:"Western",w:"prospercpa.ca",s:"small",v:1,sv:"Bookkeeping · tax",y:"Cloud reporting, GST/HST for contractors.",f:4},
+  {n:"AL Accounting",c:"Vancouver, BC",r:"Western",w:"al-accounting.com",s:"small",v:1,sv:"Bookkeeping",y:"Xero/QBO setup, monthly recon, GST filing.",f:4},
+  {n:"786 Venture CPA",c:"Calgary, AB",r:"Western",w:"786vcpa.ca",s:"small",v:1,sv:"Bookkeeping · accounting",y:"CPA-led, sets up QBO/Xero, real-time access.",f:4},
+  {n:"Crescendo Accounting",c:"Calgary, AB",r:"Western",w:"crescendoaccountingcpa.ca",s:"small",v:1,sv:"Bookkeeping · corporate tax",y:"Uses Xero, QBO, Hubdocs, Dext.",f:4},
+  {n:"HGA CPA",c:"Edmonton, AB",r:"Western",w:"hgacpa.com",s:"small",sv:"Accounting · bookkeeping · tax",y:"Small-business CPA firm, bookkeeping + tax.",f:3},
+  {n:"New Wave CPA",c:"Saskatoon, SK",r:"Western",w:"newwavecpa.com",ct:"tel:3063715919",cl:"306-371-5919",s:"small",sv:"Tax · accounting · CFO",y:"End-to-end tax + bookkeeping packages.",f:4},
+  {n:"Custom CPA",c:"Regina, SK",r:"Western",w:"customcpa.ca",s:"small",sv:"Accounting · tax · CFO",y:"Tech-forward CFO advisory for growing SMBs.",f:4},
+  {n:"Erudite Bookkeepers",c:"Winnipeg, MB",r:"Western",w:"eruditebookkeepers.ca",s:"small",v:1,sv:"Bookkeeping · tax",y:"Elite QBO ProAdvisor, virtual cloud bookkeeping.",f:4},
+  {n:"Bookkeeping Fusion",c:"Winnipeg, MB",r:"Western",w:"bookkeepingfusion.ca",s:"small",v:1,sv:"Bookkeeping",y:"15 yrs QuickBooks, cloud apps, monthly close.",f:4},
+  {n:"Entreflow Consulting",c:"Vancouver, BC",r:"Western",w:"entreflow.com",ct:"tel:6043384437",cl:"604-338-4437",s:"mid",v:1,sv:"Accounting · CFO · tax",y:"Elite QBO ProAdvisor (~20-25 staff) — bigger.",f:5},
+  {n:"Avalon Accounting",c:"Victoria, BC",r:"Western",w:"avalonaccounting.ca",s:"mid",v:1,sv:"Bookkeeping · tax · payroll",y:"Xero+Dext, online-first (~20 advisors) — bigger.",f:5},
+  {n:"Achen Henderson LLP",c:"Calgary, AB",r:"Western",w:"achenhenderson.ca",ct:"mailto:success@achenhenderson.ca",cl:"success@achenhenderson.ca",s:"mid",v:1,sv:"Accounting · bookkeeping · tax",y:"\"Modern virtual CPA firm\" — bigger small/mid.",f:5},
+  {n:"Enkel Back-Office",c:"Vancouver / Calgary",r:"Western",w:"enkel.ca",s:"mid",v:1,sv:"Bookkeeping · payroll · CFO",y:"Cloud-native, multi-city — bigger.",f:5},
+
+  // ===== ATLANTIC =====
+  {n:"Cloud North Bookkeeping & Tax",c:"St. John's, NL",r:"Atlantic",w:"cloudnorthbookkeeping.ca",s:"solo",v:1,sv:"Bookkeeping · tax",y:"CPA-led, cloud-first (QBO, Dext, Syft).",f:5},
+  {n:"Clarified Accounting",c:"St. John's, NL",r:"Atlantic",w:"clarifiedaccounting.ca",ct:"mailto:connect@clarifiedaccounting.ca",cl:"connect@clarifiedaccounting.ca",s:"small",v:1,sv:"Accounting · bookkeeping · payroll · tax",y:"Leading-edge cloud accounting, multi-location.",f:5},
+  {n:"Hausgaard Bookkeeping & Tax",c:"Halifax / Bedford, NS",r:"Atlantic",w:"hausgaardbookkeeping.com",s:"solo",sv:"Bookkeeping · payroll · tax",y:"Certified bookkeeper serving small businesses.",f:4},
+  {n:"Premier Accounting & Tax",c:"Halifax, NS",r:"Atlantic",w:"premiertaxhalifax.com",s:"small",sv:"Accounting · bookkeeping · tax",y:"Young modern firm (2019), SMB CRA compliance.",f:4},
+  {n:"ITC Accounting",c:"Moncton / Fredericton, NB",r:"Atlantic",w:"itcaccounting.ca",s:"small",v:1,sv:"Cloud bookkeeping",y:"\"Cloud-based bookkeeping throughout NB.\"",f:4},
+  {n:"East Coast Accounting Solutions",c:"Charlottetown, PEI",r:"Atlantic",w:"eastcoastaccounting.ca",s:"small",sv:"Bookkeeping · HST · payroll · tax",y:"QuickBooks-based full-cycle bookkeeping island-wide.",f:4},
+  {n:"Diamond Accounts",c:"Halifax, NS",r:"Atlantic",w:"diamondaccounts.ca",s:"small",sv:"Bookkeeping · GST-HST · payroll",y:"Serves startups & growing small businesses.",f:3},
+  {n:"Databooks Accounting",c:"Fredericton, NB",r:"Atlantic",w:"databooks.ca",s:"small",sv:"Accounting · bookkeeping",y:"Small-business-focused across NB.",f:3},
+  {n:"Signature Accounting & Tax",c:"Charlottetown, PEI",r:"Atlantic",w:"signatureaccounting.ca",s:"small",sv:"Bookkeeping · tax · payroll · HST",y:"Home-based & small corporate clients across PEI.",f:3},
+  {n:"CC Accounting",c:"Charlottetown, PEI",r:"Atlantic",w:"ccabookkeepers.com",s:"small",sv:"Bookkeeping · payroll",y:"Province-wide PEI bookkeeping boutique.",f:3},
+
+  // ===== VIRTUAL / CANADA-WIDE =====
+  {n:"Xen Accounting",c:"Montréal / Canada-wide",r:"Virtual",w:"xenaccounting.com",ct:"mailto:info@xenaccounting.com",cl:"info@xenaccounting.com",s:"small",v:1,sv:"Bookkeeping · payroll · tax · CFO",y:"Xero Platinum Partner; explicitly automated & paperless.",f:5},
+  {n:"Source Online Bookkeeping",c:"Victoria, BC / Canada-wide",r:"Virtual",w:"source.online",s:"solo",v:1,sv:"Bookkeeping",y:"100% cloud, paperless, QBO-certified for solopreneurs.",f:5},
+  {n:"Paperless Books",c:"Virtual / Canada",r:"Virtual",w:"paperlessbooks.ca",s:"small",v:1,sv:"Bookkeeping · cleanup",y:"Paperless, QBO/Xero — small enough to adopt fast.",f:5},
+  {n:"LiveCA LLP",c:"Virtual / Toronto HQ",r:"Virtual",w:"liveca.ca",ct:"mailto:info@liveca.ca",cl:"info@liveca.ca",s:"mid",v:1,sv:"Accounting · bookkeeping · tax · payroll",y:"Fully remote CPA firm built on cloud tools.",f:5},
+  {n:"Back Office Stars",c:"Virtual (ON/BC/AB)",r:"Virtual",w:"backofficestars.ca",s:"small",v:1,sv:"Bookkeeping",y:"All-Canadian remote team, Xero + QBO, doc-driven.",f:4},
+  {n:"Online Accountant",c:"Virtual / Canada",r:"Virtual",w:"online-accountant.ca",s:"mid",v:1,sv:"Bookkeeping · accounting",y:"QBO Elite + Xero Gold Partner.",f:4},
+];
+
+const REGIONS = ["All","Quebec","Ontario","Western","Atlantic","Virtual"];
+const REGION_LABEL = {Western:"Western Canada", Atlantic:"Atlantic Canada", Virtual:"Virtual / Canada-wide"};
+const SIZE_LABEL = {solo:"Solo / micro", small:"Boutique", mid:"Mid-size"};
+const SIZE_ORDER = {solo:0, small:1, mid:2};
+
+let state = { region:"All", search:"", smallOnly:false, sort:"fit" };
+
+const isPick = f => f.f >= 4 && f.s !== "mid";
+
+function stars(n){
+  let h = "";
+  for(let i=1;i<=5;i++) h += i<=n ? "★" : '<span class="off">★</span>';
+  return h;
+}
+
+function renderStats(){
+  const total = FIRMS.length;
+  const small = FIRMS.filter(f=>f.s!=="mid").length;
+  const top = FIRMS.filter(f=>f.f===5).length;
+  const picks = FIRMS.filter(isPick).length;
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><div class="num">${total}</div><div class="lbl">Total firms</div></div>
+    <div class="stat"><div class="num">${small}</div><div class="lbl">Small (solo + boutique)</div></div>
+    <div class="stat"><div class="num">${picks}</div><div class="lbl">★ Early-stage picks</div></div>
+    <div class="stat"><div class="num">${top}</div><div class="lbl">Fit score 5/5</div></div>`;
+}
+
+function renderChips(){
+  const wrap = document.getElementById("region-chips");
+  wrap.innerHTML = REGIONS.map(r=>{
+    const count = r==="All" ? FIRMS.length : FIRMS.filter(f=>f.r===r).length;
+    const lbl = r==="All" ? "All Canada" : (REGION_LABEL[r]||r);
+    return `<button class="chip ${state.region===r?'active':''}" data-region="${r}">${lbl}<span class="c">${count}</span></button>`;
+  }).join("");
+  wrap.querySelectorAll(".chip").forEach(c=>{
+    c.onclick = ()=>{ state.region = c.dataset.region; renderChips(); renderGrid(); };
+  });
+}
+
+function renderGrid(){
+  let list = FIRMS.slice();
+  if(state.region!=="All") list = list.filter(f=>f.r===state.region);
+  if(state.smallOnly) list = list.filter(f=>f.s!=="mid");
+  if(state.search){
+    const q = state.search.toLowerCase();
+    list = list.filter(f=> (f.n+" "+f.c+" "+f.sv+" "+f.y).toLowerCase().includes(q));
+  }
+  if(state.sort==="fit") list.sort((a,b)=> b.f-a.f || SIZE_ORDER[a.s]-SIZE_ORDER[b.s]);
+  else if(state.sort==="size") list.sort((a,b)=> SIZE_ORDER[a.s]-SIZE_ORDER[b.s] || b.f-a.f);
+  else if(state.sort==="name") list.sort((a,b)=> a.n.localeCompare(b.n));
+  else if(state.sort==="region") list.sort((a,b)=> a.r.localeCompare(b.r) || b.f-a.f);
+
+  const grid = document.getElementById("grid");
+  const empty = document.getElementById("empty");
+  document.getElementById("countLine").innerHTML = `Showing <b>${list.length}</b> of ${FIRMS.length} firms`;
+
+  if(!list.length){ grid.innerHTML=""; empty.style.display="block"; return; }
+  empty.style.display="none";
+
+  grid.innerHTML = list.map(f=>{
+    const sizeBadge = `<span class="badge b-${f.s}">${SIZE_LABEL[f.s]}</span>`;
+    const cloudBadge = f.v ? `<span class="badge b-cloud">☁ Cloud-first</span>` : "";
+    const regBadge = `<span class="badge b-region">${REGION_LABEL[f.r]||f.r}</span>`;
+    const contact = f.ct
+      ? `<a class="btn btn-contact" href="${f.ct}">${f.ct.startsWith('tel')?'📞':'✉'} ${f.cl}</a>`
+      : `<span class="btn btn-contact disabled">Contact via site</span>`;
+    return `
+    <div class="card ${isPick(f)?'pick':''}">
+      <div class="card-top">
+        <div>
+          <div class="firm-name">${f.n}</div>
+          <div class="city">📍 ${f.c}</div>
+        </div>
+        <div class="stars" title="Fit ${f.f}/5">${stars(f.f)}</div>
+      </div>
+      <div class="badges">${regBadge}${sizeBadge}${cloudBadge}</div>
+      <div class="service">${f.sv}</div>
+      <div class="why">${f.y}</div>
+      <div class="card-foot">
+        <a class="btn btn-web" href="https://${f.w}" target="_blank" rel="noopener">🌐 Website</a>
+        ${contact}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+document.getElementById("search").oninput = e=>{ state.search = e.target.value; renderGrid(); };
+document.getElementById("smallOnly").onchange = e=>{ state.smallOnly = e.target.checked; renderGrid(); };
+document.getElementById("sort").onchange = e=>{ state.sort = e.target.value; renderGrid(); };
+
+renderStats();
+renderChips();
+renderGrid();
+</script>
+</body>
+</html>
