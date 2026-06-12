@@ -134,6 +134,24 @@ export default async function EngagementDetailPage({
   const signatureItems = items.filter((i) => i.kind === "signature");
   const collectionItems = items.filter((i) => i.kind !== "signature");
 
+  // The "document to sign" for each signature item (the blank/template the
+  // accountant uploaded) — signed in one batch so the Preview overlay can show
+  // it alongside the returned copy. Returned copies are already in `uploads`;
+  // this is the one signature document that isn't an uploaded_file.
+  const signingItems = signatureItems.filter((i) => i.signing_doc_path);
+  const signingUrlByPath = signingItems.length
+    ? await signedDownloadUrls(
+        signingItems.map((i) => i.signing_doc_path as string),
+        3600,
+      )
+    : new Map<string, string>();
+  const signingDocs = signingItems.map((i) => ({
+    itemId: i.id,
+    url: signingUrlByPath.get(i.signing_doc_path as string) ?? "#",
+    name: i.signing_doc_name ?? i.label,
+    mime: i.signing_doc_mime ?? null,
+  }));
+
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
   const tApp = await getTranslations("App");
@@ -412,6 +430,7 @@ export default async function EngagementDetailPage({
                   engagementTitle={engagement.title}
                   clientName={client?.display_name ?? null}
                   locale={locale}
+                  signingDocs={signingDocs}
                 />
                 {isLive && (
                   <AddItemDialog

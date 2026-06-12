@@ -119,6 +119,8 @@
     "empty_duplicates": "Aucun doublon.",
     "duplicates_heading": "Doublons",
     "duplicate_of": "Copie de {title}",
+    "signature_badge": "Signature",
+    "doc_to_sign": "Document à signer",
     "empty_all": "Aucun document téléversé pour l'instant.",
     "empty_approved": "Rien ici pour l'instant.",
     "empty_rejected": "Rien de rejeté.",

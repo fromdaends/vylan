@@ -119,6 +119,8 @@
     "empty_duplicates": "No duplicates.",
     "duplicates_heading": "Duplicates",
     "duplicate_of": "Copy of {title}",
+    "signature_badge": "Signature",
+    "doc_to_sign": "Document to sign",
     "empty_all": "No documents uploaded yet.",
     "empty_approved": "Nothing here yet.",
     "empty_rejected": "Nothing rejected.",

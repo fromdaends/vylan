@@ -18,6 +18,17 @@ const PreviewOverlay = dynamic(
   { ssr: false },
 );
 
+// A signature item's "document to sign" — the blank/template the accountant
+// uploaded for the client to sign. It's NOT an uploaded_file (it lives on the
+// request_item), so the preview can't derive it from `uploads`; the server
+// signs a short-lived URL and passes it through so the overlay can surface it.
+export type SigningDoc = {
+  itemId: string;
+  url: string;
+  name: string;
+  mime: string | null;
+};
+
 export type EngagementPreviewProps = {
   uploads: UploadedFile[];
   items: RequestItem[];
@@ -25,6 +36,9 @@ export type EngagementPreviewProps = {
   engagementTitle: string;
   clientName: string | null;
   locale: "fr" | "en";
+  // Signature items' "document to sign", signed server-side. Optional so the
+  // per-item preview (collection rows only) and tests can omit it.
+  signingDocs?: SigningDoc[];
 };
 
 // The always-available "Preview" entry point. variant="header" (default) is the
