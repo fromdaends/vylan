@@ -2,8 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   sanitizeFilenamePart,
   macZipEntryName,
-  buildZipArchive,
-  zipToStream,
+  streamZip,
   type ZipEntry,
 } from "./zip";
 
@@ -37,6 +36,55 @@ function centralDirectory(zip: Uint8Array): { name: string; usesDataDescriptor: 
     p += 46 + nameLen + extraLen + commentLen;
   }
   return out;
+}
+
+// Extract STORE entries: central directory -> each local-header offset -> the
+// raw stored bytes. Proves the archive's CONTENTS, not just its structure.
+function extractStored(zip: Uint8Array): { name: string; data: Uint8Array }[] {
+  const b = Buffer.from(zip);
+  let eocd = -1;
+  for (let i = b.length - 22; i >= 0; i--) {
+    if (b.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd === -1) throw new Error("no End Of Central Directory record");
+  const total = b.readUInt16LE(eocd + 10);
+  let p = b.readUInt32LE(eocd + 16);
+  const out: { name: string; data: Uint8Array }[] = [];
+  for (let n = 0; n < total; n++) {
+    if (b.readUInt32LE(p) !== 0x02014b50) throw new Error("bad central header");
+    const size = b.readUInt32LE(p + 24); // uncompressed (= compressed for store)
+    const nameLen = b.readUInt16LE(p + 28);
+    const extraLen = b.readUInt16LE(p + 30);
+    const commentLen = b.readUInt16LE(p + 32);
+    const lho = b.readUInt32LE(p + 42); // local header offset
+    const name = b.toString("utf8", p + 46, p + 46 + nameLen);
+    const lhNameLen = b.readUInt16LE(lho + 26);
+    const lhExtraLen = b.readUInt16LE(lho + 28);
+    const start = lho + 30 + lhNameLen + lhExtraLen;
+    out.push({ name, data: new Uint8Array(zip.subarray(start, start + size)) });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return out;
+}
+
+async function drain(stream: ReadableStream<Uint8Array>) {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.length;
+  }
+  return { out, chunkCount: chunks.length };
 }
 
 async function* gen(entries: ZipEntry[]): AsyncGenerator<ZipEntry> {
@@ -126,97 +174,98 @@ describe("macZipEntryName", () => {
   });
 });
 
-describe("buildZipArchive (macOS-openable format)", () => {
-  it("produces a valid ZIP (starts with a local file header)", async () => {
-    const zip = await buildZipArchive(
-      gen([{ name: "a.txt", data: bytes("hello world") }]),
+describe("streamZip (incremental, macOS-openable, bounded-memory)", () => {
+  it("produces a valid ZIP (local file header + EOCD) and round-trips contents", async () => {
+    const { out } = await drain(
+      streamZip(
+        gen([
+          { name: "T4 - 2024.pdf", data: bytes("employment income") },
+          { name: "folder/RL-1 - 2024.pdf", data: bytes("releve un") },
+        ]),
+      ),
     );
-    expect(zip.byteLength).toBeGreaterThan(0);
-    expect(Buffer.from(zip).readUInt32LE(0)).toBe(0x04034b50); // PK\x03\x04
-  });
-
-  it("accepts a plain array of entries (sync iterable), not just an async stream", async () => {
-    // The bulk-download route now collects entries into an array (via bounded
-    // parallel fetch) and passes that array straight in.
-    const zip = await buildZipArchive([
-      { name: "a.txt", data: bytes("hello") },
-      { name: "b.txt", data: bytes("world") },
+    expect(Buffer.from(out).readUInt32LE(0)).toBe(0x04034b50); // PK\x03\x04
+    const dir = centralDirectory(out);
+    expect(dir.map((e) => e.name)).toEqual([
+      "T4 - 2024.pdf",
+      "folder/RL-1 - 2024.pdf",
     ]);
-    expect(Buffer.from(zip).readUInt32LE(0)).toBe(0x04034b50);
-    const dir = centralDirectory(zip);
-    expect(dir.map((e) => e.name)).toEqual(["a.txt", "b.txt"]);
-    for (const e of dir) expect(e.usesDataDescriptor).toBe(false);
+    const extracted = extractStored(out);
+    expect(extracted.map((e) => e.name)).toEqual([
+      "T4 - 2024.pdf",
+      "folder/RL-1 - 2024.pdf",
+    ]);
+    expect(new TextDecoder().decode(extracted[0]!.data)).toBe("employment income");
+    expect(new TextDecoder().decode(extracted[1]!.data)).toBe("releve un");
   });
 
-  it("writes NO streaming data descriptor — every entry has GP bit 3 clear", async () => {
-    // The macOS Archive Utility fix: fflate's zipSync writes the CRC + size in
-    // each local header (no data descriptor / no ".zip → .cpgz" loop).
-    const zip = await buildZipArchive(
-      gen([
-        { name: "T4 - 2024.pdf", data: bytes("one") },
-        { name: "folder/RL-1 - 2024.pdf", data: bytes("two") },
-      ]),
+  it("writes NO data descriptor: every entry has general-purpose bit 3 clear (macOS-safe)", async () => {
+    const { out } = await drain(
+      streamZip(
+        gen([
+          { name: "a.pdf", data: bytes("one") },
+          { name: "b.pdf", data: bytes("two") },
+        ]),
+      ),
     );
-    const dir = centralDirectory(zip);
-    expect(dir.map((e) => e.name)).toEqual(["T4 - 2024.pdf", "folder/RL-1 - 2024.pdf"]);
-    for (const e of dir) expect(e.usesDataDescriptor).toBe(false);
+    for (const e of centralDirectory(out)) {
+      expect(e.usesDataDescriptor).toBe(false);
+    }
   });
 
-  it("de-duplicates colliding entry names with a ' (n)' suffix", async () => {
-    const zip = await buildZipArchive(
-      gen([
-        { name: "T4 - 2024.pdf", data: bytes("a") },
-        { name: "T4 - 2024.pdf", data: bytes("b") },
-        { name: "T4 - 2024.pdf", data: bytes("c") },
-      ]),
+  it("de-duplicates colliding entry names with a ' (n)' suffix, keeping each file's bytes", async () => {
+    const { out } = await drain(
+      streamZip(
+        gen([
+          { name: "T4 - 2024.pdf", data: bytes("a") },
+          { name: "T4 - 2024.pdf", data: bytes("b") },
+          { name: "T4 - 2024.pdf", data: bytes("c") },
+        ]),
+      ),
     );
-    const names = centralDirectory(zip).map((e) => e.name);
-    expect(names).toEqual(["T4 - 2024.pdf", "T4 - 2024 (1).pdf", "T4 - 2024 (2).pdf"]);
-  });
-});
-
-describe("zipToStream (streamed response — dodges the ~4.5MB buffered-body cap)", () => {
-  async function drain(stream: ReadableStream<Uint8Array>) {
-    const reader = stream.getReader();
-    const chunks: Uint8Array[] = [];
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-    }
-    const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
-    let o = 0;
-    for (const c of chunks) {
-      out.set(c, o);
-      o += c.length;
-    }
-    return { out, chunkCount: chunks.length };
-  }
-
-  it("streams a >4.5MB archive back byte-for-byte across many chunks", async () => {
-    // Bigger than the platform's buffered-response cap — the exact case the
-    // stream exists to handle. Deterministic content so we can compare exactly.
-    const big = new Uint8Array(5 * 1024 * 1024 + 777);
-    for (let i = 0; i < big.length; i++) big[i] = (i * 31) & 0xff;
-
-    const { out, chunkCount } = await drain(zipToStream(big, 256 * 1024));
-
-    expect(chunkCount).toBeGreaterThan(1); // genuinely chunked, not one blob
-    expect(out.length).toBe(big.length);
-    expect(Buffer.from(out).equals(Buffer.from(big))).toBe(true);
+    expect(centralDirectory(out).map((e) => e.name)).toEqual([
+      "T4 - 2024.pdf",
+      "T4 - 2024 (1).pdf",
+      "T4 - 2024 (2).pdf",
+    ]);
+    expect(
+      extractStored(out).map((e) => new TextDecoder().decode(e.data)),
+    ).toEqual(["a", "b", "c"]);
   });
 
-  it("preserves a real (small) archive exactly", async () => {
-    const zip = await buildZipArchive([{ name: "a.txt", data: bytes("hello") }]);
-    const { out } = await drain(zipToStream(zip));
-    expect(Buffer.from(out).equals(Buffer.from(zip))).toBe(true);
-    // still a valid zip after the round-trip
-    expect(Buffer.from(out).readUInt32LE(0)).toBe(0x04034b50);
+  it("produces a valid EMPTY archive when there are no entries", async () => {
+    const { out } = await drain(streamZip(gen([])));
+    expect(out.length).toBe(22); // EOCD only
+    expect(Buffer.from(out).readUInt32LE(0)).toBe(0x06054b50);
+    expect(centralDirectory(out)).toEqual([]);
   });
 
-  it("closes cleanly on an empty archive", async () => {
-    const { out, chunkCount } = await drain(zipToStream(new Uint8Array(0)));
-    expect(out.length).toBe(0);
-    expect(chunkCount).toBe(0);
+  it("handles a single entry far larger than the old in-memory build, content intact", async () => {
+    // ~12MB single file. The old zipSync path allocated the WHOLE archive at
+    // once (what threw on big engagements); streamZip writes it incrementally,
+    // in multiple chunks. Also bigger than the ~4.5MB buffered-response cap.
+    const big = new Uint8Array(12 * 1024 * 1024 + 123);
+    for (let i = 0; i < big.length; i++) big[i] = (i * 73) & 0xff;
+    const { out, chunkCount } = await drain(
+      streamZip(gen([{ name: "big.bin", data: big }])),
+    );
+    expect(chunkCount).toBeGreaterThan(1); // streamed in pieces, not one blob
+    const extracted = extractStored(out);
+    expect(extracted).toHaveLength(1);
+    expect(Buffer.from(extracted[0]!.data).equals(Buffer.from(big))).toBe(true);
+  });
+
+  it("emits each entry's header + data as it goes (incremental, not one buffer)", async () => {
+    const { chunkCount } = await drain(
+      streamZip(
+        gen([
+          { name: "a", data: bytes("aaa") },
+          { name: "b", data: bytes("bbb") },
+          { name: "c", data: bytes("ccc") },
+        ]),
+      ),
+    );
+    // 3 entries x (header + data) + footer => well more than one chunk.
+    expect(chunkCount).toBeGreaterThanOrEqual(4);
   });
 });

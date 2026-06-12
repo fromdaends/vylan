@@ -1,26 +1,26 @@
-// ZIP building primitive + filename sanitization.
+// Streaming ZIP writer + filename sanitization.
 //
-// We use fflate's `zipSync` (not archiver) for two reasons:
+// We hand-write the archive instead of using fflate's `zipSync`. zipSync
+// allocates the ENTIRE archive as one in-memory buffer; on an engagement with
+// many / large documents that allocation THROWS (the real cause of the
+// "couldn't prepare the download" 500s — the route's try/catch turned a zipSync
+// allocation failure into `{"error":"zip_failed"}`). streamZip() below writes
+// the archive INCREMENTALLY to a ReadableStream: one file is held in memory at a
+// time, the whole archive is never materialised at once, and the response
+// streams (so it also dodges the ~4.5 MB buffered-response cap).
 //
-//   1. macOS compatibility. zipSync has every file's bytes up front, so it
-//      writes each entry's CRC + size into a plain local file header — NO
-//      streaming "data descriptor" (general-purpose bit 3). Streaming zippers
-//      (archiver, fflate's streaming Zip) can't know the size up front so they
-//      MUST use a data descriptor, and macOS Archive Utility frequently fails
-//      on those — the classic ".zip → .cpgz → .zip" expand loop. zipSync's
-//      output opens cleanly in Archive Utility, Windows Explorer, and `unzip`.
+// macOS compatibility: we have each file's full bytes BEFORE writing its entry,
+// so we put the CRC + size in a plain local file header — NO streaming "data
+// descriptor" (general-purpose bit 3). Streaming zippers that don't know the
+// size up front (archiver; fflate's streaming Zip) MUST use a data descriptor,
+// and macOS Archive Utility chokes on those (the ".zip → .cpgz" expand loop).
+// Hand-writing STORE entries keeps the output opening cleanly in Archive
+// Utility, Windows Explorer, and `unzip` — validated with `ditto` (the engine
+// behind Finder's Archive Utility).
 //
-//   2. archiver 8.x dropped its callable `archiver("zip", …)` factory (it now
-//      exports ESM classes only), which silently broke our old call at runtime
-//      while the stale @types/archiver kept the build green. Moving to fflate
-//      removes that landmine.
-//
-// Trade-off: zipSync builds the whole archive in memory. Our archives are
-// individual tax documents (single-digit MB each, a handful per engagement;
-// the firm export is owner-only + rate-limited), so the peak is modest. If a
-// future use case needs giant archives, revisit with a chunked approach.
-
-import { zipSync } from "fflate";
+// STORE (no compression): the payload is tax documents — PDFs and JPEGs, already
+// compressed — so deflating buys ~nothing and only costs CPU. Per-entry size is
+// assumed under the 4 GB ZIP32 limit (tax slips are KB–MB).
 
 export type ZipEntry = {
   /** Filename inside the ZIP. Forward slashes create folders. */
@@ -37,64 +37,158 @@ function suffixName(name: string, n: number): string {
   return `${name} (${n})`;
 }
 
-/**
- * Consume an async stream of entries and build a single ZIP archive (returned
- * as bytes). Duplicate entry names are disambiguated with a " (n)" suffix so
- * every file survives. Throws if fflate rejects an entry; callers surface that
- * as a failed download.
- */
-export async function buildZipArchive(
-  entries: AsyncIterable<ZipEntry> | Iterable<ZipEntry>,
-  // 0 = STORE (no compression). Our payload is tax documents — PDFs and JPEGs,
-  // which are ALREADY compressed — so deflating them buys ~nothing in size but
-  // burns real CPU and time. Storing keeps the single-shot in-memory build fast
-  // and well under the route's time budget (level-6 deflate of a big, heavily
-  // re-uploaded engagement is what was timing the bulk download out). Callers
-  // can opt back into deflate (1-9) if they ever zip compressible content.
-  level: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 = 0,
-): Promise<Uint8Array> {
-  const files: Record<string, Uint8Array> = {};
-  const seen = new Map<string, number>();
-  for await (const entry of entries) {
-    let name = entry.name;
-    const n = seen.get(name) ?? 0;
-    seen.set(name, n + 1);
-    if (n > 0) name = suffixName(name, n);
-    files[name] = entry.data;
+// --- CRC-32 (IEEE polynomial, the one ZIP uses) ----------------------------
+let CRC_TABLE: Uint32Array | null = null;
+function crcTable(): Uint32Array {
+  if (CRC_TABLE) return CRC_TABLE;
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
   }
-  return zipSync(files, { level });
+  CRC_TABLE = t;
+  return t;
+}
+function crc32(data: Uint8Array): number {
+  const t = crcTable();
+  let c = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    c = (t[(c ^ data[i]!) & 0xff]! ^ (c >>> 8)) >>> 0;
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+const utf8 = (s: string) => new TextEncoder().encode(s);
+// 1980-01-01 in DOS date format (year-1980 << 9 | month << 5 | day); time = 0.
+const DOS_DATE = 0x0021;
+
+// Local file header (30 bytes + name). STORE method; CRC + size are known up
+// front, so the header is complete and there's NO data descriptor (bit 3 clear).
+function localFileHeader(name: Uint8Array, crc: number, size: number): Uint8Array {
+  const h = new Uint8Array(30 + name.length);
+  const v = new DataView(h.buffer);
+  v.setUint32(0, 0x04034b50, true); // local file header signature
+  v.setUint16(4, 20, true); // version needed to extract (2.0)
+  v.setUint16(6, 0, true); // general purpose flag (bit 3 CLEAR → no descriptor)
+  v.setUint16(8, 0, true); // compression method = 0 (store)
+  v.setUint16(10, 0, true); // last mod time
+  v.setUint16(12, DOS_DATE, true); // last mod date
+  v.setUint32(14, crc, true);
+  v.setUint32(18, size, true); // compressed size (= uncompressed for store)
+  v.setUint32(22, size, true); // uncompressed size
+  v.setUint16(26, name.length, true);
+  v.setUint16(28, 0, true); // extra field length
+  h.set(name, 30);
+  return h;
+}
+
+// Central directory file header (46 bytes + name).
+function centralFileHeader(
+  name: Uint8Array,
+  crc: number,
+  size: number,
+  offset: number,
+): Uint8Array {
+  const h = new Uint8Array(46 + name.length);
+  const v = new DataView(h.buffer);
+  v.setUint32(0, 0x02014b50, true); // central file header signature
+  v.setUint16(4, 20, true); // version made by
+  v.setUint16(6, 20, true); // version needed
+  v.setUint16(8, 0, true); // flags
+  v.setUint16(10, 0, true); // method = store
+  v.setUint16(12, 0, true); // mod time
+  v.setUint16(14, DOS_DATE, true); // mod date
+  v.setUint32(16, crc, true);
+  v.setUint32(20, size, true); // compressed
+  v.setUint32(24, size, true); // uncompressed
+  v.setUint16(28, name.length, true);
+  v.setUint16(30, 0, true); // extra len
+  v.setUint16(32, 0, true); // comment len
+  v.setUint16(34, 0, true); // disk number start
+  v.setUint16(36, 0, true); // internal attrs
+  v.setUint32(38, 0, true); // external attrs
+  v.setUint32(42, offset, true); // relative offset of local header
+  h.set(name, 46);
+  return h;
+}
+
+// End of central directory record (22 bytes, no archive comment).
+function endOfCentralDirectory(
+  count: number,
+  cdSize: number,
+  cdOffset: number,
+): Uint8Array {
+  const h = new Uint8Array(22);
+  const v = new DataView(h.buffer);
+  v.setUint32(0, 0x06054b50, true); // EOCD signature
+  v.setUint16(4, 0, true); // disk number
+  v.setUint16(6, 0, true); // disk with central directory
+  v.setUint16(8, count, true); // CD records on this disk
+  v.setUint16(10, count, true); // total CD records
+  v.setUint32(12, cdSize, true); // size of central directory
+  v.setUint32(16, cdOffset, true); // offset of central directory
+  v.setUint16(20, 0, true); // comment length
+  return h;
 }
 
 /**
- * Serve an in-memory archive as a STREAMED response body, not one buffered blob.
- *
- * Why this exists: the hosting platform caps a BUFFERED Serverless-Function
- * response at ~4.5 MB (the same cap the chunked-upload flow dodges on the way
- * IN). Returning `new Response(zipBytes)` — a single Uint8Array with a fixed
- * Content-Length — trips that cap the moment an engagement's documents total
- * more than ~4.5 MB, which is why "Download all" failed on real engagements. A
- * response whose body is a ReadableStream is delivered chunked and is NOT
- * subject to that cap — exactly how single-file download (/api/files/[id])
- * already serves large files. The archive is still built whole in memory (so it
- * keeps the macOS-openable zipSync format); we just hand it out in chunks.
- *
- * 256 KB chunks balance per-chunk overhead against churn. `subarray` is a view
- * (no copy). Lazy `pull` means we only enqueue as the client drains.
+ * Build a ZIP **incrementally** and serve it as a ReadableStream: each entry is
+ * written (local header + bytes) and released before the next is pulled, so peak
+ * memory is ONE file — never the whole archive (which is what made zipSync throw
+ * on big engagements). Entries are STOREd with complete headers (no data
+ * descriptors) so the result opens in macOS Archive Utility, Windows, and
+ * `unzip`. Duplicate names get a " (n)" suffix. The caller's generator should
+ * skip a file it can't fetch (yield nothing for it); a genuine throw here errors
+ * the stream (the download just fails, as before).
  */
-export function zipToStream(
-  bytes: Uint8Array,
-  chunkSize = 256 * 1024,
+export function streamZip(
+  entries: AsyncIterable<ZipEntry>,
 ): ReadableStream<Uint8Array> {
-  let offset = 0;
+  const iter = entries[Symbol.asyncIterator]();
+  const seen = new Map<string, number>();
+  const central: Uint8Array[] = [];
+  let offset = 0; // bytes written so far (= next entry's local-header offset)
+  let count = 0;
+
   return new ReadableStream<Uint8Array>({
-    pull(controller) {
-      if (offset >= bytes.byteLength) {
-        controller.close();
-        return;
+    async pull(controller) {
+      try {
+        const next = await iter.next();
+        if (next.done) {
+          // Footer: the central directory, then the End Of Central Directory.
+          const cdOffset = offset;
+          let cdSize = 0;
+          for (const rec of central) {
+            controller.enqueue(rec);
+            cdSize += rec.byteLength;
+          }
+          controller.enqueue(endOfCentralDirectory(count, cdSize, cdOffset));
+          controller.close();
+          return;
+        }
+
+        let name = next.value.name || "untitled";
+        const n = seen.get(name) ?? 0;
+        seen.set(name, n + 1);
+        if (n > 0) name = suffixName(name, n);
+        const nameBytes = utf8(name);
+        const data = next.value.data;
+        const crc = crc32(data);
+
+        const header = localFileHeader(nameBytes, crc, data.byteLength);
+        controller.enqueue(header);
+        controller.enqueue(data);
+        central.push(centralFileHeader(nameBytes, crc, data.byteLength, offset));
+        offset += header.byteLength + data.byteLength;
+        count += 1;
+      } catch (e) {
+        controller.error(e);
       }
-      const end = Math.min(offset + chunkSize, bytes.byteLength);
-      controller.enqueue(bytes.subarray(offset, end));
-      offset = end;
+    },
+    cancel() {
+      // Client aborted the download — let the source generator stop fetching.
+      void iter.return?.();
     },
   });
 }
