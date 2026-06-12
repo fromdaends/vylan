@@ -621,6 +621,30 @@ describe("groupDocsForGrid (Duplicates section)", () => {
     expect(groups[1].docs.map((d) => d.fileId)).toEqual(["b"]);
   });
 
+  it("puts signature sections before collection sections (signatures lead the grid)", () => {
+    const items = [
+      item({ id: "c1", label: "T4 Slip", kind: "collection", order_index: 0 }),
+      item({
+        id: "s1",
+        label: "Engagement letter",
+        kind: "signature",
+        order_index: 1,
+      }),
+      item({ id: "c2", label: "RL-1", kind: "collection", order_index: 2 }),
+    ];
+    const docs = buildPreviewDocs(
+      [
+        file({ id: "a", request_item_id: "c1" }),
+        file({ id: "b", request_item_id: "s1" }),
+        file({ id: "c", request_item_id: "c2" }),
+      ],
+      items,
+    );
+    const groups = groupDocsForGrid(docs, items);
+    // Signature item leads; the collection items keep their checklist order.
+    expect(groups.map((g) => g.itemId)).toEqual(["s1", "c1", "c2"]);
+  });
+
   it("orders the Duplicates section oldest-first, regardless of input order", () => {
     const items = [item({ id: "i1" })];
     const uploads = [

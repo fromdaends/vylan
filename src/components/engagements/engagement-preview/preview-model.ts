@@ -468,8 +468,10 @@ export function groupDocsByItem(
 // localized heading for it ("Duplicates" / "Doublons").
 export const DUPLICATES_SECTION_ID = "__duplicates__";
 
-// Group docs for the Preview GRID: the usual one-section-per-checklist-item
-// layout, then a single trailing "Duplicates" section gathering every
+// Group docs for the Preview GRID: SIGNATURE items lead (the client signs a
+// document and returns it — the highest-signal review items, so they sit at the
+// top), then the usual one-section-per-checklist-item layout for collection
+// items, then a single trailing "Duplicates" section gathering every
 // exact-content re-upload (is_duplicate). A duplicate is REMOVED from its item
 // section and shown ONLY here — one file, one place — so an item's real
 // documents never read as cluttered by repeats. Pass already-filtered docs
@@ -481,7 +483,16 @@ export function groupDocsForGrid(
 ): PreviewGroup[] {
   const duplicates = docs.filter((d) => d.isDuplicate);
   const originals = docs.filter((d) => !d.isDuplicate);
-  const groups = groupDocsByItem(originals, items);
+  const grouped = groupDocsByItem(originals, items);
+  // Signature sections first. The partition is stable, so the relative order
+  // inside each band is the checklist order groupDocsByItem already produced.
+  const signatureIds = new Set(
+    items.filter((i) => i.kind === "signature").map((i) => i.id),
+  );
+  const groups = [
+    ...grouped.filter((g) => signatureIds.has(g.itemId)),
+    ...grouped.filter((g) => !signatureIds.has(g.itemId)),
+  ];
   if (duplicates.length > 0) {
     groups.push({
       itemId: DUPLICATES_SECTION_ID,
