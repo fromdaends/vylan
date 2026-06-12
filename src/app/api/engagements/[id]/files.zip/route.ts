@@ -16,6 +16,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { signedUrl } from "@/lib/storage";
 import {
   buildZipArchive,
+  zipToStream,
   sanitizeFilenamePart,
   macZipEntryName,
   type ZipEntry,
@@ -125,7 +126,14 @@ export async function GET(
 
     const zipBytes = await buildZipArchive(collected);
 
-    return new Response(zipBytes as unknown as BodyInit, {
+    // STREAM the archive — do not return it as one buffered body. The platform
+    // caps a buffered serverless response at ~4.5 MB (the same cap the
+    // chunked-upload flow dodges on the way in), and a multi-document zip blows
+    // past it — that was the real "couldn't prepare the download" failure. A
+    // ReadableStream body is delivered chunked and isn't subject to that cap,
+    // exactly how /api/files/[id] serves large single files. Content-Length is
+    // still known + set, so the browser keeps an accurate progress bar.
+    return new Response(zipToStream(zipBytes), {
       status: 200,
       headers: {
         "Content-Type": "application/zip",
