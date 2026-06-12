@@ -15,12 +15,12 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-const addItemAction = vi.fn(async (_prev: unknown, _data: FormData) => ({
-  ok: true as const,
-}));
-vi.mock("@/app/actions/items", () => ({
-  addItemAction: (prev: unknown, data: FormData) => addItemAction(prev, data),
-}));
+// The dialog POSTs to a stable API route. Capture the fetch so we can assert
+// what was sent and simulate the server's JSON response.
+const ok = () => ({ json: async () => ({ ok: true, id: "i1" }) });
+const fetchMock = vi.fn();
+fetchMock.mockResolvedValue(ok());
+vi.stubGlobal("fetch", fetchMock);
 
 import { AddItemDialog } from "./add-item-dialog";
 
@@ -32,8 +32,8 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   refresh.mockReset();
-  addItemAction.mockReset();
-  vi.restoreAllMocks();
+  fetchMock.mockReset();
+  fetchMock.mockResolvedValue(ok());
 });
 
 function openDialog() {
@@ -54,25 +54,20 @@ function form(): HTMLFormElement {
 }
 
 describe("AddItemDialog", () => {
-  it("adds an item from a single label (Required left unchecked)", async () => {
+  it("POSTs to the stable engagement-items route with the label", async () => {
     openDialog();
     fireEvent.change(screen.getByLabelText(en.Engagements.label_placeholder), {
       target: { value: "Bank statement" },
     });
-    // Submit WITHOUT touching the Required checkbox — the reported bug.
     fireEvent.submit(form());
 
-    await waitFor(() => expect(addItemAction).toHaveBeenCalledTimes(1));
-    const fd = addItemAction.mock.calls[0][1] as FormData;
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/engagements/e1/items");
+    expect(init.method).toBe("POST");
+    const fd = init.body as FormData;
     expect(fd.get("label")).toBe("Bank statement");
-    // Bridge: the same value is sent under the legacy names too, so the add
-    // works whether the server runs the new or old action (deploy skew).
-    expect(fd.get("label_fr")).toBe("Bank statement");
-    expect(fd.get("label_en")).toBe("Bank statement");
     expect(fd.get("required")).toBeNull(); // unchecked
-    expect(
-      screen.queryByText(en.Engagements.add_item_check_field),
-    ).not.toBeInTheDocument();
   });
 
   it("captures an autofilled label that bypasses React onChange (the Safari bug)", async () => {
@@ -80,22 +75,34 @@ describe("AddItemDialog", () => {
     const label = screen.getByLabelText(
       en.Engagements.label_placeholder,
     ) as HTMLInputElement;
-    // Simulate Safari autofill: set the DOM value directly with NO change event.
-    // A controlled mirror would read empty here; reading the form must not.
+    // Safari autofill: value set with NO change event. Reading the form must
+    // still pick it up.
     label.value = "Bank statement";
     fireEvent.submit(form());
 
-    await waitFor(() => expect(addItemAction).toHaveBeenCalledTimes(1));
-    const fd = addItemAction.mock.calls[0][1] as FormData;
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    const fd = fetchMock.mock.calls[0][1].body as FormData;
     expect(fd.get("label")).toBe("Bank statement");
   });
 
-  it("blocks and warns when the label is empty", async () => {
+  it("blocks before fetching when the label is empty", async () => {
     openDialog();
     fireEvent.submit(form());
     expect(
       await screen.findByText(en.Engagements.add_item_check_field),
     ).toBeInTheDocument();
-    expect(addItemAction).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's raw detail when the add fails", async () => {
+    fetchMock.mockResolvedValueOnce({
+      json: async () => ({ error: "add_failed", detail: "boom from server" }),
+    });
+    openDialog();
+    fireEvent.change(screen.getByLabelText(en.Engagements.label_placeholder), {
+      target: { value: "T4" },
+    });
+    fireEvent.submit(form());
+    expect(await screen.findByText("boom from server")).toBeInTheDocument();
   });
 });

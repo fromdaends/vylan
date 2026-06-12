@@ -18,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { addItemAction } from "@/app/actions/items";
 import { Loader2, Plus } from "lucide-react";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 import type { DocType } from "@/lib/db/templates";
@@ -64,36 +63,36 @@ export function AddItemDialog({
       return;
     }
     const description = String(fd.get("description") ?? "").trim();
-    // Send the single value under BOTH the new and the legacy field names so the
-    // add succeeds whether the server is running the new {label} action or a
-    // just-replaced {label_fr,label_en} one. Without this bridge, a deploy/cache
-    // skew (new page, old action) produces a spurious "fill in both labels".
     fd.set("label", label);
-    fd.set("label_fr", label);
-    fd.set("label_en", label);
     fd.set("description", description);
-    fd.set("description_fr", description);
     fd.set("doc_type", docType);
 
     setPending(true);
     try {
-      const res = await addItemAction(null, fd);
+      // POST to a STABLE URL (not a Server Action) so a deploy/version mismatch
+      // can't make the call fail before it reaches the server. The endpoint
+      // returns { ok } | { fieldErrors, detail } | { error, detail }.
+      const r = await fetch(`/api/engagements/${engagementId}/items`, {
+        method: "POST",
+        body: fd,
+      });
+      const res = (await r.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        detail?: string;
+        fieldErrors?: Record<string, string>;
+      } | null;
       if (res?.ok) {
         formEl.reset();
         setDocType("other");
         setOpen(false);
         // Toast confirms success even when the new row lands far down a long
-        // checklist; the action revalidated the cache, refresh re-renders it.
+        // checklist; the route revalidated the cache, refresh re-renders it.
         toast.success(t("item_added"));
         router.refresh();
       } else if (res?.detail) {
-        // Show the raw server reason (diagnostic) so a hidden DB/RLS error is
-        // visible instead of a useless generic message.
+        // Raw server reason — so a hidden DB/RLS/validation error is visible.
         setError(res.detail);
-      } else if (res?.fieldErrors) {
-        // The label is already validated above, so unexpected field errors mean
-        // a stale page talking to a new/old server — ask for a refresh.
-        setError(t("add_item_error"));
       } else {
         setError(t("add_item_error"));
       }
