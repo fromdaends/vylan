@@ -112,6 +112,17 @@ export type ClassificationResult = {
   fields_confidence: number;
   looks_correct: boolean;
   issue_if_any: string | null;
+  // Whether the document plausibly belongs to the requested client, judged from
+  // ALL the evidence on the page (a business name that may be the client's own
+  // company, a spouse/dependant on a family doc, the issuer, account holders —
+  // not just the personal name). null on older responses that predate this
+  // field, so callers can fall back to the name-token heuristic.
+  belongs_to_client: boolean | null;
+  belongs_confidence: number;
+  // The model's single honest "is this the correct + usable document for what
+  // was requested" headline score (type + year + whose-document + legibility,
+  // weighed together) — what the accountant sees, not the raw type confidence.
+  overall_confidence: number;
   usability: UsabilityVerdict;
 };
 
@@ -259,6 +270,25 @@ const CLASSIFY_TOOL = {
         description:
           "A short bilingual-safe note explaining the mismatch if looks_correct is false, or any concern (illegible, wrong year, multiple slips in one file). Null if nothing's wrong.",
       },
+      belongs_to_client: {
+        type: "boolean",
+        description:
+          "Weighing ALL the evidence on the page — NOT just the name — does this document plausibly belong to the requested client? A company/business name (which may well be the client's OWN business), a spouse or dependant on a family document, the issuer/payer, account holders, or a different address can all legitimately differ from the client's personal name. Return FALSE only when the evidence clearly shows the document is about an UNRELATED individual (e.g. a personal slip in a different person's name with nothing on the page tying it to the client). When genuinely unsure, return TRUE and put the doubt in issue_if_any — never bounce an innocent client on a hunch.",
+      },
+      belongs_confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+        description:
+          "How confident you are in belongs_to_client. Use >=0.85 only when the evidence is clear; lower while you are piecing it together. Vylan only auto-sends-back a wrong-owner document at >=0.80.",
+      },
+      overall_confidence: {
+        type: "number",
+        minimum: 0,
+        maximum: 1,
+        description:
+          "Your SINGLE honest overall score (0-1) that this is the CORRECT and USABLE document for what the accountant requested — weighing the document type, the tax year, whether it belongs to this client, AND legibility together. This is the headline number the accountant sees, so it must reflect your true assessment: a clean, right document scores high; a perfectly legible document that is the WRONG type, the WRONG year, or about a clearly DIFFERENT person scores LOW even when you are certain what it is. Do NOT just echo document_type confidence.",
+      },
       usable: {
         type: "boolean",
         description:
@@ -314,6 +344,9 @@ const CLASSIFY_TOOL = {
       "fields_confidence",
       "looks_correct",
       "issue_if_any",
+      "belongs_to_client",
+      "belongs_confidence",
+      "overall_confidence",
       "usable",
       "usability_confidence",
       "primary_issue",
@@ -342,6 +375,7 @@ export function buildSystemPrompt(
   ctx: RequestContext = {},
 ): string {
   const label = ctx.requestLabel?.trim() || ctx.requestLabelFr?.trim() || null;
+  const clientName = ctx.clientName?.trim() || null;
   const requestLines = [
     label
       ? `The accountant asked the client for: "${label}"${
@@ -523,6 +557,31 @@ Obvious placeholder / sample / template names (e.g. "Sample Company",
 "Example", "John Doe", "Test", a generic "You") do NOT identify a real owner —
 treat them as missing: set party_name to null and owner_identifiable to false.
 
+WHOSE DOCUMENT IS THIS — set belongs_to_client by piecing together ALL the
+evidence on the page, not just the name${clientName ? ` (the client is ${clientName})` : ""}.
+A business or company name is NOT automatically a stranger: a T2125, a GST/QST
+return, or a financial statement headed "Smith Plumbing Inc." for an individual
+client is very likely that client's OWN business — set belongs_to_client = true.
+A spouse or dependant on a family document, the issuer/payer, an account holder,
+or a different mailing address can also legitimately differ from the client's
+personal name. Set belongs_to_client = FALSE only when the evidence clearly
+points to an UNRELATED individual — e.g. a personal T4 in a different person's
+name with nothing on the page connecting it to the client. When you ARE
+confident it belongs to someone else (belongs_confidence >= 0.85), also set
+usable=false with wrong_document_type and write issue_summary asking for the
+client's own document. When you are merely unsure, keep belongs_to_client = true
+with a lower belongs_confidence and note the doubt in issue_if_any — the
+accountant reviews it. Never send an innocent client's correct document back
+over a name you simply did not recognise.
+
+OVERALL SCORE — set overall_confidence (0-1) to your single honest judgment that
+this is the CORRECT, USABLE document for what was requested, weighing type + tax
+year + whose-document-it-is + legibility TOGETHER. A clean exact match scores
+high; a document that is the wrong type, the wrong year, about a clearly
+different person, or unusable scores LOW even when you are certain what it is.
+This is the headline number the accountant sees — make it mean something, do not
+just copy document_type confidence.
+
 Return a usability_confidence between 0 and 1. Use <0.80 when you are
 uncertain — Vylan only auto-acts above that threshold.
 
@@ -585,6 +644,9 @@ export async function classifyDocument(opts: {
       fields_confidence: 0,
       looks_correct: false,
       issue_if_any: "Unsupported file format for AI classification.",
+      belongs_to_client: null,
+      belongs_confidence: 0,
+      overall_confidence: 0,
       usability: USABLE_BY_DEFAULT,
     };
   }
@@ -718,6 +780,21 @@ export function parseClassification(
   // silently flipped.
   const keyValuesObscured = raw.key_values_obscured === true;
 
+  // Holistic identity judgment (see withWrongRecipient + the prompt): the model
+  // weighs ALL the evidence to decide whether the document belongs to the
+  // requested client. Only a CONFIDENT "no" (>= the auto-act threshold)
+  // hard-rejects, so a business name or a spouse the model is merely unsure
+  // about never bounces an innocent client.
+  const belongsToClient =
+    typeof raw.belongs_to_client === "boolean" ? raw.belongs_to_client : null;
+  const belongsConfidence =
+    typeof raw.belongs_confidence === "number"
+      ? Math.max(0, Math.min(1, raw.belongs_confidence))
+      : 0;
+  const wrongRecipient =
+    belongsToClient === false &&
+    belongsConfidence >= USABILITY_CONFIDENCE_THRESHOLD;
+
   return {
     document_type: (KNOWN_DOC_TYPES as string[]).includes(doc)
       ? (doc as DocType)
@@ -751,15 +828,25 @@ export function parseClassification(
       typeof raw.issue_if_any === "string" && raw.issue_if_any.trim() !== ""
         ? raw.issue_if_any.trim()
         : null,
-    // Both hard rules force the same shape (unusable + key_fields_obscured +
-    // confidence floor); they differ only in the client message. Key-values
-    // first so a void cheque with a blacked-out account number reads "your
-    // numbers are hidden", not "we couldn't read the name".
+    belongs_to_client: belongsToClient,
+    belongs_confidence: belongsConfidence,
+    // Honest headline score. Older responses without it fall back to the
+    // document_type confidence so the UI always has a number to show.
+    overall_confidence:
+      typeof raw.overall_confidence === "number"
+        ? Math.max(0, Math.min(1, raw.overall_confidence))
+        : Math.max(0, Math.min(1, conf)),
+    // Hard rules force an unusable verdict the firm-controlled router then acts
+    // on. Order = message precedence: obscured key numbers, then an unreadable
+    // owner, then a confident wrong-OWNER (a clean scan of someone else's
+    // document). They differ only in the client-facing message.
     usability: keyValuesObscured
       ? withObscuredKeyValues(parseUsability(raw))
       : ownerUnreadable
         ? withUnreadableOwner(parseUsability(raw))
-        : parseUsability(raw),
+        : wrongRecipient
+          ? withWrongRecipient(parseUsability(raw))
+          : parseUsability(raw),
   };
 }
 
@@ -871,6 +958,33 @@ function withObscuredKeyValues(v: UsabilityVerdict): UsabilityVerdict {
     "Some of the key numbers on this document are blacked out or unreadable, so we can't use it. Please re-upload a copy with all the numbers fully visible.",
     "Certains chiffres importants de ce document sont masqués ou illisibles, donc nous ne pouvons pas l'utiliser. Veuillez téléverser une copie où tous les chiffres sont entièrement visibles.",
   );
+}
+
+// Hard rule #3: a document that confidently belongs to SOMEONE ELSE — a clean,
+// readable scan of an unrelated person's slip — is the wrong document however
+// legible. Unlike a blunt name-token check this fires on the model's HOLISTIC
+// belongs_to_client judgment, so a business / spouse / dependant it reasoned
+// through is NOT bounced. primary_issue is wrong_document_type (not
+// key_fields_obscured), and the model's own bilingual reason is preferred over
+// the generic fallback so the client sees a specific "we need YOUR document".
+function withWrongRecipient(v: UsabilityVerdict): UsabilityVerdict {
+  const all_issues: UsabilityIssue[] = v.all_issues.includes(
+    "wrong_document_type",
+  )
+    ? v.all_issues
+    : [...v.all_issues, "wrong_document_type"];
+  return {
+    usable: false,
+    confidence: Math.max(v.confidence, USABILITY_CONFIDENCE_THRESHOLD + 0.05),
+    primary_issue: v.primary_issue ?? "wrong_document_type",
+    all_issues,
+    issue_summary_en:
+      v.issue_summary_en ||
+      "This document appears to belong to someone else. Please upload the client's own document.",
+    issue_summary_fr:
+      v.issue_summary_fr ||
+      "Ce document semble appartenir à une autre personne. Veuillez téléverser le document du client.",
+  };
 }
 
 // Fetch uploaded file bytes from Supabase storage by signed-URL fetch.

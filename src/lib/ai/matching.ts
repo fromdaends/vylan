@@ -8,8 +8,9 @@
 //
 // Deliberately conservative — a false flag erodes trust faster than a miss:
 //   * a mismatch only surfaces when the AI was reasonably sure (>= 0.5);
-//   * identity flags a TOTAL stranger only — any shared name token (e.g. a
-//     spouse's shared surname on a joint/family file) keeps it quiet.
+//   * identity prefers the model's holistic belongs_to_client judgment (it
+//     weighs business names, spouses, dependants — not just the name), and
+//     falls back to a name-token heuristic only for older data without it.
 
 import type { DocType } from "@/lib/db/templates";
 
@@ -32,6 +33,12 @@ export type MatchClassification = {
   extracted_year: number | null;
   party_name: string | null;
   fields_confidence: number;
+  // The model's HOLISTIC "does this document belong to the client?" judgment —
+  // it weighs business names, spouses, dependants, and context, not just the
+  // name. null on older classifications that predate it (then the matcher falls
+  // back to the name-token heuristic); when present it OVERRIDES that heuristic.
+  belongs_to_client?: boolean | null;
+  belongs_confidence?: number;
 };
 
 export type MatchInput = {
@@ -83,10 +90,25 @@ export function matchDocument(input: MatchInput): MatchFlag[] {
     });
   }
 
-  // IDENTITY — the named party shares NO name token with the client. Lenient
-  // by design: a shared surname (spouse / dependant on a family file) keeps it
-  // quiet. Soft flag only — a legitimate household slip must never reject.
+  // IDENTITY — does the document belong to the client? PREFER the model's
+  // holistic belongs_to_client judgment (it weighs business names, spouses,
+  // dependants, and context — not just the name). Fall back to the name-token
+  // heuristic ONLY for older classifications that predate that signal
+  // (belongs_to_client == null), so historical files still surface a mismatch.
+  // Soft flag only here — the CONFIDENT wrong-owner hard reject lives in
+  // classify.ts (withWrongRecipient), off the same belongs_to_client judgment.
   if (
+    c.belongs_to_client === false &&
+    (c.belongs_confidence ?? 0) >= MIN_FLAG_CONFIDENCE
+  ) {
+    flags.push({
+      kind: "identity_mismatch",
+      confidence: c.belongs_confidence ?? MIN_FLAG_CONFIDENCE,
+      expected: input.clientName ?? "",
+      actual: c.party_name ?? "",
+    });
+  } else if (
+    c.belongs_to_client == null &&
     input.clientName &&
     c.party_name &&
     c.fields_confidence >= MIN_FLAG_CONFIDENCE &&

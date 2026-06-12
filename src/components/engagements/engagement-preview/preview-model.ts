@@ -154,6 +154,8 @@ function mismatchesRequest(
     extracted_year?: unknown;
     party_name?: unknown;
     fields_confidence?: unknown;
+    belongs_to_client?: unknown;
+    belongs_confidence?: unknown;
   };
   const flags = matchDocument({
     expectedDocType,
@@ -167,6 +169,10 @@ function mismatchesRequest(
       party_name: typeof f.party_name === "string" ? f.party_name : null,
       fields_confidence:
         typeof f.fields_confidence === "number" ? f.fields_confidence : 0,
+      belongs_to_client:
+        typeof f.belongs_to_client === "boolean" ? f.belongs_to_client : null,
+      belongs_confidence:
+        typeof f.belongs_confidence === "number" ? f.belongs_confidence : 0,
     },
   });
   return flags.length > 0;

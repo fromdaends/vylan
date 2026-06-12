@@ -150,6 +150,7 @@
     "viewer_unsupported": "Impossible d'afficher un aperçu de ce fichier.",
     "open_new_tab": "Ouvrir dans un nouvel onglet",
     "confidence": "Confiance de {percent} %",
+    "match_score": "Score du document",
     "quality_ok": "Qualité correcte",
     "quality_issue": "Problème de qualité",
     "flags_heading": "Ne correspond pas à la demande",

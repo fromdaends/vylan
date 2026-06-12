@@ -45,6 +45,9 @@ type ExtractedFields = {
   form_identifier?: string | null;
   amounts?: { label: string; value: number }[] | null;
   fields_confidence?: number | null;
+  belongs_to_client?: boolean | null;
+  belongs_confidence?: number | null;
+  overall_confidence?: number | null;
 };
 
 const STATUS_PILL: Record<
@@ -149,6 +152,31 @@ export function PreviewDetail({
       ? docTypeLabel(classification as DocType, locale)
       : null;
 
+  // The headline score the accountant sees: the AI's honest "is this the right +
+  // usable document" judgment (overall_confidence), NOT the raw type confidence.
+  // Falls back to type confidence for files analysed before the model returned
+  // it. Colour-graded so a wrong-person / wrong-year doc reads low at a glance.
+  const overall =
+    typeof fields.overall_confidence === "number"
+      ? fields.overall_confidence
+      : conf;
+  const scoreText =
+    overall == null
+      ? "text-muted-foreground"
+      : overall >= 0.8
+        ? "text-success"
+        : overall >= 0.5
+          ? "text-warning"
+          : "text-destructive";
+  const scoreBar =
+    overall == null
+      ? "bg-muted-foreground/40"
+      : overall >= 0.8
+        ? "bg-success"
+        : overall >= 0.5
+          ? "bg-warning"
+          : "bg-destructive";
+
   const flags: MatchFlag[] =
     classification && conf != null
       ? matchDocument({
@@ -167,6 +195,14 @@ export function PreviewDetail({
             fields_confidence:
               typeof fields.fields_confidence === "number"
                 ? fields.fields_confidence
+                : 0,
+            belongs_to_client:
+              typeof fields.belongs_to_client === "boolean"
+                ? fields.belongs_to_client
+                : null,
+            belongs_confidence:
+              typeof fields.belongs_confidence === "number"
+                ? fields.belongs_confidence
                 : 0,
           },
         })
@@ -397,15 +433,8 @@ export function PreviewDetail({
                 {tAi("label")}
               </div>
               {typeName ? (
-                <div className="mt-1">
-                  <div className="text-sm font-semibold text-foreground">
-                    {typeName}
-                  </div>
-                  {conf != null && (
-                    <div className="text-xs text-muted-foreground">
-                      {t("confidence", { percent: Math.round(conf * 100) })}
-                    </div>
-                  )}
+                <div className="mt-1 text-sm font-semibold text-foreground">
+                  {typeName}
                 </div>
               ) : (
                 <div className="mt-1 text-sm text-muted-foreground">
@@ -413,6 +442,34 @@ export function PreviewDetail({
                 </div>
               )}
             </section>
+
+            {/* Prominent headline score — the AI's honest "is this the right +
+                usable document" judgment, not the raw type confidence. A
+                wrong-person or wrong-year document reads LOW here at a glance. */}
+            {overall != null && (
+              <section className="rounded-lg border border-border/50 bg-card/40 p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    {t("match_score")}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-3xl leading-none font-bold tabular-nums",
+                      scoreText,
+                    )}
+                  >
+                    {Math.round(overall * 100)}
+                    <span className="text-lg font-semibold">%</span>
+                  </span>
+                </div>
+                <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn("h-full rounded-full transition-all", scoreBar)}
+                    style={{ width: `${Math.max(4, Math.round(overall * 100))}%` }}
+                  />
+                </div>
+              </section>
+            )}
 
             {verdict && (
               <section

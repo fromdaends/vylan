@@ -55,6 +55,10 @@ export type FileAiView = {
   headline: AiHeadline;
   analyzed: boolean;
   confidence: number;
+  /** Headline "is this the right + usable document" score (0-1) — what the row
+   *  shows prominently. Falls back to the type confidence for files analysed
+   *  before the model returned an overall score. */
+  overallConfidence: number;
   detected: string;
   year: number | null;
   issuer: string | null;
@@ -94,6 +98,9 @@ export function deriveFileAi(
     issuer_name?: unknown;
     party_name?: unknown;
     fields_confidence?: unknown;
+    belongs_to_client?: unknown;
+    belongs_confidence?: unknown;
+    overall_confidence?: unknown;
   };
   const detected = file.ai_classification ?? "";
   const conf = file.ai_confidence ?? 0;
@@ -110,6 +117,21 @@ export function deriveFileAi(
   // badge and the Preview can never disagree.
   const fieldsConf =
     typeof fields.fields_confidence === "number" ? fields.fields_confidence : 0;
+  const belongsToClient =
+    typeof fields.belongs_to_client === "boolean"
+      ? fields.belongs_to_client
+      : null;
+  const belongsConf =
+    typeof fields.belongs_confidence === "number"
+      ? fields.belongs_confidence
+      : 0;
+  // The headline "is this the right + usable document" score the row shows. Falls
+  // back to the type-classification confidence for files analysed before the
+  // model started returning an overall score.
+  const overallConfidence =
+    typeof fields.overall_confidence === "number"
+      ? fields.overall_confidence
+      : conf;
 
   const flags = analyzed
     ? matchDocument({
@@ -122,6 +144,8 @@ export function deriveFileAi(
           extracted_year: year,
           party_name: party,
           fields_confidence: fieldsConf,
+          belongs_to_client: belongsToClient,
+          belongs_confidence: belongsConf,
         },
       })
     : [];
@@ -164,6 +188,7 @@ export function deriveFileAi(
     headline,
     analyzed,
     confidence: conf,
+    overallConfidence,
     detected,
     year,
     issuer,

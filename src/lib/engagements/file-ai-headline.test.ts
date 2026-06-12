@@ -183,6 +183,61 @@ describe("deriveFileAi", () => {
     expect(v.mismatch).toBeNull();
   });
 
+  it("uses the AI belongs judgment to flag a confident wrong-owner", () => {
+    const v = deriveFileAi(
+      file({
+        ai_extracted_fields: {
+          extracted_year: 2024,
+          party_name: "Jane Smith",
+          fields_confidence: 0.95,
+          belongs_to_client: false,
+          belongs_confidence: 0.9,
+        },
+      }),
+      { ...ctx, clientName: "Tyler Jette" },
+      NOW,
+    );
+    expect(v.headline.kind).toBe("wrong_type");
+    expect(v.mismatch?.kind).toBe("identity_mismatch");
+  });
+
+  it("does NOT flag a business doc the AI says belongs, despite no shared name", () => {
+    // "Smith Plumbing Inc." for client "Tyler Jette": the display trusts the
+    // AI's holistic belongs judgment, so a legit business document stays green.
+    const v = deriveFileAi(
+      file({
+        ai_classification: "t2125",
+        ai_extracted_fields: {
+          extracted_year: 2024,
+          party_name: "Smith Plumbing Inc.",
+          fields_confidence: 0.95,
+          belongs_to_client: true,
+          belongs_confidence: 0.9,
+        },
+      }),
+      { ...ctx, expectedDocType: "t2125", clientName: "Tyler Jette" },
+      NOW,
+    );
+    expect(v.headline).toEqual({ kind: "looks_right", tone: "good" });
+    expect(v.mismatch).toBeNull();
+  });
+
+  it("exposes the AI overall_confidence as the headline score", () => {
+    const v = deriveFileAi(
+      file({
+        ai_extracted_fields: { extracted_year: 2024, overall_confidence: 0.42 },
+      }),
+      ctx,
+      NOW,
+    );
+    expect(v.overallConfidence).toBe(0.42);
+  });
+
+  it("falls overallConfidence back to type confidence when the AI didn't score it", () => {
+    const v = deriveFileAi(file({ ai_confidence: 0.88 }), ctx, NOW);
+    expect(v.overallConfidence).toBe(0.88);
+  });
+
   it("surfaces a usability auto-rejection with its summary", () => {
     const v = deriveFileAi(
       file({

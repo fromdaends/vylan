@@ -43,6 +43,18 @@ describe("buildSystemPrompt — the request in words", () => {
     expect(p).toContain("older tax year is NOT");
   });
 
+  it("instructs the model to weigh belongs_to_client holistically and score overall", () => {
+    const p = buildSystemPrompt("t2125", {
+      requestLabel: "Business income (T2125)",
+      clientName: "Tyler Jette",
+    });
+    expect(p).toContain("belongs_to_client");
+    expect(p).toContain("OVERALL SCORE");
+    // a business name must be explicitly called out as NOT automatically a stranger
+    expect(p).toMatch(/business/i);
+    expect(p).toContain("Tyler Jette");
+  });
+
   it("treats PARTIAL obscuring of a key number as disqualifying", () => {
     const p = buildSystemPrompt("other", {
       requestLabel: "Void cheque (direct deposit)",
@@ -116,6 +128,9 @@ describe("parseClassification", () => {
       fields_confidence: 0,
       looks_correct: true,
       issue_if_any: null,
+      belongs_to_client: null,
+      belongs_confidence: 0,
+      overall_confidence: 0.92,
       usability: {
         usable: true,
         confidence: 0.96,
@@ -604,5 +619,102 @@ describe("parseClassification — obscured key-values rule", () => {
       usability_confidence: 0.9,
     });
     expect(out?.usability.usable).toBe(false);
+  });
+});
+
+describe("parseClassification — belongs_to_client + overall_confidence", () => {
+  const base = {
+    document_type: "t4",
+    confidence: 0.99,
+    extracted_year: 2024,
+    extracted_amount_or_total: 50000,
+    looks_correct: true,
+    issue_if_any: null,
+    party_name: "Jane Smith",
+    owner_identifiable: true,
+    usable: true,
+    usability_confidence: 0.95,
+    primary_issue: null,
+    all_issues: [],
+    issue_summary_fr: "",
+    issue_summary_en: "",
+  };
+
+  it("parses belongs fields; overall_confidence falls back to type confidence when absent", () => {
+    const out = parseClassification({ ...base });
+    expect(out?.belongs_to_client).toBeNull();
+    expect(out?.belongs_confidence).toBe(0);
+    expect(out?.overall_confidence).toBe(0.99); // fell back to confidence
+  });
+
+  it("keeps an explicit overall_confidence (clamped), distinct from type confidence", () => {
+    expect(parseClassification({ ...base, overall_confidence: 0.12 })?.overall_confidence).toBe(0.12);
+    expect(parseClassification({ ...base, overall_confidence: 1.4 })?.overall_confidence).toBe(1);
+  });
+
+  it("HARD-REJECTS a document the model is confident belongs to someone else", () => {
+    // The smart-identity case: a clean, readable, right-TYPE T4 the model judged
+    // (holistically) belongs to an unrelated person. usable flips to false with
+    // wrong_document_type so it routes like any other reject.
+    const out = parseClassification({
+      ...base,
+      belongs_to_client: false,
+      belongs_confidence: 0.92,
+      issue_summary_en: "This looks like someone else's T4.",
+      issue_summary_fr: "Ceci semble être le T4 d'une autre personne.",
+    });
+    expect(out?.usability.usable).toBe(false);
+    expect(out?.usability.primary_issue).toBe("wrong_document_type");
+    expect(out?.usability.all_issues).toContain("wrong_document_type");
+    expect(out?.usability.confidence).toBeGreaterThanOrEqual(0.85);
+    expect(out?.usability.issue_summary_en).toContain("someone else");
+  });
+
+  it("does NOT bounce a business name the model is UNSURE about (< 0.80) — the false-bounce fix", () => {
+    // "Smith Plumbing Inc." for client Tyler Jette: the model suspects but isn't
+    // sure → stays usable, accountant reviews, client is never nagged.
+    const out = parseClassification({
+      ...base,
+      document_type: "t2125",
+      party_name: "Smith Plumbing Inc.",
+      belongs_to_client: false,
+      belongs_confidence: 0.55,
+    });
+    expect(out?.usability.usable).toBe(true);
+  });
+
+  it("does NOT bounce a document the model says DOES belong to the client", () => {
+    const out = parseClassification({
+      ...base,
+      document_type: "t2125",
+      party_name: "Smith Plumbing Inc.",
+      belongs_to_client: true,
+      belongs_confidence: 0.9,
+    });
+    expect(out?.usability.usable).toBe(true);
+    expect(out?.belongs_to_client).toBe(true);
+  });
+
+  it("supplies a generic wrong-owner message when the model left one blank", () => {
+    const out = parseClassification({
+      ...base,
+      belongs_to_client: false,
+      belongs_confidence: 0.9,
+      issue_summary_en: "",
+      issue_summary_fr: "",
+    });
+    expect(out?.usability.issue_summary_en).not.toBe("");
+    expect(out?.usability.issue_summary_fr).not.toBe("");
+  });
+
+  it("lets obscured key-values take precedence over the wrong-owner message", () => {
+    const out = parseClassification({
+      ...base,
+      key_values_obscured: true,
+      belongs_to_client: false,
+      belongs_confidence: 0.9,
+    });
+    expect(out?.usability.usable).toBe(false);
+    expect(out?.usability.primary_issue).toBe("key_fields_obscured");
   });
 });
