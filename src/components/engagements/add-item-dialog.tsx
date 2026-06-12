@@ -63,8 +63,16 @@ export function AddItemDialog({
       setError(t("add_item_check_field"));
       return;
     }
-    // Normalize the trimmed value + ensure the picker's choice is included.
+    const description = String(fd.get("description") ?? "").trim();
+    // Send the single value under BOTH the new and the legacy field names so the
+    // add succeeds whether the server is running the new {label} action or a
+    // just-replaced {label_fr,label_en} one. Without this bridge, a deploy/cache
+    // skew (new page, old action) produces a spurious "fill in both labels".
     fd.set("label", label);
+    fd.set("label_fr", label);
+    fd.set("label_en", label);
+    fd.set("description", description);
+    fd.set("description_fr", description);
     fd.set("doc_type", docType);
 
     setPending(true);
@@ -79,7 +87,9 @@ export function AddItemDialog({
         toast.success(t("item_added"));
         router.refresh();
       } else if (res?.fieldErrors) {
-        setError(t("add_item_check_fields"));
+        // The label is already validated above, so unexpected field errors mean
+        // a stale page talking to a new/old server — ask for a refresh.
+        setError(t("add_item_error"));
       } else {
         setError(t("add_item_error"));
       }
