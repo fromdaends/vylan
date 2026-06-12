@@ -120,6 +120,69 @@ describe("deriveFileAi", () => {
     expect(v.mismatch?.kind).toBe("type_mismatch");
   });
 
+  // Regression: the checklist used to feed matchDocument fields_confidence 0, so
+  // a clean, readable, right-type T4 belonging to a STRANGER showed green "looks
+  // right" here while the Preview (which passes the real value) flagged it. Now
+  // both read the same field, so the two surfaces agree.
+  it("flags a wrong-NAME document the Preview also flags (checklist↔preview parity)", () => {
+    const v = deriveFileAi(
+      file({
+        ai_extracted_fields: {
+          extracted_year: 2024,
+          party_name: "Jane Smith",
+          fields_confidence: 0.95,
+        },
+      }),
+      { ...ctx, clientName: "Tyler Jette" },
+      NOW,
+    );
+    expect(v.headline).toEqual({ kind: "wrong_type", tone: "bad" });
+    expect(v.mismatch?.kind).toBe("identity_mismatch");
+    expect(v.mismatch?.expected).toBe("Tyler Jette");
+    expect(v.mismatch?.actual).toBe("Jane Smith");
+  });
+
+  it("flags a wrong tax YEAR", () => {
+    const v = deriveFileAi(
+      file({ ai_extracted_fields: { extracted_year: 2021, fields_confidence: 0.9 } }),
+      ctx, // expectedYear 2024
+      NOW,
+    );
+    expect(v.headline.kind).toBe("wrong_type");
+    expect(v.mismatch?.kind).toBe("year_mismatch");
+  });
+
+  it("prioritises the identity flag over the year flag for the row reason", () => {
+    const v = deriveFileAi(
+      file({
+        ai_extracted_fields: {
+          extracted_year: 2021, // ALSO a year mismatch
+          party_name: "Jane Smith",
+          fields_confidence: 0.9,
+        },
+      }),
+      { ...ctx, clientName: "Tyler Jette" },
+      NOW,
+    );
+    expect(v.mismatch?.kind).toBe("identity_mismatch");
+  });
+
+  it("stays quiet when the field read is low-confidence (matcher's own gate)", () => {
+    const v = deriveFileAi(
+      file({
+        ai_extracted_fields: {
+          extracted_year: 2021,
+          party_name: "Jane Smith",
+          fields_confidence: 0.3, // below the 0.5 floor → no flag, by design
+        },
+      }),
+      { ...ctx, clientName: "Tyler Jette" },
+      NOW,
+    );
+    expect(v.headline).toEqual({ kind: "looks_right", tone: "good" });
+    expect(v.mismatch).toBeNull();
+  });
+
   it("surfaces a usability auto-rejection with its summary", () => {
     const v = deriveFileAi(
       file({
