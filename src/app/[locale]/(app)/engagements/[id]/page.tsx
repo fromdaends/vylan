@@ -413,7 +413,12 @@ export default async function EngagementDetailPage({
                   clientName={client?.display_name ?? null}
                   locale={locale}
                 />
-                {isLive && <AddItemDialog engagementId={engagement.id} />}
+                {isLive && (
+                  <AddItemDialog
+                    engagementId={engagement.id}
+                    province={client?.province ?? null}
+                  />
+                )}
               </div>
             </div>
             {collectionItems.length === 0 ? (

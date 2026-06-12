@@ -17,6 +17,7 @@ import {
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
+import { appliesToProvince } from "@/lib/doc-types";
 
 type KnownErrorKey =
   | "missing_client"
@@ -57,9 +58,15 @@ export function EngagementBuilder({
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [dueDate, setDueDate] = useState("");
-  const [items, setItems] = useState<TemplateItem[]>(
-    templates[0]?.items ?? [],
-  );
+  const [items, setItems] = useState<TemplateItem[]>(() => {
+    // If we already know the client (e.g. started from a client's page), seed
+    // the checklist with only the documents that apply to their province.
+    const initialProvince =
+      clients.find((c) => c.id === initialClientId)?.province ?? null;
+    return (templates[0]?.items ?? []).filter((it) =>
+      appliesToProvince(it.doc_type, initialProvince),
+    );
+  });
   const [error, setError] = useState<string | null>(null);
   // How many times "Create and send" was pressed with an empty checklist.
   // From the 2nd attempt we ring the checklist so the reason is obvious.
@@ -67,6 +74,25 @@ export function EngagementBuilder({
   const [pending, startTransition] = useTransition();
 
   const selectedTemplate = templates.find((tt) => tt.id === templateId);
+  // The chosen client's province drives which document types apply. Quebec
+  // clients get the RL slips; everyone else (or province not set) doesn't.
+  const selectedProvince =
+    clients.find((c) => c.id === clientId)?.province ?? null;
+
+  // Keep only the document types that apply to the given province (drops the
+  // Quebec RL slips for a non-Quebec client). Empty-doc_type rows the
+  // accountant is still typing are always kept.
+  function forProvince(list: TemplateItem[], province: string | null) {
+    return list.filter((it) => appliesToProvince(it.doc_type, province));
+  }
+
+  // Switching client re-filters the current checklist (e.g. picking an Ontario
+  // client after a Quebec template drops the RL slips on the spot).
+  function chooseClient(id: string | null) {
+    setClientId(id);
+    const province = clients.find((c) => c.id === id)?.province ?? null;
+    setItems((prev) => forProvince(prev, province));
+  }
 
   // Auto-fill title from template + year when not yet edited.
   const defaultTitle = useMemo(() => {
@@ -84,7 +110,9 @@ export function EngagementBuilder({
   function pickTemplate(id: string) {
     setTemplateId(id);
     const tmpl = templates.find((tt) => tt.id === id);
-    setItems(tmpl?.items ?? []);
+    // Apply the template, but only the documents that apply to this client's
+    // province — an Ontario client never gets the Quebec RL slips.
+    setItems(forProvince(tmpl?.items ?? [], selectedProvince));
     setTitleTouched(false);
   }
 
@@ -198,10 +226,11 @@ export function EngagementBuilder({
           <CardTitle className="text-base">{t("section_client")}</CardTitle>
         </CardHeader>
         <CardContent>
+          {/* chooseClient re-filters the checklist for the new client's province */}
           <ClientCombobox
             clients={clients}
             value={clientId}
-            onChange={setClientId}
+            onChange={chooseClient}
           />
         </CardContent>
       </Card>
@@ -375,6 +404,7 @@ export function EngagementBuilder({
                           value={item.doc_type}
                           onChange={(dt) => updateItem(idx, { doc_type: dt })}
                           className="h-8 w-[14rem] max-w-full text-xs"
+                          province={selectedProvince}
                         />
                         <label className="flex items-center gap-1.5 select-none cursor-pointer">
                           <input

@@ -49,6 +49,7 @@ export default async function NewEngagementPage({
           display_name: c.display_name,
           type: c.type,
           email: c.email,
+          province: c.province,
         }))}
         templates={templates}
         initialClientId={sp.client}

@@ -24,6 +24,10 @@ export type ComboboxClient = {
   display_name: string;
   type: "individual" | "business";
   email: string | null;
+  // Canadian province code (QC, ON, …). Drives province-aware document
+  // filtering when building an engagement. Optional for callers that don't
+  // need it.
+  province?: string | null;
 };
 
 export function ClientCombobox({
