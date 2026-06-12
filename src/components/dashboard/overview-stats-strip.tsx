@@ -3,8 +3,9 @@ import { Link } from "@/i18n/navigation";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 import { computeOverviewStats } from "@/lib/dashboard/overview-stats";
 
-// Overview stats strip — a slim, quiet row of four at-a-glance counts under
-// Jump back in. Deliberately MUCH quieter than Needs attention (mesh, not box:
+// Overview stats strip — a slim, quiet row of four at-a-glance counts
+// anchoring the Overview's top-left, beside Needs attention.
+// Deliberately MUCH quieter than Needs attention (mesh, not box:
 // no card chrome, just a whisper hairline per stat and spacing). Each stat is
 // a link; counts come from computeOverviewStats over the same WorklistRow[]
 // the page already loaded, so they always agree with the views they link to.

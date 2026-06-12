@@ -40,7 +40,6 @@ import { AddSignatureDialog } from "@/components/engagements/add-signature-dialo
 import { signedUrl } from "@/lib/storage";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
-import { RecordEngagementOpen } from "@/components/engagements/record-engagement-open";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -167,10 +166,6 @@ export default async function EngagementDetailPage({
 
   return (
     <div className="space-y-6">
-      {/* Record this open (per device) so the dashboard's "Jump back in"
-          card can surface it. Renders nothing. */}
-      <RecordEngagementOpen engagementId={engagement.id} />
-
       {/* Auto-refresh while the engagement is still active. Picks up new
           client uploads + AI verdicts + activity-log entries without
           requiring the accountant to hit reload. Skipped for draft /
