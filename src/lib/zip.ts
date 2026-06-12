@@ -66,6 +66,40 @@ export async function buildZipArchive(
 }
 
 /**
+ * Serve an in-memory archive as a STREAMED response body, not one buffered blob.
+ *
+ * Why this exists: the hosting platform caps a BUFFERED Serverless-Function
+ * response at ~4.5 MB (the same cap the chunked-upload flow dodges on the way
+ * IN). Returning `new Response(zipBytes)` — a single Uint8Array with a fixed
+ * Content-Length — trips that cap the moment an engagement's documents total
+ * more than ~4.5 MB, which is why "Download all" failed on real engagements. A
+ * response whose body is a ReadableStream is delivered chunked and is NOT
+ * subject to that cap — exactly how single-file download (/api/files/[id])
+ * already serves large files. The archive is still built whole in memory (so it
+ * keeps the macOS-openable zipSync format); we just hand it out in chunks.
+ *
+ * 256 KB chunks balance per-chunk overhead against churn. `subarray` is a view
+ * (no copy). Lazy `pull` means we only enqueue as the client drains.
+ */
+export function zipToStream(
+  bytes: Uint8Array,
+  chunkSize = 256 * 1024,
+): ReadableStream<Uint8Array> {
+  let offset = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (offset >= bytes.byteLength) {
+        controller.close();
+        return;
+      }
+      const end = Math.min(offset + chunkSize, bytes.byteLength);
+      controller.enqueue(bytes.subarray(offset, end));
+      offset = end;
+    },
+  });
+}
+
+/**
  * Sanitize a string for use as part of a downloadable filename.
  * - Strips ASCII control characters.
  * - Removes path separators and Windows-reserved characters outright

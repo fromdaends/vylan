@@ -3,6 +3,7 @@ import {
   sanitizeFilenamePart,
   macZipEntryName,
   buildZipArchive,
+  zipToStream,
   type ZipEntry,
 } from "./zip";
 
@@ -171,5 +172,51 @@ describe("buildZipArchive (macOS-openable format)", () => {
     );
     const names = centralDirectory(zip).map((e) => e.name);
     expect(names).toEqual(["T4 - 2024.pdf", "T4 - 2024 (1).pdf", "T4 - 2024 (2).pdf"]);
+  });
+});
+
+describe("zipToStream (streamed response — dodges the ~4.5MB buffered-body cap)", () => {
+  async function drain(stream: ReadableStream<Uint8Array>) {
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let o = 0;
+    for (const c of chunks) {
+      out.set(c, o);
+      o += c.length;
+    }
+    return { out, chunkCount: chunks.length };
+  }
+
+  it("streams a >4.5MB archive back byte-for-byte across many chunks", async () => {
+    // Bigger than the platform's buffered-response cap — the exact case the
+    // stream exists to handle. Deterministic content so we can compare exactly.
+    const big = new Uint8Array(5 * 1024 * 1024 + 777);
+    for (let i = 0; i < big.length; i++) big[i] = (i * 31) & 0xff;
+
+    const { out, chunkCount } = await drain(zipToStream(big, 256 * 1024));
+
+    expect(chunkCount).toBeGreaterThan(1); // genuinely chunked, not one blob
+    expect(out.length).toBe(big.length);
+    expect(Buffer.from(out).equals(Buffer.from(big))).toBe(true);
+  });
+
+  it("preserves a real (small) archive exactly", async () => {
+    const zip = await buildZipArchive([{ name: "a.txt", data: bytes("hello") }]);
+    const { out } = await drain(zipToStream(zip));
+    expect(Buffer.from(out).equals(Buffer.from(zip))).toBe(true);
+    // still a valid zip after the round-trip
+    expect(Buffer.from(out).readUInt32LE(0)).toBe(0x04034b50);
+  });
+
+  it("closes cleanly on an empty archive", async () => {
+    const { out, chunkCount } = await drain(zipToStream(new Uint8Array(0)));
+    expect(out.length).toBe(0);
+    expect(chunkCount).toBe(0);
   });
 });
