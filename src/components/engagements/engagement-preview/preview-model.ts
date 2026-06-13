@@ -516,3 +516,35 @@ export function groupLabel(group: PreviewGroup, locale: string): string {
   const label = locale === "fr" && group.labelFr ? group.labelFr : group.label;
   return label || group.docs[0]?.fileName || "";
 }
+
+// Flatten the grid sections into a single ordered list of documents, in exact
+// on-screen reading order (signature sections, then collection items in
+// checklist order, then the Duplicates section — the order groupDocsForGrid
+// produces). This is the sequence the detail view's prev/next arrows walk, so
+// stepping through always matches what the eye just scanned in the grid.
+export function flattenPreviewGroups(groups: PreviewGroup[]): PreviewDoc[] {
+  return groups.flatMap((g) => g.docs);
+}
+
+// Where the currently-open document sits in the flattened grid order, and which
+// documents the prev / next arrows should jump to. `index` is 0-based (-1 when
+// the open document isn't in the current filtered/searched set — e.g. it was
+// just approved and dropped off a status tab); the arrows are null at the ends
+// (stop, don't wrap) and when there's no neighbour. Pure so the overlay can
+// derive nav state with a memo and it can be unit-tested directly.
+export function previewNavState(
+  flat: PreviewDoc[],
+  currentFileId: string | null,
+): { index: number; total: number; prevId: string | null; nextId: string | null } {
+  const total = flat.length;
+  const index = currentFileId
+    ? flat.findIndex((d) => d.fileId === currentFileId)
+    : -1;
+  if (index < 0) return { index: -1, total, prevId: null, nextId: null };
+  return {
+    index,
+    total,
+    prevId: index > 0 ? flat[index - 1].fileId : null,
+    nextId: index < total - 1 ? flat[index + 1].fileId : null,
+  };
+}

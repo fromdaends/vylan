@@ -7,6 +7,8 @@ import {
   filterByItem,
   groupDocsByItem,
   groupDocsForGrid,
+  flattenPreviewGroups,
+  previewNavState,
   DUPLICATES_SECTION_ID,
   groupLabel,
   previewHeader,
@@ -691,6 +693,99 @@ describe("groupDocsForGrid (Duplicates section)", () => {
     const groups = groupDocsForGrid(onlyDup, items);
     expect(groups.map((g) => g.itemId)).toEqual([DUPLICATES_SECTION_ID]);
     expect(groups[0].docs.map((d) => d.fileId)).toEqual(["b"]);
+  });
+});
+
+describe("flattenPreviewGroups + previewNavState (detail prev/next)", () => {
+  // A grid with a signature item leading, two collection items, and a
+  // duplicate — so the flattened order exercises the full grid ordering.
+  const items = [
+    item({ id: "c1", label: "T4 Slip", kind: "collection", order_index: 0 }),
+    item({
+      id: "s1",
+      label: "Engagement letter",
+      kind: "signature",
+      order_index: 1,
+    }),
+    item({ id: "c2", label: "RL-1", kind: "collection", order_index: 2 }),
+  ];
+  const uploads = [
+    file({ id: "a", request_item_id: "c1", uploaded_at: "2026-01-01T00:00:00Z" }),
+    file({ id: "b", request_item_id: "s1", uploaded_at: "2026-01-02T00:00:00Z" }),
+    file({ id: "c", request_item_id: "c2", uploaded_at: "2026-01-03T00:00:00Z" }),
+    file({
+      id: "d",
+      request_item_id: "c1",
+      uploaded_at: "2026-01-04T00:00:00Z",
+      is_duplicate: true,
+      duplicate_of_file_id: "a",
+    }),
+  ];
+  const groups = groupDocsForGrid(buildPreviewDocs(uploads, items), items);
+
+  it("flattens groups into exact on-screen order (signature, collections, duplicates)", () => {
+    expect(flattenPreviewGroups(groups).map((d) => d.fileId)).toEqual([
+      "b", // signature item leads
+      "a", // collection c1
+      "c", // collection c2
+      "d", // duplicates section trails
+    ]);
+  });
+
+  it("locates the open doc and points the arrows at its neighbours", () => {
+    const flat = flattenPreviewGroups(groups); // [b, a, c, d]
+    expect(previewNavState(flat, "a")).toEqual({
+      index: 1,
+      total: 4,
+      prevId: "b",
+      nextId: "c",
+    });
+  });
+
+  it("stops at the ends — no wrap (prev null at first, next null at last)", () => {
+    const flat = flattenPreviewGroups(groups); // [b, a, c, d]
+    expect(previewNavState(flat, "b")).toMatchObject({
+      index: 0,
+      prevId: null,
+      nextId: "a",
+    });
+    expect(previewNavState(flat, "d")).toMatchObject({
+      index: 3,
+      prevId: "c",
+      nextId: null,
+    });
+  });
+
+  it("returns index -1 and no arrows when the open doc isn't in the set", () => {
+    // e.g. it was just approved and dropped off a status-filtered tab.
+    expect(previewNavState(flattenPreviewGroups(groups), "gone")).toEqual({
+      index: -1,
+      total: 4,
+      prevId: null,
+      nextId: null,
+    });
+  });
+
+  it("handles a null selection (detail closed)", () => {
+    expect(previewNavState(flattenPreviewGroups(groups), null)).toEqual({
+      index: -1,
+      total: 4,
+      prevId: null,
+      nextId: null,
+    });
+  });
+
+  it("a single-doc grid has both arrows disabled", () => {
+    const one = groupDocsForGrid(
+      buildPreviewDocs([file({ id: "solo", request_item_id: "c1" })], items),
+      items,
+    );
+    expect(previewNavState(flattenPreviewGroups(one), "solo")).toEqual({
+      index: 0,
+      total: 1,
+      prevId: null,
+      nextId: null,
+    });
   });
 });
 
