@@ -461,14 +461,20 @@ clearly readable. Mark it unusable if ANY of the following are true:
   document is about (employee, recipient, taxpayer, account holder) is covered,
   redacted, scribbled over, or unreadable — Vylan cannot accept a document when
   it cannot confirm whose it is.
-- partial_capture: real CONTENT of THIS page is sliced off by the photo
-  framing — an edge, a column, a row, or an amount is cut out of frame so it
-  cannot be read. This is about this single photo, NOT about whether other pages
-  exist. IMPORTANT crop distinction: if only a blank margin or the small
-  page-number footer (e.g. "page 2 of 4") is cropped while ALL of the page's
-  actual content is visible and readable, the file is USABLE — do NOT flag
-  partial_capture. A missing page NUMBER is not missing CONTENT; where the page
-  belongs is judged elsewhere.
+- partial_capture: the WHOLE page is not in frame. Flag this whenever any
+  printed part of the page is sliced off at the edge of the photo so the page is
+  not shown in full — a cut-off header, logo, marginal/marketing text, a sliced
+  column or row, or an amount out of frame. The test is simple: do you see the
+  page's full border with a clear margin on ALL FOUR sides? If the printed
+  content runs off the edge of the photo on any side (it is clearly truncated,
+  not just surrounded by blank paper), flag partial_capture and ask for a retake
+  that shows the entire page — EVEN IF the financial figures you can see look
+  complete. Do NOT excuse a big crop because "the important numbers are visible";
+  the firm wants the full document. The ONLY crops that stay USABLE are a clean
+  blank paper margin, or SOLELY the small page-number footer line (e.g.
+  "page 2 of 4") being cut — a missing page NUMBER is not missing content, and
+  where the page belongs is judged elsewhere. This is about this single photo,
+  NOT about whether other pages exist.
 - glare_or_shadow: reflections, bright spots, or shadows obscure
   important content
 - wrong_document_type: the document clearly CANNOT satisfy what the
