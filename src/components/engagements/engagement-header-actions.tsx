@@ -55,12 +55,14 @@ export function EngagementMoreMenu({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
-  // Download-all used to be a plain <a download> inside the dropdown item. The
-  // menu closes on click, which UNMOUNTS the anchor before the browser starts
-  // the download — Safari then cancels it (the "does nothing" bug). Fetch the
-  // ZIP as a blob and save it programmatically instead, so it survives the menu
-  // closing and we can surface a real error (no files / network) as a toast.
-  // Works identically on macOS Safari/Chrome and Windows.
+  // The endpoint builds the ZIP server-side, stores it, and returns a signed
+  // storage URL as JSON ({url}); the browser then downloads STRAIGHT FROM
+  // storage. (The function can't return the zip bytes as its own response —
+  // Vercel's runtime 500s on that, streamed or buffered — so delivery goes
+  // through storage, like the upload flow does in reverse.) The signed URL
+  // carries a download disposition, so navigating to it saves the file instead
+  // of opening it; navigation isn't tied to the (closing) menu, so Safari
+  // doesn't cancel it. Errors (no files / network) still surface as a toast.
   async function downloadAll() {
     if (downloading) return;
     setDownloading(true);
@@ -72,19 +74,12 @@ export function EngagementMoreMenu({
         );
         return;
       }
-      const blob = await res.blob();
-      const cd = res.headers.get("Content-Disposition") ?? "";
-      const match = /filename="?([^"]+)"?/.exec(cd);
-      const filename = match?.[1] ?? "documents.zip";
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      // Revoke after the click has been handed to the browser.
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const data = (await res.json().catch(() => null)) as { url?: string } | null;
+      if (!data?.url) {
+        toast.error(t("download_all_failed"));
+        return;
+      }
+      window.location.href = data.url;
     } catch {
       toast.error(t("download_all_failed"));
     } finally {

@@ -269,22 +269,33 @@ export async function uploadObject(opts: {
   path: string;
   body: Buffer | ArrayBuffer | Uint8Array;
   contentType: string;
+  // Overwrite an existing object at this path (default false). The bulk-download
+  // export reuses one path per engagement, so it upserts.
+  upsert?: boolean;
 }): Promise<void> {
   const sb = getServiceRoleSupabase();
   const { error } = await sb.storage
     .from(BUCKET)
     .upload(opts.path, opts.body, {
       contentType: opts.contentType,
-      upsert: false,
+      upsert: opts.upsert ?? false,
     });
   if (error) throw error;
 }
 
-export async function signedUrl(path: string, ttlSec = 900): Promise<string> {
+// `download`, when set, makes the signed URL serve the object with
+// Content-Disposition: attachment; filename="<download>" — so navigating the
+// browser to it downloads (with the right name) instead of rendering. Required
+// for the bulk-download zip, which the client opens via window.location.
+export async function signedUrl(
+  path: string,
+  ttlSec = 900,
+  download?: string,
+): Promise<string> {
   const sb = getServiceRoleSupabase();
   const { data, error } = await sb.storage
     .from(BUCKET)
-    .createSignedUrl(path, ttlSec);
+    .createSignedUrl(path, ttlSec, download ? { download } : undefined);
   if (error || !data) throw error ?? new Error("signed_url_failed");
   return data.signedUrl;
 }
