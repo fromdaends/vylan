@@ -4,6 +4,7 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { approveFile, rejectFile } from "@/lib/db/file-review";
 import { deleteUploadedFilePermanently } from "@/lib/db/uploaded-files";
+import { scheduleSetAssessment } from "@/lib/ai/set-assessment";
 import { logUserActivity } from "@/lib/db/activity";
 import { getServerSupabase } from "@/lib/supabase/server";
 
@@ -91,6 +92,11 @@ export async function deleteFileAction(
 
   const result = await deleteUploadedFilePermanently(id);
   if (!result.ok) return { error: "delete_failed" };
+
+  // The set changed — re-run the group review so its summary (and any
+  // missing-page / duplicate verdict) reflects the remaining files instead of
+  // going stale. Debounced + best-effort; never blocks the delete.
+  if (result.itemId) await scheduleSetAssessment(result.itemId);
 
   // PII rule: ids only, never the filename (the log outlives the file).
   await logUserActivity(ctx.firmId, ctx.engagementId, "delete_file", {
