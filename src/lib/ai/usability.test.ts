@@ -59,6 +59,34 @@ describe("shouldActOnUsability — auto-rejection threshold", () => {
   it("is false for the safe-default verdict (confidence 0)", () => {
     expect(shouldActOnUsability(USABLE_BY_DEFAULT)).toBe(false);
   });
+
+  // Authority change: missing pages is decided by the SET assessment, never by
+  // the per-file router — so a lone photo of "page 1 of 4" must not auto-reject.
+  it("does NOT act when the headline issue is missing_pages, even at high confidence", () => {
+    expect(
+      shouldActOnUsability({
+        usable: false,
+        confidence: 0.97,
+        primary_issue: "missing_pages",
+        all_issues: ["missing_pages"],
+        issue_summary_fr: "",
+        issue_summary_en: "",
+      }),
+    ).toBe(false);
+  });
+
+  it("still acts on a real quality issue (a missing-pages note as a SECONDARY issue does not shield it)", () => {
+    expect(
+      shouldActOnUsability({
+        usable: false,
+        confidence: 0.9,
+        primary_issue: "glare_or_shadow",
+        all_issues: ["glare_or_shadow", "missing_pages"],
+        issue_summary_fr: "",
+        issue_summary_en: "",
+      }),
+    ).toBe(true);
+  });
 });
 
 describe("isUsabilityIssue", () => {

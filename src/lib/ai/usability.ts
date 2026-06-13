@@ -64,6 +64,18 @@ export const USABLE_BY_DEFAULT: UsabilityVerdict = {
 // match — so a business / spouse / dependant the model reasoned through is never
 // bounced. It produces a usable=false verdict, so it flows through this same
 // shouldActOnUsability gate and the existing router like any other reject.
+//
+// AUTHORITY CHANGE (set-aware analysis): "missing pages" is no longer a per-file
+// rejection reason. Whether a multi-page document arrived complete is decided by
+// the SET assessment (set-assessment.ts), which sees ALL of an item's files
+// together. A lone photo of "page 1 of 4" must NOT auto-reject or burn a strike
+// here — that was the per-page rejection bug. Per-file quality issues (blur,
+// glare, content actually cut off, wrong document, obscured values) still act
+// immediately. A verdict whose HEADLINE reason is missing_pages defers to the
+// set, even above the confidence threshold.
 export function shouldActOnUsability(v: UsabilityVerdict): boolean {
-  return v.usable === false && v.confidence >= USABILITY_CONFIDENCE_THRESHOLD;
+  if (v.usable !== false) return false;
+  if (v.confidence < USABILITY_CONFIDENCE_THRESHOLD) return false;
+  if (v.primary_issue === "missing_pages") return false;
+  return true;
 }

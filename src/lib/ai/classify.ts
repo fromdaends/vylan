@@ -461,8 +461,14 @@ clearly readable. Mark it unusable if ANY of the following are true:
   document is about (employee, recipient, taxpayer, account holder) is covered,
   redacted, scribbled over, or unreadable — Vylan cannot accept a document when
   it cannot confirm whose it is.
-- partial_capture: the document is cut off — edges missing, only part
-  of a page visible
+- partial_capture: real CONTENT of THIS page is sliced off by the photo
+  framing — an edge, a column, a row, or an amount is cut out of frame so it
+  cannot be read. This is about this single photo, NOT about whether other pages
+  exist. IMPORTANT crop distinction: if only a blank margin or the small
+  page-number footer (e.g. "page 2 of 4") is cropped while ALL of the page's
+  actual content is visible and readable, the file is USABLE — do NOT flag
+  partial_capture. A missing page NUMBER is not missing CONTENT; where the page
+  belongs is judged elsewhere.
 - glare_or_shadow: reflections, bright spots, or shadows obscure
   important content
 - wrong_document_type: the document clearly CANNOT satisfy what the
@@ -494,8 +500,13 @@ clearly readable. Mark it unusable if ANY of the following are true:
   rotate it) — flag this only when orientation genuinely impairs reading.
 - password_protected: the file is locked / encrypted and its contents can't
   be read; an unlocked copy is needed.
-- missing_pages: the document clearly has more pages than were provided (e.g.
-  "Page 1 of 3" with only one page, or a statement cut off mid-table).
+- missing_pages: do NOT flag this for a single photo that is simply one page of
+  a larger document. Clients routinely upload a multi-page document (a bank
+  statement, a lease) as SEVERAL separate photos, and whether the whole set
+  arrived is judged separately across ALL of the item's files — never on this one
+  file alone. A standalone continuation page, an inside page, or a page marked
+  "page 1 of 4" must stay USABLE here. Completeness of the set is decided
+  elsewhere, so leaving pages out is not a reason to reject this individual photo.
 - screenshot_of_screen: this is a PHOTO of a monitor or phone screen (visible
   bezel, glare, or moiré) rather than the document itself, and that impairs
   reading. A clean digital screenshot of the actual document is USABLE.
