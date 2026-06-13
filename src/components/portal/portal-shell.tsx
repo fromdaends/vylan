@@ -285,6 +285,9 @@ export function PortalShell({
                   uploadedCount={uploads[item.id] ?? 0}
                   files={filesByItem[item.id] ?? []}
                   rejection={ctx.rejection_summary_by_item[item.id] ?? null}
+                  autoRequestMissingPages={Boolean(
+                    ctx.firm.auto_request_missing_pages,
+                  )}
                   onUploaded={(f) => handleUploaded(item.id, f)}
                   onStatusChange={(status) =>
                     handleItemUpdated(item.id, { status })

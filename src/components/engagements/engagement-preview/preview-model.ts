@@ -1,5 +1,6 @@
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
+import type { SetAssessment } from "@/lib/ai/set-assessment";
 import type { DocType } from "@/lib/db/templates";
 import { DOC_TYPE_LABELS, docTypeLabel } from "@/lib/doc-types";
 import { matchDocument } from "@/lib/ai/matching";
@@ -416,6 +417,10 @@ export type PreviewGroup = {
   label: string;
   labelFr: string | null;
   docType: string | null;
+  // The item-level set assessment (all of the item's files judged together),
+  // for the accountant-facing summary line in the group header. Null for orphan
+  // and Duplicates sections, which have no single owning request item.
+  setAssessment: SetAssessment | null;
   docs: PreviewDoc[];
 };
 
@@ -444,6 +449,7 @@ export function groupDocsByItem(
         label: it.label,
         labelFr: it.label_fr,
         docType: it.doc_type,
+        setAssessment: it.ai_set_assessment ?? null,
         docs: [...ds].sort((a, b) => a.seq - b.seq),
       });
       seen.add(it.id);
@@ -456,6 +462,7 @@ export function groupDocsByItem(
         label: ds[0]?.itemLabel ?? "",
         labelFr: ds[0]?.itemLabelFr ?? null,
         docType: ds[0]?.classification ?? null,
+        setAssessment: null,
         docs: [...ds].sort((a, b) => a.seq - b.seq),
       });
     }
@@ -499,6 +506,7 @@ export function groupDocsForGrid(
       label: "",
       labelFr: null,
       docType: null,
+      setAssessment: null,
       // Oldest upload first (tie-break on file id) so the order is stable across
       // renders, mirroring the per-item seq ordering elsewhere in the grid.
       docs: [...duplicates].sort((a, b) => {

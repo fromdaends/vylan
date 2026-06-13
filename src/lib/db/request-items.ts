@@ -1,6 +1,7 @@
 import { getServerSupabase } from "@/lib/supabase/server";
 import { setAllFilesReviewForItem } from "./file-review";
 import type { DocType } from "./templates";
+import type { SetAssessment } from "@/lib/ai/set-assessment";
 
 export type RequestItemStatus =
   | "pending"
@@ -36,6 +37,11 @@ export type RequestItem = {
   signing_doc_path: string | null;
   signing_doc_name: string | null;
   signing_doc_mime: string | null;
+  // Set-aware analysis (migration 0320): the item-level verdict over ALL of the
+  // item's non-duplicate files judged together. Null until the set-assessment
+  // worker has run for this item. Fetched by the select("*") in both
+  // listRequestItems (accountant) and the portal item query.
+  ai_set_assessment: SetAssessment | null;
   created_at: string;
 };
 

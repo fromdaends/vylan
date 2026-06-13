@@ -40,6 +40,10 @@ import {
 import { PreviewCard } from "./preview-card";
 import { PreviewRejectPrompt } from "./preview-reject-prompt";
 import { PreviewDetail } from "./preview-detail";
+import {
+  SetSummaryLine,
+  shouldShowSetLine,
+} from "@/components/engagements/set-summary-line";
 import type { EngagementPreviewProps } from "./engagement-preview";
 
 type Props = EngagementPreviewProps & {
@@ -481,19 +485,29 @@ export function PreviewOverlay({
                     {/* Section header — the checklist item these documents
                         belong to, or the catch-all Duplicates section. Hairline
                         divider, not a box (mesh, don't box). */}
-                    <div className="mb-3 flex items-baseline gap-2 border-b border-border/30 pb-2">
-                      <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
-                        {heading}
-                      </h3>
-                      {signatureItemIds.has(g.itemId) && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent/15 px-1.5 py-0.5 text-[0.65rem] font-semibold tracking-wide text-accent uppercase">
-                          <FileSignature className="size-3" aria-hidden />
-                          {t("signature_badge")}
+                    <div className="mb-3 border-b border-border/30 pb-2">
+                      <div className="flex items-baseline gap-2">
+                        <h3 className="truncate text-sm font-semibold tracking-tight text-foreground">
+                          {heading}
+                        </h3>
+                        {signatureItemIds.has(g.itemId) && (
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-accent/15 px-1.5 py-0.5 text-[0.65rem] font-semibold tracking-wide text-accent uppercase">
+                            <FileSignature className="size-3" aria-hidden />
+                            {t("signature_badge")}
+                          </span>
+                        )}
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          {t("doc_count", { count: g.docs.length })}
                         </span>
-                      )}
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        {t("doc_count", { count: g.docs.length })}
-                      </span>
+                      </div>
+                      {!isDuplicates &&
+                        shouldShowSetLine(g.setAssessment, g.docs.length) && (
+                          <SetSummaryLine
+                            assessment={g.setAssessment}
+                            locale={locale === "fr" ? "fr" : "en"}
+                            className="mt-1.5"
+                          />
+                        )}
                     </div>
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8">
                       {g.docs.map((doc) => {
