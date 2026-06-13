@@ -194,6 +194,39 @@ export function streamZip(
 }
 
 /**
+ * Build the whole archive into a single Uint8Array by draining streamZip.
+ *
+ * Why this exists alongside streamZip: returning a hand-constructed
+ * ReadableStream as a Response body crashes Vercel's Node serverless runtime
+ * (it pipes a native fetch-body stream fine — /api/files/[id] — but throws an
+ * instant 500 on a JS-built ReadableStream). So the bulk-download route builds
+ * the bytes with this and returns a plain BUFFERED response, which is the
+ * standard, reliable mechanism. The construction is still incremental
+ * (streamZip releases each file as it goes); we just collect the chunks here.
+ * Suitable for the modest archives this app produces (a handful of tax docs).
+ */
+export async function zipToBytes(
+  entries: AsyncIterable<ZipEntry>,
+): Promise<Uint8Array> {
+  const reader = streamZip(entries).getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    total += value.length;
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    out.set(c, offset);
+    offset += c.length;
+  }
+  return out;
+}
+
+/**
  * Sanitize a string for use as part of a downloadable filename.
  * - Strips ASCII control characters.
  * - Removes path separators and Windows-reserved characters outright

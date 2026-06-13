@@ -18,7 +18,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { signedUrl } from "@/lib/storage";
 import {
-  streamZip,
+  zipToBytes,
   sanitizeFilenamePart,
   macZipEntryName,
   type ZipEntry,
@@ -175,14 +175,17 @@ export async function GET(_request: NextRequest) {
     }
   }
 
-  // Streamed (chunked) response: built incrementally one entry at a time, so a
-  // large firm's export never allocates the whole archive in memory, and the
-  // body isn't subject to the ~4.5 MB buffered-response cap.
-  return new Response(streamZip(entries()), {
+  // Buffered response (NOT a streamed ReadableStream — that crashes Vercel's
+  // Node runtime; see the engagement files.zip route for the full note). The
+  // archive is still built incrementally via zipToBytes; we just collect it
+  // before returning.
+  const zipBytes = await zipToBytes(entries());
+  return new Response(zipBytes as unknown as BodyInit, {
     status: 200,
     headers: {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${archiveName}"`,
+      "Content-Length": String(zipBytes.byteLength),
       "Cache-Control": "no-store",
     },
   });

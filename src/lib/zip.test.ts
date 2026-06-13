@@ -3,6 +3,7 @@ import {
   sanitizeFilenamePart,
   macZipEntryName,
   streamZip,
+  zipToBytes,
   type ZipEntry,
 } from "./zip";
 
@@ -267,5 +268,46 @@ describe("streamZip (incremental, macOS-openable, bounded-memory)", () => {
     );
     // 3 entries x (header + data) + footer => well more than one chunk.
     expect(chunkCount).toBeGreaterThanOrEqual(4);
+  });
+});
+
+describe("zipToBytes (buffered build — what the routes actually return)", () => {
+  it("produces a valid archive in one buffer, contents intact", async () => {
+    const buf = await zipToBytes(
+      gen([
+        { name: "a.txt", data: bytes("hello") },
+        { name: "folder/b.pdf", data: bytes("world") },
+      ]),
+    );
+    expect(Buffer.from(buf).readUInt32LE(0)).toBe(0x04034b50); // PK\x03\x04
+    const dir = centralDirectory(buf);
+    expect(dir.map((e) => e.name)).toEqual(["a.txt", "folder/b.pdf"]);
+    for (const e of dir) expect(e.usesDataDescriptor).toBe(false);
+    const extracted = extractStored(buf);
+    expect(new TextDecoder().decode(extracted[0]!.data)).toBe("hello");
+    expect(new TextDecoder().decode(extracted[1]!.data)).toBe("world");
+  });
+
+  it("matches streamZip's bytes exactly (same archive, just collected)", async () => {
+    const items = [
+      { name: "x.bin", data: bytes("one") },
+      { name: "y.bin", data: bytes("two") },
+    ];
+    const buffered = await zipToBytes(gen(items));
+    // drain the stream form ourselves
+    const reader = streamZip(gen(items)).getReader();
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    }
+    const streamed = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let o = 0;
+    for (const c of chunks) {
+      streamed.set(c, o);
+      o += c.length;
+    }
+    expect(Buffer.from(buffered).equals(Buffer.from(streamed))).toBe(true);
   });
 });
