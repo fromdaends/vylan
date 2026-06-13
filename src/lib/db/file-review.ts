@@ -22,6 +22,14 @@ type FileRow = FileReview & {
   reviewed_by: string | null;
 };
 
+// Just the slice of request_items.ai_set_assessment the roll-up needs — kept
+// local so the db layer doesn't depend on the AI module's full type.
+type SetNeedsClient = {
+  outcome?: string;
+  needs_client?: boolean;
+  assessed_at?: string;
+};
+
 const nowIso = () => new Date().toISOString();
 
 export async function recomputeItemStatus(
@@ -30,7 +38,7 @@ export async function recomputeItemStatus(
 ): Promise<void> {
   const { data: item } = await sb
     .from("request_items")
-    .select("status")
+    .select("status, ai_set_assessment")
     .eq("id", itemId)
     .maybeSingle();
   if (!item) return;
@@ -46,7 +54,19 @@ export async function recomputeItemStatus(
     .eq("request_item_id", itemId);
   const files = (rows ?? []) as FileRow[];
 
-  const status = deriveItemStatus(files);
+  // Set-aware: a confident, opted-in missing-page verdict keeps the item
+  // "waiting on the client" until a newer upload answers it. We pass the
+  // assessment's timestamp; deriveItemStatus applies the same outstanding rule
+  // a file rejection uses. Null (no assessment / not needs_client / complete)
+  // leaves the file-only behaviour untouched.
+  const assessment = (item as { ai_set_assessment?: SetNeedsClient | null })
+    .ai_set_assessment;
+  const setNeedsClientSince =
+    assessment?.needs_client && assessment?.outcome === "incomplete"
+      ? (assessment.assessed_at ?? null)
+      : null;
+
+  const status = deriveItemStatus(files, { setNeedsClientSince });
 
   // Mirror onto the item the fields existing readers still rely on: the
   // outstanding rejection's reason (the client portal shows it) and

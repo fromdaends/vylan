@@ -51,7 +51,16 @@ function isOutstandingRejection(file: FileReview, all: FileReview[]): boolean {
   return !all.some((other) => ms(other.uploaded_at) > rejectedAt);
 }
 
-export function deriveItemStatus(files: FileReview[]): RolledUpStatus {
+export function deriveItemStatus(
+  files: FileReview[],
+  // Set-aware analysis: when the group review concluded a page is missing AND
+  // the firm opted into auto-asking the client, the item should keep "needing
+  // the client" — pass the assessment's timestamp here. Like a file rejection,
+  // it's only OUTSTANDING until the client answers with a newer upload. Omitted
+  // (the default) → identical to the pre-set-aware behaviour, so every existing
+  // caller is unaffected.
+  opts?: { setNeedsClientSince?: string | null },
+): RolledUpStatus {
   // Duplicates are set aside before any roll-up: a byte-identical re-upload
   // never drags the item into "needs attention" and never counts as progress —
   // the original upload it duplicates is what matters. (A rejection is therefore
@@ -60,6 +69,15 @@ export function deriveItemStatus(files: FileReview[]): RolledUpStatus {
   if (real.length === 0) return "pending";
   if (real.some((f) => isOutstandingRejection(f, real))) return "rejected";
   if (real.some((f) => f.review_status === "approved")) return "approved";
+  // A missing-page verdict keeps the item "waiting on the client" (a
+  // rejected-equivalent for the roll-up) until a newer upload answers it — the
+  // SAME outstanding rule as a file rejection. This is reached only in the
+  // would-be "submitted" case, so it never overrides an accountant's explicit
+  // approval or a real file rejection.
+  const since = opts?.setNeedsClientSince ?? null;
+  if (since && !real.some((f) => ms(f.uploaded_at) > ms(since))) {
+    return "rejected";
+  }
   // Files exist with no outstanding rejection and nothing approved → still
   // waiting on the accountant (pending uploads, or an answered re-upload).
   return "submitted";

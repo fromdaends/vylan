@@ -24,6 +24,24 @@ export function shouldShowSetLine(
   );
 }
 
+// A "missing page" block: the item rolled up to "rejected" purely because the
+// set is incomplete and the client is being asked for the page (NOT because a
+// file was rejected — those carry a rejection_reason). Lets the accountant UI
+// label it "Missing page" instead of the misleading "Rejected", and offer
+// approve/reject rather than reopen.
+export function isMissingPageBlock(item: {
+  status: string;
+  rejection_reason: string | null;
+  ai_set_assessment: SetAssessment | null;
+}): boolean {
+  return (
+    item.status === "rejected" &&
+    !item.rejection_reason &&
+    item.ai_set_assessment?.outcome === "incomplete" &&
+    item.ai_set_assessment?.needs_client === true
+  );
+}
+
 const TONE = {
   complete: { icon: CheckCircle2, color: "text-success" },
   incomplete: { icon: AlertTriangle, color: "text-warning" },

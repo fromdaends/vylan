@@ -34,6 +34,7 @@ import { ChecklistItemShell } from "@/components/engagements/checklist-item-shel
 import {
   SetSummaryLine,
   shouldShowSetLine,
+  isMissingPageBlock,
 } from "@/components/engagements/set-summary-line";
 import { EngagementPreview } from "@/components/engagements/engagement-preview/engagement-preview";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
@@ -483,6 +484,9 @@ async function ItemRow({
     locale === "fr" && item.label_fr ? item.label_fr : item.label;
   const hasSubmittedFiles = files.length > 0;
   const hasReason = item.status === "rejected" && !!item.rejection_reason;
+  // A missing-page block reads as "rejected" in the roll-up but isn't a file
+  // rejection — relabel the badge and offer approve/reject instead of reopen.
+  const missingPageBlock = isMissingPageBlock(item);
   // Collapsible only when there's something to reveal. Items needing the
   // accountant's eye (submitted = awaiting review, rejected = shows the reason)
   // start open; resolved/empty items start collapsed so a long list stays calm.
@@ -521,10 +525,19 @@ async function ItemRow({
               locale={locale}
             />
           )}
-          <Badge variant={itemBadgeVariant(item.status)}>
-            {tStatus(item.status)}
-          </Badge>
-          {item.status === "submitted" && canEdit && (
+          {missingPageBlock ? (
+            <Badge
+              variant="outline"
+              className="border-warning/40 text-warning"
+            >
+              {t("set_incomplete_badge")}
+            </Badge>
+          ) : (
+            <Badge variant={itemBadgeVariant(item.status)}>
+              {tStatus(item.status)}
+            </Badge>
+          )}
+          {(item.status === "submitted" || missingPageBlock) && canEdit && (
             <>
               <form action={approveItemAction}>
                 <input type="hidden" name="id" value={item.id} />
@@ -546,7 +559,7 @@ async function ItemRow({
               <RejectModal itemId={item.id} itemLabel={label} />
             </>
           )}
-          {item.status === "rejected" && canEdit && (
+          {item.status === "rejected" && !missingPageBlock && canEdit && (
             <form action={reopenItemAction}>
               <input type="hidden" name="id" value={item.id} />
               <Button type="submit" variant="outline" size="sm">

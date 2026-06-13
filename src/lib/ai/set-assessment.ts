@@ -32,6 +32,7 @@ import { assessSetWithOpenAI } from "./openai-classify";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { expectedYearFromTitle } from "./matching";
 import { enqueueJob } from "@/lib/db/jobs";
+import { recomputeItemStatus } from "@/lib/db/file-review";
 
 // Keep in sync with MODEL in classify.ts — the set assessment rides the same
 // provider + model choices as the per-file classifier.
@@ -82,6 +83,13 @@ export type SetAssessment = {
   /** Plain client-facing ask for the missing page(s); only set when incomplete. */
   client_request_fr: string;
   client_request_en: string;
+  /**
+   * Routing-derived: the client is being asked to send a missing page, so the
+   * item-status roll-up keeps the item "waiting on the client" until a newer
+   * upload answers it. True only on a confident, opted-in incomplete set.
+   * Optional so assessments written before this field read as false.
+   */
+  needs_client?: boolean;
   pages: SetAssessmentPage[];
   flags: string[];
   assessed_at: string;
@@ -645,8 +653,35 @@ export async function processSetAssessmentJob(
     return { skipped: "set_changed" };
   }
 
+  // Routing (piece 2) is computed BEFORE the write so its needs_client flag is
+  // stored on the assessment — the item-status roll-up (piece B) reads it. A
+  // confidently-missing page either auto-asks the client (firm opted in) or is
+  // flagged for the accountant. The firm flag lives in a column added by
+  // migration 0330 — read it resiliently so this is safe before that migration
+  // is applied (a missing column → null → OFF).
+  let autoRequestMissingPages = false;
+  try {
+    const { data: firmRow } = await sb
+      .from("firms")
+      .select("auto_request_missing_pages")
+      .eq("id", firmId)
+      .maybeSingle();
+    autoRequestMissingPages = Boolean(firmRow?.auto_request_missing_pages);
+  } catch {
+    // pre-0330 / transient — default OFF (accountant), never block on it.
+  }
+  const routing = decideSetRouting({
+    outcome: parsed.outcome,
+    confidence: parsed.confidence,
+    autoRequestMissingPages,
+  });
+
   const assessment: SetAssessment = {
     ...parsed,
+    // The item is "waiting on the client" only when we're actually asking the
+    // client (confident incomplete + firm opted in). Anything routed to the
+    // accountant leaves the item in its normal review flow.
+    needs_client: routing === "ask_client",
     assessed_at: new Date().toISOString(),
     files_signature: computeFilesSignature(
       prepared.map((p) => ({
@@ -668,8 +703,13 @@ export async function processSetAssessmentJob(
   // One real set call ran — bill ONE unit, same meter as classify.
   await incrementFirmAiUsage(firmId);
 
+  // Re-derive the item status now the verdict is in: a needs_client set keeps
+  // the item "waiting on the client" (a rejected-equivalent roll-up); a
+  // now-complete set lets it return to its file-derived status. Reads the
+  // assessment we just wrote.
+  await recomputeItemStatus(sb, itemId);
+
   // PII-free metadata (no filenames, no conclusions — they can name people).
-  // outcome is the routing verdict that the block below acts on.
   await sb.from("activity_log").insert({
     firm_id: firmId,
     engagement_id: item.engagement_id,
@@ -684,26 +724,6 @@ export async function processSetAssessmentJob(
     },
   });
 
-  // Routing (piece 2). A confidently-missing page either auto-asks the client
-  // (firm opted in) or is flagged for the accountant. The firm flag lives in a
-  // column added by migration 0330 — read it resiliently so this is safe to
-  // run before that migration is applied (a missing column → null → OFF).
-  let autoRequestMissingPages = false;
-  try {
-    const { data: firmRow } = await sb
-      .from("firms")
-      .select("auto_request_missing_pages")
-      .eq("id", firmId)
-      .maybeSingle();
-    autoRequestMissingPages = Boolean(firmRow?.auto_request_missing_pages);
-  } catch {
-    // pre-0330 / transient — default OFF (accountant), never block on it.
-  }
-  const routing = decideSetRouting({
-    outcome: assessment.outcome,
-    confidence: assessment.confidence,
-    autoRequestMissingPages,
-  });
   if (routing === "ask_client") {
     // Reuse the existing client-retry notifier (email always, SMS with the
     // 30-min anti-spam) with the set's plain-French missing-page ask. The
