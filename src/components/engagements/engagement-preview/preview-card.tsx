@@ -174,14 +174,6 @@ export function PreviewCard({
           <span className="sr-only">{statusLabel}</span>
         </span>
 
-        {/* How many files are on this checklist line (informational only now —
-            approve/reject is per file). */}
-        {doc.siblingCount > 1 && (
-          <span className="pointer-events-none absolute top-1.5 left-1.5 z-20 rounded-full bg-black/55 px-1.5 py-0.5 text-[10px] font-medium text-white">
-            {t("n_files", { count: doc.siblingCount })}
-          </span>
-        )}
-
         {/* In-flight approve/reject (visual only; the card stays clickable). */}
         {pending && (
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/40">
