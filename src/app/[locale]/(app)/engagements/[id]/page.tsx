@@ -532,42 +532,52 @@ async function ItemRow({
             >
               {t("set_incomplete_badge")}
             </Badge>
+          ) : item.status === "rejected" ? (
+            // A document under this item was sent back — the line isn't
+            // "rejected/closed", it's waiting on the client to resend. Soft
+            // amber, not a hard red "Rejected".
+            <Badge
+              variant="outline"
+              className="border-warning/40 text-warning"
+            >
+              {t("awaiting_client_badge")}
+            </Badge>
           ) : (
             <Badge variant={itemBadgeVariant(item.status)}>
               {tStatus(item.status)}
             </Badge>
           )}
+          {/* Approve the whole checklist line. Rejection is per-DOCUMENT (the
+              icon on each file row below), so there is no item-level reject. */}
           {(item.status === "submitted" || missingPageBlock) && canEdit && (
-            <>
-              <form action={approveItemAction}>
-                <input type="hidden" name="id" value={item.id} />
-                {/* Hover effect: flip to the success-green palette + a
-                    soft tinted shadow so the positive action reads as
-                    a clear "confirm" cue, not just a default primary
-                    button. The base button's `transition-all` +
-                    `active:scale-[0.97]` already supply the press
-                    feedback. */}
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
-                >
-                  <CheckCircle2 className="size-4" />
-                  {t("approve")}
-                </Button>
-              </form>
-              <RejectModal itemId={item.id} itemLabel={label} />
-            </>
-          )}
-          {item.status === "rejected" && !missingPageBlock && canEdit && (
-            <form action={reopenItemAction}>
+            <form action={approveItemAction}>
               <input type="hidden" name="id" value={item.id} />
-              <Button type="submit" variant="outline" size="sm">
-                <RotateCcw className="size-4" />
-                {t("reopen_item")}
+              {/* Hover effect: flip to the success-green palette + a soft tinted
+                  shadow so the positive action reads as a clear "confirm" cue. */}
+              <Button
+                type="submit"
+                size="sm"
+                className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
+              >
+                <CheckCircle2 className="size-4" />
+                {t("approve")}
               </Button>
             </form>
           )}
+          {/* Reopen undoes an approval, OR clears a per-document rejection, back
+              to in-review. Approved items were previously stuck with no way to
+              reopen — this closes that gap. */}
+          {(item.status === "approved" ||
+            (item.status === "rejected" && !missingPageBlock)) &&
+            canEdit && (
+              <form action={reopenItemAction}>
+                <input type="hidden" name="id" value={item.id} />
+                <Button type="submit" variant="outline" size="sm">
+                  <RotateCcw className="size-4" />
+                  {t("reopen_item")}
+                </Button>
+              </form>
+            )}
           {canEdit &&
             !hasSubmittedFiles &&
             (item.status === "pending" || item.status === "na") && (
@@ -614,6 +624,21 @@ async function ItemRow({
               expectedYear={expectedYear}
               clientName={clientName}
               rejectionCount={item.ai_rejection_count ?? 0}
+              // Per-document reject (the founder's model: approve the line as a
+              // whole, send back individual documents). A set-aside duplicate
+              // can't be rejected — it already doesn't count. The X turns red
+              // once a document has been sent back.
+              actions={
+                canEdit && !f.is_duplicate ? (
+                  <RejectModal
+                    itemId={item.id}
+                    itemLabel={f.display_name ?? f.original_filename}
+                    fileId={f.id}
+                    compact
+                    active={f.review_status === "rejected"}
+                  />
+                ) : undefined
+              }
             />
           ))}
         </ul>
