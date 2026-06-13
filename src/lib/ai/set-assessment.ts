@@ -42,6 +42,24 @@ const ANTHROPIC_MODEL = "claude-sonnet-4-6";
 
 export type SetAssessmentPlacement = "printed" | "inferred" | "unconfirmed";
 
+// The routing-relevant conclusion about the whole set:
+//   complete     — every page is present (a whole multi-page doc, or a complete
+//                  single document); no action needed.
+//   incomplete   — a specific page is CONFIDENTLY missing (e.g. page 3 of 4).
+//   unplaceable  — at least one file could not be confidently placed; the chain
+//                  did not lock, so it routes to the accountant, never a guess.
+//   not_a_set    — the files are separate documents (e.g. a pile of receipts),
+//                  no page sequence to complete; treated like complete for
+//                  routing (no missing-page action).
+export type SetOutcome = "complete" | "incomplete" | "unplaceable" | "not_a_set";
+
+const SET_OUTCOMES: readonly SetOutcome[] = [
+  "complete",
+  "incomplete",
+  "unplaceable",
+  "not_a_set",
+];
+
 export type SetAssessmentPage = {
   file_id: string;
   /** Page number within the assembled document; null when not applicable. */
@@ -58,6 +76,8 @@ export type SetAssessment = {
   conclusion_en: string;
   conclusion_fr: string;
   confidence: number;
+  /** Routing-relevant verdict about the whole set. */
+  outcome: SetOutcome;
   pages: SetAssessmentPage[];
   flags: string[];
   assessed_at: string;
@@ -159,6 +179,12 @@ export const SET_ASSESSMENT_TOOL = {
         description:
           "Honest confidence in the conclusion, 0 to 1. Use below 0.80 whenever unsure.",
       },
+      outcome: {
+        type: "string",
+        enum: ["complete", "incomplete", "unplaceable", "not_a_set"],
+        description:
+          "The routing verdict about the whole set: 'complete' = every page is present (a whole multi-page document, or a complete single document); 'incomplete' = a specific page is CONFIDENTLY missing; 'unplaceable' = at least one file could not be confidently placed (the chain did not lock — do NOT guess, route to the accountant); 'not_a_set' = the files are separate documents with no page sequence (e.g. a pile of receipts).",
+      },
       pages: {
         type: "array",
         description:
@@ -207,6 +233,7 @@ export const SET_ASSESSMENT_TOOL = {
       "conclusion_en",
       "conclusion_fr",
       "confidence",
+      "outcome",
       "pages",
       "flags",
     ],
@@ -249,10 +276,15 @@ For every file, add one pages[] entry:
   * "unconfirmed" — you cannot confirm where the file belongs. NEVER silently guess a position.
 - note: one short remark when useful (e.g. "page-number footer cut off; placed by the running balance"); empty string otherwise.
 
+Cropping has two very different severities — keep them apart:
+- If only a blank margin or the page-number FOOTER is cropped but ALL of the page's actual content is visible, the page is fine: place it by content continuity and note "page number not visible". Do NOT treat it as missing or unreadable.
+- If real CONTENT is sliced off (a column, a row, an amount cut out of frame so it cannot be read), that page needs to be retaken. Flag it, and do not let it count as a confidently placed page.
+
 Then conclude:
 - conclusion_en and conclusion_fr: ONE short sentence each, plain words, written for the accountant. Say what the set is and whether it is complete. When pages are missing, NAME them (e.g. EN "Pages 1, 2 and 4 of 4 are present; page 3 is missing." / FR "Les pages 1, 2 et 4 sur 4 sont présentes; la page 3 est manquante."). If a file could not be placed, say so honestly.
 - conclusion_fr is plain Quebec French a non-expert reads comfortably: no jargon, no type codes, no percentages, never mention AI.
 - confidence: 0 to 1, honest. Below 0.80 whenever unsure.
+- outcome: the single routing verdict — "complete" when every page is present (a whole multi-page document, OR a complete single document, OR a set of separate complete documents like receipts), "incomplete" when a specific page is CONFIDENTLY missing, "unplaceable" when at least one file could not be confidently placed (the content chain did not lock — never guess, send it to the accountant), or "not_a_set" when the files are separate documents with no page sequence to complete. When you are not sure whether a page is missing or just unplaced, prefer "unplaceable" over "incomplete" — an honest "needs a human" beats a wrong "page missing".
 - flags: short, specific warnings ONLY when something needs the accountant's attention (a missing page, a file too blurry to read, a file unrelated to the request). Empty array when all is well.
 
 Always answer through the ${SET_ASSESSMENT_TOOL.name} tool. Never reply with prose.`;
@@ -296,7 +328,12 @@ export function parseSetAssessment(
   orderedFileIds: string[],
 ): Pick<
   SetAssessment,
-  "conclusion_en" | "conclusion_fr" | "confidence" | "pages" | "flags"
+  | "conclusion_en"
+  | "conclusion_fr"
+  | "confidence"
+  | "outcome"
+  | "pages"
+  | "flags"
 > | null {
   const en = str(raw.conclusion_en);
   const fr = str(raw.conclusion_fr);
@@ -331,12 +368,19 @@ export function parseSetAssessment(
         .slice(0, 12)
     : [];
 
+  // Unknown / malformed outcome defaults to "unplaceable" — the conservative
+  // choice (routes to the accountant), never a wrong "complete" or "missing".
+  const outcome: SetOutcome = SET_OUTCOMES.includes(raw.outcome as SetOutcome)
+    ? (raw.outcome as SetOutcome)
+    : "unplaceable";
+
   return {
     // Mirror a missing language from the other so both are always present.
     conclusion_en: (en ?? fr ?? "").slice(0, 500),
     conclusion_fr: (fr ?? en ?? "").slice(0, 500),
     confidence:
       typeof raw.confidence === "number" ? clamp01(raw.confidence) : 0,
+    outcome,
     pages,
     flags,
   };
@@ -365,7 +409,7 @@ export async function processSetAssessmentJob(
   payload: Record<string, unknown>,
 ): Promise<{
   skipped?: string;
-  assessed?: { files: number; confidence: number };
+  assessed?: { files: number; confidence: number; outcome: SetOutcome };
 }> {
   if (!isAiConfigured()) return { skipped: "ai_not_configured" };
   const itemId = String(payload.request_item_id ?? "");
@@ -552,6 +596,10 @@ export async function processSetAssessmentJob(
   await incrementFirmAiUsage(firmId);
 
   // PII-free metadata (no filenames, no conclusions — they can name people).
+  // outcome is the routing verdict: piece 1 records it for traceability and
+  // stops the page-by-page rejection. The firm setting that can auto-ask the
+  // client for a confidently missing page (incomplete) lands in piece 2;
+  // 'unplaceable' always belongs to the accountant regardless of that setting.
   await sb.from("activity_log").insert({
     firm_id: firmId,
     engagement_id: item.engagement_id,
@@ -561,12 +609,17 @@ export async function processSetAssessmentJob(
       request_item_id: itemId,
       file_count: prepared.length,
       confidence: assessment.confidence,
+      outcome: assessment.outcome,
       flag_count: assessment.flags.length,
     },
   });
 
   return {
-    assessed: { files: prepared.length, confidence: assessment.confidence },
+    assessed: {
+      files: prepared.length,
+      confidence: assessment.confidence,
+      outcome: assessment.outcome,
+    },
   };
 }
 

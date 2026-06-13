@@ -115,6 +115,29 @@ describe("parseSetAssessment", () => {
     expect(out!.conclusion_fr).toBe("English only."); // mirrored from EN
   });
 
+  it("parses each valid outcome verbatim", () => {
+    for (const outcome of ["complete", "incomplete", "unplaceable", "not_a_set"]) {
+      const out = parseSetAssessment(
+        { conclusion_en: "x", conclusion_fr: "x", confidence: 0.9, outcome, pages: [], flags: [] },
+        IDS,
+      );
+      expect(out!.outcome).toBe(outcome);
+    }
+  });
+
+  it("defaults a missing or junk outcome to the conservative 'unplaceable'", () => {
+    const missing = parseSetAssessment(
+      { conclusion_en: "x", conclusion_fr: "x", confidence: 0.9, pages: [], flags: [] },
+      IDS,
+    );
+    expect(missing!.outcome).toBe("unplaceable");
+    const junk = parseSetAssessment(
+      { conclusion_en: "x", conclusion_fr: "x", confidence: 0.9, outcome: "mostly", pages: [], flags: [] },
+      IDS,
+    );
+    expect(junk!.outcome).toBe("unplaceable");
+  });
+
   it("returns null when there is no usable conclusion at all", () => {
     const out = parseSetAssessment(
       { conclusion_en: "", conclusion_fr: "", confidence: 0.9, pages: [], flags: [] },
