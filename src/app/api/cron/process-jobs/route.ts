@@ -16,6 +16,7 @@ import {
 } from "@/lib/db/jobs";
 import { processReminderJob } from "@/lib/reminders";
 import { processClassifyJob } from "@/lib/ai/process";
+import { processSetAssessmentJob } from "@/lib/ai/set-assessment";
 import { processNotifyClientRetryJob } from "@/lib/notify-retry";
 import {
   backfillContentHashes,
@@ -39,6 +40,12 @@ const WAVE_SIZE = 4;
 // must be retried, not marked done — otherwise the file is stuck on "Analyzing"
 // forever. Permanent skips (no API key, file gone, no expected type) are done.
 const RETRYABLE_SKIPS = new Set(["download_failed", "no_classification"]);
+
+// Set-assessment transient skips worth a retry: a storage hiccup or an empty
+// model reply. Everything else is terminal-done — note "set_changed" is
+// deliberately NOT here: it means a newer upload already scheduled a fresh job,
+// so this stale run should just be marked done, not retried.
+const RETRYABLE_SET_SKIPS = new Set(["download_failed", "no_result"]);
 
 export async function GET(request: NextRequest) {
   const expected = process.env.CRON_SECRET;
@@ -112,6 +119,15 @@ async function runJob(
       const detail = await processClassifyJob(job.payload);
       if (detail.skipped && RETRYABLE_SKIPS.has(detail.skipped)) {
         // Transient — send it back for another pass instead of marking done.
+        await markJobFailed(job.id, `skip:${detail.skipped}`);
+        return { id: job.id, kind: job.kind, ok: false, detail };
+      }
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: true, detail };
+    }
+    if (job.kind === "assess_item_set") {
+      const detail = await processSetAssessmentJob(job.payload);
+      if (detail.skipped && RETRYABLE_SET_SKIPS.has(detail.skipped)) {
         await markJobFailed(job.id, `skip:${detail.skipped}`);
         return { id: job.id, kind: job.kind, ok: false, detail };
       }

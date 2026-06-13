@@ -10,7 +10,12 @@ export type JobKind =
   // Queued by the Phase 3 router when an upload should be auto-rejected.
   // Handler ships in Phase 4 (UnusableDocRetry email + SMS); until then
   // the cron route will absorb these as `unknown_kind` (non-fatal).
-  | "notify_client_retry";
+  | "notify_client_retry"
+  // Set-aware analysis: one debounced job per item assesses ALL its
+  // non-duplicate files together (src/lib/ai/set-assessment.ts). Scheduled
+  // ~2 min after the last upload in a burst so a multi-photo document is
+  // judged as one set, not page-by-page.
+  | "assess_item_set";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {

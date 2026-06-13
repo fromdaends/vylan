@@ -24,7 +24,8 @@ const MODEL = "claude-sonnet-4-6";
 // Which AI runs the classifier. Defaults to Anthropic (Claude); set
 // AI_CLASSIFIER_PROVIDER=openai to use GPT-5 Mini instead. Read per-call so the
 // provider can be flipped (and reverted) via env with no code change.
-function getProvider(): "anthropic" | "openai" {
+// Exported so the set-assessment worker rides the SAME provider switch.
+export function getProvider(): "anthropic" | "openai" {
   return process.env.AI_CLASSIFIER_PROVIDER?.toLowerCase() === "openai"
     ? "openai"
     : "anthropic";
@@ -37,7 +38,7 @@ function getProvider(): "anthropic" | "openai" {
 // "see" them, which hid subtle redactions (a scribble over a void cheque's
 // transit digits sailed through as "looks good"). Override per-deployment with
 // OPENAI_MODEL (e.g. "gpt-5.4-mini" cheaper, or "gpt-5.5" newer) with no code change.
-function getOpenAiModel(): string {
+export function getOpenAiModel(): string {
   return process.env.OPENAI_MODEL?.trim() || "gpt-5.4";
 }
 
@@ -52,8 +53,9 @@ const MAX_IMAGE_EDGE = 2048;
 
 // Downscale an oversized image (and honour EXIF rotation) before it goes to the
 // model. Fail-soft: ANY error falls back to the original bytes so analysis
-// never breaks on a quirky file. PDFs are never passed here.
-async function normalizeImageForAi(
+// never breaks on a quirky file. PDFs are never passed here. Exported so the
+// set-assessment worker prepares its images identically.
+export async function normalizeImageForAi(
   bytes: Buffer,
   mimeType: string,
 ): Promise<{ bytes: Buffer; mimeType: string }> {
