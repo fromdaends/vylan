@@ -102,8 +102,10 @@ export default async function DashboardPage({
 
       {/* Top row: the stats strip anchors the top-left and Needs attention
           fills the rest of the row on a wide canvas (2xl+), so neither
-          floats alone in empty space. Below 2xl they stack, stats first. */}
-      <div className="flex flex-col gap-8 2xl:flex-row 2xl:items-start 2xl:gap-10">
+          floats alone in empty space. Default cross-axis stretch on purpose:
+          the stats column matches Needs attention's height and spreads its
+          2×2 across it. Below 2xl they stack, stats first. */}
+      <div className="flex flex-col gap-8 2xl:flex-row 2xl:gap-10">
         {/* At-a-glance counts — quiet, clickable, computed from the same
             worklist rows (and the same status engine) as everything else.
             Firm-wide on purpose: the linked views are firm-wide too, so a
