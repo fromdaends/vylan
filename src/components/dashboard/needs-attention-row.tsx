@@ -51,14 +51,18 @@ export function NeedsAttentionRow({
   row,
   canDelete,
   menuActionsLabel,
-  badges,
+  accent,
+  context,
   href,
 }: {
   row: WorklistRow;
   canDelete: boolean;
   menuActionsLabel: string;
-  // Reason chips, one per signal that applies (already ordered by urgency).
-  badges: NeedsAttentionBadge[];
+  // The ONE colored reason chip (the most actionable signal), or null when
+  // only passive context applies.
+  accent: NeedsAttentionBadge | null;
+  // The remaining applicable reasons, rendered as quiet muted text.
+  context: string[];
   // Row destination — the engagement page, or the Preview deep-link when
   // flagged files make that the better landing.
   href?: string;
@@ -76,6 +80,7 @@ export function NeedsAttentionRow({
     state: lifecycleState,
     canDelete,
   });
+  const AccentIcon = accent ? BADGE_ICONS[accent.iconKey] : null;
 
   return (
     <>
@@ -97,23 +102,32 @@ export function NeedsAttentionRow({
                 {row.clientName}
               </div>
             </div>
-            {badges.length > 0 && (
-              <span className="flex max-w-[60%] shrink-0 flex-wrap items-center justify-end gap-1">
-                {badges.map((badge) => {
-                  const BadgeIcon = BADGE_ICONS[badge.iconKey];
-                  return (
-                    <span
-                      key={badge.iconKey}
-                      className={
-                        "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
-                        badge.tone
-                      }
-                    >
-                      <BadgeIcon className="h-3 w-3" aria-hidden />
-                      {badge.label}
-                    </span>
-                  );
-                })}
+            {(accent != null || context.length > 0) && (
+              <span className="flex max-w-[60%] shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
+                {/* Passive/supporting reasons: quiet text, no pill, no icon —
+                    readable but never competing with the accent chip. One span
+                    per reason (nowrap) so narrow screens wrap between reasons,
+                    never mid-phrase. */}
+                {context.map((label, i) => (
+                  <span
+                    key={label}
+                    className="whitespace-nowrap text-xs text-muted-foreground"
+                  >
+                    {label}
+                    {i < context.length - 1 && <span aria-hidden> ·</span>}
+                  </span>
+                ))}
+                {accent != null && AccentIcon != null && (
+                  <span
+                    className={
+                      "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
+                      accent.tone
+                    }
+                  >
+                    <AccentIcon className="h-3 w-3" aria-hidden />
+                    {accent.label}
+                  </span>
+                )}
               </span>
             )}
             <DropdownMenu>
