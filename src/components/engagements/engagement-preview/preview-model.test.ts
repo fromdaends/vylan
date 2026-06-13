@@ -16,11 +16,14 @@ import {
   applyOverrides,
   searchDocs,
   normalizeText,
+  hasPageOrder,
+  sortDocsByPageOrder,
   type PreviewDoc,
 } from "./preview-model";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { RequestItem } from "@/lib/db/request-items";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
+import type { SetAssessment } from "@/lib/ai/set-assessment";
 
 function verdict(usable: boolean): UsabilityVerdict {
   return {
@@ -85,6 +88,49 @@ function item(over: Partial<RequestItem>): RequestItem {
     ...over,
   };
 }
+
+// sortDocsByPageOrder/hasPageOrder read only doc.fileId and the assessment's
+// pages, so minimal stubs stand in for the full shapes.
+function pdoc(fileId: string): PreviewDoc {
+  return { fileId } as PreviewDoc;
+}
+function assess(
+  pages: { file_id: string; position: number | null; placement: string }[],
+): SetAssessment {
+  return { pages } as unknown as SetAssessment;
+}
+
+describe("sortDocsByPageOrder / hasPageOrder", () => {
+  it("orders confidently-placed pages by page number", () => {
+    const docs = [pdoc("c"), pdoc("a"), pdoc("b")];
+    const a = assess([
+      { file_id: "a", position: 1, placement: "printed" },
+      { file_id: "b", position: 2, placement: "inferred" },
+      { file_id: "c", position: 3, placement: "printed" },
+    ]);
+    expect(sortDocsByPageOrder(docs, a).map((d) => d.fileId)).toEqual(["a", "b", "c"]);
+    expect(hasPageOrder(a)).toBe(true);
+  });
+
+  it("trails unplaceable/unconfirmed docs after placed ones, keeping their order", () => {
+    const docs = [pdoc("x"), pdoc("p2"), pdoc("y"), pdoc("p1")];
+    const a = assess([
+      { file_id: "p1", position: 1, placement: "printed" },
+      { file_id: "p2", position: 2, placement: "printed" },
+      { file_id: "x", position: 5, placement: "unconfirmed" }, // not a real placement
+      // y absent from pages → unplaced
+    ]);
+    expect(sortDocsByPageOrder(docs, a).map((d) => d.fileId)).toEqual(["p1", "p2", "x", "y"]);
+  });
+
+  it("returns the docs untouched when there is no page order", () => {
+    const docs = [pdoc("a"), pdoc("b")];
+    expect(sortDocsByPageOrder(docs, null)).toBe(docs);
+    const noOrder = assess([{ file_id: "a", position: null, placement: "unconfirmed" }]);
+    expect(hasPageOrder(noOrder)).toBe(false);
+    expect(sortDocsByPageOrder(docs, noOrder)).toBe(docs);
+  });
+});
 
 describe("resolvePreviewStatus", () => {
   it("the accountant's per-file approval wins over AI flags", () => {

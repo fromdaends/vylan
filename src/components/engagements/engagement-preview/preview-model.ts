@@ -525,6 +525,43 @@ export function groupLabel(group: PreviewGroup, locale: string): string {
   return label || group.docs[0]?.fileName || "";
 }
 
+// Does this set assessment carry a usable page order — i.e. at least one file
+// was CONFIDENTLY placed (a printed or inferred page position)? Drives whether
+// the "Sort by page order" control is offered for the group.
+export function hasPageOrder(setAssessment: SetAssessment | null): boolean {
+  if (!setAssessment) return false;
+  return setAssessment.pages.some(
+    (p) => p.position != null && p.placement !== "unconfirmed",
+  );
+}
+
+// Reorder a group's docs into the believed page order: confidently-placed pages
+// first (by page number), then everything the review could NOT place — kept in
+// its original order and trailing, never shuffled into a guessed slot. PURE +
+// stable; returns the input untouched when there's no order to apply.
+export function sortDocsByPageOrder(
+  docs: PreviewDoc[],
+  setAssessment: SetAssessment | null,
+): PreviewDoc[] {
+  if (!setAssessment) return docs;
+  const posByFile = new Map<string, number>();
+  for (const p of setAssessment.pages) {
+    if (p.position != null && p.placement !== "unconfirmed") {
+      posByFile.set(p.file_id, p.position);
+    }
+  }
+  if (posByFile.size === 0) return docs;
+  return docs
+    .map((d, i) => ({ d, i, pos: posByFile.get(d.fileId) }))
+    .sort((a, b) => {
+      if (a.pos != null && b.pos != null) return a.pos - b.pos || a.i - b.i;
+      if (a.pos != null) return -1; // placed sorts before unplaced
+      if (b.pos != null) return 1;
+      return a.i - b.i; // both unplaced → original order
+    })
+    .map((x) => x.d);
+}
+
 // Flatten the grid sections into a single ordered list of documents, in exact
 // on-screen reading order (signature sections, then collection items in
 // checklist order, then the Duplicates section — the order groupDocsForGrid
