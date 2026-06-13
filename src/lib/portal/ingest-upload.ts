@@ -17,6 +17,7 @@ import {
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { enqueueJob } from "@/lib/db/jobs";
 import { processClassifyJob } from "@/lib/ai/process";
+import { scheduleSetAssessment } from "@/lib/ai/set-assessment";
 import {
   isHeic,
   convertHeicToJpeg,
@@ -210,6 +211,13 @@ export async function ingestPortalUpload(opts: {
     payload: { uploaded_file_id: inserted.id },
     runAfter: new Date(),
   });
+
+  // Set-aware analysis (Phase 1): debounce a single item-level assessment that
+  // judges ALL of this item's non-duplicate files together. Each upload in a
+  // burst pushes the one pending job ~2 min out, so a multi-photo document is
+  // assessed as one set (and billed as one AI call), not page-by-page. Awaited
+  // but self-contained + best-effort — it never throws into the upload path.
+  await scheduleSetAssessment(item.id);
 
   const insertedFileId = inserted.id;
   const bytesForAi = storedBytes;

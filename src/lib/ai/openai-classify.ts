@@ -144,3 +144,94 @@ export async function classifyWithOpenAI(opts: {
     return { raw: null, usage };
   }
 }
+
+// Multi-file sibling of classifyWithOpenAI for the SET assessment: one call,
+// MANY files, judged together. Each file is preceded by a "File N:" text part
+// so the model's image_index answers anchor unambiguously to upload order.
+// Same client (40s timeout, no SDK retries — the job queue is the retry path),
+// same Structured Outputs + toStrictSchema treatment, same PDF/image split per
+// attachment as the single-file call.
+export async function assessSetWithOpenAI(opts: {
+  model: string;
+  systemPrompt: string;
+  userText: string;
+  schemaName: string;
+  schema: Record<string, unknown>;
+  files: { isPdf: boolean; base64: string; mediaType: string }[];
+}): Promise<{
+  raw: Record<string, unknown> | null;
+  usage: { input: number; output: number; reasoning: number | null } | null;
+}> {
+  const c = client();
+  if (!c) return { raw: null, usage: null };
+
+  type Part =
+    | { type: "text"; text: string }
+    | { type: "file"; file: { filename: string; file_data: string } }
+    | { type: "image_url"; image_url: { url: string; detail: "high" } };
+  const parts: Part[] = [];
+  opts.files.forEach((f, i) => {
+    parts.push({ type: "text", text: `File ${i + 1} of ${opts.files.length}:` });
+    parts.push(
+      f.isPdf
+        ? {
+            type: "file",
+            file: {
+              filename: `document-${i + 1}.pdf`,
+              file_data: `data:application/pdf;base64,${f.base64}`,
+            },
+          }
+        : {
+            type: "image_url",
+            image_url: {
+              url: `data:${f.mediaType};base64,${f.base64}`,
+              // Full-detail tiling, same rationale as the single-file call:
+              // "auto" can quietly down-sample and hide faint page footers.
+              detail: "high",
+            },
+          },
+    );
+  });
+  parts.push({ type: "text", text: opts.userText });
+
+  const resp = await c.chat.completions.create({
+    model: opts.model,
+    // Roomier than the single-doc cap: reasoning spans several images and the
+    // pages[] output grows with the set. Only tokens actually used are billed.
+    max_completion_tokens: 6000,
+    reasoning_effort: REASONING_EFFORT,
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: opts.schemaName,
+        strict: true,
+        schema: toStrictSchema(opts.schema) as Record<string, unknown>,
+      },
+    },
+    messages: [
+      { role: "system", content: opts.systemPrompt },
+      { role: "user", content: parts as never },
+    ],
+  });
+
+  const u = resp.usage;
+  const usage = u
+    ? {
+        input: u.prompt_tokens,
+        output: u.completion_tokens,
+        reasoning: u.completion_tokens_details?.reasoning_tokens ?? null,
+      }
+    : null;
+
+  const msg = resp.choices?.[0]?.message;
+  if (!msg || msg.refusal) return { raw: null, usage };
+  const content = msg.content;
+  if (typeof content !== "string" || content.trim() === "") {
+    return { raw: null, usage };
+  }
+  try {
+    return { raw: JSON.parse(content) as Record<string, unknown>, usage };
+  } catch {
+    return { raw: null, usage };
+  }
+}
