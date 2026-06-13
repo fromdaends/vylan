@@ -451,10 +451,19 @@ After identifying the document type, also assess whether this document is
 USABLE for an accountant. A document is usable if all key information is
 clearly readable. Mark it unusable if ANY of the following are true:
 
-- text_unreadable: blur, low resolution, pixelation, or faint/fading ink makes
-  key text illegible — including when the page looks fine overall but one
-  critical value (an amount, account/transit number, name, or date) is too soft,
-  small, or fuzzy to read every character with confidence
+- text_unreadable: blur, motion blur, smearing, low resolution, pixelation, or
+  faint/fading ink makes text illegible. Flag this in EITHER of these cases:
+  (a) one critical value (an amount, account/transit number, name, or date) is
+  too soft, small, or fuzzy to read every character with confidence; OR
+  (b) a MEANINGFUL PORTION of the document's actual content is illegible — for
+  example several rows of a statement's or ledger's transactions, a block of
+  line items, or a paragraph of text that is smeared or out of focus — EVEN IF
+  the letterhead, the document's identity, and a few totals are perfectly clear.
+  An accountant must be able to read the document's SUBSTANCE, not merely
+  identify it: a bank-statement page whose transaction lines cannot be read is
+  unusable no matter how crisp the header and the balance column are. Do NOT
+  excuse a smeared block because you can still tell what the document is or can
+  read some of its numbers.
 - key_fields_obscured: important fields (amounts, names, dates, account
   numbers) are covered, scratched out, redacted, blacked out, or missing.
   This ALWAYS includes the case where the NAME of the person or business the
@@ -518,8 +527,12 @@ clearly readable. Mark it unusable if ANY of the following are true:
   reading. A clean digital screenshot of the actual document is USABLE.
 - other: a usability issue that doesn't match the categories above
 
-If the document is borderline (mildly blurry but readable), prefer USABLE.
-Only mark UNUSABLE if a human accountant would clearly reject it.
+If the document is borderline (a FEW characters slightly soft but still
+confidently readable in full), prefer USABLE. Only mark UNUSABLE if a human
+accountant would clearly reject it. But be honest about what "borderline" means:
+a whole block of a statement's transaction lines smeared out of focus is NOT
+borderline — a human accountant would send that back even if the header and one
+or two totals are crisp. "I can read some of it" is not "it is readable."
 
 IDENTITY IS A HARD EXCEPTION to that leniency. You must be able to read
 the name of the person or business the document is about. Set owner_identifiable
