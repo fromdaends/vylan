@@ -1,14 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { RequestItem } from "@/lib/db/request-items";
-import type { PreviewView } from "./preview-model";
 
 // The overlay is portal-rendered, browser-only, and (in later phases) pulls in
 // thumbnail + PDF rendering. Load it lazily so opening Preview is the only time
@@ -38,16 +36,12 @@ export function EngagementPreview({
   ...props
 }: EngagementPreviewProps & { variant?: "header" | "item" }) {
   const t = useTranslations("Preview");
-  // Deep-link support: /engagements/[id]?preview=1 auto-opens the overlay,
-  // ?preview=flagged lands straight on the Flagged tab (the Needs-attention
-  // "flagged files" rows link here). Only the header variant honors it — the
-  // per-item buttons stay manual. Read once at mount; closing works normally.
-  const searchParams = useSearchParams();
-  const previewParam = searchParams?.get("preview") ?? null;
+  // Preview opens ONLY when the accountant clicks the button — never on its own.
+  // (We used to auto-open via a ?preview= deep link from the dashboard, but
+  // having the full-screen viewer pop up on navigation was jarring; removed so
+  // a stray URL param can't trigger it either.)
   const isItem = variant === "item";
-  const [open, setOpen] = useState(() => !isItem && previewParam != null);
-  const initialView: PreviewView | undefined =
-    previewParam === "flagged" ? "flagged" : undefined;
+  const [open, setOpen] = useState(false);
 
   return (
     <>
@@ -69,7 +63,6 @@ export function EngagementPreview({
         <PreviewOverlay
           {...props}
           scoped={isItem}
-          initialView={initialView}
           onClose={() => setOpen(false)}
         />
       )}
