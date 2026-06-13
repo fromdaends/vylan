@@ -218,6 +218,46 @@ describe("parseSetAssessment", () => {
   });
 });
 
+describe("parseSetAssessment — content duplicates", () => {
+  function withPages(pages: unknown[]) {
+    return parseSetAssessment(
+      { conclusion_en: "x", conclusion_fr: "x", confidence: 0.9, outcome: "complete", pages, flags: [] },
+      IDS,
+    );
+  }
+
+  it("maps a later file's duplicate pointer to the earlier file's id", () => {
+    const out = withPages([
+      { image_index: 1, position: 1, of_total: 1, placement: "printed", note: "", duplicate_of_image_index: null },
+      { image_index: 3, position: 1, of_total: 1, placement: "printed", note: "", duplicate_of_image_index: 1 },
+    ]);
+    expect(out!.pages.find((p) => p.file_id === "fileC")!.duplicate_of_file_id).toBe("fileA");
+    expect(out!.pages.find((p) => p.file_id === "fileA")!.duplicate_of_file_id).toBeNull();
+  });
+
+  it("ignores a forward pointer (earlier file pointing at a later one)", () => {
+    const out = withPages([
+      { image_index: 1, position: 1, of_total: 1, placement: "printed", note: "", duplicate_of_image_index: 3 },
+    ]);
+    expect(out!.pages[0]!.duplicate_of_file_id).toBeNull();
+  });
+
+  it("ignores a self pointer and an out-of-range pointer", () => {
+    const out = withPages([
+      { image_index: 2, position: 1, of_total: 1, placement: "printed", note: "", duplicate_of_image_index: 2 },
+      { image_index: 4, position: 1, of_total: 1, placement: "printed", note: "", duplicate_of_image_index: 99 },
+    ]);
+    expect(out!.pages.every((p) => p.duplicate_of_file_id === null)).toBe(true);
+  });
+
+  it("defaults to null when the duplicate field is absent", () => {
+    const out = withPages([
+      { image_index: 1, position: 1, of_total: 1, placement: "printed", note: "" },
+    ]);
+    expect(out!.pages[0]!.duplicate_of_file_id).toBeNull();
+  });
+});
+
 describe("decideSetRouting", () => {
   const bar = SET_INCOMPLETE_CONFIDENCE_BAR;
 

@@ -33,6 +33,7 @@ import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { expectedYearFromTitle } from "./matching";
 import { enqueueJob } from "@/lib/db/jobs";
 import { recomputeItemStatus } from "@/lib/db/file-review";
+import { applyDuplicateDecision } from "@/lib/duplicates";
 
 // Keep in sync with MODEL in classify.ts — the set assessment rides the same
 // provider + model choices as the per-file classifier.
@@ -72,6 +73,13 @@ export type SetAssessmentPage = {
   placement: SetAssessmentPlacement;
   /** Short per-file remark ("" when none). */
   note: string;
+  /**
+   * Content-aware duplicate (Phase 4): the id of an EARLIER file in the set this
+   * file is the SAME actual document/page as (identical specific content, not
+   * just the same kind of document). Null when this file is unique. A different
+   * page of the same document is NEVER a duplicate.
+   */
+  duplicate_of_file_id: string | null;
 };
 
 export type SetAssessment = {
@@ -230,8 +238,20 @@ export const SET_ASSESSMENT_TOOL = {
               description:
                 "Short remark about this file when useful (e.g. 'page-number footer cut off, placed by the running balance'). Empty string when none.",
             },
+            duplicate_of_image_index: {
+              type: ["integer", "null"],
+              description:
+                "If this file is the SAME actual document or page as an EARLIER file in this set (identical specific content — not just the same kind of document), the 1-based image_index of that earlier file. Null otherwise. A different page of the same document is NOT a duplicate.",
+            },
           },
-          required: ["image_index", "position", "of_total", "placement", "note"],
+          required: [
+            "image_index",
+            "position",
+            "of_total",
+            "placement",
+            "note",
+            "duplicate_of_image_index",
+          ],
         },
       },
       flags: {
@@ -299,6 +319,12 @@ For every file, add one pages[] entry:
   * "inferred" — no readable printed number, but the content locks the position: a running balance chaining from the previous page's closing balance, transactions/dates that continue across pages, a "continued"/"suite" marker, an opening- or closing-balance line. State WHICH evidence in note.
   * "unconfirmed" — you cannot confirm where the file belongs. NEVER silently guess a position.
 - note: one short remark when useful (e.g. "page-number footer cut off; placed by the running balance"); empty string otherwise.
+
+Duplicates within the set (content-aware — judge the actual document, not its bytes):
+- If a file is the SAME actual document or the SAME page as an EARLIER file already in this set — identical SPECIFIC content (same date, same amounts, same transactions, same account, the very same page photographed again) — set its duplicate_of_image_index to that earlier file's image_index. The earliest copy is the keeper; only the later copy is the duplicate.
+- A DIFFERENT page of the same document is NEVER a duplicate — it completes the set.
+- Two documents that merely share a merchant, a layout, or a format are NOT duplicates: a dozen receipts from the same pharmacy, or a recurring monthly bill, are DIFFERENT documents (different dates, amounts, transactions). Leave duplicate_of_image_index null for all of them.
+- When you are not certain two files are the very same document, leave it null. Never over-flag a duplicate.
 
 Cropping has two very different severities — keep them apart:
 - If only a blank margin or the page-number FOOTER is cropped but ALL of the page's actual content is visible, the page is fine: place it by content continuity and note "page number not visible". Do NOT treat it as missing or unreadable.
@@ -417,12 +443,24 @@ export function parseSetAssessment(
       if (idx < 1 || idx > orderedFileIds.length) continue;
       if (seen.has(idx)) continue; // first entry per file wins
       seen.add(idx);
+      // Content-duplicate: must point to an EARLIER file (strictly lower index)
+      // so the earliest copy is always the keeper and the pair can never both be
+      // marked. A forward/self/out-of-range pointer is ignored (treated unique).
+      const dupRaw = rec.duplicate_of_image_index;
+      const duplicate_of_file_id =
+        typeof dupRaw === "number" &&
+        Number.isInteger(dupRaw) &&
+        dupRaw >= 1 &&
+        dupRaw < idx
+          ? orderedFileIds[dupRaw - 1]!
+          : null;
       pages.push({
         file_id: orderedFileIds[idx - 1]!,
         position: posInt(rec.position),
         of_total: posInt(rec.of_total),
         placement: isPlacement(rec.placement) ? rec.placement : "unconfirmed",
         note: (str(rec.note) ?? "").slice(0, 300),
+        duplicate_of_file_id,
       });
     }
   }
@@ -490,6 +528,7 @@ export async function processSetAssessmentJob(
     confidence: number;
     outcome: SetOutcome;
     routing: SetRoutingAction;
+    duplicatesFlagged: number;
   };
 }> {
   if (!isAiConfigured()) return { skipped: "ai_not_configured" };
@@ -500,13 +539,13 @@ export async function processSetAssessmentJob(
   const { data: itemData } = await sb
     .from("request_items")
     .select(
-      "id, engagement_id, label, label_fr, kind, engagements!inner(firm_id, title, clients!inner(display_name))",
+      "id, engagement_id, label, label_fr, kind, engagements!inner(firm_id, title, clients!inner(display_name, locale))",
     )
     .eq("id", itemId)
     .maybeSingle();
   if (!itemData) return { skipped: "item_not_found" };
 
-  type ClientCtx = { display_name?: string | null };
+  type ClientCtx = { display_name?: string | null; locale?: string | null };
   type EngCtx = {
     firm_id?: string | null;
     title?: string | null;
@@ -703,10 +742,32 @@ export async function processSetAssessmentJob(
   // One real set call ran — bill ONE unit, same meter as classify.
   await incrementFirmAiUsage(firmId);
 
+  // Content-aware duplicates (Phase 4): the set review judged the actual
+  // documents and pointed each later copy at the earlier file it duplicates.
+  // Flag them through the SAME machinery as the byte-identical detector (set
+  // aside into the Duplicates section, never auto-rejected here — the toggle
+  // is Phase 5). Done BEFORE the status recompute so the roll-up excludes them.
+  const clientLocale: "fr" | "en" = client?.locale === "en" ? "en" : "fr";
+  let duplicatesFlagged = 0;
+  for (const page of assessment.pages) {
+    if (!page.duplicate_of_file_id) continue;
+    await applyDuplicateDecision({
+      supabase: sb,
+      decision: "flag",
+      fileId: page.file_id,
+      originalFileId: page.duplicate_of_file_id,
+      requestItemId: itemId,
+      engagementId: item.engagement_id,
+      firmId,
+      clientLocale,
+    });
+    duplicatesFlagged += 1;
+  }
+
   // Re-derive the item status now the verdict is in: a needs_client set keeps
   // the item "waiting on the client" (a rejected-equivalent roll-up); a
-  // now-complete set lets it return to its file-derived status. Reads the
-  // assessment we just wrote.
+  // now-complete set lets it return to its file-derived status. Also reflects
+  // any duplicates just set aside. Reads the assessment we just wrote.
   await recomputeItemStatus(sb, itemId);
 
   // PII-free metadata (no filenames, no conclusions — they can name people).
@@ -721,6 +782,7 @@ export async function processSetAssessmentJob(
       confidence: assessment.confidence,
       outcome: assessment.outcome,
       flag_count: assessment.flags.length,
+      duplicates_flagged: duplicatesFlagged,
     },
   });
 
@@ -748,6 +810,7 @@ export async function processSetAssessmentJob(
       confidence: assessment.confidence,
       outcome: assessment.outcome,
       routing,
+      duplicatesFlagged,
     },
   };
 }
