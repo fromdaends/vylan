@@ -296,8 +296,11 @@ export function PreviewDetail({
       tabIndex={-1}
       className="absolute inset-0 z-30 flex flex-col bg-background outline-none"
     >
-      {/* Top bar */}
-      <div className="flex items-center justify-between gap-2 border-b border-border/40 px-4 py-3">
+      {/* Top bar. Wraps (never clips) on very narrow screens: the panel is
+          overflow-hidden, and the doc-nav cluster added width to a row that's
+          tight on phones, so the action group drops to a second line instead
+          of being cut off. Single line at any normal width. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b border-border/40 px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           <Button
             type="button"
