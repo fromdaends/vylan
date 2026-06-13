@@ -31,6 +31,7 @@ import {
 import { assessSetWithOpenAI } from "./openai-classify";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { expectedYearFromTitle } from "./matching";
+import { enqueueJob } from "@/lib/db/jobs";
 
 // Keep in sync with MODEL in classify.ts — the set assessment rides the same
 // provider + model choices as the per-file classifier.
@@ -78,6 +79,9 @@ export type SetAssessment = {
   confidence: number;
   /** Routing-relevant verdict about the whole set. */
   outcome: SetOutcome;
+  /** Plain client-facing ask for the missing page(s); only set when incomplete. */
+  client_request_fr: string;
+  client_request_en: string;
   pages: SetAssessmentPage[];
   flags: string[];
   assessed_at: string;
@@ -228,6 +232,16 @@ export const SET_ASSESSMENT_TOOL = {
         description:
           "Short, specific accountant-facing warnings ONLY when something needs attention (missing page, unreadable file, unrelated file). Empty when all is well.",
       },
+      client_request_fr: {
+        type: "string",
+        description:
+          "ONLY when outcome is 'incomplete': ONE short, friendly, plain Quebec French sentence asking the CLIENT to send the specific missing page(s), e.g. 'Il manque la page 3 sur 4 de votre relevé bancaire. Pourriez-vous l'ajouter?'. No jargon, no codes, no percentages, never mention AI. Empty string for any other outcome.",
+      },
+      client_request_en: {
+        type: "string",
+        description:
+          "The English equivalent of client_request_fr, written for the client. Empty string when outcome is not 'incomplete'.",
+      },
     },
     required: [
       "conclusion_en",
@@ -236,6 +250,8 @@ export const SET_ASSESSMENT_TOOL = {
       "outcome",
       "pages",
       "flags",
+      "client_request_fr",
+      "client_request_en",
     ],
   },
 } as const;
@@ -285,6 +301,7 @@ Then conclude:
 - conclusion_fr is plain Quebec French a non-expert reads comfortably: no jargon, no type codes, no percentages, never mention AI.
 - confidence: 0 to 1, honest. Below 0.80 whenever unsure.
 - outcome: the single routing verdict — "complete" when every page is present (a whole multi-page document, OR a complete single document, OR a set of separate complete documents like receipts), "incomplete" when a specific page is CONFIDENTLY missing, "unplaceable" when at least one file could not be confidently placed (the content chain did not lock — never guess, send it to the accountant), or "not_a_set" when the files are separate documents with no page sequence to complete. When you are not sure whether a page is missing or just unplaced, prefer "unplaceable" over "incomplete" — an honest "needs a human" beats a wrong "page missing".
+- client_request_fr / client_request_en: ONLY when outcome is "incomplete", one short friendly sentence asking the CLIENT to send the specific missing page(s), in plain Quebec French and English (e.g. FR "Il manque la page 3 sur 4 de votre relevé bancaire. Pourriez-vous l'ajouter?"). No jargon, no codes, no percentages, never mention AI. Leave BOTH empty strings for any other outcome.
 - flags: short, specific warnings ONLY when something needs the accountant's attention (a missing page, a file too blurry to read, a file unrelated to the request). Empty array when all is well.
 
 Always answer through the ${SET_ASSESSMENT_TOOL.name} tool. Never reply with prose.`;
@@ -298,6 +315,45 @@ export function computeFilesSignature(
   files: { id: string; content_hash: string | null }[],
 ): string[] {
   return files.map((f) => `${f.id}:${f.content_hash ?? ""}`).sort();
+}
+
+// ---------------------------------------------------------------------------
+// Routing (piece 2): what to do once the set verdict is in
+// ---------------------------------------------------------------------------
+
+// A confidently-missing page only triggers the client-facing auto-ask above
+// this bar — below it, the conservative choice is to send it to the accountant.
+// Matches the per-file usability auto-act threshold (0.8) so the whole system
+// uses one "confident enough to act" line.
+export const SET_INCOMPLETE_CONFIDENCE_BAR = 0.8;
+
+// Fallback client ask when the model leaves client_request empty on an
+// incomplete set — generic but plain, so the client is never asked nothing.
+export const DEFAULT_MISSING_PAGE_ASK_FR =
+  "Il manque une ou des pages de ce document. Pourriez-vous les ajouter?";
+export const DEFAULT_MISSING_PAGE_ASK_EN =
+  "One or more pages of this document are missing. Could you please add them?";
+
+export type SetRoutingAction = "none" | "ask_client" | "flag_accountant";
+
+// PURE routing decision (exported for tests). Mirrors the duplicate-setting
+// philosophy: the automatic client-facing action fires ONLY on a confident
+// 'incomplete' when the firm opted in; everything uncertain goes to the
+// accountant. 'unplaceable' ALWAYS goes to the accountant — a guess is never
+// sent to a client. 'complete'/'not_a_set' need no routing.
+export function decideSetRouting(opts: {
+  outcome: SetOutcome;
+  confidence: number;
+  autoRequestMissingPages: boolean;
+}): SetRoutingAction {
+  if (opts.outcome === "unplaceable") return "flag_accountant";
+  if (opts.outcome === "incomplete") {
+    if (opts.confidence < SET_INCOMPLETE_CONFIDENCE_BAR) {
+      return "flag_accountant";
+    }
+    return opts.autoRequestMissingPages ? "ask_client" : "flag_accountant";
+  }
+  return "none";
 }
 
 function str(v: unknown): string | null {
@@ -332,6 +388,8 @@ export function parseSetAssessment(
   | "conclusion_fr"
   | "confidence"
   | "outcome"
+  | "client_request_fr"
+  | "client_request_en"
   | "pages"
   | "flags"
 > | null {
@@ -374,6 +432,13 @@ export function parseSetAssessment(
     ? (raw.outcome as SetOutcome)
     : "unplaceable";
 
+  // Client-facing ask is only meaningful for an incomplete set; force it empty
+  // otherwise so a stray sentence never leaks to a client on a complete set.
+  const clientFr =
+    outcome === "incomplete" ? (str(raw.client_request_fr) ?? "").slice(0, 500) : "";
+  const clientEn =
+    outcome === "incomplete" ? (str(raw.client_request_en) ?? "").slice(0, 500) : "";
+
   return {
     // Mirror a missing language from the other so both are always present.
     conclusion_en: (en ?? fr ?? "").slice(0, 500),
@@ -381,6 +446,9 @@ export function parseSetAssessment(
     confidence:
       typeof raw.confidence === "number" ? clamp01(raw.confidence) : 0,
     outcome,
+    // Mirror one language from the other when only one came back.
+    client_request_fr: clientFr || clientEn,
+    client_request_en: clientEn || clientFr,
     pages,
     flags,
   };
@@ -409,7 +477,12 @@ export async function processSetAssessmentJob(
   payload: Record<string, unknown>,
 ): Promise<{
   skipped?: string;
-  assessed?: { files: number; confidence: number; outcome: SetOutcome };
+  assessed?: {
+    files: number;
+    confidence: number;
+    outcome: SetOutcome;
+    routing: SetRoutingAction;
+  };
 }> {
   if (!isAiConfigured()) return { skipped: "ai_not_configured" };
   const itemId = String(payload.request_item_id ?? "");
@@ -596,10 +669,7 @@ export async function processSetAssessmentJob(
   await incrementFirmAiUsage(firmId);
 
   // PII-free metadata (no filenames, no conclusions — they can name people).
-  // outcome is the routing verdict: piece 1 records it for traceability and
-  // stops the page-by-page rejection. The firm setting that can auto-ask the
-  // client for a confidently missing page (incomplete) lands in piece 2;
-  // 'unplaceable' always belongs to the accountant regardless of that setting.
+  // outcome is the routing verdict that the block below acts on.
   await sb.from("activity_log").insert({
     firm_id: firmId,
     engagement_id: item.engagement_id,
@@ -614,11 +684,50 @@ export async function processSetAssessmentJob(
     },
   });
 
+  // Routing (piece 2). A confidently-missing page either auto-asks the client
+  // (firm opted in) or is flagged for the accountant. The firm flag lives in a
+  // column added by migration 0330 — read it resiliently so this is safe to
+  // run before that migration is applied (a missing column → null → OFF).
+  let autoRequestMissingPages = false;
+  try {
+    const { data: firmRow } = await sb
+      .from("firms")
+      .select("auto_request_missing_pages")
+      .eq("id", firmId)
+      .maybeSingle();
+    autoRequestMissingPages = Boolean(firmRow?.auto_request_missing_pages);
+  } catch {
+    // pre-0330 / transient — default OFF (accountant), never block on it.
+  }
+  const routing = decideSetRouting({
+    outcome: assessment.outcome,
+    confidence: assessment.confidence,
+    autoRequestMissingPages,
+  });
+  if (routing === "ask_client") {
+    // Reuse the existing client-retry notifier (email always, SMS with the
+    // 30-min anti-spam) with the set's plain-French missing-page ask. The
+    // worker is already item-level; uploaded_file_id is intentionally omitted.
+    await enqueueJob({
+      kind: "notify_client_retry",
+      payload: {
+        request_item_id: itemId,
+        engagement_id: item.engagement_id,
+        issue_summary_fr:
+          assessment.client_request_fr || DEFAULT_MISSING_PAGE_ASK_FR,
+        issue_summary_en:
+          assessment.client_request_en || DEFAULT_MISSING_PAGE_ASK_EN,
+      },
+      runAfter: new Date(),
+    });
+  }
+
   return {
     assessed: {
       files: prepared.length,
       confidence: assessment.confidence,
       outcome: assessment.outcome,
+      routing,
     },
   };
 }

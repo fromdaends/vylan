@@ -587,6 +587,8 @@
     "auto_reject_help": "When on, Vylan automatically rejects uploads that are unreadable, incomplete, or not the document that was requested, and asks the client to resubmit. When off, these are queued for your review.",
     "auto_reject_duplicates_label": "Auto-reject duplicates",
     "auto_reject_duplicates_help": "When on, Vylan automatically rejects an upload that is an exact copy of a document the client already sent for this engagement. When off, the duplicate is flagged for your review.",
+    "auto_request_missing_pages_label": "Auto-ask for missing pages",
+    "auto_request_missing_pages_help": "When on, if a client uploads a multi-page document but a specific page is missing, Vylan automatically asks the client to send the missing page. When off, the missing page is flagged for your review instead. If Vylan is unsure which page is missing, it always comes to you, never the client.",
     "ai_usage_label": "AI document checks",
     "ai_active_badge": "Active",
     "ai_paused_badge": "Paused",

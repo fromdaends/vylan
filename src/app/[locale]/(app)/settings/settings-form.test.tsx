@@ -66,6 +66,7 @@ function renderShell(
         currentTimezone="America/Toronto"
         autoRejectUnusableDocs={false}
         autoRejectDuplicates={false}
+        autoRequestMissingPages={false}
         aiUsage={{
           used: 0,
           cap: 400,

@@ -587,6 +587,8 @@
     "auto_reject_help": "Quand activé, Vylan rejette automatiquement les téléversements illisibles, incomplets ou qui ne correspondent pas au document demandé, et demande au client de les renvoyer. Quand désactivé, ces téléversements sont placés en file d'attente pour votre révision.",
     "auto_reject_duplicates_label": "Rejeter automatiquement les doublons",
     "auto_reject_duplicates_help": "Quand activé, Vylan rejette automatiquement un téléversement qui est une copie exacte d'un document déjà envoyé par le client pour cet engagement. Quand désactivé, le doublon est signalé pour votre révision.",
+    "auto_request_missing_pages_label": "Demander automatiquement les pages manquantes",
+    "auto_request_missing_pages_help": "Quand activé, si un client téléverse un document de plusieurs pages mais qu'une page précise manque, Vylan demande automatiquement au client d'envoyer la page manquante. Quand désactivé, la page manquante est plutôt signalée pour votre révision. Si Vylan ne sait pas avec certitude quelle page manque, la décision vous revient toujours, jamais au client.",
     "ai_usage_label": "Vérifications IA des documents",
     "ai_active_badge": "Actif",
     "ai_paused_badge": "En pause",
