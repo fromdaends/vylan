@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import {
+  ArrowDownUp,
   ChevronDown,
   Download,
   FileSignature,
@@ -28,6 +29,8 @@ import {
   groupDocsByItem,
   groupDocsForGrid,
   groupLabel,
+  hasPageOrder,
+  sortDocsByPageOrder,
   previewCounts,
   previewCardTitle,
   previewNavState,
@@ -158,12 +161,35 @@ export function PreviewOverlay({
     () => groupDocsForGrid(visible, items),
     [visible, items],
   );
+  // "Sort by page order": when on, reorder each section's documents into the
+  // page order the group review worked out (page 1, 2, 3 …), so the accountant
+  // reads a multi-photo document top to bottom instead of in upload order. Off
+  // by default; documents the review couldn't place stay at the end, never
+  // shuffled into a guessed slot. Display-only — nothing is renamed or moved.
+  const [sortByPage, setSortByPage] = useState(false);
+  const anySortable = useMemo(
+    () => groups.some((g) => hasPageOrder(g.setAssessment)),
+    [groups],
+  );
+  const orderedGroups = useMemo(
+    () =>
+      sortByPage
+        ? groups.map((g) => ({
+            ...g,
+            docs: sortDocsByPageOrder(g.docs, g.setAssessment),
+          }))
+        : groups,
+    [groups, sortByPage],
+  );
   // Flat, on-screen-ordered list of the documents currently in the grid — the
   // sequence the detail view's prev/next arrows step through, so navigation
   // always matches what the accountant just scanned (and respects the active
-  // tab / item filter / search). Derived from `groups` so it shares their exact
-  // order (signatures, then collection items, then duplicates).
-  const flatVisible = useMemo(() => flattenPreviewGroups(groups), [groups]);
+  // tab / item filter / search + the page-order sort). Derived from the ordered
+  // groups so prev/next follows the same order shown.
+  const flatVisible = useMemo(
+    () => flattenPreviewGroups(orderedGroups),
+    [orderedGroups],
+  );
   // Position of the open document in that list + which neighbours the arrows
   // jump to (null at the ends and when the open doc isn't in the current set).
   const nav = useMemo(
@@ -440,26 +466,48 @@ export function PreviewOverlay({
               />
             </div>
           </div>
-          <div className="relative py-2">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("search_placeholder")}
-              aria-label={t("search_placeholder")}
-              className="h-9 w-full rounded-lg border border-border/40 bg-card/40 pr-8 pl-8 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/60 sm:w-72"
-            />
-            {query && (
+          <div className="flex items-center gap-2 py-2">
+            {/* Sort by page order — only offered when the group review actually
+                worked out a page order to apply. A press toggle: on = pages in
+                order, off = upload order. */}
+            {anySortable && (
               <button
                 type="button"
-                aria-label={t("clear_search")}
-                onClick={() => setQuery("")}
-                className="absolute top-1/2 right-1.5 inline-flex size-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                onClick={() => setSortByPage((p) => !p)}
+                aria-pressed={sortByPage}
+                title={t("sort_by_page")}
+                className={
+                  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors " +
+                  (sortByPage
+                    ? "border-accent/40 bg-accent/10 text-accent"
+                    : "border-border/40 bg-card/40 text-muted-foreground hover:text-foreground")
+                }
               >
-                <X className="size-3.5" />
+                <ArrowDownUp className="size-3.5" aria-hidden />
+                <span className="hidden sm:inline">{t("sort_by_page")}</span>
               </button>
             )}
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("search_placeholder")}
+                aria-label={t("search_placeholder")}
+                className="h-9 w-full rounded-lg border border-border/40 bg-card/40 pr-8 pl-8 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/60 sm:w-72"
+              />
+              {query && (
+                <button
+                  type="button"
+                  aria-label={t("clear_search")}
+                  onClick={() => setQuery("")}
+                  className="absolute top-1/2 right-1.5 inline-flex size-6 -translate-y-1/2 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -475,7 +523,7 @@ export function PreviewOverlay({
             </div>
           ) : (
             <div className="space-y-7">
-              {groups.map((g) => {
+              {orderedGroups.map((g) => {
                 const isDuplicates = g.itemId === DUPLICATES_SECTION_ID;
                 const heading = isDuplicates
                   ? t("duplicates_heading")
