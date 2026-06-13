@@ -1048,6 +1048,7 @@
     "approve": "Approuver",
     "reject": "Refuser",
     "reopen_item": "Rouvrir",
+    "set_incomplete_badge": "Page manquante",
     "remove_item": "Retirer de la liste",
     "rejection_reason": "Motif de refus",
     "reject_title": "Refuser cette soumission",

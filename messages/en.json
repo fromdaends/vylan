@@ -1048,6 +1048,7 @@
     "approve": "Approve",
     "reject": "Reject",
     "reopen_item": "Reopen",
+    "set_incomplete_badge": "Missing page",
     "remove_item": "Remove from checklist",
     "rejection_reason": "Rejection reason",
     "reject_title": "Reject this submission",

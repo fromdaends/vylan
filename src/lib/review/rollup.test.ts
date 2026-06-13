@@ -155,4 +155,56 @@ describe("deriveItemStatus", () => {
   it("a lone duplicate (its original lives on another item) counts as no files => pending", () => {
     expect(deriveItemStatus([f({ is_duplicate: true })])).toBe("pending");
   });
+
+  // Set-aware: a missing-page verdict keeps a would-be "submitted" item
+  // "waiting on the client" (rejected-equivalent) until a newer upload answers.
+  describe("set-aware missing-page override", () => {
+    const SINCE = "2026-02-01T00:00:00Z";
+
+    it("an outstanding missing-page set turns submitted into rejected", () => {
+      expect(
+        deriveItemStatus([f({ uploaded_at: "2026-01-15T00:00:00Z" })], {
+          setNeedsClientSince: SINCE,
+        }),
+      ).toBe("rejected");
+    });
+
+    it("a newer upload after the assessment answers it (back to submitted)", () => {
+      expect(
+        deriveItemStatus([f({ uploaded_at: "2026-02-02T00:00:00Z" })], {
+          setNeedsClientSince: SINCE,
+        }),
+      ).toBe("submitted");
+    });
+
+    it("never overrides an accountant's explicit approval", () => {
+      expect(
+        deriveItemStatus(
+          [f({ review_status: "approved", uploaded_at: "2026-01-15T00:00:00Z" })],
+          { setNeedsClientSince: SINCE },
+        ),
+      ).toBe("approved");
+    });
+
+    it("a real outstanding file rejection still wins", () => {
+      expect(
+        deriveItemStatus(
+          [
+            f({
+              review_status: "rejected",
+              uploaded_at: "2026-01-15T00:00:00Z",
+              reviewed_at: "2026-01-16T00:00:00Z",
+            }),
+          ],
+          { setNeedsClientSince: SINCE },
+        ),
+      ).toBe("rejected");
+    });
+
+    it("no override when the timestamp is null (default behaviour)", () => {
+      expect(
+        deriveItemStatus([f({})], { setNeedsClientSince: null }),
+      ).toBe("submitted");
+    });
+  });
 });
