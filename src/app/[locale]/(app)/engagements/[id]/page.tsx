@@ -31,6 +31,10 @@ import { formatDate } from "@/lib/format";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
 import { ChecklistItemShell } from "@/components/engagements/checklist-item-shell";
+import {
+  SetSummaryLine,
+  shouldShowSetLine,
+} from "@/components/engagements/set-summary-line";
 import { EngagementPreview } from "@/components/engagements/engagement-preview/engagement-preview";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
@@ -497,6 +501,13 @@ async function ItemRow({
               <span className="ml-2 text-warning">· {t("required")}</span>
             )}
           </div>
+          {shouldShowSetLine(item.ai_set_assessment, files.length) && (
+            <SetSummaryLine
+              assessment={item.ai_set_assessment}
+              locale={locale}
+              className="mt-1.5"
+            />
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {hasSubmittedFiles && (

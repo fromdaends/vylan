@@ -55,6 +55,7 @@ function item(overrides: Partial<RequestItem> = {}): RequestItem {
     signing_doc_path: null,
     signing_doc_name: null,
     signing_doc_mime: null,
+    ai_set_assessment: null,
     created_at: NOW.toISOString(),
     ...overrides,
   };

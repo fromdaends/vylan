@@ -77,6 +77,7 @@ export function ItemCard({
   uploadedCount,
   files,
   rejection,
+  autoRequestMissingPages,
   onUploaded,
   onStatusChange,
 }: {
@@ -93,6 +94,11 @@ export function ItemCard({
   // written in. Null for manual / legacy rejections — those fall back to the
   // column text.
   rejection: { fr: string; en: string } | null;
+  // The firm's "auto-ask the client for missing pages" setting (migration 0330).
+  // When ON, an incomplete multi-page set shows the client a plain-language
+  // "please send the missing page" line here; when OFF the accountant handles
+  // it and the client sees nothing.
+  autoRequestMissingPages: boolean;
   onUploaded: (file: { id: string; name: string; mime: string }) => void;
   onStatusChange: (s: RequestItemStatus) => void;
 }) {
@@ -447,6 +453,19 @@ export function ItemCard({
   // badge, and the tint. Approval-based, never upload-based.
   const ds = displayState(item.status, hasIssue);
 
+  // Set-aware "a page is missing" ask. Shown ONLY when the firm opted into
+  // auto-asking the client AND the group review concluded a specific page is
+  // missing — otherwise the accountant handles it and the client sees nothing.
+  // The sentence is the model's plain-language ask, already client-facing.
+  const setAssessment = item.ai_set_assessment;
+  const missingPageAsk =
+    autoRequestMissingPages && setAssessment?.outcome === "incomplete"
+      ? (locale === "fr"
+          ? setAssessment.client_request_fr || setAssessment.client_request_en
+          : setAssessment.client_request_en || setAssessment.client_request_fr
+        ).trim() || null
+      : null;
+
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setDragging(false);
@@ -528,10 +547,27 @@ export function ItemCard({
             </div>
           )}
 
+          {/* Set-aware "please send the missing page" ask. Item-level, plain
+              language, no scores — the client just needs to know what to add.
+              Sits below any per-file banner; an incomplete set normally has no
+              per-file rejection, so the two rarely co-occur. */}
+          {missingPageAsk && (
+            <div className="mt-3 rounded-lg border border-warning/30 bg-warning/[0.08] px-3 py-2.5 text-sm">
+              <div className="flex items-start gap-1.5 text-foreground/80">
+                <AlertTriangle
+                  className="mt-0.5 size-4 shrink-0 text-warning"
+                  aria-hidden
+                />
+                <span>{missingPageAsk}</span>
+              </div>
+            </div>
+          )}
+
           {/* The flip side of the warning banner: instant reassurance when the
               check recognised the upload as the right document. Suppressed the
-              moment any issue banner is active — never both at once. */}
-          {aiConfirmed && !bannerMsg && (
+              moment any issue banner is active — never both at once, and never
+              alongside a missing-page ask. */}
+          {aiConfirmed && !bannerMsg && !missingPageAsk && (
             <div className="mt-3 rounded-lg border border-success/30 bg-success/[0.08] px-3 py-2.5 text-sm">
               <div className="flex items-center gap-1.5 font-medium text-success">
                 <CheckCircle2 className="size-4 shrink-0" aria-hidden />
