@@ -4,21 +4,21 @@
 // engagement belongs to their firm before doing any work — a stale `id` from
 // another firm returns 404.
 //
-// IMPORTANT — why this returns a BUFFERED response, not a stream: returning a
-// hand-constructed ReadableStream as the response body crashes Vercel's Node
-// serverless runtime (instant 500, empty body — confirmed in prod via a
-// diagnostic build, even on a 1 MB archive). It happily pipes a NATIVE fetch
-// body stream (see /api/files/[id]) but throws on a JS-built ReadableStream. So
-// we build the archive into bytes (incrementally — zipToBytes drains streamZip,
-// which releases each file as it goes) and return a plain buffered Response,
-// the standard reliable mechanism. Tax-doc archives are modest (a handful of
-// files, low single-digit MB), so the in-memory buffer is fine.
+// DELIVERY — why this returns a JSON {url} and downloads from STORAGE, not the
+// zip bytes directly: Vercel's Node runtime crashes (instant empty 500) when
+// this route returns the archive as its response body — BOTH a streamed
+// ReadableStream AND a buffered Uint8Array (confirmed in prod, even on a ~1 MB
+// archive; the build itself is fine). A small JSON response works, and the
+// app's own upload flow already goes direct-to-storage to dodge these platform
+// limits. So we build the zip (zipToBytes), upload it to storage, and hand the
+// browser a short-lived signed URL with a download disposition. The download
+// then streams straight from Supabase — no function-response body, no size cap.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { format } from "date-fns";
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { signedUrl } from "@/lib/storage";
+import { signedUrl, uploadObject } from "@/lib/storage";
 import {
   zipToBytes,
   sanitizeFilenamePart,
@@ -81,8 +81,8 @@ export async function GET(
     return NextResponse.json({ error: "no_files" }, { status: 404 });
   }
 
-  // On-disk filename: client - engagement - YYYY-MM-DD.zip. Each part sanitized
-  // so paths / special chars can't escape the Content-Disposition.
+  // Download filename: client - engagement - YYYY-MM-DD.zip. Sanitized so
+  // special chars can't break the Content-Disposition on the signed URL.
   const clientPart = sanitizeFilenamePart(client?.display_name ?? "client");
   const titlePart = sanitizeFilenamePart(engagement.title);
   const datePart = format(new Date(), "yyyy-MM-dd");
@@ -92,7 +92,7 @@ export async function GET(
     file_count: realFiles.length,
   });
 
-  // Fetch each file's bytes. A document we can't sign or fetch is skipped, so
+  // Fetch each file's bytes. A document we can't sign or fetch is skipped so
   // one stale / erased object never sinks the whole download.
   async function* entries(): AsyncGenerator<ZipEntry> {
     for (const f of realFiles) {
@@ -112,28 +112,39 @@ export async function GET(
     }
   }
 
+  // Build → store → sign. One export object per engagement (upsert overwrites
+  // any prior one). The signed URL carries the download disposition so the
+  // browser saves it as archiveName.
+  let phase = "build";
   try {
     const zipBytes = await zipToBytes(entries());
-    return new Response(zipBytes as unknown as BodyInit, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename="${archiveName}"`,
-        "Content-Length": String(zipBytes.byteLength),
-        "Cache-Control": "no-store",
-      },
+    phase = "upload";
+    const exportPath = `firms/${firm.id}/_exports/${engagement.id}.zip`;
+    // The client-uploads bucket only allows document MIME types
+    // (pdf/jpeg/png/webp/heic) — it REJECTS "application/zip". We declare an
+    // allowed type here; it's cosmetic because the signed URL below carries a
+    // Content-Disposition that forces the browser to save it as the real
+    // <archiveName>.zip (verified: the file opens as a valid zip in macOS
+    // Archive Utility / unzip). Avoids a bucket-config migration.
+    await uploadObject({
+      path: exportPath,
+      body: zipBytes,
+      contentType: "application/pdf",
+      upsert: true,
     });
+    phase = "sign";
+    const url = await signedUrl(exportPath, 300, archiveName);
+    return NextResponse.json({ url });
   } catch (e) {
-    // Return a clean, descriptive error (never a bare/empty 500) so any future
-    // failure is diagnosable from the response itself. No document contents.
-    console.error("[files.zip] build failed", {
+    // Descriptive error (never a bare empty 500) so any future failure names
+    // its phase. No document contents.
+    const message = e instanceof Error ? e.message : String(e);
+    console.error("[files.zip] export failed", {
       engagement_id: engagement.id,
+      phase,
       file_count: realFiles.length,
-      error: e instanceof Error ? e.message : String(e),
+      error: message,
     });
-    return NextResponse.json(
-      { error: "zip_failed", message: e instanceof Error ? e.message : String(e) },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "export_failed", phase, message }, { status: 500 });
   }
 }
