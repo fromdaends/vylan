@@ -3,18 +3,22 @@ import { Link } from "@/i18n/navigation";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 import { selectNeedsAttentionRows } from "@/lib/dashboard/worklist-select";
+import {
+  pickAttentionChips,
+  type AttentionReason,
+} from "@/lib/dashboard/attention-chips";
 import { NeedsAttentionRow } from "@/components/dashboard/needs-attention-row";
 
 const MAX_VISIBLE = 5;
 
 // Needs attention — the prominent, accent-tinted action block in the top
 // region of the Overview. The actionable to-do list: every engagement that
-// requires the ACCOUNTANT to act, with a reason chip per signal (ready to
-// review, flagged files, signed copy to confirm, sitting unreviewed, overdue /
-// due soon / quiet). One row per engagement, multiple chips when multiple
-// reasons apply. Shows the top few; "View all" links to the full engagements
-// list when there are more. Calm, compact empty state. Each row carries the
-// same right-click / "..." Open-Archive-Delete menu as the My-engagements rows
+// requires the ACCOUNTANT to act. Per row, ONE reason wears a colored accent
+// chip (pickAttentionChips decides the winner) and every other applicable
+// reason renders as quiet muted text — so a row pulls the eye exactly once.
+// Shows the top few; "View all" links to the full engagements list when there
+// are more. Calm, compact empty state. Each row carries the same right-click /
+// "..." Open-Archive-Delete menu as the My-engagements rows
 // (NeedsAttentionRow is a client component reusing useEngagementRowMenu).
 export async function NeedsAttention({
   rows,
@@ -72,103 +76,83 @@ export async function NeedsAttention({
         </p>
       ) : (
         <ul className="mt-3 space-y-1.5">
-          {visible.map((r) => (
-            <NeedsAttentionRow
-              key={r.id}
-              row={r}
-              canDelete={canDelete}
-              menuActionsLabel={tEng("menu_actions")}
-              badges={badgesFor(r, t)}
-              // Flagged uploads are reviewed in the Preview overlay's Flagged
-              // tab — land there directly. Every other reason lands on the
-              // engagement page itself.
-              href={
-                r.flaggedFilesCount > 0
-                  ? `/engagements/${r.id}?preview=flagged`
-                  : `/engagements/${r.id}`
-              }
-            />
-          ))}
+          {visible.map((r) => {
+            const chips = pickAttentionChips(r);
+            return (
+              <NeedsAttentionRow
+                key={r.id}
+                row={r}
+                canDelete={canDelete}
+                menuActionsLabel={tEng("menu_actions")}
+                accent={
+                  chips.accent
+                    ? {
+                        label: labelFor(chips.accent, r, t),
+                        iconKey: chips.accent,
+                        tone: ACCENT_TONES[chips.accent],
+                      }
+                    : null
+                }
+                context={chips.context.map((reason) => labelFor(reason, r, t))}
+                // Flagged uploads are reviewed in the Preview overlay's Flagged
+                // tab — land there directly. Every other reason lands on the
+                // engagement page itself.
+                href={
+                  r.flaggedFilesCount > 0
+                    ? `/engagements/${r.id}?preview=flagged`
+                    : `/engagements/${r.id}`
+                }
+              />
+            );
+          })}
         </ul>
       )}
     </section>
   );
 }
 
-// The reason chips on one row, in display order: hard deadlines first, then
-// the review queue signals, then the soft chase signals. One chip per signal
-// that applies — never duplicate rows, one row per engagement.
-type ReasonKind =
-  | "overdue"
-  | "sitting"
-  | "flagged"
-  | "signed_copy"
-  | "ready"
-  | "due_soon"
-  | "stale";
-
+// The one colored accent chip on a row (the most actionable reason —
+// pickAttentionChips decides which). Everything else renders as muted text.
 export type NeedsAttentionBadge = {
   label: string;
-  iconKey: ReasonKind;
+  iconKey: AttentionReason;
   tone: string;
 };
 
-function badgesFor(
+// Tone for whichever reason wins the accent. Same palette the chips always
+// used — red deadline, green ready, amber flags/due-soon, blue signature.
+// (The passive reasons keep entries for type completeness; they never win.)
+const ACCENT_TONES: Record<AttentionReason, string> = {
+  overdue: "bg-destructive/15 text-destructive",
+  ready: "bg-success/15 text-success",
+  flagged: "bg-warning/15 text-warning",
+  signed_copy: "bg-accent/15 text-accent",
+  due_soon: "bg-warning/15 text-warning",
+  sitting: "bg-muted text-muted-foreground",
+  stale: "bg-muted text-muted-foreground",
+};
+
+function labelFor(
+  reason: AttentionReason,
   row: WorklistRow,
   t: Awaited<ReturnType<typeof getTranslations<"Attention">>>,
-): NeedsAttentionBadge[] {
-  const badges: NeedsAttentionBadge[] = [];
-  if (row.reasons.includes("overdue")) {
-    badges.push({
-      label: t("overdue_by", { days: row.daysOverdue ?? 0 }),
-      iconKey: "overdue",
-      tone: "bg-destructive/15 text-destructive",
-    });
+): string {
+  switch (reason) {
+    case "overdue":
+      return t("overdue_by", { days: row.daysOverdue ?? 0 });
+    case "sitting":
+      return t("chip_sitting", { days: row.waitingDays ?? 0 });
+    case "flagged":
+      return t("chip_flagged", { count: row.flaggedFilesCount });
+    case "signed_copy":
+      return t("chip_signed_copy", { count: row.signedCopiesToConfirm });
+    case "ready":
+      return row.itemsReadyToReview > 0
+        ? t("items_ready", { count: row.itemsReadyToReview })
+        : t("chip_ready");
+    case "due_soon":
+      return t("due_in", { days: row.daysUntilDue ?? 0 });
+    case "stale":
+      return t("stale_days", { days: row.daysSinceClientActivity ?? 0 });
   }
-  if (row.sittingUnreviewed) {
-    badges.push({
-      label: t("chip_sitting", { days: row.waitingDays ?? 0 }),
-      iconKey: "sitting",
-      tone: "bg-warning/15 text-warning",
-    });
-  }
-  if (row.flaggedFilesCount > 0) {
-    badges.push({
-      label: t("chip_flagged", { count: row.flaggedFilesCount }),
-      iconKey: "flagged",
-      tone: "bg-warning/15 text-warning",
-    });
-  }
-  if (row.signedCopiesToConfirm > 0) {
-    badges.push({
-      label: t("chip_signed_copy", { count: row.signedCopiesToConfirm }),
-      iconKey: "signed_copy",
-      tone: "bg-accent/15 text-accent",
-    });
-  }
-  if (row.readyToReview) {
-    badges.push({
-      label:
-        row.itemsReadyToReview > 0
-          ? t("items_ready", { count: row.itemsReadyToReview })
-          : t("chip_ready"),
-      iconKey: "ready",
-      tone: "bg-success/15 text-success",
-    });
-  }
-  if (row.reasons.includes("due_soon")) {
-    badges.push({
-      label: t("due_in", { days: row.daysUntilDue ?? 0 }),
-      iconKey: "due_soon",
-      tone: "bg-warning/15 text-warning",
-    });
-  }
-  if (row.reasons.includes("stale")) {
-    badges.push({
-      label: t("stale_days", { days: row.daysSinceClientActivity ?? 0 }),
-      iconKey: "stale",
-      tone: "bg-muted text-muted-foreground",
-    });
-  }
-  return badges;
 }
