@@ -13,15 +13,19 @@ export default function Loading() {
       </div>
 
       {/* Top row: stats strip (left) + Needs attention (right), matching
-          the page's 2xl flex layout so nothing shifts when it streams in. */}
-      <div className="flex flex-col gap-8 2xl:flex-row 2xl:items-start 2xl:gap-10">
+          the page's 2xl flex layout (stretch, stats fill the column height)
+          so nothing shifts when it streams in. */}
+      <div className="flex flex-col gap-8 2xl:flex-row 2xl:gap-10">
         {/* Stats strip — four hairline-accented counts */}
         <div className="shrink-0 2xl:w-[21rem]">
-          <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 2xl:grid-cols-2">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 2xl:h-full 2xl:grid-cols-2 2xl:grid-rows-2 2xl:gap-x-8 2xl:gap-y-6">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="border-l border-border/40 pl-3">
-                <div className="h-6 w-10 rounded-md bg-muted" />
-                <div className="mt-1.5 h-3 w-20 rounded bg-muted/50" />
+              <div
+                key={i}
+                className="border-l border-border/40 pl-3 2xl:flex 2xl:flex-col 2xl:justify-center 2xl:pl-4"
+              >
+                <div className="h-6 w-10 rounded-md bg-muted 2xl:h-10 2xl:w-14" />
+                <div className="mt-1.5 h-3 w-20 rounded bg-muted/50 2xl:h-4 2xl:w-28" />
               </div>
             ))}
           </div>
