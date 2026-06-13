@@ -3,7 +3,9 @@ import {
   parseSetAssessment,
   computeFilesSignature,
   decideSetRouting,
+  decideDuplicateAction,
   SET_INCOMPLETE_CONFIDENCE_BAR,
+  DUPLICATE_AUTO_REJECT_CONFIDENCE,
   type SetAssessmentPage,
 } from "./set-assessment";
 
@@ -255,6 +257,30 @@ describe("parseSetAssessment — content duplicates", () => {
       { image_index: 1, position: 1, of_total: 1, placement: "printed", note: "" },
     ]);
     expect(out!.pages[0]!.duplicate_of_file_id).toBeNull();
+  });
+
+  it("keeps duplicate_confidence only for an actual duplicate (else 0)", () => {
+    const out = withPages([
+      { image_index: 1, position: 1, of_total: 1, placement: "printed", note: "", duplicate_of_image_index: null, duplicate_confidence: 0.95 },
+      { image_index: 3, position: 1, of_total: 1, placement: "printed", note: "", duplicate_of_image_index: 1, duplicate_confidence: 0.93 },
+    ]);
+    // Not a duplicate → confidence scrubbed to 0.
+    expect(out!.pages.find((p) => p.file_id === "fileA")!.duplicate_confidence).toBe(0);
+    // A real duplicate → confidence kept (clamped).
+    expect(out!.pages.find((p) => p.file_id === "fileC")!.duplicate_confidence).toBe(0.93);
+  });
+});
+
+describe("decideDuplicateAction", () => {
+  const bar = DUPLICATE_AUTO_REJECT_CONFIDENCE;
+
+  it("auto-rejects only when the firm opted in AND it's confident enough", () => {
+    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar })).toBe("auto_reject");
+    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar - 0.01 })).toBe("flag");
+  });
+
+  it("never auto-rejects with the setting off, however confident", () => {
+    expect(decideDuplicateAction({ autoRejectDuplicates: false, confidence: 1 })).toBe("flag");
   });
 });
 

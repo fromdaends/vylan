@@ -33,7 +33,10 @@ import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { expectedYearFromTitle } from "./matching";
 import { enqueueJob } from "@/lib/db/jobs";
 import { recomputeItemStatus } from "@/lib/db/file-review";
-import { applyDuplicateDecision } from "@/lib/duplicates";
+import {
+  applyDuplicateDecision,
+  type DuplicateDecision,
+} from "@/lib/duplicates";
 
 // Keep in sync with MODEL in classify.ts — the set assessment rides the same
 // provider + model choices as the per-file classifier.
@@ -80,6 +83,11 @@ export type SetAssessmentPage = {
    * page of the same document is NEVER a duplicate.
    */
   duplicate_of_file_id: string | null;
+  /**
+   * How certain (0-1) the file is that very same document, when it IS a
+   * duplicate. Gates the Phase 5 auto-reject (vs flag). 0 when not a duplicate.
+   */
+  duplicate_confidence: number;
 };
 
 export type SetAssessment = {
@@ -243,6 +251,11 @@ export const SET_ASSESSMENT_TOOL = {
               description:
                 "If this file is the SAME actual document or page as an EARLIER file in this set (identical specific content — not just the same kind of document), the 1-based image_index of that earlier file. Null otherwise. A different page of the same document is NOT a duplicate.",
             },
+            duplicate_confidence: {
+              type: ["number", "null"],
+              description:
+                "When duplicate_of_image_index is set, how certain (0-1) you are that the two files are the VERY SAME document. Reserve values at or above 0.9 for cases you are nearly certain about. Null when this file is not a duplicate.",
+            },
           },
           required: [
             "image_index",
@@ -251,6 +264,7 @@ export const SET_ASSESSMENT_TOOL = {
             "placement",
             "note",
             "duplicate_of_image_index",
+            "duplicate_confidence",
           ],
         },
       },
@@ -324,7 +338,8 @@ Duplicates within the set (content-aware — judge the actual document, not its 
 - If a file is the SAME actual document or the SAME page as an EARLIER file already in this set — identical SPECIFIC content (same date, same amounts, same transactions, same account, the very same page photographed again) — set its duplicate_of_image_index to that earlier file's image_index. The earliest copy is the keeper; only the later copy is the duplicate.
 - A DIFFERENT page of the same document is NEVER a duplicate — it completes the set.
 - Two documents that merely share a merchant, a layout, or a format are NOT duplicates: a dozen receipts from the same pharmacy, or a recurring monthly bill, are DIFFERENT documents (different dates, amounts, transactions). Leave duplicate_of_image_index null for all of them.
-- When you are not certain two files are the very same document, leave it null. Never over-flag a duplicate.
+- When you DO mark a duplicate, also set duplicate_confidence (0 to 1) to how certain you are the two are the very same document. Reserve 0.9 and above for cases you are nearly certain about — that high band is what may be auto-rejected; anything lower is sent to the accountant.
+- When you are not certain two files are the very same document, leave duplicate_of_image_index null. Never over-flag a duplicate.
 
 Cropping has two very different severities — keep them apart:
 - If only a blank margin or the page-number FOOTER is cropped but ALL of the page's actual content is visible, the page is fine: place it by content continuity and note "page number not visible". Do NOT treat it as missing or unreadable.
@@ -361,12 +376,32 @@ export function computeFilesSignature(
 // uses one "confident enough to act" line.
 export const SET_INCOMPLETE_CONFIDENCE_BAR = 0.8;
 
+// A content-duplicate auto-fires (when the firm's auto_reject_duplicates is ON)
+// only at or above this bar — deliberately high so a wrong auto-rejection is
+// rare. Anything less confident is flagged for the accountant regardless of the
+// setting. Tunable in one place.
+export const DUPLICATE_AUTO_REJECT_CONFIDENCE = 0.9;
+
 // Fallback client ask when the model leaves client_request empty on an
 // incomplete set — generic but plain, so the client is never asked nothing.
 export const DEFAULT_MISSING_PAGE_ASK_FR =
   "Il manque une ou des pages de ce document. Pourriez-vous les ajouter?";
 export const DEFAULT_MISSING_PAGE_ASK_EN =
   "One or more pages of this document are missing. Could you please add them?";
+
+// PURE: per-duplicate routing. A content duplicate auto-rejects only when the
+// firm opted in AND the model is very confident; otherwise it is flagged for the
+// accountant. Mirrors the duplicate-setting philosophy (auto-fire on the sure
+// cases only). Exported for tests.
+export function decideDuplicateAction(opts: {
+  autoRejectDuplicates: boolean;
+  confidence: number;
+}): DuplicateDecision {
+  return opts.autoRejectDuplicates &&
+    opts.confidence >= DUPLICATE_AUTO_REJECT_CONFIDENCE
+    ? "auto_reject"
+    : "flag";
+}
 
 export type SetRoutingAction = "none" | "ask_client" | "flag_accountant";
 
@@ -454,6 +489,11 @@ export function parseSetAssessment(
         dupRaw < idx
           ? orderedFileIds[dupRaw - 1]!
           : null;
+      // Confidence only matters for a real duplicate; force 0 otherwise.
+      const duplicate_confidence =
+        duplicate_of_file_id && typeof rec.duplicate_confidence === "number"
+          ? clamp01(rec.duplicate_confidence)
+          : 0;
       pages.push({
         file_id: orderedFileIds[idx - 1]!,
         position: posInt(rec.position),
@@ -461,6 +501,7 @@ export function parseSetAssessment(
         placement: isPlacement(rec.placement) ? rec.placement : "unconfirmed",
         note: (str(rec.note) ?? "").slice(0, 300),
         duplicate_of_file_id,
+        duplicate_confidence,
       });
     }
   }
@@ -587,7 +628,16 @@ export async function processSetAssessmentJob(
     .eq("is_duplicate", false)
     .order("uploaded_at", { ascending: true });
   const allFiles = (fileRows ?? []) as FileRow[];
-  if (allFiles.length === 0) return { skipped: "no_files" };
+  if (allFiles.length === 0) {
+    // No files left to assess (all deleted, or all duplicates). Clear any prior
+    // verdict so the engagement never shows a set summary for documents that
+    // are gone — this is what makes the re-check after a deletion meaningful.
+    await sb
+      .from("request_items")
+      .update({ ai_set_assessment: null })
+      .eq("id", itemId);
+    return { skipped: "no_files" };
+  }
 
   const readable = allFiles.filter((f) =>
     isSupportedAiMime(f.mime_type ?? ""),
@@ -699,13 +749,15 @@ export async function processSetAssessmentJob(
   // migration 0330 — read it resiliently so this is safe before that migration
   // is applied (a missing column → null → OFF).
   let autoRequestMissingPages = false;
+  let autoRejectDuplicates = false;
   try {
     const { data: firmRow } = await sb
       .from("firms")
-      .select("auto_request_missing_pages")
+      .select("auto_request_missing_pages, auto_reject_duplicates")
       .eq("id", firmId)
       .maybeSingle();
     autoRequestMissingPages = Boolean(firmRow?.auto_request_missing_pages);
+    autoRejectDuplicates = Boolean(firmRow?.auto_reject_duplicates);
   } catch {
     // pre-0330 / transient — default OFF (accountant), never block on it.
   }
@@ -742,18 +794,25 @@ export async function processSetAssessmentJob(
   // One real set call ran — bill ONE unit, same meter as classify.
   await incrementFirmAiUsage(firmId);
 
-  // Content-aware duplicates (Phase 4): the set review judged the actual
-  // documents and pointed each later copy at the earlier file it duplicates.
-  // Flag them through the SAME machinery as the byte-identical detector (set
-  // aside into the Duplicates section, never auto-rejected here — the toggle
-  // is Phase 5). Done BEFORE the status recompute so the roll-up excludes them.
+  // Content-aware duplicates: the set review pointed each later copy at the
+  // earlier file it duplicates. Route each through the SAME machinery as the
+  // byte-identical detector. Phase 5: when the firm's auto_reject_duplicates is
+  // ON, a VERY confident duplicate auto-rejects (with the existing "already
+  // sent" message); anything less confident is flagged for the accountant
+  // regardless of the setting. Done BEFORE the status recompute so the roll-up
+  // excludes them.
   const clientLocale: "fr" | "en" = client?.locale === "en" ? "en" : "fr";
   let duplicatesFlagged = 0;
+  let duplicatesAutoRejected = 0;
   for (const page of assessment.pages) {
     if (!page.duplicate_of_file_id) continue;
+    const decision = decideDuplicateAction({
+      autoRejectDuplicates,
+      confidence: page.duplicate_confidence,
+    });
     await applyDuplicateDecision({
       supabase: sb,
-      decision: "flag",
+      decision,
       fileId: page.file_id,
       originalFileId: page.duplicate_of_file_id,
       requestItemId: itemId,
@@ -762,6 +821,7 @@ export async function processSetAssessmentJob(
       clientLocale,
     });
     duplicatesFlagged += 1;
+    if (decision === "auto_reject") duplicatesAutoRejected += 1;
   }
 
   // Re-derive the item status now the verdict is in: a needs_client set keeps
@@ -783,6 +843,7 @@ export async function processSetAssessmentJob(
       outcome: assessment.outcome,
       flag_count: assessment.flags.length,
       duplicates_flagged: duplicatesFlagged,
+      duplicates_auto_rejected: duplicatesAutoRejected,
     },
   });
 

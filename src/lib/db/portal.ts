@@ -148,10 +148,14 @@ export async function loadPortalContext(
   // The per-item file list (oldest first, matching the query order).
   const filesByItem: Record<string, PortalFile[]> = {};
   for (const u of uploaded ?? []) {
-    // A detected duplicate is hidden from the client: their original copy still
-    // shows, so they never see the same file listed twice (or a confusing
-    // "rejected" on an accidental re-upload). The accountant still sees it.
-    if (u.is_duplicate) continue;
+    // A duplicate is hidden from the client ONLY once it's been REJECTED (an
+    // exact copy with auto-reject on, or a very-confident content duplicate the
+    // firm auto-rejects). A duplicate that's merely FLAGGED for the accountant
+    // stays visible to the client — content matching can occasionally be wrong,
+    // and a client's real document must never silently vanish from their view
+    // before a human has confirmed it. The accountant sees both either way
+    // (in-item badge + the Preview Duplicates section).
+    if (u.is_duplicate && u.review_status === "rejected") continue;
     counts[u.request_item_id] = (counts[u.request_item_id] ?? 0) + 1;
     const v = u.ai_usability as UsabilityVerdict | null;
     const fr = v?.issue_summary_fr?.trim();
