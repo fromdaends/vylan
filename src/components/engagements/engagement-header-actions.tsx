@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { toast } from "sonner";
 import { Bell, BellOff, Download, Loader2, MoreHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useDownloadAll } from "./use-download-all";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -53,39 +53,10 @@ export function EngagementMoreMenu({
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [downloading, setDownloading] = useState(false);
-
-  // The endpoint builds the ZIP server-side, stores it, and returns a signed
-  // storage URL as JSON ({url}); the browser then downloads STRAIGHT FROM
-  // storage. (The function can't return the zip bytes as its own response —
-  // Vercel's runtime 500s on that, streamed or buffered — so delivery goes
-  // through storage, like the upload flow does in reverse.) The signed URL
-  // carries a download disposition, so navigating to it saves the file instead
-  // of opening it; navigation isn't tied to the (closing) menu, so Safari
-  // doesn't cancel it. Errors (no files / network) still surface as a toast.
-  async function downloadAll() {
-    if (downloading) return;
-    setDownloading(true);
-    try {
-      const res = await fetch(`/api/engagements/${engagementId}/files.zip`);
-      if (!res.ok) {
-        toast.error(
-          res.status === 404 ? t("download_all_empty") : t("download_all_failed"),
-        );
-        return;
-      }
-      const data = (await res.json().catch(() => null)) as { url?: string } | null;
-      if (!data?.url) {
-        toast.error(t("download_all_failed"));
-        return;
-      }
-      window.location.href = data.url;
-    } catch {
-      toast.error(t("download_all_failed"));
-    } finally {
-      setDownloading(false);
-    }
-  }
+  // Shared with the Preview overlay's "Download all" — one code path so they
+  // can't drift (the route returns JSON {url}; the browser downloads from
+  // storage). See use-download-all.ts.
+  const { downloading, downloadAll } = useDownloadAll(engagementId);
 
   const isLive = status === "live";
   const hasItems = isLive || hasUploads || canDelete;
