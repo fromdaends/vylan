@@ -325,6 +325,8 @@ First decide what the files form together:
 - SEVERAL separate documents (e.g. many different receipts — normal for a receipts item; do NOT invent a page order between unrelated documents),
 - or a mix.
 
+GROUND EVERYTHING IN THE ${fileCount} FILE(S) YOU WERE ACTUALLY GIVEN. Never claim a page is "present" unless one of these files IS that page, and never invent or count pages you were not shown. If the files are pages of DIFFERENT documents — for example two different monthly statements, two different statement periods, or otherwise unrelated documents — they do NOT form one set: say so plainly in the conclusion (e.g. "these are page 1 of two different monthly statements"), set outcome to "not_a_set", and do NOT merge them into a single page inventory or call any page "missing". "Missing page" only makes sense WITHIN one and the same document.
+
 For every file, add one pages[] entry:
 - image_index: the 1-based "File N" position as presented (File 1 was uploaded first).
 - position / of_total: page number and total when they apply; null when they do not (e.g. separate receipts).
