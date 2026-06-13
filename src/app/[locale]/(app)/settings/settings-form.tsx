@@ -81,6 +81,7 @@ export function SettingsShell({
   currentTimezone,
   autoRejectUnusableDocs,
   autoRejectDuplicates,
+  autoRequestMissingPages,
   aiUsage,
   isOwner,
   billingSlot,
@@ -95,6 +96,7 @@ export function SettingsShell({
   currentTimezone: string;
   autoRejectUnusableDocs: boolean;
   autoRejectDuplicates: boolean;
+  autoRequestMissingPages: boolean;
   aiUsage: { used: number; cap: number; paused: boolean; resetsAt: string };
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -190,6 +192,7 @@ export function SettingsShell({
           <DocumentsSection
             autoRejectUnusableDocs={autoRejectUnusableDocs}
             autoRejectDuplicates={autoRejectDuplicates}
+            autoRequestMissingPages={autoRequestMissingPages}
             aiUsage={aiUsage}
             locale={currentLocale}
             t={t}
@@ -571,12 +574,14 @@ function TimezoneSection({
 function DocumentsSection({
   autoRejectUnusableDocs,
   autoRejectDuplicates,
+  autoRequestMissingPages,
   aiUsage,
   locale,
   t,
 }: {
   autoRejectUnusableDocs: boolean;
   autoRejectDuplicates: boolean;
+  autoRequestMissingPages: boolean;
   aiUsage: { used: number; cap: number; paused: boolean; resetsAt: string };
   locale: "fr" | "en";
   t: Translate;
@@ -587,6 +592,14 @@ function DocumentsSection({
   // re-uploads. Optimistic save via its own POST route; revert on failure.
   const [dupEnabled, setDupEnabled] = useState(autoRejectDuplicates);
   const [dupError, setDupError] = useState<string | null>(null);
+  // SEPARATE again: auto-ask the client for a confidently-missing page in a
+  // multi-page document. Same optimistic-save-and-revert pattern, own POST route.
+  const [missingPagesEnabled, setMissingPagesEnabled] = useState(
+    autoRequestMissingPages,
+  );
+  const [missingPagesError, setMissingPagesError] = useState<string | null>(
+    null,
+  );
 
   async function onDuplicatesToggle(next: boolean) {
     setDupError(null);
@@ -605,6 +618,26 @@ function DocumentsSection({
       console.error("[onToggle] auto-reject-duplicates save failed:", e);
       setDupError(t("save_failed"));
       setDupEnabled(!next);
+    }
+  }
+
+  async function onMissingPagesToggle(next: boolean) {
+    setMissingPagesError(null);
+    setMissingPagesEnabled(next);
+    try {
+      const res = await fetch("/api/firm/auto-request-missing-pages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!res.ok) {
+        setMissingPagesError(t("save_failed"));
+        setMissingPagesEnabled(!next);
+      }
+    } catch (e) {
+      console.error("[onToggle] auto-request-missing-pages save failed:", e);
+      setMissingPagesError(t("save_failed"));
+      setMissingPagesEnabled(!next);
     }
   }
 
@@ -721,6 +754,27 @@ function DocumentsSection({
         />
       </div>
       {dupError && <p className="mt-2 text-xs text-destructive">{dupError}</p>}
+
+      {/* Separate setting: auto-ask the client for a confidently-missing page in
+          a multi-page document (set-aware analysis). */}
+      <div className="mt-3 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border/50 px-4 py-3">
+        <div className="space-y-1">
+          <div className="text-sm font-medium">
+            {t("auto_request_missing_pages_label")}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("auto_request_missing_pages_help")}
+          </p>
+        </div>
+        <Switch
+          checked={missingPagesEnabled}
+          onCheckedChange={onMissingPagesToggle}
+          ariaLabel={t("auto_request_missing_pages_label")}
+        />
+      </div>
+      {missingPagesError && (
+        <p className="mt-2 text-xs text-destructive">{missingPagesError}</p>
+      )}
     </section>
   );
 }

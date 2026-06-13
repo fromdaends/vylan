@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   parseSetAssessment,
   computeFilesSignature,
+  decideSetRouting,
+  SET_INCOMPLETE_CONFIDENCE_BAR,
   type SetAssessmentPage,
 } from "./set-assessment";
 
@@ -125,6 +127,41 @@ describe("parseSetAssessment", () => {
     }
   });
 
+  it("keeps the client ask only on an incomplete set", () => {
+    const incomplete = parseSetAssessment(
+      {
+        conclusion_en: "page 3 missing",
+        conclusion_fr: "page 3 manquante",
+        confidence: 0.9,
+        outcome: "incomplete",
+        client_request_fr: "Il manque la page 3 sur 4. Pourriez-vous l'ajouter?",
+        client_request_en: "Page 3 of 4 is missing. Could you add it?",
+        pages: [],
+        flags: [],
+      },
+      IDS,
+    );
+    expect(incomplete!.client_request_fr).toContain("page 3");
+    expect(incomplete!.client_request_en).toContain("Page 3");
+
+    // A stray client ask on a COMPLETE set must be scrubbed — never leak to a client.
+    const complete = parseSetAssessment(
+      {
+        conclusion_en: "complete",
+        conclusion_fr: "complet",
+        confidence: 0.95,
+        outcome: "complete",
+        client_request_fr: "oops should not be here",
+        client_request_en: "oops should not be here",
+        pages: [],
+        flags: [],
+      },
+      IDS,
+    );
+    expect(complete!.client_request_fr).toBe("");
+    expect(complete!.client_request_en).toBe("");
+  });
+
   it("defaults a missing or junk outcome to the conservative 'unplaceable'", () => {
     const missing = parseSetAssessment(
       { conclusion_en: "x", conclusion_fr: "x", confidence: 0.9, pages: [], flags: [] },
@@ -178,6 +215,43 @@ describe("parseSetAssessment", () => {
     };
     const out = parseSetAssessment(raw, IDS);
     expect(out!.flags).toHaveLength(12);
+  });
+});
+
+describe("decideSetRouting", () => {
+  const bar = SET_INCOMPLETE_CONFIDENCE_BAR;
+
+  it("asks the client for a confident missing page only when the firm opted in", () => {
+    expect(
+      decideSetRouting({ outcome: "incomplete", confidence: bar, autoRequestMissingPages: true }),
+    ).toBe("ask_client");
+    expect(
+      decideSetRouting({ outcome: "incomplete", confidence: bar, autoRequestMissingPages: false }),
+    ).toBe("flag_accountant");
+  });
+
+  it("never asks the client below the confidence bar, even with the setting on", () => {
+    expect(
+      decideSetRouting({ outcome: "incomplete", confidence: bar - 0.01, autoRequestMissingPages: true }),
+    ).toBe("flag_accountant");
+  });
+
+  it("always sends an unplaceable set to the accountant, regardless of the setting", () => {
+    expect(
+      decideSetRouting({ outcome: "unplaceable", confidence: 0.99, autoRequestMissingPages: true }),
+    ).toBe("flag_accountant");
+    expect(
+      decideSetRouting({ outcome: "unplaceable", confidence: 0.99, autoRequestMissingPages: false }),
+    ).toBe("flag_accountant");
+  });
+
+  it("does nothing for a complete set or a pile of separate documents", () => {
+    expect(
+      decideSetRouting({ outcome: "complete", confidence: 0.99, autoRequestMissingPages: true }),
+    ).toBe("none");
+    expect(
+      decideSetRouting({ outcome: "not_a_set", confidence: 0.99, autoRequestMissingPages: true }),
+    ).toBe("none");
   });
 });
 

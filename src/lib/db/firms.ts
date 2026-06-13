@@ -25,6 +25,11 @@ export type Firm = {
   // SEPARATE from auto_reject_unusable_docs (migration 0270): when ON, an
   // exact-duplicate upload is auto-rejected; when OFF it is only flagged.
   auto_reject_duplicates: boolean;
+  // SEPARATE again (migration 0330): when ON, a confidently-missing page in a
+  // multi-page document makes Vylan auto-ask the client to send it; when OFF the
+  // missing page is only flagged for the accountant. May be undefined at runtime
+  // until 0330 is applied — readers default it to false (OFF).
+  auto_request_missing_pages: boolean;
   // Per-firm monthly AI-check cap (migration 0230). Service-role-only — not in
   // the updateCurrentFirm whitelist. May be undefined at runtime until 0230 is
   // applied; getFirmAiUsage defaults it to 400.
@@ -68,6 +73,7 @@ export async function updateCurrentFirm(
       | "onboarded_at"
       | "auto_reject_unusable_docs"
       | "auto_reject_duplicates"
+      | "auto_request_missing_pages"
       | "logo_url"
     >
   >,
