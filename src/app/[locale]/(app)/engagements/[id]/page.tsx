@@ -74,6 +74,7 @@ import {
   Bell,
   BellOff,
   Download,
+  Sparkles,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -221,6 +222,15 @@ export default async function EngagementDetailPage({
               <Badge variant="outline" className="text-xs">
                 <BellOff className="size-3" />
                 {t("reminders_paused_badge")}
+              </Badge>
+            )}
+            {/* AI was turned off for this engagement at creation — uploads are
+                never sent to the AI, so the per-document AI verdicts below are
+                hidden. Surfaced here so the accountant knows why. */}
+            {engagement.ai_enabled === false && (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                <Sparkles className="size-3" />
+                {t("ai_off_badge")}
               </Badge>
             )}
           </div>
@@ -437,6 +447,11 @@ export default async function EngagementDetailPage({
                     clientName={client?.display_name ?? null}
                     expectedYear={expectedYearFromTitle(engagement.title)}
                     engagementTitle={engagement.title}
+                    // AI off for this engagement → hide the per-document AI
+                    // verdicts (they'd otherwise sit on a permanent "Not
+                    // analyzed" chip). `=== false` so pre-migration (undefined)
+                    // keeps AI shown.
+                    aiEnabled={engagement.ai_enabled !== false}
                   />
                 ))}
               </ul>
@@ -469,6 +484,7 @@ async function ItemRow({
   clientName,
   expectedYear,
   engagementTitle,
+  aiEnabled,
 }: {
   item: RequestItem;
   files: (UploadedFile & { url: string })[];
@@ -477,6 +493,8 @@ async function ItemRow({
   clientName: string | null;
   expectedYear: number | null;
   engagementTitle: string;
+  // When false, AI is off for this engagement — hide all per-document AI chrome.
+  aiEnabled: boolean;
 }) {
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -505,13 +523,14 @@ async function ItemRow({
               <span className="ml-2 text-warning">· {t("required")}</span>
             )}
           </div>
-          {shouldShowSetLine(item.ai_set_assessment, files.length) && (
-            <SetSummaryLine
-              assessment={item.ai_set_assessment}
-              locale={locale}
-              className="mt-1.5"
-            />
-          )}
+          {aiEnabled &&
+            shouldShowSetLine(item.ai_set_assessment, files.length) && (
+              <SetSummaryLine
+                assessment={item.ai_set_assessment}
+                locale={locale}
+                className="mt-1.5"
+              />
+            )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {hasSubmittedFiles && (
@@ -624,6 +643,8 @@ async function ItemRow({
               expectedYear={expectedYear}
               clientName={clientName}
               rejectionCount={item.ai_rejection_count ?? 0}
+              // AI off for this engagement → no AI chrome on the row.
+              hideAi={!aiEnabled}
               // Per-document reject (the founder's model: approve the line as a
               // whole, send back individual documents). A set-aside duplicate
               // can't be rejected — it already doesn't count. The X turns red

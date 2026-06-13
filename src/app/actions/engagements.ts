@@ -64,6 +64,9 @@ const CreateSchema = z.object({
     .nullable()
     .optional()
     .transform((v) => (v && v !== "" ? v : null)),
+  // "AI Analyze" switch. Optional + defaults true so existing/forgetful callers
+  // keep AI on; only an explicit false disables it.
+  ai_enabled: z.boolean().optional().default(true),
   items: z.array(ItemSchema).min(0),
 });
 
@@ -94,6 +97,7 @@ export async function createEngagementAction(payload: {
   title: string;
   type: "t1" | "t2" | "bookkeeping" | "custom";
   due_date: string | null;
+  ai_enabled?: boolean;
   items: TemplateItem[];
   send: boolean;
   locale: "fr" | "en";
@@ -103,6 +107,7 @@ export async function createEngagementAction(payload: {
     title: payload.title,
     type: payload.type,
     due_date: payload.due_date,
+    ai_enabled: payload.ai_enabled,
     items: payload.items,
   });
   if (!parsed.success) {
@@ -141,6 +146,7 @@ export async function createEngagementAction(payload: {
       title: parsed.data.title,
       type: parsed.data.type,
       due_date: parsed.data.due_date,
+      ai_enabled: parsed.data.ai_enabled,
       items,
     };
     const created = await createEngagementWithItems(input);

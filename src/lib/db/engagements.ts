@@ -24,6 +24,11 @@ export type Engagement = {
   magic_expires_at: string | null;
   assigned_user_id: string | null;
   reminders_paused: boolean;
+  // Per-engagement AI toggle (migration 0340). When false, no document uploaded
+  // to this engagement is sent to the AI. Defaults true. Optional on the type so
+  // reads survive the pre-migration window (column absent → undefined → treated
+  // as ON everywhere via the `=== false` checks).
+  ai_enabled?: boolean;
   created_at: string;
   // Lifecycle (migration 0139). archive = hidden from active views, reversible
   // anytime; soft-delete = 30-day recoverable window before the purge cron.
@@ -109,6 +114,8 @@ export type CreateEngagementInput = {
   title: string;
   type: EngagementType;
   due_date: string | null;
+  // "AI Analyze" switch from the engagement builder. Defaults true upstream.
+  ai_enabled: boolean;
   items: TemplateItem[];
 };
 
@@ -134,6 +141,7 @@ export async function createEngagementWithItems(
       type: input.type,
       status: "draft",
       due_date: input.due_date,
+      ai_enabled: input.ai_enabled,
       // Default the creator as the assignee-of-record (accountability, not
       // access control — every firm member still sees every engagement).
       assigned_user_id: user.user.id,

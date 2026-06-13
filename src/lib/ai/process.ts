@@ -22,6 +22,7 @@ import { expectedYearFromTitle } from "./matching";
 import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
+import { isEngagementAiEnabled } from "./engagement-ai";
 
 export async function processClassifyJob(
   payload: Record<string, unknown>,
@@ -59,6 +60,17 @@ export async function processClassifyJob(
   const item = Array.isArray(itemRaw) ? itemRaw[0] : itemRaw;
   const expectedDocType = item?.doc_type as string | undefined;
   if (!expectedDocType) return { skipped: "no_expected_doc_type" };
+
+  // Per-engagement "AI Analyze" toggle (migration 0340): the accountant turned
+  // AI off for this engagement, so skip the (paid) classification entirely —
+  // before any storage download or model call. Checked here, at the engine, so
+  // NO upload path can spend tokens on a disabled engagement. Fail-open: a
+  // missing column or a read error reads as ON (see isEngagementAiEnabled). The
+  // skip is terminal-done in the cron (not in RETRYABLE_SKIPS), so it never
+  // loops.
+  if (!(await isEngagementAiEnabled(sb, file.engagement_id))) {
+    return { skipped: "engagement_ai_disabled" };
+  }
 
   // Cap AI spend per firm per day. We look up firm_id from the engagement
   // before downloading the file so an attacker can't burn bandwidth on
