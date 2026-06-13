@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Download,
   Loader2,
@@ -84,6 +86,9 @@ export function PreviewDetail({
   clientName,
   locale,
   pending,
+  position,
+  onPrev,
+  onNext,
   onApprove,
   onReject,
   onBack,
@@ -97,6 +102,14 @@ export function PreviewDetail({
   clientName: string | null;
   locale: AppLocale;
   pending: boolean;
+  // The open document's place in the grid order ({index 0-based, total}), or
+  // null when it's not in the current filtered set. Drives the "n / total"
+  // counter shown between the arrows.
+  position: { index: number; total: number } | null;
+  // Step to the previous / next document in grid order. Null at the ends (the
+  // arrow renders disabled — navigation stops, it doesn't wrap).
+  onPrev: (() => void) | null;
+  onNext: (() => void) | null;
   onApprove: () => void;
   onReject: () => void;
   onBack: () => void;
@@ -138,6 +151,29 @@ export function PreviewDetail({
   useEffect(() => {
     rootRef.current?.focus();
   }, []);
+
+  // Left / right arrow keys step between documents (the on-screen arrows' twin).
+  // Guarded so it can't fire while a blocking layer owns the keyboard: the
+  // delete-confirm dialog (its own state), the reject prompt (which makes this
+  // whole panel `inert` — we walk up to detect it), or a typed field. prevents
+  // the default so the document viewer doesn't also scroll on the keypress.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      if (confirmDeleteOpen || deleting) return;
+      if (rootRef.current?.closest("[inert]")) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input,textarea,select,[contenteditable="true"]')) {
+        return;
+      }
+      const handler = e.key === "ArrowLeft" ? onPrev : onNext;
+      if (!handler) return;
+      e.preventDefault();
+      handler();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [confirmDeleteOpen, deleting, onPrev, onNext]);
 
   const header = previewCardTitle(doc, locale);
   const pill = STATUS_PILL[doc.status];
@@ -273,6 +309,46 @@ export function PreviewDetail({
             <ArrowLeft className="size-4" />
             <span className="hidden sm:inline">{t("back")}</span>
           </Button>
+
+          {/* Step through the documents in the grid, in on-screen order.
+              Disabled (not hidden) at the ends so the control's position is
+              stable; the counter says where you are. Mirrored by the ← / →
+              keys. Hidden only when the open doc isn't in the current set. */}
+          {position && (
+            <div
+              className="flex shrink-0 items-center gap-0.5 border-l border-border/40 pl-2"
+              role="group"
+              aria-label={t("doc_position", {
+                index: position.index + 1,
+                total: position.total,
+              })}
+            >
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={!onPrev}
+                onClick={() => onPrev?.()}
+                aria-label={t("prev_doc")}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <span className="min-w-[3.5ch] text-center text-xs tabular-nums text-muted-foreground">
+                {position.index + 1}/{position.total}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                disabled={!onNext}
+                onClick={() => onNext?.()}
+                aria-label={t("next_doc")}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          )}
+
           <span className="hidden max-w-[22ch] truncate text-sm font-semibold sm:block">
             {header}
           </span>

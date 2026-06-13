@@ -24,11 +24,13 @@ import {
   DUPLICATES_SECTION_ID,
   filterByItem,
   filterDocs,
+  flattenPreviewGroups,
   groupDocsByItem,
   groupDocsForGrid,
   groupLabel,
   previewCounts,
   previewCardTitle,
+  previewNavState,
   searchDocs,
   type PreviewDoc,
   type PreviewGroup,
@@ -151,6 +153,18 @@ export function PreviewOverlay({
   const groups = useMemo(
     () => groupDocsForGrid(visible, items),
     [visible, items],
+  );
+  // Flat, on-screen-ordered list of the documents currently in the grid — the
+  // sequence the detail view's prev/next arrows step through, so navigation
+  // always matches what the accountant just scanned (and respects the active
+  // tab / item filter / search). Derived from `groups` so it shares their exact
+  // order (signatures, then collection items, then duplicates).
+  const flatVisible = useMemo(() => flattenPreviewGroups(groups), [groups]);
+  // Position of the open document in that list + which neighbours the arrows
+  // jump to (null at the ends and when the open doc isn't in the current set).
+  const nav = useMemo(
+    () => previewNavState(flatVisible, selectedFileId),
+    [flatVisible, selectedFileId],
   );
   // Stable map of every document's display handle ("[item] #N"), so a duplicate
   // card can name the original it copies ("Copy of T4 #1"). Built from the full
@@ -524,6 +538,17 @@ export function PreviewOverlay({
             clientName={clientName}
             locale={locale}
             pending={pendingFiles.has(selectedDoc.fileId)}
+            position={
+              nav.index >= 0
+                ? { index: nav.index, total: nav.total }
+                : null
+            }
+            onPrev={
+              nav.prevId ? () => setSelectedFileId(nav.prevId) : null
+            }
+            onNext={
+              nav.nextId ? () => setSelectedFileId(nav.nextId) : null
+            }
             onApprove={() => approve(selectedDoc)}
             onReject={() => setRejectTarget(selectedDoc)}
             onBack={() => {
