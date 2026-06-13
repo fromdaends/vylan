@@ -250,6 +250,22 @@ export function sanitizeFilenamePart(input: string, maxLen = 80): string {
 }
 
 /**
+ * ASCII-safe filename part: transliterate accents to their base letter and drop
+ * any remaining non-ASCII (é → e, the em-dash "—" → removed), then apply the
+ * same path / control-char sanitization as sanitizeFilenamePart. Used for the
+ * archive's OWN download filename and for the folder segments inside it, so the
+ * saved name never depends on the reader honouring UTF-8 — which is what
+ * produced the "%C3%A9 %E2%80%94" mojibake in the downloaded filename.
+ */
+export function asciiFilePart(
+  input: string | null | undefined,
+  maxLen = 80,
+): string {
+  const ascii = (input ?? "").normalize("NFKD").replace(/[^\x20-\x7e]/g, "");
+  return sanitizeFilenamePart(ascii, maxLen);
+}
+
+/**
  * Sanitize ONE ZIP entry name segment (no folders) for maximum unzip
  * compatibility — macOS Archive Utility in particular. On top of
  * sanitizeFilenamePart this also transliterates accents to ASCII

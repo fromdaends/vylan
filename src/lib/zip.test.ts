@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   sanitizeFilenamePart,
+  asciiFilePart,
   macZipEntryName,
   streamZip,
   zipToBytes,
@@ -133,6 +134,31 @@ describe("sanitizeFilenamePart", () => {
 
   it("preserves accented characters and dashes", () => {
     expect(sanitizeFilenamePart("Tremblay-Côté")).toBe("Tremblay-Côté");
+  });
+});
+
+describe("asciiFilePart (download filename / folder names — no mojibake)", () => {
+  it("transliterates accents and drops the em-dash that came back percent-encoded", () => {
+    // The exact failing case: "Personnalisé — 2026" downloaded as
+    // "Personnalis%C3%A9 %E2%80%94 2026".
+    expect(asciiFilePart("Personnalisé — 2026")).toBe("Personnalise 2026");
+    expect(asciiFilePart("Tremblay-Côté")).toBe("Tremblay-Cote");
+    expect(asciiFilePart("Relevé d'emploi")).toBe("Releve d'emploi");
+  });
+
+  it("strips emoji / non-Latin and collapses the gaps", () => {
+    expect(asciiFilePart("reçu 🧾 café")).toBe("recu cafe");
+  });
+
+  it("removes path separators and reserved chars (safe as a folder segment)", () => {
+    expect(asciiFilePart("a/b\\c")).toBe("abc");
+    expect(asciiFilePart('Notice <of> "Assessment"')).toBe("Notice of Assessment");
+  });
+
+  it("falls back to 'untitled' when nothing printable survives", () => {
+    expect(asciiFilePart("—✦—")).toBe("untitled");
+    expect(asciiFilePart("")).toBe("untitled");
+    expect(asciiFilePart(null)).toBe("untitled");
   });
 });
 

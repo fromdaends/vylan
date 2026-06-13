@@ -12,6 +12,7 @@ import {
   FileSignature,
   FolderOpen,
   ListFilter,
+  Loader2,
   Search,
   X,
 } from "lucide-react";
@@ -48,6 +49,7 @@ import {
   shouldShowSetLine,
 } from "@/components/engagements/set-summary-line";
 import type { EngagementPreviewProps } from "./engagement-preview";
+import { useDownloadAll } from "@/components/engagements/use-download-all";
 
 type Props = EngagementPreviewProps & {
   onClose: () => void;
@@ -79,6 +81,9 @@ export function PreviewOverlay({
   const t = useTranslations("Preview");
   const tEng = useTranslations("Engagements");
   const router = useRouter();
+  // "Download all" — shared with the engagement header menu so the two can't
+  // drift (the route returns JSON {url}; the browser downloads from storage).
+  const { downloading, downloadAll } = useDownloadAll(engagementId);
   const [view, setView] = useState<PreviewView>(initialView ?? "all");
   const [query, setQuery] = useState("");
   // The checklist-item filter ("all" or a specific request_item id).
@@ -382,16 +387,20 @@ export function PreviewOverlay({
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {!scoped && counts.all > 0 && (
-              <a
-                href={`/api/engagements/${engagementId}/files.zip`}
-                className="inline-flex"
-                download
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={downloading}
+                onClick={() => void downloadAll()}
               >
-                <Button type="button" variant="outline" size="sm">
+                {downloading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
                   <Download className="size-4" />
-                  {tEng("download_all")}
-                </Button>
-              </a>
+                )}
+                {tEng("download_all")}
+              </Button>
             )}
             <Button
               type="button"

@@ -10,18 +10,24 @@
 // ReadableStream AND a buffered Uint8Array (confirmed in prod, even on a ~1 MB
 // archive; the build itself is fine). A small JSON response works, and the
 // app's own upload flow already goes direct-to-storage to dodge these platform
-// limits. So we build the zip (zipToBytes), upload it to storage, and hand the
-// browser a short-lived signed URL with a download disposition. The download
-// then streams straight from Supabase — no function-response body, no size cap.
+// limits. So we build the zip, upload it to storage, and hand the browser a
+// short-lived signed URL with a download disposition.
+//
+// LAYOUT — the archive is organized by checklist ITEM (one folder per item, in
+// the accountant's locale); any REJECTED document (review_status = rejected,
+// including AI auto-rejected) is set aside under a top-level "Rejected/" folder
+// so the accepted set stays clean. The download filename is
+// "<engagement> - <client>.zip", ASCII-only so it can't come back
+// percent-encoded ("%C3%A9 %E2%80%94").
 
 import { NextResponse, type NextRequest } from "next/server";
-import { format } from "date-fns";
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 import { signedUrl, uploadObject } from "@/lib/storage";
 import {
   zipToBytes,
-  sanitizeFilenamePart,
+  asciiFilePart,
   macZipEntryName,
   type ZipEntry,
 } from "@/lib/zip";
@@ -41,10 +47,11 @@ export async function GET(
   if (!auth.user) {
     return NextResponse.json({ error: "unauth" }, { status: 401 });
   }
-  const firm = await getCurrentFirm();
+  const [firm, user] = await Promise.all([getCurrentFirm(), getCurrentUser()]);
   if (!firm) {
     return NextResponse.json({ error: "no_firm" }, { status: 403 });
   }
+  const locale = user?.locale ?? "fr";
 
   // Firm-scope the engagement lookup. A user from another firm gets an
   // indistinguishable 404 — no existence oracle.
@@ -59,7 +66,7 @@ export async function GET(
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const [{ data: client }, { data: files }] = await Promise.all([
+  const [{ data: client }, { data: files }, { data: items }] = await Promise.all([
     sb
       .from("clients")
       .select("display_name")
@@ -67,9 +74,15 @@ export async function GET(
       .maybeSingle(),
     sb
       .from("uploaded_files")
-      .select("id, storage_path, original_filename, display_name, is_duplicate")
+      .select(
+        "id, request_item_id, storage_path, original_filename, display_name, is_duplicate, review_status",
+      )
       .eq("engagement_id", engagement.id)
       .order("uploaded_at", { ascending: true }),
+    sb
+      .from("request_items")
+      .select("id, label, label_fr")
+      .eq("engagement_id", engagement.id),
   ]);
 
   // Exclude byte-identical re-uploads (the original they copy is already in the
@@ -81,19 +94,36 @@ export async function GET(
     return NextResponse.json({ error: "no_files" }, { status: 404 });
   }
 
-  // Download filename: client - engagement - YYYY-MM-DD.zip. Sanitized so
-  // special chars can't break the Content-Disposition on the signed URL.
-  const clientPart = sanitizeFilenamePart(client?.display_name ?? "client");
-  const titlePart = sanitizeFilenamePart(engagement.title);
-  const datePart = format(new Date(), "yyyy-MM-dd");
-  const archiveName = `${clientPart}-${titlePart}-${datePart}.zip`;
+  // One folder per checklist item, named in the accountant's locale.
+  // asciiFilePart keeps it openable everywhere; missing labels fall back.
+  const folderByItem = new Map<string, string>();
+  for (const it of items ?? []) {
+    const raw =
+      (locale === "fr" ? it.label_fr || it.label : it.label || it.label_fr) ||
+      "Documents";
+    // 80 (not 60) so realistically-long slip labels don't truncate to a shared
+    // prefix and collapse two items into one folder.
+    let folder = asciiFilePart(raw, 80);
+    // "Rejected" is reserved for the top-level rejected-docs folder below; an
+    // item literally labelled that would otherwise drop its ACCEPTED files
+    // straight into the rejected area. Rename it so the namespaces stay clean.
+    if (folder.toLowerCase() === "rejected") folder = `${folder} (item)`;
+    folderByItem.set(it.id, folder);
+  }
+
+  // "<engagement> - <client>.zip" — ASCII so the saved name is clean (no
+  // percent-encoded accents / em-dash).
+  const archiveName = `${asciiFilePart(engagement.title)} - ${asciiFilePart(
+    client?.display_name ?? "client",
+  )}.zip`;
 
   await logUserActivity(firm.id, engagement.id, "bulk_download", {
     file_count: realFiles.length,
   });
 
-  // Fetch each file's bytes. A document we can't sign or fetch is skipped so
-  // one stale / erased object never sinks the whole download.
+  // Fetch each file's bytes and place it under its checklist-item folder —
+  // rejected documents under a top-level "Rejected/" folder. A document we
+  // can't sign or fetch is skipped so one stale object never sinks the download.
   async function* entries(): AsyncGenerator<ZipEntry> {
     for (const f of realFiles) {
       const url = await signedUrl(f.storage_path, 300).catch(() => null);
@@ -102,10 +132,13 @@ export async function GET(
         const res = await fetch(url);
         if (!res.ok) continue;
         const data = new Uint8Array(await res.arrayBuffer());
-        yield {
-          name: macZipEntryName(f.display_name ?? f.original_filename),
-          data,
-        };
+        const folder = folderByItem.get(f.request_item_id) ?? "Documents";
+        const leaf = macZipEntryName(f.display_name ?? f.original_filename);
+        const path =
+          f.review_status === "rejected"
+            ? `Rejected/${folder}/${leaf}`
+            : `${folder}/${leaf}`;
+        yield { name: path, data };
       } catch {
         continue;
       }
@@ -113,8 +146,7 @@ export async function GET(
   }
 
   // Build → store → sign. One export object per engagement (upsert overwrites
-  // any prior one). The signed URL carries the download disposition so the
-  // browser saves it as archiveName.
+  // any prior one). The signed URL carries the download disposition.
   let phase = "build";
   try {
     const zipBytes = await zipToBytes(entries());
@@ -124,8 +156,8 @@ export async function GET(
     // (pdf/jpeg/png/webp/heic) — it REJECTS "application/zip". We declare an
     // allowed type here; it's cosmetic because the signed URL below carries a
     // Content-Disposition that forces the browser to save it as the real
-    // <archiveName>.zip (verified: the file opens as a valid zip in macOS
-    // Archive Utility / unzip). Avoids a bucket-config migration.
+    // <archiveName>.zip (verified: opens as a valid zip in macOS Archive Utility
+    // / unzip). Avoids a bucket-config migration.
     await uploadObject({
       path: exportPath,
       body: zipBytes,
