@@ -1049,6 +1049,7 @@
     "reject": "Refuser",
     "reopen_item": "Rouvrir",
     "set_incomplete_badge": "Page manquante",
+    "awaiting_client_badge": "En attente du client",
     "remove_item": "Retirer de la liste",
     "rejection_reason": "Motif de refus",
     "reject_title": "Refuser cette soumission",

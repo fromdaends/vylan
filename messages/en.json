@@ -1049,6 +1049,7 @@
     "reject": "Reject",
     "reopen_item": "Reopen",
     "set_incomplete_badge": "Missing page",
+    "awaiting_client_badge": "Awaiting client",
     "remove_item": "Remove from checklist",
     "rejection_reason": "Rejection reason",
     "reject_title": "Reject this submission",
