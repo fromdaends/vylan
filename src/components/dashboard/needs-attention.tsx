@@ -94,14 +94,12 @@ export async function NeedsAttention({
                     : null
                 }
                 context={chips.context.map((reason) => labelFor(reason, r, t))}
-                // Flagged uploads are reviewed in the Preview overlay's Flagged
-                // tab — land there directly. Every other reason lands on the
-                // engagement page itself.
-                href={
-                  r.flaggedFilesCount > 0
-                    ? `/engagements/${r.id}?preview=flagged`
-                    : `/engagements/${r.id}`
-                }
+                // Always land on the engagement page itself. (We used to
+                // deep-link flagged engagements straight into the Preview
+                // overlay's Flagged tab, but auto-opening the full-screen viewer
+                // on navigation was jarring — the accountant opens Preview when
+                // they choose to.)
+                href={`/engagements/${r.id}`}
               />
             );
           })}
