@@ -113,7 +113,16 @@ export async function processClassifyJob(
     // rest of the month to bound token spend. The upload already succeeded —
     // we just skip the (paid) classification. Resets next month.
     const usage = await getFirmAiUsage(limitFirmId);
-    if (usage.paused) return { skipped: "firm_monthly_cap_exceeded" };
+    if (usage.paused) {
+      // Trial firms hit a low LIFETIME cap (abuse/cost guard); paid firms hit
+      // the monthly cap. Distinct codes so logs + the portal can tell them
+      // apart. Both are terminal-done in the cron (not in RETRYABLE_SKIPS).
+      return {
+        skipped: usage.isTrial
+          ? "trial_ai_limit_reached"
+          : "firm_monthly_cap_exceeded",
+      };
+    }
   }
 
   let bytes: Buffer;
