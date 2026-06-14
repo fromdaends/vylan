@@ -19,6 +19,7 @@ import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 import { appliesToProvince } from "@/lib/doc-types";
+import { localizedTemplateName } from "@/lib/templates/builtin-names";
 
 type KnownErrorKey =
   | "missing_client"
@@ -102,8 +103,8 @@ export function EngagementBuilder({
   const defaultTitle = useMemo(() => {
     if (!selectedTemplate) return "";
     const year = new Date().getFullYear();
-    return `${selectedTemplate.name} — ${year}`;
-  }, [selectedTemplate]);
+    return `${localizedTemplateName(selectedTemplate, locale)} — ${year}`;
+  }, [selectedTemplate, locale]);
   const effectiveTitle = titleTouched ? title : defaultTitle;
 
   // After a 2nd failed "Create and send" on an empty checklist, ring the
@@ -264,7 +265,9 @@ export function EngagementBuilder({
                   className="sr-only"
                 />
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">{tmpl.name}</span>
+                  <span className="font-medium">
+                    {localizedTemplateName(tmpl, locale)}
+                  </span>
                   {tmpl.firm_id == null && (
                     <Badge variant="secondary" className="text-xs">
                       {t("template_builtin")}

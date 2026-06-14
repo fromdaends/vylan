@@ -16,6 +16,7 @@ import {
 } from "@/components/dashboard/templates-gallery";
 import { EngagementsWorklist } from "@/components/dashboard/engagements-worklist";
 import { OverviewStatsStrip } from "@/components/dashboard/overview-stats-strip";
+import { localizedTemplateName } from "@/lib/templates/builtin-names";
 import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
 import { WhatsNewBell } from "@/components/inbox/whats-new-bell";
 import { NeedsAttention } from "@/components/dashboard/needs-attention";
@@ -60,7 +61,7 @@ export default async function DashboardPage({
     .filter((tmpl) => tmpl.id !== BLANK_TEMPLATE_ID)
     .map((tmpl) => ({
       id: tmpl.id,
-      name: tmpl.name,
+      name: localizedTemplateName(tmpl, locale),
       type: tmpl.type,
       itemCount: tmpl.items.length,
       requiredCount: tmpl.items.filter((it) => it.required).length,
