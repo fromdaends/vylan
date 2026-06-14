@@ -102,6 +102,14 @@ export async function submitStep1(
         plan: "trial",
         is_demo: true,
         trial_ends_at: trialEndsAtFrom(Date.now()),
+        // New accounts start with both document auto-rejects ON (founder
+        // default): unreadable/incomplete/wrong-document uploads and exact
+        // duplicates are auto-bounced back to the client instead of queued for
+        // review. Set explicitly here (the firms columns default false, 0029 /
+        // 0270) — onboarding is the only firm-creation path, so this is what new
+        // accounts get. Existing firms keep whatever they've chosen.
+        auto_reject_unusable_docs: true,
+        auto_reject_duplicates: true,
       })
       .select("id")
       .single();
