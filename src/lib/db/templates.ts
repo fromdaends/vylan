@@ -31,6 +31,11 @@ export type TemplateItem = {
   description_en?: string | null;
   doc_type: DocType;
   required: boolean;
+  // Quebec-specific item that carries a GENERIC doc_type (e.g. the Revenu
+  // Québec MR-69 authorization, the Quebec Notice of Assessment), so the
+  // doc-type province rule alone can't drop it. When true, the item follows the
+  // same include/exclude-Quebec rule as the RL slips (migration 0360).
+  quebec_only?: boolean | null;
 };
 
 export type Template = {

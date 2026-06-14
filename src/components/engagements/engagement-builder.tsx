@@ -18,7 +18,7 @@ import {
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
-import { appliesToProvince } from "@/lib/doc-types";
+import { templateItemApplies } from "@/lib/doc-types";
 import { localizedTemplateName } from "@/lib/templates/builtin-names";
 
 type KnownErrorKey =
@@ -73,7 +73,7 @@ export function EngagementBuilder({
     const initialProvince =
       clients.find((c) => c.id === initialClientId)?.province ?? null;
     return (templates[0]?.items ?? []).filter((it) =>
-      appliesToProvince(it.doc_type, initialProvince, includeQuebecForms),
+      templateItemApplies(it, initialProvince, includeQuebecForms),
     );
   });
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +93,7 @@ export function EngagementBuilder({
   // accountant is still typing are always kept.
   function forProvince(list: TemplateItem[], province: string | null) {
     return list.filter((it) =>
-      appliesToProvince(it.doc_type, province, includeQuebecForms),
+      templateItemApplies(it, province, includeQuebecForms),
     );
   }
 
