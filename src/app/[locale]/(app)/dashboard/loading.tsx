@@ -18,7 +18,7 @@ export default function Loading() {
           streams in. */}
       <div className="space-y-5 sm:space-y-6">
         {/* Stats strip — four hairline-accented counts across the width */}
-        <div className="grid grid-cols-2 gap-y-4 sm:grid-cols-4 sm:gap-y-0">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4 sm:gap-x-8 sm:gap-y-0">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="border-l border-border/40 pl-3 sm:pl-4">
               <div className="h-7 w-10 rounded-md bg-muted" />
