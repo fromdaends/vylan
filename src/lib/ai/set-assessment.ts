@@ -30,6 +30,7 @@ import {
 } from "./classify";
 import { assessSetWithOpenAI } from "./openai-classify";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
+import { isEngagementAiEnabled } from "./engagement-ai";
 import { expectedYearFromTitle } from "./matching";
 import { enqueueJob } from "@/lib/db/jobs";
 import { recomputeItemStatus } from "@/lib/db/file-review";
@@ -609,6 +610,16 @@ export async function processSetAssessmentJob(
   const eng = Array.isArray(engRaw) ? engRaw[0] : engRaw;
   const firmId = eng?.firm_id ?? null;
   if (!firmId) return { skipped: "no_firm" };
+
+  // Per-engagement "AI Analyze" toggle (migration 0340): mirror the per-file
+  // gate so the set assessment never spends tokens on a disabled engagement
+  // either. Fail-open (missing column / read error → ON). Terminal-done in the
+  // cron (not in RETRYABLE_SET_SKIPS), so a disabled item's debounced job
+  // settles to done instead of retrying.
+  if (!(await isEngagementAiEnabled(sb, item.engagement_id))) {
+    return { skipped: "engagement_ai_disabled" };
+  }
+
   const clientRaw = eng?.clients;
   const client = Array.isArray(clientRaw) ? clientRaw[0] : clientRaw;
 

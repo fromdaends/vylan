@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Trash2, GripVertical, Sparkles } from "lucide-react";
 import {
   ClientCombobox,
   type ComboboxClient,
@@ -58,6 +59,9 @@ export function EngagementBuilder({
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [dueDate, setDueDate] = useState("");
+  // "AI Analyze" toggle — on by default. When off, no document the client
+  // uploads to this engagement is sent to the AI (saves AI usage/cost).
+  const [aiEnabled, setAiEnabled] = useState(true);
   const [items, setItems] = useState<TemplateItem[]>(() => {
     // If we already know the client (e.g. started from a client's page), seed
     // the checklist with only the documents that apply to their province.
@@ -185,6 +189,7 @@ export function EngagementBuilder({
           title: effectiveTitle.trim(),
           type: selectedTemplate.type,
           due_date: dueDate || null,
+          ai_enabled: aiEnabled,
           items: cleanItems,
           send,
           locale,
@@ -305,6 +310,29 @@ export function EngagementBuilder({
             <p className="text-xs text-muted-foreground">
               {t("due_date_hint")}
             </p>
+          </div>
+          {/* "AI Analyze" toggle. On by default; turning it off means no
+              document uploaded to this engagement is ever sent to the AI —
+              helps the firm control AI usage on engagements that don't need it. */}
+          <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+            <div className="space-y-0.5">
+              <Label
+                htmlFor="ai-analyze"
+                className="flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles className="size-4 text-muted-foreground" aria-hidden />
+                {t("ai_analyze_label")}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                {t("ai_analyze_hint")}
+              </p>
+            </div>
+            <Switch
+              id="ai-analyze"
+              checked={aiEnabled}
+              onCheckedChange={setAiEnabled}
+              ariaLabel={t("ai_analyze_label")}
+            />
           </div>
         </CardContent>
       </Card>

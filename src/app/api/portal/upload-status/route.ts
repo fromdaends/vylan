@@ -17,6 +17,7 @@ import {
   checkRateLimit,
   PORTAL_STATUS_PER_TOKEN,
 } from "@/lib/rate-limit";
+import { isEngagementAiEnabled } from "@/lib/ai/engagement-ai";
 
 export const runtime = "nodejs";
 
@@ -150,6 +151,18 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
+
+  // AI off for this engagement (migration 0340): the classifier never runs, so
+  // the verdict would never "settle" and the client would poll until its own
+  // timeout, showing a "Checking…" hint for AI that isn't on. Resolve
+  // immediately as a settled no-verdict — the item-card treats status:"done"
+  // with a null verdict as "received, nothing to flag" and stops polling.
+  // Resilient read (defaults ON pre-migration / on error), so this never
+  // wrongly suppresses a real verdict.
+  if (!(await isEngagementAiEnabled(sb, engagement.id))) {
+    return NextResponse.json({ status: "done", verdict: null });
+  }
+
   type FirmEmbed = { auto_reject_unusable_docs: boolean | null };
   const firmsEmbed = (engagement as { firms?: FirmEmbed | FirmEmbed[] }).firms;
   const firmRow = Array.isArray(firmsEmbed) ? firmsEmbed[0] : firmsEmbed;
