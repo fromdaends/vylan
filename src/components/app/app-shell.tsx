@@ -162,6 +162,7 @@ export function AppShell({
   isOwner?: boolean;
 }) {
   const pathname = usePathname();
+  const tApp = useTranslations("App");
   const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
 
   const collapsed = useSyncExternalStore(
@@ -229,7 +230,7 @@ export function AppShell({
           "hidden sm:flex sm:flex-col sm:fixed sm:inset-y-0 sm:left-0 sm:border-r sm:border-border/40 sm:bg-background sm:z-30 transition-[width] duration-200 ease-out",
           collapsed ? "sm:w-16" : "sm:w-64",
         )}
-        aria-label="Primary navigation"
+        aria-label={tApp("nav_primary_label")}
       >
         <SidebarBody
           primaryNav={primaryNav}
@@ -335,6 +336,7 @@ function MobileTabBar({
   onAccountClick: () => void;
 }) {
   const pathname = usePathname();
+  const tApp = useTranslations("App");
   const tabs: NavItemDef[] = [
     {
       href: "/dashboard",
@@ -358,7 +360,7 @@ function MobileTabBar({
   return (
     <nav
       className="sm:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border/40 bg-background/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]"
-      aria-label="Bottom navigation"
+      aria-label={tApp("nav_bottom_label")}
     >
       <div className="flex items-stretch justify-around">
         {tabs.map((tab) => {

@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { Step1Form } from "./step1-form";
 import { Step2Form } from "./step2-form";
@@ -23,10 +24,15 @@ export default async function OnboardingPage({
       : 1;
 
   const firm = await getCurrentFirm();
+  const t = await getTranslations("Onboarding");
 
   return (
     <div className="space-y-6">
-      <Progress step={step} total={TOTAL} />
+      <Progress
+        step={step}
+        total={TOTAL}
+        ariaLabel={t("progress_aria", { step, total: TOTAL })}
+      />
       {step === 1 && (
         <Step1Form
           locale={locale}
@@ -46,12 +52,17 @@ export default async function OnboardingPage({
   );
 }
 
-function Progress({ step, total }: { step: number; total: number }) {
+function Progress({
+  step,
+  total,
+  ariaLabel,
+}: {
+  step: number;
+  total: number;
+  ariaLabel: string;
+}) {
   return (
-    <div
-      className="flex items-center gap-2"
-      aria-label={`step ${step}/${total}`}
-    >
+    <div className="flex items-center gap-2" aria-label={ariaLabel}>
       {Array.from({ length: total }).map((_, i) => (
         <div
           key={i}

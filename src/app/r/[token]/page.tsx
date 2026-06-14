@@ -34,12 +34,10 @@ export default async function PortalPage({
   const ctx = await loadPortalContext(token);
   if (!ctx) notFound();
 
-  const locale: "fr" | "en" =
-    sp.lang === "en"
-      ? "en"
-      : sp.lang === "fr"
-        ? "fr"
-        : ctx.client.locale;
+  // The client portal ALWAYS defaults to English, regardless of the client's
+  // stored locale or the firm default. The client can switch to French via the
+  // in-header ?lang= toggle (portal-shell), but the initial language is English.
+  const locale: "fr" | "en" = sp.lang === "fr" ? "fr" : "en";
   const [messages, firmLogoUrl] = await Promise.all([
     getMessages({ locale }),
     getBrandingImageUrl(ctx.firm.logo_url),

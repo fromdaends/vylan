@@ -74,7 +74,15 @@ export function TemplateEditor({
     <div className="space-y-6">
       {state?.error && (
         <Alert variant="destructive">
-          <AlertDescription>{state.error}</AlertDescription>
+          {/* Map the action's error CODE to a localized message — the raw code
+              (e.g. "update_failed") used to render straight to the user. */}
+          <AlertDescription>
+            {state.error === "missing_name"
+              ? t("errors.missing_name")
+              : state.error === "invalid_items"
+                ? t("errors.invalid_items")
+                : t("errors.update_failed")}
+          </AlertDescription>
         </Alert>
       )}
       {state?.ok && (

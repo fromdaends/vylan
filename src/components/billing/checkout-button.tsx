@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import type { PlanId } from "@/lib/plans";
 
@@ -15,7 +16,10 @@ export function CheckoutButton({
   disabledLabel?: string;
   label: string;
 }) {
+  const t = useTranslations("Billing");
   const [pending, startTransition] = useTransition();
+  // A localized, user-facing message (never a raw error code like
+  // "checkout_failed", which previously rendered straight to the user).
   const [error, setError] = useState<string | null>(null);
 
   function go() {
@@ -33,10 +37,10 @@ export function CheckoutButton({
         if (j?.url) {
           window.location.href = j.url;
         } else {
-          setError(j?.error ?? "checkout_failed");
+          setError(t("checkout_failed"));
         }
       } catch {
-        setError("checkout_failed");
+        setError(t("checkout_failed"));
       }
     });
   }

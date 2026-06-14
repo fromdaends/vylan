@@ -138,7 +138,7 @@ function EmailChangeDialog({
                 type="email"
                 autoComplete="email"
                 required
-                placeholder="name@example.com"
+                placeholder={t("new_email_placeholder")}
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}

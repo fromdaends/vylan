@@ -123,10 +123,9 @@ export function PortalShell({
 
   const otherLocale = locale === "fr" ? "en" : "fr";
   const helpSubject = `${ctx.firm.name} — ${ctx.engagement.title}`;
-  const helpBody =
-    locale === "fr"
-      ? `Bonjour,\n\nJ'ai une question concernant les documents demandés pour « ${ctx.engagement.title} ».\n\nMerci.`
-      : `Hi,\n\nI have a question about the documents requested for "${ctx.engagement.title}".\n\nThanks.`;
+  // Localized via the Portal namespace (follows the portal locale, which
+  // defaults to English) instead of a hardcoded FR/EN branch.
+  const helpBody = t("help_body", { title: ctx.engagement.title });
 
   function handleItemUpdated(itemId: string, patch: Partial<(typeof items)[0]>) {
     setItems((prev) =>

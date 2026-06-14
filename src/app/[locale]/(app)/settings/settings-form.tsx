@@ -53,14 +53,15 @@ type Translate = (k: string, values?: Record<string, string | number>) => string
 
 // Same Canadian zones that used to live in /firm. Kept in sync with the
 // server-side allow-list in /api/firm/timezone — if you add a zone here,
-// add it there too.
+// add it there too. The label is a Common.* i18n key (resolved at render) so
+// the zone descriptors translate (Eastern → Est, etc.).
 const CA_TIMEZONES: ReadonlyArray<readonly [string, string]> = [
-  ["America/Toronto", "Toronto / Ottawa / Montréal (Eastern)"],
-  ["America/Halifax", "Halifax (Atlantic)"],
-  ["America/St_Johns", "St. John's (Newfoundland)"],
-  ["America/Winnipeg", "Winnipeg / Regina (Central)"],
-  ["America/Edmonton", "Edmonton / Calgary (Mountain)"],
-  ["America/Vancouver", "Vancouver (Pacific)"],
+  ["America/Toronto", "tz_eastern"],
+  ["America/Halifax", "tz_atlantic"],
+  ["America/St_Johns", "tz_newfoundland"],
+  ["America/Winnipeg", "tz_central"],
+  ["America/Edmonton", "tz_mountain"],
+  ["America/Vancouver", "tz_pacific"],
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -518,6 +519,7 @@ function TimezoneSection({
   currentTimezone: string;
   t: Translate;
 }) {
+  const tc = useTranslations("Common");
   const [value, setValue] = useState(currentTimezone);
   const [error, setError] = useState<string | null>(null);
 
@@ -555,9 +557,9 @@ function TimezoneSection({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {CA_TIMEZONES.map(([tz, label]) => (
+            {CA_TIMEZONES.map(([tz, labelKey]) => (
               <SelectItem key={tz} value={tz}>
-                {label}
+                {tc(labelKey)}
               </SelectItem>
             ))}
           </SelectContent>
