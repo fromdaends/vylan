@@ -12,31 +12,27 @@ export default function Loading() {
         <div className="h-4 w-48 max-w-full rounded-md bg-muted/60" />
       </div>
 
-      {/* Top row: stats strip (left) + Needs attention (right), matching
-          the page's 2xl flex layout (stretch, stats fill the column height)
-          so nothing shifts when it streams in. */}
-      <div className="flex flex-col gap-8 2xl:flex-row 2xl:gap-10">
-        {/* Stats strip — four hairline-accented counts */}
-        <div className="shrink-0 2xl:w-[21rem]">
-          <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-4 2xl:h-full 2xl:grid-cols-2 2xl:grid-rows-2 2xl:gap-x-8 2xl:gap-y-6">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="border-l border-border/40 pl-3 2xl:flex 2xl:flex-col 2xl:justify-center 2xl:pl-4"
-              >
-                <div className="h-6 w-10 rounded-md bg-muted 2xl:h-10 2xl:w-14" />
-                <div className="mt-1.5 h-3 w-20 rounded bg-muted/50 2xl:h-4 2xl:w-28" />
-              </div>
-            ))}
-          </div>
+      {/* Top region: thin full-width stats strip above a full-width Needs
+          attention block, matching the page's stacked layout (and the real
+          Needs attention's left accent rule) so nothing shifts when it
+          streams in. */}
+      <div className="space-y-5 sm:space-y-6">
+        {/* Stats strip — four hairline-accented counts across the width */}
+        <div className="grid grid-cols-2 gap-y-4 sm:grid-cols-4 sm:gap-y-0">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="border-l border-border/40 pl-3 sm:pl-4">
+              <div className="h-7 w-10 rounded-md bg-muted" />
+              <div className="mt-1.5 h-3 w-20 rounded bg-muted/50" />
+            </div>
+          ))}
         </div>
 
-        {/* Needs attention block (accent-tinted card) */}
-        <div className="min-w-0 flex-1 rounded-2xl border border-accent/20 bg-accent/[0.04] p-4 sm:p-5">
+        {/* Needs attention block — left accent rule, full width */}
+        <div className="border-l-2 border-accent/40 pl-4 sm:pl-5">
           <div className="h-5 w-40 rounded-md bg-muted" />
-          <div className="mt-3 space-y-2">
+          <div className="mt-3 space-y-1.5">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-11 rounded-xl bg-muted/40" />
+              <div key={i} className="h-12 rounded-xl bg-muted/40" />
             ))}
           </div>
         </div>

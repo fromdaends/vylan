@@ -100,30 +100,26 @@ export default async function DashboardPage({
         }
       />
 
-      {/* Top row: the stats strip anchors the top-left and Needs attention
-          fills the rest of the row on a wide canvas (2xl+), so neither
-          floats alone in empty space. Default cross-axis stretch on purpose:
-          the stats column matches Needs attention's height and spreads its
-          2×2 across it. Below 2xl they stack, stats first. */}
-      <div className="flex flex-col gap-8 2xl:flex-row 2xl:gap-10">
+      {/* Top region: a thin full-width stats strip sitting directly above a
+          full-width Needs attention block. Stacked (not side-by-side columns)
+          so there is no uneven-height dead space, and tightly spaced so the
+          strip reads as a quiet header to Needs attention, which stays high
+          and prominent. */}
+      <div className="space-y-5 sm:space-y-6">
         {/* At-a-glance counts — quiet, clickable, computed from the same
             worklist rows (and the same status engine) as everything else.
             Firm-wide on purpose: the linked views are firm-wide too, so a
             staff member's click always lands on a list matching the count. */}
-        <div className="shrink-0 2xl:w-[21rem]">
-          <OverviewStatsStrip rows={worklistRows} />
-        </div>
+        <OverviewStatsStrip rows={worklistRows} />
 
         {/* Needs attention — the prominent, accent-tinted action block,
             expanded by default. Always rendered (calm "all caught up" line
             when empty). Rows carry the same right-click / "..." menu as the
             My-engagements table. */}
-        <div className="min-w-0 flex-1">
-          <NeedsAttention
-            rows={attentionRows}
-            canDelete={user ? canDeleteEngagements(user.role) : false}
-          />
-        </div>
+        <NeedsAttention
+          rows={attentionRows}
+          canDelete={user ? canDeleteEngagements(user.role) : false}
+        />
       </div>
 
       {/* Recent/Mine show active work; the Complete tab surfaces finished
