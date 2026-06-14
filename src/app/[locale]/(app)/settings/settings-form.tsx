@@ -86,6 +86,7 @@ export function SettingsShell({
   autoRejectUnusableDocs,
   autoRejectDuplicates,
   autoRequestMissingPages,
+  includeQuebecForms,
   aiUsage,
   isOwner,
   billingSlot,
@@ -101,6 +102,7 @@ export function SettingsShell({
   autoRejectUnusableDocs: boolean;
   autoRejectDuplicates: boolean;
   autoRequestMissingPages: boolean;
+  includeQuebecForms: boolean;
   aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -197,6 +199,7 @@ export function SettingsShell({
             autoRejectUnusableDocs={autoRejectUnusableDocs}
             autoRejectDuplicates={autoRejectDuplicates}
             autoRequestMissingPages={autoRequestMissingPages}
+            includeQuebecForms={includeQuebecForms}
             aiUsage={aiUsage}
             locale={currentLocale}
             t={t}
@@ -580,6 +583,7 @@ function DocumentsSection({
   autoRejectUnusableDocs,
   autoRejectDuplicates,
   autoRequestMissingPages,
+  includeQuebecForms,
   aiUsage,
   locale,
   t,
@@ -587,6 +591,7 @@ function DocumentsSection({
   autoRejectUnusableDocs: boolean;
   autoRejectDuplicates: boolean;
   autoRequestMissingPages: boolean;
+  includeQuebecForms: boolean;
   aiUsage: AiUsage;
   locale: "fr" | "en";
   t: Translate;
@@ -605,6 +610,10 @@ function DocumentsSection({
   const [missingPagesError, setMissingPagesError] = useState<string | null>(
     null,
   );
+  // SEPARATE again (migration 0350): whether this firm uses the Quebec-only
+  // RL slips at all. Same optimistic-save-and-revert pattern, own POST route.
+  const [quebecEnabled, setQuebecEnabled] = useState(includeQuebecForms);
+  const [quebecError, setQuebecError] = useState<string | null>(null);
 
   async function onDuplicatesToggle(next: boolean) {
     setDupError(null);
@@ -643,6 +652,26 @@ function DocumentsSection({
       console.error("[onToggle] auto-request-missing-pages save failed:", e);
       setMissingPagesError(t("save_failed"));
       setMissingPagesEnabled(!next);
+    }
+  }
+
+  async function onQuebecToggle(next: boolean) {
+    setQuebecError(null);
+    setQuebecEnabled(next);
+    try {
+      const res = await fetch("/api/firm/include-quebec-forms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!res.ok) {
+        setQuebecError(t("save_failed"));
+        setQuebecEnabled(!next);
+      }
+    } catch (e) {
+      console.error("[onToggle] include-quebec-forms save failed:", e);
+      setQuebecError(t("save_failed"));
+      setQuebecEnabled(!next);
     }
   }
 
@@ -796,6 +825,28 @@ function DocumentsSection({
       </div>
       {missingPagesError && (
         <p className="mt-2 text-xs text-destructive">{missingPagesError}</p>
+      )}
+
+      {/* Separate setting: whether this firm uses the Quebec-only tax forms
+          (the RL slips). Off for a firm that works entirely outside Quebec —
+          the RL slips then drop from every checklist regardless of province. */}
+      <div className="mt-3 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border/50 px-4 py-3">
+        <div className="space-y-1">
+          <div className="text-sm font-medium">
+            {t("include_quebec_forms_label")}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("include_quebec_forms_help")}
+          </p>
+        </div>
+        <Switch
+          checked={quebecEnabled}
+          onCheckedChange={onQuebecToggle}
+          ariaLabel={t("include_quebec_forms_label")}
+        />
+      </div>
+      {quebecError && (
+        <p className="mt-2 text-xs text-destructive">{quebecError}</p>
       )}
     </section>
   );

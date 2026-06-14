@@ -432,9 +432,15 @@ export const DOC_TYPES: DocType[] = (
 export function appliesToProvince(
   code: DocType,
   province: string | null | undefined,
+  includeQuebecForms: boolean = true,
 ): boolean {
+  const isQuebec = DOC_TYPE_LABELS[code]?.group === "quebec";
+  // Firm-wide off-switch (migration 0350): a firm that excludes Quebec forms
+  // never shows the RL slips, whatever the client's province. Defaults to true
+  // so every existing caller keeps today's per-client behaviour.
+  if (isQuebec && !includeQuebecForms) return false;
   if (!province) return true;
-  return DOC_TYPE_LABELS[code]?.group === "quebec" ? province === "QC" : true;
+  return isQuebec ? province === "QC" : true;
 }
 
 /**
@@ -444,13 +450,14 @@ export function appliesToProvince(
  */
 export function docTypesByGroup(
   province?: string | null,
+  includeQuebecForms: boolean = true,
 ): { group: DocTypeGroup; codes: DocType[] }[] {
   return DOC_TYPE_GROUP_ORDER.map((group) => ({
     group,
     codes: (Object.keys(DOC_TYPE_LABELS) as DocType[]).filter(
       (code) =>
         DOC_TYPE_LABELS[code].group === group &&
-        appliesToProvince(code, province),
+        appliesToProvince(code, province, includeQuebecForms),
     ),
   })).filter((g) => g.codes.length > 0);
 }

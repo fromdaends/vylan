@@ -1,6 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listClients } from "@/lib/db/clients";
 import { listTemplates } from "@/lib/db/templates";
+import { getCurrentFirm } from "@/lib/db/firms";
 import { EngagementBuilder } from "@/components/engagements/engagement-builder";
 import { assertLocale } from "@/lib/locale";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -17,9 +18,10 @@ export default async function NewEngagementPage({
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  const [clients, templates] = await Promise.all([
+  const [clients, templates, firm] = await Promise.all([
     listClients({ includeArchived: false }),
     listTemplates(),
+    getCurrentFirm(),
   ]);
 
   const t = await getTranslations("Engagements");
@@ -54,6 +56,7 @@ export default async function NewEngagementPage({
         templates={templates}
         initialClientId={sp.client}
         locale={locale}
+        includeQuebecForms={firm?.include_quebec_forms ?? true}
       />
     </div>
   );

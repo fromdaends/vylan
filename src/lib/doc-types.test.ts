@@ -120,3 +120,35 @@ describe("appliesToProvince (province-aware document filtering)", () => {
     expect(docTypesByGroup().some((g) => g.group === "quebec")).toBe(true);
   });
 });
+
+describe("appliesToProvince (firm-wide Quebec off-switch, migration 0350)", () => {
+  it("hides the Quebec RL slips for any province when the firm excludes them", () => {
+    // Even a Quebec client of a firm that turned Quebec forms off.
+    expect(appliesToProvince("rl1", "QC", false)).toBe(false);
+    expect(appliesToProvince("rl3", "QC", false)).toBe(false);
+    expect(appliesToProvince("rl1", null, false)).toBe(false);
+    expect(appliesToProvince("rl31", "ON", false)).toBe(false);
+  });
+
+  it("never hides non-Quebec forms when the firm excludes Quebec", () => {
+    expect(appliesToProvince("t4", "QC", false)).toBe(true);
+    expect(appliesToProvince("noa", null, false)).toBe(true);
+    expect(appliesToProvince("gst_hst_qst", "ON", false)).toBe(true);
+  });
+
+  it("defaults to including Quebec (today's per-client behaviour preserved)", () => {
+    expect(appliesToProvince("rl1", "QC")).toBe(true);
+    expect(appliesToProvince("rl1", "QC", true)).toBe(true);
+    expect(appliesToProvince("rl1", "ON", true)).toBe(false);
+  });
+
+  it("docTypesByGroup drops the quebec group when the firm excludes it, even for QC", () => {
+    const off = docTypesByGroup("QC", false);
+    expect(off.some((g) => g.group === "quebec")).toBe(false);
+    expect(off.some((g) => g.group === "federal")).toBe(true);
+    // On (default) keeps Quebec for a QC client.
+    expect(docTypesByGroup("QC", true).some((g) => g.group === "quebec")).toBe(
+      true,
+    );
+  });
+});

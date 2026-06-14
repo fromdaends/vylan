@@ -30,6 +30,12 @@ export type Firm = {
   // missing page is only flagged for the accountant. May be undefined at runtime
   // until 0330 is applied — readers default it to false (OFF).
   auto_request_missing_pages: boolean;
+  // Firm-wide include/exclude for the Quebec-only tax forms — the RL slips
+  // (migration 0350). When false, those slips are hidden from every client
+  // checklist regardless of the client's province; when true (default), the
+  // per-client province filter still applies. May be undefined at runtime until
+  // 0350 is applied — readers default it to true (include).
+  include_quebec_forms: boolean;
   // Per-firm monthly AI-check cap (migration 0230). Service-role-only — not in
   // the updateCurrentFirm whitelist. May be undefined at runtime until 0230 is
   // applied; getFirmAiUsage defaults it to 400.
@@ -74,6 +80,7 @@ export async function updateCurrentFirm(
       | "auto_reject_unusable_docs"
       | "auto_reject_duplicates"
       | "auto_request_missing_pages"
+      | "include_quebec_forms"
       | "logo_url"
     >
   >,

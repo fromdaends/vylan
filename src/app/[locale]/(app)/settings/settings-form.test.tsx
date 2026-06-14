@@ -67,6 +67,7 @@ function renderShell(
         autoRejectUnusableDocs={false}
         autoRejectDuplicates={false}
         autoRequestMissingPages={false}
+        includeQuebecForms={true}
         aiUsage={{
           used: 0,
           cap: 400,

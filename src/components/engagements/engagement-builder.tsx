@@ -44,11 +44,15 @@ export function EngagementBuilder({
   templates,
   initialClientId,
   locale,
+  includeQuebecForms = true,
 }: {
   clients: ComboboxClient[];
   templates: Template[];
   initialClientId?: string;
   locale: "fr" | "en";
+  // Firm-wide setting (migration 0350). When false, the Quebec-only RL slips
+  // never appear in this firm's checklists, whatever the client's province.
+  includeQuebecForms?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
@@ -69,7 +73,7 @@ export function EngagementBuilder({
     const initialProvince =
       clients.find((c) => c.id === initialClientId)?.province ?? null;
     return (templates[0]?.items ?? []).filter((it) =>
-      appliesToProvince(it.doc_type, initialProvince),
+      appliesToProvince(it.doc_type, initialProvince, includeQuebecForms),
     );
   });
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +92,9 @@ export function EngagementBuilder({
   // Quebec RL slips for a non-Quebec client). Empty-doc_type rows the
   // accountant is still typing are always kept.
   function forProvince(list: TemplateItem[], province: string | null) {
-    return list.filter((it) => appliesToProvince(it.doc_type, province));
+    return list.filter((it) =>
+      appliesToProvince(it.doc_type, province, includeQuebecForms),
+    );
   }
 
   // Switching client re-filters the current checklist (e.g. picking an Ontario
@@ -436,6 +442,7 @@ export function EngagementBuilder({
                           onChange={(dt) => updateItem(idx, { doc_type: dt })}
                           className="h-8 w-[14rem] max-w-full text-xs"
                           province={selectedProvince}
+                          includeQuebecForms={includeQuebecForms}
                         />
                         <label className="flex items-center gap-1.5 select-none cursor-pointer">
                           <input
