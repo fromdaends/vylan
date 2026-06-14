@@ -5,6 +5,7 @@ import {
   BLANK_TEMPLATE_ID,
   type Template,
 } from "@/lib/db/templates";
+import { localizedTemplateName } from "@/lib/templates/builtin-names";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { TemplateCard } from "@/components/templates/template-card";
@@ -42,7 +43,7 @@ export default async function TemplatesPage({
       .map((it) => (locale === "fr" ? it.label_fr : it.label_en));
     const requiredCount = tmpl.items.filter((it) => it.required).length;
     return {
-      name: tmpl.name,
+      name: localizedTemplateName(tmpl, locale),
       type: tmpl.type,
       itemCount: tmpl.items.length,
       requiredCount,
