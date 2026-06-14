@@ -86,7 +86,7 @@ export function NeedsAttentionRow({
     <>
       <ContextMenu>
         <ContextMenuTrigger asChild>
-          <li className="group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-accent/10">
+          <li className="group relative flex items-center gap-x-3 gap-y-1 rounded-xl px-3 py-2.5 transition-colors hover:bg-accent/10">
             {/* Full-row link overlay — clicking the row opens the engagement
                 (or the Preview deep-link when that's the better landing). */}
             <Link
@@ -94,42 +94,51 @@ export function NeedsAttentionRow({
               className="absolute inset-0 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label={row.title}
             />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium text-foreground">
-                {row.title}
+            {/* Identity and reasons are grouped together on the LEFT so the
+                chips read as belonging to this engagement — no large empty gap
+                stranding them at the far edge. The group takes the slack
+                (flex-1) but stays left-aligned, so the "..." menu pins to the
+                right in the normal row spot. The group wraps on narrow widths;
+                the name truncates (capped) before the chips drop to a line. */}
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
+              <div className="min-w-0 max-w-full sm:max-w-[20rem]">
+                <div className="truncate text-sm font-medium text-foreground">
+                  {row.title}
+                </div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {row.clientName}
+                </div>
               </div>
-              <div className="truncate text-xs text-muted-foreground">
-                {row.clientName}
-              </div>
+              {/* The ONE colored actionable chip, immediately after the name. */}
+              {accent != null && AccentIcon != null && (
+                <span
+                  className={
+                    "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
+                    accent.tone
+                  }
+                >
+                  <AccentIcon className="h-3 w-3" aria-hidden />
+                  {accent.label}
+                </span>
+              )}
+              {/* Passive/supporting reasons: quiet text, no pill, no icon —
+                  readable but never competing with the accent chip. One span
+                  per reason (nowrap) so narrow screens wrap between reasons,
+                  never mid-phrase. */}
+              {context.length > 0 && (
+                <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                  {context.map((label, i) => (
+                    <span
+                      key={label}
+                      className="whitespace-nowrap text-xs text-muted-foreground"
+                    >
+                      {label}
+                      {i < context.length - 1 && <span aria-hidden> ·</span>}
+                    </span>
+                  ))}
+                </span>
+              )}
             </div>
-            {(accent != null || context.length > 0) && (
-              <span className="flex max-w-[60%] shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1">
-                {/* Passive/supporting reasons: quiet text, no pill, no icon —
-                    readable but never competing with the accent chip. One span
-                    per reason (nowrap) so narrow screens wrap between reasons,
-                    never mid-phrase. */}
-                {context.map((label, i) => (
-                  <span
-                    key={label}
-                    className="whitespace-nowrap text-xs text-muted-foreground"
-                  >
-                    {label}
-                    {i < context.length - 1 && <span aria-hidden> ·</span>}
-                  </span>
-                ))}
-                {accent != null && AccentIcon != null && (
-                  <span
-                    className={
-                      "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
-                      accent.tone
-                    }
-                  >
-                    <AccentIcon className="h-3 w-3" aria-hidden />
-                    {accent.label}
-                  </span>
-                )}
-              </span>
-            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
