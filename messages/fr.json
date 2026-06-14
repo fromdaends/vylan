@@ -601,6 +601,8 @@
     "auto_reject_duplicates_help": "Quand activé, Vylan rejette automatiquement un téléversement qui est une copie exacte d'un document déjà envoyé par le client pour cet engagement. Quand désactivé, le doublon est signalé pour votre révision.",
     "auto_request_missing_pages_label": "Demander automatiquement les pages manquantes",
     "auto_request_missing_pages_help": "Quand activé, si un client téléverse un document de plusieurs pages mais qu'une page précise manque, Vylan demande automatiquement au client d'envoyer la page manquante. Quand désactivé, la page manquante est plutôt signalée pour votre révision. Si Vylan ne sait pas avec certitude quelle page manque, la décision vous revient toujours, jamais au client.",
+    "include_quebec_forms_label": "Inclure les formulaires fiscaux du Québec",
+    "include_quebec_forms_help": "Activé par défaut. Désactivez-le si votre cabinet travaille entièrement hors Québec : les relevés propres au Québec (RL-1, RL-3, etc.) sont alors masqués de toutes les listes de documents. Quand c'est activé, ces relevés disparaissent quand même automatiquement pour tout client dont la province est définie hors Québec.",
     "ai_usage_label": "Vérifications IA des documents",
     "ai_active_badge": "Actif",
     "ai_paused_badge": "En pause",

@@ -58,6 +58,7 @@ export function DocTypePicker({
   id,
   className,
   province,
+  includeQuebecForms = true,
 }: {
   value: DocType;
   onChange: (next: DocType) => void;
@@ -68,6 +69,9 @@ export function DocTypePicker({
   /** The client's province. When set to a non-Quebec province, the Quebec RL
    *  slips are hidden so only the documents that apply there are offered. */
   province?: string | null;
+  /** Firm-wide setting (migration 0350). When false, the Quebec RL slips are
+   *  hidden regardless of province. */
+  includeQuebecForms?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const locale = useLocale();
@@ -96,7 +100,7 @@ export function DocTypePicker({
           <CommandInput placeholder={t("doc_type_search")} />
           <CommandList>
             <CommandEmpty>{t("doc_type_empty")}</CommandEmpty>
-            {docTypesByGroup(province).map((g) => {
+            {docTypesByGroup(province, includeQuebecForms).map((g) => {
               const heading = docTypeGroupLabel(g.group, locale);
               return (
                 <CommandGroup key={g.group} heading={heading}>

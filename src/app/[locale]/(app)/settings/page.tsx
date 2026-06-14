@@ -96,6 +96,7 @@ export default async function SettingsPage({
         autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
         autoRejectDuplicates={firm.auto_reject_duplicates}
         autoRequestMissingPages={firm.auto_request_missing_pages}
+        includeQuebecForms={firm.include_quebec_forms ?? true}
         aiUsage={aiUsage}
         isOwner={isOwner}
         billingSlot={billingSlot}
