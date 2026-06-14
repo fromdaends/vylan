@@ -595,6 +595,8 @@
     "section_preferences": "Préférences",
     "section_doc_handling": "Gestion des documents",
     "section_doc_handling_hint": "Comment Vylan gère les téléversements de vos clients.",
+    "section_tax_forms": "Formulaires fiscaux",
+    "section_tax_forms_hint": "Quels formulaires fiscaux apparaissent dans les listes de documents de vos clients.",
     "auto_reject_label": "Rejet automatique des téléversements invalides",
     "auto_reject_help": "Quand activé, Vylan rejette automatiquement les téléversements illisibles, incomplets ou qui ne correspondent pas au document demandé, et demande au client de les renvoyer. Quand désactivé, ces téléversements sont placés en file d'attente pour votre révision.",
     "auto_reject_duplicates_label": "Rejeter automatiquement les doublons",
