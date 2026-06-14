@@ -28,6 +28,7 @@ import {
   ASSISTANT_PER_USER,
   ASSISTANT_PER_FIRM_DAILY,
 } from "@/lib/rate-limit";
+import { getFirmAiUsage, incrementFirmAiUsage } from "@/lib/ai/usage";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -122,6 +123,28 @@ export async function POST(request: NextRequest) {
 
   const client = assistantClient();
   if (!client) return jsonError(500, "ai_unavailable");
+
+  // Free-trial firms share ONE small lifetime AI budget across BOTH document
+  // analysis AND this assistant (TRIAL_AI_TOTAL_CAP) — otherwise a trial could
+  // burn unbounded paid Claude calls here, outside the document cap. Block once
+  // the budget is spent, and count this turn against it (reserve BEFORE the
+  // model call — conservative if the stream then fails). Trial firms only; paid
+  // firms' monthly document meter is untouched.
+  const aiUsage = await getFirmAiUsage(firm.id);
+  if (aiUsage.isTrial && aiUsage.paused) {
+    const msg =
+      body.locale === "fr"
+        ? "Vous avez atteint la limite d’IA de votre essai gratuit. Passez à un forfait pour continuer à utiliser l’assistant IA."
+        : "You've reached your free trial's AI limit. Upgrade to keep using the AI assistant.";
+    return new Response(msg, {
+      status: 200,
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "x-assistant-limit": "1",
+      },
+    });
+  }
+  if (aiUsage.isTrial) await incrementFirmAiUsage(firm.id);
 
   const system = buildSystemPrompt({
     locale: body.locale,

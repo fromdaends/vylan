@@ -631,7 +631,14 @@ export async function processSetAssessmentJob(
   });
   if (!rl.ok) return { skipped: "firm_daily_quota_exceeded" };
   const usage = await getFirmAiUsage(firmId);
-  if (usage.paused) return { skipped: "firm_monthly_cap_exceeded" };
+  if (usage.paused) {
+    // Trial lifetime cap vs paid monthly cap — distinct codes; both terminal.
+    return {
+      skipped: usage.isTrial
+        ? "trial_ai_limit_reached"
+        : "firm_monthly_cap_exceeded",
+    };
+  }
 
   // The set: every non-duplicate file of the item, in upload order.
   const { data: fileRows } = await sb

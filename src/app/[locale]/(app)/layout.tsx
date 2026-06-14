@@ -3,6 +3,7 @@ import { getPathname } from "@/i18n/navigation";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { isTrialExpired, trialDaysLeft } from "@/lib/trial";
+import { getFirmAiUsage } from "@/lib/ai/usage";
 import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { getTranslations } from "next-intl/server";
@@ -82,6 +83,14 @@ export default async function AppLayout({
   // stays out of the render path (react-hooks purity).
   const trialExpired = isTrialExpired(firm);
   const trialDays = trialDaysLeft(firm);
+  // Trial firms also hit a hard LIFETIME AI cap (abuse/cost guard) well before
+  // the 14 days are up. Surface an "upgrade" state in the banner when it's
+  // reached. Only query usage for trial firms — paid firms skip the round trip.
+  let aiLimitReached = false;
+  if (firm.is_demo) {
+    const usage = await getFirmAiUsage(firm.id);
+    aiLimitReached = usage.isTrial && usage.paused;
+  }
 
   return (
     <AppShell
@@ -94,7 +103,11 @@ export default async function AppLayout({
       isOwner={dbUser.role === "owner"}
       topBar={
         firm.is_demo ? (
-          <TrialBanner expired={trialExpired} daysLeft={trialDays} />
+          <TrialBanner
+            expired={trialExpired}
+            daysLeft={trialDays}
+            aiLimitReached={aiLimitReached}
+          />
         ) : undefined
       }
       engagementBadges={{

@@ -37,6 +37,9 @@ import {
 } from "@/components/settings/firm-settings-sections";
 import { AccountSignInSections } from "@/components/settings/account-security-sections";
 import { MfaSection } from "@/components/profile/mfa-section";
+// Type-only import (erased at build) — safe in this client component even though
+// usage.ts is server code. Keeps the AI-usage prop shape in sync with the source.
+import type { AiUsage } from "@/lib/ai/usage";
 
 type ThemeChoice = "light" | "dark" | "system";
 type SectionId =
@@ -97,7 +100,7 @@ export function SettingsShell({
   autoRejectUnusableDocs: boolean;
   autoRejectDuplicates: boolean;
   autoRequestMissingPages: boolean;
-  aiUsage: { used: number; cap: number; paused: boolean; resetsAt: string };
+  aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
   // passed in as a slot so the client shell can show it under the Billing tab.
@@ -582,7 +585,7 @@ function DocumentsSection({
   autoRejectUnusableDocs: boolean;
   autoRejectDuplicates: boolean;
   autoRequestMissingPages: boolean;
-  aiUsage: { used: number; cap: number; paused: boolean; resetsAt: string };
+  aiUsage: AiUsage;
   locale: "fr" | "en";
   t: Translate;
 }) {
@@ -645,12 +648,18 @@ function DocumentsSection({
     100,
     Math.round((aiUsage.used / Math.max(1, aiUsage.cap)) * 100),
   );
-  // The meter resets at the first of next month UTC; format in UTC so a
-  // behind-UTC viewer doesn't see it slip to "the 30th".
-  const resetDate = new Date(aiUsage.resetsAt).toLocaleDateString(
-    locale === "fr" ? "fr-CA" : "en-CA",
-    { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" },
-  );
+  // Trial firms have a LIFETIME cap (no monthly reset — it lifts on upgrade), so
+  // we never show a reset date for them. The monthly meter resets at the first
+  // of next month UTC; format in UTC so a behind-UTC viewer doesn't see it slip
+  // to "the 30th". Guard against an empty/invalid resetsAt so it never renders
+  // "Invalid Date".
+  const resetDate =
+    !aiUsage.isTrial && aiUsage.resetsAt
+      ? new Date(aiUsage.resetsAt).toLocaleDateString(
+          locale === "fr" ? "fr-CA" : "en-CA",
+          { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" },
+        )
+      : null;
 
   async function onToggle(next: boolean) {
     setError(null);
@@ -696,9 +705,18 @@ function DocumentsSection({
           </span>
         </div>
         <p className="mt-1 text-xs text-muted-foreground">
-          {t("ai_usage_count", { used: aiUsage.used, cap: aiUsage.cap })}
-          {" · "}
-          {t("ai_resets_on", { date: resetDate })}
+          {aiUsage.isTrial
+            ? t("ai_usage_count_trial", {
+                used: aiUsage.used,
+                cap: aiUsage.cap,
+              })
+            : t("ai_usage_count", { used: aiUsage.used, cap: aiUsage.cap })}
+          {resetDate && (
+            <>
+              {" · "}
+              {t("ai_resets_on", { date: resetDate })}
+            </>
+          )}
         </p>
         <div
           className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-muted"
@@ -717,7 +735,9 @@ function DocumentsSection({
           />
         </div>
         {aiUsage.paused && (
-          <p className="mt-2 text-xs text-warning">{t("ai_paused_hint")}</p>
+          <p className="mt-2 text-xs text-warning">
+            {aiUsage.isTrial ? t("ai_trial_limit_hint") : t("ai_paused_hint")}
+          </p>
         )}
       </div>
 

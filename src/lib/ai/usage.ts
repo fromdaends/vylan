@@ -8,16 +8,47 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 // still overrides this; this constant is the fallback + the new-firm default.
 export const DEFAULT_AI_MONTHLY_CAP = 350;
 
+// Free-trial firms get a hard LIFETIME ceiling on paid AI checks (NOT a monthly
+// one) so an unconverted account can't burn unbounded AI — a known cost/abuse
+// hole where a trial had the same AI powers as a paying firm. Deliberately low:
+// a trial is for evaluating, not running a practice. The cap lifts the moment
+// the firm converts to a paid plan (is_demo flips false). Tunable here.
+//
+// The check-then-spend gates aren't transactionally atomic, so concurrent jobs
+// in one cron wave can overshoot by a few checks (bounded by WAVE_SIZE). That's
+// fine: this bounds AI to the order of ~10, not 350 — exactly the goal. It is a
+// cost ceiling, not an exact quota.
+export const TRIAL_AI_TOTAL_CAP = 10;
+
 export type AiUsage = {
   used: number;
   cap: number;
   paused: boolean;
-  /** ISO timestamp — first day of next UTC month, when the meter resets. */
+  /** ISO timestamp — first day of next UTC month, when a MONTHLY meter resets.
+   *  For the trial cap this carries the trial end (informational only — the cap
+   *  lifts on UPGRADE, not at a date), or "" when unknown. */
   resetsAt: string;
+  /** true = the trial LIFETIME cap (lifts on upgrade); false = the normal
+   *  per-calendar-month cap (resets at resetsAt). Drives "upgrade" vs
+   *  "resets next month" messaging. */
+  isTrial: boolean;
 };
 
+// Trial firms that haven't started paying get the lifetime AI cap. A firm that
+// has begun a paid/trialing subscription is exempt even if is_demo hasn't been
+// flipped to false yet (Stripe webhook lag), so a converting customer is never
+// throttled. Mirrors the subscription exemption in isTrialExpired. PURE.
+export function isTrialCapped(firm: {
+  is_demo?: boolean | null;
+  subscription_status?: string | null;
+}): boolean {
+  if (firm.is_demo !== true) return false;
+  const sub = firm.subscription_status;
+  return sub !== "active" && sub !== "trialing";
+}
+
 // PURE: given used + cap (+ the current time), is the firm paused, and when
-// does the meter reset? Exported for testing.
+// does the MONTHLY meter reset? Exported for testing.
 export function aiCapStatus(used: number, cap: number, now: Date): AiUsage {
   const safeCap =
     Number.isFinite(cap) && cap >= 0 ? cap : DEFAULT_AI_MONTHLY_CAP;
@@ -29,6 +60,24 @@ export function aiCapStatus(used: number, cap: number, now: Date): AiUsage {
     cap: safeCap,
     paused: used >= safeCap,
     resetsAt: reset.toISOString(),
+    isTrial: false,
+  };
+}
+
+// PURE: trial LIFETIME cap status. `used` is the firm's all-time AI-check total
+// (summed across every month), not the current month. Exported for testing.
+export function aiTrialCapStatus(
+  used: number,
+  cap: number,
+  trialEndsAt: string | null,
+): AiUsage {
+  const safeCap = Number.isFinite(cap) && cap >= 0 ? cap : TRIAL_AI_TOTAL_CAP;
+  return {
+    used,
+    cap: safeCap,
+    paused: used >= safeCap,
+    resetsAt: trialEndsAt ?? "",
+    isTrial: true,
   };
 }
 
@@ -49,9 +98,38 @@ export async function getFirmAiUsage(firmId: string): Promise<AiUsage> {
     const sb = await getServiceRoleSupabase();
     const { data: firm } = await sb
       .from("firms")
-      .select("ai_monthly_cap")
+      .select("ai_monthly_cap, is_demo, subscription_status, trial_ends_at")
       .eq("id", firmId)
       .single();
+
+    // Free-trial firms: a hard LIFETIME ceiling (the firm's all-time AI-check
+    // total, summed across every month) instead of the monthly cap, so an
+    // unconverted account can't burn unbounded paid AI. Lifts on conversion.
+    // Once the firm read CONFIRMS a trial we NEVER fall back to the generous
+    // monthly cap — a failed usage-sum read defaults the total to 0 (still
+    // trial-classified, so the ceiling holds as the data recovers) rather than
+    // escaping to the outer catch and handing out the 350 monthly default.
+    if (firm && isTrialCapped(firm)) {
+      let total = 0;
+      try {
+        const { data: rows } = await sb
+          .from("ai_usage_monthly")
+          .select("used")
+          .eq("firm_id", firmId);
+        total = (rows ?? []).reduce(
+          (n, r) => n + (typeof r.used === "number" ? r.used : 0),
+          0,
+        );
+      } catch {
+        // keep total = 0 — the trial cap still applies (fail toward the cap).
+      }
+      return aiTrialCapStatus(
+        total,
+        TRIAL_AI_TOTAL_CAP,
+        (firm.trial_ends_at as string | null) ?? null,
+      );
+    }
+
     if (firm && typeof firm.ai_monthly_cap === "number") {
       cap = firm.ai_monthly_cap;
     }
@@ -63,7 +141,12 @@ export async function getFirmAiUsage(firmId: string): Promise<AiUsage> {
       .maybeSingle();
     if (row && typeof row.used === "number") used = row.used;
   } catch {
-    // pre-migration / transient — fall through to defaults (not paused).
+    // The FIRM read itself failed — we can't classify trial vs paid, so we fall
+    // open to the monthly default (not paused). This protects PAYING firms from
+    // a transient blip; the residual is that a trial during a sustained firms-
+    // read outage isn't capped. Accepted: failing closed would lock out paid
+    // firms, and the firm PK read is highly reliable. A failed USAGE read for a
+    // confirmed trial is already handled above (stays trial-capped).
   }
   return aiCapStatus(used, cap, now);
 }
