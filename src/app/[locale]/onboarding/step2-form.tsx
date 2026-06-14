@@ -25,13 +25,15 @@ import {
   type OnboardingState,
 } from "@/app/actions/onboarding";
 
+// Label is a Common.* i18n key (resolved at render) so zone descriptors
+// translate. Kept in sync with the same list in Settings + /api/firm/timezone.
 const CA_TIMEZONES = [
-  ["America/Toronto", "Toronto / Ottawa / Montréal (Eastern)"],
-  ["America/Halifax", "Halifax (Atlantic)"],
-  ["America/St_Johns", "St. John's (Newfoundland)"],
-  ["America/Winnipeg", "Winnipeg / Regina (Central)"],
-  ["America/Edmonton", "Edmonton / Calgary (Mountain)"],
-  ["America/Vancouver", "Vancouver (Pacific)"],
+  ["America/Toronto", "tz_eastern"],
+  ["America/Halifax", "tz_atlantic"],
+  ["America/St_Johns", "tz_newfoundland"],
+  ["America/Winnipeg", "tz_central"],
+  ["America/Edmonton", "tz_mountain"],
+  ["America/Vancouver", "tz_pacific"],
 ] as const;
 
 export function Step2Form({
@@ -72,9 +74,9 @@ export function Step2Form({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CA_TIMEZONES.map(([tz, label]) => (
+                {CA_TIMEZONES.map(([tz, labelKey]) => (
                   <SelectItem key={tz} value={tz}>
-                    {label}
+                    {tc(labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>

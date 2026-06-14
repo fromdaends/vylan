@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 
 export function PortalButton({ label }: { label: string }) {
+  const t = useTranslations("Billing");
   const [pending, startTransition] = useTransition();
+  // Localized, user-facing message (never the raw "portal_failed" code).
   const [error, setError] = useState<string | null>(null);
 
   function go() {
@@ -18,10 +21,10 @@ export function PortalButton({ label }: { label: string }) {
         if (j?.url) {
           window.location.href = j.url;
         } else {
-          setError(j?.error ?? "portal_failed");
+          setError(t("portal_failed"));
         }
       } catch {
-        setError("portal_failed");
+        setError(t("portal_failed"));
       }
     });
   }

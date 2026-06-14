@@ -631,7 +631,7 @@ function InviteModal({
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="colleague@example.com"
+              placeholder={t("invite_email_placeholder")}
             />
           </div>
           <div className="space-y-1.5">

@@ -62,7 +62,8 @@ export function CsvImportClient({ locale }: { locale: "fr" | "en" }) {
         await importAndRedirect(rows, locale);
         // server redirect handles navigation; client only reaches here on error
       } catch {
-        setSubmitError("commit_failed");
+        // Localized message — never the raw "commit_failed" code.
+        setSubmitError(t("import_commit_failed"));
       }
     });
   }

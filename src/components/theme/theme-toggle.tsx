@@ -2,18 +2,24 @@
 
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Moon, Sun } from "lucide-react";
 
 export function ThemeToggle({
   className = "",
-  lightLabel = "Switch to light mode",
-  darkLabel = "Switch to dark mode",
+  lightLabel,
+  darkLabel,
 }: {
   className?: string;
-  // Optional localized aria-labels (the bilingual client portal passes FR/EN).
+  // Optional localized aria-labels. When omitted they fall back to the shared
+  // Common.* translations so the label follows the UI language; the bilingual
+  // client portal still passes its own FR/EN strings explicitly.
   lightLabel?: string;
   darkLabel?: string;
 }) {
+  const tc = useTranslations("Common");
+  const light = lightLabel ?? tc("switch_to_light");
+  const dark = darkLabel ?? tc("switch_to_dark");
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
@@ -36,7 +42,7 @@ export function ThemeToggle({
     <button
       type="button"
       onClick={toggle}
-      aria-label={isDark ? lightLabel : darkLabel}
+      aria-label={isDark ? light : dark}
       className={
         "relative inline-flex h-8 w-8 items-center justify-center rounded-md " +
         "border border-border bg-card text-muted-foreground " +

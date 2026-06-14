@@ -36,6 +36,7 @@
     }
   },
   "Team": {
+    "invite_email_placeholder": "collegue@exemple.com",
     "title": "Équipe",
     "subtitle": "Invitez des collègues et gérez qui a accès à votre cabinet.",
     "subtitle_readonly": "Les personnes qui ont accès à votre cabinet.",
@@ -353,6 +354,14 @@
     "faq_4_a": "Oui. La page /clients permet l'import CSV (collage ou fichier), avec en-têtes en français ou en anglais. La plupart des logiciels comptables exportent un CSV compatible."
   },
   "Common": {
+    "tz_eastern": "Toronto / Ottawa / Montréal (Est)",
+    "tz_atlantic": "Halifax (Atlantique)",
+    "tz_newfoundland": "St. John's (Terre-Neuve)",
+    "tz_central": "Winnipeg / Regina (Centre)",
+    "tz_mountain": "Edmonton / Calgary (Rocheuses)",
+    "tz_pacific": "Vancouver (Pacifique)",
+    "switch_to_light": "Passer au mode clair",
+    "switch_to_dark": "Passer au mode sombre",
     "loading": "Chargement…",
     "save": "Enregistrer",
     "cancel": "Annuler",
@@ -431,6 +440,7 @@
     }
   },
   "Onboarding": {
+    "progress_aria": "Étape {step} sur {total}",
     "step_label": "Étape {current} sur {total}",
     "step1_title": "Bienvenue chez Vylan",
     "step1_subtitle": "Quelques détails sur votre cabinet pour personnaliser le portail client.",
@@ -452,6 +462,7 @@
     "finish": "Terminer"
   },
   "Profile": {
+    "new_email_placeholder": "nom@exemple.com",
     "title": "Votre profil",
     "subtitle": "Tout ce qui vous concerne — vous et votre cabinet — au même endroit.",
     "subtitle_v2": "Votre compte : photo, nom, mot de passe et sécurité.",
@@ -807,6 +818,8 @@
     "stats_due_soon": "Échéance sous 7 jours"
   },
   "App": {
+    "nav_primary_label": "Navigation principale",
+    "nav_bottom_label": "Navigation du bas",
     "dashboard_title": "Aperçu",
     "dashboard_empty": "Aucun engagement actif pour l’instant. Créez votre premier client pour commencer.",
     "filter_all": "Tous",
@@ -841,6 +854,7 @@
     "recent_engagements": "Engagements récents"
   },
   "Clients": {
+    "import_commit_failed": "Impossible d'importer les clients. Veuillez réessayer.",
     "title": "Clients",
     "count": "{count, plural, =0 {Aucun client} one {# client} other {# clients}}",
     "add_client": "Ajouter un client",
@@ -1281,6 +1295,11 @@
     "tone_overdue": "En retard"
   },
   "Templates": {
+    "errors": {
+      "missing_name": "Veuillez donner un nom au modèle.",
+      "invalid_items": "Veuillez vérifier la liste de documents et réessayer.",
+      "update_failed": "Impossible d'enregistrer le modèle. Veuillez réessayer."
+    },
     "title": "Modèles",
     "subtitle": "Lancez un engagement à partir d'une liste de documents prête à l'emploi, ou créez la vôtre.",
     "documents_count": "{count, plural, one {# document} other {# documents}}",
@@ -1357,6 +1376,8 @@
     "plan_cabinet_features": "Tout + soutien courriel prioritaire"
   },
   "Billing": {
+    "checkout_failed": "Impossible de démarrer le paiement. Veuillez réessayer.",
+    "portal_failed": "Impossible d'ouvrir le portail de facturation. Veuillez réessayer.",
     "title": "Facturation",
     "subtitle": "Gérez votre forfait, votre mode de paiement et votre historique.",
     "placeholder_subtitle": "La tarification est en pause pendant qu'on accueille nos premiers cabinets.",
@@ -1425,6 +1446,7 @@
     "p_contact": "Questions sur ces conditions ? Écrivez à {email}."
   },
   "Demo": {
+    "buy_email_subject": "Prêt à m'abonner",
     "page_title": "Réservez votre démo Vylan",
     "page_subtitle": "Prenez 2 minutes pour nous parler de votre cabinet. Nous adapterons la démo à vos besoins.",
     "step_indicator": "Étape {current} sur {total}",
@@ -1629,6 +1651,7 @@
     }
   },
   "Portal": {
+    "help_body": "Bonjour,\n\nJ'ai une question concernant les documents demandés pour « {title} ».\n\nMerci.",
     "ai_rejected_title": "Ce fichier ne semble pas valide — veuillez réessayer",
     "ai_rejected_help": "Reprenez une nouvelle photo ou téléversez le bon document.",
     "ai_rejected_generic": "Nous n'arrivons pas à lire ce document clairement. Veuillez réessayer avec une nouvelle photo ou le bon fichier.",
