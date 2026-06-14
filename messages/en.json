@@ -1521,6 +1521,8 @@
     "trial_cta_pricing": "Contact us for pricing",
     "trial_expired_banner": "Your free trial has ended",
     "trial_cta_book": "Book a meeting",
+    "ai_limit_banner": "You've used all the free AI document checks in your trial — AI analysis is paused.",
+    "ai_limit_cta": "Upgrade to keep AI on",
     "block_title": "Your free trial has ended",
     "block_default_reason": "Your 14-day free trial is over. Book a quick call and we'll set you up on a plan that fits.",
     "block_body": "Your data is safe — nothing's gone. To start working again, book a meeting and we'll talk pricing and get you set up.",

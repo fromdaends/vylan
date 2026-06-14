@@ -1521,6 +1521,8 @@
     "trial_cta_pricing": "Nous contacter pour les tarifs",
     "trial_expired_banner": "Votre essai gratuit est terminé",
     "trial_cta_book": "Réserver un appel",
+    "ai_limit_banner": "Vous avez utilisé toutes les analyses IA gratuites de votre essai — l’analyse IA est en pause.",
+    "ai_limit_cta": "Passer à un forfait pour garder l’IA",
     "block_title": "Votre essai gratuit est terminé",
     "block_default_reason": "Votre essai gratuit de 14 jours est terminé. Réservez un court appel et nous vous installerons sur un forfait adapté.",
     "block_body": "Vos données sont en sécurité — rien n'est perdu. Pour reprendre le travail, réservez un appel : on discutera des tarifs et on vous configurera.",
