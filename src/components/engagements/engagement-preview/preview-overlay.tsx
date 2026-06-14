@@ -44,6 +44,7 @@ import {
 import { PreviewCard } from "./preview-card";
 import { PreviewRejectPrompt } from "./preview-reject-prompt";
 import { PreviewDetail } from "./preview-detail";
+import { preloadPreviewDoc } from "./preview-preload";
 import {
   SetSummaryLine,
   shouldShowSetLine,
@@ -223,6 +224,26 @@ export function PreviewOverlay({
         : null,
     [liveUploads, selectedFileId],
   );
+
+  // Warm document images so the detail view is INSTANT, not a few-second
+  // thumbnail generation. With a document open, preload its prev/next neighbours
+  // (so the arrow keys step through instantly); with only the grid showing,
+  // preload the first handful (bounded, so a large engagement doesn't fan out)
+  // so an early click near the top is instant too. Card hover/focus warms the
+  // rest on demand. Images only — PDFs render via pdf.js. Cheap + idempotent
+  // (preloadPreviewDoc dedupes per file id).
+  useEffect(() => {
+    if (selectedFileId) {
+      const i = flatVisible.findIndex((d) => d.fileId === selectedFileId);
+      if (i >= 0) {
+        if (flatVisible[i]) preloadPreviewDoc(flatVisible[i]);
+        if (flatVisible[i + 1]) preloadPreviewDoc(flatVisible[i + 1]);
+        if (flatVisible[i - 1]) preloadPreviewDoc(flatVisible[i - 1]);
+      }
+    } else {
+      for (const d of flatVisible.slice(0, 4)) preloadPreviewDoc(d);
+    }
+  }, [selectedFileId, flatVisible]);
 
   // Lock the page behind the overlay from scrolling and move focus into the
   // panel; restore both on close so the engagement page is exactly where the

@@ -19,6 +19,7 @@ import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { useInView } from "./use-in-view";
 import { previewCardTitle, type PreviewDoc, type PreviewStatus } from "./preview-model";
+import { preloadPreviewDoc } from "./preview-preload";
 
 const PreviewPdfThumb = dynamic(() => import("./preview-pdf-thumb"), {
   ssr: false,
@@ -159,6 +160,11 @@ export function PreviewCard({
         <button
           type="button"
           onClick={onOpen}
+          // Warm the detail-size image the moment the user shows intent (hover
+          // or keyboard focus), so the click opens the document instantly
+          // instead of waiting for the thumbnail to generate.
+          onMouseEnter={() => preloadPreviewDoc(doc)}
+          onFocus={() => preloadPreviewDoc(doc)}
           aria-label={`${t("open")} ${title}`}
           className="absolute inset-0 z-10 cursor-pointer rounded-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none focus-visible:ring-inset"
         />
