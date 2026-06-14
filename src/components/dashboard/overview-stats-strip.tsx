@@ -27,12 +27,12 @@ export async function OverviewStatsStrip({ rows }: { rows: WorklistRow[] }) {
 
   return (
     <section aria-label={t("stats_label")}>
-      <ul className="grid grid-cols-2 gap-y-4 sm:grid-cols-4 sm:gap-y-0">
+      <ul className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4 sm:gap-x-8 sm:gap-y-0">
         {items.map((s) => (
           <li key={s.key} className="min-w-0">
             <Link
               href={s.href}
-              className="group flex min-w-0 flex-col gap-1 rounded-r-sm border-l border-border/40 pl-3 pr-2 transition-colors hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:pl-4"
+              className="group flex min-w-0 flex-col gap-1 rounded-r-sm border-l border-border/40 pl-3 transition-colors hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:pl-4"
             >
               <span className="block text-2xl font-semibold leading-none tracking-tight tabular-nums text-foreground">
                 {s.count}
