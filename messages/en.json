@@ -36,6 +36,7 @@
     }
   },
   "Team": {
+    "invite_email_placeholder": "colleague@example.com",
     "title": "Team",
     "subtitle": "Invite teammates and manage who has access to your firm.",
     "subtitle_readonly": "The people who have access to your firm.",
@@ -353,6 +354,14 @@
     "faq_4_a": "Yes. The /clients page has a CSV import that accepts paste-in or file upload, with column headers in either French or English. Most accounting software exports a compatible CSV."
   },
   "Common": {
+    "tz_eastern": "Toronto / Ottawa / Montréal (Eastern)",
+    "tz_atlantic": "Halifax (Atlantic)",
+    "tz_newfoundland": "St. John's (Newfoundland)",
+    "tz_central": "Winnipeg / Regina (Central)",
+    "tz_mountain": "Edmonton / Calgary (Mountain)",
+    "tz_pacific": "Vancouver (Pacific)",
+    "switch_to_light": "Switch to light mode",
+    "switch_to_dark": "Switch to dark mode",
     "loading": "Loading…",
     "save": "Save",
     "cancel": "Cancel",
@@ -431,6 +440,7 @@
     }
   },
   "Onboarding": {
+    "progress_aria": "Step {step} of {total}",
     "step_label": "Step {current} of {total}",
     "step1_title": "Welcome to Vylan",
     "step1_subtitle": "A few details about your firm to personalize the client portal.",
@@ -452,6 +462,7 @@
     "finish": "Finish"
   },
   "Profile": {
+    "new_email_placeholder": "name@example.com",
     "title": "Your profile",
     "subtitle": "Everything about you and your firm in one place.",
     "subtitle_v2": "Your account: avatar, name, password, and security.",
@@ -807,6 +818,8 @@
     "stats_due_soon": "Due within 7 days"
   },
   "App": {
+    "nav_primary_label": "Primary navigation",
+    "nav_bottom_label": "Bottom navigation",
     "dashboard_title": "Overview",
     "dashboard_empty": "No active engagements yet. Add your first client to get started.",
     "filter_all": "All",
@@ -1281,6 +1294,11 @@
     "tone_overdue": "Overdue"
   },
   "Templates": {
+    "errors": {
+      "missing_name": "Please give the template a name.",
+      "invalid_items": "Please check the document list and try again.",
+      "update_failed": "Couldn't save the template. Please try again."
+    },
     "title": "Templates",
     "subtitle": "Start an engagement from a ready-made document checklist, or build your own.",
     "documents_count": "{count, plural, one {# document} other {# documents}}",
@@ -1357,6 +1375,8 @@
     "plan_cabinet_features": "Everything + priority email support"
   },
   "Billing": {
+    "checkout_failed": "Couldn't start checkout. Please try again.",
+    "portal_failed": "Couldn't open the billing portal. Please try again.",
     "title": "Billing",
     "subtitle": "Manage your plan, payment method, and billing history.",
     "placeholder_subtitle": "Pricing is on hold while we onboard our first clients.",
@@ -1425,6 +1445,7 @@
     "p_contact": "Questions about these terms? Email {email}."
   },
   "Demo": {
+    "buy_email_subject": "Ready to subscribe",
     "page_title": "Book your Vylan demo",
     "page_subtitle": "Take 2 minutes to tell us about your firm. We'll tailor the demo to what you actually need.",
     "step_indicator": "Step {current} of {total}",
@@ -1629,6 +1650,7 @@
     }
   },
   "Portal": {
+    "help_body": "Hi,\n\nI have a question about the documents requested for \"{title}\".\n\nThanks.",
     "rejected_action_needed": "Your accountant asked for a different document.",
     "preview_open": "View {name}",
     "preview_close": "Close",

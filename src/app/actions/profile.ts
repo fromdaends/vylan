@@ -1,7 +1,6 @@
 "use server";
 
 import { z } from "zod";
-import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { updateUserProfile, getCurrentUser } from "@/lib/db/users";
@@ -84,15 +83,6 @@ export async function updateLocaleAction(
   } catch {
     return { ok: false, error: "save_failed" };
   }
-  // Persist the choice in the NEXT_LOCALE cookie so it STICKS across
-  // logout/login and unprefixed entry points (the next-intl middleware reads
-  // this cookie — see routing.ts localeDetection). Without it, the saved DB
-  // locale only affected emails, and the app reverted to English on next visit.
-  (await cookies()).set("NEXT_LOCALE", parsed.data.locale, {
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-    sameSite: "lax",
-  });
   revalidatePath("/profile", "layout");
   return { ok: true };
 }
