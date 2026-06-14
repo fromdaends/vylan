@@ -146,3 +146,44 @@ describe("SettingsShell — Account / Security & privacy / Billing", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+describe("SettingsShell — AI usage card (Documents tab)", () => {
+  it("shows the monthly reset line for a PAID firm", () => {
+    renderShell({
+      initialSection: "documents",
+      aiUsage: {
+        used: 12,
+        cap: 350,
+        paused: false,
+        resetsAt: "2026-07-01T00:00:00.000Z",
+        isTrial: false,
+      },
+    });
+    // Monthly framing + a real reset date (no "Invalid Date").
+    expect(screen.getByText(/used this month/)).toBeInTheDocument();
+    expect(screen.getByText(/resets/)).toBeInTheDocument();
+    expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument();
+  });
+
+  it("shows trial framing with NO reset line and NO 'Invalid Date' for a capped trial", () => {
+    renderShell({
+      initialSection: "documents",
+      aiUsage: {
+        used: 10,
+        cap: 10,
+        paused: true,
+        resetsAt: "", // trials carry no monthly reset — must not become a date
+        isTrial: true,
+      },
+    });
+    // Lifetime/trial framing + the upgrade hint…
+    expect(
+      screen.getByText(/free trial AI checks used/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Upgrade to keep AI/)).toBeInTheDocument();
+    // …and crucially never the monthly reset line or a broken date.
+    expect(screen.queryByText(/resets/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/used this month/)).not.toBeInTheDocument();
+  });
+});
