@@ -13,6 +13,11 @@ export const DEFAULT_AI_MONTHLY_CAP = 350;
 // hole where a trial had the same AI powers as a paying firm. Deliberately low:
 // a trial is for evaluating, not running a practice. The cap lifts the moment
 // the firm converts to a paid plan (is_demo flips false). Tunable here.
+//
+// The check-then-spend gates aren't transactionally atomic, so concurrent jobs
+// in one cron wave can overshoot by a few checks (bounded by WAVE_SIZE). That's
+// fine: this bounds AI to the order of ~10, not 350 — exactly the goal. It is a
+// cost ceiling, not an exact quota.
 export const TRIAL_AI_TOTAL_CAP = 10;
 
 export type AiUsage = {
@@ -100,15 +105,24 @@ export async function getFirmAiUsage(firmId: string): Promise<AiUsage> {
     // Free-trial firms: a hard LIFETIME ceiling (the firm's all-time AI-check
     // total, summed across every month) instead of the monthly cap, so an
     // unconverted account can't burn unbounded paid AI. Lifts on conversion.
+    // Once the firm read CONFIRMS a trial we NEVER fall back to the generous
+    // monthly cap — a failed usage-sum read defaults the total to 0 (still
+    // trial-classified, so the ceiling holds as the data recovers) rather than
+    // escaping to the outer catch and handing out the 350 monthly default.
     if (firm && isTrialCapped(firm)) {
-      const { data: rows } = await sb
-        .from("ai_usage_monthly")
-        .select("used")
-        .eq("firm_id", firmId);
-      const total = (rows ?? []).reduce(
-        (n, r) => n + (typeof r.used === "number" ? r.used : 0),
-        0,
-      );
+      let total = 0;
+      try {
+        const { data: rows } = await sb
+          .from("ai_usage_monthly")
+          .select("used")
+          .eq("firm_id", firmId);
+        total = (rows ?? []).reduce(
+          (n, r) => n + (typeof r.used === "number" ? r.used : 0),
+          0,
+        );
+      } catch {
+        // keep total = 0 — the trial cap still applies (fail toward the cap).
+      }
       return aiTrialCapStatus(
         total,
         TRIAL_AI_TOTAL_CAP,
@@ -127,7 +141,12 @@ export async function getFirmAiUsage(firmId: string): Promise<AiUsage> {
       .maybeSingle();
     if (row && typeof row.used === "number") used = row.used;
   } catch {
-    // pre-migration / transient — fall through to defaults (not paused).
+    // The FIRM read itself failed — we can't classify trial vs paid, so we fall
+    // open to the monthly default (not paused). This protects PAYING firms from
+    // a transient blip; the residual is that a trial during a sustained firms-
+    // read outage isn't capped. Accepted: failing closed would lock out paid
+    // firms, and the firm PK read is highly reliable. A failed USAGE read for a
+    // confirmed trial is already handled above (stays trial-capped).
   }
   return aiCapStatus(used, cap, now);
 }

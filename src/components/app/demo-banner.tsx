@@ -56,7 +56,9 @@ export function TrialBanner({
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-2 flex items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 min-w-0">
             <Sparkles className="h-3.5 w-3.5 text-warning shrink-0" aria-hidden />
-            <span className="font-semibold text-warning truncate">
+            {/* No truncate — the message must stay readable on narrow screens;
+                it wraps to a second line rather than getting cut off. */}
+            <span className="font-semibold text-warning" title={t("ai_limit_banner")}>
               {t("ai_limit_banner")}
             </span>
           </div>

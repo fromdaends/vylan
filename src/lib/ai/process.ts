@@ -82,6 +82,11 @@ export async function processClassifyJob(
     .eq("id", file.engagement_id)
     .single();
   const limitFirmId: string | null = engagementForLimit?.firm_id ?? null;
+  // Can't resolve the firm → can't enforce the monthly OR trial AI cap. Fail
+  // CLOSED rather than spend uncapped AI. Retryable (see RETRYABLE_SKIPS): a
+  // transient engagement-read miss recovers on the cron's next attempt; a truly
+  // orphaned file gives up after MAX_ATTEMPTS.
+  if (!limitFirmId) return { skipped: "firm_not_resolved" };
   // Request context for the classifier: the item's human label plus the
   // engagement's client + tax year, so the model can judge "is this even the
   // requested document" (drives the wrong_document_type auto-bounce). Year

@@ -39,7 +39,13 @@ const WAVE_SIZE = 4;
 // Classify skips that are TRANSIENT (a storage hiccup or an empty model reply)
 // must be retried, not marked done — otherwise the file is stuck on "Analyzing"
 // forever. Permanent skips (no API key, file gone, no expected type) are done.
-const RETRYABLE_SKIPS = new Set(["download_failed", "no_classification"]);
+const RETRYABLE_SKIPS = new Set([
+  "download_failed",
+  "no_classification",
+  // Firm couldn't be resolved (transient engagement read) — the gate failed
+  // closed instead of spending uncapped AI; retry so a blip self-heals.
+  "firm_not_resolved",
+]);
 
 // Set-assessment transient skips worth a retry: a storage hiccup or an empty
 // model reply. Everything else is terminal-done — note "set_changed" is

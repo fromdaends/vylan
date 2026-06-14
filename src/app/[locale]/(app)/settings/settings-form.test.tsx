@@ -72,6 +72,7 @@ function renderShell(
           cap: 400,
           paused: false,
           resetsAt: "2026-07-01T00:00:00.000Z",
+          isTrial: false,
         }}
         isOwner
         billingSlot={<div>SUBSCRIPTION_SLOT</div>}
