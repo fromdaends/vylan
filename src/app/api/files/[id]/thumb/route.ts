@@ -73,8 +73,11 @@ export async function GET(
     status: 200,
     headers: {
       "Content-Type": "image/jpeg",
-      // Bytes never change for a given file id; cache in the user's browser.
-      "Cache-Control": "private, max-age=86400",
+      // Bytes never change for a given file id (uploads are immutable; a
+      // re-upload gets a new id), so cache aggressively + immutable. This makes
+      // a re-opened or preloaded thumbnail load instantly from cache instead of
+      // regenerating the on-demand resize.
+      "Cache-Control": "private, max-age=31536000, immutable",
       "Content-Length": String(out.length),
     },
   });
