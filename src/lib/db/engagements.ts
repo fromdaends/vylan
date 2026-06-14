@@ -119,6 +119,20 @@ export type CreateEngagementInput = {
   items: TemplateItem[];
 };
 
+// A write that referenced a column the current DB doesn't have yet (a migration
+// deployed in code but not applied to this environment). PostgREST reports a
+// schema-cache miss (PGRST204); Postgres proper reports undefined_column (42703).
+function isUnknownColumnError(
+  err: { code?: string | null; message?: string | null } | null,
+): boolean {
+  if (!err) return false;
+  return (
+    err.code === "PGRST204" ||
+    err.code === "42703" ||
+    /ai_enabled/i.test(err.message ?? "")
+  );
+}
+
 export async function createEngagementWithItems(
   input: CreateEngagementInput,
 ): Promise<Engagement> {
@@ -132,23 +146,36 @@ export async function createEngagementWithItems(
     .single();
   if (!u?.firm_id) throw new Error("No firm for user");
 
-  const { data: engagement, error: engErr } = await supabase
+  // Base row (valid in every environment). ai_enabled (migration 0340) is added
+  // separately so creation survives the deploy→migrate window: if that column
+  // doesn't exist yet, including it would fail the WHOLE insert and break
+  // engagement creation. Try WITH it; only on a missing-column error retry
+  // WITHOUT it. Fail-open — until the migration lands the toggle has no effect
+  // (AI stays on, the default), matching the read side which also defaults ON.
+  const baseRow = {
+    firm_id: u.firm_id,
+    client_id: input.client_id,
+    title: input.title,
+    type: input.type,
+    status: "draft",
+    due_date: input.due_date,
+    // Default the creator as the assignee-of-record (accountability, not
+    // access control — every firm member still sees every engagement).
+    assigned_user_id: user.user.id,
+    assigned_at: new Date().toISOString(),
+  };
+  let { data: engagement, error: engErr } = await supabase
     .from("engagements")
-    .insert({
-      firm_id: u.firm_id,
-      client_id: input.client_id,
-      title: input.title,
-      type: input.type,
-      status: "draft",
-      due_date: input.due_date,
-      ai_enabled: input.ai_enabled,
-      // Default the creator as the assignee-of-record (accountability, not
-      // access control — every firm member still sees every engagement).
-      assigned_user_id: user.user.id,
-      assigned_at: new Date().toISOString(),
-    })
+    .insert({ ...baseRow, ai_enabled: input.ai_enabled })
     .select("*")
     .single();
+  if (engErr && isUnknownColumnError(engErr)) {
+    ({ data: engagement, error: engErr } = await supabase
+      .from("engagements")
+      .insert(baseRow)
+      .select("*")
+      .single());
+  }
   if (engErr || !engagement) throw engErr ?? new Error("create_failed");
 
   if (input.items.length > 0) {
