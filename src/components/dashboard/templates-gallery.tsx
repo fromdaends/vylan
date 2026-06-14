@@ -52,11 +52,11 @@ export function TemplatesGallery({ templates }: { templates: TemplateCard[] }) {
           <Link
             key={tmpl.id}
             href={`/engagements/new?template=${tmpl.id}`}
-            className="group flex shrink-0 items-center gap-2.5 rounded-lg border border-border/50 bg-card/40 px-3 py-2 transition-colors hover:border-accent/40 hover:bg-card"
+            className="group flex shrink-0 items-center gap-3 rounded-lg border border-border/50 bg-card/40 px-3.5 py-3.5 transition-colors hover:border-accent/40 hover:bg-card"
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent transition-colors duration-200 group-hover:bg-accent group-hover:text-accent-foreground">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent transition-colors duration-200 group-hover:bg-accent group-hover:text-accent-foreground">
               {createElement(resolveTemplateIcon(tmpl.name, tmpl.type), {
-                className: "h-3.5 w-3.5",
+                className: "h-4 w-4",
                 "aria-hidden": true,
               })}
             </span>
