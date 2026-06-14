@@ -263,7 +263,14 @@ export function AppShell({
 
         <main
           className={cn(
-            "flex-1 mx-auto w-full px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8 animate-in-fade",
+            // overflow-x-clip: the in-app content area NEVER scrolls/pulls
+            // horizontally. Any component that legitimately needs width (the
+            // worklist table, the templates strip) carries its OWN
+            // overflow-x-auto, so it scrolls internally rather than dragging the
+            // whole page left — the bug a Mac/Safari user hit on the Overview.
+            // clip (not hidden) keeps overflow-y visible, so position:sticky
+            // inside main still works. The sticky top bar is outside <main>.
+            "flex-1 mx-auto w-full overflow-x-clip px-4 sm:px-8 pt-4 sm:pt-8 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-8 animate-in-fade",
             // The data-dense pages (Overview, Clients, Engagements list +
             // detail) get a wider cap on large monitors (>=1800px) so they fill
             // a 27" screen instead of letterboxing. Forms (New engagement) and
