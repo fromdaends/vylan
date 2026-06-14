@@ -122,15 +122,14 @@ export type CreateEngagementInput = {
 // A write that referenced a column the current DB doesn't have yet (a migration
 // deployed in code but not applied to this environment). PostgREST reports a
 // schema-cache miss (PGRST204); Postgres proper reports undefined_column (42703).
+// Match on these exact codes ONLY — deliberately NOT on the message text, so an
+// unrelated failure that merely mentions the column can never trigger the
+// retry-without-ai_enabled and silently create the engagement with AI on when
+// the accountant chose off.
 function isUnknownColumnError(
-  err: { code?: string | null; message?: string | null } | null,
+  err: { code?: string | null } | null,
 ): boolean {
-  if (!err) return false;
-  return (
-    err.code === "PGRST204" ||
-    err.code === "42703" ||
-    /ai_enabled/i.test(err.message ?? "")
-  );
+  return err?.code === "PGRST204" || err?.code === "42703";
 }
 
 export async function createEngagementWithItems(
