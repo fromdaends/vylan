@@ -11,6 +11,9 @@ import {
 } from "@/lib/engagements/views";
 import { getEngagementBadges } from "@/lib/engagements/badges";
 import { EngagementsView } from "@/components/engagements/engagements-view";
+import { Link } from "@/i18n/navigation";
+import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 
 // Shared server render for every All-Engagements sub-page. Each route file
 // (/engagements, /engagements/ready, …) just calls this with its view. Loads
@@ -38,10 +41,19 @@ export async function renderEngagementsView({
 
   return (
     <div className="space-y-8">
-      <header className="space-y-1.5">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
           {t(viewTitleKey(view))}
         </h1>
+        {/* Primary action: start a new engagement straight from the list,
+            instead of routing through Templates. Same control as the dashboard
+            header. */}
+        <Button asChild className="shrink-0 self-start sm:self-auto">
+          <Link href="/engagements/new">
+            <Plus className="h-4 w-4" />
+            {t("new")}
+          </Link>
+        </Button>
       </header>
 
       <EngagementsView
