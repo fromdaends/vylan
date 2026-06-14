@@ -251,7 +251,14 @@ export function AppShell({
           Mobile gets bottom padding to clear the tab bar. */}
       <div
         className={cn(
-          "flex-1 flex flex-col min-h-screen transition-[margin-left] duration-200 ease-out",
+          // min-w-0: this is a flex child; without it the default min-width:auto
+          // refuses to shrink below its content's intrinsic width, so a wide
+          // child (e.g. the worklist table at a large viewport) pushes the whole
+          // content column past the viewport — the page then scrolls/pulls
+          // horizontally by ~the sidebar width. min-w-0 lets it size to the
+          // available width; <main> below clips any remaining child overflow
+          // (and the table keeps its own internal scroll).
+          "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin-left] duration-200 ease-out",
           collapsed ? "sm:ml-16" : "sm:ml-64",
         )}
       >
