@@ -429,18 +429,46 @@ export const DOC_TYPES: DocType[] = (
 // A null/empty province means "not set" → applies (show everything), so
 // existing clients/firms that never set a province see no change. An explicit
 // non-QC province hides the Quebec-only slips.
+// Whether Quebec-specific content applies for a given firm + client. The
+// firm-wide include_quebec_forms switch (migration 0350) wins: off => never.
+// Otherwise a client whose province is set outside Quebec drops it; QC or an
+// unset province keeps it. Defaults to including Quebec so existing callers are
+// unchanged.
+export function quebecApplies(
+  province: string | null | undefined,
+  includeQuebecForms: boolean = true,
+): boolean {
+  if (!includeQuebecForms) return false;
+  return !province || province === "QC";
+}
+
 export function appliesToProvince(
   code: DocType,
   province: string | null | undefined,
   includeQuebecForms: boolean = true,
 ): boolean {
-  const isQuebec = DOC_TYPE_LABELS[code]?.group === "quebec";
-  // Firm-wide off-switch (migration 0350): a firm that excludes Quebec forms
-  // never shows the RL slips, whatever the client's province. Defaults to true
-  // so every existing caller keeps today's per-client behaviour.
-  if (isQuebec && !includeQuebecForms) return false;
-  if (!province) return true;
-  return isQuebec ? province === "QC" : true;
+  // Only the Quebec slip group is province-restricted; federal + shared forms
+  // apply everywhere.
+  if (DOC_TYPE_LABELS[code]?.group === "quebec") {
+    return quebecApplies(province, includeQuebecForms);
+  }
+  return true;
+}
+
+// Whether a TEMPLATE ITEM should appear for a given firm + client. Combines the
+// doc-type's province rule with the item's explicit quebec_only marker — some
+// Quebec items (the MR-69 authorization, the Quebec assessment) carry a generic
+// doc_type, so they are flagged on the item itself and follow the same rule as
+// the RL slips (migration 0360).
+export function templateItemApplies(
+  item: { doc_type: DocType; quebec_only?: boolean | null },
+  province: string | null | undefined,
+  includeQuebecForms: boolean = true,
+): boolean {
+  if (item.quebec_only && !quebecApplies(province, includeQuebecForms)) {
+    return false;
+  }
+  return appliesToProvince(item.doc_type, province, includeQuebecForms);
 }
 
 /**

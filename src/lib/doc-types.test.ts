@@ -7,6 +7,8 @@ import {
   docTypeLabel,
   docTypeGroupLabel,
   appliesToProvince,
+  quebecApplies,
+  templateItemApplies,
 } from "./doc-types";
 import type { DocType } from "./db/templates";
 
@@ -150,5 +152,55 @@ describe("appliesToProvince (firm-wide Quebec off-switch, migration 0350)", () =
     expect(docTypesByGroup("QC", true).some((g) => g.group === "quebec")).toBe(
       true,
     );
+  });
+});
+
+describe("quebecApplies", () => {
+  it("includes Quebec for a QC or unset province when the firm includes it", () => {
+    expect(quebecApplies("QC")).toBe(true);
+    expect(quebecApplies(null)).toBe(true);
+    expect(quebecApplies(undefined)).toBe(true);
+  });
+
+  it("excludes Quebec for a non-QC province", () => {
+    expect(quebecApplies("ON")).toBe(false);
+    expect(quebecApplies("BC")).toBe(false);
+  });
+
+  it("excludes Quebec for everyone when the firm turns it off", () => {
+    expect(quebecApplies("QC", false)).toBe(false);
+    expect(quebecApplies(null, false)).toBe(false);
+  });
+});
+
+describe("templateItemApplies (quebec_only items follow the RL-slip rule, 0360)", () => {
+  const mr69 = { doc_type: "other" as DocType, quebec_only: true };
+  const federalNoa = { doc_type: "noa" as DocType };
+
+  it("drops a quebec_only item for a non-Quebec client despite its generic doc_type", () => {
+    expect(templateItemApplies(mr69, "ON")).toBe(false);
+    expect(templateItemApplies(mr69, "BC")).toBe(false);
+  });
+
+  it("keeps a quebec_only item for a Quebec or unset client", () => {
+    expect(templateItemApplies(mr69, "QC")).toBe(true);
+    expect(templateItemApplies(mr69, null)).toBe(true);
+  });
+
+  it("drops a quebec_only item when the firm excludes Quebec, whatever the province", () => {
+    expect(templateItemApplies(mr69, "QC", false)).toBe(false);
+    expect(templateItemApplies(mr69, null, false)).toBe(false);
+  });
+
+  it("never drops a generic (non-quebec_only) item by this rule", () => {
+    expect(templateItemApplies(federalNoa, "ON")).toBe(true);
+    expect(templateItemApplies(federalNoa, "QC", false)).toBe(true);
+  });
+
+  it("still applies the doc-type province rule for an RL-slip item", () => {
+    const rl1Item = { doc_type: "rl1" as DocType };
+    expect(templateItemApplies(rl1Item, "ON")).toBe(false);
+    expect(templateItemApplies(rl1Item, "QC")).toBe(true);
+    expect(templateItemApplies(rl1Item, "QC", false)).toBe(false);
   });
 });
