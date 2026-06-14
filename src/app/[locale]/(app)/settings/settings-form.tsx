@@ -827,10 +827,17 @@ function DocumentsSection({
         <p className="mt-2 text-xs text-destructive">{missingPagesError}</p>
       )}
 
-      {/* Separate setting: whether this firm uses the Quebec-only tax forms
-          (the RL slips). Off for a firm that works entirely outside Quebec —
-          the RL slips then drop from every checklist regardless of province. */}
-      <div className="mt-3 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border/50 px-4 py-3">
+      {/* A distinct group from the AI document-handling toggles above: this is
+          about WHICH tax forms land on a checklist, not how uploads are handled
+          by the AI. Its own heading + a divider so it never reads as a fourth
+          AI setting. */}
+      <div className="mt-10 border-t border-border/50 pt-8">
+        <h2 className="text-sm font-semibold">{t("section_tax_forms")}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {t("section_tax_forms_hint")}
+        </p>
+      </div>
+      <div className="mt-4 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border/50 px-4 py-3">
         <div className="space-y-1">
           <div className="text-sm font-medium">
             {t("include_quebec_forms_label")}
