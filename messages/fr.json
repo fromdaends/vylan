@@ -854,6 +854,7 @@
     "recent_engagements": "Engagements récents"
   },
   "Clients": {
+    "import_commit_failed": "Impossible d'importer les clients. Veuillez réessayer.",
     "title": "Clients",
     "count": "{count, plural, =0 {Aucun client} one {# client} other {# clients}}",
     "add_client": "Ajouter un client",
