@@ -21,7 +21,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Vylan" });
-  return { title: `${t("contact_title")} — Vylan` };
+  return { title: `${t("contact_title")}: Vylan` };
 }
 
 // Standalone Contact page. Reuses the manifesto's page chrome (dark canvas +
