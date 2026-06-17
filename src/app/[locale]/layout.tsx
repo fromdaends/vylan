@@ -20,7 +20,7 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: `${brand.name} — ${brand.tagline.fr}`,
+  title: `${brand.name}: ${brand.tagline.fr}`,
   description: brand.tagline.fr,
 };
 

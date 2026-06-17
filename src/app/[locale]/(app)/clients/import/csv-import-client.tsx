@@ -206,7 +206,7 @@ export function CsvImportClient({ locale }: { locale: "fr" | "en" }) {
                 <ul className="mt-1.5 space-y-1 font-mono">
                   {preview.invalid.slice(0, 20).map((r) => (
                     <li key={r.row}>
-                      {t("import_row_label", { row: r.row })} — {r.error}
+                      {t("import_row_label", { row: r.row })}: {r.error}
                     </li>
                   ))}
                 </ul>

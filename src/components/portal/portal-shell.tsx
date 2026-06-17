@@ -122,7 +122,7 @@ export function PortalShell({
     .toUpperCase();
 
   const otherLocale = locale === "fr" ? "en" : "fr";
-  const helpSubject = `${ctx.firm.name} — ${ctx.engagement.title}`;
+  const helpSubject = `${ctx.firm.name}: ${ctx.engagement.title}`;
   // Localized via the Portal namespace (follows the portal locale, which
   // defaults to English) instead of a hardcoded FR/EN branch.
   const helpBody = t("help_body", { title: ctx.engagement.title });

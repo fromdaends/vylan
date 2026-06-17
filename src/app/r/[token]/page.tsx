@@ -50,7 +50,7 @@ export default async function PortalPage({
       suppressHydrationWarning
     >
       <head>
-        <title>{`${brand.name} — ${ctx.firm.name}`}</title>
+        <title>{`${brand.name}: ${ctx.firm.name}`}</title>
         <meta
           name="viewport"
           content="width=device-width, initial-scale=1, viewport-fit=cover"
