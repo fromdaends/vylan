@@ -52,6 +52,18 @@ const CURRENT_TOOL_LABEL: Record<string, string> = {
   other_software: "Other software",
   nothing: "Nothing structured",
 };
+// Industry is stored in the row's `practice_type` column (see saveDemoStep).
+// For the "other" choice we store the prospect's free text, so an unmapped
+// value falls through to the raw string — exactly what we want to show.
+const INDUSTRY_LABEL: Record<string, string> = {
+  accounting: "Accounting / bookkeeping",
+  legal: "Legal / law firm",
+  real_estate: "Property management / real estate",
+  financial: "Financial services / insurance",
+  healthcare: "Healthcare / clinic",
+  construction: "Construction / trades",
+  other: "Other",
+};
 
 function fmt(label: string | null | undefined, map?: Record<string, string>) {
   if (!label) return "—";
@@ -304,10 +316,11 @@ export async function notifyFounderQualifiedLead(row: DemoRequest) {
     `Prov:  ${row.province ?? "—"}`,
     ``,
     `── Firm ──`,
-    `Name:    ${row.firm_name ?? "—"}`,
-    `Size:    ${sizeLabel}`,
-    `Clients: ${fmt(row.client_volume, CLIENT_VOLUME_LABEL)}`,
-    `Tool:    ${toolDetail}`,
+    `Name:     ${row.firm_name ?? "—"}`,
+    `Industry: ${fmt(row.practice_type, INDUSTRY_LABEL)}`,
+    `Size:     ${sizeLabel}`,
+    `Clients:  ${fmt(row.client_volume, CLIENT_VOLUME_LABEL)}`,
+    `Tool:     ${toolDetail}`,
     ``,
     `── Compliance ──`,
     `Marketing opt-in: ${row.marketing_opt_in ? "YES" : "no"}`,
@@ -332,6 +345,7 @@ export async function notifyFounderQualifiedLead(row: DemoRequest) {
       ])}
       ${section("Firm", [
         ["Name", row.firm_name ?? "—"],
+        ["Industry", fmt(row.practice_type, INDUSTRY_LABEL)],
         ["Size", sizeLabel],
         ["Clients", fmt(row.client_volume, CLIENT_VOLUME_LABEL)],
         ["Tool", toolDetail],
@@ -388,6 +402,9 @@ export async function notifyFounderPartialLead(row: DemoRequest) {
       ? `${fmt(row.current_tool, CURRENT_TOOL_LABEL)} — ${row.current_tool_other}`
       : fmt(row.current_tool, CURRENT_TOOL_LABEL)
     : null;
+  const industryLabel = row.practice_type
+    ? fmt(row.practice_type, INDUSTRY_LABEL)
+    : null;
 
   const lines = [
     `A prospect started the demo form but didn't finish.`,
@@ -400,12 +417,13 @@ export async function notifyFounderPartialLead(row: DemoRequest) {
     `Email: ${row.email}`,
     ``,
     `── Firm ──`,
-    `Name:    ${row.firm_name ?? "—"}`,
-    sizeLabel ? `Size:    ${sizeLabel}` : null,
+    `Name:     ${row.firm_name ?? "—"}`,
+    industryLabel ? `Industry: ${industryLabel}` : null,
+    sizeLabel ? `Size:     ${sizeLabel}` : null,
     row.client_volume
-      ? `Clients: ${fmt(row.client_volume, CLIENT_VOLUME_LABEL)}`
+      ? `Clients:  ${fmt(row.client_volume, CLIENT_VOLUME_LABEL)}`
       : null,
-    toolLabel ? `Tool:    ${toolLabel}` : null,
+    toolLabel ? `Tool:     ${toolLabel}` : null,
     ``,
     `You can still follow up at the email above.`,
     `Lead id: ${row.id}`,
@@ -422,6 +440,7 @@ export async function notifyFounderPartialLead(row: DemoRequest) {
   const firmRows: Array<[string, string, boolean?]> = [
     ["Name", row.firm_name ?? "—"],
   ];
+  if (industryLabel) firmRows.push(["Industry", industryLabel]);
   if (sizeLabel) firmRows.push(["Size", sizeLabel]);
   if (row.client_volume)
     firmRows.push(["Clients", fmt(row.client_volume, CLIENT_VOLUME_LABEL)]);
@@ -476,10 +495,11 @@ export async function notifyFounderDemoBooked(row: DemoRequest) {
     `Prov:  ${row.province ?? "—"}`,
     ``,
     `── Firm ──`,
-    `Name:    ${row.firm_name ?? "—"}`,
-    `Size:    ${sizeLabel}`,
-    `Clients: ${fmt(row.client_volume, CLIENT_VOLUME_LABEL)}`,
-    `Tool:    ${toolLabel}`,
+    `Name:     ${row.firm_name ?? "—"}`,
+    `Industry: ${fmt(row.practice_type, INDUSTRY_LABEL)}`,
+    `Size:     ${sizeLabel}`,
+    `Clients:  ${fmt(row.client_volume, CLIENT_VOLUME_LABEL)}`,
+    `Tool:     ${toolLabel}`,
     ``,
     `── Compliance ──`,
     `Marketing opt-in: ${row.marketing_opt_in ? "YES" : "no"}`,
@@ -510,6 +530,7 @@ export async function notifyFounderDemoBooked(row: DemoRequest) {
       ])}
       ${section("Firm", [
         ["Name", row.firm_name ?? "—"],
+        ["Industry", fmt(row.practice_type, INDUSTRY_LABEL)],
         ["Size", sizeLabel],
         ["Clients", fmt(row.client_volume, CLIENT_VOLUME_LABEL)],
         ["Tool", toolLabel],
