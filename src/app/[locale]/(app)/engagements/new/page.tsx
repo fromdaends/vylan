@@ -11,7 +11,7 @@ export default async function NewEngagementPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ client?: string }>;
+  searchParams: Promise<{ client?: string; template?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
@@ -55,6 +55,7 @@ export default async function NewEngagementPage({
         }))}
         templates={templates}
         initialClientId={sp.client}
+        initialTemplateId={sp.template}
         locale={locale}
         includeQuebecForms={firm?.include_quebec_forms ?? true}
       />

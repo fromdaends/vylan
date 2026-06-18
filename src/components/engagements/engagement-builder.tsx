@@ -19,6 +19,7 @@ import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
 import { templateItemApplies } from "@/lib/doc-types";
+import { resolveInitialTemplate } from "@/lib/engagements/initial-template";
 import { localizedTemplateName } from "@/lib/templates/builtin-names";
 
 type KnownErrorKey =
@@ -43,12 +44,17 @@ export function EngagementBuilder({
   clients,
   templates,
   initialClientId,
+  initialTemplateId,
   locale,
   includeQuebecForms = true,
 }: {
   clients: ComboboxClient[];
   templates: Template[];
   initialClientId?: string;
+  // The template the user clicked "Use" on, carried via ?template=. When it
+  // matches a template the form opens on it; otherwise (direct open, or a
+  // stale/unknown id) it falls back to the first template.
+  initialTemplateId?: string;
   locale: "fr" | "en";
   // Firm-wide setting (migration 0350). When false, the Quebec-only RL slips
   // never appear in this firm's checklists, whatever the client's province.
@@ -57,10 +63,16 @@ export function EngagementBuilder({
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
 
+  // Open on the template the user picked via "Use" (matched by id); fall back to
+  // the first template only for a direct open or a stale/unknown id.
+  const initialTemplate = resolveInitialTemplate(templates, initialTemplateId);
+
   const [clientId, setClientId] = useState<string | null>(
     initialClientId ?? null,
   );
-  const [templateId, setTemplateId] = useState<string>(templates[0]?.id ?? "");
+  const [templateId, setTemplateId] = useState<string>(
+    initialTemplate?.id ?? "",
+  );
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [dueDate, setDueDate] = useState("");
@@ -72,7 +84,7 @@ export function EngagementBuilder({
     // the checklist with only the documents that apply to their province.
     const initialProvince =
       clients.find((c) => c.id === initialClientId)?.province ?? null;
-    return (templates[0]?.items ?? []).filter((it) =>
+    return (initialTemplate?.items ?? []).filter((it) =>
       templateItemApplies(it, initialProvince, includeQuebecForms),
     );
   });
