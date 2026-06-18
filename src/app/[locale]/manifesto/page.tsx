@@ -90,6 +90,9 @@ export default async function ManifestoPage({
       <main className="vy-manifesto-main">
         <span className="vy-pill">{tm("pill")}</span>
         <h1>{withBreaks(tm("title"))}</h1>
+        {/* Small audience eyebrow under the headline — its own line, distinct
+            from the big subheadline below it. */}
+        <p className="vy-audience">{tm("audience")}</p>
         <p className="vy-lede">{tm("lede")}</p>
 
         <div className="vy-body">
