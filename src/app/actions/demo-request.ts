@@ -103,6 +103,13 @@ export async function saveDemoStep(
         parsed.data.current_tool === "other_software"
           ? (parsed.data.current_tool_other ?? null)
           : null,
+      // Industry reuses the spare `practice_type` column (no migration). For
+      // the "other" choice we store the prospect's free-text answer directly,
+      // so the notification can show it verbatim.
+      practice_type:
+        parsed.data.industry === "other"
+          ? parsed.data.industry_other?.trim() || "other"
+          : parsed.data.industry,
       // furthest_step only moves forward, never backwards (so the
       // funnel metric stays meaningful even if a prospect goes Back).
       furthest_step: Math.max(existing.furthest_step, 2) as 1 | 2 | 3,

@@ -19,6 +19,7 @@ import {
   DemoStep1Schema,
   DemoStep2Schema,
   DemoStep3Schema,
+  INDUSTRIES,
   PROVINCES,
   type Province,
 } from "@/app/actions/demo-request.schema";
@@ -60,6 +61,8 @@ type LeadDraft = {
     client_volume: string;
     current_tool: string;
     current_tool_other: string;
+    industry: string;
+    industry_other: string;
   };
   s3: {
     phone: string;
@@ -81,6 +84,8 @@ function readLeadDraft(locale: Locale): LeadDraft {
       client_volume: "",
       current_tool: "",
       current_tool_other: "",
+      industry: "",
+      industry_other: "",
     },
     s3: {
       phone: "",
@@ -339,6 +344,27 @@ export function LeadForm() {
                     setS2({ ...s2, current_tool_other: e.target.value })
                   }
                   placeholder={td("step2_tool_other_placeholder")}
+                  required
+                />
+              )}
+              <Sel
+                value={s2.industry}
+                onChange={(v) => setS2({ ...s2, industry: v })}
+                placeholder={td("step2_industry_label")}
+                options={INDUSTRIES.map((o) => ({
+                  value: o,
+                  label: td(`step2_industry_${o}`),
+                }))}
+              />
+              {s2.industry === "other" && (
+                <input
+                  className="vy-field"
+                  type="text"
+                  value={s2.industry_other}
+                  onChange={(e) =>
+                    setS2({ ...s2, industry_other: e.target.value })
+                  }
+                  placeholder={td("step2_industry_other_placeholder")}
                   required
                 />
               )}

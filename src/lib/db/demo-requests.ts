@@ -73,6 +73,9 @@ export type UpdateDemoRequestPatch = Partial<{
   booked_at: string | null;
   notified_at: string | null;
   notion_page_id: string | null;
+  // Industry reuses the spare practice_type column (migration 0160, unused by
+  // the current /demo flow) so no new migration is needed. See saveDemoStep.
+  practice_type: string | null;
 }>;
 
 export async function createDemoRequest(

@@ -59,6 +59,16 @@ type Step2State = {
     | "other_software"
     | "nothing";
   current_tool_other: string;
+  industry:
+    | ""
+    | "accounting"
+    | "legal"
+    | "real_estate"
+    | "financial"
+    | "healthcare"
+    | "construction"
+    | "other";
+  industry_other: string;
 };
 
 type Step3State = {
@@ -92,6 +102,15 @@ const CURRENT_TOOL_OPTIONS = [
   "other_software",
   "nothing",
 ] as const;
+const INDUSTRY_OPTIONS = [
+  "accounting",
+  "legal",
+  "real_estate",
+  "financial",
+  "healthcare",
+  "construction",
+  "other",
+] as const;
 
 export function DemoFormFlow({ locale }: { locale: Locale }) {
   const t = useTranslations("Demo");
@@ -110,6 +129,8 @@ export function DemoFormFlow({ locale }: { locale: Locale }) {
     client_volume: "",
     current_tool: "",
     current_tool_other: "",
+    industry: "",
+    industry_other: "",
   });
   const [step3, setStep3] = useState<Step3State>({
     phone: "",
@@ -461,6 +482,30 @@ function Step2({
           value={state.current_tool_other}
           onChange={(v) => setState({ ...state, current_tool_other: v })}
           placeholder={t("step2_tool_other_placeholder")}
+          required
+        />
+      )}
+
+      <SelectField
+        id="industry"
+        label={t("step2_industry_label")}
+        value={state.industry}
+        onChange={(v) =>
+          setState({ ...state, industry: v as Step2State["industry"] })
+        }
+        options={INDUSTRY_OPTIONS.map((o) => ({
+          value: o,
+          label: t(`step2_industry_${o}` as const),
+        }))}
+      />
+
+      {state.industry === "other" && (
+        <Field
+          id="industry_other"
+          label={t("step2_industry_other_label")}
+          value={state.industry_other}
+          onChange={(v) => setState({ ...state, industry_other: v })}
+          placeholder={t("step2_industry_other_placeholder")}
           required
         />
       )}

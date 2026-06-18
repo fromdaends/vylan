@@ -38,6 +38,18 @@ export const CURRENT_TOOLS = [
   "nothing",
 ] as const;
 
+// What industry the prospect is in. Vylan is for any business that collects
+// documents from clients; accounting is the lead example, not the only fit.
+export const INDUSTRIES = [
+  "accounting",
+  "legal",
+  "real_estate",
+  "financial",
+  "healthcare",
+  "construction",
+  "other",
+] as const;
+
 // Step 1 — who you are.
 export const DemoStep1Schema = z.object({
   contact_name: z.string().trim().min(2, "name_too_short").max(120, "too_long"),
@@ -64,6 +76,13 @@ export const DemoStep2Schema = z
       .max(120, "too_long")
       .optional()
       .or(z.literal("")),
+    industry: z.enum(INDUSTRIES),
+    industry_other: z
+      .string()
+      .trim()
+      .max(120, "too_long")
+      .optional()
+      .or(z.literal("")),
   })
   .superRefine((val, ctx) => {
     if (val.current_tool === "other_software") {
@@ -72,6 +91,15 @@ export const DemoStep2Schema = z
           code: z.ZodIssueCode.custom,
           path: ["current_tool_other"],
           message: "tool_name_required",
+        });
+      }
+    }
+    if (val.industry === "other") {
+      if (!val.industry_other || val.industry_other.trim() === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["industry_other"],
+          message: "industry_required",
         });
       }
     }
