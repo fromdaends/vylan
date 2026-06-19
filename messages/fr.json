@@ -1687,6 +1687,7 @@
     "upload": "Téléverser",
     "uploading": "Téléversement…",
     "add_more": "Ajouter un autre",
+    "or_drop_here": "ou déposez vos fichiers ici",
     "mark_na": "Non applicable",
     "undo_na": "Annuler « Non applicable »",
     "uploaded_count": "{count, plural, one {# fichier téléversé} other {# fichiers téléversés}}",

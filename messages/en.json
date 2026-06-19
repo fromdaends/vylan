@@ -1693,6 +1693,7 @@
     "upload": "Upload",
     "uploading": "Uploading…",
     "add_more": "Add another",
+    "or_drop_here": "or drop files here",
     "mark_na": "Not applicable",
     "undo_na": "Undo \"Not applicable\"",
     "uploaded_count": "{count, plural, one {# file uploaded} other {# files uploaded}}",
