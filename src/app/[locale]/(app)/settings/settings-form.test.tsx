@@ -77,6 +77,7 @@ function renderShell(
         }}
         isOwner
         billingSlot={<div>SUBSCRIPTION_SLOT</div>}
+        connect={null}
         firmName="Acme"
         firm={FIRM}
         firmLogoUrl={null}
@@ -140,6 +141,24 @@ describe("SettingsShell — Account / Security & privacy / Payments", () => {
     // Old bookmarks/links used ?tab=billing before the subscription card moved
     // under Payments — they must still land on the subscription slot.
     renderShell({ initialSection: "billing" });
+    expect(screen.getByText("SUBSCRIPTION_SLOT")).toBeInTheDocument();
+  });
+
+  it("renders the Stripe Connect block above the subscription under Payments", () => {
+    renderShell({
+      initialSection: "payments",
+      connect: {
+        configured: true,
+        accountId: null,
+        chargesEnabled: false,
+        detailsSubmitted: false,
+        onboardedAt: null,
+        justReturned: false,
+      },
+    });
+    expect(
+      screen.getByText(en.Settings.connect_start_title),
+    ).toBeInTheDocument();
     expect(screen.getByText("SUBSCRIPTION_SLOT")).toBeInTheDocument();
   });
 

@@ -13,6 +13,18 @@ export type Firm = {
   subscription_status: string | null;
   current_period_end: string | null;
   trial_ends_at: string | null;
+  // Stripe Connect (Standard) — the firm's OWN connected account, so clients can
+  // pay the accountant DIRECTLY (migration 0370). All service-role-write-only:
+  // deliberately NOT in updateCurrentFirm's whitelist, so an authenticated user
+  // can never PATCH their own connected-account id. The booleans mirror Stripe's
+  // authoritative account flags, written by the Connect webhook. May be undefined
+  // at runtime until 0370 is applied — readers default the booleans to false and
+  // the id to null.
+  stripe_connect_account_id: string | null;
+  connect_charges_enabled: boolean;
+  connect_payouts_enabled: boolean;
+  connect_details_submitted: boolean;
+  connect_onboarded_at: string | null;
   plan: "trial" | "solo" | "cabinet" | "cabinet_plus";
   // Per-firm seat-cap override (migration 0190). NULL = use the plan's
   // maxUsers; a positive value wins over the plan (resolveSeatCap). Service-

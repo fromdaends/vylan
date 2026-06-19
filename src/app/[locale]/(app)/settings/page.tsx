@@ -8,6 +8,7 @@ import { isTrialExpired, trialDaysLeft } from "@/lib/trial";
 import { getFirmAiUsage } from "@/lib/ai/usage";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { assertLocale } from "@/lib/locale";
+import { isStripeConfigured } from "@/lib/stripe";
 import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
@@ -26,10 +27,10 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; connect?: string }>;
 }) {
   const { locale: rawLocale } = await params;
-  const { tab } = await searchParams;
+  const { tab, connect: connectParam } = await searchParams;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -76,6 +77,20 @@ export default async function SettingsPage({
     />
   ) : null;
 
+  // Stripe Connect status for the owner-only "Get paid by clients" block in the
+  // Payments section. The connect_* fields may be undefined until migration 0370
+  // is applied (remote DB) — `=== true` / `?? null` default to "not connected".
+  const connect = isOwner
+    ? {
+        configured: isStripeConfigured(),
+        accountId: firm.stripe_connect_account_id ?? null,
+        chargesEnabled: firm.connect_charges_enabled === true,
+        detailsSubmitted: firm.connect_details_submitted === true,
+        onboardedAt: firm.connect_onboarded_at ?? null,
+        justReturned: connectParam === "done",
+      }
+    : null;
+
   return (
     <div className="max-w-3xl mx-auto space-y-8 animate-in-up">
       <header>
@@ -100,6 +115,7 @@ export default async function SettingsPage({
         aiUsage={aiUsage}
         isOwner={isOwner}
         billingSlot={billingSlot}
+        connect={connect}
         firmName={firm.name}
         firm={{
           name: firm.name,

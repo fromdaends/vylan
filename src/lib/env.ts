@@ -29,6 +29,10 @@ const ServerEnvSchema = z.object({
 
   STRIPE_SECRET_KEY: optionalSecret(),
   STRIPE_WEBHOOK_SECRET: optionalSecret(),
+  // Separate signing secret for the Connect webhook endpoint (account.updated +
+  // client-payment events). Connect events carry a different secret than the
+  // subscription webhook, so they must be verified independently.
+  STRIPE_CONNECT_WEBHOOK_SECRET: optionalSecret(),
 
   APP_URL: z.string().url().default("http://localhost:3000"),
   CRON_SECRET: optionalSecret(16),
