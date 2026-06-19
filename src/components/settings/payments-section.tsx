@@ -38,7 +38,7 @@ export function PaymentsConnectSection({ connect }: { connect: ConnectStatus }) 
         method: "POST",
       });
       const data = (await res.json().catch(() => null)) as
-        | { url?: string; error?: string }
+        | { url?: string; error?: string; detail?: string }
         | null;
       if (res.ok && data?.url) {
         window.location.assign(data.url);
@@ -47,7 +47,9 @@ export function PaymentsConnectSection({ connect }: { connect: ConnectStatus }) 
       setError(
         data?.error === "migration_pending"
           ? t("connect_error_setup")
-          : t("connect_error"),
+          : data?.detail
+            ? `${t("connect_error")} (${data.detail})`
+            : t("connect_error"),
       );
     } catch {
       setError(t("connect_error"));

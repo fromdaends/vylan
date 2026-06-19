@@ -49,7 +49,10 @@ export async function POST() {
       accountId = account.id;
     } catch (e) {
       console.error("[connect/onboard] account create failed:", e);
-      return NextResponse.json({ error: "stripe_error" }, { status: 502 });
+      return NextResponse.json(
+        { error: "stripe_error", detail: stripeDetail(e) },
+        { status: 502 },
+      );
     }
     const saved = await setFirmConnectAccountId(firm.id, accountId);
     if (!saved.ok) {
@@ -77,6 +80,23 @@ export async function POST() {
     return NextResponse.json({ url: link.url });
   } catch (e) {
     console.error("[connect/onboard] account link failed:", e);
-    return NextResponse.json({ error: "stripe_error" }, { status: 502 });
+    return NextResponse.json(
+      { error: "stripe_error", detail: stripeDetail(e) },
+      { status: 502 },
+    );
   }
+}
+
+// Pull a readable, non-sensitive reason out of a Stripe error so the owner sees
+// WHY connecting failed (e.g. "Connect is not enabled...") instead of a generic
+// message. Stripe error messages are designed to be shown to the integrator.
+function stripeDetail(e: unknown): string | undefined {
+  if (e && typeof e === "object") {
+    const err = e as { message?: string; code?: string };
+    const parts = [err.message, err.code ? `[${err.code}]` : undefined].filter(
+      Boolean,
+    );
+    if (parts.length) return parts.join(" ");
+  }
+  return e instanceof Error ? e.message : undefined;
 }
