@@ -194,6 +194,60 @@ No password required.`;
   return { subject, html, text };
 }
 
+// The client-facing "please pay" email. The CTA opens the SAME firm-branded
+// portal (where the Pay now card lives), keeping all Stripe logic server-side.
+export function buildPaymentRequestEmail(opts: {
+  clientName: string;
+  firmName: string;
+  firmLogoUrl?: string | null;
+  engagementTitle: string;
+  amount: string; // already-formatted currency, e.g. "$350.00"
+  url: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  const logoBlock = buildLogoBlock(opts.firmLogoUrl, opts.firmName);
+  const amount = escapeHtml(opts.amount);
+  if (opts.locale === "fr") {
+    const subject = `${opts.firmName} : paiement de ${opts.amount} pour « ${opts.engagementTitle} »`;
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+${logoBlock}<p>Bonjour ${escapeHtml(opts.clientName)},</p>
+<p>${escapeHtml(opts.firmName)} vous demande un paiement de <strong>${amount}</strong> pour <strong>${escapeHtml(opts.engagementTitle)}</strong>.</p>
+<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Le paiement est sécurisé et traité par Stripe.</p>
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Payer maintenant</a>
+</p>
+<p style="color:#64748b;font-size:13px">Ou copiez ce lien dans votre navigateur : <br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.url}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">Aucun mot de passe à créer.</p>
+</body></html>`;
+    const text = `Bonjour ${opts.clientName},
+
+${opts.firmName} vous demande un paiement de ${opts.amount} pour ${opts.engagementTitle}.
+Payez en toute sécurité (traité par Stripe) : ${opts.url}
+
+Aucun mot de passe à créer.`;
+    return { subject, html, text };
+  }
+
+  const subject = `${opts.firmName}: ${opts.amount} due for "${opts.engagementTitle}"`;
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+${logoBlock}<p>Hi ${escapeHtml(opts.clientName)},</p>
+<p>${escapeHtml(opts.firmName)} has requested a payment of <strong>${amount}</strong> for <strong>${escapeHtml(opts.engagementTitle)}</strong>.</p>
+<p style="margin:0 0 16px 0;color:#64748b;font-size:14px">Payment is secure and handled by Stripe.</p>
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Pay now</a>
+</p>
+<p style="color:#64748b;font-size:13px">Or copy this link into your browser:<br><span style="font-family:monospace;font-size:12px;word-break:break-all">${opts.url}</span></p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">No password required.</p>
+</body></html>`;
+  const text = `Hi ${opts.clientName},
+
+${opts.firmName} has requested a payment of ${opts.amount} for ${opts.engagementTitle}.
+Pay securely (handled by Stripe): ${opts.url}
+
+No password required.`;
+  return { subject, html, text };
+}
+
 // Notify the ACCOUNTANT that a client returned the signed copy of a signature
 // item, with a link to review it in Vylan. Internal (accountant-facing), so it
 // is Vylan-branded rather than firm-branded and uses the accountant's own

@@ -45,6 +45,11 @@ export const PORTAL_UPLOAD_CHUNK_PER_IP: LimitSpec = {
   window: "1 h",
 };
 export const PORTAL_MUTATION_PER_TOKEN: LimitSpec = { limit: 120, window: "1 h" };
+// Start a Stripe Checkout for a payment request. Tight: a real client clicks
+// "Pay now" a handful of times at most; this only guards against scripted abuse
+// of the unauthenticated endpoint.
+export const PORTAL_CHECKOUT_PER_TOKEN: LimitSpec = { limit: 20, window: "1 h" };
+export const PORTAL_CHECKOUT_PER_IP: LimitSpec = { limit: 40, window: "1 h" };
 // Poll status — called by the portal after every upload at ~2s intervals
 // for up to ~30s. Generous limit so a normal upload-heavy session never
 // trips it: 30 polls × 30 uploads = 900 in the worst case, but realistic
