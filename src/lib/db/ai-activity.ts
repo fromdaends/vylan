@@ -23,7 +23,12 @@ export type AiActivityEntry = ActivityEntry & {
 // `sinceISO` (optional): only return rows with `created_at >= sinceISO`.
 // The dashboard passes a rolling 7-day cutoff so the section
 // auto-resets every week (no manual reset needed).
-export async function listAiActivityForFirm(
+// Generalized version: list activity_log rows for the current firm (RLS-scoped)
+// filtered to any set of actions, enriched with engagement title + client name.
+// listAiActivityForFirm is the AI-actions wrapper; the notifications feed uses
+// this directly for payment + lifecycle events.
+export async function listFirmActivityByActions(
+  actions: readonly string[],
   limit = 200,
   sinceISO?: string,
 ): Promise<AiActivityEntry[]> {
@@ -31,7 +36,7 @@ export async function listAiActivityForFirm(
   let query = supabase
     .from("activity_log")
     .select("*")
-    .in("action", AI_ACTIONS as unknown as string[])
+    .in("action", actions as unknown as string[])
     .order("created_at", { ascending: false })
     .limit(limit);
   if (sinceISO) query = query.gte("created_at", sinceISO);
@@ -95,4 +100,11 @@ export async function listAiActivityForFirm(
       client_display_name: (client?.display_name as string | undefined) ?? null,
     };
   });
+}
+
+export async function listAiActivityForFirm(
+  limit = 200,
+  sinceISO?: string,
+): Promise<AiActivityEntry[]> {
+  return listFirmActivityByActions(AI_ACTIONS, limit, sinceISO);
 }

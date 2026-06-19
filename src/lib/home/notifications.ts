@@ -19,7 +19,10 @@
 //                               regardless of the AI's verdict on them)
 //   - overdue                  (engagement's due_date has passed)
 
-import { listAiActivityForFirm } from "@/lib/db/ai-activity";
+import {
+  listAiActivityForFirm,
+  listFirmActivityByActions,
+} from "@/lib/db/ai-activity";
 import { listEngagements } from "@/lib/db/engagements";
 import { listClients, type Client } from "@/lib/db/clients";
 import { getServerSupabase } from "@/lib/supabase/server";
@@ -35,7 +38,20 @@ export type HomeNotificationKind =
   | "document_uploaded"
   | "signed_copy_uploaded"
   | "ready_to_review"
-  | "overdue";
+  | "overdue"
+  // Payment + lifecycle events (sourced from the activity log).
+  | "client_paid"
+  | "payment_failed"
+  | "engagement_completed";
+
+// Activity-log actions surfaced as notifications (a client paid, a payment
+// failed, an engagement was finished). complete_engagement maps to the
+// engagement_completed kind below.
+const EVENT_ACTIONS = [
+  "client_paid",
+  "payment_failed",
+  "complete_engagement",
+] as const;
 
 export type HomeNotification = {
   id: string;
@@ -65,6 +81,23 @@ export type HomeNotification = {
 // every firm notification. Staff see only notifications for engagements
 // assigned to THEM; anything unassigned or assigned to a deactivated member
 // falls through to the owner's firm-wide view. PURE + exported for tests.
+// Map an activity_log action to its notification kind (or null if it isn't one
+// we surface). PURE + exported for tests.
+export function eventActionToNotificationKind(
+  action: string,
+): HomeNotificationKind | null {
+  switch (action) {
+    case "complete_engagement":
+      return "engagement_completed";
+    case "client_paid":
+      return "client_paid";
+    case "payment_failed":
+      return "payment_failed";
+    default:
+      return null;
+  }
+}
+
 export function filterNotificationsForViewer(
   notifications: HomeNotification[],
   assigneeByEngagement: Map<string, string | null>,
@@ -88,8 +121,9 @@ export async function listHomeNotifications(
   const recentSinceISO = new Date(
     Date.now() - 14 * 24 * 60 * 60 * 1000,
   ).toISOString();
-  const [aiActivity, engagements, clients] = await Promise.all([
+  const [aiActivity, eventActivity, engagements, clients] = await Promise.all([
     listAiActivityForFirm(40, recentSinceISO),
+    listFirmActivityByActions(EVENT_ACTIONS, 40, recentSinceISO),
     listEngagements(),
     listClients({ includeArchived: true }),
   ]);
@@ -120,6 +154,22 @@ export async function listHomeNotifications(
           : "/dashboard",
       });
     }
+  }
+
+  // 1b) Payment + lifecycle events straight off the activity feed (a client
+  // paid, a payment failed, an engagement was finished).
+  for (const a of eventActivity) {
+    const kind = eventActionToNotificationKind(a.action);
+    if (!kind) continue;
+    out.push({
+      id: a.id,
+      kind,
+      engagement_id: a.engagement_id,
+      engagement_title: a.engagement_title,
+      client_display_name: a.client_display_name,
+      timestamp: a.created_at,
+      href: a.engagement_id ? `/engagements/${a.engagement_id}` : "/dashboard",
+    });
   }
 
   // 2) Attention-derived signals. Pull items + last-upload activity

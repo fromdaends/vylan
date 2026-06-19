@@ -1,8 +1,27 @@
 import { describe, it, expect } from "vitest";
 import {
   filterNotificationsForViewer,
+  eventActionToNotificationKind,
   type HomeNotification,
 } from "./notifications";
+
+describe("eventActionToNotificationKind", () => {
+  it("maps payment + lifecycle actions to notification kinds", () => {
+    expect(eventActionToNotificationKind("client_paid")).toBe("client_paid");
+    expect(eventActionToNotificationKind("payment_failed")).toBe(
+      "payment_failed",
+    );
+    expect(eventActionToNotificationKind("complete_engagement")).toBe(
+      "engagement_completed",
+    );
+  });
+
+  it("returns null for actions that aren't surfaced as notifications", () => {
+    expect(eventActionToNotificationKind("payment_requested")).toBeNull();
+    expect(eventActionToNotificationKind("reopen_engagement")).toBeNull();
+    expect(eventActionToNotificationKind("anything_else")).toBeNull();
+  });
+});
 
 function notif(
   over: Partial<HomeNotification> &

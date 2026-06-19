@@ -5,10 +5,12 @@ import type { HomeNotification } from "@/lib/home/notifications";
 import {
   AlertTriangle,
   CheckCheck,
+  CheckCircle2,
   ChevronRight,
   FileSignature,
   FileUp,
   Sparkles,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -121,5 +123,11 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: CheckCheck, tone: "bg-success/15 text-success" };
     case "overdue":
       return { Icon: AlertTriangle, tone: "bg-destructive/15 text-destructive" };
+    case "client_paid":
+      return { Icon: Wallet, tone: "bg-success/15 text-success" };
+    case "payment_failed":
+      return { Icon: AlertTriangle, tone: "bg-destructive/15 text-destructive" };
+    case "engagement_completed":
+      return { Icon: CheckCircle2, tone: "bg-success/15 text-success" };
   }
 }

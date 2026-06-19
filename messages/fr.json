@@ -747,7 +747,10 @@
     "kind_ready_to_review": "Tous les documents reçus : prêt à réviser",
     "kind_document_uploaded": "Nouveau document téléversé",
     "kind_signed_copy_uploaded": "Copie signée téléversée",
-    "kind_overdue": "Engagement en retard"
+    "kind_overdue": "Engagement en retard",
+    "kind_client_paid": "Le client a payé",
+    "kind_payment_failed": "Échec du paiement du client",
+    "kind_engagement_completed": "Engagement complété"
   },
   "Inbox": {
     "title": "Boîte de réception",
@@ -768,6 +771,9 @@
     "kind_document_uploaded": "Nouveau document téléversé",
     "kind_signed_copy_uploaded": "Copie signée téléversée",
     "kind_overdue": "Engagement en retard",
+    "kind_client_paid": "Le client a payé",
+    "kind_payment_failed": "Échec du paiement du client",
+    "kind_engagement_completed": "Engagement complété",
     "search_label": "Rechercher des clients",
     "search_placeholder": "Rechercher",
     "search_clear": "Effacer la recherche",
