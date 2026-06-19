@@ -713,6 +713,13 @@ export function ItemCard({
                       ? t("add_more")
                       : t("upload")}
                 </Button>
+                {/* Discoverability hint for the drag-and-drop, which already
+                    works. Pointer/desktop only (the media query) so a touch
+                    user is never told to "drop files"; the Upload button stays
+                    the primary path everywhere. */}
+                <span className="hidden items-center text-xs text-muted-foreground [@media(pointer:fine)]:inline-flex">
+                  {t("or_drop_here")}
+                </span>
                 {!item.required && (
                   <Button
                     size="sm"
