@@ -11,6 +11,7 @@
 // migration" message instead of a 500.
 
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
+import { stripe } from "@/lib/stripe";
 
 // PostgREST surfaces an unknown column as PGRST204 (schema-cache miss after a
 // not-yet-applied migration) or the Postgres 42703 "undefined_column".
@@ -127,4 +128,42 @@ export async function clearFirmConnectAccount(firmId: string): Promise<void> {
     console.error("[stripe-connect] clearFirmConnectAccount failed:", error);
     throw error;
   }
+}
+
+// Pull the live account status straight from Stripe and persist it — so the
+// "Connected" state doesn't depend on the account.updated webhook arriving. Used
+// when the firm has a connected account but charges aren't enabled yet (the
+// "Almost there" state), e.g. right after returning from onboarding. Returns the
+// refreshed row (or the original on any Stripe error) so the caller can render
+// the up-to-date status immediately.
+export async function syncFirmConnectStatusFromStripe(
+  accountId: string,
+): Promise<FirmConnectRow | null> {
+  const firm = await findFirmByConnectAccountId(accountId);
+  if (!firm) return null;
+  const s = stripe();
+  if (!s) return firm;
+  let account;
+  try {
+    account = await s.accounts.retrieve(accountId);
+  } catch (e) {
+    console.error("[stripe-connect] sync retrieve failed:", e);
+    return firm;
+  }
+  const status = {
+    charges_enabled: account.charges_enabled === true,
+    payouts_enabled: account.payouts_enabled === true,
+    details_submitted: account.details_submitted === true,
+  };
+  try {
+    await applyConnectAccountStatus(firm, status);
+  } catch {
+    // Best-effort persist; still return the live status to the caller.
+  }
+  return {
+    ...firm,
+    connect_charges_enabled: status.charges_enabled,
+    connect_payouts_enabled: status.payouts_enabled,
+    connect_details_submitted: status.details_submitted,
+  };
 }
