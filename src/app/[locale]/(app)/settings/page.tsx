@@ -9,6 +9,7 @@ import { getFirmAiUsage } from "@/lib/ai/usage";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { assertLocale } from "@/lib/locale";
 import { isStripeConfigured } from "@/lib/stripe";
+import { syncFirmConnectStatusFromStripe } from "@/lib/db/stripe-connect";
 import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
@@ -80,12 +81,26 @@ export default async function SettingsPage({
   // Stripe Connect status for the owner-only "Get paid by clients" block in the
   // Payments section. The connect_* fields may be undefined until migration 0370
   // is applied (remote DB) — `=== true` / `?? null` default to "not connected".
+  const stripeReady = isStripeConfigured();
+  const connectAccountId = firm.stripe_connect_account_id ?? null;
+  let connectChargesEnabled = firm.connect_charges_enabled === true;
+  let connectDetailsSubmitted = firm.connect_details_submitted === true;
+  // Self-heal: if a connected account exists but charges aren't enabled yet (the
+  // "Almost there" state, e.g. just back from onboarding), pull the live status
+  // straight from Stripe instead of waiting on the account.updated webhook.
+  if (isOwner && stripeReady && connectAccountId && !connectChargesEnabled) {
+    const synced = await syncFirmConnectStatusFromStripe(connectAccountId);
+    if (synced) {
+      connectChargesEnabled = synced.connect_charges_enabled;
+      connectDetailsSubmitted = synced.connect_details_submitted;
+    }
+  }
   const connect = isOwner
     ? {
-        configured: isStripeConfigured(),
-        accountId: firm.stripe_connect_account_id ?? null,
-        chargesEnabled: firm.connect_charges_enabled === true,
-        detailsSubmitted: firm.connect_details_submitted === true,
+        configured: stripeReady,
+        accountId: connectAccountId,
+        chargesEnabled: connectChargesEnabled,
+        detailsSubmitted: connectDetailsSubmitted,
         onboardedAt: firm.connect_onboarded_at ?? null,
         justReturned: connectParam === "done",
       }
