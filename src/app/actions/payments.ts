@@ -5,8 +5,12 @@ import { revalidatePath } from "next/cache";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { getEngagement } from "@/lib/db/engagements";
+import { getClient } from "@/lib/db/clients";
 import { createPaymentRequest } from "@/lib/db/payment-requests";
 import { logUserActivity } from "@/lib/db/activity";
+import { buildPaymentRequestEmail, sendEmail } from "@/lib/email";
+import { getBrandingImageUrlForEmail } from "@/lib/storage";
+import { formatCurrency } from "@/lib/format";
 
 export type RequestPaymentInput = {
   engagementId: string;
@@ -72,6 +76,35 @@ export async function requestPaymentAction(
     currency: "cad",
     payment_request_id: row.id,
   });
+
+  // Deliver the emailed pay link if the accountant chose email / both. The CTA
+  // opens the firm-branded portal where the Pay now card lives. Best-effort: a
+  // send failure never fails the request (the row is what matters).
+  if (
+    (parsed.data.delivery === "email" || parsed.data.delivery === "both") &&
+    engagement.magic_token
+  ) {
+    try {
+      const client = await getClient(engagement.client_id);
+      if (client?.email) {
+        const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+        const locale = client.locale === "en" ? "en" : "fr";
+        const firmLogoUrl = await getBrandingImageUrlForEmail(firm.logo_url);
+        const email = buildPaymentRequestEmail({
+          clientName: client.display_name,
+          firmName: firm.name,
+          firmLogoUrl,
+          engagementTitle: engagement.title,
+          amount: formatCurrency(parsed.data.amountCents / 100, locale),
+          url: `${appUrl}/r/${engagement.magic_token}`,
+          locale,
+        });
+        await sendEmail({ to: client.email, ...email });
+      }
+    } catch (e) {
+      console.error("[requestPaymentAction] payment email failed:", e);
+    }
+  }
 
   revalidatePath(`/engagements/${engagement.id}`);
   return { ok: true, id: row.id };

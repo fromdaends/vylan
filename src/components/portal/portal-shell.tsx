@@ -12,6 +12,7 @@ import {
 import type { PortalContext } from "@/lib/db/portal";
 import { ItemCard } from "./item-card";
 import { SignatureItemCard } from "./signature-item-card";
+import { PaymentDueCard } from "./payment-due-card";
 import { PortalHub, type HubCardData } from "./portal-hub";
 import { splitPortalItems } from "@/lib/portal/split-items";
 import {
@@ -31,10 +32,13 @@ export function PortalShell({
   ctx,
   locale,
   firmLogoUrl,
+  justReturnedPaid = false,
 }: {
   ctx: PortalContext;
   locale: "fr" | "en";
   firmLogoUrl: string | null;
+  // true right after returning from a successful Stripe checkout (?paid=1).
+  justReturnedPaid?: boolean;
 }) {
   const t = useTranslations("Portal");
   const [items, setItems] = useState(ctx.items);
@@ -217,6 +221,15 @@ export function PortalShell({
       </header>
 
       <main className="animate-in-up mx-auto w-full max-w-2xl flex-1 space-y-8 px-4 py-8 sm:px-6 sm:py-10">
+        {ctx.payment_request && (
+          <PaymentDueCard
+            token={ctx.engagement.magic_token ?? ""}
+            paymentRequest={ctx.payment_request}
+            firmName={ctx.firm.name}
+            locale={locale}
+            justReturnedPaid={justReturnedPaid}
+          />
+        )}
         {effectiveView === "hub" ? (
           <>
             <GreetingSection

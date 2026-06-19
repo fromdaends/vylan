@@ -26,7 +26,7 @@ export default async function PortalPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ lang?: string }>;
+  searchParams: Promise<{ lang?: string; paid?: string }>;
 }) {
   const { token } = await params;
   const sp = await searchParams;
@@ -59,7 +59,12 @@ export default async function PortalPage({
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>
-            <PortalShell ctx={ctx} locale={locale} firmLogoUrl={firmLogoUrl} />
+            <PortalShell
+              ctx={ctx}
+              locale={locale}
+              firmLogoUrl={firmLogoUrl}
+              justReturnedPaid={sp.paid === "1"}
+            />
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>

@@ -66,6 +66,16 @@ export type PortalContext = {
   // only if neither has an email on file (shouldn't happen — users.email is
   // NOT NULL — but the footer degrades gracefully if it ever is).
   accountant_email: string | null;
+  // The latest payment request for this engagement, if any — drives the
+  // "Payment due" / "Payment received" card. Null when none exists (or before
+  // migration 0380). Only the client-safe fields, never internal ids.
+  payment_request: {
+    id: string;
+    amount_cents: number;
+    currency: string;
+    description: string | null;
+    status: "requested" | "paid" | "failed" | "canceled";
+  } | null;
 };
 
 export async function loadPortalContext(
@@ -195,6 +205,25 @@ export async function loadPortalContext(
   });
   const accountantEmail = accountantContact?.email ?? null;
 
+  // The latest payment request (if any) for the "Payment due" card. Tolerant of
+  // the table being absent before migration 0380 (data stays null on error).
+  const { data: pr } = await sb
+    .from("payment_requests")
+    .select("id, amount_cents, currency, description, status")
+    .eq("engagement_id", engagement.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const paymentRequest = pr
+    ? {
+        id: pr.id as string,
+        amount_cents: pr.amount_cents as number,
+        currency: (pr.currency as string) ?? "cad",
+        description: (pr.description as string | null) ?? null,
+        status: pr.status as "requested" | "paid" | "failed" | "canceled",
+      }
+    : null;
+
   return {
     engagement: engagement as Engagement,
     client: client as Client,
@@ -204,6 +233,7 @@ export async function loadPortalContext(
     files_by_item: filesByItem,
     rejection_summary_by_item: rejectionSummaryByItem,
     accountant_email: accountantEmail,
+    payment_request: paymentRequest,
   };
 }
 

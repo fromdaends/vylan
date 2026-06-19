@@ -1,4 +1,4 @@
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 
 export type ActivityActor = "user" | "client" | "system";
 
@@ -213,4 +213,25 @@ export async function logSystemActivity(
     action,
     metadata,
   });
+}
+
+// System activity written from a context with NO user session (the Stripe
+// webhook). Uses the service role so the insert isn't blocked by RLS.
+export async function logServiceRoleActivity(
+  firmId: string,
+  engagementId: string | null,
+  action: string,
+  metadata: Record<string, unknown> = {},
+) {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb.from("activity_log").insert({
+    firm_id: firmId,
+    engagement_id: engagementId,
+    actor_type: "system",
+    action,
+    metadata,
+  });
+  if (error) {
+    console.error("[activity] logServiceRoleActivity failed:", error);
+  }
 }
