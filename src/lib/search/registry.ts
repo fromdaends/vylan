@@ -294,15 +294,17 @@ export function buildSearchRegistry(
       keywords: "settings preferences parametres reglages configuration",
     },
     {
+      // Internal id stays "billing" (the subscription card); the user-facing
+      // label + destination moved to the new Payments section in settings.
       id: "billing",
-      label: t.set("nav_billing"),
+      label: t.set("nav_payments"),
       group: "go",
       icon: CreditCard,
       color: "text-icon-amber",
-      href: "/settings?tab=billing",
+      href: "/settings?tab=payments",
       ownerOnly: true,
       keywords:
-        "billing subscription plan invoice payment upgrade facturation abonnement forfait paiement facture",
+        "payments billing subscription plan invoice payment upgrade paiements facturation abonnement forfait paiement facture",
     },
     {
       id: "audit",

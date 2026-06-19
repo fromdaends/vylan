@@ -1,9 +1,10 @@
 // Which /settings sub-sections only the firm OWNER may see + edit.
 //
 // Staff keep full PRODUCT access (clients, engagements, Preview, approve/reject,
-// AI) but not firm-admin. Billing and firm-wide document handling are entirely
-// owner-only TABS. Within the Account + General tabs, the firm-settings and
-// timezone sub-sections are also owner-only (handled inline in settings-form).
+// AI) but not firm-admin. Payments (the firm's Vylan subscription, plus client
+// payment collection) and firm-wide document handling are entirely owner-only
+// TABS. Within the Account + General tabs, the firm-settings and timezone
+// sub-sections are also owner-only (handled inline in settings-form).
 //
 // UI hiding is defence-in-depth: the server actions + /api routes reject staff
 // regardless of what the UI shows.
@@ -13,11 +14,11 @@ export type SettingsSectionId =
   | "security"
   | "appearance"
   | "general"
-  | "billing"
+  | "payments"
   | "documents";
 
 export const OWNER_ONLY_SETTINGS_SECTIONS: readonly SettingsSectionId[] = [
-  "billing",
+  "payments",
   "documents",
 ];
 

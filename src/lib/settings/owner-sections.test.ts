@@ -11,13 +11,13 @@ const ALL: SettingsSectionId[] = [
   "security",
   "appearance",
   "general",
-  "billing",
+  "payments",
   "documents",
 ];
 
 describe("isOwnerOnlySettingsSection", () => {
-  it("billing + documents are owner-only", () => {
-    expect(isOwnerOnlySettingsSection("billing")).toBe(true);
+  it("payments + documents are owner-only", () => {
+    expect(isOwnerOnlySettingsSection("payments")).toBe(true);
     expect(isOwnerOnlySettingsSection("documents")).toBe(true);
   });
   it("account / security / appearance / general are not", () => {
@@ -32,9 +32,9 @@ describe("visibleSettingsSections", () => {
     expect(visibleSettingsSections(ALL, true)).toEqual(ALL);
   });
 
-  it("staff never see Billing or Documents, but keep their own tabs", () => {
+  it("staff never see Payments or Documents, but keep their own tabs", () => {
     const staff = visibleSettingsSections(ALL, false);
-    expect(staff).not.toContain("billing");
+    expect(staff).not.toContain("payments");
     expect(staff).not.toContain("documents");
     expect(staff).toEqual(["account", "security", "appearance", "general"]);
   });
