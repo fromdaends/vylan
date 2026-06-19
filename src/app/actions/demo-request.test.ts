@@ -45,6 +45,7 @@ describe("DemoStep2Schema", () => {
       firm_size: "2_5",
       client_volume: "25_100",
       current_tool: "taxdome",
+      industry: "accounting",
     });
     expect(out.firm_size).toBe("2_5");
     expect(out.client_volume).toBe("25_100");
@@ -65,6 +66,7 @@ describe("DemoStep2Schema", () => {
       firm_size: "solo",
       client_volume: "under_25",
       current_tool: "other_software",
+      industry: "accounting",
       // missing current_tool_other
     });
     expect(res.success).toBe(false);
@@ -82,6 +84,7 @@ describe("DemoStep2Schema", () => {
       client_volume: "under_25",
       current_tool: "other_software",
       current_tool_other: "Citrix ShareFile",
+      industry: "accounting",
     });
     expect(res.success).toBe(true);
   });
@@ -92,6 +95,7 @@ describe("DemoStep2Schema", () => {
       client_volume: "under_25",
       current_tool: "other_software",
       current_tool_other: "   ",
+      industry: "accounting",
     });
     expect(res.success).toBe(false);
   });
