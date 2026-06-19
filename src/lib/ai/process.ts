@@ -43,7 +43,7 @@ export async function processClassifyJob(
   const { data: file } = await sb
     .from("uploaded_files")
     .select(
-      "id, request_item_id, engagement_id, storage_path, mime_type, original_filename, request_items!inner(doc_type, engagement_id, label, label_fr)",
+      "id, request_item_id, engagement_id, storage_path, mime_type, original_filename, request_items!inner(doc_type, engagement_id, label, label_fr, ai_instructions)",
     )
     .eq("id", fileId)
     .maybeSingle();
@@ -54,6 +54,7 @@ export async function processClassifyJob(
     engagement_id: string;
     label: string | null;
     label_fr: string | null;
+    ai_instructions: string | null;
   };
   type Row = { request_items: ItemRow | ItemRow[] | null };
   const itemRaw = (file as unknown as Row).request_items;
@@ -105,6 +106,7 @@ export async function processClassifyJob(
     requestLabelFr: item?.label_fr ?? null,
     clientName: ctxClient?.display_name ?? null,
     expectedYear: expectedYearFromTitle(engCtx?.title ?? ""),
+    aiInstructions: item?.ai_instructions ?? null,
   };
   // limitFirmId is guaranteed non-null here (we returned above if it wasn't).
   const rl = await checkRateLimit({

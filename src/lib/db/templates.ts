@@ -36,6 +36,10 @@ export type TemplateItem = {
   // doc-type province rule alone can't drop it. When true, the item follows the
   // same include/exclude-Quebec rule as the RL slips (migration 0360).
   quebec_only?: boolean | null;
+  // Optional per-item AI guidance (migration 0390). Free text the accountant
+  // types to steer the AI's assessment of this item's upload (e.g. "expect a
+  // 2024 return"). Blank/undefined = default behavior.
+  ai_instructions?: string | null;
 };
 
 export type Template = {

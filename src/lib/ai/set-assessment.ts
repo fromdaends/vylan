@@ -304,9 +304,12 @@ type SetRequestContext = {
   requestLabelFr: string | null;
   clientName: string | null;
   expectedYear: number | null;
+  // Optional per-item note the accountant typed to steer the AI (migration
+  // 0390). Blank/null leaves the prompt unchanged from before.
+  aiInstructions: string | null;
 };
 
-function buildSetSystemPrompt(
+export function buildSetSystemPrompt(
   ctx: SetRequestContext,
   fileCount: number,
 ): string {
@@ -314,12 +317,18 @@ function buildSetSystemPrompt(
   const labelFr = ctx.requestLabelFr?.trim() || "(no French label)";
   const clientName = ctx.clientName?.trim() || "(unknown)";
   const year = ctx.expectedYear != null ? String(ctx.expectedYear) : "(unknown)";
+  // Optional accountant guidance for this item. Advisory only — it informs the
+  // judgment but never overrides the grounded-in-the-files rules below.
+  const note = ctx.aiInstructions?.trim();
+  const noteLine = note
+    ? `\n- Accountant's note for this item (guidance, not an override): "${note}"`
+    : "";
   return `You are a meticulous assistant to a Quebec accountant. A client uploaded ${fileCount} file(s) into ONE checklist item of a document request. Each file has already been examined alone; YOUR job is to judge them TOGETHER as a set.
 
 Request context:
 - Requested item: "${label}" (French label: "${labelFr}")
 - Client: ${clientName}
-- Expected tax year: ${year}
+- Expected tax year: ${year}${noteLine}
 
 First decide what the files form together:
 - ONE multi-page document split across several files (e.g. a 4-page bank statement photographed page by page),
@@ -583,7 +592,7 @@ export async function processSetAssessmentJob(
   const { data: itemData } = await sb
     .from("request_items")
     .select(
-      "id, engagement_id, label, label_fr, kind, engagements!inner(firm_id, title, clients!inner(display_name, locale))",
+      "id, engagement_id, label, label_fr, kind, ai_instructions, engagements!inner(firm_id, title, clients!inner(display_name, locale))",
     )
     .eq("id", itemId)
     .maybeSingle();
@@ -601,6 +610,7 @@ export async function processSetAssessmentJob(
     label: string | null;
     label_fr: string | null;
     kind: string;
+    ai_instructions: string | null;
     engagements: EngCtx | EngCtx[] | null;
   };
   const item = itemData as unknown as ItemRow;
@@ -696,6 +706,7 @@ export async function processSetAssessmentJob(
     requestLabelFr: item.label_fr ?? null,
     clientName: client?.display_name ?? null,
     expectedYear: expectedYearFromTitle(eng?.title ?? ""),
+    aiInstructions: item.ai_instructions ?? null,
   };
   const systemPrompt = buildSetSystemPrompt(requestContext, prepared.length);
   const requestedAs =

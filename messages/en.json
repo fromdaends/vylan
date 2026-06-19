@@ -1027,6 +1027,8 @@
     "label_fr_placeholder": "Label (French)",
     "label_en_placeholder": "Label (English)",
     "description_fr_placeholder": "Optional description for the client",
+    "ai_instructions_placeholder": "AI note (optional): e.g. expect a 2024 return, not 2026",
+    "ai_instructions_label": "AI note (optional)",
     "required": "Required",
     "add_item": "Add item",
     "checklist_empty": "No items in the checklist. Pick a template or add one.",
