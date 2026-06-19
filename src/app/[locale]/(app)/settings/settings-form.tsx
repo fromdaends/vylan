@@ -36,6 +36,10 @@ import {
   type FirmInfo,
 } from "@/components/settings/firm-settings-sections";
 import { AccountSignInSections } from "@/components/settings/account-security-sections";
+import {
+  PaymentsConnectSection,
+  type ConnectStatus,
+} from "@/components/settings/payments-section";
 import { MfaSection } from "@/components/profile/mfa-section";
 // Type-only import (erased at build) — safe in this client component even though
 // usage.ts is server code. Keeps the AI-usage prop shape in sync with the source.
@@ -90,6 +94,7 @@ export function SettingsShell({
   aiUsage,
   isOwner,
   billingSlot,
+  connect,
   firmName,
   firm,
   firmLogoUrl,
@@ -106,9 +111,12 @@ export function SettingsShell({
   aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
-  // passed in as a slot so the client shell can show it under the Billing tab.
+  // passed in as a slot so the client shell can show it under the Payments tab.
   // Null for non-owners.
   billingSlot: React.ReactNode;
+  // Stripe Connect status for the "Get paid by clients" block at the top of the
+  // Payments section. Null for non-owners.
+  connect: ConnectStatus | null;
   firmName: string;
   firm: FirmInfo;
   firmLogoUrl: string | null;
@@ -198,11 +206,12 @@ export function SettingsShell({
           />
         )}
         {section === "payments" && isOwner && (
-          // Payments home. Today it hosts the firm's own Vylan subscription
-          // (the Subscription card). Client-payment collection (Stripe Connect
-          // onboarding + payment requests) will slot in ABOVE this card in a
-          // later phase, hence the spaced container.
-          <div className="space-y-12">{billingSlot}</div>
+          // Payments home: client-payment collection (Stripe Connect) on top,
+          // the firm's own Vylan subscription below.
+          <div className="space-y-12">
+            {connect && <PaymentsConnectSection connect={connect} />}
+            {billingSlot}
+          </div>
         )}
         {section === "documents" && isOwner && (
           <DocumentsSection

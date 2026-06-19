@@ -1,0 +1,82 @@
+import { NextResponse } from "next/server";
+import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
+import { setFirmConnectAccountId } from "@/lib/db/stripe-connect";
+
+export const runtime = "nodejs";
+
+// POST /api/billing/connect/onboard
+//
+// Starts (or resumes) Stripe Connect STANDARD onboarding for the current firm.
+// Creates a connected account on first use, persists its id (service role),
+// then returns a Stripe-hosted Account Link the browser redirects to. Stripe
+// collects all identity/bank/tax details — Vylan never sees them. Owner-only.
+export async function POST() {
+  if (!isStripeConfigured()) {
+    return NextResponse.json({ error: "stripe_not_configured" }, { status: 503 });
+  }
+
+  const sb = await getServerSupabase();
+  const { data: auth } = await sb.auth.getUser();
+  if (!auth.user) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+  // Owner-only: connecting the firm's payout account is firm-admin.
+  const me = await getCurrentUser();
+  if (me?.role !== "owner") {
+    return NextResponse.json({ error: "owner_only" }, { status: 403 });
+  }
+  const firm = await getCurrentFirm();
+  if (!firm) {
+    return NextResponse.json({ error: "no_firm" }, { status: 400 });
+  }
+
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  const s = stripe()!;
+
+  // Reuse the firm's existing connected account if it has one (resuming an
+  // incomplete onboarding); otherwise create a fresh Standard account.
+  let accountId = firm.stripe_connect_account_id ?? null;
+  if (!accountId) {
+    try {
+      const account = await s.accounts.create({
+        type: "standard",
+        email: auth.user.email ?? undefined,
+        metadata: { firm_id: firm.id },
+      });
+      accountId = account.id;
+    } catch (e) {
+      console.error("[connect/onboard] account create failed:", e);
+      return NextResponse.json({ error: "stripe_error" }, { status: 502 });
+    }
+    const saved = await setFirmConnectAccountId(firm.id, accountId);
+    if (!saved.ok) {
+      // Pre-migration (0370 not applied yet) or a DB error. Surface a clean
+      // status so the UI can tell the founder to apply the migration rather
+      // than throwing a 500. We do NOT proceed to the account link, because we
+      // couldn't store the account id and would orphan it.
+      return NextResponse.json(
+        { error: saved.reason },
+        { status: saved.reason === "migration_pending" ? 503 : 500 },
+      );
+    }
+  }
+
+  // Hosted onboarding link. return_url / refresh_url both land back on the
+  // Payments settings section; the ?connect flag lets the UI show a friendly
+  // "confirming with Stripe" state while the webhook writes the real status.
+  try {
+    const link = await s.accountLinks.create({
+      account: accountId,
+      type: "account_onboarding",
+      return_url: `${appUrl}/settings?tab=payments&connect=done`,
+      refresh_url: `${appUrl}/settings?tab=payments&connect=refresh`,
+    });
+    return NextResponse.json({ url: link.url });
+  } catch (e) {
+    console.error("[connect/onboard] account link failed:", e);
+    return NextResponse.json({ error: "stripe_error" }, { status: 502 });
+  }
+}
