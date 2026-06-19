@@ -53,6 +53,7 @@ import {
   getLastFirmPaymentAmountCents,
 } from "@/lib/db/payment-requests";
 import { resolveDefaultAmountCents } from "@/lib/payments/prefill";
+import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
 import { RequestPaymentButton } from "@/components/engagements/request-payment-button";
 import { CopyPaymentLink } from "@/components/engagements/copy-payment-link";
 import { isTrialExpired } from "@/lib/trial";
@@ -129,13 +130,30 @@ export default async function EngagementDetailPage({
   // (Stripe Connect ready). Load the latest request (status badge) + compute the
   // dialog's pre-fill amount (per-service default price -> last amount -> empty).
   const connectReady = firm?.connect_charges_enabled === true;
-  const [latestPayment, lastFirmAmountCents] =
+  const [latestPaymentRaw, lastFirmAmountCents] =
     connectReady && firm
       ? await Promise.all([
           getLatestPaymentRequestForEngagement(engagement.id),
           getLastFirmPaymentAmountCents(firm.id),
         ])
       : [null, null];
+  // Self-heal: if a payment is still "requested" but Stripe already collected it
+  // (the webhook can lag or be misconfigured), reconcile straight from Stripe so
+  // the accountant sees "Paid" without depending on the webhook.
+  let latestPayment = latestPaymentRaw;
+  if (
+    latestPaymentRaw &&
+    latestPaymentRaw.status === "requested" &&
+    firm?.stripe_connect_account_id
+  ) {
+    const status = await reconcilePaymentRequest(
+      latestPaymentRaw.id,
+      firm.stripe_connect_account_id,
+    );
+    if (status && status !== latestPaymentRaw.status) {
+      latestPayment = { ...latestPaymentRaw, status };
+    }
+  }
   const paymentPrefillCents = resolveDefaultAmountCents(
     firm?.service_prices,
     engagement.type,

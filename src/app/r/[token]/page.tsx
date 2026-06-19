@@ -3,6 +3,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { loadPortalContext } from "@/lib/db/portal";
+import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
 import { brand } from "@/lib/brand";
 import { PortalShell } from "@/components/portal/portal-shell";
 import { ThemeProvider } from "@/components/theme/theme-provider";
@@ -33,6 +34,20 @@ export default async function PortalPage({
 
   const ctx = await loadPortalContext(token);
   if (!ctx) notFound();
+
+  // The client just returned from a successful Stripe checkout (?paid=1).
+  // Reconcile the payment straight from Stripe so it flips to "paid" for the
+  // accountant immediately, without depending on the webhook.
+  if (
+    sp.paid === "1" &&
+    ctx.payment_request &&
+    ctx.firm.stripe_connect_account_id
+  ) {
+    await reconcilePaymentRequest(
+      ctx.payment_request.id,
+      ctx.firm.stripe_connect_account_id,
+    );
+  }
 
   // The client portal ALWAYS defaults to English, regardless of the client's
   // stored locale or the firm default. The client can switch to French via the
