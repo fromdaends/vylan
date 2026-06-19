@@ -40,6 +40,7 @@ import {
   PaymentsConnectSection,
   type ConnectStatus,
 } from "@/components/settings/payments-section";
+import { PaymentsServicePrices } from "@/components/settings/payments-service-prices";
 import { MfaSection } from "@/components/profile/mfa-section";
 // Type-only import (erased at build) — safe in this client component even though
 // usage.ts is server code. Keeps the AI-usage prop shape in sync with the source.
@@ -95,6 +96,7 @@ export function SettingsShell({
   isOwner,
   billingSlot,
   connect,
+  servicePrices,
   firmName,
   firm,
   firmLogoUrl,
@@ -117,6 +119,9 @@ export function SettingsShell({
   // Stripe Connect status for the "Get paid by clients" block at the top of the
   // Payments section. Null for non-owners.
   connect: ConnectStatus | null;
+  // Per-service default prices (cents) for the Payments section editor. Null for
+  // non-owners.
+  servicePrices: Record<string, number> | null;
   firmName: string;
   firm: FirmInfo;
   firmLogoUrl: string | null;
@@ -210,6 +215,9 @@ export function SettingsShell({
           // the firm's own Vylan subscription below.
           <div className="space-y-12">
             {connect && <PaymentsConnectSection connect={connect} />}
+            {servicePrices && (
+              <PaymentsServicePrices prices={servicePrices} />
+            )}
             {billingSlot}
           </div>
         )}
