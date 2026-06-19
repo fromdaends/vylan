@@ -41,6 +41,8 @@ import {
   type ConnectStatus,
 } from "@/components/settings/payments-section";
 import { PaymentsServicePrices } from "@/components/settings/payments-service-prices";
+import { PaymentsList } from "@/components/payments/payments-list";
+import type { PaymentsListRow } from "@/lib/db/payment-requests";
 import { MfaSection } from "@/components/profile/mfa-section";
 // Type-only import (erased at build) — safe in this client component even though
 // usage.ts is server code. Keeps the AI-usage prop shape in sync with the source.
@@ -97,6 +99,7 @@ export function SettingsShell({
   billingSlot,
   connect,
   servicePrices,
+  paymentsList,
   firmName,
   firm,
   firmLogoUrl,
@@ -122,6 +125,8 @@ export function SettingsShell({
   // Per-service default prices (cents) for the Payments section editor. Null for
   // non-owners.
   servicePrices: Record<string, number> | null;
+  // Firm-wide recent payments for the Payments section list. Null for non-owners.
+  paymentsList: PaymentsListRow[] | null;
   firmName: string;
   firm: FirmInfo;
   firmLogoUrl: string | null;
@@ -217,6 +222,19 @@ export function SettingsShell({
             {connect && <PaymentsConnectSection connect={connect} />}
             {servicePrices && (
               <PaymentsServicePrices prices={servicePrices} />
+            )}
+            {paymentsList && paymentsList.length > 0 && (
+              <section>
+                <h2 className="text-sm font-semibold">
+                  {t("payments_history_title")}
+                </h2>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t("payments_history_hint")}
+                </p>
+                <div className="mt-4 max-w-xl">
+                  <PaymentsList rows={paymentsList} />
+                </div>
+              </section>
             )}
             {billingSlot}
           </div>

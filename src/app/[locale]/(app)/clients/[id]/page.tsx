@@ -8,9 +8,15 @@ import {
   engagementStatusPillClass,
   engagementStatusVariant,
 } from "@/lib/engagements/status-pill";
+import {
+  getLatestPaymentStatusByEngagementIds,
+  listFirmPaymentsWithNames,
+} from "@/lib/db/payment-requests";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { PaymentBadge } from "@/components/payments/payment-badge";
+import { PaymentsList } from "@/components/payments/payments-list";
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import {
   archiveClientAction,
@@ -43,6 +49,12 @@ export default async function ClientDetailPage({
       deriveEngagementStatus(s.engagement.status, s.attention),
     ]),
   );
+  // Payment status per engagement (for the chip) + this client's payment history
+  // (so the accountant can backtrack what was paid on which engagement).
+  const [paymentByEng, clientPayments] = await Promise.all([
+    getLatestPaymentStatusByEngagementIds(engagements.map((e) => e.id)),
+    listFirmPaymentsWithNames({ clientId: id }),
+  ]);
   const t = await getTranslations("Clients");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
@@ -157,22 +169,37 @@ export default async function ClientDetailPage({
                         {e.due_date && ` · ${formatDate(e.due_date, locale, "medium")}`}
                       </div>
                     </div>
-                    <Badge
-                      variant={engagementStatusVariant(
-                        derivedStatusById.get(e.id) ?? e.status,
-                      )}
-                      className={engagementStatusPillClass(
-                        derivedStatusById.get(e.id) ?? e.status,
-                      )}
-                    >
-                      {tStatus(derivedStatusById.get(e.id) ?? e.status)}
-                    </Badge>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {paymentByEng.get(e.id) &&
+                        paymentByEng.get(e.id)!.status !== "canceled" && (
+                          <PaymentBadge status={paymentByEng.get(e.id)!.status} />
+                        )}
+                      <Badge
+                        variant={engagementStatusVariant(
+                          derivedStatusById.get(e.id) ?? e.status,
+                        )}
+                        className={engagementStatusPillClass(
+                          derivedStatusById.get(e.id) ?? e.status,
+                        )}
+                      >
+                        {tStatus(derivedStatusById.get(e.id) ?? e.status)}
+                      </Badge>
+                    </div>
                   </Link>
                 </li>
               ))}
             </ul>
           )}
       </div>
+
+      {clientPayments.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">
+            {tEng("payments_history")}
+          </h2>
+          <PaymentsList rows={clientPayments} showClient={false} />
+        </div>
+      )}
     </div>
   );
 }

@@ -127,6 +127,114 @@ export async function getLastFirmPaymentAmountCents(
   return (data?.amount_cents as number | undefined) ?? null;
 }
 
+// Latest payment status for a SET of engagements in ONE query (no N+1) — feeds
+// the per-engagement badge on the dashboard worklist + engagements list. Rows
+// are ordered newest-first, so the first row seen per engagement is the latest.
+export async function getLatestPaymentStatusByEngagementIds(
+  ids: string[],
+): Promise<
+  Map<string, { status: PaymentRequestStatus; amount_cents: number; currency: string }>
+> {
+  const out = new Map<
+    string,
+    { status: PaymentRequestStatus; amount_cents: number; currency: string }
+  >();
+  if (ids.length === 0) return out;
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .select("engagement_id, status, amount_cents, currency, created_at")
+    .in("engagement_id", ids)
+    .order("created_at", { ascending: false });
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] getLatestStatusByIds failed:", error);
+    }
+    return out;
+  }
+  for (const row of data ?? []) {
+    const eid = row.engagement_id as string | null;
+    if (!eid || out.has(eid)) continue;
+    out.set(eid, {
+      status: row.status as PaymentRequestStatus,
+      amount_cents: row.amount_cents as number,
+      currency: (row.currency as string) ?? "cad",
+    });
+  }
+  return out;
+}
+
+export type PaymentsListRow = {
+  id: string;
+  status: PaymentRequestStatus;
+  amountCents: number;
+  currency: string;
+  createdAt: string;
+  clientName: string | null;
+  engagementTitle: string | null;
+};
+
+// Recent payments (RLS-scoped to the firm) for the Payments settings list and
+// the per-client payments history. Pass clientId to scope to one client. Joins
+// client + engagement names in JS (this repo has no PostgREST embeds). Degrades
+// to [] before migration 0380 is applied.
+export async function listFirmPaymentsWithNames(
+  opts: { clientId?: string; limit?: number } = {},
+): Promise<PaymentsListRow[]> {
+  const { clientId, limit = 50 } = opts;
+  const sb = await getServerSupabase();
+  let query = sb
+    .from("payment_requests")
+    .select(
+      "id, engagement_id, client_id, amount_cents, currency, status, created_at",
+    );
+  if (clientId) query = query.eq("client_id", clientId);
+  const { data: prs, error } = await query
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] listFirmPaymentsWithNames failed:", error);
+    }
+    return [];
+  }
+  const rows = prs ?? [];
+  const engIds = [
+    ...new Set(rows.map((r) => r.engagement_id).filter(Boolean)),
+  ] as string[];
+  const cliIds = [
+    ...new Set(rows.map((r) => r.client_id).filter(Boolean)),
+  ] as string[];
+  const engTitle = new Map<string, string>();
+  const cliName = new Map<string, string>();
+  if (engIds.length) {
+    const { data } = await sb
+      .from("engagements")
+      .select("id, title")
+      .in("id", engIds);
+    for (const e of data ?? []) engTitle.set(e.id as string, e.title as string);
+  }
+  if (cliIds.length) {
+    const { data } = await sb
+      .from("clients")
+      .select("id, display_name")
+      .in("id", cliIds);
+    for (const c of data ?? [])
+      cliName.set(c.id as string, c.display_name as string);
+  }
+  return rows.map((r) => ({
+    id: r.id as string,
+    status: r.status as PaymentRequestStatus,
+    amountCents: r.amount_cents as number,
+    currency: (r.currency as string) ?? "cad",
+    createdAt: r.created_at as string,
+    clientName: r.client_id ? (cliName.get(r.client_id) ?? null) : null,
+    engagementTitle: r.engagement_id
+      ? (engTitle.get(r.engagement_id) ?? null)
+      : null,
+  }));
+}
+
 // ── Service-role helpers ────────────────────────────────────────────────────
 // Used by the unauthenticated client portal (checkout route) and the Stripe
 // webhook, neither of which has a user session. The service role bypasses RLS,
