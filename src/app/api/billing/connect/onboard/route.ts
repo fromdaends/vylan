@@ -91,12 +91,20 @@ export async function POST() {
 // WHY connecting failed (e.g. "Connect is not enabled...") instead of a generic
 // message. Stripe error messages are designed to be shown to the integrator.
 function stripeDetail(e: unknown): string | undefined {
+  let detail: string | undefined;
   if (e && typeof e === "object") {
     const err = e as { message?: string; code?: string };
     const parts = [err.message, err.code ? `[${err.code}]` : undefined].filter(
       Boolean,
     );
-    if (parts.length) return parts.join(" ");
+    if (parts.length) detail = parts.join(" ");
   }
-  return e instanceof Error ? e.message : undefined;
+  if (!detail && e instanceof Error) detail = e.message;
+  // Never echo anything key-like back to the UI, even though this is owner-only:
+  // Stripe's "Invalid API Key" message includes the key value. Redact any
+  // sk_/pk_/rk_/mk_/whsec_ token so the reason stays helpful without leaking.
+  return detail?.replace(
+    /\b(sk|pk|rk|mk|whsec)_[A-Za-z0-9_]+/g,
+    "$1_[redacted]",
+  );
 }
