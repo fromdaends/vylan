@@ -89,8 +89,8 @@ function renderShell(
   );
 }
 
-describe("SettingsShell — Account / Security & privacy / Billing", () => {
-  it("shows the Account, Security and Billing tabs in the sub-nav", () => {
+describe("SettingsShell — Account / Security & privacy / Payments", () => {
+  it("shows the Account, Security and Payments tabs in the sub-nav", () => {
     renderShell();
     expect(
       screen.getByRole("button", { name: en.Settings.nav_account }),
@@ -99,7 +99,7 @@ describe("SettingsShell — Account / Security & privacy / Billing", () => {
       screen.getByRole("button", { name: en.Settings.nav_security }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: en.Settings.nav_billing }),
+      screen.getByRole("button", { name: en.Settings.nav_payments }),
     ).toBeInTheDocument();
   });
 
@@ -125,22 +125,29 @@ describe("SettingsShell — Account / Security & privacy / Billing", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the subscription slot only after switching to the Billing tab", () => {
+  it("shows the subscription slot only after switching to the Payments tab", () => {
     renderShell({ initialSection: "account" });
     expect(screen.queryByText("SUBSCRIPTION_SLOT")).not.toBeInTheDocument();
     expect(screen.getByDisplayValue(EMAIL)).toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("button", { name: en.Settings.nav_billing }),
+      screen.getByRole("button", { name: en.Settings.nav_payments }),
     );
     expect(screen.getByText("SUBSCRIPTION_SLOT")).toBeInTheDocument();
     expect(screen.queryByDisplayValue(EMAIL)).not.toBeInTheDocument();
   });
 
-  it("hides Billing + the owner-only privacy tools from non-owners but keeps 2FA", () => {
+  it("resolves the legacy ?tab=billing deep link to the Payments section", () => {
+    // Old bookmarks/links used ?tab=billing before the subscription card moved
+    // under Payments — they must still land on the subscription slot.
+    renderShell({ initialSection: "billing" });
+    expect(screen.getByText("SUBSCRIPTION_SLOT")).toBeInTheDocument();
+  });
+
+  it("hides Payments + the owner-only privacy tools from non-owners but keeps 2FA", () => {
     renderShell({ isOwner: false, billingSlot: null, initialSection: "security" });
     expect(screen.getByText(en.Profile.mfa_title)).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: en.Settings.nav_billing }),
+      screen.queryByRole("button", { name: en.Settings.nav_payments }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText(en.Settings.data_export_label),

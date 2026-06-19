@@ -13,7 +13,7 @@ import {
   SlidersHorizontal,
   FileText,
   ShieldCheck,
-  CreditCard,
+  Wallet,
   Download,
   Trash2,
   ChevronRight,
@@ -47,7 +47,7 @@ type SectionId =
   | "security"
   | "appearance"
   | "general"
-  | "billing"
+  | "payments"
   | "documents";
 type Translate = (k: string, values?: Record<string, string | number>) => string;
 
@@ -76,7 +76,7 @@ const SECTION_IDS: SectionId[] = [
   "security",
   "appearance",
   "general",
-  "billing",
+  "payments",
   "documents",
 ];
 
@@ -119,10 +119,14 @@ export function SettingsShell({
   initialSection?: string;
 }) {
   const t = useTranslations("Settings");
-  const requested: SectionId = SECTION_IDS.includes(initialSection as SectionId)
-    ? (initialSection as SectionId)
+  // The subscription summary used to live under its own "billing" tab; it now
+  // lives inside the new "Payments" section. Keep old ?tab=billing bookmarks /
+  // links working by aliasing them to the Payments section.
+  const aliased = initialSection === "billing" ? "payments" : initialSection;
+  const requested: SectionId = SECTION_IDS.includes(aliased as SectionId)
+    ? (aliased as SectionId)
     : "account";
-  // Staff deep-linking ?tab=billing / ?tab=documents would land on an empty
+  // Staff deep-linking ?tab=payments / ?tab=documents would land on an empty
   // owner-only tab — fall back to Account.
   const [section, setSection] = useState<SectionId>(
     !isOwner && isOwnerOnlySettingsSection(requested) ? "account" : requested,
@@ -133,7 +137,7 @@ export function SettingsShell({
     { id: "security", label: t("nav_security"), icon: ShieldCheck },
     { id: "appearance", label: t("nav_appearance"), icon: Palette },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
-    { id: "billing", label: t("nav_billing"), icon: CreditCard },
+    { id: "payments", label: t("nav_payments"), icon: Wallet },
     { id: "documents", label: t("nav_documents"), icon: FileText },
   ];
   // Owner-only tabs (Billing, Documents) are hidden from staff.
@@ -193,7 +197,13 @@ export function SettingsShell({
             t={t}
           />
         )}
-        {section === "billing" && isOwner && billingSlot}
+        {section === "payments" && isOwner && (
+          // Payments home. Today it hosts the firm's own Vylan subscription
+          // (the Subscription card). Client-payment collection (Stripe Connect
+          // onboarding + payment requests) will slot in ABOVE this card in a
+          // later phase, hence the spaced container.
+          <div className="space-y-12">{billingSlot}</div>
+        )}
         {section === "documents" && isOwner && (
           <DocumentsSection
             autoRejectUnusableDocs={autoRejectUnusableDocs}
@@ -213,7 +223,7 @@ export function SettingsShell({
 // ─────────────────────────────────────────────────────────────────────────────
 // Account — your sign-in (Email, Password) up top, then your firm settings
 // (logo, name, brand color, client-email language). Two-factor lives under
-// Security & privacy; the subscription summary lives in Billing.
+// Security & privacy; the subscription summary lives in Payments.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AccountSection({
