@@ -8,10 +8,12 @@ import {
   engagementStatusPillClass,
   engagementStatusVariant,
 } from "@/lib/engagements/status-pill";
+import { getCurrentFirm } from "@/lib/db/firms";
 import {
   getLatestPaymentStatusByEngagementIds,
   listFirmPaymentsWithNames,
 } from "@/lib/db/payment-requests";
+import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +51,19 @@ export default async function ClientDetailPage({
       deriveEngagementStatus(s.engagement.status, s.attention),
     ]),
   );
+  // Self-heal: re-check this client's still-"requested" payments against Stripe
+  // (webhook-independent) so Paid shows even if the webhook never delivered, then
+  // read the now-correct statuses for display. Bounded to one client's payments.
+  const firm = await getCurrentFirm();
+  const connectedAccountId = firm?.stripe_connect_account_id ?? null;
+  if (connectedAccountId) {
+    const pending = await listFirmPaymentsWithNames({ clientId: id });
+    await Promise.all(
+      pending
+        .filter((p) => p.status === "requested")
+        .map((p) => reconcilePaymentRequest(p.id, connectedAccountId)),
+    );
+  }
   // Payment status per engagement (for the chip) + this client's payment history
   // (so the accountant can backtrack what was paid on which engagement).
   const [paymentByEng, clientPayments] = await Promise.all([
