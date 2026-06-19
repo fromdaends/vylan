@@ -11,10 +11,12 @@ import {
   AlertTriangle,
   Bell,
   CheckCheck,
+  CheckCircle2,
   ChevronRight,
   FileSignature,
   FileUp,
   Sparkles,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -178,5 +180,14 @@ function notificationVisual(kind: HomeNotification["kind"]): {
         Icon: AlertTriangle,
         tone: "bg-destructive/15 text-destructive",
       };
+    case "client_paid":
+      return { Icon: Wallet, tone: "bg-success/15 text-success" };
+    case "payment_failed":
+      return {
+        Icon: AlertTriangle,
+        tone: "bg-destructive/15 text-destructive",
+      };
+    case "engagement_completed":
+      return { Icon: CheckCircle2, tone: "bg-success/15 text-success" };
   }
 }

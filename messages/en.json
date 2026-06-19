@@ -747,7 +747,10 @@
     "kind_ready_to_review": "All documents received, ready to review",
     "kind_document_uploaded": "New document uploaded",
     "kind_signed_copy_uploaded": "Signed copy uploaded",
-    "kind_overdue": "Engagement is overdue"
+    "kind_overdue": "Engagement is overdue",
+    "kind_client_paid": "Client paid",
+    "kind_payment_failed": "Client payment failed",
+    "kind_engagement_completed": "Engagement completed"
   },
   "Inbox": {
     "title": "Inbox",
@@ -768,6 +771,9 @@
     "kind_document_uploaded": "New document uploaded",
     "kind_signed_copy_uploaded": "Signed copy uploaded",
     "kind_overdue": "Engagement is overdue",
+    "kind_client_paid": "Client paid",
+    "kind_payment_failed": "Client payment failed",
+    "kind_engagement_completed": "Engagement completed",
     "search_label": "Search clients",
     "search_placeholder": "Find",
     "search_clear": "Clear search",
