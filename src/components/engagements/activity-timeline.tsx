@@ -146,6 +146,8 @@ function describe(
       return t("complete_engagement");
     case "reopen_engagement":
       return t("reopen_engagement");
+    case "payment_requested":
+      return t("payment_requested");
     case "ai_classified":
       // Filtered out above, but keep the branch so the switch stays
       // exhaustive against future enum additions.

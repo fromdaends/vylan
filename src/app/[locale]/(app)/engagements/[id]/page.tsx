@@ -27,7 +27,7 @@ import {
 } from "@/app/actions/items";
 import { approveFileAction } from "@/app/actions/files";
 import { assertLocale } from "@/lib/locale";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatCurrency } from "@/lib/format";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
 import { ChecklistItemShell } from "@/components/engagements/checklist-item-shell";
@@ -48,6 +48,12 @@ import { EngagementAssignee } from "@/components/engagements/engagement-assignee
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
+import {
+  getLatestPaymentRequestForEngagement,
+  getLastFirmPaymentAmountCents,
+} from "@/lib/db/payment-requests";
+import { resolveDefaultAmountCents } from "@/lib/payments/prefill";
+import { RequestPaymentButton } from "@/components/engagements/request-payment-button";
 import { isTrialExpired } from "@/lib/trial";
 import {
   getCurrentUser,
@@ -118,6 +124,25 @@ export default async function EngagementDetailPage({
   // The server actions enforce this too; this is the matching UI gate.
   const canDelete = user ? canDeleteEngagements(user.role) : false;
 
+  // Payments (Phase 3): only relevant once the firm can actually receive money
+  // (Stripe Connect ready). Load the latest request (status badge) + compute the
+  // dialog's pre-fill amount (per-service default price -> last amount -> empty).
+  const connectReady = firm?.connect_charges_enabled === true;
+  const [latestPayment, lastFirmAmountCents] =
+    connectReady && firm
+      ? await Promise.all([
+          getLatestPaymentRequestForEngagement(engagement.id),
+          getLastFirmPaymentAmountCents(firm.id),
+        ])
+      : [null, null];
+  const paymentPrefillCents = resolveDefaultAmountCents(
+    firm?.service_prices,
+    engagement.type,
+    lastFirmAmountCents,
+  );
+  const paymentPrefill =
+    paymentPrefillCents != null ? (paymentPrefillCents / 100).toFixed(2) : "";
+
   // Assignment (Phase 5): resolve the assignee (may be deactivated — still shown
   // for history) + the active members available as reassignment targets.
   const assignee =
@@ -140,6 +165,15 @@ export default async function EngagementDetailPage({
   const collectionItems = items.filter((i) => i.kind !== "signature");
 
   const t = await getTranslations("Engagements");
+  const paymentStatusLabel = latestPayment
+    ? latestPayment.status === "paid"
+      ? t("payment_status_paid")
+      : latestPayment.status === "failed"
+        ? t("payment_status_failed")
+        : latestPayment.status === "canceled"
+          ? t("payment_status_canceled")
+          : t("payment_status_requested")
+    : null;
   const tStatus = await getTranslations("Status");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
@@ -322,14 +356,36 @@ export default async function EngagementDetailPage({
               </form>
             </>
           )}
+          {latestPayment && paymentStatusLabel && (
+            <Badge
+              variant={
+                latestPayment.status === "paid"
+                  ? "default"
+                  : latestPayment.status === "failed"
+                    ? "destructive"
+                    : "secondary"
+              }
+            >
+              {paymentStatusLabel} ·{" "}
+              {formatCurrency(latestPayment.amount_cents / 100, locale)}
+            </Badge>
+          )}
           {isComplete && (
-            <form action={reopenEngagementAction}>
-              <input type="hidden" name="id" value={engagement.id} />
-              <Button type="submit" variant="outline" size="sm">
-                <RotateCcw className="size-4" />
-                {t("reopen")}
-              </Button>
-            </form>
+            <>
+              <form action={reopenEngagementAction}>
+                <input type="hidden" name="id" value={engagement.id} />
+                <Button type="submit" variant="outline" size="sm">
+                  <RotateCcw className="size-4" />
+                  {t("reopen")}
+                </Button>
+              </form>
+              {connectReady && (
+                <RequestPaymentButton
+                  engagementId={engagement.id}
+                  defaultAmount={paymentPrefill}
+                />
+              )}
+            </>
           )}
           {/* Occasional actions (Pause/Resume reminders, Download all, Cancel,
               Delete) live in a "..." menu so the header stays calm — primary +

@@ -91,6 +91,10 @@ export default async function SettingsPage({
       }
     : null;
 
+  // Per-service default prices for the Payments settings editor (owner-only).
+  // Defaults to {} until migration 0380 is applied (column absent -> undefined).
+  const servicePrices = isOwner ? (firm.service_prices ?? {}) : null;
+
   return (
     <div className="max-w-3xl mx-auto space-y-8 animate-in-up">
       <header>
@@ -116,6 +120,7 @@ export default async function SettingsPage({
         isOwner={isOwner}
         billingSlot={billingSlot}
         connect={connect}
+        servicePrices={servicePrices}
         firmName={firm.name}
         firm={{
           name: firm.name,

@@ -25,6 +25,12 @@ export type Firm = {
   connect_payouts_enabled: boolean;
   connect_details_submitted: boolean;
   connect_onboarded_at: string | null;
+  // Per-service default payment prices in cents, keyed by engagement type
+  // (t1 / t2 / bookkeeping / custom) — migration 0380. Pre-fills the
+  // Request-payment dialog. Owner-editable (IS in updateCurrentFirm's
+  // whitelist). May be undefined at runtime until 0380 is applied — readers
+  // default it to {}.
+  service_prices: Record<string, number>;
   plan: "trial" | "solo" | "cabinet" | "cabinet_plus";
   // Per-firm seat-cap override (migration 0190). NULL = use the plan's
   // maxUsers; a positive value wins over the plan (resolveSeatCap). Service-
@@ -93,6 +99,7 @@ export async function updateCurrentFirm(
       | "auto_reject_duplicates"
       | "auto_request_missing_pages"
       | "include_quebec_forms"
+      | "service_prices"
       | "logo_url"
     >
   >,
