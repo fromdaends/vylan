@@ -79,6 +79,7 @@ function renderShell(
         billingSlot={<div>SUBSCRIPTION_SLOT</div>}
         connect={null}
         servicePrices={null}
+        paymentsList={null}
         firmName="Acme"
         firm={FIRM}
         firmLogoUrl={null}

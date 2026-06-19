@@ -54,6 +54,7 @@ import {
 } from "@/lib/db/payment-requests";
 import { resolveDefaultAmountCents } from "@/lib/payments/prefill";
 import { RequestPaymentButton } from "@/components/engagements/request-payment-button";
+import { CopyPaymentLink } from "@/components/engagements/copy-payment-link";
 import { isTrialExpired } from "@/lib/trial";
 import {
   getCurrentUser,
@@ -369,6 +370,9 @@ export default async function EngagementDetailPage({
               {paymentStatusLabel} ·{" "}
               {formatCurrency(latestPayment.amount_cents / 100, locale)}
             </Badge>
+          )}
+          {latestPayment?.status === "requested" && portalUrl && (
+            <CopyPaymentLink url={portalUrl} />
           )}
           {isComplete && (
             <>

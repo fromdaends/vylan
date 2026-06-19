@@ -30,6 +30,7 @@ import {
 } from "@/components/engagements/engagement-row-menu";
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 import type { NeedsAttentionBadge } from "@/components/dashboard/needs-attention";
+import { PaymentBadge } from "@/components/payments/payment-badge";
 
 const BADGE_ICONS: Record<NeedsAttentionBadge["iconKey"], LucideIcon> = {
   overdue: AlertTriangle,
@@ -137,6 +138,9 @@ export function NeedsAttentionRow({
                     </span>
                   ))}
                 </span>
+              )}
+              {row.paymentStatus && row.paymentStatus !== "canceled" && (
+                <PaymentBadge status={row.paymentStatus} className="shrink-0" />
               )}
             </div>
             <DropdownMenu>

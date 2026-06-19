@@ -6,6 +6,7 @@ import {
 } from "@/lib/db/engagements";
 import { listClients } from "@/lib/db/clients";
 import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { getLatestPaymentStatusByEngagementIds } from "@/lib/db/payment-requests";
 import {
   computeAttention,
   attentionScore,
@@ -130,10 +131,14 @@ export const loadEngagementWorklist = cache(
   async function _loadEngagementWorklist(
     scope: EngagementScope = "active",
   ): Promise<WorklistRow[]> {
-    const [signals, clients, firmUsers] = await Promise.all([
-      loadEngagementSignals(scope),
+    // Signals first so we have the engagement ids to batch-load payment status
+    // in ONE query alongside clients + users (no N+1). loadEngagementSignals is
+    // React.cache'd, so this is usually free on repeat.
+    const signals = await loadEngagementSignals(scope);
+    const [clients, firmUsers, paymentByEng] = await Promise.all([
       listClients({ includeArchived: false }),
       listFirmUsers(),
+      getLatestPaymentStatusByEngagementIds(signals.map((s) => s.engagement.id)),
     ]);
 
     const clientsById = new Map(clients.map((c) => [c.id, c]));
@@ -172,6 +177,7 @@ export const loadEngagementWorklist = cache(
         recencyAt,
         archivedAt: e.archived_at,
         deletedAt: e.deleted_at,
+        paymentStatus: paymentByEng.get(e.id)?.status ?? null,
       } satisfies WorklistRow;
     });
   },

@@ -10,6 +10,7 @@ import { getBrandingImageUrl } from "@/lib/storage";
 import { assertLocale } from "@/lib/locale";
 import { isStripeConfigured } from "@/lib/stripe";
 import { syncFirmConnectStatusFromStripe } from "@/lib/db/stripe-connect";
+import { listFirmPaymentsWithNames } from "@/lib/db/payment-requests";
 import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
@@ -109,6 +110,8 @@ export default async function SettingsPage({
   // Per-service default prices for the Payments settings editor (owner-only).
   // Defaults to {} until migration 0380 is applied (column absent -> undefined).
   const servicePrices = isOwner ? (firm.service_prices ?? {}) : null;
+  // Firm-wide recent payments for the Payments settings list (owner-only).
+  const paymentsList = isOwner ? await listFirmPaymentsWithNames() : null;
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 animate-in-up">
@@ -136,6 +139,7 @@ export default async function SettingsPage({
         billingSlot={billingSlot}
         connect={connect}
         servicePrices={servicePrices}
+        paymentsList={paymentsList}
         firmName={firm.name}
         firm={{
           name: firm.name,

@@ -5,6 +5,8 @@ import { useTranslations } from "next-intl";
 import { AlertTriangle, Clock, FileWarning, MoreHorizontal, Search } from "lucide-react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
+import { PaymentBadge } from "@/components/payments/payment-badge";
+import type { PaymentRequestStatus } from "@/lib/db/payment-requests";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -93,6 +95,10 @@ export type WorklistRow = {
   // Both null = active; archivedAt set = archived; deletedAt set = in trash.
   archivedAt: string | null;
   deletedAt: string | null;
+  // Latest payment status for this engagement, or null/undefined when no payment
+  // was ever requested (payment is optional). Drives the Paid / Unpaid / Failed
+  // chip. Optional so callers that don't load payments stay valid.
+  paymentStatus?: PaymentRequestStatus | null;
 };
 
 const FILTERS = ["recent", "mine", "complete"] as const;
@@ -498,7 +504,11 @@ function WorklistRowView({
               {/* Urgency lives in the always-visible Engagement cell (not the
                   Due column, which is hidden on phones) so triage badges never
                   disappear on small screens. */}
-              {(overdueText || dueSoonText || staleText || readyText) && (
+              {(overdueText ||
+                dueSoonText ||
+                staleText ||
+                readyText ||
+                (row.paymentStatus && row.paymentStatus !== "canceled")) && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   {overdueText && (
                     <Badge variant="destructive" className="gap-1 font-normal">
@@ -522,6 +532,9 @@ function WorklistRowView({
                       <FileWarning className="h-3 w-3" />
                       {staleText}
                     </Badge>
+                  )}
+                  {row.paymentStatus && (
+                    <PaymentBadge status={row.paymentStatus} />
                   )}
                 </div>
               )}
