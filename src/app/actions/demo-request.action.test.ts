@@ -181,6 +181,7 @@ describe("saveDemoStep — funnel walk", () => {
         firm_size: "2_5",
         client_volume: "25_100",
         current_tool: "taxdome",
+        industry: "accounting",
       },
     });
     expect(r2.ok).toBe(true);
@@ -227,6 +228,7 @@ describe("saveDemoStep — funnel walk", () => {
         firm_size: "solo",
         client_volume: "under_25",
         current_tool: "other_software",
+        industry: "accounting",
       },
     });
     expect(bad.ok).toBe(false);
@@ -242,6 +244,7 @@ describe("saveDemoStep — funnel walk", () => {
         client_volume: "under_25",
         current_tool: "other_software",
         current_tool_other: "Citrix ShareFile",
+        industry: "accounting",
       },
     });
     expect(good.ok).toBe(true);
@@ -256,6 +259,7 @@ describe("saveDemoStep — funnel walk", () => {
         firm_size: "solo",
         client_volume: "under_25",
         current_tool: "nothing",
+        industry: "accounting",
       },
     });
     expect(res.ok).toBe(false);
