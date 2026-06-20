@@ -152,6 +152,10 @@ function describe(
       return t("client_paid");
     case "payment_failed":
       return t("payment_failed");
+    case "signature_requested":
+      return t("signature_requested", { label: meta.label ?? "—" });
+    case "signature_signed":
+      return t("signature_signed");
     case "ai_classified":
       // Filtered out above, but keep the branch so the switch stays
       // exhaustive against future enum additions.

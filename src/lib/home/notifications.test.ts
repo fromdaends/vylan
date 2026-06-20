@@ -14,6 +14,9 @@ describe("eventActionToNotificationKind", () => {
     expect(eventActionToNotificationKind("complete_engagement")).toBe(
       "engagement_completed",
     );
+    expect(eventActionToNotificationKind("signature_signed")).toBe(
+      "client_signed",
+    );
   });
 
   it("returns null for actions that aren't surfaced as notifications", () => {

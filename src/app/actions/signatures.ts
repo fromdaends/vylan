@@ -104,11 +104,6 @@ export async function addSignatureItemAction(
     return { error: "generic" };
   }
 
-  await logUserActivity(eng.firm_id as string, engagementId, "add_item", {
-    item_id: itemId,
-    label: labelFr.trim(),
-  });
-
   // Resolve the signer (client) + firm once — needed for both the SignWell
   // request and the notification email.
   let client: Awaited<ReturnType<typeof getClient>> = null;
@@ -170,14 +165,19 @@ export async function addSignatureItemAction(
     error_detail: srError,
   });
 
-  if (srDocId) {
-    await logUserActivity(
-      eng.firm_id as string,
-      engagementId,
-      "signature_requested",
-      { item_id: itemId, signwell_document_id: srDocId, test_mode: testMode },
-    );
-  }
+  // One clean audit row for the request (always — even if SignWell setup
+  // failed, the accountant did request a signature and the item exists).
+  await logUserActivity(
+    eng.firm_id as string,
+    engagementId,
+    "signature_requested",
+    {
+      item_id: itemId,
+      label: labelFr.trim(),
+      test_mode: testMode,
+      ...(srDocId ? { signwell_document_id: srDocId } : {}),
+    },
+  );
 
   // Tell the client a signature is waiting. Best-effort — never fail the action
   // on an email hiccup (the item already exists and shows in the portal).

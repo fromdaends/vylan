@@ -808,7 +808,8 @@
     "kind_overdue": "Engagement en retard",
     "kind_client_paid": "Le client a payé",
     "kind_payment_failed": "Échec du paiement du client",
-    "kind_engagement_completed": "Engagement complété"
+    "kind_engagement_completed": "Engagement complété",
+    "kind_client_signed": "Le client a signé un document"
   },
   "Inbox": {
     "title": "Boîte de réception",
@@ -832,6 +833,7 @@
     "kind_client_paid": "Le client a payé",
     "kind_payment_failed": "Échec du paiement du client",
     "kind_engagement_completed": "Engagement complété",
+    "kind_client_signed": "Le client a signé un document",
     "search_label": "Rechercher des clients",
     "search_placeholder": "Rechercher",
     "search_clear": "Effacer la recherche",
@@ -1394,6 +1396,8 @@
     "payment_requested": "A demandé le paiement au client",
     "client_paid": "Le client a payé",
     "payment_failed": "Le paiement du client a échoué",
+    "signature_requested": "Signature demandée : {label}",
+    "signature_signed": "Le client a signé le document",
     "reminders_paused": "Rappels mis en pause",
     "reminders_resumed": "Rappels repris",
     "reminder_fired": "Rappel {tone} envoyé",
