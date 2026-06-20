@@ -538,7 +538,6 @@ export default async function EngagementDetailPage({
                   canEdit={isLive}
                   clientName={client?.display_name ?? null}
                   expectedYear={expectedYearFromTitle(engagement.title)}
-                  engagementTitle={engagement.title}
                   // AI off for this engagement → hide the per-document AI
                   // verdicts (they'd otherwise sit on a permanent "Not
                   // analyzed" chip). `=== false` so pre-migration (undefined)
@@ -561,7 +560,6 @@ async function ItemRow({
   canEdit,
   clientName,
   expectedYear,
-  engagementTitle,
   aiEnabled,
 }: {
   item: RequestItem;
@@ -570,7 +568,6 @@ async function ItemRow({
   canEdit: boolean;
   clientName: string | null;
   expectedYear: number | null;
-  engagementTitle: string;
   // When false, AI is off for this engagement — hide all per-document AI chrome.
   aiEnabled: boolean;
 }) {
@@ -611,17 +608,6 @@ async function ItemRow({
             )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {hasSubmittedFiles && (
-            <EngagementPreview
-              variant="item"
-              uploads={files}
-              items={[item]}
-              engagementId={item.engagement_id}
-              engagementTitle={engagementTitle}
-              clientName={clientName}
-              locale={locale}
-            />
-          )}
           {missingPageBlock ? (
             <Badge
               variant="outline"
