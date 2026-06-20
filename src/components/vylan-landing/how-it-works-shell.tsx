@@ -39,7 +39,8 @@ type HowItWorksStrings = {
   payCaption: string;
   trustEyebrow: string;
   trustTitle: string;
-  trustCards: { title: string; body: string }[];
+  trustIntro: string;
+  trustCards: { title: string; body: string; badge?: string }[];
   closeTitle: string; // may contain "\n"
 };
 
@@ -81,11 +82,11 @@ function IconCard({ stroke }: { stroke: string }) {
     </svg>
   );
 }
-function IconPin({ stroke }: { stroke: string }) {
+function IconSignature({ stroke }: { stroke: string }) {
   return (
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M12 21s7-6.3 7-12a7 7 0 1 0-14 0c0 5.7 7 12 7 12z" />
-      <circle cx="12" cy="9" r="2.5" />
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 17c3-1 4-9 7-9s2 6 4 6 2-3 4-3" />
+      <path d="M14 19l2 2 4-4" />
     </svg>
   );
 }
@@ -108,10 +109,10 @@ function IconGlobe({ stroke }: { stroke: string }) {
 }
 
 const TRUST_ICONS = [
-  <IconPin key="pin" stroke="var(--wwd-coral)" />,
+  <IconSignature key="sig" stroke="var(--wwd-mint)" />,
   <IconShield key="shield" stroke="var(--wwd-cyan)" />,
   <IconGlobe key="globe" stroke="var(--wwd-violet)" />,
-  <IconCircleCheck key="check" stroke="var(--wwd-mint)" />,
+  <IconCircleCheck key="check" stroke="var(--wwd-coral)" />,
 ];
 const PAY_ICONS = [
   <IconDoc key="doc" stroke="var(--wwd-cyan)" />,
@@ -318,23 +319,33 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
 
       {/* ---------- TRUST & SECURITY ---------- */}
       <section className="wwd-section wwd-trust">
-        <div className="wwd-trust-head" data-reveal>
-          <div className="wwd-eyebrow">{s.trustEyebrow}</div>
-          <h2 className="wwd-h2">{s.trustTitle}</h2>
-        </div>
-        <div className="wwd-trust-grid">
-          {s.trustCards.map((card, i) => (
-            <div
-              className="wwd-trust-card"
-              key={i}
-              data-reveal
-              data-reveal-delay={`${[0, 90, 60, 150][i] ?? 0}`}
-            >
-              <span className="wwd-trust-icon">{TRUST_ICONS[i]}</span>
-              <h3 className="wwd-trust-title">{card.title}</h3>
-              <p className="wwd-trust-text">{card.body}</p>
-            </div>
-          ))}
+        <div className="wwd-trust-layout">
+          <div className="wwd-trust-head" data-reveal>
+            <div className="wwd-eyebrow">{s.trustEyebrow}</div>
+            <h2 className="wwd-h2">{s.trustTitle}</h2>
+            <p className="wwd-trust-intro">{s.trustIntro}</p>
+          </div>
+          <div className="wwd-trust-rows">
+            {s.trustCards.map((card, i) => (
+              <div
+                className="wwd-trust-row"
+                key={i}
+                data-reveal
+                data-reveal-delay={`${[0, 90, 160, 230][i] ?? 0}`}
+              >
+                <span className="wwd-trust-icon">{TRUST_ICONS[i]}</span>
+                <div className="wwd-trust-row-body">
+                  <div className="wwd-trust-row-head">
+                    <h3 className="wwd-trust-title">{card.title}</h3>
+                    {card.badge && (
+                      <span className="wwd-trust-badge">{card.badge}</span>
+                    )}
+                  </div>
+                  <p className="wwd-trust-text">{card.body}</p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 

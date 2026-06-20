@@ -64,9 +64,10 @@ export default async function HowItWorksPage({
     payCaption: t("pay_caption"),
     trustEyebrow: t("trust_eyebrow"),
     trustTitle: t("trust_title"),
+    trustIntro: t("trust_intro"),
     trustCards: [
-      { title: t("trust_1_title"), body: t("trust_1_body") },
-      { title: t("trust_2_title"), body: t("trust_2_body") },
+      { title: t("trust_1_title"), body: t("trust_1_body"), badge: t("trust_1_badge") },
+      { title: t("trust_2_title"), body: t("trust_2_body"), badge: t("trust_2_badge") },
       { title: t("trust_3_title"), body: t("trust_3_body") },
       { title: t("trust_4_title"), body: t("trust_4_body") },
     ],
