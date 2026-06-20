@@ -25,7 +25,6 @@ import {
   reopenItemAction,
   removeItemAction,
 } from "@/app/actions/items";
-import { approveFileAction } from "@/app/actions/files";
 import { assertLocale } from "@/lib/locale";
 import { formatDate, formatCurrency } from "@/lib/format";
 import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
@@ -43,7 +42,6 @@ import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { ActivityDrawer } from "@/components/engagements/activity-drawer";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
-import { signedUrl } from "@/lib/storage";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
@@ -55,6 +53,12 @@ import {
 } from "@/lib/db/payment-requests";
 import { resolveDefaultAmountCents } from "@/lib/payments/prefill";
 import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
+import {
+  getSignatureRequestsByItem,
+  type SignatureRequest,
+} from "@/lib/db/signature-requests";
+import { reconcileSignatureRequest } from "@/lib/signwell/reconcile";
+import { signedUrl } from "@/lib/storage";
 import { RequestPaymentButton } from "@/components/engagements/request-payment-button";
 import { CopyPaymentLink } from "@/components/engagements/copy-payment-link";
 import { isTrialExpired } from "@/lib/trial";
@@ -77,7 +81,6 @@ import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
   Send,
   Trash2,
-  Check,
   CheckCircle2,
   RotateCcw,
   Bell,
@@ -183,6 +186,32 @@ export default async function EngagementDetailPage({
   // from the document-collection checklist.
   const signatureItems = items.filter((i) => i.kind === "signature");
   const collectionItems = items.filter((i) => i.kind !== "signature");
+
+  // SignWell status per signature item (one query, RLS-scoped). Empty before
+  // migration 0400 is applied or when there are no signature items.
+  const signatureRequestsByItem =
+    signatureItems.length > 0
+      ? await getSignatureRequestsByItem(engagement.id)
+      : new Map<string, SignatureRequest>();
+
+  // Self-heal: the SignWell webhook can lag or be misconfigured, so for any
+  // request still out for signature, reconcile straight from SignWell. If it's
+  // signed, this pulls the signed PDF back and flips the status without waiting
+  // on the webhook (mirrors the payments reconcile).
+  const awaitingSigs = [...signatureRequestsByItem.values()].filter(
+    (sr) => sr.status === "sent" || sr.status === "viewed",
+  );
+  if (awaitingSigs.length > 0) {
+    const reconciled = await Promise.all(
+      awaitingSigs.map((sr) => reconcileSignatureRequest(sr)),
+    );
+    const anyChanged = reconciled.some((s, i) => s !== awaitingSigs[i].status);
+    if (anyChanged) {
+      // One re-read to pick up the new status + signed_file_path on changed rows.
+      const fresh = await getSignatureRequestsByItem(engagement.id);
+      for (const [k, v] of fresh) signatureRequestsByItem.set(k, v);
+    }
+  }
 
   const t = await getTranslations("Engagements");
   const paymentStatusLabel = latestPayment
@@ -443,7 +472,12 @@ export default async function EngagementDetailPage({
         </div>
       </header>
 
-      {portalUrl && isLive && <MagicLinkPanel url={portalUrl} />}
+      {portalUrl && isLive && (
+        <MagicLinkPanel
+          url={portalUrl}
+          token={engagement.magic_token ?? undefined}
+        />
+      )}
 
       {isDraft &&
         (items.length === 0 ? (
@@ -484,11 +518,11 @@ export default async function EngagementDetailPage({
                   <SignatureRow
                     key={item.id}
                     item={item}
-                    files={filesByItem.get(item.id) ?? []}
                     locale={locale}
                     canEdit={isLive}
-                    clientName={client?.display_name ?? null}
-                    engagementTitle={engagement.title}
+                    signatureRequest={
+                      signatureRequestsByItem.get(item.id) ?? null
+                    }
                   />
                 ))}
               </ul>
@@ -732,158 +766,103 @@ async function ItemRow({
   );
 }
 
-// Prompt B: a signature item rendered for the accountant. Same machinery as a
-// collection item, relabelled: "Sent to client" -> "Signed copy returned" ->
-// "Signed". Confirm = approve the returned copy. No legal / e-signature claims.
+// A signature item rendered for the accountant.
+//
+// Status is driven by the SignWell signature request (Phase 2): "Awaiting
+// signature" once the embedded request is created, "Signing setup needed" when
+// it could not be created (e.g. before the SignWell key is set), and "Signed"
+// once completed (Phase 4). A "Test mode" chip shows while requests are
+// watermarked. Embedded signing itself lands in the client portal (Phase 3).
 async function SignatureRow({
   item,
-  files,
   locale,
   canEdit,
-  clientName,
+  signatureRequest,
 }: {
   item: RequestItem;
-  files: (UploadedFile & { url: string })[];
   locale: "fr" | "en";
   canEdit: boolean;
-  clientName: string | null;
-  engagementTitle: string;
+  signatureRequest: SignatureRequest | null;
 }) {
   const t = await getTranslations("Engagements");
   const label = locale === "fr" && item.label_fr ? item.label_fr : item.label;
-  const hasReturned = files.length > 0;
-  // Short-lived link for the accountant to re-open the blank document they
-  // uploaded to be signed.
-  let signingDocUrl: string | null = null;
-  if (item.signing_doc_path) {
+
+  const srStatus = signatureRequest?.status ?? null;
+  const isSigned = srStatus === "completed" || item.status === "approved";
+  const isAwaiting = srStatus === "sent" || srStatus === "viewed";
+  const statusKey = isSigned
+    ? "sig_status_signed"
+    : isAwaiting
+      ? "sig_status_awaiting"
+      : "sig_status_setup_needed";
+  const badgeVariant = isSigned
+    ? "default"
+    : isAwaiting
+      ? "secondary"
+      : "outline";
+  const showTestChip =
+    (isAwaiting || isSigned) && signatureRequest?.test_mode === true;
+
+  // Short-lived download link to the signed PDF (with SignWell's audit page)
+  // once it has been pulled back. Forces a download with a readable filename.
+  let signedHref: string | null = null;
+  if (isSigned && signatureRequest?.signed_file_path) {
     try {
-      signingDocUrl = await signedUrl(item.signing_doc_path, 3600);
+      signedHref = await signedUrl(
+        signatureRequest.signed_file_path,
+        3600,
+        `${label}.pdf`,
+      );
     } catch {
-      signingDocUrl = null;
+      signedHref = null;
     }
   }
 
   return (
-    <li className="py-3 space-y-2">
+    <li className="py-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="font-medium truncate">{label}</div>
-          {signingDocUrl && (
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{t(statusKey)}</span>
+            {showTestChip && (
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("sig_test_mode")}
+              </span>
+            )}
+          </div>
+          {signedHref && (
             <a
-              href={signingDocUrl}
+              href={signedHref}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-0.5 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
             >
               <Download className="size-3.5" />
-              {t("view_document_to_sign")}
+              {t("sig_download_signed")}
             </a>
           )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Badge variant={itemBadgeVariant(item.status)}>
-            {t(signatureStatusKey(item.status))}
-          </Badge>
-          {/* Approve / reject is per signed copy (the icons on each file row
-              below), so a client who sends several copies can have some accepted
-              and others sent back — no single "confirm all". */}
-          {canEdit &&
-            !hasReturned &&
-            (item.status === "pending" || item.status === "na") && (
-              <form action={removeItemAction}>
-                <input type="hidden" name="id" value={item.id} />
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t("remove_item")}
-                  title={t("remove_item")}
-                >
-                  <Trash2 className="size-4 text-muted-foreground" />
-                </Button>
-              </form>
-            )}
+          <Badge variant={badgeVariant}>{t(statusKey)}</Badge>
+          {canEdit && !isSigned && (
+            <form action={removeItemAction}>
+              <input type="hidden" name="id" value={item.id} />
+              <Button
+                type="submit"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={t("remove_item")}
+                title={t("remove_item")}
+              >
+                <Trash2 className="size-4 text-muted-foreground" />
+              </Button>
+            </form>
+          )}
         </div>
       </div>
-
-      {item.status === "rejected" && item.rejection_reason && (
-        <Alert variant="destructive">
-          <AlertDescription className="text-xs">
-            <span className="font-medium">{t("rejection_reason")}: </span>
-            {item.rejection_reason}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {files.length > 0 && (
-        <ul className="space-y-1 mt-2">
-          {files.map((f) => (
-            <FilePreviewRow
-              key={f.id}
-              file={f}
-              url={f.url}
-              expectedDocType={item.doc_type}
-              expectedYear={null}
-              clientName={clientName}
-              rejectionCount={item.ai_rejection_count ?? 0}
-              hideAi
-              actions={
-                canEdit ? (
-                  <>
-                    {/* Approve this copy. Filled green once approved. */}
-                    <form action={approveFileAction}>
-                      <input type="hidden" name="id" value={f.id} />
-                      <Button
-                        type="submit"
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={t("approve")}
-                        title={t("approve")}
-                        className={
-                          f.review_status === "approved"
-                            ? "bg-success text-white hover:bg-success/90"
-                            : "text-muted-foreground hover:bg-success/10 hover:text-success"
-                        }
-                      >
-                        <Check className="size-4" />
-                      </Button>
-                    </form>
-                    {/* Send this copy back with a reason. Filled red once sent
-                        back. Rejects just this file, not the whole signature. */}
-                    <RejectModal
-                      itemId={item.id}
-                      itemLabel={f.original_filename}
-                      fileId={f.id}
-                      compact
-                      active={f.review_status === "rejected"}
-                      suggestions={[
-                        t("sig_reject_not_signed"),
-                        t("sig_reject_wrong_doc"),
-                        t("sig_reject_unclear"),
-                      ]}
-                    />
-                  </>
-                ) : undefined
-              }
-            />
-          ))}
-        </ul>
-      )}
     </li>
   );
-}
-
-function signatureStatusKey(status: string): string {
-  switch (status) {
-    case "approved":
-      return "sig_status_signed";
-    case "submitted":
-      return "sig_status_returned";
-    case "rejected":
-      return "sig_status_rejected";
-    default:
-      return "sig_status_sent"; // pending / na / fallback
-  }
 }
 
 function statusVariant(

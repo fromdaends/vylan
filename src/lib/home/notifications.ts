@@ -42,15 +42,19 @@ export type HomeNotificationKind =
   // Payment + lifecycle events (sourced from the activity log).
   | "client_paid"
   | "payment_failed"
-  | "engagement_completed";
+  | "engagement_completed"
+  // A client signed a document via embedded e-signature (the embedded flow
+  // replaces the old "signed copy uploaded" upload signal).
+  | "client_signed";
 
 // Activity-log actions surfaced as notifications (a client paid, a payment
-// failed, an engagement was finished). complete_engagement maps to the
-// engagement_completed kind below.
+// failed, an engagement was finished, a client signed). complete_engagement
+// maps to the engagement_completed kind below.
 const EVENT_ACTIONS = [
   "client_paid",
   "payment_failed",
   "complete_engagement",
+  "signature_signed",
 ] as const;
 
 export type HomeNotification = {
@@ -93,6 +97,8 @@ export function eventActionToNotificationKind(
       return "client_paid";
     case "payment_failed":
       return "payment_failed";
+    case "signature_signed":
+      return "client_signed";
     default:
       return null;
   }

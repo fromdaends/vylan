@@ -258,8 +258,9 @@ export function PortalShell({
                   token={ctx.engagement.magic_token ?? ""}
                   item={item}
                   locale={locale}
-                  files={filesByItem[item.id] ?? []}
-                  onUploaded={(f) => handleUploaded(item.id, f)}
+                  signatureStatus={
+                    ctx.signature_status_by_item[item.id] ?? null
+                  }
                 />
               ))}
             </section>

@@ -12,6 +12,7 @@ import type { Engagement } from "./engagements";
 import type { Client } from "./clients";
 import type { Firm } from "./firms";
 import type { RequestItem, RequestItemStatus } from "./request-items";
+import type { SignatureStatus } from "@/lib/signwell/client";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
 import { BUCKET } from "@/lib/storage";
@@ -76,6 +77,10 @@ export type PortalContext = {
     description: string | null;
     status: "requested" | "paid" | "failed" | "canceled";
   } | null;
+  // SignWell signing status per signature item (Phase 3). Drives the portal
+  // signature card: "sent"/"viewed" => the client can sign, "completed" => signed.
+  // Empty before migration 0400 or when there are no signature items.
+  signature_status_by_item: Record<string, SignatureStatus>;
 };
 
 export async function loadPortalContext(
@@ -224,6 +229,18 @@ export async function loadPortalContext(
       }
     : null;
 
+  // SignWell status per signature item, for the portal signature card. Tolerant
+  // of the table being absent before migration 0400 (data stays empty on error).
+  const signatureStatusByItem: Record<string, SignatureStatus> = {};
+  const { data: sigReqs } = await sb
+    .from("signature_requests")
+    .select("request_item_id, status")
+    .eq("engagement_id", engagement.id);
+  for (const r of sigReqs ?? []) {
+    signatureStatusByItem[r.request_item_id as string] =
+      r.status as SignatureStatus;
+  }
+
   return {
     engagement: engagement as Engagement,
     client: client as Client,
@@ -234,6 +251,7 @@ export async function loadPortalContext(
     rejection_summary_by_item: rejectionSummaryByItem,
     accountant_email: accountantEmail,
     payment_request: paymentRequest,
+    signature_status_by_item: signatureStatusByItem,
   };
 }
 

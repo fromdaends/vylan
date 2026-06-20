@@ -129,5 +129,7 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: AlertTriangle, tone: "bg-destructive/15 text-destructive" };
     case "engagement_completed":
       return { Icon: CheckCircle2, tone: "bg-success/15 text-success" };
+    case "client_signed":
+      return { Icon: FileSignature, tone: "bg-success/15 text-success" };
   }
 }

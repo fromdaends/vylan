@@ -179,6 +179,18 @@ export function signingDocPath(parts: {
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/signing/${parts.uuid}-${safeName}`;
 }
 
+// The completed, signed PDF (with SignWell's audit page) returned after the
+// client signs. Keyed by the SignWell document id so re-processing the same
+// document overwrites the same object (idempotent upsert).
+export function signedDocPath(parts: {
+  firmId: string;
+  engagementId: string;
+  documentId: string;
+}): string {
+  const safeId = safeStorageName(parts.documentId);
+  return `firms/${parts.firmId}/engagements/${parts.engagementId}/signed/${safeId}.pdf`;
+}
+
 export type BrandingKind = "firm_logo" | "user_avatar";
 
 // Storage paths for branding images. Both sit under the firm prefix so the
