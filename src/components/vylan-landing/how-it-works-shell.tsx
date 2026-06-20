@@ -36,6 +36,10 @@ type HowItWorksStrings = {
   payTitleWord: string;
   payBody: string;
   paySteps: { title: string; body: string }[];
+  payStatBig: string;
+  payStatUnit: string;
+  payStatTitle: string;
+  payStatBody: string;
   payCaption: string;
   trustEyebrow: string;
   trustTitle: string;
@@ -132,6 +136,7 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
     );
     const fill = root.querySelector<HTMLElement>("[data-spine-fill]");
     const nodes = Array.from(root.querySelectorAll<HTMLElement>("[data-node]"));
+    const payBar = root.querySelector<HTMLElement>("[data-pay-bar]");
 
     const reduce =
       typeof window.matchMedia === "function" &&
@@ -143,6 +148,7 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
       reveals.forEach((el) => el.classList.add("wwd-in"));
       if (fill) fill.style.transform = "scaleY(1)";
       nodes.forEach((n) => n.classList.add("wwd-node-on"));
+      if (payBar) payBar.style.transform = "scaleX(1)";
       return;
     }
 
@@ -186,6 +192,14 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
         if (nr.top < vh * 0.62) n.classList.add("wwd-node-on");
         else n.classList.remove("wwd-node-on");
       });
+      // Pay stat bar: fill as the card scrolls from ~90% to ~42% of the viewport.
+      if (payBar) {
+        const br = payBar.getBoundingClientRect();
+        const start = vh * 0.9;
+        const end = vh * 0.42;
+        const p = Math.min(Math.max((start - br.top) / (start - end), 0), 1);
+        payBar.style.transform = "scaleX(" + p.toFixed(3) + ")";
+      }
     };
     const onScroll = () => {
       if (ticking) return;
@@ -315,6 +329,21 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
                 <p className="wwd-pay-step-text">{step.body}</p>
               </div>
             ))}
+          </div>
+        </div>
+        <div className="wwd-pay-stat" data-reveal data-reveal-delay="200">
+          <div className="wwd-pay-stat-card">
+            <div className="wwd-pay-stat-num" aria-hidden="true">
+              <span className="wwd-pay-stat-big">{s.payStatBig}</span>
+              <span className="wwd-pay-stat-unit">{s.payStatUnit}</span>
+            </div>
+            <div className="wwd-pay-stat-main">
+              <div className="wwd-pay-stat-title">{s.payStatTitle}</div>
+              <p className="wwd-pay-stat-text">{s.payStatBody}</p>
+              <div className="wwd-pay-bar-track" aria-hidden="true">
+                <div className="wwd-pay-bar-fill" data-pay-bar />
+              </div>
+            </div>
           </div>
         </div>
         <div className="wwd-pay-caption" data-reveal data-reveal-delay="220">
