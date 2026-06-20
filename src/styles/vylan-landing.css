@@ -1637,7 +1637,7 @@ a.vy-contact-card:hover {
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.05;
-  font-size: clamp(28px, 4.6vw, 52px);
+  font-size: clamp(24px, 4vw, 44px);
   max-width: 760px;
   text-wrap: balance;
 }
