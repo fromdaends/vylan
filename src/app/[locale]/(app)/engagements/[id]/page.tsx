@@ -472,7 +472,12 @@ export default async function EngagementDetailPage({
         </div>
       </header>
 
-      {portalUrl && isLive && <MagicLinkPanel url={portalUrl} />}
+      {portalUrl && isLive && (
+        <MagicLinkPanel
+          url={portalUrl}
+          token={engagement.magic_token ?? undefined}
+        />
+      )}
 
       {isDraft &&
         (items.length === 0 ? (
