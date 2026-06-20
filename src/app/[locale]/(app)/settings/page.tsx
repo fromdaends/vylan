@@ -15,6 +15,7 @@ import {
   quickbooksEnvironment,
 } from "@/lib/quickbooks/client";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
+import { ensureFreshQuickbooksToken } from "@/lib/quickbooks/connection";
 import { listFirmPaymentsWithNames } from "@/lib/db/payment-requests";
 import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
@@ -123,6 +124,12 @@ export default async function SettingsPage({
     ? (qboParam as "done" | "denied" | "error" | "setup")
     : null;
   const qboConnection = isOwner ? await getFirmQuickbooksStatus() : null;
+  // Keep the connection alive: when connected, refresh the access token if it is
+  // stale (best-effort; never blocks the page on failure). Stage 1's automatic
+  // token-refresh trigger — future stages also refresh on every API call.
+  if (isOwner && qboConnection?.connected) {
+    await ensureFreshQuickbooksToken(firm.id);
+  }
   const quickbooks = isOwner
     ? {
         configured: isQuickbooksConfigured(),
@@ -130,7 +137,6 @@ export default async function SettingsPage({
         companyName: qboConnection?.companyName ?? null,
         realmId: qboConnection?.realmId ?? null,
         environment: qboConnection?.environment ?? quickbooksEnvironment(),
-        justReturned: qboParam === "done",
         callbackStatus: qboCallbackStatus,
       }
     : null;

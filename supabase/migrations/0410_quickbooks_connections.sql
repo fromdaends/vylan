@@ -7,15 +7,18 @@
 -- friendly company name) and which environment it was made in (sandbox today,
 -- production once Intuit approves the app — a single env switch, no code change).
 --
--- SECURITY (mirrors the Stripe Connect posture in 0370 + the column whitelist in
--- 0039):
+-- SECURITY (uses the table-revoke + column-grant whitelist pattern from 0039 /
+-- 0190 / 0230 — NOT 0370, which deliberately keeps SELECT table-wide because the
+-- firms columns hold no secrets):
 --   * RLS is ON and firm-scoped: a firm can only ever see its OWN connection row,
 --     so one firm can never read another firm's QuickBooks connection.
 --   * The two real secrets — access_token + refresh_token — are NOT readable by
---     authenticated users at all (column-level REVOKE). Only the service role
---     (server-side OAuth callback / token refresh / disconnect) reads them. The
---     harmless display fields (realm id, company name, environment, dates) stay
---     readable so the Settings page can render the "Connected" state.
+--     authenticated users at all: we revoke the default table-level grant and
+--     re-grant SELECT on the display columns ONLY (the tokens are omitted), so the
+--     token columns are unreadable via PostgREST. Only the service role (the
+--     server-side OAuth callback / token refresh / disconnect) reads them. The
+--     display fields (realm id, company name, environment, dates) stay readable so
+--     the Settings page can render the "Connected" state.
 --   * All writes (insert/update/delete) are service-role-only: an authenticated
 --     user can never forge, alter, or attach a connection from the browser.
 --
@@ -62,11 +65,31 @@ drop policy if exists quickbooks_connections_select on quickbooks_connections;
 create policy quickbooks_connections_select on quickbooks_connections for select
   using (firm_id = public.current_firm_id());
 
--- Defense in depth on top of RLS:
---   1. No browser-side writes at all — service role only.
-revoke insert, update, delete on quickbooks_connections from authenticated, anon;
---   2. The token columns are never selectable by authenticated/anon, so a curious
---      or compromised user can never exfiltrate the OAuth secrets via PostgREST.
---      Display columns stay selectable (gated to the firm by the policy above).
-revoke select (access_token, refresh_token)
-  on quickbooks_connections from authenticated, anon;
+-- Lock down the table-level grants PostgREST gives every new public table by
+-- default. A column-level `revoke select (...)` is a NO-OP while a table-level
+-- SELECT grant still exists — Postgres consults column privileges only when there
+-- is no covering table grant. So we must REVOKE the table-level grant first, then
+-- GRANT SELECT on the non-secret display columns ONLY. Same pattern as 0039
+-- (column-update whitelist) and 0190 / 0230 (table-grant lockdown).
+--
+--   * No browser-side writes at all — service role only (no insert/update/delete
+--     grant).
+--   * access_token + refresh_token are deliberately OMITTED from the SELECT
+--     grant, so they are genuinely unreadable by authenticated/anon via PostgREST
+--     (a `select access_token ...` returns "permission denied for column"). Only
+--     the service role — which bypasses these grants — reads the tokens.
+--   * The firm-scoped RLS policy above still gates WHICH rows are visible, so one
+--     firm can never see another firm's connection.
+revoke all on quickbooks_connections from anon, authenticated;
+grant select (
+  id,
+  firm_id,
+  realm_id,
+  company_name,
+  environment,
+  connected_by,
+  connected_at,
+  updated_at,
+  access_token_expires_at,
+  refresh_token_expires_at
+) on quickbooks_connections to authenticated;

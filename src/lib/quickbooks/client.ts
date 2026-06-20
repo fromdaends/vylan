@@ -21,6 +21,11 @@
 
 const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
+const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
+// Bound every Intuit network call so a slow/hung endpoint can never block a
+// server render (the Settings keep-alive awaits refreshTokens) or a route. 10s is
+// well under the platform request timeout. Same approach as src/app/api/files.
+const QBO_FETCH_TIMEOUT_MS = 10_000;
 // QuickBooks Online Accounting scope — what later stages will need to read/write
 // the books. Requesting it now means the accountant approves once.
 const ACCOUNTING_SCOPE = "com.intuit.quickbooks.accounting";
@@ -32,6 +37,8 @@ export class QuickbooksError extends Error {
     public readonly code:
       | "not_configured"
       | "token_exchange_failed"
+      | "token_refresh_failed"
+      | "invalid_grant"
       | "company_info_failed"
       | "request_failed",
     message: string,
@@ -164,6 +171,7 @@ export async function exchangeCodeForTokens(
         redirect_uri: quickbooksRedirectUri(),
       }).toString(),
       cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
     });
   } catch (e) {
     throw new QuickbooksError(
@@ -183,6 +191,90 @@ export async function exchangeCodeForTokens(
   return tokensFromResponse(json, Date.now());
 }
 
+// Exchange a refresh token for a fresh set of tokens. Intuit ROTATES the refresh
+// token periodically, so the caller MUST persist whatever comes back (both the
+// new access token and the possibly-new refresh token). Throws with code
+// "invalid_grant" when the refresh token is expired/revoked (the connection is
+// dead and must be re-established), vs "token_refresh_failed" for other errors.
+export async function refreshTokens(
+  refreshToken: string,
+): Promise<QuickbooksTokens> {
+  if (!isQuickbooksConfigured()) {
+    throw new QuickbooksError("not_configured", "QuickBooks is not configured");
+  }
+  let res: Response;
+  try {
+    res = await fetch(TOKEN_URL, {
+      method: "POST",
+      headers: {
+        Authorization: basicAuthHeader(),
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+      }).toString(),
+      cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new QuickbooksError(
+      "request_failed",
+      `QuickBooks token refresh request failed: ${(e as Error).message}`,
+    );
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    const dead = /invalid_grant/i.test(detail);
+    throw new QuickbooksError(
+      dead ? "invalid_grant" : "token_refresh_failed",
+      `QuickBooks token refresh failed (${res.status}): ${truncate(detail)}`,
+      res.status,
+    );
+  }
+  const json = (await res.json()) as IntuitTokenResponse;
+  return tokensFromResponse(json, Date.now());
+}
+
+// Tell Intuit to revoke our access for this connection (the accountant
+// disconnected). Revoking the refresh token revokes the whole grant. Best-effort:
+// returns true on success, false on any failure, and never throws — disconnect
+// must still clear our local record even if Intuit can't be reached.
+export async function revokeToken(token: string): Promise<boolean> {
+  if (!isQuickbooksConfigured()) return false;
+  try {
+    const res = await fetch(REVOKE_URL, {
+      method: "POST",
+      headers: {
+        Authorization: basicAuthHeader(),
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({ token }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// Is the access token expired, or close enough that we should refresh now? A
+// missing/unparseable expiry is treated as stale (refresh to be safe). The buffer
+// avoids racing an about-to-expire token.
+export function isAccessTokenStale(
+  expiresAt: string | null,
+  nowMs: number,
+  bufferMs = 5 * 60 * 1000,
+): boolean {
+  if (!expiresAt) return true;
+  const t = Date.parse(expiresAt);
+  if (Number.isNaN(t)) return true;
+  return t - nowMs <= bufferMs;
+}
+
 // ONE identity-only read: the connected company's display name, so the connected
 // card can show it. This is NOT financial data and touches no transactions or
 // documents. Returns null on any failure (the connection is still valid; we just
@@ -200,6 +292,7 @@ export async function fetchCompanyName(
       method: "GET",
       headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
       cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
     });
   } catch {
     return null;

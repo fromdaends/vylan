@@ -17,9 +17,10 @@ export type QuickbooksStatus = {
   companyName: string | null;
   realmId: string | null;
   environment: "sandbox" | "production";
-  // True right after returning from Intuit (?qbo=done).
-  justReturned: boolean;
-  // The status flag the callback redirected back with, if any.
+  // The status flag the callback redirected back with, if any. On "done" the
+  // connection was written synchronously before the redirect, so the connected
+  // card already renders — no separate "confirming" state is needed (unlike
+  // Stripe, whose status arrives later via webhook).
   callbackStatus: "done" | "denied" | "error" | "setup" | null;
 };
 
@@ -31,6 +32,9 @@ export function IntegrationsSection({
   const t = useTranslations("Settings");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
 
   // Surface a message for a callback that came back unhappy.
   const callbackError =
@@ -58,13 +62,32 @@ export function IntegrationsSection({
       }
       setError(
         data?.error === "quickbooks_not_configured"
-          ? t("qbo_not_configured")
+          ? t("qbo_unavailable")
           : t("qbo_connect_error"),
       );
     } catch {
       setError(t("qbo_connect_error"));
     }
     setLoading(false);
+  }
+
+  async function doDisconnect() {
+    setDisconnecting(true);
+    setDisconnectError(null);
+    try {
+      const res = await fetch("/api/integrations/quickbooks/disconnect", {
+        method: "POST",
+      });
+      if (res.ok) {
+        // Re-render the section in its not-connected state.
+        window.location.reload();
+        return;
+      }
+      setDisconnectError(t("qbo_disconnect_error"));
+    } catch {
+      setDisconnectError(t("qbo_disconnect_error"));
+    }
+    setDisconnecting(false);
   }
 
   return (
@@ -105,6 +128,45 @@ export function IntegrationsSection({
                     })
                   : t("qbo_connected_hint")}
               </p>
+              <div className="pt-1">
+                {confirmingDisconnect ? (
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {t("qbo_disconnect_confirm_q")}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={doDisconnect}
+                      disabled={disconnecting}
+                      aria-busy={disconnecting}
+                      className="text-xs font-medium text-destructive hover:underline disabled:opacity-60"
+                    >
+                      {disconnecting ? "…" : t("qbo_disconnect_confirm_yes")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDisconnect(false)}
+                      disabled={disconnecting}
+                      className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-60"
+                    >
+                      {t("qbo_disconnect_cancel")}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmingDisconnect(true)}
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground"
+                  >
+                    {t("qbo_disconnect_cta")}
+                  </button>
+                )}
+                {disconnectError && (
+                  <p role="alert" className="mt-1 text-xs text-destructive">
+                    {disconnectError}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -120,12 +182,17 @@ export function IntegrationsSection({
                 {t("qbo_connect_hint")}
               </p>
               <div className="pt-1">
-                <Button size="sm" onClick={startConnect} disabled={loading}>
+                <Button
+                  size="sm"
+                  onClick={startConnect}
+                  disabled={loading}
+                  aria-busy={loading}
+                >
                   {loading ? "…" : t("qbo_connect_cta")}
                 </Button>
               </div>
               {(error || callbackError) && (
-                <p className="text-xs text-destructive">
+                <p role="alert" className="text-xs text-destructive">
                   {error ?? callbackError}
                 </p>
               )}

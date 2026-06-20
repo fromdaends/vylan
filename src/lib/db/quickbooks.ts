@@ -112,3 +112,120 @@ export async function upsertFirmQuickbooksConnection(
   }
   return { ok: true };
 }
+
+export type QuickbooksConnectionWithTokens = {
+  realmId: string;
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresAt: string | null;
+  refreshTokenExpiresAt: string | null;
+  environment: QuickbooksEnvironment;
+};
+
+// Service-role read of the FULL connection, including the OAuth tokens, for token
+// refresh + disconnect. The token columns are not readable by the authenticated
+// client (migration 0410), so this MUST go through the service role. Returns null
+// when not connected or before the migration is applied.
+export async function getFirmQuickbooksConnectionWithTokens(
+  firmId: string,
+): Promise<QuickbooksConnectionWithTokens | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("quickbooks_connections")
+    .select(
+      "realm_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, environment",
+    )
+    .eq("firm_id", firmId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error(
+        "[quickbooks] getFirmQuickbooksConnectionWithTokens failed:",
+        error,
+      );
+    }
+    return null;
+  }
+  if (!data) return null;
+  return {
+    realmId: data.realm_id as string,
+    accessToken: data.access_token as string,
+    refreshToken: data.refresh_token as string,
+    accessTokenExpiresAt: (data.access_token_expires_at as string | null) ?? null,
+    refreshTokenExpiresAt:
+      (data.refresh_token_expires_at as string | null) ?? null,
+    environment:
+      (data.environment as string) === "production" ? "production" : "sandbox",
+  };
+}
+
+export type UpdateTokensResult =
+  // Our rotation was durably persisted.
+  | { outcome: "updated" }
+  // A CONCURRENT refresh already rotated the token (our optimistic match found 0
+  // rows). The caller must re-read and use the stored token, not its own.
+  | { outcome: "raced" }
+  // The write failed — the rotated refresh token is NOT stored, so the caller
+  // must NOT hand out its access token (the next refresh would use a dead token).
+  | { outcome: "error" };
+
+// Persist refreshed tokens (service role) with OPTIMISTIC CONCURRENCY. Intuit
+// rotates the refresh token, so two concurrent refreshes (both reading the same
+// old token) must not clobber each other: the update only matches the row whose
+// refresh_token STILL equals expectedRefreshToken, so the first writer wins
+// ("updated") and the second matches 0 rows ("raced"). A genuine write error
+// returns "error" so the caller never trusts an unsaved rotation. Firm-scoped, so
+// a refresh can never touch another firm's row.
+//
+// refresh_token_expires_at is overwritten ONLY when the response carried a value:
+// Intuit's refresh-token expiry counts DOWN toward the original grant, and a
+// partial response must not wipe the known expiry with NULL.
+export async function updateFirmQuickbooksTokens(
+  firmId: string,
+  expectedRefreshToken: string,
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+    accessTokenExpiresAt: string | null;
+    refreshTokenExpiresAt: string | null;
+  },
+): Promise<UpdateTokensResult> {
+  const sb = getServiceRoleSupabase();
+  const patch: Record<string, unknown> = {
+    access_token: tokens.accessToken,
+    refresh_token: tokens.refreshToken,
+    access_token_expires_at: tokens.accessTokenExpiresAt,
+    updated_at: new Date().toISOString(),
+  };
+  if (tokens.refreshTokenExpiresAt != null) {
+    patch.refresh_token_expires_at = tokens.refreshTokenExpiresAt;
+  }
+  const { data, error } = await sb
+    .from("quickbooks_connections")
+    .update(patch)
+    .eq("firm_id", firmId)
+    .eq("refresh_token", expectedRefreshToken)
+    .select("id");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] updateFirmQuickbooksTokens failed:", error);
+    }
+    return { outcome: "error" };
+  }
+  return data && data.length > 0 ? { outcome: "updated" } : { outcome: "raced" };
+}
+
+// Remove the firm's connection entirely (disconnect). Service-role delete. Safe
+// to call when nothing exists (no-op) or before the migration is applied.
+export async function clearFirmQuickbooksConnection(
+  firmId: string,
+): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("quickbooks_connections")
+    .delete()
+    .eq("firm_id", firmId);
+  if (error && !isMissingSchema(error)) {
+    console.error("[quickbooks] clearFirmQuickbooksConnection failed:", error);
+  }
+}
