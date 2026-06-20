@@ -1530,6 +1530,46 @@ a.vy-contact-card:hover {
   font-weight: 500;
 }
 
+/* The e-signatures icon (first trust row) draws its signature, then the check
+   stamps in, once as the row reveals into view. Without JS / with reduced
+   motion the icon simply shows finished (drawn signature + visible check). */
+.wwd-trust-row:nth-child(1) .wwd-sig-stroke {
+  stroke-dasharray: 1;
+}
+.vy-wwd.wwd-js .wwd-trust-row:nth-child(1) .wwd-sig-stroke {
+  stroke-dashoffset: 1;
+}
+.vy-wwd.wwd-js .wwd-trust-row:nth-child(1).wwd-in .wwd-sig-stroke {
+  animation: wwd-sigdraw 1.5s cubic-bezier(0.65, 0, 0.35, 1) 0.15s forwards;
+}
+.vy-wwd.wwd-js .wwd-trust-row:nth-child(1) .wwd-sig-seal {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.vy-wwd.wwd-js .wwd-trust-row:nth-child(1).wwd-in .wwd-sig-seal {
+  animation: wwd-sigseal 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 1.3s forwards;
+}
+@keyframes wwd-sigdraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes wwd-sigseal {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) rotate(-8deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.15) rotate(2deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
 /* ---------- CLOSING ---------- */
 .wwd-close {
   position: relative;

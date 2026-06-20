@@ -85,8 +85,10 @@ function IconCard({ stroke }: { stroke: string }) {
 function IconSignature({ stroke }: { stroke: string }) {
   return (
     <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 17c3-1 4-9 7-9s2 6 4 6 2-3 4-3" />
-      <path d="M14 19l2 2 4-4" />
+      {/* pathLength=1 normalizes the stroke so the draw-on animation (CSS,
+          scoped to the trust e-signatures row) works regardless of path length. */}
+      <path className="wwd-sig-stroke" pathLength={1} d="M3 17c3-1 4-9 7-9s2 6 4 6 2-3 4-3" />
+      <path className="wwd-sig-seal" d="M14 19l2 2 4-4" />
     </svg>
   );
 }
