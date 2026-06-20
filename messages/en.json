@@ -1101,6 +1101,7 @@
     "sig_status_awaiting": "Awaiting signature",
     "sig_status_setup_needed": "Signing setup needed",
     "sig_test_mode": "Test mode",
+    "sig_download_signed": "Download signed document",
     "sig_status_rejected": "Sent back",
     "confirm_signed": "Confirm / Mark as signed",
     "view_document_to_sign": "View document to sign",

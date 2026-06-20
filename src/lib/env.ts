@@ -44,6 +44,10 @@ const ServerEnvSchema = z.object({
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().optional(),
   ),
+  // The per-webhook "Webhook ID" SignWell shows when you create the webhook.
+  // It is the HMAC-SHA256 key used to verify each event's authenticity. Without
+  // it the webhook rejects events, but completion still self-heals via reconcile.
+  SIGNWELL_WEBHOOK_ID: optionalSecret(),
 
   APP_URL: z.string().url().default("http://localhost:3000"),
   CRON_SECRET: optionalSecret(16),

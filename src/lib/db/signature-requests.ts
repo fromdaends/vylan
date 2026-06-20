@@ -135,3 +135,93 @@ export async function getSignatureRequestByItemSR(
   }
   return (data as SignatureRequest) ?? null;
 }
+
+// Look a request up by its SignWell document id — the webhook's only handle.
+export async function getSignatureRequestByDocumentIdSR(
+  documentId: string,
+): Promise<SignatureRequest | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("signature_requests")
+    .select("*")
+    .eq("signwell_document_id", documentId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[signature-requests] getByDocId(SR) failed:", error);
+    }
+    return null;
+  }
+  return (data as SignatureRequest) ?? null;
+}
+
+// Mark a request signed/completed. Idempotent: returns null (no-op) if the row
+// is missing or already completed, so a re-delivered webhook + the reconcile
+// backstop can't double-process. Returns the row's firm/engagement/item so the
+// caller can log the activity.
+export async function markSignatureCompletedSR(
+  id: string,
+  opts: {
+    signedFilePath: string;
+    eventType?: string | null;
+    eventTime?: string | null;
+  },
+): Promise<{
+  firmId: string;
+  engagementId: string;
+  requestItemId: string;
+} | null> {
+  const sb = getServiceRoleSupabase();
+  const { data: cur } = await sb
+    .from("signature_requests")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (!cur) return null;
+  const row = cur as SignatureRequest;
+  if (row.status === "completed") return null; // already processed
+  const { error } = await sb
+    .from("signature_requests")
+    .update({
+      status: "completed",
+      signed_file_path: opts.signedFilePath,
+      completed_at: new Date().toISOString(),
+      last_event_type: opts.eventType ?? row.last_event_type,
+      last_event_time: opts.eventTime ?? row.last_event_time,
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("[signature-requests] markCompleted(SR) failed:", error);
+    return null;
+  }
+  return {
+    firmId: row.firm_id,
+    engagementId: row.engagement_id,
+    requestItemId: row.request_item_id,
+  };
+}
+
+// Update a non-terminal status (viewed / declined / canceled / expired) from a
+// webhook or reconcile. Never overwrites a completed row.
+export async function updateSignatureStatusSR(
+  id: string,
+  status: SignatureStatus,
+  opts: { eventType?: string | null; eventTime?: string | null } = {},
+): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { data: cur } = await sb
+    .from("signature_requests")
+    .select("status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!cur) return;
+  if ((cur as { status: SignatureStatus }).status === "completed") return;
+  await sb
+    .from("signature_requests")
+    .update({
+      status,
+      last_event_type: opts.eventType ?? null,
+      last_event_time: opts.eventTime ?? null,
+    })
+    .eq("id", id);
+}

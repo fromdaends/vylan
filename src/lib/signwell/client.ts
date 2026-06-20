@@ -257,3 +257,39 @@ export async function getDocument(
     embeddedSigningUrl: recipient?.embedded_signing_url ?? null,
   };
 }
+
+// Download the completed, signed PDF including SignWell's audit page (the
+// tamper-evident trail of who signed, when, and from where). Returns the raw PDF
+// bytes. This is a binary download, so it doesn't go through the JSON helper.
+export async function getCompletedPdf(documentId: string): Promise<Buffer> {
+  const key = process.env.SIGNWELL_API_KEY?.trim();
+  if (!key) {
+    throw new SignwellError("not_configured", "SIGNWELL_API_KEY is not set");
+  }
+  const url =
+    `${SIGNWELL_BASE_URL}/documents/${encodeURIComponent(documentId)}` +
+    `/completed_pdf?audit_page=true`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: { "X-Api-Key": key, Accept: "application/pdf" },
+      cache: "no-store",
+    });
+  } catch (e) {
+    throw new SignwellError(
+      "request_failed",
+      `SignWell completed_pdf failed: ${(e as Error).message}`,
+    );
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new SignwellError(
+      "request_failed",
+      `SignWell completed_pdf failed (${res.status}): ${truncateDetail(detail)}`,
+      res.status,
+    );
+  }
+  const ab = await res.arrayBuffer();
+  return Buffer.from(ab);
+}

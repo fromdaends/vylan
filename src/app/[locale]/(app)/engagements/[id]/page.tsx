@@ -57,6 +57,8 @@ import {
   getSignatureRequestsByItem,
   type SignatureRequest,
 } from "@/lib/db/signature-requests";
+import { reconcileSignatureRequest } from "@/lib/signwell/reconcile";
+import { signedUrl } from "@/lib/storage";
 import { RequestPaymentButton } from "@/components/engagements/request-payment-button";
 import { CopyPaymentLink } from "@/components/engagements/copy-payment-link";
 import { isTrialExpired } from "@/lib/trial";
@@ -83,6 +85,7 @@ import {
   RotateCcw,
   Bell,
   BellOff,
+  Download,
   Sparkles,
 } from "lucide-react";
 
@@ -190,6 +193,25 @@ export default async function EngagementDetailPage({
     signatureItems.length > 0
       ? await getSignatureRequestsByItem(engagement.id)
       : new Map<string, SignatureRequest>();
+
+  // Self-heal: the SignWell webhook can lag or be misconfigured, so for any
+  // request still out for signature, reconcile straight from SignWell. If it's
+  // signed, this pulls the signed PDF back and flips the status without waiting
+  // on the webhook (mirrors the payments reconcile).
+  const awaitingSigs = [...signatureRequestsByItem.values()].filter(
+    (sr) => sr.status === "sent" || sr.status === "viewed",
+  );
+  if (awaitingSigs.length > 0) {
+    const reconciled = await Promise.all(
+      awaitingSigs.map((sr) => reconcileSignatureRequest(sr)),
+    );
+    const anyChanged = reconciled.some((s, i) => s !== awaitingSigs[i].status);
+    if (anyChanged) {
+      // One re-read to pick up the new status + signed_file_path on changed rows.
+      const fresh = await getSignatureRequestsByItem(engagement.id);
+      for (const [k, v] of fresh) signatureRequestsByItem.set(k, v);
+    }
+  }
 
   const t = await getTranslations("Engagements");
   const paymentStatusLabel = latestPayment
@@ -773,7 +795,23 @@ async function SignatureRow({
     : isAwaiting
       ? "secondary"
       : "outline";
-  const showTestChip = isAwaiting && signatureRequest?.test_mode === true;
+  const showTestChip =
+    (isAwaiting || isSigned) && signatureRequest?.test_mode === true;
+
+  // Short-lived download link to the signed PDF (with SignWell's audit page)
+  // once it has been pulled back. Forces a download with a readable filename.
+  let signedHref: string | null = null;
+  if (isSigned && signatureRequest?.signed_file_path) {
+    try {
+      signedHref = await signedUrl(
+        signatureRequest.signed_file_path,
+        3600,
+        `${label}.pdf`,
+      );
+    } catch {
+      signedHref = null;
+    }
+  }
 
   return (
     <li className="py-3">
@@ -788,6 +826,17 @@ async function SignatureRow({
               </span>
             )}
           </div>
+          {signedHref && (
+            <a
+              href={signedHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Download className="size-3.5" />
+              {t("sig_download_signed")}
+            </a>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Badge variant={badgeVariant}>{t(statusKey)}</Badge>

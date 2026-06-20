@@ -5,6 +5,7 @@ import {
   mapSignwellStatus,
   createSignatureDocument,
   getDocument,
+  getCompletedPdf,
   SignwellError,
 } from "./client";
 
@@ -221,6 +222,49 @@ describe("getDocument", () => {
     await expect(getDocument("missing")).rejects.toMatchObject({
       code: "request_failed",
       status: 404,
+    });
+  });
+});
+
+describe("getCompletedPdf", () => {
+  beforeEach(() => vi.stubEnv("SIGNWELL_API_KEY", "test-key"));
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("downloads the signed PDF (with audit page) as bytes", async () => {
+    const bytes = new TextEncoder().encode("%PDF-signed");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => bytes.buffer,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const buf = await getCompletedPdf("doc_123");
+    expect(Buffer.isBuffer(buf)).toBe(true);
+    expect(buf.toString()).toBe("%PDF-signed");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "https://www.signwell.com/api/v1/documents/doc_123/completed_pdf?audit_page=true",
+    );
+    expect(init.method).toBe("GET");
+    expect(init.headers["X-Api-Key"]).toBe("test-key");
+  });
+
+  it("throws on a non-ok response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => "boom",
+      }),
+    );
+    await expect(getCompletedPdf("doc_123")).rejects.toMatchObject({
+      code: "request_failed",
+      status: 500,
     });
   });
 });
