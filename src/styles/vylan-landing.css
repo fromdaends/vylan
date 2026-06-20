@@ -1621,3 +1621,23 @@ a.vy-contact-card:hover {
     transition: none;
   }
 }
+
+/* ---------- Homepage call-to-action (replaces the old 3-up feature grid) ---------- */
+.vy-home-cta {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(22px, 3vw, 32px);
+  text-align: center;
+  padding: clamp(72px, 12vw, 140px) 24px;
+}
+.vy-home-cta-title {
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.05;
+  font-size: clamp(28px, 4.6vw, 52px);
+  max-width: 760px;
+  text-wrap: balance;
+}

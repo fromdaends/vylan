@@ -55,7 +55,6 @@ export default async function ContactPage({
     defText: t("menu_def_text"),
     navHome: t("nav_home"),
     navHowItWorks: t("nav_how_it_works"),
-    navForFirms: t("nav_for_firms"),
     navBookDemo: t("nav_book_demo"),
     navLogin: t("nav_login"),
     navContact: t("nav_contact"),
@@ -65,7 +64,6 @@ export default async function ContactPage({
   const footer = {
     brand: t("brand_word"),
     howItWorks: t("footer_how_it_works"),
-    forFirms: t("footer_for_firms"),
     bookDemo: t("footer_book_demo"),
     contact: t("footer_contact"),
     login: t("footer_login"),

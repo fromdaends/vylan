@@ -20,7 +20,6 @@ export type VylanMenuStrings = {
   defText: string;
   navHome: string;
   navHowItWorks: string;
-  navForFirms: string;
   navBookDemo: string;
   navLogin: string;
   navContact: string;
@@ -138,9 +137,6 @@ export function VylanMenu({ s }: { s: VylanMenuStrings }) {
             <Link href="/how-it-works" onClick={closeNow}>
               {s.navHowItWorks} <span className="vy-arr">→</span>
             </Link>
-            <a href="#vy-get-access" onClick={closeAndJump}>
-              {s.navForFirms} <span className="vy-arr">→</span>
-            </a>
             <a href="#vy-get-access" onClick={closeAndJump}>
               {s.navBookDemo} <span className="vy-arr">→</span>
             </a>

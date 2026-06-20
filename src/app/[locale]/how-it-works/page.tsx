@@ -85,7 +85,6 @@ export default async function HowItWorksPage({
     defText: tv("menu_def_text"),
     navHome: tv("nav_home"),
     navHowItWorks: tv("nav_how_it_works"),
-    navForFirms: tv("nav_for_firms"),
     navBookDemo: tv("nav_book_demo"),
     navLogin: tv("nav_login"),
     navContact: tv("nav_contact"),
@@ -95,7 +94,6 @@ export default async function HowItWorksPage({
   const footer = {
     brand: tv("brand_word"),
     howItWorks: tv("footer_how_it_works"),
-    forFirms: tv("footer_for_firms"),
     bookDemo: tv("footer_book_demo"),
     contact: tv("footer_contact"),
     login: tv("footer_login"),

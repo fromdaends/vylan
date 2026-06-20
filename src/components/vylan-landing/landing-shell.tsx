@@ -23,7 +23,6 @@ export type LandingShellStrings = {
   defText: string;
   navHome: string;
   navHowItWorks: string;
-  navForFirms: string;
   navBookDemo: string;
   navLogin: string;
   navContact: string;
