@@ -253,14 +253,7 @@ export function PortalShell({
             )}
             <section className="animate-in-stagger space-y-3">
               {signatureItems.map((item) => (
-                <SignatureItemCard
-                  key={item.id}
-                  token={ctx.engagement.magic_token ?? ""}
-                  item={item}
-                  locale={locale}
-                  files={filesByItem[item.id] ?? []}
-                  onUploaded={(f) => handleUploaded(item.id, f)}
-                />
+                <SignatureItemCard key={item.id} item={item} locale={locale} />
               ))}
             </section>
           </>
