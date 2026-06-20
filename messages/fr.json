@@ -1171,6 +1171,7 @@
     "copy": "Copier",
     "copied": "Copié",
     "copy_link": "Copier le lien",
+    "copy_client_link": "Copier le lien client",
     "approve": "Approuver",
     "reject": "Refuser",
     "reopen_item": "Rouvrir",
