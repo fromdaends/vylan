@@ -17,13 +17,12 @@ export type LandingShellStrings = {
   reelWords: string[];
   brandWord: string;
   ctaBook: string;
-  ctaManifesto: string;
+  ctaHowItWorks: string;
   defTerm: string;
   defAbbr: string;
   defText: string;
   navHome: string;
-  navManifesto: string;
-  navForFirms: string;
+  navHowItWorks: string;
   navBookDemo: string;
   navLogin: string;
   navContact: string;
@@ -337,8 +336,8 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
               <button className="vy-btn" type="button" onClick={scrollToForm}>
                 {s.ctaBook}
               </button>
-              <Link className="vy-link-btn" href="/manifesto">
-                {s.ctaManifesto}
+              <Link className="vy-link-btn" href="/how-it-works">
+                {s.ctaHowItWorks}
               </Link>
             </div>
           </div>

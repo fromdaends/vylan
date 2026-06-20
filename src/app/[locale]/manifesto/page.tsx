@@ -1,128 +1,17 @@
-import type { Metadata } from "next";
-import { setRequestLocale, getTranslations } from "next-intl/server";
-import { Link } from "@/i18n/navigation";
+import { redirect } from "next/navigation";
+import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
-import { schibsted } from "@/components/vylan-landing/fonts";
-import { BirdVideo } from "@/components/vylan-landing/bird-video";
-import { VylanMenu } from "@/components/vylan-landing/vylan-menu";
-import { LeadForm } from "@/components/vylan-landing/lead-form";
-import { VylanFooter } from "@/components/vylan-landing/vylan-footer";
-import "@/styles/vylan-landing.css";
 
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}): Promise<Metadata> {
-  const { locale } = await params;
-  const t = await getTranslations({ locale, namespace: "VylanManifesto" });
-  return { title: t("meta_title") };
-}
-
-// Render a string that may contain "\n" line breaks as <br/>-separated
-// fragments.
-function withBreaks(text: string) {
-  const lines = text.split("\n");
-  return lines.map((line, i) => (
-    <span key={i}>
-      {line}
-      {i < lines.length - 1 ? <br /> : null}
-    </span>
-  ));
-}
-
-export default async function ManifestoPage({
+// The manifesto has been retired and replaced by the "How it works" page.
+// We keep this route as a redirect (rather than deleting it) so any existing
+// bookmark or inbound link to /manifesto lands on the new page instead of a
+// dead 404. All in-app links now point straight at /how-it-works.
+export default async function ManifestoRedirect({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
-  setRequestLocale(locale);
-
-  const tm = await getTranslations("VylanManifesto");
-  const tv = await getTranslations("Vylan");
-
-  // Same menu strings the landing builds (all in the Vylan namespace), so the
-  // shared VylanMenu shows identical options on both pages.
-  const menu = {
-    brand: tv("brand_word"),
-    logoAlt: tv("logo_alt"),
-    menuLabel: tv("menu_label"),
-    closeLabel: tv("menu_close"),
-    defTerm: tv("menu_def_term"),
-    defAbbr: tv("menu_def_abbr"),
-    defText: tv("menu_def_text"),
-    navHome: tv("nav_home"),
-    navManifesto: tv("nav_manifesto"),
-    navForFirms: tv("nav_for_firms"),
-    navBookDemo: tv("nav_book_demo"),
-    navLogin: tv("nav_login"),
-    navContact: tv("nav_contact"),
-    follow: tv("follow"),
-  };
-
-  const footer = {
-    brand: tv("brand_word"),
-    manifesto: tv("footer_manifesto"),
-    forFirms: tv("footer_for_firms"),
-    bookDemo: tv("footer_book_demo"),
-    contact: tv("footer_contact"),
-    login: tv("footer_login"),
-    copyright: tv("footer_copyright"),
-    location: tv("contact_location_value"),
-  };
-
-  return (
-    <div className={`vy-manifesto ${schibsted.variable}`}>
-      <BirdVideo />
-
-      {/* centred brand + shared slide-down menu (opens on hover) */}
-      <VylanMenu s={menu} />
-
-      {/* back to the landing — kept top-right */}
-      <div className="vy-topbar">
-        <Link className="vy-back" href="/">
-          <span className="vy-arr">←</span> {tm("back")}
-        </Link>
-      </div>
-
-      <main className="vy-manifesto-main">
-        <span className="vy-pill">{tm("pill")}</span>
-        <h1>{withBreaks(tm("title"))}</h1>
-        {/* Small audience eyebrow under the headline — its own line, distinct
-            from the big subheadline below it. */}
-        <p className="vy-audience">{tm("audience")}</p>
-        <p className="vy-lede">{tm("lede")}</p>
-
-        <div className="vy-body">
-          <p>{tm("body_1")}</p>
-          <p>{tm("body_2")}</p>
-          <p>{tm("body_3")}</p>
-          <p>
-            {tm.rich("body_4", {
-              strong: (chunks) => <strong>{chunks}</strong>,
-            })}
-          </p>
-        </div>
-
-        <p className="vy-kicker">{withBreaks(tm("kicker"))}</p>
-
-        <div className="vy-signoff">
-          <span className="vy-name">{tm("signoff_name")}</span>
-          <a className="vy-btn" href="#vy-get-access">
-            {tm("signoff_cta")}
-          </a>
-        </div>
-      </main>
-
-      {/* FORM — same lead form as the landing page */}
-      <section className="vy-form-section" id="vy-get-access">
-        <LeadForm />
-      </section>
-
-      {/* FOOTER */}
-      <VylanFooter s={footer} />
-    </div>
-  );
+  redirect(getPathname({ locale, href: "/how-it-works" }));
 }

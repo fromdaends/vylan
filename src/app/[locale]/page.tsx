@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { getPathname } from "@/i18n/navigation";
+import { getPathname, Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { schibsted } from "@/components/vylan-landing/fonts";
@@ -53,13 +53,12 @@ export default async function Home({
     reelWords: t.raw("reel_words") as string[],
     brandWord: t("brand_word"),
     ctaBook: t("cta_book"),
-    ctaManifesto: t("cta_manifesto"),
+    ctaHowItWorks: t("cta_how_it_works"),
     defTerm: t("menu_def_term"),
     defAbbr: t("menu_def_abbr"),
     defText: t("menu_def_text"),
     navHome: t("nav_home"),
-    navManifesto: t("nav_manifesto"),
-    navForFirms: t("nav_for_firms"),
+    navHowItWorks: t("nav_how_it_works"),
     navBookDemo: t("nav_book_demo"),
     navLogin: t("nav_login"),
     navContact: t("nav_contact"),
@@ -68,8 +67,7 @@ export default async function Home({
 
   const footer = {
     brand: t("brand_word"),
-    manifesto: t("footer_manifesto"),
-    forFirms: t("footer_for_firms"),
+    howItWorks: t("footer_how_it_works"),
     bookDemo: t("footer_book_demo"),
     contact: t("footer_contact"),
     login: t("footer_login"),
@@ -86,24 +84,14 @@ export default async function Home({
         <LeadForm />
       </section>
 
-      {/* FEATURES */}
-      <div className="vy-features">
-        <div className="vy-feature">
-          <div className="vy-k">{t("feat_1_k")}</div>
-          <h3>{t("feat_1_title")}</h3>
-          <p>{t("feat_1_body")}</p>
-        </div>
-        <div className="vy-feature">
-          <div className="vy-k">{t("feat_2_k")}</div>
-          <h3>{t("feat_2_title")}</h3>
-          <p>{t("feat_2_body")}</p>
-        </div>
-        <div className="vy-feature">
-          <div className="vy-k">{t("feat_3_k")}</div>
-          <h3>{t("feat_3_title")}</h3>
-          <p>{t("feat_3_body")}</p>
-        </div>
-      </div>
+      {/* CALL TO ACTION — invites visitors to the full "How it works" page
+          (replaced the old 3-up feature grid). */}
+      <section className="vy-home-cta">
+        <h2 className="vy-home-cta-title">{t("home_cta_title")}</h2>
+        <Link className="vy-btn" href="/how-it-works">
+          {t("cta_how_it_works")}
+        </Link>
+      </section>
 
       {/* FOOTER (Contact now lives on its own /contact page; the footer keeps
           the details in a small faint line) */}
