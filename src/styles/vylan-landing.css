@@ -8,7 +8,8 @@
    ===================================================================== */
 
 .vy-root,
-.vy-manifesto {
+.vy-manifesto,
+.vy-wwd {
   --vy-blue: #1050ed;
   --vy-blue-deep: #0a39d6;
   --vy-ink: #ffffff;
@@ -25,16 +26,19 @@
 
 /* Smooth in-page anchor scrolling, scoped to the marketing pages only. */
 html:has(.vy-root),
-html:has(.vy-manifesto) {
+html:has(.vy-manifesto),
+html:has(.vy-wwd) {
   scroll-behavior: smooth;
 }
 
 .vy-root *,
-.vy-manifesto * {
+.vy-manifesto *,
+.vy-wwd * {
   box-sizing: border-box;
 }
 .vy-root ::selection,
-.vy-manifesto ::selection {
+.vy-manifesto ::selection,
+.vy-wwd ::selection {
   background: #fff;
   color: var(--vy-blue);
 }
@@ -1078,4 +1082,542 @@ a.vy-contact-card:hover {
   color: #fff;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+/* =====================================================================
+   "How it works / What we do" page (/how-it-works). Ported from the
+   Claude Design "Vylan What We Do" handoff (Kinetic hero) and rebranded
+   to the live system: the design colour #2347F2 and its Archivo / Hanken
+   fonts became our --vy-blue and Schibsted Grotesk. Scoped under `.vy-wwd`;
+   every class is `wwd-` and every keyframe `wwd-*` so it stays isolated.
+   Accent system: amber = the problem, cyan = the AI, mint = paid, plus
+   four icon hues on the trust cards.
+   ===================================================================== */
+.vy-wwd {
+  --wwd-amber: #ffb36b;
+  --wwd-coral: #ff8e72;
+  --wwd-cyan: #74d0ff;
+  --wwd-mint: #63e2a8;
+  --wwd-violet: #b69cff;
+}
+
+/* fixed atmospheric backdrop (soft top light, deep bottom) over the blue */
+.wwd-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(110% 70% at 50% -5%, rgba(150, 175, 255, 0.4), transparent 55%),
+    radial-gradient(120% 75% at 50% 105%, rgba(6, 26, 140, 0.55), transparent 60%);
+}
+
+/* shared bits */
+.wwd-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+.wwd-eyebrow-cyan {
+  color: rgba(116, 208, 255, 0.85);
+}
+.wwd-h2 {
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+  font-size: clamp(30px, 4.4vw, 58px);
+  margin-top: 16px;
+  text-wrap: balance;
+}
+.wwd-center {
+  text-align: center;
+}
+.wwd-section {
+  position: relative;
+  z-index: 1;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* ---------- HERO: Kinetic ---------- */
+.wwd-hero {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 150px 7vw 110px;
+  overflow: hidden;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+.wwd-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 16.66% 100%;
+}
+.wwd-hero-inner {
+  position: relative;
+  z-index: 1;
+}
+.wwd-hero-title {
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+  font-size: clamp(46px, 11vw, 150px);
+  margin-top: 18px;
+}
+.wwd-line {
+  display: block;
+  opacity: 1;
+}
+.wwd-hero-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 30px;
+  margin-top: 44px;
+}
+.wwd-sub {
+  max-width: 480px;
+  font-size: clamp(18px, 1.5vw, 22px);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.86);
+  font-weight: 500;
+}
+.wwd-cta-row {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ---------- THE PROBLEM ---------- */
+.wwd-problem {
+  padding: 60px 7vw 120px;
+}
+.wwd-problem .wwd-h2 {
+  max-width: 880px;
+}
+.wwd-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 42px;
+}
+.wwd-chip {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: clamp(14px, 1.5vw, 18px);
+  padding: 9px 17px;
+  border-radius: 999px;
+  background: rgba(255, 179, 107, 0.1);
+  border: 1px solid rgba(255, 179, 107, 0.42);
+}
+.wwd-lead {
+  margin-top: 40px;
+  max-width: 560px;
+  font-size: clamp(18px, 1.6vw, 22px);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 500;
+}
+
+/* ---------- HOW IT WORKS (walkthrough + scroll spine) ---------- */
+.wwd-steps {
+  padding: 30px 7vw 100px;
+  max-width: 1100px;
+}
+.wwd-steps-head {
+  text-align: center;
+  margin-bottom: 18px;
+}
+.wwd-spine {
+  position: relative;
+  padding-left: 8px;
+}
+.wwd-spine-track,
+.wwd-spine-fill {
+  position: absolute;
+  left: 35px;
+  top: 30px;
+  bottom: 30px;
+  width: 2px;
+}
+.wwd-spine-track {
+  background: rgba(255, 255, 255, 0.16);
+}
+.wwd-spine-fill {
+  background: #fff;
+  transform: scaleY(1);
+  transform-origin: top;
+  will-change: transform;
+}
+.wwd-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 30px;
+  padding: 30px 0;
+  align-items: start;
+}
+.wwd-node {
+  position: relative;
+  z-index: 2;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--vy-blue);
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.55);
+  transition: background 0.5s ease, color 0.5s ease, border-color 0.5s ease,
+    box-shadow 0.5s ease;
+}
+.wwd-node.wwd-node-on {
+  background: #fff;
+  border-color: #fff;
+  color: var(--vy-blue);
+  box-shadow: 0 0 0 7px rgba(255, 255, 255, 0.14);
+}
+.wwd-step-body {
+  padding-top: 4px;
+}
+.wwd-kicker {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.65);
+}
+.wwd-step-title {
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-size: clamp(24px, 3.2vw, 38px);
+  margin-top: 10px;
+  line-height: 1.08;
+}
+.wwd-step-text {
+  margin-top: 14px;
+  max-width: 620px;
+  font-size: clamp(17px, 1.5vw, 21px);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+
+/* ---------- PAYMENT PIPELINE ---------- */
+.wwd-pay {
+  padding: 90px 7vw 110px;
+}
+.wwd-pay-head {
+  text-align: center;
+  max-width: 780px;
+  margin: 0 auto;
+}
+.wwd-pay .wwd-h2 {
+  font-size: clamp(32px, 5vw, 64px);
+  line-height: 1;
+}
+.wwd-paid {
+  color: var(--wwd-mint);
+}
+.wwd-pay-body {
+  margin: 22px auto 0;
+  max-width: 640px;
+  font-size: clamp(18px, 1.6vw, 22px);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.84);
+  font-weight: 500;
+}
+.wwd-rail {
+  position: relative;
+  margin-top: 64px;
+}
+.wwd-rail-line,
+.wwd-rail-dash {
+  position: absolute;
+  top: 38px;
+  left: 14%;
+  right: 14%;
+  height: 2px;
+  z-index: 0;
+}
+.wwd-rail-line {
+  background: linear-gradient(90deg, rgba(116, 208, 255, 0.6), rgba(99, 226, 168, 0.6));
+}
+.wwd-rail-dash {
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.85) 0 8px,
+    transparent 8px 18px
+  );
+  background-size: 18px 2px;
+  animation: wwd-dash 0.8s linear infinite;
+}
+.wwd-rail-steps {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  text-align: center;
+}
+.wwd-pay-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.wwd-pay-icon {
+  width: 78px;
+  height: 78px;
+  border-radius: 50%;
+  background: var(--vy-blue);
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 8px var(--vy-blue);
+}
+.wwd-rail-steps .wwd-pay-step:first-child .wwd-pay-icon {
+  border-color: rgba(116, 208, 255, 0.55);
+}
+.wwd-pay-icon-paid {
+  background: var(--wwd-mint);
+  border-color: transparent;
+  box-shadow: 0 0 0 8px var(--vy-blue), 0 0 44px rgba(99, 226, 168, 0.55);
+}
+.wwd-pay-step-title {
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(18px, 2vw, 24px);
+}
+.wwd-pay-step-text {
+  max-width: 260px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.74);
+  font-weight: 500;
+}
+.wwd-pay-caption {
+  text-align: center;
+  margin-top: 54px;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: clamp(16px, 1.7vw, 21px);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* ---------- TRUST & SECURITY ---------- */
+.wwd-trust {
+  padding: 80px 7vw 110px;
+  max-width: 1160px;
+}
+.wwd-trust-head {
+  margin-bottom: 48px;
+}
+.wwd-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  overflow: hidden;
+}
+.wwd-trust-card {
+  background: var(--vy-blue);
+  padding: 38px 34px;
+}
+.wwd-trust-title {
+  font-family: inherit;
+  font-weight: 700;
+  font-size: clamp(20px, 2.2vw, 27px);
+  margin-top: 20px;
+  line-height: 1.1;
+}
+.wwd-trust-text {
+  margin-top: 12px;
+  font-size: 17px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.78);
+  font-weight: 500;
+}
+
+/* ---------- CLOSING ---------- */
+.wwd-close {
+  position: relative;
+  z-index: 1;
+  min-height: 84vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 100px 24px 80px;
+}
+.wwd-close-aura {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 900px;
+  max-width: 110vw;
+  aspect-ratio: 1;
+  margin-left: -450px;
+  transform: translateY(-50%);
+  z-index: 0;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, rgba(150, 178, 255, 0.5), transparent 66%);
+  filter: blur(34px);
+  animation: wwd-aura 10s ease-in-out infinite;
+}
+.wwd-close-title {
+  position: relative;
+  z-index: 1;
+  font-family: inherit;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-size: clamp(32px, 5.2vw, 68px);
+}
+
+/* ---------- motion: armed by JS only (no-JS / reduced-motion stays legible) ---------- */
+.vy-wwd.wwd-js [data-reveal] {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.9s var(--vy-ease), transform 0.9s var(--vy-ease);
+}
+.vy-wwd.wwd-js [data-reveal].wwd-in {
+  opacity: 1;
+  transform: none;
+}
+.vy-wwd.wwd-js .wwd-line {
+  opacity: 0;
+  animation: wwd-lineup 0.85s var(--vy-ease) forwards;
+}
+.vy-wwd.wwd-js .wwd-load {
+  opacity: 0;
+  animation: wwd-fadeup 0.9s var(--vy-ease) forwards;
+}
+
+@keyframes wwd-lineup {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes wwd-fadeup {
+  from {
+    opacity: 0;
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes wwd-dash {
+  to {
+    background-position: 18px 0;
+  }
+}
+@keyframes wwd-aura {
+  0%,
+  100% {
+    transform: translateY(-50%) scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateY(-50%) scale(1.1);
+    opacity: 1;
+  }
+}
+
+/* ---------- accessible focus rings ---------- */
+.vy-wwd a:focus-visible,
+.vy-wwd button:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, 0.7);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 860px) {
+  .wwd-hero {
+    padding: 130px 24px 90px;
+  }
+  .wwd-hero-foot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 22px;
+  }
+  .wwd-problem,
+  .wwd-steps,
+  .wwd-pay,
+  .wwd-trust {
+    padding-left: 24px;
+    padding-right: 24px;
+  }
+  .wwd-rail-steps {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+  .wwd-rail-line,
+  .wwd-rail-dash {
+    display: none;
+  }
+  .wwd-trust-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 560px) {
+  .wwd-hero-title {
+    font-size: clamp(34px, 12vw, 60px);
+  }
+  .wwd-step {
+    grid-template-columns: 48px 1fr;
+    gap: 18px;
+  }
+  .wwd-node {
+    width: 44px;
+    height: 44px;
+    font-size: 16px;
+  }
+  .wwd-spine-track,
+  .wwd-spine-fill {
+    left: 30px;
+  }
+}
+
+/* ---------- reduced motion: no looping / auto animation ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .vy-wwd .wwd-rail-dash,
+  .vy-wwd .wwd-close-aura {
+    animation: none;
+  }
+  .vy-wwd .wwd-node {
+    transition: none;
+  }
 }

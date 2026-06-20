@@ -19,7 +19,7 @@ export const VYLAN_PHONES = [
 
 export type VylanFooterStrings = {
   brand: string;
-  manifesto: string;
+  howItWorks: string;
   forFirms: string;
   bookDemo: string;
   contact: string;
@@ -33,7 +33,7 @@ export function VylanFooter({ s }: { s: VylanFooterStrings }) {
     <footer className="vy-footer">
       <div className="vy-fbrand">{s.brand}</div>
       <div className="vy-links">
-        <Link href="/manifesto">{s.manifesto}</Link>
+        <Link href="/how-it-works">{s.howItWorks}</Link>
         <a href="#vy-get-access">{s.forFirms}</a>
         <a href="#vy-get-access">{s.bookDemo}</a>
         <Link href="/contact">{s.contact}</Link>

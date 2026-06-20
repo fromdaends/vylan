@@ -53,12 +53,12 @@ export default async function Home({
     reelWords: t.raw("reel_words") as string[],
     brandWord: t("brand_word"),
     ctaBook: t("cta_book"),
-    ctaManifesto: t("cta_manifesto"),
+    ctaHowItWorks: t("cta_how_it_works"),
     defTerm: t("menu_def_term"),
     defAbbr: t("menu_def_abbr"),
     defText: t("menu_def_text"),
     navHome: t("nav_home"),
-    navManifesto: t("nav_manifesto"),
+    navHowItWorks: t("nav_how_it_works"),
     navForFirms: t("nav_for_firms"),
     navBookDemo: t("nav_book_demo"),
     navLogin: t("nav_login"),
@@ -68,7 +68,7 @@ export default async function Home({
 
   const footer = {
     brand: t("brand_word"),
-    manifesto: t("footer_manifesto"),
+    howItWorks: t("footer_how_it_works"),
     forFirms: t("footer_for_firms"),
     bookDemo: t("footer_book_demo"),
     contact: t("footer_contact"),
