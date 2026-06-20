@@ -27,7 +27,7 @@ import {
 } from "@/app/actions/items";
 import { assertLocale } from "@/lib/locale";
 import { formatDate, formatCurrency } from "@/lib/format";
-import { MagicLinkPanel } from "@/components/engagements/magic-link-panel";
+import { EngagementTabs } from "@/components/engagements/engagement-tabs";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
 import { ChecklistItemShell } from "@/components/engagements/checklist-item-shell";
 import {
@@ -242,6 +242,9 @@ export default async function EngagementDetailPage({
   const derivedStatus = deriveEngagementStatus(engagement.status, attention);
   const view = engagementToView(engagement, { readyToReview });
 
+  // Client portal URL — used by the "Copy payment link" button when a payment is
+  // requested. (The client-link copy in the header 3-dots menu builds its own
+  // origin-aware URL from the magic token.)
   const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
   const portalUrl =
     engagement.magic_token != null
@@ -467,17 +470,13 @@ export default async function EngagementDetailPage({
               remindersPaused={engagement.reminders_paused}
               hasUploads={uploads.length > 0}
               canDelete={canDelete}
+              clientLinkToken={
+                isLive ? (engagement.magic_token ?? undefined) : undefined
+              }
             />
           )}
         </div>
       </header>
-
-      {portalUrl && isLive && (
-        <MagicLinkPanel
-          url={portalUrl}
-          token={engagement.magic_token ?? undefined}
-        />
-      )}
 
       {isDraft &&
         (items.length === 0 ? (
@@ -490,74 +489,38 @@ export default async function EngagementDetailPage({
           </Alert>
         ))}
 
-      {/* The Activity feed now opens from a right-side slide-out (the "Activity"
-          button in the header actions), so the checklist + signatures use the
-          full content width instead of the old cramped 2/3 column. */}
-      <section className="space-y-4">
-        {/* Signatures first: a signature (an authorization or engagement
-            letter) is usually a quick, important action, so it sits above the
-            longer document checklist rather than buried beneath it. */}
-        {(isLive || signatureItems.length > 0) && (
-          <div className="space-y-3">
-            <div className="flex flex-row items-center justify-between gap-3">
-              <h2 className="text-base font-semibold tracking-tight text-foreground">
-                {t("signatures")}{" "}
-                <span className="text-muted-foreground font-normal">
-                  ({signatureItems.length})
-                </span>
-              </h2>
-              {isLive && <AddSignatureDialog engagementId={engagement.id} />}
-            </div>
-            {signatureItems.length === 0 ? (
-              <div className="text-sm text-muted-foreground py-4">
-                {t("signatures_empty")}
-              </div>
-            ) : (
-              <ul className="divide-y divide-border border-t border-border">
-                {signatureItems.map((item) => (
-                  <SignatureRow
-                    key={item.id}
-                    item={item}
-                    locale={locale}
-                    canEdit={isLive}
-                    signatureRequest={
-                      signatureRequestsByItem.get(item.id) ?? null
-                    }
-                  />
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
-
-        <div className="space-y-3">
-          <div className="flex flex-row items-center justify-between gap-3">
-            <h2 className="text-base font-semibold tracking-tight text-foreground">
-              {t("checklist")}{" "}
-              <span className="text-muted-foreground font-normal">
-                ({collectionItems.length})
-              </span>
-            </h2>
-            <div className="flex items-center gap-2">
-              {/* Always-available visual review of every uploaded document,
-                  regardless of how many there are. */}
-              <EngagementPreview
-                uploads={uploads}
-                items={items}
+      {/* Checklist + Signatures share one tab switch (Checklist is the default)
+          so the page shows one section at a time instead of stacking both. Each
+          tab keeps its own controls. The Activity feed opens from the header
+          slide-out. */}
+      <EngagementTabs
+        checklistCount={collectionItems.length}
+        signaturesCount={signatureItems.length}
+        showSignatures={isLive || signatureItems.length > 0}
+        checklistControls={
+          <>
+            {/* Always-available visual review of every uploaded document. */}
+            <EngagementPreview
+              uploads={uploads}
+              items={items}
+              engagementId={engagement.id}
+              engagementTitle={engagement.title}
+              clientName={client?.display_name ?? null}
+              locale={locale}
+            />
+            {isLive && (
+              <AddItemDialog
                 engagementId={engagement.id}
-                engagementTitle={engagement.title}
-                clientName={client?.display_name ?? null}
-                locale={locale}
+                province={client?.province ?? null}
               />
-              {isLive && (
-                <AddItemDialog
-                  engagementId={engagement.id}
-                  province={client?.province ?? null}
-                />
-              )}
-            </div>
-          </div>
-          {collectionItems.length === 0 ? (
+            )}
+          </>
+        }
+        signaturesControls={
+          isLive ? <AddSignatureDialog engagementId={engagement.id} /> : null
+        }
+        checklist={
+          collectionItems.length === 0 ? (
             <div className="text-sm text-muted-foreground py-4">
               {t("checklist_empty")}
             </div>
@@ -580,9 +543,30 @@ export default async function EngagementDetailPage({
                 />
               ))}
             </ul>
-          )}
-        </div>
-      </section>
+          )
+        }
+        signatures={
+          signatureItems.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-4">
+              {t("signatures_empty")}
+            </div>
+          ) : (
+            <ul className="divide-y divide-border">
+              {signatureItems.map((item) => (
+                <SignatureRow
+                  key={item.id}
+                  item={item}
+                  locale={locale}
+                  canEdit={isLive}
+                  signatureRequest={
+                    signatureRequestsByItem.get(item.id) ?? null
+                  }
+                />
+              ))}
+            </ul>
+          )
+        }
+      />
     </div>
   );
 }

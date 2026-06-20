@@ -2,7 +2,17 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Bell, BellOff, Download, Loader2, MoreHorizontal, Trash2, X } from "lucide-react";
+import {
+  Bell,
+  BellOff,
+  Check,
+  Download,
+  Link as LinkIcon,
+  Loader2,
+  MoreHorizontal,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDownloadAll } from "./use-download-all";
 import {
@@ -43,6 +53,7 @@ export function EngagementMoreMenu({
   remindersPaused,
   hasUploads,
   canDelete,
+  clientLinkToken,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -50,9 +61,27 @@ export function EngagementMoreMenu({
   remindersPaused: boolean;
   hasUploads: boolean;
   canDelete: boolean;
+  // The engagement's magic token (live engagements only). When set, the menu
+  // offers "Copy client link" — the client-portal URL, built from the current
+  // site origin so it's correct on preview + live (same as the old inline box).
+  clientLinkToken?: string;
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyClientLink = async () => {
+    if (!clientLinkToken || typeof window === "undefined") return;
+    try {
+      await navigator.clipboard.writeText(
+        `${window.location.origin}/r/${clientLinkToken}`,
+      );
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard blocked — no-op (the user can re-open the menu and retry).
+    }
+  };
   // Shared with the Preview overlay's "Download all" — one code path so they
   // can't drift (the route returns JSON {url}; the browser downloads from
   // storage). See use-download-all.ts.
@@ -89,7 +118,25 @@ export function EngagementMoreMenu({
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuContent align="end" className="w-64">
+          {clientLinkToken && (
+            <>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  // Keep the menu open so the "Copied" feedback is visible.
+                  e.preventDefault();
+                  void copyClientLink();
+                }}
+              >
+                {copied ? <Check /> : <LinkIcon />}
+                {copied ? t("copied") : t("copy_client_link")}
+              </DropdownMenuItem>
+              <div className="px-2 pb-1.5 pt-0.5 text-xs leading-snug text-muted-foreground">
+                {t("magic_link_hint")}
+              </div>
+              <DropdownMenuSeparator />
+            </>
+          )}
           {isLive && (
             <DropdownMenuItem onSelect={togglePause}>
               {remindersPaused ? <Bell /> : <BellOff />}
