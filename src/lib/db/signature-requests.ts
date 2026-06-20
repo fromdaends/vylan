@@ -7,7 +7,7 @@
 // table/column is treated as "no signature requests yet" so the UI never
 // hard-errors — same pattern as payment-requests.ts.
 
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import type { SignatureStatus } from "@/lib/signwell/client";
 
 export type SignatureRequest = {
@@ -110,4 +110,28 @@ export async function getSignatureRequestsByItem(
     if (!out.has(row.request_item_id)) out.set(row.request_item_id, row);
   }
   return out;
+}
+
+// ── Service-role helpers ────────────────────────────────────────────────────
+// Used by the unauthenticated client portal (embed route) and the SignWell
+// webhook (Phase 4), neither of which has a user session. The service role
+// bypasses RLS, so callers MUST derive the item/engagement from trusted server
+// state (the magic token / the verified webhook), never from raw client input.
+
+export async function getSignatureRequestByItemSR(
+  requestItemId: string,
+): Promise<SignatureRequest | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("signature_requests")
+    .select("*")
+    .eq("request_item_id", requestItemId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[signature-requests] getByItem(SR) failed:", error);
+    }
+    return null;
+  }
+  return (data as SignatureRequest) ?? null;
 }

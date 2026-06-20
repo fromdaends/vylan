@@ -224,3 +224,36 @@ export async function createSignatureDocument(
     embeddedSigningUrl: recipient?.embedded_signing_url ?? null,
   };
 }
+
+export type SignwellDocumentState = {
+  status: SignatureStatus;
+  // Fresh embedded signing url for the signer; embedded urls can expire, so we
+  // fetch this when the client opens the portal rather than storing it.
+  embeddedSigningUrl: string | null;
+};
+
+// Fetch the current state of a document — its status and a fresh embedded
+// signing url for the signer. Used when the client opens the portal to sign.
+export async function getDocument(
+  documentId: string,
+): Promise<SignwellDocumentState> {
+  const res = await signwellFetch(
+    `/documents/${encodeURIComponent(documentId)}`,
+    { method: "GET" },
+  );
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new SignwellError(
+      "request_failed",
+      `SignWell get document failed (${res.status}): ${truncateDetail(detail)}`,
+      res.status,
+    );
+  }
+  const json = (await res.json()) as SignwellDocumentResponse;
+  const recipient =
+    json.recipients?.find((r) => r.id === "client") ?? json.recipients?.[0];
+  return {
+    status: mapSignwellStatus(json.status),
+    embeddedSigningUrl: recipient?.embedded_signing_url ?? null,
+  };
+}

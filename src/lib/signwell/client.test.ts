@@ -4,6 +4,7 @@ import {
   isSignwellTestMode,
   mapSignwellStatus,
   createSignatureDocument,
+  getDocument,
   SignwellError,
 } from "./client";
 
@@ -172,6 +173,54 @@ describe("createSignatureDocument", () => {
     );
     await expect(createSignatureDocument(valid)).rejects.toMatchObject({
       code: "not_configured",
+    });
+  });
+});
+
+describe("getDocument", () => {
+  beforeEach(() => vi.stubEnv("SIGNWELL_API_KEY", "test-key"));
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("fetches the document and returns normalized status + fresh embedded url", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "doc_123",
+        status: "Viewed",
+        recipients: [
+          { id: "client", embedded_signing_url: "https://embed.example/fresh" },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await getDocument("doc_123");
+    expect(res).toEqual({
+      status: "viewed",
+      embeddedSigningUrl: "https://embed.example/fresh",
+    });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://www.signwell.com/api/v1/documents/doc_123");
+    expect(init.method).toBe("GET");
+    expect(init.headers["X-Api-Key"]).toBe("test-key");
+  });
+
+  it("throws on a non-ok response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        text: async () => "Not found",
+      }),
+    );
+    await expect(getDocument("missing")).rejects.toMatchObject({
+      code: "request_failed",
+      status: 404,
     });
   });
 });
