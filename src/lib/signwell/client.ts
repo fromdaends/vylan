@@ -165,8 +165,10 @@ export type CreateSignatureDocResult = {
 // - embedded_signing: true renders inside our portal (no redirect to signwell).
 // - The recipient's send_email is false and reminders are off, so SignWell does
 //   NOT email the client a competing link — the client signs inside Vylan.
-// - No signature `fields` are placed here; field placement is decided in Phase 3
-//   (embedded signing UX). The document is still created and returns an id.
+// - with_signature_page: true makes SignWell auto-append a clean signature page
+//   with a signature field for the signer. SignWell REJECTS a sendable document
+//   whose signer has no field ("with_no_fields"), so a field is required — this
+//   places one without us having to know the PDF's page count or layout.
 export async function createSignatureDocument(
   input: CreateSignatureDocInput,
 ): Promise<CreateSignatureDocResult> {
@@ -181,6 +183,9 @@ export async function createSignatureDocument(
     // No SignWell-side emails or reminders: signing happens embedded in Vylan.
     reminders: false,
     draft: false,
+    // Auto-append a signature page + field for the signer (required: a sendable
+    // document with no field for the recipient is rejected with "with_no_fields").
+    with_signature_page: true,
     name: input.name,
     files: [{ name: input.fileName, file_base64: input.fileBase64 }],
     recipients: [

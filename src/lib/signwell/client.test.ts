@@ -125,6 +125,9 @@ describe("createSignatureDocument", () => {
     expect(body.embedded_signing).toBe(true);
     expect(body.reminders).toBe(false);
     expect(body.draft).toBe(false);
+    // Auto signature page so the signer always has a field (avoids the SignWell
+    // "with_no_fields" rejection).
+    expect(body.with_signature_page).toBe(true);
     expect(body.files[0]).toEqual({
       name: "letter.pdf",
       file_base64: "QkFTRTY0",
