@@ -13,6 +13,7 @@ import {
   markSignatureCompletedSR,
   type SignatureRequest,
 } from "@/lib/db/signature-requests";
+import { setItemStatus } from "@/lib/db/portal";
 import { logServiceRoleActivity } from "@/lib/db/activity";
 
 export async function finalizeSignatureCompletion(
@@ -20,7 +21,14 @@ export async function finalizeSignatureCompletion(
   event?: { type?: string | null; time?: string | null },
 ): Promise<boolean> {
   if (!sr.signwell_document_id) return false;
-  if (sr.status === "completed") return true;
+  // Already completed: just make sure the checklist item reflects it
+  // (idempotent self-heal) and stop — no need to re-download the PDF. A signed
+  // signature item must be 'approved' so a required signature doesn't keep the
+  // engagement stuck "not ready to review" (computeAttention reads item.status).
+  if (sr.status === "completed") {
+    await setItemStatus(sr.request_item_id, "approved", sr.engagement_id);
+    return true;
+  }
 
   let pdf: Buffer;
   try {
@@ -54,6 +62,9 @@ export async function finalizeSignatureCompletion(
   });
   // res is null when another path already completed it — don't double-log.
   if (res) {
+    // Mark the checklist item approved so the engagement can read as ready to
+    // review / complete (a required signature item otherwise stays 'pending').
+    await setItemStatus(res.requestItemId, "approved", res.engagementId);
     await logServiceRoleActivity(
       res.firmId,
       res.engagementId,
