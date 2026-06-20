@@ -14,6 +14,7 @@ import {
   FileText,
   ShieldCheck,
   Wallet,
+  Plug,
   Download,
   Trash2,
   ChevronRight,
@@ -40,6 +41,10 @@ import {
   PaymentsConnectSection,
   type ConnectStatus,
 } from "@/components/settings/payments-section";
+import {
+  IntegrationsSection,
+  type QuickbooksStatus,
+} from "@/components/settings/integrations-section";
 import { PaymentsServicePrices } from "@/components/settings/payments-service-prices";
 import { PaymentsList } from "@/components/payments/payments-list";
 import type { PaymentsListRow } from "@/lib/db/payment-requests";
@@ -55,6 +60,7 @@ type SectionId =
   | "appearance"
   | "general"
   | "payments"
+  | "integrations"
   | "documents";
 type Translate = (k: string, values?: Record<string, string | number>) => string;
 
@@ -84,6 +90,7 @@ const SECTION_IDS: SectionId[] = [
   "appearance",
   "general",
   "payments",
+  "integrations",
   "documents",
 ];
 
@@ -98,6 +105,7 @@ export function SettingsShell({
   isOwner,
   billingSlot,
   connect,
+  quickbooks,
   servicePrices,
   paymentsList,
   firmName,
@@ -122,6 +130,9 @@ export function SettingsShell({
   // Stripe Connect status for the "Get paid by clients" block at the top of the
   // Payments section. Null for non-owners.
   connect: ConnectStatus | null;
+  // QuickBooks (Intuit) connection status for the Integrations section. Null for
+  // non-owners.
+  quickbooks: QuickbooksStatus | null;
   // Per-service default prices (cents) for the Payments section editor. Null for
   // non-owners.
   servicePrices: Record<string, number> | null;
@@ -156,6 +167,7 @@ export function SettingsShell({
     { id: "appearance", label: t("nav_appearance"), icon: Palette },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
     { id: "payments", label: t("nav_payments"), icon: Wallet },
+    { id: "integrations", label: t("nav_integrations"), icon: Plug },
     { id: "documents", label: t("nav_documents"), icon: FileText },
   ];
   // Owner-only tabs (Billing, Documents) are hidden from staff.
@@ -238,6 +250,9 @@ export function SettingsShell({
             )}
             {billingSlot}
           </div>
+        )}
+        {section === "integrations" && isOwner && quickbooks && (
+          <IntegrationsSection quickbooks={quickbooks} />
         )}
         {section === "documents" && isOwner && (
           <DocumentsSection

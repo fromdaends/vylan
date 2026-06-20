@@ -49,6 +49,23 @@ const ServerEnvSchema = z.object({
   // it the webhook rejects events, but completion still self-heals via reconcile.
   SIGNWELL_WEBHOOK_ID: optionalSecret(),
 
+  // QuickBooks (Intuit) OAuth — Stage 1, connection only. Client id + secret are
+  // server-only secrets. QBO_ENVIRONMENT is the sandbox/production switch: it
+  // fails safe to sandbox unless exactly "production" (see quickbooks/client.ts),
+  // so flipping live is one env change with no code change. QBO_REDIRECT_URI must
+  // match a URI registered in the Intuit app EXACTLY; when unset it falls back to
+  // APP_URL + /api/integrations/quickbooks/callback.
+  QBO_CLIENT_ID: optionalSecret(),
+  QBO_CLIENT_SECRET: optionalSecret(),
+  QBO_ENVIRONMENT: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().optional(),
+  ),
+  QBO_REDIRECT_URI: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().url().optional(),
+  ),
+
   APP_URL: z.string().url().default("http://localhost:3000"),
   CRON_SECRET: optionalSecret(16),
 });

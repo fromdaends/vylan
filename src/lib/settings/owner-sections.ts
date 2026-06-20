@@ -15,10 +15,12 @@ export type SettingsSectionId =
   | "appearance"
   | "general"
   | "payments"
+  | "integrations"
   | "documents";
 
 export const OWNER_ONLY_SETTINGS_SECTIONS: readonly SettingsSectionId[] = [
   "payments",
+  "integrations",
   "documents",
 ];
 
