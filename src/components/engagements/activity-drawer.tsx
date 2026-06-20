@@ -30,9 +30,16 @@ export function ActivityDrawer({ children }: { children: ReactNode }) {
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
-        <Button type="button" variant="outline" size="sm">
+        {/* Icon-only: the History glyph carries it. aria-label + title keep it
+            named for screen readers and as a hover tooltip. */}
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          aria-label={t("title")}
+          title={t("title")}
+        >
           <History className="size-4" aria-hidden />
-          {t("title")}
         </Button>
       </SheetTrigger>
       <SheetContent
