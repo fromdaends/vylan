@@ -1425,6 +1425,79 @@ a.vy-contact-card:hover {
   color: rgba(255, 255, 255, 0.78);
 }
 
+/* Payment stat card: "<3 min — from invoice to paid" with a scroll-filled bar. */
+.wwd-pay-stat {
+  margin-top: 52px;
+  display: flex;
+  justify-content: center;
+}
+.wwd-pay-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  padding: 22px 30px;
+  border: 1px solid rgba(99, 226, 168, 0.4);
+  border-radius: 18px;
+  background: rgba(99, 226, 168, 0.06);
+  max-width: 620px;
+}
+.wwd-pay-stat-num {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.wwd-pay-stat-big {
+  font-family: inherit;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  font-size: clamp(38px, 6vw, 60px);
+  line-height: 0.9;
+  color: var(--wwd-mint);
+}
+.wwd-pay-stat-unit {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: clamp(14px, 1.6vw, 18px);
+  color: rgba(99, 226, 168, 0.92);
+}
+.wwd-pay-stat-main {
+  flex: 1;
+  min-width: 0;
+}
+.wwd-pay-stat-title {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: clamp(15px, 1.7vw, 19px);
+  line-height: 1.2;
+}
+.wwd-pay-stat-text {
+  margin-top: 5px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 500;
+}
+.wwd-pay-bar-track {
+  margin-top: 11px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.wwd-pay-bar-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--wwd-cyan), var(--wwd-mint));
+  transform-origin: left;
+  /* No-JS / pre-armed: full bar. JS arms it empty (below) and fills on scroll. */
+  transform: scaleX(1);
+}
+.vy-wwd.wwd-js .wwd-pay-bar-fill {
+  transform: scaleX(0);
+}
+
 /* ---------- TRUST & SECURITY ---------- */
 .wwd-trust {
   padding: 80px 7vw 110px;
@@ -1655,6 +1728,11 @@ a.vy-contact-card:hover {
   .wwd-rail-steps {
     grid-template-columns: 1fr;
     gap: 40px;
+  }
+  .wwd-pay-stat-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
   }
   .wwd-rail-line,
   .wwd-rail-dash {
