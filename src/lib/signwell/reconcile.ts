@@ -16,7 +16,15 @@ export async function reconcileSignatureRequest(
   sr: SignatureRequest,
 ): Promise<SignatureStatus> {
   if (!sr.signwell_document_id) return sr.status;
-  if (sr.status !== "sent" && sr.status !== "viewed") return sr.status;
+  // 'pending' is included: SignWell's create response can momentarily report
+  // "Draft", which we stored as 'pending'. Re-fetching advances it.
+  if (
+    sr.status !== "pending" &&
+    sr.status !== "sent" &&
+    sr.status !== "viewed"
+  ) {
+    return sr.status;
+  }
 
   let doc: { status: SignatureStatus; embeddedSigningUrl: string | null };
   try {
@@ -29,9 +37,12 @@ export async function reconcileSignatureRequest(
     await finalizeSignatureCompletion(sr);
     return "completed";
   }
-  if (doc.status !== sr.status) {
-    await updateSignatureStatusSR(sr.id, doc.status);
-    return doc.status;
+  // Same normalization as create: a created (non-draft) document still reporting
+  // "Draft" is really out for signature, not stuck.
+  const live = doc.status === "pending" ? "sent" : doc.status;
+  if (live !== sr.status) {
+    await updateSignatureStatusSR(sr.id, live);
+    return live;
   }
   return sr.status;
 }

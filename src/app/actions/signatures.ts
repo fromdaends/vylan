@@ -141,8 +141,12 @@ export async function addSignatureItemAction(
         signerName: client.display_name,
         metadata: { request_item_id: itemId, engagement_id: engagementId },
       });
-      srStatus = doc.status;
       srDocId = doc.documentId;
+      // A non-draft document we just created is out for signature. SignWell's
+      // create response can momentarily report "Draft" (which maps to 'pending');
+      // don't let that strand the item as "Signing setup needed" — a created
+      // document is at least 'sent'. The webhook/reconcile advance it from there.
+      srStatus = doc.status === "pending" ? "sent" : doc.status;
     } catch (e) {
       srStatus = "error";
       srError =
