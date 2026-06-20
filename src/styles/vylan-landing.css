@@ -1580,7 +1580,8 @@ a.vy-contact-card:hover {
 }
 .vy-wwd.wwd-js .wwd-line {
   opacity: 0;
-  animation: wwd-lineup 0.85s var(--vy-ease) forwards;
+  will-change: transform, filter, opacity;
+  animation: wwd-lineup 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 .vy-wwd.wwd-js .wwd-load {
   opacity: 0;
@@ -1588,13 +1589,15 @@ a.vy-contact-card:hover {
 }
 
 @keyframes wwd-lineup {
-  from {
+  0% {
     opacity: 0;
-    transform: translateY(26px);
+    transform: translateY(0.34em) scale(0.95);
+    filter: blur(10px);
   }
-  to {
+  100% {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+    filter: blur(0);
   }
 }
 @keyframes wwd-fadeup {

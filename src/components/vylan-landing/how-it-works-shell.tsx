@@ -146,8 +146,13 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
       return;
     }
 
-    // Arm the animated states (hidden-until-revealed, headline line-up).
-    root.classList.add("wwd-js");
+    // Arm the animated states (hidden-until-revealed, headline line-up). The
+    // class has to land on the `.vy-wwd` scope (the page wrapper), because every
+    // gated rule is written `.vy-wwd.wwd-js ...`. This shell's own root is a
+    // CHILD of `.vy-wwd`, so target the ancestor — putting it on `root` here
+    // silently disabled every reveal + the headline entrance.
+    const scope = root.closest<HTMLElement>(".vy-wwd") ?? root;
+    scope.classList.add("wwd-js");
 
     const io = new IntersectionObserver(
       (entries) => {
