@@ -1090,7 +1090,7 @@
     "checklist_empty": "No items in the checklist. Pick a template or add one.",
     "request_signature": "Request a signature",
     "request_signature_title": "Request a signature",
-    "request_signature_subtitle": "Upload the document the client needs to sign. They download it, sign it their own way, and upload the signed copy back.",
+    "request_signature_subtitle": "Upload the PDF the client needs to sign. They sign it right inside Vylan, and the signed copy comes back here automatically.",
     "signing_document": "Document to sign",
     "choose_document": "Choose a document (PDF)",
     "signatures": "Signatures",

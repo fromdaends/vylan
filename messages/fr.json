@@ -1090,7 +1090,7 @@
     "checklist_empty": "Aucun document dans la liste. Choisissez un modèle ou ajoutez un élément.",
     "request_signature": "Demander une signature",
     "request_signature_title": "Demander une signature",
-    "request_signature_subtitle": "Téléversez le document que le client doit signer. Il le télécharge, le signe à sa façon, puis téléverse la copie signée.",
+    "request_signature_subtitle": "Téléversez le PDF que le client doit signer. Il le signe directement dans Vylan, et la copie signée revient automatiquement ici.",
     "signing_document": "Document à signer",
     "choose_document": "Choisir un document (PDF)",
     "signatures": "Signatures",
