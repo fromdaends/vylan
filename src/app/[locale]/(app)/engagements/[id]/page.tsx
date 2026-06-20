@@ -53,6 +53,10 @@ import {
 } from "@/lib/db/payment-requests";
 import { resolveDefaultAmountCents } from "@/lib/payments/prefill";
 import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
+import {
+  getSignatureRequestsByItem,
+  type SignatureRequest,
+} from "@/lib/db/signature-requests";
 import { RequestPaymentButton } from "@/components/engagements/request-payment-button";
 import { CopyPaymentLink } from "@/components/engagements/copy-payment-link";
 import { isTrialExpired } from "@/lib/trial";
@@ -179,6 +183,13 @@ export default async function EngagementDetailPage({
   // from the document-collection checklist.
   const signatureItems = items.filter((i) => i.kind === "signature");
   const collectionItems = items.filter((i) => i.kind !== "signature");
+
+  // SignWell status per signature item (one query, RLS-scoped). Empty before
+  // migration 0400 is applied or when there are no signature items.
+  const signatureRequestsByItem =
+    signatureItems.length > 0
+      ? await getSignatureRequestsByItem(engagement.id)
+      : new Map<string, SignatureRequest>();
 
   const t = await getTranslations("Engagements");
   const paymentStatusLabel = latestPayment
@@ -482,6 +493,9 @@ export default async function EngagementDetailPage({
                     item={item}
                     locale={locale}
                     canEdit={isLive}
+                    signatureRequest={
+                      signatureRequestsByItem.get(item.id) ?? null
+                    }
                   />
                 ))}
               </ul>
@@ -727,36 +741,56 @@ async function ItemRow({
 
 // A signature item rendered for the accountant.
 //
-// Phase 1 of the SignWell migration: the old transport-only mechanics (the
-// client re-uploaded a signed copy and the accountant approved it per file)
-// have been removed. Real embedded e-signing via SignWell, plus the returned
-// signed PDF and its audit trail, land in the later phases. For now this shows
-// the item and its status only.
+// Status is driven by the SignWell signature request (Phase 2): "Awaiting
+// signature" once the embedded request is created, "Signing setup needed" when
+// it could not be created (e.g. before the SignWell key is set), and "Signed"
+// once completed (Phase 4). A "Test mode" chip shows while requests are
+// watermarked. Embedded signing itself lands in the client portal (Phase 3).
 async function SignatureRow({
   item,
   locale,
   canEdit,
+  signatureRequest,
 }: {
   item: RequestItem;
   locale: "fr" | "en";
   canEdit: boolean;
+  signatureRequest: SignatureRequest | null;
 }) {
   const t = await getTranslations("Engagements");
   const label = locale === "fr" && item.label_fr ? item.label_fr : item.label;
-  const isSigned = item.status === "approved";
-  const statusKey = isSigned ? "sig_status_signed" : "sig_status_awaiting";
+
+  const srStatus = signatureRequest?.status ?? null;
+  const isSigned = srStatus === "completed" || item.status === "approved";
+  const isAwaiting = srStatus === "sent" || srStatus === "viewed";
+  const statusKey = isSigned
+    ? "sig_status_signed"
+    : isAwaiting
+      ? "sig_status_awaiting"
+      : "sig_status_setup_needed";
+  const badgeVariant = isSigned
+    ? "default"
+    : isAwaiting
+      ? "secondary"
+      : "outline";
+  const showTestChip = isAwaiting && signatureRequest?.test_mode === true;
 
   return (
     <li className="py-3">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="font-medium truncate">{label}</div>
-          <div className="mt-0.5 text-xs text-muted-foreground">
-            {t(statusKey)}
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>{t(statusKey)}</span>
+            {showTestChip && (
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                {t("sig_test_mode")}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Badge variant={itemBadgeVariant(item.status)}>{t(statusKey)}</Badge>
+          <Badge variant={badgeVariant}>{t(statusKey)}</Badge>
           {canEdit && !isSigned && (
             <form action={removeItemAction}>
               <input type="hidden" name="id" value={item.id} />

@@ -99,7 +99,7 @@ export function AddSignatureDialog({ engagementId }: { engagementId: string }) {
               type="file"
               name="file"
               required
-              accept="application/pdf,image/*"
+              accept="application/pdf"
               className="hidden"
               onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
             />

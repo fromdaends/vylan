@@ -34,6 +34,17 @@ const ServerEnvSchema = z.object({
   // subscription webhook, so they must be verified independently.
   STRIPE_CONNECT_WEBHOOK_SECRET: optionalSecret(),
 
+  // SignWell embedded e-signatures. The API key is a server-only secret. The
+  // mode is a switch, not a secret: signing is TEST mode (watermarked, free, not
+  // legally binding) unless SIGNWELL_TEST_MODE is exactly "false" — it fails safe
+  // to test so we can never accidentally create a real, billable signature. See
+  // src/lib/signwell/client.ts (isSignwellTestMode).
+  SIGNWELL_API_KEY: optionalSecret(),
+  SIGNWELL_TEST_MODE: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().optional(),
+  ),
+
   APP_URL: z.string().url().default("http://localhost:3000"),
   CRON_SECRET: optionalSecret(16),
 });
