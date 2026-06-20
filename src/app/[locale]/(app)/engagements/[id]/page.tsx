@@ -40,6 +40,7 @@ import { EngagementPreview } from "@/components/engagements/engagement-preview/e
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
+import { ActivityDrawer } from "@/components/engagements/activity-drawer";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
 import { signedUrl } from "@/lib/storage";
@@ -409,6 +410,21 @@ export default async function EngagementDetailPage({
               )}
             </>
           )}
+          {/* Activity history — a right-side slide-out (History icon, NOT a
+              bell). Holds the full feed, which is rendered untouched inside the
+              drawer. Sits with the other header actions across every state. */}
+          <ActivityDrawer>
+            <ActivityTimeline
+              entries={activity}
+              locale={locale}
+              filenamesByFileId={
+                new Map(uploads.map((u) => [u.id, u.original_filename]))
+              }
+              rejectionReasonsByItemId={
+                new Map(items.map((i) => [i.id, i.rejection_reason ?? null]))
+              }
+            />
+          </ActivityDrawer>
           {/* Occasional actions (Pause/Resume reminders, Download all, Cancel,
               Delete) live in a "..." menu so the header stays calm — primary +
               secondary visible, the rest one tap away. Delete keeps its
@@ -440,116 +456,100 @@ export default async function EngagementDetailPage({
           </Alert>
         ))}
 
-      {/* On a wide monitor (>=1800px) the Activity rail becomes a fixed 360px
-          column instead of a proportional third (which would balloon to ~670px);
-          the checklist column takes the rest. Below 1800px it's the original
-          3-column proportional grid, unchanged. */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-[1800px]:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="lg:col-span-2 space-y-4 min-[1800px]:col-span-1">
-          {/* Signatures first: a signature (an authorization or engagement
-              letter) is usually a quick, important action, so it sits above the
-              longer document checklist rather than buried beneath it. */}
-          {(isLive || signatureItems.length > 0) && (
-            <div className="space-y-3">
-              <div className="flex flex-row items-center justify-between gap-3">
-                <h2 className="text-base font-semibold tracking-tight text-foreground">
-                  {t("signatures")}{" "}
-                  <span className="text-muted-foreground font-normal">
-                    ({signatureItems.length})
-                  </span>
-                </h2>
-                {isLive && <AddSignatureDialog engagementId={engagement.id} />}
-              </div>
-              {signatureItems.length === 0 ? (
-                <div className="text-sm text-muted-foreground py-4">
-                  {t("signatures_empty")}
-                </div>
-              ) : (
-                <ul className="divide-y divide-border border-t border-border">
-                  {signatureItems.map((item) => (
-                    <SignatureRow
-                      key={item.id}
-                      item={item}
-                      files={filesByItem.get(item.id) ?? []}
-                      locale={locale}
-                      canEdit={isLive}
-                      clientName={client?.display_name ?? null}
-                      engagementTitle={engagement.title}
-                    />
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-
+      {/* The Activity feed now opens from a right-side slide-out (the "Activity"
+          button in the header actions), so the checklist + signatures use the
+          full content width instead of the old cramped 2/3 column. */}
+      <section className="space-y-4">
+        {/* Signatures first: a signature (an authorization or engagement
+            letter) is usually a quick, important action, so it sits above the
+            longer document checklist rather than buried beneath it. */}
+        {(isLive || signatureItems.length > 0) && (
           <div className="space-y-3">
             <div className="flex flex-row items-center justify-between gap-3">
               <h2 className="text-base font-semibold tracking-tight text-foreground">
-                {t("checklist")}{" "}
+                {t("signatures")}{" "}
                 <span className="text-muted-foreground font-normal">
-                  ({collectionItems.length})
+                  ({signatureItems.length})
                 </span>
               </h2>
-              <div className="flex items-center gap-2">
-                {/* Always-available visual review of every uploaded document,
-                    regardless of how many there are. */}
-                <EngagementPreview
-                  uploads={uploads}
-                  items={items}
-                  engagementId={engagement.id}
-                  engagementTitle={engagement.title}
-                  clientName={client?.display_name ?? null}
-                  locale={locale}
-                />
-                {isLive && (
-                  <AddItemDialog
-                    engagementId={engagement.id}
-                    province={client?.province ?? null}
-                  />
-                )}
-              </div>
+              {isLive && <AddSignatureDialog engagementId={engagement.id} />}
             </div>
-            {collectionItems.length === 0 ? (
+            {signatureItems.length === 0 ? (
               <div className="text-sm text-muted-foreground py-4">
-                {t("checklist_empty")}
+                {t("signatures_empty")}
               </div>
             ) : (
-              <ul className="space-y-2">
-                {collectionItems.map((item) => (
-                  <ItemRow
+              <ul className="divide-y divide-border border-t border-border">
+                {signatureItems.map((item) => (
+                  <SignatureRow
                     key={item.id}
                     item={item}
                     files={filesByItem.get(item.id) ?? []}
                     locale={locale}
                     canEdit={isLive}
                     clientName={client?.display_name ?? null}
-                    expectedYear={expectedYearFromTitle(engagement.title)}
                     engagementTitle={engagement.title}
-                    // AI off for this engagement → hide the per-document AI
-                    // verdicts (they'd otherwise sit on a permanent "Not
-                    // analyzed" chip). `=== false` so pre-migration (undefined)
-                    // keeps AI shown.
-                    aiEnabled={engagement.ai_enabled !== false}
                   />
                 ))}
               </ul>
             )}
           </div>
-        </section>
+        )}
 
-        <aside className="space-y-4">
-          <ActivityTimeline
-            entries={activity}
-            locale={locale}
-            filenamesByFileId={
-              new Map(uploads.map((u) => [u.id, u.original_filename]))
-            }
-            rejectionReasonsByItemId={
-              new Map(items.map((i) => [i.id, i.rejection_reason ?? null]))
-            }
-          />
-        </aside>
-      </div>
+        <div className="space-y-3">
+          <div className="flex flex-row items-center justify-between gap-3">
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
+              {t("checklist")}{" "}
+              <span className="text-muted-foreground font-normal">
+                ({collectionItems.length})
+              </span>
+            </h2>
+            <div className="flex items-center gap-2">
+              {/* Always-available visual review of every uploaded document,
+                  regardless of how many there are. */}
+              <EngagementPreview
+                uploads={uploads}
+                items={items}
+                engagementId={engagement.id}
+                engagementTitle={engagement.title}
+                clientName={client?.display_name ?? null}
+                locale={locale}
+              />
+              {isLive && (
+                <AddItemDialog
+                  engagementId={engagement.id}
+                  province={client?.province ?? null}
+                />
+              )}
+            </div>
+          </div>
+          {collectionItems.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-4">
+              {t("checklist_empty")}
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {collectionItems.map((item) => (
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  files={filesByItem.get(item.id) ?? []}
+                  locale={locale}
+                  canEdit={isLive}
+                  clientName={client?.display_name ?? null}
+                  expectedYear={expectedYearFromTitle(engagement.title)}
+                  engagementTitle={engagement.title}
+                  // AI off for this engagement → hide the per-document AI
+                  // verdicts (they'd otherwise sit on a permanent "Not
+                  // analyzed" chip). `=== false` so pre-migration (undefined)
+                  // keeps AI shown.
+                  aiEnabled={engagement.ai_enabled !== false}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
