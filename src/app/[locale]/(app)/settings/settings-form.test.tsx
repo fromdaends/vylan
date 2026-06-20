@@ -78,6 +78,7 @@ function renderShell(
         isOwner
         billingSlot={<div>SUBSCRIPTION_SLOT</div>}
         connect={null}
+        quickbooks={null}
         servicePrices={null}
         paymentsList={null}
         firmName="Acme"
