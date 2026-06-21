@@ -31,6 +31,8 @@ import {
 import type { WorklistRow } from "@/components/dashboard/engagements-worklist";
 import type { NeedsAttentionBadge } from "@/components/dashboard/needs-attention";
 import { PaymentBadge } from "@/components/payments/payment-badge";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/cn";
 
 const BADGE_ICONS: Record<NeedsAttentionBadge["iconKey"], LucideIcon> = {
   overdue: AlertTriangle,
@@ -110,17 +112,16 @@ export function NeedsAttentionRow({
                   {row.clientName}
                 </div>
               </div>
-              {/* The ONE colored actionable chip, immediately after the name. */}
+              {/* The ONE colored actionable chip, immediately after the name.
+                  Built on the shared <Badge> (same shape, padding, radius,
+                  height, weight as the Unpaid chip) so every chip on the row is
+                  one system; only the tone (orange flag, red overdue, etc.)
+                  changes. */}
               {accent != null && AccentIcon != null && (
-                <span
-                  className={
-                    "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium " +
-                    accent.tone
-                  }
-                >
+                <Badge className={cn("shrink-0 font-normal", accent.tone)}>
                   <AccentIcon className="h-3 w-3" aria-hidden />
                   {accent.label}
-                </span>
+                </Badge>
               )}
               {/* Passive/supporting reasons: quiet text, no pill, no icon —
                   readable but never competing with the accent chip. One span

@@ -1,16 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   Bell,
   BellOff,
   Check,
   Download,
+  History,
   Link as LinkIcon,
   Loader2,
   MoreHorizontal,
   Trash2,
+  Wallet,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
   Dialog,
   DialogClose,
@@ -37,15 +40,16 @@ import {
   toggleRemindersPausedAction,
 } from "@/app/actions/engagements";
 
-// The "..." overflow menu for an engagement's header actions. The primary +
-// secondary actions (Mark complete / Send reminder / Reopen) stay as visible
-// buttons in the header; the occasional ones live here so the bar stays calm:
-//   * live      → Pause/Resume reminders, Download all, Cancel, Delete
-//   * complete  → Download all, Delete
-//   * cancelled → Download all, Delete
-// Delete keeps its confirmation + soft-delete (recoverable 30 days). The menu
-// self-hides when it would be empty (e.g. a staff member on a cancelled
-// engagement with no uploads), so we never show a dead "..." button.
+// The "..." overflow menu for an engagement's header actions. It keeps the top
+// row calm: only the primary/secondary buttons (Mark complete / Send reminder /
+// Reopen) and a subtle payment status pill stay visible; everything occasional
+// lives here:
+//   * Activity (the slide-out feed — owned by this menu now, opened by an item)
+//   * Copy client link / Copy payment link
+//   * Pause/Resume reminders, Download all, Cancel, Delete
+// Drafts never get this menu (they keep their inline buttons + a standalone
+// Activity icon), so wherever this menu renders it always has at least the
+// Activity item and never self-hides.
 export function EngagementMoreMenu({
   engagementId,
   locale,
@@ -54,6 +58,8 @@ export function EngagementMoreMenu({
   hasUploads,
   canDelete,
   clientLinkToken,
+  paymentLinkUrl,
+  activity,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -61,35 +67,40 @@ export function EngagementMoreMenu({
   remindersPaused: boolean;
   hasUploads: boolean;
   canDelete: boolean;
-  // The engagement's magic token (live engagements only). When set, the menu
-  // offers "Copy client link" — the client-portal URL, built from the current
-  // site origin so it's correct on preview + live (same as the old inline box).
+  // Live engagements only: enables "Copy client link" (origin-aware portal URL).
   clientLinkToken?: string;
+  // Present when a payment has been requested: enables "Copy payment link".
+  paymentLinkUrl?: string;
+  // The Activity feed (ActivityTimeline), rendered inside the slide-out the
+  // "Activity" item opens.
+  activity: ReactNode;
 }) {
   const t = useTranslations("Engagements");
+  const tActivity = useTranslations("Activity");
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [copied, setCopied] = useState<null | "client" | "payment">(null);
 
-  const copyClientLink = async () => {
-    if (!clientLinkToken || typeof window === "undefined") return;
+  const copy = async (which: "client" | "payment", url: string) => {
     try {
-      await navigator.clipboard.writeText(
-        `${window.location.origin}/r/${clientLinkToken}`,
-      );
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(url);
+      setCopied(which);
+      window.setTimeout(() => setCopied(null), 1500);
     } catch {
       // Clipboard blocked — no-op (the user can re-open the menu and retry).
     }
   };
-  // Shared with the Preview overlay's "Download all" — one code path so they
-  // can't drift (the route returns JSON {url}; the browser downloads from
-  // storage). See use-download-all.ts.
-  const { downloading, downloadAll } = useDownloadAll(engagementId);
 
+  // Shared with the Preview overlay's "Download all" — one code path so they
+  // can't drift (the route returns JSON {url}; the browser downloads).
+  const { downloading, downloadAll } = useDownloadAll(engagementId);
   const isLive = status === "live";
-  const hasItems = isLive || hasUploads || canDelete;
-  if (!hasItems) return null;
+
+  const openActivity = () => {
+    // Defer so the dropdown fully closes (releasing its focus trap) before the
+    // Sheet grabs focus — avoids a fight between the two Radix portals.
+    window.setTimeout(() => setActivityOpen(true), 0);
+  };
 
   const togglePause = () => {
     const f = new FormData();
@@ -119,24 +130,45 @@ export function EngagementMoreMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuItem onSelect={openActivity}>
+            <History />
+            {tActivity("title")}
+          </DropdownMenuItem>
+
+          {(clientLinkToken || paymentLinkUrl) && <DropdownMenuSeparator />}
           {clientLinkToken && (
             <>
               <DropdownMenuItem
                 onSelect={(e) => {
                   // Keep the menu open so the "Copied" feedback is visible.
                   e.preventDefault();
-                  void copyClientLink();
+                  void copy(
+                    "client",
+                    `${window.location.origin}/r/${clientLinkToken}`,
+                  );
                 }}
               >
-                {copied ? <Check /> : <LinkIcon />}
-                {copied ? t("copied") : t("copy_client_link")}
+                {copied === "client" ? <Check /> : <LinkIcon />}
+                {copied === "client" ? t("copied") : t("copy_client_link")}
               </DropdownMenuItem>
               <div className="px-2 pb-1.5 pt-0.5 text-xs leading-snug text-muted-foreground">
                 {t("magic_link_hint")}
               </div>
-              <DropdownMenuSeparator />
             </>
           )}
+          {paymentLinkUrl && (
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault();
+                void copy("payment", paymentLinkUrl);
+              }}
+            >
+              {copied === "payment" ? <Check /> : <Wallet />}
+              {copied === "payment" ? t("copied") : t("copy_payment_link")}
+            </DropdownMenuItem>
+          )}
+
+          {(isLive || hasUploads) && <DropdownMenuSeparator />}
           {isLive && (
             <DropdownMenuItem onSelect={togglePause}>
               {remindersPaused ? <Bell /> : <BellOff />}
@@ -165,7 +197,7 @@ export function EngagementMoreMenu({
           )}
           {canDelete && (
             <>
-              {(isLive || hasUploads) && <DropdownMenuSeparator />}
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
                 onSelect={() => setConfirmOpen(true)}
@@ -177,6 +209,21 @@ export function EngagementMoreMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Activity slide-out, opened by the Activity menu item. Same Sheet the
+          standalone ActivityDrawer uses (drafts still render that one). */}
+      <Sheet open={activityOpen} onOpenChange={setActivityOpen}>
+        <SheetContent
+          side="right"
+          aria-describedby={undefined}
+          className="w-full gap-0 border-l border-border/60 sm:max-w-md"
+        >
+          <SheetTitle className="sr-only">{tActivity("title")}</SheetTitle>
+          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+            {activity}
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Delete confirmation — controlled, opened by the Delete menu item.
           Confirm submits the server action via a real form so its

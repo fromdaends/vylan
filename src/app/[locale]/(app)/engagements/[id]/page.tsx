@@ -60,7 +60,6 @@ import {
 import { reconcileSignatureRequest } from "@/lib/signwell/reconcile";
 import { signedUrl } from "@/lib/storage";
 import { RequestPaymentButton } from "@/components/engagements/request-payment-button";
-import { CopyPaymentLink } from "@/components/engagements/copy-payment-link";
 import { isTrialExpired } from "@/lib/trial";
 import {
   getCurrentUser,
@@ -256,6 +255,21 @@ export default async function EngagementDetailPage({
   const isDraft = engagement.status === "draft";
   const isComplete = engagement.status === "complete";
 
+  // The Activity feed, rendered once and shown either inside the 3-dots menu's
+  // slide-out (non-drafts) or the standalone Activity icon (drafts).
+  const activityFeed = (
+    <ActivityTimeline
+      entries={activity}
+      locale={locale}
+      filenamesByFileId={
+        new Map(uploads.map((u) => [u.id, u.original_filename]))
+      }
+      rejectionReasonsByItemId={
+        new Map(items.map((i) => [i.id, i.rejection_reason ?? null]))
+      }
+    />
+  );
+
   return (
     <div className="space-y-6">
       {/* Auto-refresh while the engagement is still active. Picks up new
@@ -422,9 +436,6 @@ export default async function EngagementDetailPage({
               {formatCurrency(latestPayment.amount_cents / 100, locale)}
             </Badge>
           )}
-          {latestPayment?.status === "requested" && portalUrl && (
-            <CopyPaymentLink url={portalUrl} />
-          )}
           {isComplete && (
             <>
               <form action={reopenEngagementAction}>
@@ -442,26 +453,14 @@ export default async function EngagementDetailPage({
               )}
             </>
           )}
-          {/* Activity history — a right-side slide-out (History icon, NOT a
-              bell). Holds the full feed, which is rendered untouched inside the
-              drawer. Sits with the other header actions across every state. */}
-          <ActivityDrawer>
-            <ActivityTimeline
-              entries={activity}
-              locale={locale}
-              filenamesByFileId={
-                new Map(uploads.map((u) => [u.id, u.original_filename]))
-              }
-              rejectionReasonsByItemId={
-                new Map(items.map((i) => [i.id, i.rejection_reason ?? null]))
-              }
-            />
-          </ActivityDrawer>
-          {/* Occasional actions (Pause/Resume reminders, Download all, Cancel,
-              Delete) live in a "..." menu so the header stays calm — primary +
-              secondary visible, the rest one tap away. Delete keeps its
-              confirmation + 30-day recovery. Drafts keep their own inline
-              Send + Delete-draft buttons above and never get this menu. */}
+          {/* Activity: drafts keep a standalone slide-out icon; every other
+              state opens it from the "..." menu, so the row stays calm. */}
+          {isDraft && <ActivityDrawer>{activityFeed}</ActivityDrawer>}
+          {/* The "..." menu holds the occasional actions — Activity, Copy client
+              / payment link, Pause/Resume reminders, Download all, Cancel,
+              Delete — so only primary buttons + the payment pill stay in the
+              row. Delete keeps its confirmation + 30-day recovery. Drafts keep
+              their own inline Send + Delete-draft buttons and never get it. */}
           {!isDraft && (
             <EngagementMoreMenu
               engagementId={engagement.id}
@@ -473,6 +472,12 @@ export default async function EngagementDetailPage({
               clientLinkToken={
                 isLive ? (engagement.magic_token ?? undefined) : undefined
               }
+              paymentLinkUrl={
+                latestPayment?.status === "requested"
+                  ? (portalUrl ?? undefined)
+                  : undefined
+              }
+              activity={activityFeed}
             />
           )}
         </div>
