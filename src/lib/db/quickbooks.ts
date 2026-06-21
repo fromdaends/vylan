@@ -15,8 +15,9 @@ import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server
 import type { QuickbooksEnvironment } from "@/lib/quickbooks/client";
 
 // PostgREST surfaces a not-yet-applied migration as a missing table (PGRST205 /
-// Postgres 42P01) or a missing column (PGRST204 / 42703).
-function isMissingSchema(
+// Postgres 42P01) or a missing column (PGRST204 / 42703). Exported so the cache
+// layer (0420) can degrade the same way before its migration is applied.
+export function isMissingSchema(
   err: { code?: string; message?: string } | null,
 ): boolean {
   if (!err) return false;
@@ -25,7 +26,9 @@ function isMissingSchema(
     err.code === "42P01" ||
     err.code === "PGRST204" ||
     err.code === "42703" ||
-    /quickbooks_connections/i.test(err.message ?? "") ||
+    /quickbooks_(connections|accounts|vendors|customers|tax_codes)/i.test(
+      err.message ?? "",
+    ) ||
     /could not find the table|relation .* does not exist|column .* does not exist/i.test(
       err.message ?? "",
     )

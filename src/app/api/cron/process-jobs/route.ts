@@ -18,6 +18,7 @@ import { processReminderJob } from "@/lib/reminders";
 import { processClassifyJob } from "@/lib/ai/process";
 import { processSetAssessmentJob } from "@/lib/ai/set-assessment";
 import { processNotifyClientRetryJob } from "@/lib/notify-retry";
+import { processSyncQuickbooksJob } from "@/lib/quickbooks/sync";
 import {
   backfillContentHashes,
   type BackfillResult,
@@ -144,6 +145,19 @@ async function runJob(
       const detail = await processNotifyClientRetryJob(job.payload);
       await markJobDone(job.id);
       return { id: job.id, kind: job.kind, ok: true, detail };
+    }
+    if (job.kind === "sync_quickbooks") {
+      const detail = await processSyncQuickbooksJob(job.payload);
+      // Retry TRANSIENT failures (a QBO blip, a partial pull, a cache-write hiccup)
+      // via the queue's backoff + attempt cap, so a firm is never stuck with a
+      // permanently-unpopulated cache. Finalize success + the permanent
+      // no_firm_id. (The sync also records its outcome in the firm's sync state.)
+      if (detail.ok || detail.detail === "no_firm_id") {
+        await markJobDone(job.id);
+      } else {
+        await markJobFailed(job.id, `sync:${detail.detail}`);
+      }
+      return { id: job.id, kind: job.kind, ok: detail.ok, detail };
     }
     // Unknown kind: nothing to do — mark done so it doesn't spin.
     await markJobDone(job.id);
