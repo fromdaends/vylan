@@ -37,6 +37,7 @@ import {
 } from "@/components/engagements/set-summary-line";
 import { EngagementPreview } from "@/components/engagements/engagement-preview/engagement-preview";
 import { QuickbooksDraftCard } from "@/components/engagements/quickbooks-draft-card";
+import { QuickbooksDraftsSummary } from "@/components/engagements/quickbooks-drafts-summary";
 import { getSuggestionsForEngagement } from "@/lib/db/quickbooks-suggestions";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import type { TransactionSuggestion } from "@/lib/quickbooks/suggest";
@@ -543,8 +544,17 @@ export default async function EngagementDetailPage({
               {t("checklist_empty")}
             </div>
           ) : (
-            <ul className="space-y-2">
-              {collectionItems.map((item) => (
+            <>
+              {/* QuickBooks Stage 3: roll-up of the drafts on this engagement
+                  (renders nothing when there are none / AI is off). */}
+              {engagement.ai_enabled !== false && (
+                <QuickbooksDraftsSummary
+                  suggestions={[...suggestionsByFile.values()]}
+                  locale={locale}
+                />
+              )}
+              <ul className="space-y-2">
+                {collectionItems.map((item) => (
                 <ItemRow
                   key={item.id}
                   item={item}
@@ -560,8 +570,9 @@ export default async function EngagementDetailPage({
                   // keeps AI shown.
                   aiEnabled={engagement.ai_enabled !== false}
                 />
-              ))}
-            </ul>
+                ))}
+              </ul>
+            </>
           )
         }
         signatures={
@@ -773,6 +784,7 @@ async function ItemRow({
                   <QuickbooksDraftCard
                     suggestion={suggestionsByFile.get(f.id)!}
                     locale={locale}
+                    fileId={f.id}
                   />
                 ) : undefined
               }
