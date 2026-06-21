@@ -710,7 +710,7 @@
     "connect_error_setup": "Payments are not ready yet on this account. Please try again shortly.",
     "connect_unavailable": "Client payments are not available yet.",
     "qbo_title": "QuickBooks",
-    "qbo_hint": "Connect your QuickBooks (Intuit) company so Vylan can work with it. Right now this only links the account. It does not read your books, post transactions, or touch your documents.",
+    "qbo_hint": "Connect your QuickBooks (Intuit) company so Vylan can work with it. Vylan reads your chart of accounts, vendors, customers, and tax codes to help match your documents. It does not post transactions or read your transaction history.",
     "qbo_unavailable": "QuickBooks isn't set up yet.",
     "qbo_connect_title": "Connect QuickBooks",
     "qbo_connect_hint": "Link your QuickBooks Online company through Intuit's secure login. You choose the company and approve access. It takes about a minute.",

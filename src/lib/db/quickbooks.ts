@@ -116,6 +116,29 @@ export async function upsertFirmQuickbooksConnection(
   return { ok: true };
 }
 
+// Cheap service-role "is this firm connected to QuickBooks?" check, for the
+// classify worker to decide whether to spend tokens on the (extra) transaction
+// extraction pass. Selects only realm_id (never the tokens). Degrades to false
+// on any error or before the migration is applied, so a firm without QuickBooks
+// — or an environment without the table yet — simply never runs the extra pass.
+export async function isFirmQuickbooksConnected(
+  firmId: string,
+): Promise<boolean> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("quickbooks_connections")
+    .select("realm_id")
+    .eq("firm_id", firmId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] isFirmQuickbooksConnected failed:", error);
+    }
+    return false;
+  }
+  return Boolean(data);
+}
+
 export type QuickbooksConnectionWithTokens = {
   realmId: string;
   accessToken: string;

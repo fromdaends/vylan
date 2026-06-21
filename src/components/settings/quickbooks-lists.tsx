@@ -36,12 +36,58 @@ export function QuickbooksLists() {
   const [refreshError, setRefreshError] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
   const mountedRef = useRef(true);
+  // Guards against two poll loops running at once (e.g. the first-load poll and
+  // a Refresh click). Only one watches for the synced copy to land.
+  const pollingRef = useRef(false);
 
   const fetchLists = useCallback(async (): Promise<ListsResponse | null> => {
     const res = await fetch("/api/integrations/quickbooks/lists");
     const data = (await res.json().catch(() => null)) as ListsResponse | null;
     return res.ok ? data : null;
   }, []);
+
+  // Poll until a background sync lands (every 12s, up to ~3 min), then reconcile.
+  // Used BOTH after a Refresh click AND on first load when the lists arrive
+  // mid-sync — so the "Syncing…" indicator resolves to "Last synced" on its own
+  // without the user reloading the page. `prevSynced` is the last-synced stamp at
+  // the moment polling began; a new stamp means the fresh copy landed.
+  const pollUntilSynced = useCallback(
+    async (prevSynced: string | null) => {
+      if (pollingRef.current) return; // one watcher at a time
+      pollingRef.current = true;
+      try {
+        for (let i = 0; i < 16; i++) {
+          await delay(12_000);
+          if (!mountedRef.current) return;
+          const data = await fetchLists().catch(() => null);
+          if (!mountedRef.current) return;
+          const ns = data?.syncState ?? null;
+          if (ns?.lastSyncedAt && ns.lastSyncedAt !== prevSynced) {
+            if (data?.lists) setLists(data.lists);
+            setSyncState(ns);
+            setStatus("loaded");
+            return;
+          }
+          if (ns?.status === "error") {
+            setSyncState(ns);
+            return;
+          }
+        }
+        // Poll timed out — reconcile with the real server state so the
+        // "Syncing…" indicator never outlives the poll.
+        if (mountedRef.current) {
+          const data = await fetchLists().catch(() => null);
+          if (mountedRef.current && data?.syncState) {
+            if (data.lists) setLists(data.lists);
+            setSyncState(data.syncState);
+          }
+        }
+      } finally {
+        pollingRef.current = false;
+      }
+    },
+    [fetchLists],
+  );
 
   const load = useCallback(async () => {
     try {
@@ -51,6 +97,11 @@ export function QuickbooksLists() {
         setLists(data.lists);
         setSyncState(data.syncState ?? null);
         setStatus("loaded");
+        // Arrived mid-sync (e.g. right after connect) — watch for the fresh
+        // copy instead of freezing on a static "Syncing…" until a reload.
+        if (data.syncState?.status === "syncing") {
+          void pollUntilSynced(data.syncState.lastSyncedAt ?? null);
+        }
       } else {
         setSyncState(data?.syncState ?? null);
         setStatus("error");
@@ -58,7 +109,7 @@ export function QuickbooksLists() {
     } catch {
       if (mountedRef.current) setStatus("error");
     }
-  }, [fetchLists]);
+  }, [fetchLists, pollUntilSynced]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -87,39 +138,14 @@ export function QuickbooksLists() {
     if (mountedRef.current) setPosting(false);
     if (!posted || !mountedRef.current) return;
 
-    // Optimistic "syncing", then poll (every 12s, up to ~3 min) for the
-    // background job to land a fresh copy.
+    // Optimistic "syncing", then watch for the background job to land a fresh
+    // copy (shared with the first-load poll).
     setSyncState((s) =>
       s
         ? { ...s, status: "syncing" }
         : { lastSyncedAt: prevSynced, status: "syncing", error: null },
     );
-    for (let i = 0; i < 16; i++) {
-      await delay(12_000);
-      if (!mountedRef.current) return;
-      const data = await fetchLists().catch(() => null);
-      if (!mountedRef.current) return;
-      const ns = data?.syncState ?? null;
-      if (ns?.lastSyncedAt && ns.lastSyncedAt !== prevSynced) {
-        if (data?.lists) setLists(data.lists);
-        setSyncState(ns);
-        setStatus("loaded");
-        return;
-      }
-      if (ns?.status === "error") {
-        setSyncState(ns);
-        return;
-      }
-    }
-    // Poll timed out — reconcile with the real server state so the "Syncing…"
-    // indicator never outlives the poll.
-    if (mountedRef.current) {
-      const data = await fetchLists().catch(() => null);
-      if (mountedRef.current && data?.syncState) {
-        if (data.lists) setLists(data.lists);
-        setSyncState(data.syncState);
-      }
-    }
+    await pollUntilSynced(prevSynced);
   }
 
   const refreshBtn = (

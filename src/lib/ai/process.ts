@@ -19,6 +19,12 @@ import {
 } from "./classify";
 import { shouldActOnUsability } from "./usability";
 import { expectedYearFromTitle } from "./matching";
+import {
+  extractTransaction,
+  shouldExtractTransaction,
+  type TransactionExtraction,
+} from "./transaction-extract";
+import { isFirmQuickbooksConnected } from "@/lib/db/quickbooks";
 import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
@@ -153,6 +159,30 @@ export async function processClassifyJob(
   });
   if (!result) return { skipped: "no_classification" };
 
+  // QuickBooks Stage 3 (Phase 1): for bookkeeping transaction documents
+  // (receipts / sales invoices) at a firm that has QuickBooks connected, run a
+  // SECOND, focused read that captures the fields a draft QuickBooks entry needs
+  // (direction, vendor/customer, subtotal, tax split, total, currency, date).
+  // It does NOT touch the tuned tax-slip classifier above. Gated tightly so it
+  // never spends tokens off-target, and fully best-effort: any failure leaves
+  // transaction null and the core classification is unaffected.
+  //   * only receipts/invoices (whether requested OR detected as one),
+  //   * only when THIS firm has a QuickBooks connection.
+  // The result is stored under ai_extracted_fields.transaction (jsonb, no
+  // migration) and feeds the Phase-2 mapper that drafts the suggestion.
+  let transaction: TransactionExtraction | null = null;
+  if (
+    shouldExtractTransaction(expectedDocType, result.document_type) &&
+    (await isFirmQuickbooksConnected(limitFirmId))
+  ) {
+    try {
+      transaction = await extractTransaction({ fileBytes: bytes, mimeType });
+    } catch (err) {
+      console.warn("[classify] transaction extract failed:", err);
+      transaction = null;
+    }
+  }
+
   // ai_rejected is intentionally NOT set here. Phase 3's routing logic
   // decides whether the system actually auto-rejects this upload based
   // on the firm's auto_reject_unusable_docs flag + the strike counter.
@@ -184,6 +214,9 @@ export async function processClassifyJob(
         belongs_to_client: result.belongs_to_client,
         belongs_confidence: result.belongs_confidence,
         overall_confidence: result.overall_confidence,
+        // Stage 3 (Phase 1): transaction-grade fields for receipts/invoices at
+        // QuickBooks-connected firms (null otherwise). Feeds the Phase-2 mapper.
+        transaction,
       },
       ai_usability: result.usability,
     })
