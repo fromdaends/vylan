@@ -171,10 +171,14 @@ export async function processClassifyJob(
   // The result is stored under ai_extracted_fields.transaction (jsonb, no
   // migration) and feeds the Phase-2 mapper that drafts the suggestion.
   let transaction: TransactionExtraction | null = null;
-  if (
+  // We reach this code only AFTER the firm passed the daily rate limit + the
+  // monthly/trial pause check, and only when AI is configured (checked at the
+  // top), so entering this branch means a real, billable second model call
+  // happens. Track that so the firm's AI cap is charged for BOTH calls below.
+  const ranTransactionPass =
     shouldExtractTransaction(expectedDocType, result.document_type) &&
-    (await isFirmQuickbooksConnected(limitFirmId))
-  ) {
+    (await isFirmQuickbooksConnected(limitFirmId));
+  if (ranTransactionPass) {
     try {
       transaction = await extractTransaction({ fileBytes: bytes, mimeType });
     } catch (err) {
@@ -260,6 +264,13 @@ export async function processClassifyJob(
   // A real AI check ran — count it against the firm's monthly cap (best-effort,
   // never blocks). Drives the auto-pause once the firm reaches ai_monthly_cap.
   await incrementFirmAiUsage(limitFirmId);
+  // The QuickBooks transaction pass is a SECOND billable model call (Stage 3,
+  // Phase 1). Count it too so the monthly/trial cap reflects true spend — a
+  // QuickBooks-connected firm processing receipts/invoices pays ~2x per
+  // document, and the auto-pause must account for that, not under-count by half.
+  if (ranTransactionPass) {
+    await incrementFirmAiUsage(limitFirmId);
+  }
 
   // Pull the firm + client locale together so we can both log the
   // classification AND decide whether to route the AI's verdict.
