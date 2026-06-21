@@ -123,6 +123,7 @@ export function FilePreviewRow({
   rejectionCount,
   hideAi = false,
   actions,
+  footer,
 }: {
   file: UploadedFile;
   // Legacy signed-URL prop (still passed by the engagement page). It's
@@ -143,6 +144,10 @@ export function FilePreviewRow({
   // Extra controls rendered at the end of the header row (e.g. the per-copy
   // approve/reject icons for a returned signed copy).
   actions?: ReactNode;
+  // Optional content rendered at the bottom of the row, inside the same <li>
+  // (e.g. the QuickBooks draft card). Kept inside the li so the list markup
+  // stays valid and the content reads as belonging to this file.
+  footer?: ReactNode;
 }) {
   const t = useTranslations("Engagements");
   const tAi = useTranslations("Ai");
@@ -460,6 +465,7 @@ export function FilePreviewRow({
           )}
         </div>
       )}
+      {footer && <div className="px-2.5 pb-2">{footer}</div>}
       {viewerOpen && (
         <DocumentViewerModal
           source={source}

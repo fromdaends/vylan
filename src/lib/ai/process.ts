@@ -25,6 +25,9 @@ import {
   type TransactionExtraction,
 } from "./transaction-extract";
 import { isFirmQuickbooksConnected } from "@/lib/db/quickbooks";
+import { readCachedQuickbooksListsForFirm } from "@/lib/db/quickbooks-cache";
+import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
+import { upsertTransactionSuggestion } from "@/lib/db/quickbooks-suggestions";
 import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
@@ -259,6 +262,30 @@ export async function processClassifyJob(
     }
   } catch (err) {
     console.warn("[classify] display_name update threw:", err);
+  }
+
+  // Stage 3 (Phase 3): now that the core classification is persisted, map the
+  // transaction read onto the firm's cached QuickBooks lists and persist the
+  // DRAFT suggestion (vendor/customer, account, tax code, amount, date) so the
+  // accountant sees it on the engagement page. Runs AFTER the file update so a
+  // failure here can never lose the classification. Read-only on QuickBooks;
+  // best-effort — any error, or a cache that isn't there yet, just leaves this
+  // file without a draft.
+  if (transaction) {
+    try {
+      const cached = await readCachedQuickbooksListsForFirm(limitFirmId);
+      if (cached) {
+        const suggestion = buildTransactionSuggestion(transaction, cached);
+        await upsertTransactionSuggestion({
+          firmId: limitFirmId,
+          uploadedFileId: file.id,
+          engagementId: file.engagement_id,
+          suggestion,
+        });
+      }
+    } catch (err) {
+      console.warn("[classify] qbo suggestion generation failed:", err);
+    }
   }
 
   // A real AI check ran — count it against the firm's monthly cap (best-effort,
