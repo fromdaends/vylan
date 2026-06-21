@@ -1932,5 +1932,29 @@
       "heic_too_large": "This photo is over 10 MB. Retake it or choose a smaller copy.",
       "rate_limited": "Too many attempts. Please wait a minute and try again."
     }
+  },
+  "Quickbooks": {
+    "draft_title": "QuickBooks draft",
+    "draft_badge": "Draft",
+    "readiness": "Match readiness: {pct}%",
+    "draft_readonly_hint": "Suggested mapping for your review. Nothing is sent to QuickBooks yet.",
+    "field_type": "Type",
+    "direction_expense": "Expense",
+    "direction_income": "Income",
+    "direction_unknown": "Expense or income?",
+    "field_vendor": "Vendor",
+    "field_customer": "Customer",
+    "field_party": "Vendor / customer",
+    "field_account": "Account",
+    "field_tax": "Tax code",
+    "field_amount": "Amount",
+    "field_date": "Date",
+    "choose_vendor": "Pick a vendor",
+    "choose_customer": "Pick a customer",
+    "choose_party": "Pick a vendor or customer",
+    "choose_account": "Choose an account",
+    "confirm_tax": "Confirm tax code",
+    "archived": "Archived",
+    "foreign_currency": "Amounts appear to be in {currency}, not CAD"
   }
 }

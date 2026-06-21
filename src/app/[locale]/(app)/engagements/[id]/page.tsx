@@ -36,6 +36,10 @@ import {
   isMissingPageBlock,
 } from "@/components/engagements/set-summary-line";
 import { EngagementPreview } from "@/components/engagements/engagement-preview/engagement-preview";
+import { QuickbooksDraftCard } from "@/components/engagements/quickbooks-draft-card";
+import { getSuggestionsForEngagement } from "@/lib/db/quickbooks-suggestions";
+import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
+import type { TransactionSuggestion } from "@/lib/quickbooks/suggest";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
@@ -179,6 +183,15 @@ export default async function EngagementDetailPage({
     arr.push({ ...u, url: urlByPath.get(u.storage_path) ?? "#" });
     filesByItem.set(u.request_item_id, arr);
   }
+
+  // QuickBooks Stage 3 (Phase 3): the read-only DRAFT suggestion cards. Only
+  // relevant when this firm has QuickBooks connected; the drafts themselves are
+  // keyed by uploaded file. Both reads degrade gracefully (no connection / no
+  // 0430 migration yet -> nothing shows).
+  const quickbooksConnected = (await getFirmQuickbooksStatus()) != null;
+  const suggestionsByFile = quickbooksConnected
+    ? await getSuggestionsForEngagement(id)
+    : new Map<string, TransactionSuggestion>();
 
   // Prompt B: signature items (the accountant supplies a document, the client
   // returns a signed copy) render in their own "Signatures" group, separate
@@ -536,6 +549,7 @@ export default async function EngagementDetailPage({
                   key={item.id}
                   item={item}
                   files={filesByItem.get(item.id) ?? []}
+                  suggestionsByFile={suggestionsByFile}
                   locale={locale}
                   canEdit={isLive}
                   clientName={client?.display_name ?? null}
@@ -579,6 +593,7 @@ export default async function EngagementDetailPage({
 async function ItemRow({
   item,
   files,
+  suggestionsByFile,
   locale,
   canEdit,
   clientName,
@@ -587,6 +602,9 @@ async function ItemRow({
 }: {
   item: RequestItem;
   files: (UploadedFile & { url: string })[];
+  // QuickBooks draft suggestions keyed by uploaded file id (empty when QB isn't
+  // connected or the migration isn't applied).
+  suggestionsByFile: Map<string, TransactionSuggestion>;
   locale: "fr" | "en";
   canEdit: boolean;
   clientName: string | null;
@@ -744,6 +762,17 @@ async function ItemRow({
                     fileId={f.id}
                     compact
                     active={f.review_status === "rejected"}
+                  />
+                ) : undefined
+              }
+              // QuickBooks draft (Stage 3): the read-only suggested mapping for a
+              // receipt/invoice. Only when AI is on AND a draft exists for this
+              // file (which itself implies QuickBooks is connected).
+              footer={
+                aiEnabled && suggestionsByFile.has(f.id) ? (
+                  <QuickbooksDraftCard
+                    suggestion={suggestionsByFile.get(f.id)!}
+                    locale={locale}
                   />
                 ) : undefined
               }

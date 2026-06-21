@@ -1932,5 +1932,29 @@
       "heic_too_large": "Cette photo dépasse 10 Mo. Reprenez la photo ou choisissez une copie plus légère.",
       "rate_limited": "Trop de tentatives. Attendez une minute puis réessayez."
     }
+  },
+  "Quickbooks": {
+    "draft_title": "Brouillon QuickBooks",
+    "draft_badge": "Brouillon",
+    "readiness": "Degré de correspondance : {pct} %",
+    "draft_readonly_hint": "Correspondance suggérée à vérifier. Rien n’est encore envoyé à QuickBooks.",
+    "field_type": "Type",
+    "direction_expense": "Dépense",
+    "direction_income": "Revenu",
+    "direction_unknown": "Dépense ou revenu?",
+    "field_vendor": "Fournisseur",
+    "field_customer": "Client",
+    "field_party": "Fournisseur / client",
+    "field_account": "Compte",
+    "field_tax": "Code de taxe",
+    "field_amount": "Montant",
+    "field_date": "Date",
+    "choose_vendor": "Choisir un fournisseur",
+    "choose_customer": "Choisir un client",
+    "choose_party": "Choisir un fournisseur ou un client",
+    "choose_account": "Choisir un compte",
+    "confirm_tax": "Confirmer le code de taxe",
+    "archived": "Archivé",
+    "foreign_currency": "Les montants semblent être en {currency}, pas en CAD"
   }
 }

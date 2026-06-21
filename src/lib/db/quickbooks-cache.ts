@@ -84,6 +84,43 @@ export async function readCachedQuickbooksLists(): Promise<QuickbooksLists | nul
   };
 }
 
+// Service-role read of a firm's cached lists BY firm id — for background workers
+// (e.g. the classify worker generating a draft suggestion) that have no
+// authenticated session, so RLS / current_firm_id() can't scope them. Mirrors
+// readCachedQuickbooksLists but filters explicitly by firm_id. Returns null when
+// the cache tables don't exist yet (pre-0420).
+export async function readCachedQuickbooksListsForFirm(
+  firmId: string,
+): Promise<QuickbooksLists | null> {
+  const sb = getServiceRoleSupabase();
+  const [acc, ven, cus, tax] = await Promise.all([
+    sb
+      .from("quickbooks_accounts")
+      .select("qbo_id, name, account_type, active")
+      .eq("firm_id", firmId),
+    sb.from("quickbooks_vendors").select("qbo_id, name, active").eq("firm_id", firmId),
+    sb.from("quickbooks_customers").select("qbo_id, name, active").eq("firm_id", firmId),
+    sb.from("quickbooks_tax_codes").select("qbo_id, name, active").eq("firm_id", firmId),
+  ]);
+  for (const r of [acc, ven, cus, tax]) {
+    if (r.error) {
+      if (!isMissingSchema(r.error)) {
+        console.error(
+          "[quickbooks] readCachedQuickbooksListsForFirm failed:",
+          r.error,
+        );
+      }
+      return null;
+    }
+  }
+  return {
+    accounts: (acc.data ?? []).map(toCachedAccount),
+    vendors: (ven.data ?? []).map(toCachedNamed),
+    customers: (cus.data ?? []).map(toCachedNamed),
+    taxCodes: (tax.data ?? []).map(toCachedNamed),
+  };
+}
+
 // ── Service-role writers (the sync job) ──────────────────────────────────────
 
 export type SetSyncStateInput = {
