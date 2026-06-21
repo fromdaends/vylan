@@ -251,8 +251,8 @@ export function SettingsShell({
             {billingSlot}
           </div>
         )}
-        {section === "integrations" && isOwner && quickbooks && (
-          <IntegrationsSection quickbooks={quickbooks} />
+        {section === "integrations" && quickbooks && (
+          <IntegrationsSection quickbooks={quickbooks} isOwner={isOwner} />
         )}
         {section === "documents" && isOwner && (
           <DocumentsSection

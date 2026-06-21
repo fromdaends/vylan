@@ -123,23 +123,23 @@ export default async function SettingsPage({
   )
     ? (qboParam as "done" | "denied" | "error" | "setup")
     : null;
-  const qboConnection = isOwner ? await getFirmQuickbooksStatus() : null;
+  // Status + read access are available to ANY firm member (connect/disconnect are
+  // gated to owners inside IntegrationsSection). getFirmQuickbooksStatus reads via
+  // RLS, so a staff member sees only their own firm's connection.
+  const qboConnection = await getFirmQuickbooksStatus();
   // Keep the connection alive: when connected, refresh the access token if it is
-  // stale (best-effort; never blocks the page on failure). Stage 1's automatic
-  // token-refresh trigger — future stages also refresh on every API call.
-  if (isOwner && qboConnection?.connected) {
+  // stale (best-effort; never blocks the page on failure).
+  if (qboConnection?.connected) {
     await ensureFreshQuickbooksToken(firm.id);
   }
-  const quickbooks = isOwner
-    ? {
-        configured: isQuickbooksConfigured(),
-        connected: Boolean(qboConnection?.connected),
-        companyName: qboConnection?.companyName ?? null,
-        realmId: qboConnection?.realmId ?? null,
-        environment: qboConnection?.environment ?? quickbooksEnvironment(),
-        callbackStatus: qboCallbackStatus,
-      }
-    : null;
+  const quickbooks = {
+    configured: isQuickbooksConfigured(),
+    connected: Boolean(qboConnection?.connected),
+    companyName: qboConnection?.companyName ?? null,
+    realmId: qboConnection?.realmId ?? null,
+    environment: qboConnection?.environment ?? quickbooksEnvironment(),
+    callbackStatus: qboCallbackStatus,
+  };
 
   // Per-service default prices for the Payments settings editor (owner-only).
   // Defaults to {} until migration 0380 is applied (column absent -> undefined).

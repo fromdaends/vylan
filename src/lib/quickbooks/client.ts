@@ -29,6 +29,9 @@ const QBO_FETCH_TIMEOUT_MS = 10_000;
 // QuickBooks Online Accounting scope — what later stages will need to read/write
 // the books. Requesting it now means the accountant approves once.
 const ACCOUNTING_SCOPE = "com.intuit.quickbooks.accounting";
+// QuickBooks pins its data schema by "minorversion". Intuit retired versions <= 74
+// (Aug 2025), so every call standardizes on this single constant.
+export const QBO_MINORVERSION = "75";
 
 export type QuickbooksEnvironment = "sandbox" | "production";
 
@@ -40,6 +43,7 @@ export class QuickbooksError extends Error {
       | "token_refresh_failed"
       | "invalid_grant"
       | "company_info_failed"
+      | "read_failed"
       | "request_failed",
     message: string,
     public readonly status?: number,
@@ -78,9 +82,13 @@ export function quickbooksRedirectUri(): string {
   return `${appUrl.replace(/\/$/, "")}/api/integrations/quickbooks/callback`;
 }
 
-// Data-API base URL for the current environment (used by the CompanyInfo read).
-export function quickbooksApiBaseUrl(): string {
-  return quickbooksEnvironment() === "production"
+// Data-API base URL. Prefer the per-connection environment (passed in) over the
+// global QBO_ENVIRONMENT switch, so flipping the global switch can never point an
+// already-connected firm at the wrong QuickBooks. Falls back to the global switch
+// when no environment is given.
+export function quickbooksApiBaseUrl(environment?: QuickbooksEnvironment): string {
+  const env = environment ?? quickbooksEnvironment();
+  return env === "production"
     ? "https://quickbooks.api.intuit.com"
     : "https://sandbox-quickbooks.api.intuit.com";
 }
@@ -282,10 +290,11 @@ export function isAccessTokenStale(
 export async function fetchCompanyName(
   accessToken: string,
   realmId: string,
+  environment?: QuickbooksEnvironment,
 ): Promise<string | null> {
   const url =
-    `${quickbooksApiBaseUrl()}/v3/company/${encodeURIComponent(realmId)}` +
-    `/companyinfo/${encodeURIComponent(realmId)}?minorversion=65`;
+    `${quickbooksApiBaseUrl(environment)}/v3/company/${encodeURIComponent(realmId)}` +
+    `/companyinfo/${encodeURIComponent(realmId)}?minorversion=${QBO_MINORVERSION}`;
   let res: Response;
   try {
     res = await fetch(url, {
@@ -307,6 +316,52 @@ export async function fetchCompanyName(
   } catch {
     return null;
   }
+}
+
+// Run a read-only QBO query (the SQL-like /query endpoint) and return the raw
+// QueryResponse object (e.g. { Account: [...], maxResults, startPosition }).
+// Read-only — used to pull reference lists (accounts, vendors, customers, tax
+// codes). Unlike fetchCompanyName (an identity read that fails soft to null),
+// this THROWS a typed QuickbooksError so callers can tell an expired token /
+// not-found / transient apart.
+export async function quickbooksQuery(
+  accessToken: string,
+  realmId: string,
+  query: string,
+  environment?: QuickbooksEnvironment,
+): Promise<Record<string, unknown>> {
+  const url =
+    `${quickbooksApiBaseUrl(environment)}/v3/company/${encodeURIComponent(realmId)}` +
+    `/query?query=${encodeURIComponent(query)}&minorversion=${QBO_MINORVERSION}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new QuickbooksError(
+      "request_failed",
+      `QuickBooks query request failed: ${(e as Error).message}`,
+    );
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new QuickbooksError(
+      "read_failed",
+      `QuickBooks query failed (${res.status}): ${truncate(detail)}`,
+      res.status,
+    );
+  }
+  const json = (await res.json().catch(() => null)) as {
+    QueryResponse?: Record<string, unknown>;
+  } | null;
+  return json?.QueryResponse ?? {};
 }
 
 // Cap any upstream error body we keep so a large/HTML error page can't bloat a
