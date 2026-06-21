@@ -15,7 +15,11 @@ export type JobKind =
   // non-duplicate files together (src/lib/ai/set-assessment.ts). Scheduled
   // ~2 min after the last upload in a burst so a multi-photo document is
   // judged as one set, not page-by-page.
-  | "assess_item_set";
+  | "assess_item_set"
+  // QuickBooks reference-list cache sync (Stage 2 Phase 4): one job per firm
+  // refreshes the cached accounts/vendors/customers/tax codes off the request
+  // path. Payload: { firmId }.
+  | "sync_quickbooks";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {

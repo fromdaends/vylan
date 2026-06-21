@@ -12,67 +12,124 @@ type Lists = {
   customers: Named[] | null;
   taxCodes: Named[] | null;
 };
+type SyncState = {
+  lastSyncedAt: string | null;
+  status: "idle" | "syncing" | "ok" | "error";
+  error: string | null;
+};
+type ListsResponse = { lists?: Lists | null; syncState?: SyncState | null };
 type Status = "loading" | "loaded" | "error";
 
-// Read-only QuickBooks reference lists (accounts, vendors, customers, tax codes)
-// shown under the connected card. Fetches live from /api/.../lists on mount (so
-// the Settings render never blocks on QuickBooks) and on an explicit Refresh.
-// Shows the time it was last loaded. A failed refresh keeps the last good lists
-// on screen with a small note. Any firm member.
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Read-only QuickBooks reference lists shown under the connected card. Reads from
+// Vylan's local cache (fast) via /lists; the "Refresh from QuickBooks" button
+// enqueues a background sync (/sync) and then polls until the new copy lands.
+// Shows "Last synced" + sync status. Any firm member.
 export function QuickbooksLists() {
   const t = useTranslations("Settings");
   const format = useFormatter();
   const [status, setStatus] = useState<Status>("loading");
   const [lists, setLists] = useState<Lists | null>(null);
-  const [lastLoaded, setLastLoaded] = useState<Date | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [syncState, setSyncState] = useState<SyncState | null>(null);
+  const [posting, setPosting] = useState(false);
   const [refreshError, setRefreshError] = useState(false);
-  // Bumped on each refresh so the error-branch alert re-mounts and re-announces
-  // if a retry from the error state also fails (otherwise nothing changes).
   const [refreshNonce, setRefreshNonce] = useState(0);
   const mountedRef = useRef(true);
 
-  const load = useCallback(async (isRefresh: boolean) => {
-    if (isRefresh) {
-      setRefreshing(true);
-      setRefreshError(false);
-      setRefreshNonce((n) => n + 1);
-    }
+  const fetchLists = useCallback(async (): Promise<ListsResponse | null> => {
+    const res = await fetch("/api/integrations/quickbooks/lists");
+    const data = (await res.json().catch(() => null)) as ListsResponse | null;
+    return res.ok ? data : null;
+  }, []);
+
+  const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/integrations/quickbooks/lists");
-      const data = (await res.json().catch(() => null)) as {
-        lists?: Lists | null;
-      } | null;
+      const data = await fetchLists();
       if (!mountedRef.current) return;
-      if (res.ok && data?.lists) {
+      if (data?.lists) {
         setLists(data.lists);
-        setLastLoaded(new Date());
+        setSyncState(data.syncState ?? null);
         setStatus("loaded");
-      } else if (isRefresh) {
-        // Keep the last good lists on screen; just flag the failed refresh.
-        setRefreshError(true);
       } else {
+        setSyncState(data?.syncState ?? null);
         setStatus("error");
       }
     } catch {
-      if (!mountedRef.current) return;
-      if (isRefresh) setRefreshError(true);
-      else setStatus("error");
-    } finally {
-      if (mountedRef.current) setRefreshing(false);
+      if (mountedRef.current) setStatus("error");
     }
-  }, []);
+  }, [fetchLists]);
 
   useEffect(() => {
     mountedRef.current = true;
-    // load() only calls setState after an await (it's async), so this is not a
-    // synchronous setState-in-effect — the rule is conservative about the call.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load(false);
+    void load();
     return () => {
       mountedRef.current = false;
     };
   }, [load]);
+
+  async function refresh() {
+    setPosting(true);
+    setRefreshError(false);
+    setRefreshNonce((n) => n + 1);
+    const prevSynced = syncState?.lastSyncedAt ?? null;
+    let posted = false;
+    try {
+      const res = await fetch("/api/integrations/quickbooks/sync", {
+        method: "POST",
+      });
+      posted = res.ok;
+      if (!res.ok && mountedRef.current) setRefreshError(true);
+    } catch {
+      if (mountedRef.current) setRefreshError(true);
+    }
+    if (mountedRef.current) setPosting(false);
+    if (!posted || !mountedRef.current) return;
+
+    // Optimistic "syncing", then poll (every 12s, up to ~3 min) for the
+    // background job to land a fresh copy.
+    setSyncState((s) =>
+      s
+        ? { ...s, status: "syncing" }
+        : { lastSyncedAt: prevSynced, status: "syncing", error: null },
+    );
+    for (let i = 0; i < 16; i++) {
+      await delay(12_000);
+      if (!mountedRef.current) return;
+      const data = await fetchLists().catch(() => null);
+      if (!mountedRef.current) return;
+      const ns = data?.syncState ?? null;
+      if (ns?.lastSyncedAt && ns.lastSyncedAt !== prevSynced) {
+        if (data?.lists) setLists(data.lists);
+        setSyncState(ns);
+        setStatus("loaded");
+        return;
+      }
+      if (ns?.status === "error") {
+        setSyncState(ns);
+        return;
+      }
+    }
+    // Poll timed out — reconcile with the real server state so the "Syncing…"
+    // indicator never outlives the poll.
+    if (mountedRef.current) {
+      const data = await fetchLists().catch(() => null);
+      if (mountedRef.current && data?.syncState) {
+        if (data.lists) setLists(data.lists);
+        setSyncState(data.syncState);
+      }
+    }
+  }
+
+  const refreshBtn = (
+    <RefreshButton
+      onClick={refresh}
+      busy={posting}
+      label={t("qbo_refresh_cta")}
+      busyLabel={t("qbo_refreshing")}
+    />
+  );
 
   if (status === "loading") {
     return (
@@ -91,38 +148,46 @@ export function QuickbooksLists() {
         >
           {t("qbo_lists_error")}
         </p>
-        <RefreshButton
-          onClick={() => load(true)}
-          refreshing={refreshing}
-          label={t("qbo_refresh_cta")}
-          busyLabel={t("qbo_refreshing")}
-        />
+        {refreshBtn}
       </div>
     );
   }
 
+  const syncing = syncState?.status === "syncing";
+
   return (
     <div className="mt-4 max-w-xl">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground">
-          {lastLoaded &&
-            t("qbo_last_loaded", {
-              time: format.dateTime(lastLoaded, {
-                hour: "numeric",
-                minute: "numeric",
-              }),
-            })}
+        <span
+          aria-live="polite"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
+        >
+          {syncing ? (
+            <>
+              <RefreshCw className="h-3 w-3 animate-spin" aria-hidden="true" />
+              {t("qbo_syncing")}
+            </>
+          ) : syncState?.lastSyncedAt ? (
+            t("qbo_last_synced", {
+              time: format.relativeTime(new Date(syncState.lastSyncedAt)),
+            })
+          ) : null}
         </span>
-        <RefreshButton
-          onClick={() => load(true)}
-          refreshing={refreshing}
-          label={t("qbo_refresh_cta")}
-          busyLabel={t("qbo_refreshing")}
-        />
+        {refreshBtn}
       </div>
+      {syncing && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {t("qbo_sync_pending")}
+        </p>
+      )}
+      {!syncing && syncState?.status === "error" && (
+        <p role="alert" className="mb-2 text-xs text-muted-foreground">
+          {t("qbo_sync_error")}
+        </p>
+      )}
       {refreshError && (
         <p role="alert" className="mb-2 text-xs text-muted-foreground">
-          {t("qbo_refresh_error")}
+          {t("qbo_refresh_failed")}
         </p>
       )}
       <div className="space-y-2">
@@ -137,12 +202,12 @@ export function QuickbooksLists() {
 
 function RefreshButton({
   onClick,
-  refreshing,
+  busy,
   label,
   busyLabel,
 }: {
   onClick: () => void;
-  refreshing: boolean;
+  busy: boolean;
   label: string;
   busyLabel: string;
 }) {
@@ -150,15 +215,15 @@ function RefreshButton({
     <button
       type="button"
       onClick={onClick}
-      disabled={refreshing}
-      aria-busy={refreshing}
+      disabled={busy}
+      aria-busy={busy}
       className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
     >
       <RefreshCw
-        className={"h-3.5 w-3.5" + (refreshing ? " animate-spin" : "")}
+        className={"h-3.5 w-3.5" + (busy ? " animate-spin" : "")}
         aria-hidden="true"
       />
-      {refreshing ? busyLabel : label}
+      {busy ? busyLabel : label}
     </button>
   );
 }

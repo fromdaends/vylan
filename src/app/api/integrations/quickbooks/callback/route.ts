@@ -11,6 +11,7 @@ import {
   QuickbooksError,
 } from "@/lib/quickbooks/client";
 import { upsertFirmQuickbooksConnection } from "@/lib/db/quickbooks";
+import { enqueueQuickbooksSync } from "@/lib/quickbooks/sync";
 import { QBO_STATE_COOKIE } from "../connect/route";
 
 export const runtime = "nodejs";
@@ -82,6 +83,9 @@ export async function GET(request: Request) {
       // "finish setup" note rather than a silent failure.
       return back(saved.reason === "migration_pending" ? "setup" : "error");
     }
+    // Kick off the first cache sync in the background (best-effort, off the
+    // connect path). A no-op if the cache migration (0420) isn't applied yet.
+    await enqueueQuickbooksSync(firm.id);
     return back("done");
   } catch (e) {
     if (e instanceof QuickbooksError) {
