@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   nameTokens,
   nameScore,
+  taxTokensFrom,
   matchTaxCode,
   suggestAccount,
   buildTransactionSuggestion,
@@ -65,8 +66,15 @@ describe("nameTokens", () => {
   it("strips accents and punctuation", () => {
     expect(nameTokens("Hydro-Québec")).toEqual(["hydro", "quebec"]);
   });
+  it("keeps single-character tokens (A&W, 7-Eleven)", () => {
+    expect(nameTokens("A&W")).toEqual(["a", "w"]);
+    expect(nameTokens("7-Eleven")).toEqual(["7", "eleven"]);
+  });
   it("keeps a lone noise word rather than emptying", () => {
     expect(nameTokens("Le")).toEqual(["le"]);
+  });
+  it("keeps non-Latin scripts instead of dropping them", () => {
+    expect(nameTokens("日本")).toEqual(["日本"]);
   });
 });
 
@@ -79,6 +87,13 @@ describe("nameScore", () => {
       MATCH_THRESHOLD,
     );
   });
+  it("matches names that reduce to single-char tokens", () => {
+    expect(nameScore("A&W", "A&W Restaurants")).toBeGreaterThan(0);
+  });
+  it("matches identical non-Latin names exactly", () => {
+    expect(nameScore("日本", "日本")).toBe(1);
+    expect(nameScore("東京", "東京 Inc")).toBe(1);
+  });
   it("scores unrelated names 0", () => {
     expect(nameScore("Costco", "Walmart")).toBe(0);
   });
@@ -88,21 +103,29 @@ describe("nameScore", () => {
   });
 });
 
+describe("taxTokensFrom (word-boundary, FR aliases)", () => {
+  it("resolves combined and French codes to canonical tokens", () => {
+    expect([...taxTokensFrom("GST/QST QC - 9.975")].sort()).toEqual(["GST", "QST"]);
+    expect([...taxTokensFrom("TPS/TVQ (5%/9.975%)")].sort()).toEqual(["GST", "QST"]);
+    expect([...taxTokensFrom("HST ON")]).toEqual(["HST"]);
+  });
+  it("does NOT substring-match a tax token inside a real word", () => {
+    expect(taxTokensFrom("Private services").size).toBe(0); // 'VAT' not matched
+    expect(taxTokensFrom("Innovate Inc").size).toBe(0);
+  });
+});
+
 describe("matchTaxCode", () => {
-  it("prefers the combined GST/QST code when both taxes are present", () => {
+  it("matches the combined GST/QST code when both taxes are present", () => {
     const m = matchTaxCode(extraction().taxes, taxCodes);
-    expect(m.match).toEqual({ id: "t2", name: "GST/QST QC - 9.975" });
+    expect(m.match).toEqual({ id: "t2", name: "GST/QST QC - 9.975", active: true });
     expect(m.confidence).toBe(1);
   });
-  it("matches a single GST and treats GST-only as confident", () => {
+  it("matches the PLAIN GST code for a GST-only receipt (no over-match to combined)", () => {
     const m = matchTaxCode([{ type: "GST", amount: 5, rate: 5 }], taxCodes);
-    // Both "GST" and "GST/QST..." contain GST; the single-token doc wants only
-    // GST, so any code covering it is full coverage. Top by active + order.
-    expect(m.match).not.toBeNull();
-    expect(m.confidence).toBe(1);
-    expect(m.candidates.length).toBeGreaterThan(0);
+    expect(m.match).toEqual({ id: "t1", name: "GST", active: true });
   });
-  it("maps French TPS/TVQ to GST/QST", () => {
+  it("maps French TPS/TVQ on the document to GST/QST codes", () => {
     const m = matchTaxCode(
       [
         { type: "TPS", amount: 5, rate: 5 },
@@ -110,28 +133,67 @@ describe("matchTaxCode", () => {
       ],
       taxCodes,
     );
-    expect(m.match).toEqual({ id: "t2", name: "GST/QST QC - 9.975" });
+    expect(m.match).toEqual({ id: "t2", name: "GST/QST QC - 9.975", active: true });
   });
-  it("returns no match when the document has no tax", () => {
+  it("matches a French-NAMED QBO tax code", () => {
+    const m = matchTaxCode(extraction().taxes, [
+      { id: "f1", name: "TPS/TVQ (5%/9.975%)", active: true },
+    ]);
+    expect(m.match).toEqual({ id: "f1", name: "TPS/TVQ (5%/9.975%)", active: true });
+  });
+  it("does not confidently match a 'VAT' line against a non-tax code name", () => {
+    const m = matchTaxCode([{ type: "VAT", amount: 2, rate: null }], [
+      { id: "x", name: "Private services", active: true },
+    ]);
+    expect(m.match).toBeNull();
+    expect(m.candidates).toEqual([]);
+  });
+  it("ignores junk (non-tax) lines when scoring", () => {
+    const m = matchTaxCode(
+      [
+        { type: "GST", amount: 5, rate: 5 },
+        { type: "QST", amount: 9.98, rate: 9.975 },
+        { type: "Enviro fee", amount: 1, rate: null },
+      ],
+      taxCodes,
+    );
+    expect(m.match).toEqual({ id: "t2", name: "GST/QST QC - 9.975", active: true });
+  });
+  it("returns no match when the document has no tax / no codes loaded", () => {
     expect(matchTaxCode([], taxCodes).match).toBeNull();
-  });
-  it("returns no match when tax codes aren't loaded", () => {
     expect(matchTaxCode(extraction().taxes, null).match).toBeNull();
   });
-  it("lists a partial code as a candidate but not a confident match for multi-tax", () => {
-    // Only a GST-only code available, but the doc has GST + QST -> partial.
+  it("lists a partial code as a candidate but not a confident match", () => {
     const m = matchTaxCode(extraction().taxes, [
       { id: "t1", name: "GST", active: true },
     ]);
     expect(m.match).toBeNull();
-    expect(m.candidates).toEqual([{ id: "t1", name: "GST", score: 0.5 }]);
+    expect(m.candidates).toEqual([
+      { id: "t1", name: "GST", active: true, score: 0.5 },
+    ]);
+  });
+});
+
+describe("ambiguity guard", () => {
+  it("returns no confident match when two parties tie on a single-token name", () => {
+    const m = buildTransactionSuggestion(extraction({ vendor_name: "Bell" }), {
+      ...lists,
+      vendors: [
+        { id: "b1", name: "Bell Canada", active: true },
+        { id: "b2", name: "Bell Mobility", active: true },
+      ],
+    });
+    expect(m.party.match).toBeNull();
+    expect(m.party.candidates).toHaveLength(2);
+    expect(m.notes.some((n) => n.includes("Couldn't confidently pick"))).toBe(
+      true,
+    );
   });
 });
 
 describe("suggestAccount", () => {
   it("narrows to expense accounts for an expense", () => {
     const m = suggestAccount("expense", "random vendor", accounts);
-    // No name match, so no confident pick, but candidates are expense-kind only.
     expect(m.match).toBeNull();
     const ids = m.candidates.map((c) => c.id);
     expect(ids).toContain("a1");
@@ -148,16 +210,46 @@ describe("suggestAccount", () => {
   });
   it("makes a confident pick when the party name resembles an account", () => {
     const m = suggestAccount("expense", "Telephone", accounts);
-    expect(m.match).toEqual({ id: "a2", name: "Telephone" });
+    expect(m.match).toEqual({ id: "a2", name: "Telephone", active: true });
   });
-  it("returns kind-filtered candidates with score 0 when there's no party name", () => {
-    const m = suggestAccount("expense", null, accounts);
+  it("returns active-sorted kind-filtered candidates when there's no party name", () => {
+    const withInactive: QbAccount[] = [
+      { id: "i1", name: "Archived Expense", accountType: "Expense", active: false },
+      ...accounts,
+    ];
+    const m = suggestAccount("expense", null, withInactive);
     expect(m.match).toBeNull();
     expect(m.candidates.every((c) => c.score === 0)).toBe(true);
-    expect(m.candidates.length).toBeGreaterThan(0);
+    // Active accounts must come before the archived one.
+    expect(m.candidates[0]!.active).toBe(true);
   });
   it("returns nothing when accounts aren't loaded", () => {
     expect(suggestAccount("expense", "x", null).candidates).toEqual([]);
+  });
+});
+
+describe("archived (inactive) entities", () => {
+  it("still matches an archived account but flags it active:false + a note", () => {
+    const s = buildTransactionSuggestion(extraction({ vendor_name: "Telephone" }), {
+      ...lists,
+      accounts: [
+        { id: "z", name: "Telephone", accountType: "Expense", active: false },
+      ],
+    });
+    expect(s.account.match).toEqual({ id: "z", name: "Telephone", active: false });
+    expect(s.notes.some((n) => n.includes("archived"))).toBe(true);
+  });
+  it("flags an archived vendor match", () => {
+    const s = buildTransactionSuggestion(
+      extraction({ vendor_name: "Old Supplier" }),
+      lists,
+    );
+    expect(s.party.match).toEqual({
+      id: "v4",
+      name: "Old Supplier Ltd",
+      active: false,
+    });
+    expect(s.notes.some((n) => n.includes("archived"))).toBe(true);
   });
 });
 
@@ -166,13 +258,20 @@ describe("buildTransactionSuggestion", () => {
     const s = buildTransactionSuggestion(extraction(), lists);
     expect(s.direction).toBe("expense");
     expect(s.partyKind).toBe("vendor");
-    expect(s.party.match).toEqual({ id: "v1", name: "The Home Depot Inc." });
-    expect(s.taxCode.match).toEqual({ id: "t2", name: "GST/QST QC - 9.975" });
+    expect(s.party.match).toEqual({
+      id: "v1",
+      name: "The Home Depot Inc.",
+      active: true,
+    });
+    expect(s.taxCode.match).toEqual({
+      id: "t2",
+      name: "GST/QST QC - 9.975",
+      active: true,
+    });
     expect(s.amount).toBe(114.98);
     expect(s.subtotal).toBe(100);
     expect(s.taxTotal).toBe(14.98);
     expect(s.date).toBe("2024-03-14");
-    // Account needs the accountant, so a note prompts for it.
     expect(s.account.match).toBeNull();
     expect(s.notes.some((n) => n.toLowerCase().includes("expense account"))).toBe(
       true,
@@ -190,7 +289,11 @@ describe("buildTransactionSuggestion", () => {
       lists,
     );
     expect(s.partyKind).toBe("customer");
-    expect(s.party.match).toEqual({ id: "c1", name: "Acme Manufacturing Inc." });
+    expect(s.party.match).toEqual({
+      id: "c1",
+      name: "Acme Manufacturing Inc.",
+      active: true,
+    });
     expect(s.notes.some((n) => n.toLowerCase().includes("income account"))).toBe(
       true,
     );
@@ -211,15 +314,12 @@ describe("buildTransactionSuggestion", () => {
       lists,
     );
     expect(s.partyKind).toBe("vendor");
-    expect(s.party.match).toEqual({ id: "v2", name: "Bell Canada" });
+    expect(s.party.match).toEqual({ id: "v2", name: "Bell Canada", active: true });
     expect(s.notes.some((n) => n.includes("expense or income"))).toBe(true);
   });
 
   it("flags a foreign currency", () => {
-    const s = buildTransactionSuggestion(
-      extraction({ currency: "USD" }),
-      lists,
-    );
+    const s = buildTransactionSuggestion(extraction({ currency: "USD" }), lists);
     expect(s.notes.some((n) => n.includes("USD"))).toBe(true);
   });
 
@@ -241,21 +341,27 @@ describe("buildTransactionSuggestion", () => {
     expect(s.party.match).toBeNull();
     expect(s.taxCode.match).toBeNull();
     expect(s.account.match).toBeNull();
-    expect(s.notes.some((n) => n.includes("vendor list isn't loaded"))).toBe(
-      true,
-    );
+    expect(s.notes.some((n) => n.includes("vendor list isn't loaded"))).toBe(true);
     expect(s.notes.some((n) => n.includes("chart of accounts isn't loaded"))).toBe(
       true,
     );
   });
 
   it("handles a document with no readable party name", () => {
-    const s = buildTransactionSuggestion(
-      extraction({ vendor_name: null }),
-      lists,
-    );
+    const s = buildTransactionSuggestion(extraction({ vendor_name: null }), lists);
     expect(s.partyKind).toBe("vendor");
     expect(s.party.match).toBeNull();
     expect(s.notes.some((n) => n.includes("No vendor name was read"))).toBe(true);
+  });
+
+  it("scores an unidentified doc no higher than a matched one (readiness counts the missing party)", () => {
+    const matched = buildTransactionSuggestion(extraction(), lists);
+    const unidentified = buildTransactionSuggestion(
+      extraction({ direction: "unknown", vendor_name: null, customer_name: null }),
+      lists,
+    );
+    expect(unidentified.overallConfidence).toBeLessThan(
+      matched.overallConfidence,
+    );
   });
 });

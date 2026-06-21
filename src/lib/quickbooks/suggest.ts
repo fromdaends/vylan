@@ -10,8 +10,11 @@
 //
 // It NEVER decides and NEVER writes — to QuickBooks or to our DB. Every field is
 // a confidence-scored SUGGESTION the accountant confirms or overrides later
-// (Stage 4). When the mapper isn't confident it returns match=null with a
-// plain-English note rather than guessing, exactly like the document matcher.
+// (Stage 4). When the mapper isn't confident — no match, or two candidates too
+// close to call — it returns match=null with a plain-English note rather than
+// guessing, exactly like the document matcher. Archived (inactive) QuickBooks
+// entities are still eligible (the read layer loads them on purpose) but the
+// `active` flag is carried through every ref so the UI can warn the accountant.
 
 import type {
   QbNamed,
@@ -23,8 +26,9 @@ import type {
   TransactionTaxLine,
 } from "@/lib/ai/transaction-extract";
 
-// A reference to one cached QuickBooks entity (its id + display name).
-export type QboRef = { id: string; name: string };
+// A reference to one cached QuickBooks entity. `active` is carried so the
+// approval UI can warn when a confident match is archived in QuickBooks.
+export type QboRef = { id: string; name: string; active: boolean };
 // A candidate the accountant could pick instead, with how well it scored (0..1).
 export type ScoredRef = QboRef & { score: number };
 
@@ -63,6 +67,10 @@ export type TransactionSuggestion = {
 // Below this score we treat a fuzzy match as "not sure" and return match=null
 // (still listing candidates). Mirrors the conservative bar in ai/matching.ts.
 export const MATCH_THRESHOLD = 0.6;
+// When the top two candidates are within this margin we call it a tie and return
+// match=null so the accountant disambiguates — a single-token receipt name
+// ("Bell") must NOT confidently auto-pick between "Bell Canada" and "Taco Bell".
+export const AMBIGUITY_MARGIN = 0.05;
 const MAX_CANDIDATES = 5;
 
 // ── Name normalization + scoring ──────────────────────────────────────────────
@@ -82,7 +90,6 @@ const BUSINESS_SUFFIXES = new Set([
   "corporation",
   "co",
   "company",
-  "ltee",
   "ltee", // ltée normalizes to ltee after accent strip
   "enr",
   "srl",
@@ -95,23 +102,27 @@ const BUSINESS_SUFFIXES = new Set([
 // Leading noise words that don't help identify a party.
 const LEADING_NOISE = new Set(["the", "le", "la", "les", "l"]);
 
-// Lowercase, strip accents + punctuation, collapse whitespace.
+// Lowercase, strip accents, drop punctuation, collapse whitespace. Unicode-aware:
+// non-Latin letters/digits (CJK, Cyrillic, Arabic) are KEPT, so an exact
+// Chinese-named vendor still matches instead of normalizing to nothing.
 function normalizeName(name: string): string {
   return name
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/[̀-ͯ]/g, "") // strip combining accent marks
+    .replace(/[^\p{L}\p{N}\s]/gu, " ") // keep letters + numbers of any script
     .replace(/\s+/g, " ")
     .trim();
 }
 
-// Meaningful tokens of a name: normalized, with business suffixes + leading noise
-// + 1-char fragments dropped. Exported for testing.
+// Meaningful tokens of a name: normalized, with business suffixes + a single
+// leading noise word dropped. 1-char tokens are KEPT (after punctuation is gone,
+// they're real initials/letters — "A&W" -> "a w", "7-Eleven" -> "7 eleven" — not
+// noise). Exported for testing.
 export function nameTokens(name: string): string[] {
   const toks = normalizeName(name)
     .split(" ")
-    .filter((t) => t.length >= 2 && !BUSINESS_SUFFIXES.has(t));
+    .filter((t) => t.length >= 1 && !BUSINESS_SUFFIXES.has(t));
   // Drop a single leading noise word ("the home depot" -> "home depot"), but keep
   // it if it's the ONLY token (so "Le" alone doesn't vanish to nothing).
   if (toks.length > 1 && LEADING_NOISE.has(toks[0]!)) toks.shift();
@@ -120,8 +131,9 @@ export function nameTokens(name: string): string[] {
 
 // Fuzzy similarity of two names, 0..1. Combines token overlap (Jaccard) with
 // "are all of the shorter name's tokens present in the longer" (containment), so
-// "Bell" vs "Bell Canada" scores well without "Bell" matching "Taco Bell" as
-// strongly. Exact normalized equality is 1. Exported for testing.
+// "Bell" vs "Bell Canada" scores well. Exact normalized equality is 1. A
+// single-token query against several multi-word names will tie (handled by the
+// ambiguity margin in pickConfident, not here). Exported for testing.
 export function nameScore(a: string, b: string): number {
   const na = normalizeName(a);
   const nb = normalizeName(b);
@@ -144,17 +156,47 @@ export function nameScore(a: string, b: string): number {
   return Math.min(1, 0.5 * jaccard + 0.5 * containment);
 }
 
-// Rank a cached list against a query name, preferring ACTIVE entries on ties.
-// Returns the confident match (>= threshold) or null, plus the top candidates.
-function bestMatches(
-  query: string | null,
-  list: QbNamed[] | null,
-  threshold = MATCH_THRESHOLD,
-): MatchField {
+// A scored row: a cached entity plus its 0..1 score against the query.
+type Scored = { id: string; name: string; active: boolean; score: number };
+
+// Sort scored rows: highest score first, then ACTIVE before archived on a tie.
+function byScoreThenActive(a: Scored, b: Scored): number {
+  return b.score - a.score || Number(b.active) - Number(a.active);
+}
+
+// Choose the confident pick from a sorted, score-descending list, applying BOTH
+// the minimum threshold AND the ambiguity margin: a clear winner only. Returns
+// the ref (with its active flag) or null. Shared by every matcher below.
+function pickConfident(
+  sorted: Scored[],
+  threshold: number,
+): { match: QboRef | null; confidence: number } {
+  const top = sorted[0];
+  if (!top || top.score < threshold) return { match: null, confidence: 0 };
+  const second = sorted[1];
+  if (second && top.score - second.score < AMBIGUITY_MARGIN) {
+    // Too close to call — let the accountant pick from the candidates.
+    return { match: null, confidence: 0 };
+  }
+  return {
+    match: { id: top.id, name: top.name, active: top.active },
+    confidence: round2(top.score),
+  };
+}
+
+function toCandidates(sorted: Scored[]): ScoredRef[] {
+  return sorted
+    .slice(0, MAX_CANDIDATES)
+    .map((r) => ({ id: r.id, name: r.name, active: r.active, score: round2(r.score) }));
+}
+
+// Rank a cached list against a query name. Returns the confident match (clear
+// winner >= threshold) or null, plus the top candidates.
+function bestMatches(query: string | null, list: QbNamed[] | null): MatchField {
   if (!query || !list || list.length === 0) {
     return { match: null, confidence: 0, candidates: [] };
   }
-  const scored = list
+  const sorted = list
     .map((r) => ({
       id: r.id,
       name: r.name,
@@ -162,47 +204,42 @@ function bestMatches(
       score: nameScore(query, r.name),
     }))
     .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score || Number(b.active) - Number(a.active));
+    .sort(byScoreThenActive);
 
-  const candidates: ScoredRef[] = scored
-    .slice(0, MAX_CANDIDATES)
-    .map(({ id, name, score }) => ({ id, name, score: round2(score) }));
-
-  const top = scored[0];
-  const match =
-    top && top.score >= threshold ? { id: top.id, name: top.name } : null;
-  return {
-    match,
-    confidence: match ? round2(top!.score) : 0,
-    candidates,
-  };
+  const { match, confidence } = pickConfident(sorted, MATCH_THRESHOLD);
+  return { match, confidence, candidates: toCandidates(sorted) };
 }
 
 // ── Tax code matching ─────────────────────────────────────────────────────────
 
-// French tax labels -> the English token QBO codes usually carry, so "TPS"/"TVQ"
-// receipts still match "GST"/"QST" tax codes.
+// Known tax words and the French labels that alias to them, so both the
+// document's tax line AND the QBO code name resolve to the same canonical token.
 const TAX_ALIASES: Record<string, string> = {
   TPS: "GST",
   TVQ: "QST",
   TVH: "HST",
   TVP: "PST",
 };
+const KNOWN_TAX_WORDS = ["GST", "HST", "QST", "PST", "VAT", "TPS", "TVQ", "TVH", "TVP"];
 
-// The canonical tax token for an extracted tax line ("TPS" -> "GST").
-function taxToken(t: TransactionTaxLine): string {
-  const up = t.type.trim().toUpperCase();
-  // Use the first known tax word found in the label, mapping FR -> EN.
-  for (const word of ["GST", "HST", "QST", "PST", "VAT", "TPS", "TVQ", "TVH", "TVP"]) {
-    if (up.includes(word)) return TAX_ALIASES[word] ?? word;
+// The canonical tax tokens contained in a string, matched on WORD BOUNDARIES
+// (not raw substring) so "Private services" never yields "VAT" and a French
+// "TPS/TVQ" code resolves to {GST, QST}. Used symmetrically on the document's
+// tax label and on the QBO code name. Exported for testing.
+export function taxTokensFrom(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const word of text.toUpperCase().split(/[^A-Z]+/)) {
+    if (!word) continue;
+    if (KNOWN_TAX_WORDS.includes(word)) out.add(TAX_ALIASES[word] ?? word);
   }
-  return up;
+  return out;
 }
 
-// Match the document's tax(es) against the firm's cached tax codes. When two
-// taxes are present (Quebec's GST + QST), prefer a single combined code whose
-// name carries BOTH tokens (e.g. "GST/QST QC - 9.975"); otherwise match the
-// single tax. Conservative: a code must contain at least one tax token to match.
+// Match the document's tax(es) against the firm's cached tax codes by comparing
+// TOKEN SETS (Jaccard), so a code is only a confident match when its taxes EXACTLY
+// equal the document's: a GST-only receipt matches the "GST" code (not the
+// combined "GST/QST"), and a Quebec GST+QST receipt matches "GST/QST" (or French
+// "TPS/TVQ"). Partial overlaps surface as candidates, never as a confident pick.
 export function matchTaxCode(
   taxes: TransactionTaxLine[],
   taxCodes: QbNamed[] | null,
@@ -210,31 +247,28 @@ export function matchTaxCode(
   if (!taxCodes || taxCodes.length === 0 || taxes.length === 0) {
     return { match: null, confidence: 0, candidates: [] };
   }
-  const wanted = [...new Set(taxes.map(taxToken))].filter(Boolean);
-  if (wanted.length === 0) return { match: null, confidence: 0, candidates: [] };
+  // Canonical tax tokens the document actually shows (junk labels contribute
+  // nothing and so don't pollute the denominator).
+  const wanted = new Set<string>();
+  for (const t of taxes) for (const tok of taxTokensFrom(t.type)) wanted.add(tok);
+  if (wanted.size === 0) return { match: null, confidence: 0, candidates: [] };
 
-  const scored = taxCodes
+  const sorted = taxCodes
     .map((c) => {
-      const upper = c.name.toUpperCase();
-      const hits = wanted.filter((w) => upper.includes(w)).length;
-      // Fraction of the wanted tokens this code covers; a code that covers all
-      // (the combined GST/QST code) scores 1, a partial code scores less.
-      const score = hits / wanted.length;
+      const codeToks = taxTokensFrom(c.name);
+      let inter = 0;
+      for (const w of wanted) if (codeToks.has(w)) inter++;
+      const union = wanted.size + codeToks.size - inter;
+      const score = union === 0 ? 0 : inter / union; // Jaccard, 1 iff sets equal
       return { id: c.id, name: c.name, active: c.active, score };
     })
     .filter((c) => c.score > 0)
-    .sort((a, b) => b.score - a.score || Number(b.active) - Number(a.active));
+    .sort(byScoreThenActive);
 
-  if (scored.length === 0) return { match: null, confidence: 0, candidates: [] };
-
-  const candidates: ScoredRef[] = scored
-    .slice(0, MAX_CANDIDATES)
-    .map(({ id, name, score }) => ({ id, name, score: round2(score) }));
-  const top = scored[0]!;
-  // A combined code that covers every wanted tax is a confident match; a code
-  // covering only some of a multi-tax document is a candidate, not a pick.
-  const match = top.score >= 1 ? { id: top.id, name: top.name } : null;
-  return { match, confidence: match ? 1 : 0, candidates };
+  if (sorted.length === 0) return { match: null, confidence: 0, candidates: [] };
+  // A confident tax match requires an EXACT token-set match (Jaccard === 1).
+  const { match, confidence } = pickConfident(sorted, 1);
+  return { match, confidence, candidates: toCandidates(sorted) };
 }
 
 // ── Account suggestion ────────────────────────────────────────────────────────
@@ -242,9 +276,7 @@ export function matchTaxCode(
 // QBO AccountType strings that mean "this is where an expense / income posts".
 function isExpenseType(t: string | null): boolean {
   const s = (t ?? "").toLowerCase();
-  return (
-    s.includes("expense") || s.includes("cost of goods")
-  );
+  return s.includes("expense") || s.includes("cost of goods");
 }
 function isIncomeType(t: string | null): boolean {
   const s = (t ?? "").toLowerCase();
@@ -255,8 +287,8 @@ function isIncomeType(t: string | null): boolean {
 // expense category, so we filter to the right KIND of account (expense for an
 // expense, income for income) and only return a confident `match` when the
 // party name strongly resembles an account name (e.g. a "Telephone" account for
-// a phone bill). Otherwise we list the type-appropriate candidates and leave the
-// pick to the accountant — honest about what the AI can and can't infer.
+// a phone bill). Otherwise we list the type-appropriate candidates (active first)
+// and leave the pick to the accountant — honest about what the AI can infer.
 export function suggestAccount(
   direction: TransactionExtraction["direction"],
   partyName: string | null,
@@ -266,7 +298,7 @@ export function suggestAccount(
     return { match: null, confidence: 0, candidates: [] };
   }
   // Narrow to the plausible account kind. When direction is unknown we can't
-  // narrow, so consider all active accounts.
+  // narrow, so consider all accounts.
   const pool = accounts.filter((a) => {
     if (direction === "expense") return isExpenseType(a.accountType);
     if (direction === "income") return isIncomeType(a.accountType);
@@ -276,32 +308,25 @@ export function suggestAccount(
 
   if (!partyName) {
     // No name to go on — surface the kind-filtered accounts as candidates (score
-    // 0) so the UI can offer a shortlist, but make no confident pick.
-    return {
-      match: null,
-      confidence: 0,
-      candidates: pool
-        .slice(0, MAX_CANDIDATES)
-        .map((a) => ({ id: a.id, name: a.name, score: 0 })),
-    };
+    // 0, active first) so the UI can offer a shortlist, but make no confident pick.
+    const shortlist = [...pool]
+      .sort((a, b) => Number(b.active) - Number(a.active))
+      .slice(0, MAX_CANDIDATES)
+      .map((a) => ({ id: a.id, name: a.name, active: a.active, score: 0 }));
+    return { match: null, confidence: 0, candidates: shortlist };
   }
 
-  const scored = pool
+  const sorted = pool
     .map((a) => ({
       id: a.id,
       name: a.name,
       active: a.active,
       score: nameScore(partyName, a.name),
     }))
-    .sort((a, b) => b.score - a.score || Number(b.active) - Number(a.active));
+    .sort(byScoreThenActive);
 
-  const candidates: ScoredRef[] = scored
-    .slice(0, MAX_CANDIDATES)
-    .map(({ id, name, score }) => ({ id, name, score: round2(score) }));
-  const top = scored[0]!;
-  const match =
-    top.score >= MATCH_THRESHOLD ? { id: top.id, name: top.name } : null;
-  return { match, confidence: match ? round2(top.score) : 0, candidates };
+  const { match, confidence } = pickConfident(sorted, MATCH_THRESHOLD);
+  return { match, confidence, candidates: toCandidates(sorted) };
 }
 
 // ── Orchestrator ──────────────────────────────────────────────────────────────
@@ -346,7 +371,17 @@ export function buildTransactionSuggestion(
     notes.push(
       `Your QuickBooks ${partyKind} list isn't loaded yet, so we couldn't match "${partyQuery}".`,
     );
-  } else if (partyKind && partyQuery && !party.match) {
+  } else if (partyKind && partyQuery && party.match) {
+    if (!party.match.active) {
+      notes.push(
+        `"${party.match.name}" is archived in QuickBooks — reactivate it or pick another ${partyKind}.`,
+      );
+    }
+  } else if (partyKind && partyQuery && party.candidates.length > 0) {
+    notes.push(
+      `Couldn't confidently pick a ${partyKind} for "${partyQuery}" — choose from the suggestions.`,
+    );
+  } else if (partyKind && partyQuery) {
     notes.push(
       `No matching ${partyKind} found for "${partyQuery}" — pick one or add it in QuickBooks.`,
     );
@@ -357,6 +392,10 @@ export function buildTransactionSuggestion(
   const account = suggestAccount(direction, partyQuery, lists.accounts);
   if (lists.accounts === null) {
     notes.push("Your QuickBooks chart of accounts isn't loaded yet.");
+  } else if (account.match && !account.match.active) {
+    notes.push(
+      `"${account.match.name}" is archived in QuickBooks — pick an active account.`,
+    );
   } else if (!account.match) {
     notes.push(
       direction === "income"
@@ -368,6 +407,8 @@ export function buildTransactionSuggestion(
   const taxCode = matchTaxCode(extraction.taxes, lists.taxCodes);
   if (extraction.taxes.length > 0 && lists.taxCodes === null) {
     notes.push("Your QuickBooks tax codes aren't loaded yet.");
+  } else if (extraction.taxes.length > 0 && taxCode.match && !taxCode.match.active) {
+    notes.push(`Tax code "${taxCode.match.name}" is archived in QuickBooks.`);
   } else if (extraction.taxes.length > 0 && !taxCode.match) {
     notes.push("Couldn't confidently match the tax — confirm the tax code.");
   }
@@ -404,24 +445,24 @@ export function buildTransactionSuggestion(
     taxTotal,
     date: extraction.document_date,
     currency: extraction.currency,
-    overallConfidence: overallReadiness(extraction, partyKind, party),
+    overallConfidence: overallReadiness(extraction, party),
     notes,
   };
 }
 
 // A rough readiness score (0..1): blends the AI's own confidence with how many
-// key fields we could actually fill (amount, a matched party, a date). Not a
-// probability — just a sortable "how ready is this draft" signal for the UI.
+// key fields we could actually fill (amount, date, a matched party). A missing
+// party ALWAYS counts as a gap, so an unidentified document never scores higher
+// than a partially-identified one. Not a probability — just a sortable signal.
 function overallReadiness(
   extraction: TransactionExtraction,
-  partyKind: PartyKind | null,
   party: MatchField,
 ): number {
-  const filled: number[] = [];
-  filled.push(extraction.total != null ? 1 : 0);
-  filled.push(extraction.document_date ? 1 : 0);
-  // Only count the party signal when we actually expected to match one.
-  if (partyKind) filled.push(party.match ? 1 : 0);
+  const filled = [
+    extraction.total != null ? 1 : 0,
+    extraction.document_date ? 1 : 0,
+    party.match ? 1 : 0,
+  ];
   const readiness = filled.reduce((a, b) => a + b, 0) / filled.length;
   return round2(0.5 * extraction.confidence + 0.5 * readiness);
 }
