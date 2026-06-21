@@ -48,8 +48,10 @@ export async function QuickbooksDraftCard({
     v.amount == null
       ? "—"
       : v.foreignCurrency && v.currency
-        ? `${formatNumber(v.amount, locale)} ${v.currency}`
+        ? `${formatNumber(v.amount, locale, 2)} ${v.currency}`
         : formatCurrency(v.amount, locale);
+
+  const readinessPct = Math.round(v.readiness * 100);
 
   return (
     <div className="mt-1.5 rounded-lg border border-border/40 bg-muted/30 px-3 py-2.5">
@@ -59,8 +61,12 @@ export async function QuickbooksDraftCard({
         <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
           {t("draft_badge")}
         </span>
-        <span className="ml-auto text-[11px] tabular-nums text-muted-foreground">
-          {Math.round(v.readiness * 100)}%
+        <span
+          className="ml-auto text-[11px] tabular-nums text-muted-foreground"
+          aria-label={t("readiness", { pct: readinessPct })}
+          title={t("readiness", { pct: readinessPct })}
+        >
+          {readinessPct}%
         </span>
       </div>
 

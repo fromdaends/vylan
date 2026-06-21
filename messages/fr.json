@@ -1936,6 +1936,7 @@
   "Quickbooks": {
     "draft_title": "Brouillon QuickBooks",
     "draft_badge": "Brouillon",
+    "readiness": "Degré de correspondance : {pct} %",
     "draft_readonly_hint": "Correspondance suggérée à vérifier. Rien n’est encore envoyé à QuickBooks.",
     "field_type": "Type",
     "direction_expense": "Dépense",

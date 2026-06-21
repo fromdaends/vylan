@@ -1936,6 +1936,7 @@
   "Quickbooks": {
     "draft_title": "QuickBooks draft",
     "draft_badge": "Draft",
+    "readiness": "Match readiness: {pct}%",
     "draft_readonly_hint": "Suggested mapping for your review. Nothing is sent to QuickBooks yet.",
     "field_type": "Type",
     "direction_expense": "Expense",

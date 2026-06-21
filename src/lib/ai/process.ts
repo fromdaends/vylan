@@ -27,7 +27,10 @@ import {
 import { isFirmQuickbooksConnected } from "@/lib/db/quickbooks";
 import { readCachedQuickbooksListsForFirm } from "@/lib/db/quickbooks-cache";
 import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
-import { upsertTransactionSuggestion } from "@/lib/db/quickbooks-suggestions";
+import {
+  upsertTransactionSuggestion,
+  deleteTransactionSuggestionForFile,
+} from "@/lib/db/quickbooks-suggestions";
 import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
@@ -174,13 +177,17 @@ export async function processClassifyJob(
   // The result is stored under ai_extracted_fields.transaction (jsonb, no
   // migration) and feeds the Phase-2 mapper that drafts the suggestion.
   let transaction: TransactionExtraction | null = null;
+  // The transaction pass + draft suggestion only matter for QuickBooks-connected
+  // firms. Resolve that once: it gates the (billable) extract call AND, below,
+  // whether we clean up a now-stale draft.
+  const quickbooksConnected = await isFirmQuickbooksConnected(limitFirmId);
   // We reach this code only AFTER the firm passed the daily rate limit + the
   // monthly/trial pause check, and only when AI is configured (checked at the
   // top), so entering this branch means a real, billable second model call
   // happens. Track that so the firm's AI cap is charged for BOTH calls below.
   const ranTransactionPass =
-    shouldExtractTransaction(expectedDocType, result.document_type) &&
-    (await isFirmQuickbooksConnected(limitFirmId));
+    quickbooksConnected &&
+    shouldExtractTransaction(expectedDocType, result.document_type);
   if (ranTransactionPass) {
     try {
       transaction = await extractTransaction({ fileBytes: bytes, mimeType });
@@ -264,27 +271,33 @@ export async function processClassifyJob(
     console.warn("[classify] display_name update threw:", err);
   }
 
-  // Stage 3 (Phase 3): now that the core classification is persisted, map the
-  // transaction read onto the firm's cached QuickBooks lists and persist the
-  // DRAFT suggestion (vendor/customer, account, tax code, amount, date) so the
-  // accountant sees it on the engagement page. Runs AFTER the file update so a
-  // failure here can never lose the classification. Read-only on QuickBooks;
-  // best-effort — any error, or a cache that isn't there yet, just leaves this
-  // file without a draft.
-  if (transaction) {
+  // Stage 3 (Phase 3): now that the core classification is persisted, sync this
+  // file's DRAFT QuickBooks suggestion (connected firms only). WITH a transaction
+  // read we map it onto the cached lists and upsert the draft; WITHOUT one (the
+  // doc is no longer a receipt/invoice, or the read failed) we delete any draft
+  // a previous pass left, so a stale card never outlives the read that made it.
+  // Runs AFTER the file update so a failure here can never lose the
+  // classification. Read-only on QuickBooks; best-effort throughout.
+  if (quickbooksConnected) {
     try {
-      const cached = await readCachedQuickbooksListsForFirm(limitFirmId);
-      if (cached) {
-        const suggestion = buildTransactionSuggestion(transaction, cached);
-        await upsertTransactionSuggestion({
-          firmId: limitFirmId,
-          uploadedFileId: file.id,
-          engagementId: file.engagement_id,
-          suggestion,
-        });
+      if (transaction) {
+        const cached = await readCachedQuickbooksListsForFirm(limitFirmId);
+        // Only (re)write when we have lists to map against; a transient empty
+        // cache must not wipe a previously-good draft.
+        if (cached) {
+          const suggestion = buildTransactionSuggestion(transaction, cached);
+          await upsertTransactionSuggestion({
+            firmId: limitFirmId,
+            uploadedFileId: file.id,
+            engagementId: file.engagement_id,
+            suggestion,
+          });
+        }
+      } else {
+        await deleteTransactionSuggestionForFile(file.id);
       }
     } catch (err) {
-      console.warn("[classify] qbo suggestion generation failed:", err);
+      console.warn("[classify] qbo suggestion sync failed:", err);
     }
   }
 

@@ -60,8 +60,20 @@ export function formatCurrency(
   }).format(amount);
 }
 
-export function formatNumber(n: number, locale: AppLocale): string {
-  return new Intl.NumberFormat(intlLocale(locale)).format(n);
+export function formatNumber(
+  n: number,
+  locale: AppLocale,
+  fractionDigits?: number,
+): string {
+  return new Intl.NumberFormat(
+    intlLocale(locale),
+    fractionDigits != null
+      ? {
+          minimumFractionDigits: fractionDigits,
+          maximumFractionDigits: fractionDigits,
+        }
+      : undefined,
+  ).format(n);
 }
 
 export function formatBytes(n: number | null | undefined): string {

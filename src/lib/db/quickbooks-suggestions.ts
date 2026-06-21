@@ -66,3 +66,20 @@ export async function upsertTransactionSuggestion(input: {
     console.error("[quickbooks] upsertTransactionSuggestion failed:", error);
   }
 }
+
+// Remove the draft suggestion for one uploaded file. Service-role. Called by the
+// classify worker when a (re)classification no longer yields a transaction (the
+// document is no longer a receipt/invoice, or the read failed), so a stale draft
+// never outlives the read that produced it. Best-effort + graceful pre-migration.
+export async function deleteTransactionSuggestionForFile(
+  uploadedFileId: string,
+): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("quickbooks_transaction_suggestions")
+    .delete()
+    .eq("uploaded_file_id", uploadedFileId);
+  if (error && !isMissingSchema(error)) {
+    console.error("[quickbooks] deleteTransactionSuggestionForFile failed:", error);
+  }
+}
