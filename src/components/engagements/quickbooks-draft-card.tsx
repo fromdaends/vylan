@@ -5,6 +5,7 @@ import {
   deriveQuickbooksDraftView,
   type DraftFieldView,
 } from "./quickbooks-draft-view";
+import { RegenerateDraftButton } from "./regenerate-draft-button";
 import { formatCurrency, formatDate, formatNumber, type AppLocale } from "@/lib/format";
 
 // Read-only "QuickBooks draft" card (Stage 3, Phase 3). Sits under a receipt /
@@ -17,9 +18,12 @@ import { formatCurrency, formatDate, formatNumber, type AppLocale } from "@/lib/
 export async function QuickbooksDraftCard({
   suggestion,
   locale,
+  fileId,
 }: {
   suggestion: TransactionSuggestion;
   locale: AppLocale;
+  // The uploaded file this draft belongs to — powers the "Refresh" control.
+  fileId: string;
 }) {
   const t = await getTranslations("Quickbooks");
   const v = deriveQuickbooksDraftView(suggestion);
@@ -106,9 +110,12 @@ export async function QuickbooksDraftCard({
         </p>
       )}
 
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        {t("draft_readonly_hint")}
-      </p>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <p className="text-[11px] text-muted-foreground">
+          {t("draft_readonly_hint")}
+        </p>
+        <RegenerateDraftButton fileId={fileId} />
+      </div>
     </div>
   );
 }

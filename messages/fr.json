@@ -1955,6 +1955,12 @@
     "choose_account": "Choisir un compte",
     "confirm_tax": "Confirmer le code de taxe",
     "archived": "Archivé",
-    "foreign_currency": "Les montants semblent être en {currency}, pas en CAD"
+    "foreign_currency": "Les montants semblent être en {currency}, pas en CAD",
+    "refresh_draft": "Actualiser",
+    "refresh_failed": "Échec de l’actualisation.",
+    "summary_label": "Brouillons QuickBooks",
+    "summary_drafts": "{count, plural, one {# brouillon} other {# brouillons}}",
+    "summary_needs_input": "{count, plural, one {# à compléter} other {# à compléter}}",
+    "summary_total": "{amount} au total"
   }
 }
