@@ -12,6 +12,7 @@ import {
   refreshTokens,
   isAccessTokenStale,
   QuickbooksError,
+  type QuickbooksEnvironment,
 } from "@/lib/quickbooks/client";
 
 // Return a valid access token for the firm's QuickBooks connection, refreshing
@@ -64,7 +65,27 @@ export async function getValidAccessToken(
   }
 }
 
-// Best-effort keep-alive used when the owner opens Settings: refreshes only when
+export type QuickbooksReadContext = {
+  accessToken: string;
+  realmId: string;
+  environment: QuickbooksEnvironment;
+};
+
+// Everything a read needs for a firm, together: a fresh access token + the realm
+// id + the per-connection environment (which selects the API base URL). Returns
+// null when the firm is not connected / not configured / the token cannot be
+// refreshed. This is the single entry point Stage 2 read code calls.
+export async function getQuickbooksReadContext(
+  firmId: string,
+): Promise<QuickbooksReadContext | null> {
+  const conn = await getFirmQuickbooksConnectionWithTokens(firmId);
+  if (!conn) return null;
+  const accessToken = await getValidAccessToken(firmId);
+  if (!accessToken) return null;
+  return { accessToken, realmId: conn.realmId, environment: conn.environment };
+}
+
+// Best-effort keep-alive used when a member opens Settings: refreshes only when
 // the access token is stale, so a dormant connection stays alive. Never throws
 // and never blocks rendering on a failure.
 export async function ensureFreshQuickbooksToken(firmId: string): Promise<void> {

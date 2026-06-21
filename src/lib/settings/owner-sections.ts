@@ -18,9 +18,11 @@ export type SettingsSectionId =
   | "integrations"
   | "documents";
 
+// NOTE: "integrations" is NOT owner-only — any firm member may VIEW the
+// QuickBooks connection + read its data. Connect/disconnect are gated to owners
+// inside IntegrationsSection (isOwner), not by hiding the whole tab.
 export const OWNER_ONLY_SETTINGS_SECTIONS: readonly SettingsSectionId[] = [
   "payments",
-  "integrations",
   "documents",
 ];
 

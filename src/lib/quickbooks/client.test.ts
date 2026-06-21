@@ -9,6 +9,7 @@ import {
   refreshTokens,
   revokeToken,
   isAccessTokenStale,
+  quickbooksQuery,
   QuickbooksError,
 } from "./client";
 
@@ -67,6 +68,15 @@ describe("quickbooksApiBaseUrl", () => {
     expect(quickbooksApiBaseUrl()).toContain("sandbox-quickbooks.api.intuit.com");
     process.env.QBO_ENVIRONMENT = "production";
     expect(quickbooksApiBaseUrl()).toBe("https://quickbooks.api.intuit.com");
+  });
+  it("prefers the per-connection environment over the global switch", () => {
+    process.env.QBO_ENVIRONMENT = "production"; // global says prod
+    expect(quickbooksApiBaseUrl("sandbox")).toContain(
+      "sandbox-quickbooks.api.intuit.com",
+    );
+    expect(quickbooksApiBaseUrl("production")).toBe(
+      "https://quickbooks.api.intuit.com",
+    );
   });
 });
 
@@ -278,5 +288,61 @@ describe("revokeToken", () => {
     vi.stubGlobal("fetch", fetchMock);
     await expect(revokeToken("rt")).resolves.toBe(false);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("quickbooksQuery", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("builds the /query URL (encoded query, minorversion 75, per-env host) and returns QueryResponse", async () => {
+    const fetchMock = vi.fn(async () =>
+      mockResponse({ ok: true, json: { QueryResponse: { Account: [{ Id: "1" }] } } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const qr = await quickbooksQuery(
+      "AT",
+      "realm1",
+      "SELECT * FROM Account",
+      "sandbox",
+    );
+    expect(qr.Account).toEqual([{ Id: "1" }]);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toContain("sandbox-quickbooks.api.intuit.com");
+    expect(url).toContain("/v3/company/realm1/query");
+    expect(url).toContain("query=SELECT%20*%20FROM%20Account");
+    expect(url).toContain("minorversion=75");
+    expect((init.headers as Record<string, string>).Authorization).toBe(
+      "Bearer AT",
+    );
+  });
+
+  it("throws read_failed on a non-2xx response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => mockResponse({ ok: false, status: 401, text: "unauthorized" })),
+    );
+    await expect(
+      quickbooksQuery("AT", "r", "SELECT * FROM Account", "sandbox"),
+    ).rejects.toMatchObject({ code: "read_failed" });
+  });
+
+  it("throws request_failed on a network error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("down");
+      }),
+    );
+    await expect(
+      quickbooksQuery("AT", "r", "Q", "sandbox"),
+    ).rejects.toMatchObject({ code: "request_failed" });
+  });
+
+  it("returns {} when the response has no QueryResponse", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => mockResponse({ ok: true, json: {} })));
+    expect(await quickbooksQuery("AT", "r", "Q", "sandbox")).toEqual({});
   });
 });

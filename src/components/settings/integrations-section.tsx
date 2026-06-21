@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Plug, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { QuickbooksAccounts } from "@/components/settings/quickbooks-accounts";
 
-// Owner-only "Integrations" settings section. Stage 1 holds a single QuickBooks
-// (Intuit) connection card that mirrors the Stripe Connect "Get paid" card:
-// connect -> Intuit approval -> connected state. Status is read-only here; the
-// OAuth callback writes the connection and this component reflects it.
+// "Integrations" settings section. Holds the QuickBooks (Intuit) connection card
+// (connect -> Intuit approval -> connected state) plus, once connected, a
+// read-only view of the company's Chart of Accounts (Stage 2). The card is
+// visible to any firm member, but connect/disconnect are owner-only (isOwner).
 export type QuickbooksStatus = {
   // Whether the Intuit app keys are set at the platform level (QBO_CLIENT_ID +
   // QBO_CLIENT_SECRET).
@@ -26,8 +27,10 @@ export type QuickbooksStatus = {
 
 export function IntegrationsSection({
   quickbooks,
+  isOwner,
 }: {
   quickbooks: QuickbooksStatus;
+  isOwner: boolean;
 }) {
   const t = useTranslations("Settings");
   const [loading, setLoading] = useState(false);
@@ -100,6 +103,7 @@ export function IntegrationsSection({
           {t("qbo_unavailable")}
         </div>
       ) : quickbooks.connected ? (
+        <>
         <div className="mt-4 max-w-xl rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] p-4">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
@@ -128,48 +132,52 @@ export function IntegrationsSection({
                     })
                   : t("qbo_connected_hint")}
               </p>
-              <div className="pt-1">
-                {confirmingDisconnect ? (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span className="text-xs text-muted-foreground">
-                      {t("qbo_disconnect_confirm_q")}
-                    </span>
+              {isOwner && (
+                <div className="pt-1">
+                  {confirmingDisconnect ? (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-xs text-muted-foreground">
+                        {t("qbo_disconnect_confirm_q")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={doDisconnect}
+                        disabled={disconnecting}
+                        aria-busy={disconnecting}
+                        className="text-xs font-medium text-destructive hover:underline disabled:opacity-60"
+                      >
+                        {disconnecting ? "…" : t("qbo_disconnect_confirm_yes")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmingDisconnect(false)}
+                        disabled={disconnecting}
+                        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-60"
+                      >
+                        {t("qbo_disconnect_cancel")}
+                      </button>
+                    </div>
+                  ) : (
                     <button
                       type="button"
-                      onClick={doDisconnect}
-                      disabled={disconnecting}
-                      aria-busy={disconnecting}
-                      className="text-xs font-medium text-destructive hover:underline disabled:opacity-60"
+                      onClick={() => setConfirmingDisconnect(true)}
+                      className="text-xs font-medium text-muted-foreground hover:text-foreground"
                     >
-                      {disconnecting ? "…" : t("qbo_disconnect_confirm_yes")}
+                      {t("qbo_disconnect_cta")}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmingDisconnect(false)}
-                      disabled={disconnecting}
-                      className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-60"
-                    >
-                      {t("qbo_disconnect_cancel")}
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmingDisconnect(true)}
-                    className="text-xs font-medium text-muted-foreground hover:text-foreground"
-                  >
-                    {t("qbo_disconnect_cta")}
-                  </button>
-                )}
-                {disconnectError && (
-                  <p role="alert" className="mt-1 text-xs text-destructive">
-                    {disconnectError}
-                  </p>
-                )}
-              </div>
+                  )}
+                  {disconnectError && (
+                    <p role="alert" className="mt-1 text-xs text-destructive">
+                      {disconnectError}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
+        <QuickbooksAccounts />
+        </>
       ) : (
         <div className="mt-4 max-w-xl rounded-lg border border-border/50 p-4">
           <div className="flex items-start gap-3">
@@ -178,22 +186,30 @@ export function IntegrationsSection({
             </span>
             <div className="space-y-2">
               <div className="text-sm font-medium">{t("qbo_connect_title")}</div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {t("qbo_connect_hint")}
-              </p>
-              <div className="pt-1">
-                <Button
-                  size="sm"
-                  onClick={startConnect}
-                  disabled={loading}
-                  aria-busy={loading}
-                >
-                  {loading ? "…" : t("qbo_connect_cta")}
-                </Button>
-              </div>
-              {(error || callbackError) && (
-                <p role="alert" className="text-xs text-destructive">
-                  {error ?? callbackError}
+              {isOwner ? (
+                <>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {t("qbo_connect_hint")}
+                  </p>
+                  <div className="pt-1">
+                    <Button
+                      size="sm"
+                      onClick={startConnect}
+                      disabled={loading}
+                      aria-busy={loading}
+                    >
+                      {loading ? "…" : t("qbo_connect_cta")}
+                    </Button>
+                  </div>
+                  {(error || callbackError) && (
+                    <p role="alert" className="text-xs text-destructive">
+                      {error ?? callbackError}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("qbo_not_connected_staff")}
                 </p>
               )}
             </div>
