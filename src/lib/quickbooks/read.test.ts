@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // Mock the read context (token+realm+env) and the network query; keep the rest of
 // the client real (QuickbooksError must stay genuine).
@@ -10,7 +10,13 @@ vi.mock("@/lib/quickbooks/client", async (importActual) => {
   return { ...actual, quickbooksQuery: vi.fn() };
 });
 
-import { readChartOfAccounts, toAccount } from "./read";
+import {
+  readQuickbooksLists,
+  toAccount,
+  toVendor,
+  toCustomer,
+  toTaxCode,
+} from "./read";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
 import { quickbooksQuery, QuickbooksError } from "@/lib/quickbooks/client";
 
@@ -24,61 +30,175 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
-describe("toAccount", () => {
-  it("maps the raw QBO account and defaults Active to true when omitted", () => {
-    expect(toAccount({ Id: "5", Name: " Checking ", AccountType: "Bank" })).toEqual({
-      id: "5",
+describe("mappers", () => {
+  it("toAccount maps name+type and defaults Active to true when omitted", () => {
+    expect(toAccount({ Id: "1", Name: " Checking ", AccountType: "Bank" })).toEqual({
+      id: "1",
       name: "Checking",
       accountType: "Bank",
       active: true,
     });
-  });
-  it("treats an explicit Active:false as inactive, and missing type as null", () => {
-    expect(toAccount({ Id: "6", Name: "Old", Active: false }).active).toBe(false);
+    expect(toAccount({ Id: "2", Name: "Old", Active: false }).active).toBe(false);
     expect(toAccount({}).accountType).toBeNull();
+  });
+  it("toVendor prefers DisplayName, falls back to CompanyName", () => {
+    expect(toVendor({ Id: "3", DisplayName: "Acme" }).name).toBe("Acme");
+    expect(toVendor({ Id: "4", CompanyName: "Beta Inc" }).name).toBe("Beta Inc");
+  });
+  it("toCustomer + toTaxCode map id/name/active", () => {
+    expect(toCustomer({ Id: "5", DisplayName: "Bob" })).toEqual({
+      id: "5",
+      name: "Bob",
+      active: true,
+    });
+    expect(toTaxCode({ Id: "6", Name: "GST", Active: false })).toEqual({
+      id: "6",
+      name: "GST",
+      active: false,
+    });
   });
 });
 
-describe("readChartOfAccounts", () => {
+// Default mock: one page per entity.
+function singlePageMock() {
+  mockQuery.mockImplementation(async (_at, _realm, sql) => {
+    if (sql.includes("FROM Account"))
+      return { Account: [{ Id: "1", Name: "Checking", AccountType: "Bank" }] };
+    if (sql.includes("FROM Vendor")) return { Vendor: [{ Id: "2", DisplayName: "Acme" }] };
+    if (sql.includes("FROM Customer"))
+      return { Customer: [{ Id: "3", DisplayName: "Bob" }] };
+    if (sql.includes("FROM TaxCode")) return { TaxCode: [{ Id: "4", Name: "GST" }] };
+    return {};
+  });
+}
+
+describe("readQuickbooksLists", () => {
   it("returns not_connected when there is no read context (and never queries)", async () => {
     mockCtx.mockResolvedValue(null);
-    expect(await readChartOfAccounts("f1")).toEqual({
+    expect(await readQuickbooksLists("f1")).toEqual({
       ok: false,
       reason: "not_connected",
     });
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it("queries SELECT * FROM Account and maps the rows on success", async () => {
+  it("reads all four lists and maps each", async () => {
     mockCtx.mockResolvedValue(CTX);
-    mockQuery.mockResolvedValue({
-      Account: [{ Id: "1", Name: "Checking", AccountType: "Bank" }],
-    });
-    const r = await readChartOfAccounts("f1");
+    singlePageMock();
+    const r = await readQuickbooksLists("f1");
     expect(r).toEqual({
       ok: true,
-      data: [{ id: "1", name: "Checking", accountType: "Bank", active: true }],
+      data: {
+        accounts: [{ id: "1", name: "Checking", accountType: "Bank", active: true }],
+        vendors: [{ id: "2", name: "Acme", active: true }],
+        customers: [{ id: "3", name: "Bob", active: true }],
+        taxCodes: [{ id: "4", name: "GST", active: true }],
+      },
     });
+    // Sequential, paged, and includes inactive records (WHERE Active IN ...).
     expect(mockQuery).toHaveBeenCalledWith(
       "AT",
       "r1",
-      "SELECT * FROM Account",
+      "SELECT * FROM Account WHERE Active IN (true, false) STARTPOSITION 1 MAXRESULTS 1000",
       "sandbox",
     );
   });
 
-  it("returns empty data when the company has no accounts", async () => {
+  it("soft-fails a single list to null without sinking the others", async () => {
     mockCtx.mockResolvedValue(CTX);
-    mockQuery.mockResolvedValue({});
-    expect(await readChartOfAccounts("f1")).toEqual({ ok: true, data: [] });
+    mockQuery.mockImplementation(async (_at, _realm, sql) => {
+      if (sql.includes("FROM Vendor")) {
+        throw new QuickbooksError("read_failed", "boom", 500);
+      }
+      if (sql.includes("FROM Account")) return { Account: [{ Id: "1", Name: "A" }] };
+      return {};
+    });
+    const r = await readQuickbooksLists("f1");
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.vendors).toBeNull();
+      expect(r.data.accounts).toEqual([
+        { id: "1", name: "A", accountType: null, active: true },
+      ]);
+      expect(r.data.customers).toEqual([]);
+    }
   });
 
-  it("returns a soft error when the query throws", async () => {
+  it("paginates a list that fills a page (STARTPOSITION advances by 1000)", async () => {
     mockCtx.mockResolvedValue(CTX);
-    mockQuery.mockRejectedValue(new QuickbooksError("read_failed", "boom", 500));
-    expect(await readChartOfAccounts("f1")).toEqual({
-      ok: false,
-      reason: "error",
+    const fullPage = Array.from({ length: 1000 }, (_, i) => ({
+      Id: String(i),
+      Name: "A",
+    }));
+    mockQuery.mockImplementation(async (_at, _realm, sql) => {
+      if (sql.includes("FROM Account")) {
+        if (sql.includes("STARTPOSITION 1 ")) return { Account: fullPage };
+        if (sql.includes("STARTPOSITION 1001 ")) return { Account: [{ Id: "x", Name: "last" }] };
+        return {};
+      }
+      return {};
     });
+    const r = await readQuickbooksLists("f1");
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.accounts).toHaveLength(1001);
+  });
+});
+
+// The rate-limit (429) back-off path uses a real setTimeout, so drive it with
+// fake timers to keep the suite fast.
+describe("readQuickbooksLists rate-limit handling", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("retries ONCE on a 429 then succeeds (exactly two calls for that list)", async () => {
+    mockCtx.mockResolvedValue(CTX);
+    let accountCalls = 0;
+    mockQuery.mockImplementation(async (_at, _realm, sql) => {
+      if (sql.includes("FROM Account")) {
+        accountCalls++;
+        if (accountCalls === 1) throw new QuickbooksError("read_failed", "429", 429);
+        return { Account: [{ Id: "1", Name: "A" }] };
+      }
+      return {};
+    });
+    const p = readQuickbooksLists("f1");
+    await vi.runAllTimersAsync();
+    const r = await p;
+    expect(r.ok).toBe(true);
+    if (r.ok)
+      expect(r.data.accounts).toEqual([
+        { id: "1", name: "A", accountType: null, active: true },
+      ]);
+    expect(accountCalls).toBe(2);
+  });
+
+  it("does NOT retry a non-429 error (one call, list null)", async () => {
+    mockCtx.mockResolvedValue(CTX);
+    let vendorCalls = 0;
+    mockQuery.mockImplementation(async (_at, _realm, sql) => {
+      if (sql.includes("FROM Vendor")) {
+        vendorCalls++;
+        throw new QuickbooksError("read_failed", "500", 500);
+      }
+      return {};
+    });
+    const p = readQuickbooksLists("f1");
+    await vi.runAllTimersAsync();
+    const r = await p;
+    expect(r.ok && r.data.vendors).toBeNull();
+    expect(vendorCalls).toBe(1);
+  });
+
+  it("surfaces a null list after two consecutive 429s", async () => {
+    mockCtx.mockResolvedValue(CTX);
+    mockQuery.mockImplementation(async (_at, _realm, sql) => {
+      if (sql.includes("FROM Customer"))
+        throw new QuickbooksError("read_failed", "429", 429);
+      return {};
+    });
+    const p = readQuickbooksLists("f1");
+    await vi.runAllTimersAsync();
+    const r = await p;
+    expect(r.ok && r.data.customers).toBeNull();
   });
 });

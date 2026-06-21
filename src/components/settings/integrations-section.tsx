@@ -4,12 +4,13 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Plug, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { QuickbooksAccounts } from "@/components/settings/quickbooks-accounts";
+import { QuickbooksLists } from "@/components/settings/quickbooks-lists";
 
 // "Integrations" settings section. Holds the QuickBooks (Intuit) connection card
 // (connect -> Intuit approval -> connected state) plus, once connected, a
-// read-only view of the company's Chart of Accounts (Stage 2). The card is
-// visible to any firm member, but connect/disconnect are owner-only (isOwner).
+// read-only view of the company's reference lists — accounts, vendors, customers,
+// tax codes (Stage 2). The card is visible to any firm member, but connect/
+// disconnect are owner-only (isOwner).
 export type QuickbooksStatus = {
   // Whether the Intuit app keys are set at the platform level (QBO_CLIENT_ID +
   // QBO_CLIENT_SECRET).
@@ -176,7 +177,7 @@ export function IntegrationsSection({
             </div>
           </div>
         </div>
-        <QuickbooksAccounts />
+        <QuickbooksLists />
         </>
       ) : (
         <div className="mt-4 max-w-xl rounded-lg border border-border/50 p-4">
