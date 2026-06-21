@@ -50,6 +50,15 @@ describe("summarizeDrafts", () => {
     expect(s.needsInput).toBe(1);
   });
 
+  it("flags a fully-unidentified party (direction unknown, partyKind null)", () => {
+    // Otherwise clean: matched tax, CAD, has amount — but no party could be
+    // identified at all. The card warns, so the roll-up must count it.
+    const s = summarizeDrafts([
+      draft({ direction: "unknown", partyKind: null, party: noMatch }),
+    ]);
+    expect(s.needsInput).toBe(1);
+  });
+
   it("flags an unmatched tax (only when the doc had tax)", () => {
     expect(summarizeDrafts([draft({ taxCode: noMatch })]).needsInput).toBe(1);
     // No tax on the doc -> an unmatched tax code is NOT a problem.

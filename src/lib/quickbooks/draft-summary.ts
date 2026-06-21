@@ -31,7 +31,10 @@ export function summarizeDrafts(
 
   for (const s of suggestions) {
     const foreign = s.currency != null && s.currency !== "CAD";
-    const partyUnresolved = s.partyKind != null && s.party.match == null;
+    // No confident party pick — counts whether the party row is unmatched OR the
+    // direction itself was unidentifiable (partyKind null). The draft card always
+    // shows a party warning in both cases, so the roll-up must agree.
+    const partyUnresolved = s.party.match == null;
     const taxUnresolved = s.taxTotal != null && s.taxCode.match == null;
     const amountMissing = s.amount == null;
     if (partyUnresolved || taxUnresolved || foreign || amountMissing) {
