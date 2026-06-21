@@ -19,6 +19,12 @@ import {
 } from "./classify";
 import { shouldActOnUsability } from "./usability";
 import { expectedYearFromTitle } from "./matching";
+import {
+  extractTransaction,
+  shouldExtractTransaction,
+  type TransactionExtraction,
+} from "./transaction-extract";
+import { isFirmQuickbooksConnected } from "@/lib/db/quickbooks";
 import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
@@ -153,6 +159,34 @@ export async function processClassifyJob(
   });
   if (!result) return { skipped: "no_classification" };
 
+  // QuickBooks Stage 3 (Phase 1): for bookkeeping transaction documents
+  // (receipts / sales invoices) at a firm that has QuickBooks connected, run a
+  // SECOND, focused read that captures the fields a draft QuickBooks entry needs
+  // (direction, vendor/customer, subtotal, tax split, total, currency, date).
+  // It does NOT touch the tuned tax-slip classifier above. Gated tightly so it
+  // never spends tokens off-target, and fully best-effort: any failure leaves
+  // transaction null and the core classification is unaffected.
+  //   * only receipts/invoices (whether requested OR detected as one),
+  //   * only when THIS firm has a QuickBooks connection.
+  // The result is stored under ai_extracted_fields.transaction (jsonb, no
+  // migration) and feeds the Phase-2 mapper that drafts the suggestion.
+  let transaction: TransactionExtraction | null = null;
+  // We reach this code only AFTER the firm passed the daily rate limit + the
+  // monthly/trial pause check, and only when AI is configured (checked at the
+  // top), so entering this branch means a real, billable second model call
+  // happens. Track that so the firm's AI cap is charged for BOTH calls below.
+  const ranTransactionPass =
+    shouldExtractTransaction(expectedDocType, result.document_type) &&
+    (await isFirmQuickbooksConnected(limitFirmId));
+  if (ranTransactionPass) {
+    try {
+      transaction = await extractTransaction({ fileBytes: bytes, mimeType });
+    } catch (err) {
+      console.warn("[classify] transaction extract failed:", err);
+      transaction = null;
+    }
+  }
+
   // ai_rejected is intentionally NOT set here. Phase 3's routing logic
   // decides whether the system actually auto-rejects this upload based
   // on the firm's auto_reject_unusable_docs flag + the strike counter.
@@ -184,6 +218,9 @@ export async function processClassifyJob(
         belongs_to_client: result.belongs_to_client,
         belongs_confidence: result.belongs_confidence,
         overall_confidence: result.overall_confidence,
+        // Stage 3 (Phase 1): transaction-grade fields for receipts/invoices at
+        // QuickBooks-connected firms (null otherwise). Feeds the Phase-2 mapper.
+        transaction,
       },
       ai_usability: result.usability,
     })
@@ -227,6 +264,13 @@ export async function processClassifyJob(
   // A real AI check ran — count it against the firm's monthly cap (best-effort,
   // never blocks). Drives the auto-pause once the firm reaches ai_monthly_cap.
   await incrementFirmAiUsage(limitFirmId);
+  // The QuickBooks transaction pass is a SECOND billable model call (Stage 3,
+  // Phase 1). Count it too so the monthly/trial cap reflects true spend — a
+  // QuickBooks-connected firm processing receipts/invoices pays ~2x per
+  // document, and the auto-pause must account for that, not under-count by half.
+  if (ranTransactionPass) {
+    await incrementFirmAiUsage(limitFirmId);
+  }
 
   // Pull the firm + client locale together so we can both log the
   // classification AND decide whether to route the AI's verdict.
