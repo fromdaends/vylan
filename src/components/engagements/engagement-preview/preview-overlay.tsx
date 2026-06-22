@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
-import { approveFileAction, rejectFileAction } from "@/app/actions/files";
+import { approveFileAction } from "@/app/actions/files";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import {
   applyOverrides,
@@ -311,11 +311,16 @@ export function PreviewOverlay({
     setOverrides((prev) => new Map(prev).set(doc.fileId, "rejected"));
     setFilePending(doc.fileId, true);
     try {
+      // STABLE URL endpoint (not a Server Action) so a deploy/version mismatch
+      // can't make reject silently fail — same fix as the RejectModal.
       const fd = new FormData();
-      fd.set("id", doc.fileId);
       fd.set("reason", reason);
-      const res = await rejectFileAction(null, fd);
-      if (res && (res.fieldErrors || res.error)) {
+      const r = await fetch(`/api/files/${doc.fileId}/reject`, {
+        method: "POST",
+        body: fd,
+      });
+      const res = (await r.json().catch(() => null)) as { ok?: boolean } | null;
+      if (!res?.ok) {
         throw new Error("reject_failed");
       }
     } catch {
