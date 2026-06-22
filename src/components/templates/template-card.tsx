@@ -7,6 +7,7 @@ import {
   Briefcase,
   Building2,
   Calculator,
+  CheckCircle2,
   ClipboardList,
   Home,
   Landmark,
@@ -157,4 +158,114 @@ export function TemplateCard({
     );
   }
   return <div className={cardClass}>{body}</div>;
+}
+
+// A single-select variant of the same card, for the New-engagement template
+// picker. Renders the SAME glyph + name + count + preview as TemplateCard, but
+// as a radio option: a hidden native radio keeps full keyboard/group semantics,
+// the selected card gets a blue ring AND a check (so selection isn't conveyed by
+// colour alone), and focus shows a ring.
+export function SelectableTemplateCard({
+  name,
+  type,
+  itemCount,
+  requiredCount,
+  preview,
+  selected,
+  onSelect,
+  groupName,
+  builtin = false,
+}: TemplateCardData & {
+  selected: boolean;
+  onSelect: () => void;
+  /** Shared radio `name` so the cards form one keyboard-navigable group. */
+  groupName: string;
+  /** Show the small "built-in" tag in the meta row. */
+  builtin?: boolean;
+}) {
+  const t = useTranslations("Templates");
+  const tEng = useTranslations("Engagements");
+  const icon = resolveTemplateIcon(name, type);
+  const shown = preview.map(cleanLabel).filter(Boolean).slice(0, 3);
+  const more = Math.max(0, itemCount - shown.length);
+
+  return (
+    <label
+      className={cn(
+        "group relative flex cursor-pointer flex-col rounded-xl border bg-card p-4 text-left transition-all duration-200 focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2 focus-within:ring-offset-background motion-reduce:transition-none",
+        selected
+          ? "border-primary ring-2 ring-primary"
+          : "border-border/70 hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-[0_4px_16px_-6px_rgba(15,23,42,0.18)] motion-reduce:hover:translate-y-0",
+      )}
+    >
+      <input
+        type="radio"
+        name={groupName}
+        className="sr-only"
+        checked={selected}
+        onChange={onSelect}
+      />
+      {selected && (
+        <CheckCircle2
+          className="absolute right-3 top-3 h-4 w-4 text-primary"
+          aria-hidden
+        />
+      )}
+      <div className="flex items-start gap-3">
+        <span
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors duration-200",
+            selected
+              ? "bg-primary/10 text-primary"
+              : "bg-accent/10 text-accent group-hover:bg-accent group-hover:text-accent-foreground",
+          )}
+        >
+          {createElement(icon, { className: "h-5 w-5", "aria-hidden": true })}
+        </span>
+        <div className="min-w-0 flex-1 pr-5">
+          <h3 className="truncate text-sm font-semibold leading-snug text-foreground">
+            {cleanLabel(name)}
+          </h3>
+          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+            <span className="tabular-nums">
+              {t("documents_count", { count: itemCount })}
+            </span>
+            {requiredCount > 0 && (
+              <>
+                <span className="text-border" aria-hidden>
+                  ·
+                </span>
+                <span className="tabular-nums">
+                  {t("required_count", { count: requiredCount })}
+                </span>
+              </>
+            )}
+            {builtin && (
+              <>
+                <span className="text-border" aria-hidden>
+                  ·
+                </span>
+                <span>{tEng("template_builtin")}</span>
+              </>
+            )}
+          </p>
+        </div>
+      </div>
+
+      {shown.length > 0 && (
+        <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground/65">
+            {t("includes")}{" "}
+          </span>
+          {shown.join(" · ")}
+          {more > 0 && (
+            <span className="text-muted-foreground/70">
+              {" "}
+              {t("plus_more", { count: more })}
+            </span>
+          )}
+        </p>
+      )}
+    </label>
+  );
 }

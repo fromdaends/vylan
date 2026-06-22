@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
@@ -17,11 +17,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { X } from "lucide-react";
-import {
-  rejectItemAction,
-  type ItemActionState,
-} from "@/app/actions/items";
-import { rejectFileAction } from "@/app/actions/files";
 
 export function RejectModal({
   itemId,
@@ -33,8 +28,7 @@ export function RejectModal({
 }: {
   itemId: string;
   itemLabel: string;
-  // When set, reject just this ONE file (per-document) via rejectFileAction
-  // instead of the whole item.
+  // When set, reject just this ONE file (per-document); otherwise the whole item.
   fileId?: string;
   // Render an icon-only trigger (a compact X) instead of the full "Reject"
   // button — used per signed-copy so the controls stay tight.
@@ -43,34 +37,63 @@ export function RejectModal({
   // state so the current decision is visible at a glance.
   active?: boolean;
   // Optional override for the quick-fill reason chips. Defaults to the
-  // document-collection suggestions; a signature reject passes its own (a
-  // signed copy can't be "the wrong year" or "missing pages").
+  // document-collection suggestions; a signature reject passes its own.
   suggestions?: string[];
 }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  // Per-file and item-level reject share the same FormData shape ({id, reason})
-  // and result shape, so the modal just switches the action + the id it sends.
-  const rejectAction = (
-    fileId ? rejectFileAction : rejectItemAction
-  ) as typeof rejectItemAction;
-  const rejectId = fileId ?? itemId;
-  const [state, action, pending] = useActionState<ItemActionState, FormData>(
-    rejectAction,
-    null,
-  );
 
-  useEffect(() => {
-    if (!state?.ok) return;
-    queueMicrotask(() => {
-      setOpen(false);
-      setReason("");
-      router.refresh();
-    });
-  }, [state, router]);
+  // STABLE URL endpoints (not Server Actions) so a deploy/version mismatch can't
+  // make the click fail silently before it reaches the server — the bug where
+  // "Reject" did nothing and the row stayed stale. Mirrors the add-item dialog.
+  const endpoint = fileId
+    ? `/api/files/${fileId}/reject`
+    : `/api/items/${itemId}/reject`;
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (pending) return;
+    setError(null);
+    const trimmed = reason.trim();
+    if (trimmed.length < 2) {
+      setError(t("reject_reason_min"));
+      return;
+    }
+    setPending(true);
+    try {
+      const fd = new FormData();
+      fd.set("reason", trimmed);
+      const r = await fetch(endpoint, { method: "POST", body: fd });
+      const res = (await r.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+        detail?: string;
+        fieldErrors?: Record<string, string>;
+      } | null;
+      if (res?.ok) {
+        setOpen(false);
+        setReason("");
+        router.refresh();
+      } else if (res?.fieldErrors?.reason) {
+        setError(
+          res.fieldErrors.reason === "too_long"
+            ? t("reject_reason_max")
+            : t("reject_reason_min"),
+        );
+      } else {
+        setError(res?.detail || t("reject_error"));
+      }
+    } catch {
+      setError(t("reject_error"));
+    } finally {
+      setPending(false);
+    }
+  }
 
   const suggestions = customSuggestions ?? [
     t("reject_suggestion_wrong_doc"),
@@ -80,7 +103,13 @@ export function RejectModal({
   ];
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setError(null);
+      }}
+    >
       <DialogTrigger asChild>
         {compact ? (
           <Button
@@ -110,11 +139,10 @@ export function RejectModal({
             {t("reject_subtitle", { label: itemLabel })}
           </DialogDescription>
         </DialogHeader>
-        <form action={action} className="space-y-3">
-          <input type="hidden" name="id" value={rejectId} />
-          {state?.error && (
+        <form onSubmit={onSubmit} className="space-y-3">
+          {error && (
             <Alert variant="destructive">
-              <AlertDescription>{state.error}</AlertDescription>
+              <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
           <div className="space-y-1.5">
@@ -129,16 +157,10 @@ export function RejectModal({
               maxLength={500}
               rows={3}
               placeholder={t("reject_reason_placeholder")}
-              aria-invalid={Boolean(state?.fieldErrors?.reason)}
             />
             <p className="text-xs text-muted-foreground">
               {t("reject_reason_privacy_hint")}
             </p>
-            {state?.fieldErrors?.reason && (
-              <p className="text-sm text-destructive">
-                {state.fieldErrors.reason}
-              </p>
-            )}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {suggestions.map((s) => (

@@ -133,22 +133,18 @@ export function TemplateEditor({
                   key={idx}
                   className="rounded-lg border border-border bg-card p-3 space-y-2"
                 >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <Input
-                      value={item.label_fr}
-                      onChange={(e) =>
-                        updateItem(idx, { label_fr: e.target.value })
-                      }
-                      placeholder={tEng("label_fr_placeholder")}
-                    />
-                    <Input
-                      value={item.label_en}
-                      onChange={(e) =>
-                        updateItem(idx, { label_en: e.target.value })
-                      }
-                      placeholder={tEng("label_en_placeholder")}
-                    />
-                  </div>
+                  {/* One label for the whole site — mirrored into both
+                      label_fr + label_en so stored data stays consistent. */}
+                  <Input
+                    value={item.label_en || item.label_fr}
+                    onChange={(e) =>
+                      updateItem(idx, {
+                        label_fr: e.target.value,
+                        label_en: e.target.value,
+                      })
+                    }
+                    placeholder={tEng("label_placeholder")}
+                  />
                   <Textarea
                     value={item.description_fr ?? ""}
                     onChange={(e) =>

@@ -4,7 +4,6 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import {
   approveItem,
-  rejectItem,
   reopenItem,
   addItemToEngagement,
   removeItem,
@@ -78,39 +77,8 @@ export async function approveItemAction(formData: FormData) {
   revalidateItemPaths(ctx?.engagement_id);
 }
 
-const RejectSchema = z.object({
-  id: z.string().min(1),
-  reason: z.string().min(2, "min_2_chars").max(500, "too_long"),
-});
-
-export async function rejectItemAction(
-  _prev: ItemActionState,
-  formData: FormData,
-): Promise<ItemActionState> {
-  const parsed = RejectSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const key = issue.path.join(".");
-      if (!fieldErrors[key]) fieldErrors[key] = issue.message;
-    }
-    return { fieldErrors };
-  }
-  const ctx = await getEngagementFirm(parsed.data.id);
-  await rejectItem(parsed.data.id, parsed.data.reason);
-  if (ctx) {
-    // Activity-log metadata MUST NOT contain client PII (Phase 5). The
-    // rejection_reason is authoritatively stored on the request_items
-    // row already — the timeline UI looks it up at render time so the
-    // 2-year activity log doesn't duplicate any client-identifying
-    // phrasing the accountant might have typed.
-    await logUserActivity(ctx.firm_id, ctx.engagement_id, "reject_item", {
-      item_id: parsed.data.id,
-    });
-  }
-  revalidateItemPaths(ctx?.engagement_id);
-  return { ok: true };
-}
+// Item reject moved to the stable URL endpoint POST /api/items/[id]/reject
+// (deploy-skew-proof), matching the add-item flow.
 
 export async function reopenItemAction(formData: FormData) {
   const id = formData.get("id");

@@ -1,8 +1,7 @@
 "use server";
 
-import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { approveFile, rejectFile } from "@/lib/db/file-review";
+import { approveFile } from "@/lib/db/file-review";
 import { deleteUploadedFilePermanently } from "@/lib/db/uploaded-files";
 import { scheduleSetAssessment } from "@/lib/ai/set-assessment";
 import { logUserActivity } from "@/lib/db/activity";
@@ -49,10 +48,16 @@ async function getFileContext(
 }
 
 // Narrow revalidation to the engagement page that changed + the dashboard
-// (whose attention counts depend on item status).
+// (whose attention counts depend on item status). Routes are localized under
+// /[locale], so a bare "/engagements/[id]" never matches the real
+// "/fr/engagements/[id]" and would silently revalidate nothing — revalidate
+// every locale's concrete path (matches the items.ts helper).
+const LOCALES = ["en", "fr"] as const;
 function revalidate(engagementId: string | undefined) {
-  if (engagementId) revalidatePath(`/engagements/${engagementId}`);
-  revalidatePath("/dashboard");
+  for (const loc of LOCALES) {
+    if (engagementId) revalidatePath(`/${loc}/engagements/${engagementId}`);
+    revalidatePath(`/${loc}/dashboard`);
+  }
 }
 
 export async function approveFileAction(formData: FormData) {
@@ -107,34 +112,5 @@ export async function deleteFileAction(
   return { ok: true };
 }
 
-const RejectSchema = z.object({
-  id: z.string().min(1),
-  reason: z.string().min(2, "min_2_chars").max(500, "too_long"),
-});
-
-export async function rejectFileAction(
-  _prev: FileActionState,
-  formData: FormData,
-): Promise<FileActionState> {
-  const parsed = RejectSchema.safeParse(Object.fromEntries(formData));
-  if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const key = issue.path.join(".");
-      if (!fieldErrors[key]) fieldErrors[key] = issue.message;
-    }
-    return { fieldErrors };
-  }
-  const sb = await getServerSupabase();
-  const { data: auth } = await sb.auth.getUser();
-  const ctx = await getFileContext(parsed.data.id);
-  await rejectFile(sb, parsed.data.id, parsed.data.reason, auth.user?.id ?? null);
-  if (ctx) {
-    await logUserActivity(ctx.firmId, ctx.engagementId, "reject_item", {
-      item_id: ctx.itemId,
-      file_id: parsed.data.id,
-    });
-  }
-  revalidate(ctx?.engagementId);
-  return { ok: true };
-}
+// Per-file reject moved to the stable URL endpoint POST /api/files/[id]/reject
+// (deploy-skew-proof). Both the RejectModal and the Preview overlay call it now.
