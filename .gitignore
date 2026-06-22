@@ -69,3 +69,6 @@ desktop.ini
 /CLAUDE UPLOADS/
 /VYLAN TESTS/
 
+
+# Local ad/marketing assets (not part of the app)
+.vylan-ad/
