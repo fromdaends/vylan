@@ -32,10 +32,24 @@ type NamedTemplate = { id: string; firm_id: string | null; name: string };
 // when locale === "en"; French, or any firm-created template, falls back to the
 // stored name. Unknown built-in ids fall back too, so a future built-in without
 // an entry here degrades to its French name rather than breaking.
+// The blank built-in (seed UUID, == BLANK_TEMPLATE_ID in db/templates). It's the
+// "start from nothing" option in the New-engagement picker; its stored name is
+// the French "Personnalisé", so we show a clear "Empty"/"Vide" in both locales
+// instead. Hard-coded here (not imported from the server db module) to keep this
+// client-safe. The Templates page hides this template, so the rename only
+// surfaces in the engagement picker.
+// Exported (client-safe) so client components can reference the blank template
+// without importing the server-only db/templates module. Mirrors
+// BLANK_TEMPLATE_ID there; both are the stable seed UUID.
+export const BLANK_TEMPLATE_SEED_ID = "00000000-0000-0000-0000-000000000004";
+
 export function localizedTemplateName(
   template: NamedTemplate,
   locale: string,
 ): string {
+  if (template.id === BLANK_TEMPLATE_SEED_ID) {
+    return locale === "fr" ? "Vide" : "Empty";
+  }
   if (locale === "en" && template.firm_id == null) {
     return BUILTIN_TEMPLATE_NAME_EN[template.id] ?? template.name;
   }

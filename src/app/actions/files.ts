@@ -49,10 +49,16 @@ async function getFileContext(
 }
 
 // Narrow revalidation to the engagement page that changed + the dashboard
-// (whose attention counts depend on item status).
+// (whose attention counts depend on item status). Routes are localized under
+// /[locale], so a bare "/engagements/[id]" never matches the real
+// "/fr/engagements/[id]" and would silently revalidate nothing — revalidate
+// every locale's concrete path (matches the items.ts helper).
+const LOCALES = ["en", "fr"] as const;
 function revalidate(engagementId: string | undefined) {
-  if (engagementId) revalidatePath(`/engagements/${engagementId}`);
-  revalidatePath("/dashboard");
+  for (const loc of LOCALES) {
+    if (engagementId) revalidatePath(`/${loc}/engagements/${engagementId}`);
+    revalidatePath(`/${loc}/dashboard`);
+  }
 }
 
 export async function approveFileAction(formData: FormData) {

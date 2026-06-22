@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2, GripVertical, Sparkles } from "lucide-react";
 import {
@@ -18,9 +17,13 @@ import {
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
+import { SelectableTemplateCard } from "@/components/templates/template-card";
 import { templateItemApplies } from "@/lib/doc-types";
 import { resolveInitialTemplate } from "@/lib/engagements/initial-template";
-import { localizedTemplateName } from "@/lib/templates/builtin-names";
+import {
+  localizedTemplateName,
+  BLANK_TEMPLATE_SEED_ID,
+} from "@/lib/templates/builtin-names";
 
 type KnownErrorKey =
   | "missing_client"
@@ -63,9 +66,21 @@ export function EngagementBuilder({
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
 
+  // The blank "Empty" template leads the list and is the default when the user
+  // didn't arrive via a specific template ("Use" on a card). Everything else
+  // keeps its incoming order.
+  const orderedTemplates = useMemo(() => {
+    const blank = templates.find((tt) => tt.id === BLANK_TEMPLATE_SEED_ID);
+    if (!blank) return templates;
+    return [blank, ...templates.filter((tt) => tt.id !== BLANK_TEMPLATE_SEED_ID)];
+  }, [templates]);
+
   // Open on the template the user picked via "Use" (matched by id); fall back to
-  // the first template only for a direct open or a stale/unknown id.
-  const initialTemplate = resolveInitialTemplate(templates, initialTemplateId);
+  // the first template (now "Empty") for a direct open or a stale/unknown id.
+  const initialTemplate = resolveInitialTemplate(
+    orderedTemplates,
+    initialTemplateId,
+  );
 
   const [clientId, setClientId] = useState<string | null>(
     initialClientId ?? null,
@@ -264,38 +279,30 @@ export function EngagementBuilder({
           <CardTitle className="text-base">{t("section_template")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {templates.map((tmpl) => (
-              <label
+          <div
+            role="radiogroup"
+            aria-label={t("section_template")}
+            className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+          >
+            {orderedTemplates.map((tmpl) => (
+              <SelectableTemplateCard
                 key={tmpl.id}
-                className={
-                  "rounded-lg border p-3 cursor-pointer transition " +
-                  (templateId === tmpl.id
-                    ? "border-primary bg-muted/50"
-                    : "border-border hover:bg-muted/30")
-                }
-              >
-                <input
-                  type="radio"
-                  name="template"
-                  checked={templateId === tmpl.id}
-                  onChange={() => pickTemplate(tmpl.id)}
-                  className="sr-only"
-                />
-                <div className="flex items-center justify-between">
-                  <span className="font-medium">
-                    {localizedTemplateName(tmpl, locale)}
-                  </span>
-                  {tmpl.firm_id == null && (
-                    <Badge variant="secondary" className="text-xs">
-                      {t("template_builtin")}
-                    </Badge>
+                groupName="template"
+                selected={templateId === tmpl.id}
+                onSelect={() => pickTemplate(tmpl.id)}
+                name={localizedTemplateName(tmpl, locale)}
+                type={tmpl.type}
+                itemCount={tmpl.items.length}
+                requiredCount={tmpl.items.filter((it) => it.required).length}
+                preview={tmpl.items
+                  .slice(0, 3)
+                  .map((it) =>
+                    locale === "fr"
+                      ? it.label_fr || it.label_en
+                      : it.label_en || it.label_fr,
                   )}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {tmpl.items.length} {t("items_count")}
-                </div>
-              </label>
+                builtin={tmpl.firm_id == null}
+              />
             ))}
           </div>
         </CardContent>
@@ -419,24 +426,20 @@ export function EngagementBuilder({
                       </button>
                     </div>
                     <div className="flex-1 space-y-2">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <Input
-                          value={item.label_fr}
-                          onChange={(e) =>
-                            updateItem(idx, { label_fr: e.target.value })
-                          }
-                          placeholder={t("label_fr_placeholder")}
-                          aria-label={t("label_fr_placeholder")}
-                        />
-                        <Input
-                          value={item.label_en}
-                          onChange={(e) =>
-                            updateItem(idx, { label_en: e.target.value })
-                          }
-                          placeholder={t("label_en_placeholder")}
-                          aria-label={t("label_en_placeholder")}
-                        />
-                      </div>
+                      {/* One label for the whole site. We mirror it into both
+                          label_fr + label_en so the stored data + the client
+                          portal stay consistent in either language. */}
+                      <Input
+                        value={item.label_en || item.label_fr}
+                        onChange={(e) =>
+                          updateItem(idx, {
+                            label_fr: e.target.value,
+                            label_en: e.target.value,
+                          })
+                        }
+                        placeholder={t("label_placeholder")}
+                        aria-label={t("label_placeholder")}
+                      />
                       <Textarea
                         value={item.description_fr ?? ""}
                         onChange={(e) =>
