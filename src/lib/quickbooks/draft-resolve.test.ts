@@ -1,0 +1,90 @@
+import { describe, it, expect } from "vitest";
+import { effectiveMapping, draftNeedsInput } from "./draft-resolve";
+import type {
+  TransactionSuggestion,
+  MatchField,
+  ResolvedEntry,
+} from "./suggest";
+
+const matched = (id: string, name: string): MatchField => ({
+  match: { id, name, active: true },
+  confidence: 0.9,
+  candidates: [],
+});
+const noMatch: MatchField = { match: null, confidence: 0, candidates: [] };
+
+function sugg(over: Partial<TransactionSuggestion> = {}): TransactionSuggestion {
+  return {
+    direction: "expense",
+    partyKind: "vendor",
+    party: matched("v1", "Home Depot"),
+    account: noMatch,
+    taxCode: matched("t1", "GST/QST"),
+    amount: 100,
+    subtotal: 88,
+    taxTotal: 12,
+    date: "2024-03-14",
+    currency: "CAD",
+    overallConfidence: 0.8,
+    notes: [],
+    ...over,
+  };
+}
+
+describe("effectiveMapping", () => {
+  it("falls back to the AI match when nothing is resolved", () => {
+    const eff = effectiveMapping(sugg(), null);
+    expect(eff.party).toEqual({ id: "v1", name: "Home Depot" });
+    expect(eff.account).toBeNull(); // AI didn't match an account
+    expect(eff.taxCode).toEqual({ id: "t1", name: "GST/QST" });
+  });
+
+  it("the accountant's pick overrides the AI match", () => {
+    const resolved: ResolvedEntry = {
+      party: { id: "v9", name: "Hicks Hardware" },
+      account: { id: "a1", name: "Supplies" },
+      taxCode: null,
+    };
+    const eff = effectiveMapping(sugg(), resolved);
+    expect(eff.party).toEqual({ id: "v9", name: "Hicks Hardware" });
+    expect(eff.account).toEqual({ id: "a1", name: "Supplies" });
+    // taxCode resolved is null -> falls back to the AI match.
+    expect(eff.taxCode).toEqual({ id: "t1", name: "GST/QST" });
+  });
+});
+
+describe("draftNeedsInput", () => {
+  it("needs input while the account is unchosen", () => {
+    expect(draftNeedsInput(sugg(), null)).toBe(true);
+  });
+
+  it("is satisfied once party + account + tax are all effective", () => {
+    const resolved: ResolvedEntry = {
+      party: null, // AI matched the vendor already
+      account: { id: "a1", name: "Supplies" },
+      taxCode: null, // AI matched the tax already
+    };
+    expect(draftNeedsInput(sugg(), resolved)).toBe(false);
+  });
+
+  it("ignores tax when the document had none", () => {
+    const s = sugg({ taxTotal: null, taxCode: noMatch });
+    expect(
+      draftNeedsInput(s, {
+        party: null,
+        account: { id: "a1", name: "Supplies" },
+        taxCode: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("flags a foreign currency and a missing amount", () => {
+    const full: ResolvedEntry = {
+      party: null,
+      account: { id: "a1", name: "Supplies" },
+      taxCode: null,
+    };
+    expect(draftNeedsInput(sugg({ currency: "USD" }), full)).toBe(true);
+    expect(draftNeedsInput(sugg({ amount: null }), full)).toBe(true);
+  });
+});

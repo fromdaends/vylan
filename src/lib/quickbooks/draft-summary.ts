@@ -1,15 +1,23 @@
-// QuickBooks Stage 3, Phase 4 — engagement-level draft roll-up (pure).
+// QuickBooks — engagement-level draft roll-up (pure).
 //
 // Summarizes all the draft suggestions on an engagement so the accountant gets a
 // one-line "here's what I drafted" at the top of the checklist. Pure + tested.
 //
-// "needsInput" counts drafts where the AI couldn't resolve something it normally
-// would — an unmatched vendor/customer, an unmatched tax on a taxed document, a
-// foreign currency, or a missing total. It deliberately does NOT count the
-// account: a receipt almost never names its expense account, so that's the
-// accountant's call on EVERY draft and would make the number meaningless.
+// "needsInput" now counts drafts that still need the accountant before they
+// could be posted, taking their RESOLVED picks into account (Stage 4): a draft
+// where they've chosen the vendor, account, and tax code no longer counts. The
+// account IS counted now that it's editable — every draft genuinely needs one.
 
-import type { TransactionSuggestion } from "@/lib/quickbooks/suggest";
+import type {
+  TransactionSuggestion,
+  ResolvedEntry,
+} from "@/lib/quickbooks/suggest";
+import { draftNeedsInput } from "./draft-resolve";
+
+export type DraftItem = {
+  suggestion: TransactionSuggestion;
+  resolved: ResolvedEntry | null;
+};
 
 export type DraftSummary = {
   total: number;
@@ -21,25 +29,15 @@ export type DraftSummary = {
   hasForeignCurrency: boolean;
 };
 
-export function summarizeDrafts(
-  suggestions: TransactionSuggestion[],
-): DraftSummary {
+export function summarizeDrafts(drafts: DraftItem[]): DraftSummary {
   let needsInput = 0;
   let totalCad = 0;
   let cadCount = 0;
   let hasForeignCurrency = false;
 
-  for (const s of suggestions) {
+  for (const { suggestion: s, resolved } of drafts) {
     const foreign = s.currency != null && s.currency !== "CAD";
-    // No confident party pick — counts whether the party row is unmatched OR the
-    // direction itself was unidentifiable (partyKind null). The draft card always
-    // shows a party warning in both cases, so the roll-up must agree.
-    const partyUnresolved = s.party.match == null;
-    const taxUnresolved = s.taxTotal != null && s.taxCode.match == null;
-    const amountMissing = s.amount == null;
-    if (partyUnresolved || taxUnresolved || foreign || amountMissing) {
-      needsInput++;
-    }
+    if (draftNeedsInput(s, resolved)) needsInput++;
     if (foreign) hasForeignCurrency = true;
     if (!foreign && s.amount != null) {
       totalCad += s.amount;
@@ -48,7 +46,7 @@ export function summarizeDrafts(
   }
 
   return {
-    total: suggestions.length,
+    total: drafts.length,
     needsInput,
     totalCad: cadCount > 0 ? Math.round(totalCad * 100) / 100 : null,
     hasForeignCurrency,

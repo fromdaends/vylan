@@ -1968,6 +1968,9 @@
     "summary_label": "QuickBooks drafts",
     "summary_drafts": "{count, plural, one {# draft} other {# drafts}}",
     "summary_needs_input": "{count, plural, one {# needs your input} other {# need your input}}",
-    "summary_total": "{amount} total"
+    "summary_total": "{amount} total",
+    "pick_search": "Search…",
+    "pick_empty": "No match.",
+    "pick_clear": "Clear"
   }
 }

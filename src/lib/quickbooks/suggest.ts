@@ -26,6 +26,17 @@ import type {
   TransactionTaxLine,
 } from "@/lib/ai/transaction-extract";
 
+// The accountant's chosen mapping (Stage 4), stored SEPARATELY from the AI
+// suggestion so editing and Refresh (which regenerates the suggestion) never
+// clobber each other. A null field means "not chosen yet" — the effective value
+// then falls back to the AI match.
+export type ResolvedRef = { id: string; name: string };
+export type ResolvedEntry = {
+  party: ResolvedRef | null;
+  account: ResolvedRef | null;
+  taxCode: ResolvedRef | null;
+};
+
 // A reference to one cached QuickBooks entity. `active` is carried so the
 // approval UI can warn when a confident match is archived in QuickBooks.
 export type QboRef = { id: string; name: string; active: boolean };

@@ -36,11 +36,17 @@ import {
   isMissingPageBlock,
 } from "@/components/engagements/set-summary-line";
 import { EngagementPreview } from "@/components/engagements/engagement-preview/engagement-preview";
-import { QuickbooksDraftCard } from "@/components/engagements/quickbooks-draft-card";
+import {
+  QuickbooksDraftCard,
+  type DraftCardOptions,
+} from "@/components/engagements/quickbooks-draft-card";
 import { QuickbooksDraftsSummary } from "@/components/engagements/quickbooks-drafts-summary";
-import { getSuggestionsForEngagement } from "@/lib/db/quickbooks-suggestions";
+import {
+  getSuggestionsForEngagement,
+  type StoredDraft,
+} from "@/lib/db/quickbooks-suggestions";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
-import type { TransactionSuggestion } from "@/lib/quickbooks/suggest";
+import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ReopenFileButton } from "@/components/engagements/reopen-file-button";
@@ -191,9 +197,20 @@ export default async function EngagementDetailPage({
   // keyed by uploaded file. Both reads degrade gracefully (no connection / no
   // 0430 migration yet -> nothing shows).
   const quickbooksConnected = (await getFirmQuickbooksStatus()) != null;
-  const suggestionsByFile = quickbooksConnected
-    ? await getSuggestionsForEngagement(id)
-    : new Map<string, TransactionSuggestion>();
+  const [suggestionsByFile, qboLists] = quickbooksConnected
+    ? await Promise.all([
+        getSuggestionsForEngagement(id),
+        readCachedQuickbooksLists(),
+      ])
+    : [new Map<string, StoredDraft>(), null];
+  // The cached QuickBooks lists the accountant picks from (active entries only).
+  const toOpt = (x: { id: string; name: string }) => ({ id: x.id, name: x.name });
+  const qboOptions: DraftCardOptions = {
+    vendors: (qboLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
+    customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
+    accounts: (qboLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
+    taxCodes: (qboLists?.taxCodes ?? []).filter((x) => x.active).map(toOpt),
+  };
 
   // Prompt B: signature items (the accountant supplies a document, the client
   // returns a signed copy) render in their own "Signatures" group, separate
@@ -550,7 +567,7 @@ export default async function EngagementDetailPage({
                   (renders nothing when there are none / AI is off). */}
               {engagement.ai_enabled !== false && (
                 <QuickbooksDraftsSummary
-                  suggestions={[...suggestionsByFile.values()]}
+                  drafts={[...suggestionsByFile.values()]}
                   locale={locale}
                 />
               )}
@@ -561,6 +578,7 @@ export default async function EngagementDetailPage({
                   item={item}
                   files={filesByItem.get(item.id) ?? []}
                   suggestionsByFile={suggestionsByFile}
+                  qboOptions={qboOptions}
                   locale={locale}
                   canEdit={isLive}
                   clientName={client?.display_name ?? null}
@@ -606,6 +624,7 @@ async function ItemRow({
   item,
   files,
   suggestionsByFile,
+  qboOptions,
   locale,
   canEdit,
   clientName,
@@ -614,9 +633,11 @@ async function ItemRow({
 }: {
   item: RequestItem;
   files: (UploadedFile & { url: string })[];
-  // QuickBooks draft suggestions keyed by uploaded file id (empty when QB isn't
-  // connected or the migration isn't applied).
-  suggestionsByFile: Map<string, TransactionSuggestion>;
+  // QuickBooks drafts keyed by uploaded file id (empty when QB isn't connected or
+  // the migration isn't applied).
+  suggestionsByFile: Map<string, StoredDraft>;
+  // The cached QuickBooks lists the draft cells pick from.
+  qboOptions: DraftCardOptions;
   locale: "fr" | "en";
   canEdit: boolean;
   clientName: string | null;
@@ -787,7 +808,9 @@ async function ItemRow({
               footer={
                 aiEnabled && suggestionsByFile.has(f.id) ? (
                   <QuickbooksDraftCard
-                    suggestion={suggestionsByFile.get(f.id)!}
+                    suggestion={suggestionsByFile.get(f.id)!.suggestion}
+                    resolved={suggestionsByFile.get(f.id)!.resolved}
+                    options={qboOptions}
                     locale={locale}
                     fileId={f.id}
                   />
