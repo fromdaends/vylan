@@ -8,10 +8,13 @@
 
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isMissingSchema } from "@/lib/db/quickbooks";
-import type {
-  TransactionSuggestion,
-  ResolvedEntry,
+import {
+  buildTransactionSuggestion,
+  type TransactionSuggestion,
+  type ResolvedEntry,
 } from "@/lib/quickbooks/suggest";
+import type { QuickbooksLists } from "@/lib/quickbooks/read";
+import type { TransactionExtraction } from "@/lib/ai/transaction-extract";
 
 // One stored draft: the AI suggestion + the accountant's resolved picks (Stage 4,
 // null until they edit) + its status.
@@ -154,6 +157,54 @@ export async function upsertTransactionSuggestion(input: {
   if (error && !isMissingSchema(error)) {
     console.error("[quickbooks] upsertTransactionSuggestion failed:", error);
   }
+}
+
+// Self-heal: regenerate any MISSING draft from the file's already-stored
+// transaction read (uploaded_files.ai_extracted_fields.transaction). The classify
+// worker normally creates the draft, but a row can go missing (re-upload race, a
+// classify that ran before the migration was applied, manual cleanup). Mirrors
+// the payment/signature reconcile-on-load this page already does, so a draft can
+// never silently vanish. No AI call — it reuses the stored transaction + the
+// firm's cached lists. Returns how many it created. Best-effort throughout.
+export async function backfillMissingSuggestions(input: {
+  firmId: string;
+  engagementId: string;
+  files: { id: string; ai_extracted_fields: Record<string, unknown> | null }[];
+  lists: QuickbooksLists | null;
+  existingFileIds: Set<string>;
+}): Promise<number> {
+  if (!input.lists) return 0;
+  let created = 0;
+  for (const f of input.files) {
+    if (input.existingFileIds.has(f.id)) continue;
+    const rawTxn = f.ai_extracted_fields?.transaction;
+    // Only files that actually carry a stored transaction read; the `taxes`
+    // array is the shape guard (the worker always writes it). Our own data, so a
+    // cast is safe after the guard.
+    if (
+      !rawTxn ||
+      typeof rawTxn !== "object" ||
+      !Array.isArray((rawTxn as { taxes?: unknown }).taxes)
+    ) {
+      continue;
+    }
+    try {
+      const suggestion = buildTransactionSuggestion(
+        rawTxn as TransactionExtraction,
+        input.lists,
+      );
+      await upsertTransactionSuggestion({
+        firmId: input.firmId,
+        uploadedFileId: f.id,
+        engagementId: input.engagementId,
+        suggestion,
+      });
+      created++;
+    } catch (err) {
+      console.warn("[quickbooks] backfillMissingSuggestions failed for", f.id, err);
+    }
+  }
+  return created;
 }
 
 // Remove the draft suggestion for one uploaded file. Service-role. Called by the
