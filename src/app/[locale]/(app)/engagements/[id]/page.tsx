@@ -43,6 +43,7 @@ import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import type { TransactionSuggestion } from "@/lib/quickbooks/suggest";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
+import { ReopenFileButton } from "@/components/engagements/reopen-file-button";
 import { ActivityTimeline } from "@/components/engagements/activity-timeline";
 import { ActivityDrawer } from "@/components/engagements/activity-drawer";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
@@ -763,17 +764,21 @@ async function ItemRow({
               hideAi={!aiEnabled}
               // Per-document reject (the founder's model: approve the line as a
               // whole, send back individual documents). A set-aside duplicate
-              // can't be rejected — it already doesn't count. The X turns red
-              // once a document has been sent back.
+              // can't be rejected — it already doesn't count. Once a document IS
+              // rejected it's done: the X is replaced by an Undo (reopen) so it
+              // never prompts a pointless second reject.
               actions={
                 canEdit && !f.is_duplicate ? (
-                  <RejectModal
-                    itemId={item.id}
-                    itemLabel={f.display_name ?? f.original_filename}
-                    fileId={f.id}
-                    compact
-                    active={f.review_status === "rejected"}
-                  />
+                  f.review_status === "rejected" ? (
+                    <ReopenFileButton fileId={f.id} />
+                  ) : (
+                    <RejectModal
+                      itemId={item.id}
+                      itemLabel={f.display_name ?? f.original_filename}
+                      fileId={f.id}
+                      compact
+                    />
+                  )
                 ) : undefined
               }
               // QuickBooks draft (Stage 3): the read-only suggested mapping for a
