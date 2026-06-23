@@ -20,9 +20,28 @@ export function selectNeedsAttention(rows: WorklistRow[]): WorklistRow[] {
 // due soon / quiet). The actionable to-do list; What's new stays the passive
 // log.
 //
-// Sort: oldest waiting first — engagements whose undecided submissions have
-// waited longest lead the queue. Rows with nothing undecided (purely
-// overdue/quiet) follow, most urgent first, then freshest.
+// Sort: MOST URGENT first, by time tier:
+//   1. Overdue        — more days overdue first
+//   2. Due soon       — sooner due first
+//   3. Waiting / quiet (and anything with no deadline) — longest first, by the
+//      larger of "waiting" (waitingDays) vs "quiet" (daysSinceClientActivity)
+// Flagged files / unpaid status do NOT affect the order. Ties fall back to the
+// larger waiting/quiet/overdue day count, then most recent activity, so the
+// order is always stable and deterministic.
+
+// 0 = overdue, 1 = due soon, 2 = everything else (waiting / quiet / no deadline).
+function attentionTier(r: WorklistRow): 0 | 1 | 2 {
+  if (r.reasons.includes("overdue")) return 0;
+  if (r.reasons.includes("due_soon")) return 1;
+  return 2;
+}
+
+// How long a non-deadline row has been outstanding: the larger of "waiting"
+// (submissions sitting unreviewed) and "quiet" (no client activity).
+function waitingMagnitude(r: WorklistRow): number {
+  return Math.max(r.waitingDays ?? 0, r.daysSinceClientActivity ?? 0);
+}
+
 export function selectNeedsAttentionRows(rows: WorklistRow[]): WorklistRow[] {
   return rows
     .filter(
@@ -34,17 +53,28 @@ export function selectNeedsAttentionRows(rows: WorklistRow[]): WorklistRow[] {
         r.sittingUnreviewed,
     )
     .sort((a, b) => {
-      if (a.waitingSince && b.waitingSince) {
-        const t = a.waitingSince.localeCompare(b.waitingSince);
-        if (t !== 0) return t; // older waiting first
-      } else if (a.waitingSince) {
-        return -1;
-      } else if (b.waitingSince) {
-        return 1;
+      const ta = attentionTier(a);
+      const tb = attentionTier(b);
+      if (ta !== tb) return ta - tb; // overdue (0) < due soon (1) < waiting (2)
+
+      if (ta === 0) {
+        // Overdue: more days overdue first.
+        const d = (b.daysOverdue ?? 0) - (a.daysOverdue ?? 0);
+        if (d !== 0) return d;
+      } else if (ta === 1) {
+        // Due soon: sooner first.
+        const d = (a.daysUntilDue ?? 0) - (b.daysUntilDue ?? 0);
+        if (d !== 0) return d;
+      } else {
+        // Waiting / quiet: longest first.
+        const d = waitingMagnitude(b) - waitingMagnitude(a);
+        if (d !== 0) return d;
       }
-      if (b.attentionScore !== a.attentionScore) {
-        return b.attentionScore - a.attentionScore;
-      }
+
+      // Tiebreaker: larger waiting/quiet/overdue day count, then freshest.
+      const tieA = Math.max(waitingMagnitude(a), a.daysOverdue ?? 0);
+      const tieB = Math.max(waitingMagnitude(b), b.daysOverdue ?? 0);
+      if (tieB !== tieA) return tieB - tieA;
       return b.recencyAt.localeCompare(a.recencyAt);
     });
 }
