@@ -13,15 +13,22 @@ import {
   type TransactionSuggestion,
   type ResolvedEntry,
 } from "@/lib/quickbooks/suggest";
+import {
+  normalizeDraftStatus,
+  type DraftStatus,
+} from "@/lib/quickbooks/draft-status";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import type { TransactionExtraction } from "@/lib/ai/transaction-extract";
 
 // One stored draft: the AI suggestion + the accountant's resolved picks (Stage 4,
-// null until they edit) + its status.
+// null until they edit) + its status + who last reviewed it (approved / dismissed
+// / reopened / edited) and when.
 export type StoredDraft = {
   suggestion: TransactionSuggestion;
   resolved: ResolvedEntry | null;
-  status: string;
+  status: DraftStatus;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
 };
 
 // Read every draft suggestion for an engagement, keyed by uploaded_file_id, so
@@ -36,11 +43,14 @@ export async function getSuggestionsForEngagement(
   const sb = await getServerSupabase();
   const primary = await sb
     .from("quickbooks_transaction_suggestions")
-    .select("uploaded_file_id, suggestion, resolved, status")
+    .select(
+      "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at",
+    )
     .eq("engagement_id", engagementId);
   let rows = primary.data as Array<Record<string, unknown>> | null;
   let error = primary.error;
-  // Graceful fallback if 0440 (resolved) isn't applied yet — re-read without it.
+  // Graceful fallback if 0440 (resolved + reviewed_by/at) isn't applied yet —
+  // re-read without those columns.
   if (error && isMissingSchema(error)) {
     const fb = await sb
       .from("quickbooks_transaction_suggestions")
@@ -61,28 +71,38 @@ export async function getSuggestionsForEngagement(
       suggestion: TransactionSuggestion | null;
       resolved?: ResolvedEntry | null;
       status?: string | null;
+      reviewed_by?: string | null;
+      reviewed_at?: string | null;
     };
     if (r.uploaded_file_id && r.suggestion) {
       out.set(r.uploaded_file_id, {
         suggestion: r.suggestion,
         resolved: r.resolved ?? null,
-        status: r.status ?? "draft",
+        status: normalizeDraftStatus(r.status),
+        reviewedBy: r.reviewed_by ?? null,
+        reviewedAt: r.reviewed_at ?? null,
       });
     }
   }
   return out;
 }
 
-// Read just the AI suggestion + accountant's resolved picks for one file, used to
-// authorize + merge a partial edit. Authenticated (RLS firm-scoped) — a row for
-// another firm simply isn't returned.
-export async function getDraftForFile(
-  uploadedFileId: string,
-): Promise<{ engagementId: string; resolved: ResolvedEntry | null } | null> {
+// Read one draft for authorization + context: the engagement + firm it belongs
+// to, the accountant's resolved picks, the AI suggestion, and the current status.
+// Authenticated (RLS firm-scoped) — a row for another firm simply isn't returned,
+// which IS the authorization. Used by the resolve (edit) route and the status
+// (approve/dismiss/reopen) route.
+export async function getDraftForFile(uploadedFileId: string): Promise<{
+  engagementId: string;
+  firmId: string;
+  resolved: ResolvedEntry | null;
+  suggestion: TransactionSuggestion | null;
+  status: DraftStatus;
+} | null> {
   const sb = await getServerSupabase();
   const primary = await sb
     .from("quickbooks_transaction_suggestions")
-    .select("engagement_id, resolved")
+    .select("engagement_id, firm_id, resolved, suggestion, status")
     .eq("uploaded_file_id", uploadedFileId)
     .maybeSingle();
   let row = primary.data as Record<string, unknown> | null;
@@ -90,7 +110,7 @@ export async function getDraftForFile(
   if (error && isMissingSchema(error)) {
     const fb = await sb
       .from("quickbooks_transaction_suggestions")
-      .select("engagement_id")
+      .select("engagement_id, firm_id, suggestion, status")
       .eq("uploaded_file_id", uploadedFileId)
       .maybeSingle();
     row = fb.data as Record<string, unknown> | null;
@@ -99,8 +119,42 @@ export async function getDraftForFile(
   if (error || !row) return null;
   return {
     engagementId: row.engagement_id as string,
+    firmId: row.firm_id as string,
     resolved: (row.resolved as ResolvedEntry | null) ?? null,
+    suggestion: (row.suggestion as TransactionSuggestion | null) ?? null,
+    status: normalizeDraftStatus(row.status as string | null),
   };
+}
+
+// Flip a draft's status (approve / dismiss / reopen) and stamp who acted + when.
+// Service-role write — authenticated users have no write grant on this table
+// (0430), exactly like saveResolvedPatch / upsertTransactionSuggestion. The
+// caller authorizes first via getDraftForFile (RLS-scoped) and validates the
+// transition; this is a plain single-column flip with no read-modify-write race.
+// Best-effort: a missing table/column (pre-migration) or error returns false.
+export async function setDraftStatus(input: {
+  uploadedFileId: string;
+  status: DraftStatus;
+  reviewerId: string | null;
+}): Promise<boolean> {
+  const sb = getServiceRoleSupabase();
+  const now = new Date().toISOString();
+  const { error } = await sb
+    .from("quickbooks_transaction_suggestions")
+    .update({
+      status: input.status,
+      reviewed_by: input.reviewerId,
+      reviewed_at: now,
+      updated_at: now,
+    })
+    .eq("uploaded_file_id", input.uploadedFileId);
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] setDraftStatus failed:", error);
+    }
+    return false;
+  }
+  return true;
 }
 
 // Atomically MERGE the changed field(s) of the accountant's resolved mapping for

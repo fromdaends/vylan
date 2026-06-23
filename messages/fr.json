@@ -1971,6 +1971,18 @@
     "summary_total": "{amount} au total",
     "pick_search": "Rechercher…",
     "pick_empty": "Aucun résultat.",
-    "pick_clear": "Effacer"
+    "pick_clear": "Effacer",
+    "status_draft": "Brouillon",
+    "status_approved": "Approuvé",
+    "status_dismissed": "Ignoré",
+    "approve": "Approuver",
+    "dismiss": "Ignorer",
+    "reopen": "Rouvrir",
+    "approve_blocked_hint": "Complétez le brouillon avant de l’approuver",
+    "status_failed": "Échec de l’enregistrement. Réessayez.",
+    "approved_by": "Approuvé par {name}",
+    "dismissed_by": "Ignoré par {name}",
+    "summary_approved": "{count, plural, one {# approuvé} other {# approuvés}}",
+    "summary_dismissed": "{count, plural, one {# ignoré} other {# ignorés}}"
   }
 }

@@ -185,6 +185,11 @@ export default async function EngagementDetailPage({
   const activeMembers = firmUsers
     .filter((u) => !u.deactivated_at)
     .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
+  // Resolve a reviewer id -> display name for the QuickBooks draft cards
+  // (who approved / dismissed). Includes deactivated members so history shows.
+  const reviewerNameById = new Map<string, string>(
+    firmUsers.map((u) => [u.id, userDisplayLabel(u)]),
+  );
 
   const filesByItem = new Map<string, (UploadedFile & { url: string })[]>();
   for (const u of uploads) {
@@ -598,6 +603,7 @@ export default async function EngagementDetailPage({
                   files={filesByItem.get(item.id) ?? []}
                   suggestionsByFile={suggestionsByFile}
                   qboOptions={qboOptions}
+                  reviewerNameById={reviewerNameById}
                   locale={locale}
                   canEdit={isLive}
                   clientName={client?.display_name ?? null}
@@ -644,6 +650,7 @@ async function ItemRow({
   files,
   suggestionsByFile,
   qboOptions,
+  reviewerNameById,
   locale,
   canEdit,
   clientName,
@@ -657,6 +664,8 @@ async function ItemRow({
   suggestionsByFile: Map<string, StoredDraft>;
   // The cached QuickBooks lists the draft cells pick from.
   qboOptions: DraftCardOptions;
+  // Reviewer id -> display name, for the draft card's "approved/dismissed by" line.
+  reviewerNameById: Map<string, string>;
   locale: "fr" | "en";
   canEdit: boolean;
   clientName: string | null;
@@ -825,15 +834,27 @@ async function ItemRow({
               // receipt/invoice. Only when AI is on AND a draft exists for this
               // file (which itself implies QuickBooks is connected).
               footer={
-                aiEnabled && suggestionsByFile.has(f.id) ? (
-                  <QuickbooksDraftCard
-                    suggestion={suggestionsByFile.get(f.id)!.suggestion}
-                    resolved={suggestionsByFile.get(f.id)!.resolved}
-                    options={qboOptions}
-                    locale={locale}
-                    fileId={f.id}
-                  />
-                ) : undefined
+                aiEnabled && suggestionsByFile.has(f.id)
+                  ? (() => {
+                      const d = suggestionsByFile.get(f.id)!;
+                      return (
+                        <QuickbooksDraftCard
+                          suggestion={d.suggestion}
+                          resolved={d.resolved}
+                          options={qboOptions}
+                          locale={locale}
+                          fileId={f.id}
+                          status={d.status}
+                          reviewedByName={
+                            d.reviewedBy
+                              ? (reviewerNameById.get(d.reviewedBy) ?? null)
+                              : null
+                          }
+                          reviewedAt={d.reviewedAt}
+                        />
+                      );
+                    })()
+                  : undefined
               }
             />
           ))}

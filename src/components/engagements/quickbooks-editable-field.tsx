@@ -35,6 +35,7 @@ export function QuickbooksEditableField({
   options,
   initial,
   choosePrompt,
+  disabled = false,
 }: {
   fileId: string;
   field: DraftField;
@@ -44,6 +45,9 @@ export function QuickbooksEditableField({
   initial: ResolvedRef | null;
   // Amber prompt shown when nothing is chosen yet.
   choosePrompt: string;
+  // When true the cell is LOCKED (read-only) — used once a draft is approved or
+  // dismissed. Reopen the draft to edit it again.
+  disabled?: boolean;
 }) {
   const t = useTranslations("Quickbooks");
   const router = useRouter();
@@ -73,6 +77,21 @@ export function QuickbooksEditableField({
   }
 
   const empty = value == null;
+
+  // Locked (approved / dismissed draft): a static, muted read-only cell — no
+  // popover, no amber prompt. Reopening the draft restores the editable cell.
+  if (disabled) {
+    return (
+      <div className="min-w-0 rounded-lg bg-muted/50 px-2.5 py-1.5 opacity-80">
+        <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          {label}
+        </div>
+        <div className="mt-0.5 truncate text-sm font-medium text-foreground">
+          {empty ? "—" : value!.name}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
