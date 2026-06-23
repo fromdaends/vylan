@@ -5,6 +5,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { isTrialExpired, trialDaysLeft } from "@/lib/trial";
 import { getFirmAiUsage } from "@/lib/ai/usage";
 import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
+import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { getTranslations } from "next-intl/server";
 import { HelpSidebar } from "@/components/help/help-sidebar";
@@ -72,10 +73,13 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const [avatarUrl, firmLogoUrl, badges] = await Promise.all([
+  const [avatarUrl, firmLogoUrl, badges, quickbooksStatus] = await Promise.all([
     getBrandingImageUrl(dbUser.avatar_path),
     getBrandingImageUrl(firm.logo_url),
     getEngagementBadges(),
+    // Drives the (conditional) QuickBooks nav item. Cheap + RLS-scoped; null
+    // when not connected or before the migration is applied.
+    getFirmQuickbooksStatus(),
   ]);
 
   // Free-trial banner state (only rendered for unconverted trial firms).
@@ -101,6 +105,7 @@ export default async function AppLayout({
       firmName={firm.name}
       firmLogoUrl={firmLogoUrl}
       isOwner={dbUser.role === "owner"}
+      quickbooksConnected={quickbooksStatus != null}
       topBar={
         firm.is_demo ? (
           <TrialBanner
@@ -120,6 +125,7 @@ export default async function AppLayout({
         engagements: t("nav_engagements"),
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
+        quickbooks: t("nav_quickbooks"),
         engagementViews: {
           active: tEng("view_active_label"),
           ready: tEng("view_ready_label"),

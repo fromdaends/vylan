@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
+  BookOpenCheck,
   ListChecks,
   PencilLine,
   ClipboardList,
@@ -127,6 +128,16 @@ export function buildSearchRegistry(
       color: "text-icon-indigo",
       href: "/engagements/ready",
       keywords: "ready to review awaiting review queue prets a reviser a reviser",
+    },
+    {
+      id: "quickbooks-drafts",
+      label: t.app("nav_quickbooks"),
+      group: "go",
+      icon: BookOpenCheck,
+      color: "text-icon-cyan",
+      href: "/quickbooks/drafts",
+      keywords:
+        "quickbooks drafts bookkeeping transactions approve dismiss qbo intuit comptabilite brouillons ecritures approuver",
     },
     {
       id: "eng-drafts",
