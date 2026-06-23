@@ -97,12 +97,12 @@ describe("selectNeedsAttentionRows (Overview block)", () => {
     expect(ids).not.toContain("clean");
   });
 
-  it("orders by attentionScore (overdue > due_soon > stale), ready-to-review last", () => {
+  it("orders by urgency tier: overdue > due soon > waiting/quiet, ready last", () => {
     const rows = [
-      row({ id: "ready", readyToReview: true, attentionScore: 0 }),
-      row({ id: "stale", reasons: ["stale"], attentionScore: 130 }),
-      row({ id: "overdue", reasons: ["overdue"], attentionScore: 1003 }),
-      row({ id: "due", reasons: ["due_soon"], attentionScore: 500 }),
+      row({ id: "ready", readyToReview: true }),
+      row({ id: "stale", reasons: ["stale"], daysSinceClientActivity: 20 }),
+      row({ id: "overdue", reasons: ["overdue"], daysOverdue: 3 }),
+      row({ id: "due", reasons: ["due_soon"], daysUntilDue: 2 }),
     ];
     expect(selectNeedsAttentionRows(rows).map((r) => r.id)).toEqual([
       "overdue",
@@ -156,26 +156,24 @@ describe("selectNeedsAttentionRows (Overview block)", () => {
     expect(ids).not.toContain("clean");
   });
 
-  it("sorts oldest-waiting first; rows with nothing undecided follow by urgency", () => {
+  it("sorts most-urgent first: overdue (most days), then due soon (soonest), then longest waiting/quiet", () => {
     const rows = [
-      row({ id: "overdue-only", reasons: ["overdue"], attentionScore: 1003 }),
-      row({
-        id: "waited-2d",
-        readyToReview: true,
-        waitingSince: "2026-06-07T00:00:00.000Z",
-      }),
-      row({
-        id: "waited-9d",
-        sittingUnreviewed: true,
-        waitingSince: "2026-05-31T00:00:00.000Z",
-      }),
-      row({ id: "stale-only", reasons: ["stale"], attentionScore: 130 }),
+      row({ id: "quiet-14", reasons: ["stale"], daysSinceClientActivity: 14 }),
+      row({ id: "waiting-35", sittingUnreviewed: true, waitingDays: 35 }),
+      row({ id: "overdue-2", reasons: ["overdue"], daysOverdue: 2 }),
+      row({ id: "overdue-5", reasons: ["overdue"], daysOverdue: 5 }),
+      row({ id: "due-1", reasons: ["due_soon"], daysUntilDue: 1 }),
+      row({ id: "due-5", reasons: ["due_soon"], daysUntilDue: 5 }),
+      row({ id: "waiting-15", sittingUnreviewed: true, waitingDays: 15 }),
     ];
     expect(selectNeedsAttentionRows(rows).map((r) => r.id)).toEqual([
-      "waited-9d",
-      "waited-2d",
-      "overdue-only",
-      "stale-only",
+      "overdue-5",
+      "overdue-2",
+      "due-1",
+      "due-5",
+      "waiting-35",
+      "waiting-15",
+      "quiet-14",
     ]);
   });
 });
