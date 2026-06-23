@@ -1971,6 +1971,18 @@
     "summary_total": "{amount} total",
     "pick_search": "Search…",
     "pick_empty": "No match.",
-    "pick_clear": "Clear"
+    "pick_clear": "Clear",
+    "status_draft": "Draft",
+    "status_approved": "Approved",
+    "status_dismissed": "Dismissed",
+    "approve": "Approve",
+    "dismiss": "Dismiss",
+    "reopen": "Reopen",
+    "approve_blocked_hint": "Finish the draft before approving",
+    "status_failed": "Couldn't save. Try again.",
+    "approved_by": "Approved by {name}",
+    "dismissed_by": "Dismissed by {name}",
+    "summary_approved": "{count, plural, one {# approved} other {# approved}}",
+    "summary_dismissed": "{count, plural, one {# dismissed} other {# dismissed}}"
   }
 }

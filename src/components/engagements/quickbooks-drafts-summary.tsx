@@ -1,5 +1,5 @@
 import { getTranslations } from "next-intl/server";
-import { BookOpen, TriangleAlert } from "lucide-react";
+import { BookOpen, TriangleAlert, CheckCircle2, Ban } from "lucide-react";
 import { summarizeDrafts, type DraftItem } from "@/lib/quickbooks/draft-summary";
 import { formatCurrency, type AppLocale } from "@/lib/format";
 
@@ -28,6 +28,18 @@ export async function QuickbooksDraftsSummary({
         <span className="inline-flex items-center gap-1 text-warning">
           <TriangleAlert className="h-3 w-3" aria-hidden="true" />
           {t("summary_needs_input", { count: s.needsInput })}
+        </span>
+      )}
+      {s.approved > 0 && (
+        <span className="inline-flex items-center gap-1 text-success">
+          <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+          {t("summary_approved", { count: s.approved })}
+        </span>
+      )}
+      {s.dismissed > 0 && (
+        <span className="inline-flex items-center gap-1 text-muted-foreground">
+          <Ban className="h-3 w-3" aria-hidden="true" />
+          {t("summary_dismissed", { count: s.dismissed })}
         </span>
       )}
       {s.totalCad != null && (
