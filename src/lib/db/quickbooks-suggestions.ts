@@ -139,8 +139,11 @@ export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
     }
     return [];
   }
+  // engagement_id is NOT NULL in the schema, but guard it anyway: a row without
+  // one can't render a valid /engagements/[id] link, so drop it rather than emit
+  // a broken row.
   const valid = (rows ?? []).filter(
-    (r) => r.uploaded_file_id && r.suggestion,
+    (r) => r.uploaded_file_id && r.suggestion && r.engagement_id,
   ) as Array<Record<string, unknown>>;
   if (valid.length === 0) return [];
 

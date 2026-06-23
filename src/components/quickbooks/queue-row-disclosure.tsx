@@ -10,8 +10,10 @@ import { cn } from "@/lib/cn";
 // inline Approve/Dismiss/Reopen controls) is always shown; clicking the chevron
 // reveals `children` — the full editable QuickBooks draft card.
 //
-// The full card (with its searchable pickers) is only inserted into the DOM when
-// expanded, so a long queue doesn't hydrate dozens of pickers up front.
+// The full card's client subcomponents (its searchable pickers + the controls)
+// only mount / hydrate when a row is expanded, so a long queue doesn't run dozens
+// of pickers at once. (The card's markup is still part of the initial server
+// payload — expansion defers the client-side mount, not the download.)
 export function QueueRowDisclosure({
   summary,
   children,
