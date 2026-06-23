@@ -1219,6 +1219,7 @@
     "reject": "Refuser",
     "reopen_item": "Rouvrir",
     "file_undo_reject": "Annuler",
+    "reopen_error": "Impossible d’annuler. Veuillez réessayer.",
     "set_incomplete_badge": "Page manquante",
     "awaiting_client_badge": "En attente du client",
     "remove_item": "Retirer de la liste",

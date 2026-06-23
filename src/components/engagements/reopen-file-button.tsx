@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -23,6 +24,9 @@ export function ReopenFileButton({ fileId }: { fileId: string }) {
       const r = await fetch(`/api/files/${fileId}/reopen`, { method: "POST" });
       const res = (await r.json().catch(() => null)) as { ok?: boolean } | null;
       if (res?.ok) router.refresh();
+      else toast.error(t("reopen_error"));
+    } catch {
+      toast.error(t("reopen_error"));
     } finally {
       setPending(false);
     }

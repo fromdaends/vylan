@@ -1219,6 +1219,7 @@
     "reject": "Reject",
     "reopen_item": "Reopen",
     "file_undo_reject": "Undo",
+    "reopen_error": "Couldn't undo. Please try again.",
     "set_incomplete_badge": "Missing page",
     "awaiting_client_badge": "Awaiting client",
     "remove_item": "Remove from checklist",
