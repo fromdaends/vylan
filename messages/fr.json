@@ -1987,7 +1987,7 @@
     "dismissed_by": "Ignoré par {name}",
     "summary_approved": "{count, plural, one {# approuvé} other {# approuvés}}",
     "summary_dismissed": "{count, plural, one {# ignoré} other {# ignorés}}",
-    "queue_title": "Brouillons QuickBooks",
+    "queue_title": "QuickBooks",
     "queue_subtitle": "Toutes les écritures en brouillon de vos mandats, au même endroit.",
     "queue_filter_label": "Filtrer par statut",
     "queue_filter_all": "Tous",

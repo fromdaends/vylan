@@ -1987,7 +1987,7 @@
     "dismissed_by": "Dismissed by {name}",
     "summary_approved": "{count, plural, one {# approved} other {# approved}}",
     "summary_dismissed": "{count, plural, one {# dismissed} other {# dismissed}}",
-    "queue_title": "QuickBooks drafts",
+    "queue_title": "QuickBooks",
     "queue_subtitle": "Every drafted entry across your engagements, in one place.",
     "queue_filter_label": "Filter by status",
     "queue_filter_all": "All",
