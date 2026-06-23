@@ -12,7 +12,7 @@ import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import {
   getDraftForFile,
-  saveResolvedForFile,
+  saveResolvedPatch,
 } from "@/lib/db/quickbooks-suggestions";
 import type { ResolvedEntry, ResolvedRef } from "@/lib/quickbooks/suggest";
 
@@ -84,7 +84,9 @@ export async function POST(
     );
   }
 
-  // Authorize + read the existing resolved picks (RLS-scoped) to merge onto.
+  // Authorize (RLS-scoped read) + resolve the engagement for revalidation. The
+  // merge itself happens atomically in the DB (merge_qbo_resolved), so we don't
+  // read-modify-write here and can't lose a concurrent edit to another field.
   const draft = await getDraftForFile(fileId);
   if (!draft) {
     return NextResponse.json(
@@ -93,20 +95,9 @@ export async function POST(
     );
   }
 
-  const existing = draft.resolved;
-  const merged: ResolvedEntry = {
-    party: "party" in patch ? (patch.party ?? null) : (existing?.party ?? null),
-    account:
-      "account" in patch ? (patch.account ?? null) : (existing?.account ?? null),
-    taxCode:
-      "taxCode" in patch
-        ? (patch.taxCode ?? null)
-        : (existing?.taxCode ?? null),
-  };
-
-  const ok = await saveResolvedForFile({
+  const ok = await saveResolvedPatch({
     uploadedFileId: fileId,
-    resolved: merged,
+    patch,
     reviewerId: auth.user.id,
   });
   if (!ok) {
@@ -116,5 +107,5 @@ export async function POST(
   for (const loc of LOCALES) {
     revalidatePath(`/${loc}/engagements/${draft.engagementId}`);
   }
-  return NextResponse.json({ ok: true, resolved: merged });
+  return NextResponse.json({ ok: true });
 }

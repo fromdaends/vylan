@@ -100,27 +100,26 @@ export async function getDraftForFile(
   };
 }
 
-// Persist the accountant's resolved mapping for one file (service role — the
-// table has no authenticated write grant). Stamps who/when. Best-effort +
-// graceful pre-0440 (a missing column is logged and swallowed).
-export async function saveResolvedForFile(input: {
+// Atomically MERGE the changed field(s) of the accountant's resolved mapping for
+// one file (service role — the table has no authenticated write grant). Uses the
+// merge_qbo_resolved function (migration 0440) so two quick edits to different
+// fields can't clobber each other via a read-modify-write race. `patch` carries
+// only the field(s) that changed; a field set to null reverts to the AI match.
+// Best-effort: a missing function (pre-0440) or error returns false.
+export async function saveResolvedPatch(input: {
   uploadedFileId: string;
-  resolved: ResolvedEntry;
+  patch: Partial<ResolvedEntry>;
   reviewerId: string | null;
 }): Promise<boolean> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb
-    .from("quickbooks_transaction_suggestions")
-    .update({
-      resolved: input.resolved,
-      reviewed_by: input.reviewerId,
-      reviewed_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
-    .eq("uploaded_file_id", input.uploadedFileId);
+  const { error } = await sb.rpc("merge_qbo_resolved", {
+    p_file_id: input.uploadedFileId,
+    p_patch: input.patch,
+    p_reviewer: input.reviewerId,
+  });
   if (error) {
     if (!isMissingSchema(error)) {
-      console.error("[quickbooks] saveResolvedForFile failed:", error);
+      console.error("[quickbooks] saveResolvedPatch failed:", error);
     }
     return false;
   }

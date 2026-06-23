@@ -165,7 +165,11 @@ export async function QuickbooksDraftCard({
           v.hasTax ? "lg:grid-cols-3" : "",
         )}
       >
+        {/* The key encodes the current effective value so a server data change
+            (e.g. after Refresh regenerates the suggestion) remounts the field
+            with the fresh value instead of leaving the picker stale. */}
         <QuickbooksEditableField
+          key={`party-${eff.party?.id ?? "none"}`}
           fileId={fileId}
           field="party"
           label={partyLabel}
@@ -174,6 +178,7 @@ export async function QuickbooksDraftCard({
           choosePrompt={partyChoose}
         />
         <QuickbooksEditableField
+          key={`account-${eff.account?.id ?? "none"}`}
           fileId={fileId}
           field="account"
           label={t("field_account")}
@@ -183,6 +188,7 @@ export async function QuickbooksDraftCard({
         />
         {v.hasTax && (
           <QuickbooksEditableField
+            key={`tax-${eff.taxCode?.id ?? "none"}`}
             fileId={fileId}
             field="taxCode"
             label={t("field_tax")}

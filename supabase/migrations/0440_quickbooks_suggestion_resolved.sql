@@ -19,3 +19,25 @@ alter table quickbooks_transaction_suggestions
   add column if not exists resolved jsonb,
   add column if not exists reviewed_by uuid references auth.users(id),
   add column if not exists reviewed_at timestamptz;
+
+-- Merge ONE field of the accountant's picks atomically, so two quick edits to
+-- different fields (party then account) can't clobber each other via a
+-- read-modify-write race. The UPDATE takes a row lock and re-reads `resolved`,
+-- so `resolved || patch` always sees the latest committed value. NOT security
+-- definer: it runs with the caller's rights, and the service role (which has the
+-- table's write rights — authenticated does not) is the only caller, so an
+-- authenticated user can never use it to write the table.
+create or replace function public.merge_qbo_resolved(
+  p_file_id uuid,
+  p_patch jsonb,
+  p_reviewer uuid
+) returns void
+language sql
+as $$
+  update quickbooks_transaction_suggestions
+  set resolved = coalesce(resolved, '{}'::jsonb) || p_patch,
+      reviewed_by = p_reviewer,
+      reviewed_at = now(),
+      updated_at = now()
+  where uploaded_file_id = p_file_id;
+$$;
