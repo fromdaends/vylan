@@ -49,6 +49,7 @@ export async function QuickbooksDraftCard({
   status,
   reviewedByName,
   reviewedAt,
+  showStatusControls = true,
 }: {
   suggestion: TransactionSuggestion;
   // The accountant's saved picks (null until they edit).
@@ -62,6 +63,10 @@ export async function QuickbooksDraftCard({
   status: DraftStatus;
   reviewedByName: string | null;
   reviewedAt: string | null;
+  // Stage 4, Phase 3: hide the footer Approve/Dismiss/Reopen controls when the
+  // surrounding surface already renders them (the firm-wide queue row does), so
+  // they're not shown twice. Defaults true (the engagement page keeps them).
+  showStatusControls?: boolean;
 }) {
   const t = await getTranslations("Quickbooks");
   const v = deriveQuickbooksDraftView(suggestion);
@@ -272,11 +277,13 @@ export async function QuickbooksDraftCard({
         </p>
         <div className="ml-auto flex items-center gap-2">
           {isDraft && <RegenerateDraftButton fileId={fileId} />}
-          <DraftStatusControls
-            fileId={fileId}
-            status={status}
-            canApprove={canApprove}
-          />
+          {showStatusControls && (
+            <DraftStatusControls
+              fileId={fileId}
+              status={status}
+              canApprove={canApprove}
+            />
+          )}
         </div>
       </div>
     </div>

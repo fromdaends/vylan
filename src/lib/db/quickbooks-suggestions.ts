@@ -87,6 +87,143 @@ export async function getSuggestionsForEngagement(
   return out;
 }
 
+// One row of the firm-wide drafts QUEUE (Stage 4, Phase 3): a draft plus the
+// context the queue needs to show it (which client, engagement, document).
+export type FirmDraftRow = {
+  fileId: string;
+  engagementId: string;
+  engagementTitle: string | null;
+  clientId: string | null;
+  clientName: string | null;
+  documentName: string | null;
+  suggestion: TransactionSuggestion;
+  resolved: ResolvedEntry | null;
+  status: DraftStatus;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+};
+
+// Read EVERY draft for the firm (newest first) with its client/engagement/file
+// context, for the firm-wide queue page. Authenticated + RLS firm-scoped (the
+// SELECT policy on each table is the firm boundary — no explicit firm_id filter
+// needed). Follows the repo's batch-load-then-map pattern (no PostgREST joins):
+// load the suggestions, then load the referenced engagements, files, and clients
+// in parallel and stitch them together in memory. Returns [] (never throws) when
+// the table doesn't exist yet (pre-migration) or on any read error.
+export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
+  const sb = await getServerSupabase();
+  const primary = await sb
+    .from("quickbooks_transaction_suggestions")
+    .select(
+      "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at",
+    )
+    .order("created_at", { ascending: false });
+  let rows = primary.data as Array<Record<string, unknown>> | null;
+  let error = primary.error;
+  // Graceful fallback if 0440 (resolved + reviewed_*) isn't applied yet.
+  if (error && isMissingSchema(error)) {
+    const fb = await sb
+      .from("quickbooks_transaction_suggestions")
+      .select(
+        "uploaded_file_id, engagement_id, suggestion, status, created_at, updated_at",
+      )
+      .order("created_at", { ascending: false });
+    rows = fb.data as Array<Record<string, unknown>> | null;
+    error = fb.error;
+  }
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] listFirmDrafts failed:", error);
+    }
+    return [];
+  }
+  // engagement_id is NOT NULL in the schema, but guard it anyway: a row without
+  // one can't render a valid /engagements/[id] link, so drop it rather than emit
+  // a broken row.
+  const valid = (rows ?? []).filter(
+    (r) => r.uploaded_file_id && r.suggestion && r.engagement_id,
+  ) as Array<Record<string, unknown>>;
+  if (valid.length === 0) return [];
+
+  const engagementIds = [
+    ...new Set(valid.map((r) => r.engagement_id as string).filter(Boolean)),
+  ];
+  const fileIds = [
+    ...new Set(valid.map((r) => r.uploaded_file_id as string).filter(Boolean)),
+  ];
+
+  // Batch-load engagements + files in parallel (both RLS firm-scoped).
+  const [engRes, fileRes] = await Promise.all([
+    engagementIds.length
+      ? sb
+          .from("engagements")
+          .select("id, title, client_id")
+          .in("id", engagementIds)
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
+    fileIds.length
+      ? sb
+          .from("uploaded_files")
+          .select("id, display_name, original_filename")
+          .in("id", fileIds)
+      : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
+  ]);
+  const engById = new Map(
+    ((engRes.data as Array<Record<string, unknown>> | null) ?? []).map((e) => [
+      e.id as string,
+      {
+        title: (e.title as string | null) ?? null,
+        clientId: (e.client_id as string | null) ?? null,
+      },
+    ]),
+  );
+  const fileById = new Map(
+    ((fileRes.data as Array<Record<string, unknown>> | null) ?? []).map((f) => [
+      f.id as string,
+      ((f.display_name as string | null) ??
+        (f.original_filename as string | null)) ??
+        null,
+    ]),
+  );
+
+  // Then the clients referenced by those engagements.
+  const clientIds = [
+    ...new Set(
+      [...engById.values()].map((e) => e.clientId).filter(Boolean) as string[],
+    ),
+  ];
+  const clientRes = clientIds.length
+    ? await sb.from("clients").select("id, display_name").in("id", clientIds)
+    : { data: [] as Array<Record<string, unknown>> };
+  const clientNameById = new Map(
+    ((clientRes.data as Array<Record<string, unknown>> | null) ?? []).map(
+      (c) => [c.id as string, (c.display_name as string | null) ?? null],
+    ),
+  );
+
+  return valid.map((r) => {
+    const engagementId = r.engagement_id as string;
+    const eng = engById.get(engagementId);
+    const clientId = eng?.clientId ?? null;
+    return {
+      fileId: r.uploaded_file_id as string,
+      engagementId,
+      engagementTitle: eng?.title ?? null,
+      clientId,
+      clientName: clientId ? (clientNameById.get(clientId) ?? null) : null,
+      documentName: fileById.get(r.uploaded_file_id as string) ?? null,
+      suggestion: r.suggestion as TransactionSuggestion,
+      resolved: (r.resolved as ResolvedEntry | null) ?? null,
+      status: normalizeDraftStatus(r.status as string | null),
+      reviewedBy: (r.reviewed_by as string | null) ?? null,
+      reviewedAt: (r.reviewed_at as string | null) ?? null,
+      createdAt: (r.created_at as string | null) ?? null,
+      updatedAt: (r.updated_at as string | null) ?? null,
+    };
+  });
+}
+
 // Read one draft for authorization + context: the engagement + firm it belongs
 // to, the accountant's resolved picks, the AI suggestion, and the current status.
 // Authenticated (RLS firm-scoped) — a row for another firm simply isn't returned,

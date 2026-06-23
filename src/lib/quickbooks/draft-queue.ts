@@ -1,0 +1,91 @@
+// QuickBooks Stage 4, Phase 3 — firm-wide drafts queue logic (pure).
+//
+// The queue page groups every draft across the firm into FOUR buckets the
+// accountant can filter by. A bucket is derived from the draft's status plus
+// (for a still-open draft) whether it is complete:
+//
+//   needs_input — status 'draft' AND still missing a vendor/account/tax/total
+//                 (the accountant must act before it could be posted).
+//   ready       — status 'draft' AND complete (one click from approved).
+//   approved    — status 'approved' (ready to post in Stage 5).
+//   dismissed   — status 'dismissed' (intentionally skipped).
+//
+// Pure + unit-tested; imported by both the server page (filtering/counting) and
+// the client toolbar (filter chip keys) — it pulls in only other pure modules,
+// so it is safe to import on either side of the server/client boundary.
+
+import type {
+  TransactionSuggestion,
+  ResolvedEntry,
+} from "@/lib/quickbooks/suggest";
+import { normalizeDraftStatus, type DraftStatus } from "./draft-status";
+import { draftNeedsInput } from "./draft-resolve";
+
+export const QUEUE_BUCKETS = [
+  "needs_input",
+  "ready",
+  "approved",
+  "dismissed",
+] as const;
+export type QueueBucket = (typeof QUEUE_BUCKETS)[number];
+
+export type QueueItem = {
+  suggestion: TransactionSuggestion;
+  resolved: ResolvedEntry | null;
+  // Defaults to 'draft' when absent / unknown.
+  status?: DraftStatus | string | null;
+};
+
+// Which bucket a single draft falls into.
+export function draftQueueBucket(item: QueueItem): QueueBucket {
+  const state = normalizeDraftStatus(item.status ?? null);
+  if (state === "approved") return "approved";
+  if (state === "dismissed") return "dismissed";
+  // status === 'draft': complete ones are "ready", the rest "needs_input".
+  return draftNeedsInput(item.suggestion, item.resolved)
+    ? "needs_input"
+    : "ready";
+}
+
+// The filter the toolbar exposes. "all" is the default view: everything EXCEPT
+// dismissed (a dismissed draft is intentionally out of the working set).
+export const QUEUE_FILTERS = [
+  "all",
+  "needs_input",
+  "ready",
+  "approved",
+  "dismissed",
+] as const;
+export type QueueFilter = (typeof QUEUE_FILTERS)[number];
+
+export function parseQueueFilter(v: string | null | undefined): QueueFilter {
+  return (QUEUE_FILTERS as readonly string[]).includes(v ?? "")
+    ? (v as QueueFilter)
+    : "all";
+}
+
+// Does a bucket pass the active filter? "all" shows everything but dismissed; a
+// specific filter shows only that bucket.
+export function matchesQueueFilter(
+  filter: QueueFilter,
+  bucket: QueueBucket,
+): boolean {
+  if (filter === "all") return bucket !== "dismissed";
+  return filter === bucket;
+}
+
+export type QueueCounts = Record<QueueBucket, number> & { total: number };
+
+// Count how many drafts fall in each bucket (over the WHOLE set, so the toolbar
+// chips can show a count regardless of the active filter).
+export function countQueueBuckets(items: QueueItem[]): QueueCounts {
+  const counts: QueueCounts = {
+    needs_input: 0,
+    ready: 0,
+    approved: 0,
+    dismissed: 0,
+    total: items.length,
+  };
+  for (const it of items) counts[draftQueueBucket(it)]++;
+  return counts;
+}

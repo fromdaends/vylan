@@ -23,6 +23,7 @@ import {
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
   Archive,
+  BookOpenCheck,
   Building2,
   ChevronDown,
   ChevronUp,
@@ -64,6 +65,7 @@ type Labels = {
   engagements: string;
   engagementsToggle: string;
   templates: string;
+  quickbooks: string;
   settings: string;
   firm: string;
   logout: string;
@@ -146,6 +148,7 @@ export function AppShell({
   labels,
   engagementBadges,
   isOwner = false,
+  quickbooksConnected = false,
 }: {
   children: React.ReactNode;
   topBar?: React.ReactNode;
@@ -160,6 +163,9 @@ export function AppShell({
   // Gates owner-only entries (billing, audit log, firm export/delete) in the
   // command palette. Defaults false so non-owners never see them.
   isOwner?: boolean;
+  // Shows the QuickBooks drafts queue nav item — only when the firm has
+  // QuickBooks connected (the queue is empty/irrelevant otherwise).
+  quickbooksConnected?: boolean;
 }) {
   const pathname = usePathname();
   const tApp = useTranslations("App");
@@ -211,6 +217,17 @@ export function AppShell({
     },
   ];
 
+  // QuickBooks drafts queue — a destination only when the firm has QuickBooks
+  // connected. Rendered after the Engagements section in the sidebar.
+  const quickbooksNav: NavItemDef | null = quickbooksConnected
+    ? {
+        href: "/quickbooks/drafts",
+        label: labels.quickbooks,
+        icon: BookOpenCheck,
+        color: "text-icon-cyan",
+      }
+    : null;
+
   // Firm + Settings used to live in a sidebar "ACCOUNT" section; they
   // now live in the avatar dropdown menu (and the mobile sheet's
   // profile menu), so the sidebar nav is just primary destinations.
@@ -234,6 +251,7 @@ export function AppShell({
       >
         <SidebarBody
           primaryNav={primaryNav}
+          quickbooksNav={quickbooksNav}
           labels={labels}
           engagementBadges={engagementBadges}
           brandColor={brandColor}
@@ -569,6 +587,7 @@ function MobileMenuItem({
 
 function SidebarBody({
   primaryNav,
+  quickbooksNav,
   labels,
   engagementBadges,
   brandColor,
@@ -581,6 +600,7 @@ function SidebarBody({
   onToggleCollapse,
 }: {
   primaryNav: NavItemDef[];
+  quickbooksNav: NavItemDef | null;
   labels: Labels;
   engagementBadges: EngagementBadgeCounts;
   brandColor: string;
@@ -706,6 +726,16 @@ function SidebarBody({
             badges={engagementBadges}
             collapsed={collapsed}
           />
+          {/* QuickBooks drafts queue — only when connected. */}
+          {quickbooksNav && (
+            <NavLink
+              href={quickbooksNav.href}
+              icon={quickbooksNav.icon}
+              label={quickbooksNav.label}
+              collapsed={collapsed}
+              color={quickbooksNav.color}
+            />
+          )}
         </NavSection>
       </nav>
 
