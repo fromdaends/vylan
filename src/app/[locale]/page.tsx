@@ -20,7 +20,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Vylan" });
-  return { title: t("meta_title") };
+  return { title: t("meta_title"), description: t("meta_description") };
 }
 
 export default async function Home({

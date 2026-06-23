@@ -166,7 +166,8 @@
     "no_ai_yet": "L'IA n'a pas encore analysé ce document."
   },
   "Vylan": {
-    "meta_title": "Vylan : arrêtez de courir après les documents",
+    "meta_title": "Vylan : Collecte de documents pour cabinets comptables",
+    "meta_description": "Collecte de documents pour cabinets comptables. Vos clients téléversent via un simple lien, Vylan vérifie chaque document dès son arrivée et relance automatiquement jusqu'à ce que tout soit reçu.",
     "logo_alt": "Logo Vylan",
     "brand_word": "vylan",
     "menu_label": "Ouvrir le menu",

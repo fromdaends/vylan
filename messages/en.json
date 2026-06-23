@@ -166,7 +166,8 @@
     "no_ai_yet": "The AI hasn't analyzed this document yet."
   },
   "Vylan": {
-    "meta_title": "Vylan: Stop chasing documents",
+    "meta_title": "Vylan: Document collection for accounting firms",
+    "meta_description": "Document collection for accounting firms. Clients upload through a simple link, Vylan checks each document as it arrives, and follows up automatically until everything's in.",
     "logo_alt": "Vylan logo",
     "brand_word": "vylan",
     "menu_label": "Open menu",
