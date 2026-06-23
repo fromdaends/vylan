@@ -84,13 +84,14 @@ export function normalizeText(s: string): string {
 }
 
 // Resolve the single status a document card shows. Order matters:
-//   1. The accountant's explicit per-file decision wins (they approved THIS
-//      file, or rejected it = sent this one back to the client).
-//   2. Otherwise the system's auto-reject flag — a TRUE rejection the client
-//      was notified about.
-//   3. Otherwise a confident mismatch with what the item asked for (wrong doc
-//      type / tax year / a stranger's name) => "flagged". A perfectly legible
-//      scan of the WRONG document must never pass as a green "looks good".
+//   1. A rejection — the accountant's (sent this file back) or the system's
+//      auto-reject (client was notified) — is terminal.
+//   2. A confident mismatch with what the item asked for (wrong doc type / tax
+//      year / a stranger's name) => "flagged" — ALWAYS, even if the file was
+//      approved. A document that doesn't match the request must never read as a
+//      green "looks good"; this also keeps the grid badge cohesive with the
+//      detail view's "Doesn't match the request" panel.
+//   3. Otherwise the accountant's explicit approval on a matching file wins.
 //   4. Otherwise the AI's usability verdict, shown as a SUGGESTION until the
 //      accountant reviews: usable -> "approved" (green hint); not usable ->
 //      "flagged".
@@ -106,12 +107,20 @@ export function resolvePreviewStatus(
   // uses — so the grid badge and that panel can never disagree.
   hasRequestMismatch = false,
 ): PreviewStatus {
-  // The accountant's own decision on THIS file is final.
-  if (file.review_status === "approved") return "approved";
+  // The accountant's explicit per-file decision comes first — BUT a confident
+  // mismatch with the request (wrong type / tax year / a stranger's name) flags
+  // even an APPROVED file, so a document that doesn't match what was asked for
+  // can never read as a green "looks good". (A reject stays a reject; a mismatch
+  // doesn't make it "less rejected".) Approval otherwise overrides the system's
+  // auto-reject and the usability suggestion. This keeps the grid badge cohesive
+  // with the detail view's "Doesn't match the request" panel.
   if (file.review_status === "rejected") return "rejected";
+  if (file.review_status === "approved") {
+    return hasRequestMismatch ? "flagged" : "approved";
+  }
   // Not yet reviewed — surface the system / AI read so the accountant can
-  // triage: a confident mismatch or an unusable scan flags; a clean read shows
-  // a green "looks good" SUGGESTION (it is not yet an accountant approval).
+  // triage: an auto-reject is a true rejection; a confident mismatch or an
+  // unusable scan flags; a clean read shows a green "looks good" SUGGESTION.
   if (file.ai_rejected) return "rejected";
   if (hasRequestMismatch) return "flagged";
   if (file.ai_usability) {

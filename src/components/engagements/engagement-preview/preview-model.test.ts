@@ -209,13 +209,13 @@ describe("resolvePreviewStatus", () => {
       resolvePreviewStatus(file({ ai_usability: verdict(true) }), true),
     ).toBe("flagged");
   });
-  it("the accountant's per-file approval still wins over a request mismatch", () => {
+  it("a confident request mismatch flags even an APPROVED file (never a green 'looks good')", () => {
     expect(
       resolvePreviewStatus(
         file({ review_status: "approved", ai_usability: verdict(true) }),
         true,
       ),
-    ).toBe("approved");
+    ).toBe("flagged");
   });
   it("a request mismatch flags even before a usability verdict lands", () => {
     expect(resolvePreviewStatus(file({}), true)).toBe("flagged");
@@ -335,13 +335,13 @@ describe("buildPreviewDocs — request matching (flag docs that don't match)", (
     expect(docs[0].status).toBe("approved");
   });
 
-  it("the accountant's explicit per-file approval still wins over a request mismatch", () => {
+  it("flags an APPROVED file that doesn't match the request (mismatch beats approval)", () => {
     const docs = buildPreviewDocs(
       [{ ...glFile(), review_status: "approved" }],
       [glItem],
       { expectedYear: 2025, clientName: "Acme Corp" },
     );
-    expect(docs[0].status).toBe("approved");
+    expect(docs[0].status).toBe("flagged");
   });
 
   it("does NOT flag a recognised doc under a freeform 'other' item on type alone", () => {
