@@ -13,6 +13,7 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
+  RotateCcw,
   Sparkles,
   Trash2,
   X,
@@ -91,6 +92,7 @@ export function PreviewDetail({
   onNext,
   onApprove,
   onReject,
+  onReopen,
   onBack,
   onCloseOverlay,
   onDeleted,
@@ -112,6 +114,8 @@ export function PreviewDetail({
   onNext: (() => void) | null;
   onApprove: () => void;
   onReject: () => void;
+  // Undo a rejection — shown in place of Reject once the doc is rejected.
+  onReopen: () => void;
   onBack: () => void;
   onCloseOverlay: () => void;
   // Called after a successful PERMANENT delete; the overlay drops the doc
@@ -378,18 +382,33 @@ export function PreviewDetail({
             <CheckCircle2 className="size-4" />
             <span className="hidden sm:inline">{t("approve")}</span>
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={pending}
-            onClick={onReject}
-            aria-label={t("reject")}
-            className="hover:border-destructive/40 hover:bg-destructive hover:text-white"
-          >
-            <X className="size-4" />
-            <span className="hidden sm:inline">{t("reject")}</span>
-          </Button>
+          {doc.status === "rejected" ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={onReopen}
+              aria-label={t("undo")}
+              className="hover:bg-muted hover:text-foreground"
+            >
+              <RotateCcw className="size-4" />
+              <span className="hidden sm:inline">{t("undo")}</span>
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={onReject}
+              aria-label={t("reject")}
+              className="hover:border-destructive/40 hover:bg-destructive hover:text-white"
+            >
+              <X className="size-4" />
+              <span className="hidden sm:inline">{t("reject")}</span>
+            </Button>
+          )}
           <a
             href={`/api/files/${doc.fileId}?download=1`}
             download

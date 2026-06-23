@@ -12,6 +12,7 @@ import {
   Download,
   FileText,
   Loader2,
+  RotateCcw,
   X,
   XCircle,
 } from "lucide-react";
@@ -81,6 +82,7 @@ export function PreviewCard({
   onOpen,
   onApprove,
   onReject,
+  onReopen,
 }: {
   doc: PreviewDoc;
   locale: string;
@@ -91,6 +93,8 @@ export function PreviewCard({
   onOpen: () => void;
   onApprove: () => void;
   onReject: () => void;
+  // Undo a rejection — shown in place of Reject once the doc is rejected.
+  onReopen: () => void;
 }) {
   const t = useTranslations("Preview");
   const [ref, inView] = useInView<HTMLDivElement>();
@@ -198,14 +202,25 @@ export function PreviewCard({
           >
             <Check className="size-4" aria-hidden />
           </QuickButton>
-          <QuickButton
-            label={t("reject")}
-            onClick={onReject}
-            disabled={pending}
-            className="hover:text-destructive"
-          >
-            <X className="size-4" aria-hidden />
-          </QuickButton>
+          {doc.status === "rejected" ? (
+            <QuickButton
+              label={t("undo")}
+              onClick={onReopen}
+              disabled={pending}
+              className="hover:text-foreground"
+            >
+              <RotateCcw className="size-4" aria-hidden />
+            </QuickButton>
+          ) : (
+            <QuickButton
+              label={t("reject")}
+              onClick={onReject}
+              disabled={pending}
+              className="hover:text-destructive"
+            >
+              <X className="size-4" aria-hidden />
+            </QuickButton>
+          )}
           <a
             href={`/api/files/${doc.fileId}?download=1`}
             download

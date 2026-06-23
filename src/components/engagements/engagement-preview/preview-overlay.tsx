@@ -331,6 +331,26 @@ export function PreviewOverlay({
     }
   }
 
+  // Undo a rejection (or approval) — the file goes back to in-review. Shown in
+  // place of the reject control once a document is already rejected, so it reads
+  // as DONE with an undo rather than prompting a pointless second reject.
+  async function reopen(doc: PreviewDoc) {
+    setOverrides((prev) => new Map(prev).set(doc.fileId, "pending"));
+    setFilePending(doc.fileId, true);
+    try {
+      const r = await fetch(`/api/files/${doc.fileId}/reopen`, {
+        method: "POST",
+      });
+      const res = (await r.json().catch(() => null)) as { ok?: boolean } | null;
+      if (!res?.ok) throw new Error("reopen_failed");
+    } catch {
+      clearOverride(doc.fileId);
+      toast.error(t("action_failed"));
+    } finally {
+      setFilePending(doc.fileId, false);
+    }
+  }
+
   // Trap Tab within the overlay so keyboard focus can't fall back to the dimmed
   // engagement page behind it. Skips anything inside an `inert` subtree (the
   // grid while the detail is open, the whole panel while the reject prompt is).
@@ -612,6 +632,7 @@ export function PreviewOverlay({
                             onOpen={() => setSelectedFileId(doc.fileId)}
                             onApprove={() => approve(doc)}
                             onReject={() => setRejectTarget(doc)}
+                            onReopen={() => reopen(doc)}
                           />
                         );
                       })}
@@ -648,6 +669,7 @@ export function PreviewOverlay({
             }
             onApprove={() => approve(selectedDoc)}
             onReject={() => setRejectTarget(selectedDoc)}
+            onReopen={() => reopen(selectedDoc)}
             onBack={() => {
               setSelectedFileId(null);
               panelRef.current?.focus();
