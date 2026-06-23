@@ -2,7 +2,7 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
-  BookOpenCheck,
+  Plug,
   ListChecks,
   PencilLine,
   ClipboardList,
@@ -130,14 +130,14 @@ export function buildSearchRegistry(
       keywords: "ready to review awaiting review queue prets a reviser a reviser",
     },
     {
-      id: "quickbooks-drafts",
-      label: t.app("nav_quickbooks"),
+      id: "integrations-quickbooks",
+      label: t.app("nav_integrations"),
       group: "go",
-      icon: BookOpenCheck,
+      icon: Plug,
       color: "text-icon-cyan",
       href: "/quickbooks/drafts",
       keywords:
-        "quickbooks drafts bookkeeping transactions approve dismiss qbo intuit comptabilite brouillons ecritures approuver",
+        "integrations integration connect apps quickbooks drafts bookkeeping transactions approve dismiss qbo intuit integrations comptabilite brouillons ecritures approuver",
     },
     {
       id: "eng-drafts",

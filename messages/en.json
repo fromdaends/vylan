@@ -982,6 +982,7 @@
     "nav_engagements_toggle": "Toggle engagement views",
     "nav_templates": "Templates",
     "nav_quickbooks": "QuickBooks",
+    "nav_integrations": "Integrations",
     "nav_billing": "Billing",
     "nav_settings": "Settings",
     "nav_firm": "Firm",
@@ -1943,6 +1944,7 @@
   },
   "Quickbooks": {
     "draft_title": "QuickBooks draft",
+    "draft_kicker": "QuickBooks",
     "draft_badge": "Draft",
     "readiness": "Match readiness: {pct}%",
     "draft_readonly_hint": "Suggested mapping for your review. Nothing is sent to QuickBooks yet.",

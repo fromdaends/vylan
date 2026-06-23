@@ -23,7 +23,6 @@ import {
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
   Archive,
-  BookOpenCheck,
   Building2,
   ChevronDown,
   ChevronUp,
@@ -37,6 +36,7 @@ import {
   PanelLeft,
   PanelLeftClose,
   PencilLine,
+  Plug,
   Search,
   Settings,
   Sparkles,
@@ -65,7 +65,7 @@ type Labels = {
   engagements: string;
   engagementsToggle: string;
   templates: string;
-  quickbooks: string;
+  integrations: string;
   settings: string;
   firm: string;
   logout: string;
@@ -217,13 +217,15 @@ export function AppShell({
     },
   ];
 
-  // QuickBooks drafts queue — a destination only when the firm has QuickBooks
-  // connected. Rendered after the Engagements section in the sidebar.
-  const quickbooksNav: NavItemDef | null = quickbooksConnected
+  // Integrations hub (QuickBooks today; more software later) — a destination
+  // only when the firm has an integration connected. Rendered after the
+  // Engagements section in the sidebar. Currently lands on the QuickBooks drafts
+  // queue, the only integration surface so far.
+  const integrationsNav: NavItemDef | null = quickbooksConnected
     ? {
         href: "/quickbooks/drafts",
-        label: labels.quickbooks,
-        icon: BookOpenCheck,
+        label: labels.integrations,
+        icon: Plug,
         color: "text-icon-cyan",
       }
     : null;
@@ -251,7 +253,7 @@ export function AppShell({
       >
         <SidebarBody
           primaryNav={primaryNav}
-          quickbooksNav={quickbooksNav}
+          integrationsNav={integrationsNav}
           labels={labels}
           engagementBadges={engagementBadges}
           brandColor={brandColor}
@@ -587,7 +589,7 @@ function MobileMenuItem({
 
 function SidebarBody({
   primaryNav,
-  quickbooksNav,
+  integrationsNav,
   labels,
   engagementBadges,
   brandColor,
@@ -600,7 +602,7 @@ function SidebarBody({
   onToggleCollapse,
 }: {
   primaryNav: NavItemDef[];
-  quickbooksNav: NavItemDef | null;
+  integrationsNav: NavItemDef | null;
   labels: Labels;
   engagementBadges: EngagementBadgeCounts;
   brandColor: string;
@@ -726,14 +728,14 @@ function SidebarBody({
             badges={engagementBadges}
             collapsed={collapsed}
           />
-          {/* QuickBooks drafts queue — only when connected. */}
-          {quickbooksNav && (
+          {/* Integrations hub — only when an integration is connected. */}
+          {integrationsNav && (
             <NavLink
-              href={quickbooksNav.href}
-              icon={quickbooksNav.icon}
-              label={quickbooksNav.label}
+              href={integrationsNav.href}
+              icon={integrationsNav.icon}
+              label={integrationsNav.label}
               collapsed={collapsed}
-              color={quickbooksNav.color}
+              color={integrationsNav.color}
             />
           )}
         </NavSection>
