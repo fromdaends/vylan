@@ -105,15 +105,20 @@ export async function POST(
     return NextResponse.json({ error: "save_failed" }, { status: 500 });
   }
 
+  // Bust the cache for BOTH locales unconditionally, the moment the write
+  // succeeds — never let it hinge on the best-effort audit log below (mirrors
+  // resolve/route.ts). revalidatePath is synchronous and won't throw.
+  for (const loc of LOCALES) {
+    revalidatePath(`/${loc}/engagements/${draft.engagementId}`);
+  }
+
+  // Audit trail (best-effort: a failure here must not fail an applied status).
   try {
     await logUserActivity(draft.firmId, draft.engagementId, ACTION[target], {
       file_id: fileId,
     });
-    for (const loc of LOCALES) {
-      revalidatePath(`/${loc}/engagements/${draft.engagementId}`);
-    }
   } catch (err) {
-    console.error("[qbo status route] post-step failed (status applied):", err);
+    console.error("[qbo status route] audit log failed (status applied):", err);
   }
 
   return NextResponse.json({ ok: true, status: target });
