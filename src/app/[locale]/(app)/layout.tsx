@@ -125,7 +125,7 @@ export default async function AppLayout({
         engagements: t("nav_engagements"),
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
-        quickbooks: t("nav_quickbooks"),
+        integrations: t("nav_integrations"),
         engagementViews: {
           active: tEng("view_active_label"),
           ready: tEng("view_ready_label"),

@@ -989,6 +989,7 @@
     "nav_engagements_toggle": "Afficher les vues des engagements",
     "nav_templates": "Modèles",
     "nav_quickbooks": "QuickBooks",
+    "nav_integrations": "Intégrations",
     "nav_billing": "Facturation",
     "nav_settings": "Paramètres",
     "settings_title": "Paramètres du cabinet",
@@ -1943,6 +1944,7 @@
   },
   "Quickbooks": {
     "draft_title": "Brouillon QuickBooks",
+    "draft_kicker": "QuickBooks",
     "draft_badge": "Brouillon",
     "readiness": "Degré de correspondance : {pct} %",
     "draft_readonly_hint": "Correspondance suggérée à vérifier. Rien n’est encore envoyé à QuickBooks.",

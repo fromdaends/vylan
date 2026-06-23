@@ -851,6 +851,7 @@ async function ItemRow({
                               : null
                           }
                           reviewedAt={d.reviewedAt}
+                          documentName={f.display_name ?? f.original_filename}
                         />
                       );
                     })()

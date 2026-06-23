@@ -2,12 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { ArrowDownLeft, ArrowUpRight, HelpCircle, TriangleAlert } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/cn";
-import {
-  formatCurrency,
-  formatDate,
-  formatNumber,
-  type AppLocale,
-} from "@/lib/format";
+import { formatCurrency, formatNumber, type AppLocale } from "@/lib/format";
 import type { FirmDraftRow } from "@/lib/db/quickbooks-suggestions";
 import {
   QuickbooksDraftCard,
@@ -66,10 +61,6 @@ export async function QueueRow({
   };
   const pill = bucketPill[bucket];
 
-  const reviewedDate = row.reviewedAt
-    ? formatDate(row.reviewedAt, locale, "medium")
-    : null;
-
   const summary = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
       {/* Identity: client + engagement link, then the document. */}
@@ -96,16 +87,12 @@ export async function QueueRow({
         </div>
       </div>
 
-      {/* Amount. */}
+      {/* Amount. (Who/when is shown in the card when the row is expanded, so
+          it isn't duplicated here.) */}
       <div className="text-right tabular-nums">
         <div className="text-sm font-semibold text-foreground">
           {amountLabel}
         </div>
-        {reviewedDate && (bucket === "approved" || bucket === "dismissed") && (
-          <div className="text-[11px] text-muted-foreground">
-            {reviewedByName ? `${reviewedByName} · ${reviewedDate}` : reviewedDate}
-          </div>
-        )}
       </div>
 
       {/* Bucket pill. */}
@@ -141,6 +128,7 @@ export async function QueueRow({
         status={row.status}
         reviewedByName={reviewedByName}
         reviewedAt={row.reviewedAt}
+        documentName={row.documentName}
         showStatusControls={false}
       />
     </QueueRowDisclosure>

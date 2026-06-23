@@ -49,6 +49,7 @@ export async function QuickbooksDraftCard({
   status,
   reviewedByName,
   reviewedAt,
+  documentName = null,
   showStatusControls = true,
 }: {
   suggestion: TransactionSuggestion;
@@ -63,6 +64,9 @@ export async function QuickbooksDraftCard({
   status: DraftStatus;
   reviewedByName: string | null;
   reviewedAt: string | null;
+  // Stage 4, Phase 3: the source document's name, used as the card title when
+  // there's no resolved/matched vendor or customer to name it by.
+  documentName?: string | null;
   // Stage 4, Phase 3: hide the footer Approve/Dismiss/Reopen controls when the
   // surrounding surface already renders them (the firm-wide queue row does), so
   // they're not shown twice. Defaults true (the engagement page keeps them).
@@ -144,6 +148,13 @@ export async function QuickbooksDraftCard({
         ? `${formatNumber(v.amount, locale, 2)} ${v.currency}`
         : formatCurrency(v.amount, locale);
 
+  // A descriptive title for this particular entry: the vendor/customer it books
+  // to (the accountant's pick, else the AI match), falling back to the source
+  // document's name, then a generic label only when neither is known. The small
+  // "QuickBooks" kicker above keeps the card's identity; the status pill carries
+  // the state, so the title never has to say "draft".
+  const cardTitle = eff.party?.name ?? documentName ?? t("draft_title");
+
   return (
     <div
       className={cn(
@@ -159,12 +170,17 @@ export async function QuickbooksDraftCard({
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
           <BookOpen className="h-4 w-4" aria-hidden="true" />
         </span>
-        <span className="text-sm font-semibold leading-none">
-          {t("draft_title")}
-        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground leading-none">
+            {t("draft_kicker")}
+          </div>
+          <div className="mt-1 truncate text-sm font-semibold leading-none">
+            {cardTitle}
+          </div>
+        </div>
         <span
           className={cn(
-            "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+            "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
             statusPill.cls,
           )}
         >
