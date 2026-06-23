@@ -1,22 +1,21 @@
 import { getTranslations } from "next-intl/server";
 import { BookOpen, TriangleAlert } from "lucide-react";
-import type { TransactionSuggestion } from "@/lib/quickbooks/suggest";
-import { summarizeDrafts } from "@/lib/quickbooks/draft-summary";
+import { summarizeDrafts, type DraftItem } from "@/lib/quickbooks/draft-summary";
 import { formatCurrency, type AppLocale } from "@/lib/format";
 
 // Engagement-level roll-up of the QuickBooks drafts, shown at the top of the
-// checklist tab so the accountant sees "here's what I drafted" at a glance.
-// Read-only; renders nothing when there are no drafts.
+// checklist tab so the accountant sees "here's what's drafted" at a glance.
+// Counts the accountant's resolved picks. Renders nothing when there are no drafts.
 export async function QuickbooksDraftsSummary({
-  suggestions,
+  drafts,
   locale,
 }: {
-  suggestions: TransactionSuggestion[];
+  drafts: DraftItem[];
   locale: AppLocale;
 }) {
-  if (suggestions.length === 0) return null;
+  if (drafts.length === 0) return null;
   const t = await getTranslations("Quickbooks");
-  const s = summarizeDrafts(suggestions);
+  const s = summarizeDrafts(drafts);
 
   return (
     <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-xs">

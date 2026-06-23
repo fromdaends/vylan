@@ -1967,6 +1967,9 @@
     "summary_label": "Brouillons QuickBooks",
     "summary_drafts": "{count, plural, one {# brouillon} other {# brouillons}}",
     "summary_needs_input": "{count, plural, one {# à compléter} other {# à compléter}}",
-    "summary_total": "{amount} au total"
+    "summary_total": "{amount} au total",
+    "pick_search": "Rechercher…",
+    "pick_empty": "Aucun résultat.",
+    "pick_clear": "Effacer"
   }
 }

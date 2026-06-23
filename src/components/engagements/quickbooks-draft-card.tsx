@@ -6,37 +6,59 @@ import {
   HelpCircle,
   TriangleAlert,
 } from "lucide-react";
-import type { TransactionSuggestion } from "@/lib/quickbooks/suggest";
-import {
-  deriveQuickbooksDraftView,
-  type DraftFieldView,
-} from "./quickbooks-draft-view";
+import type {
+  TransactionSuggestion,
+  ResolvedEntry,
+} from "@/lib/quickbooks/suggest";
+import { effectiveMapping } from "@/lib/quickbooks/draft-resolve";
+import { deriveQuickbooksDraftView } from "./quickbooks-draft-view";
 import { RegenerateDraftButton } from "./regenerate-draft-button";
+import {
+  QuickbooksEditableField,
+  type PickOption,
+} from "./quickbooks-editable-field";
 import { formatCurrency, formatDate, formatNumber, type AppLocale } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
-// Read-only "QuickBooks draft" card (Stage 3). Sits under a receipt / invoice on
-// the engagement page. Redesigned to be scannable at a glance:
+export type DraftCardOptions = {
+  vendors: PickOption[];
+  customers: PickOption[];
+  accounts: PickOption[];
+  taxCodes: PickOption[];
+};
+
+// "QuickBooks draft" card (Stage 4). Sits under a receipt / invoice on the
+// engagement page. Scannable at a glance:
 //   * a header with the title + a match-readiness meter;
 //   * a HERO line — the amount, with the expense/income direction and date;
-//   * the three mapping targets (vendor/customer, account, tax code) as cells,
-//     where anything that needs the accountant's pick is highlighted amber.
-// Nothing posts to QuickBooks; this is a preview the approval queue (Stage 4)
-// will make actionable.
+//   * the three mapping targets (vendor/customer, account, tax code) as EDITABLE
+//     cells — the accountant picks each from their connected QuickBooks lists;
+//     anything still unchosen is highlighted amber.
+// Still READ-ONLY on QuickBooks; the picks are only recorded (posting is Stage 5).
 export async function QuickbooksDraftCard({
   suggestion,
+  resolved,
+  options,
   locale,
   fileId,
 }: {
   suggestion: TransactionSuggestion;
+  // The accountant's saved picks (null until they edit).
+  resolved: ResolvedEntry | null;
+  // The firm's cached QuickBooks lists to pick from.
+  options: DraftCardOptions;
   locale: AppLocale;
-  // The uploaded file this draft belongs to — powers the "Refresh" control.
+  // The uploaded file this draft belongs to — powers Refresh + the edits.
   fileId: string;
 }) {
   const t = await getTranslations("Quickbooks");
   const v = deriveQuickbooksDraftView(suggestion);
+  const eff = effectiveMapping(suggestion, resolved);
   const readinessPct = Math.round(v.readiness * 100);
   const ready = v.readiness >= 0.7;
+  // Pick the right list for the party: customers for income, vendors otherwise.
+  const partyOptions =
+    v.partyKind === "customer" ? options.customers : options.vendors;
 
   const directionLabel =
     v.direction === "expense"
@@ -76,8 +98,6 @@ export async function QuickbooksDraftCard({
       : v.foreignCurrency && v.currency
         ? `${formatNumber(v.amount, locale, 2)} ${v.currency}`
         : formatCurrency(v.amount, locale);
-
-  const archivedLabel = t("archived");
 
   return (
     <div className="mt-1.5 overflow-hidden rounded-xl border border-border/60 bg-card/70 shadow-sm">
@@ -138,17 +158,38 @@ export async function QuickbooksDraftCard({
         </div>
       </div>
 
-      {/* The three mapping targets. Anything still needing a pick is amber. */}
+      {/* The three mapping targets — editable. Anything still unchosen is amber. */}
       <div
         className={cn(
           "grid grid-cols-1 gap-1.5 px-3 pt-2.5 sm:grid-cols-2",
           v.hasTax ? "lg:grid-cols-3" : "",
         )}
       >
-        <MapField label={partyLabel} field={v.party} choosePrompt={partyChoose} archivedLabel={archivedLabel} />
-        <MapField label={t("field_account")} field={v.account} choosePrompt={t("choose_account")} archivedLabel={archivedLabel} />
+        <QuickbooksEditableField
+          fileId={fileId}
+          field="party"
+          label={partyLabel}
+          options={partyOptions}
+          initial={eff.party}
+          choosePrompt={partyChoose}
+        />
+        <QuickbooksEditableField
+          fileId={fileId}
+          field="account"
+          label={t("field_account")}
+          options={options.accounts}
+          initial={eff.account}
+          choosePrompt={t("choose_account")}
+        />
         {v.hasTax && (
-          <MapField label={t("field_tax")} field={v.tax} choosePrompt={t("confirm_tax")} archivedLabel={archivedLabel} />
+          <QuickbooksEditableField
+            fileId={fileId}
+            field="taxCode"
+            label={t("field_tax")}
+            options={options.taxCodes}
+            initial={eff.taxCode}
+            choosePrompt={t("confirm_tax")}
+          />
         )}
       </div>
 
@@ -165,54 +206,6 @@ export async function QuickbooksDraftCard({
           {t("draft_readonly_hint")}
         </p>
         <RegenerateDraftButton fileId={fileId} />
-      </div>
-    </div>
-  );
-}
-
-// One mapping target as a labelled cell. Matched values read calm; anything the
-// accountant still has to choose gets an amber tint + icon so it's obvious at a
-// glance what's left to do (never colour alone).
-function MapField({
-  label,
-  field,
-  choosePrompt,
-  archivedLabel,
-}: {
-  label: string;
-  field: DraftFieldView;
-  choosePrompt: string;
-  archivedLabel: string;
-}) {
-  const needsPick = field.state === "ambiguous" || field.state === "none";
-  return (
-    <div
-      className={cn(
-        "min-w-0 rounded-lg px-2.5 py-1.5",
-        needsPick ? "bg-warning/10" : "bg-muted/50",
-      )}
-    >
-      <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-0.5 flex items-center gap-1 text-sm">
-        {field.state === "matched" && (
-          <span className="truncate font-medium text-foreground" title={field.name ?? undefined}>
-            {field.name}
-          </span>
-        )}
-        {field.state === "matched_archived" && (
-          <span className="min-w-0 truncate font-medium text-warning" title={field.name ?? undefined}>
-            {field.name}
-            <span className="font-normal"> · {archivedLabel}</span>
-          </span>
-        )}
-        {needsPick && (
-          <>
-            <TriangleAlert className="h-3 w-3 shrink-0 text-warning" aria-hidden="true" />
-            <span className="truncate font-medium text-warning">{choosePrompt}</span>
-          </>
-        )}
       </div>
     </div>
   );

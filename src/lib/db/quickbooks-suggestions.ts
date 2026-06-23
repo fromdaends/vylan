@@ -8,33 +8,123 @@
 
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isMissingSchema } from "@/lib/db/quickbooks";
-import type { TransactionSuggestion } from "@/lib/quickbooks/suggest";
+import type {
+  TransactionSuggestion,
+  ResolvedEntry,
+} from "@/lib/quickbooks/suggest";
+
+// One stored draft: the AI suggestion + the accountant's resolved picks (Stage 4,
+// null until they edit) + its status.
+export type StoredDraft = {
+  suggestion: TransactionSuggestion;
+  resolved: ResolvedEntry | null;
+  status: string;
+};
 
 // Read every draft suggestion for an engagement, keyed by uploaded_file_id, so
 // the page can drop the right card under each receipt/invoice. Authenticated +
 // RLS firm-scoped. Returns an EMPTY map (never throws) when the table doesn't
-// exist yet or on any read error — the cards just don't show.
+// exist yet or on any read error — the cards just don't show. `resolved` is null
+// before migration 0440 is applied (select degrades to the pre-0440 columns).
 export async function getSuggestionsForEngagement(
   engagementId: string,
-): Promise<Map<string, TransactionSuggestion>> {
-  const out = new Map<string, TransactionSuggestion>();
+): Promise<Map<string, StoredDraft>> {
+  const out = new Map<string, StoredDraft>();
   const sb = await getServerSupabase();
-  const { data, error } = await sb
+  const primary = await sb
     .from("quickbooks_transaction_suggestions")
-    .select("uploaded_file_id, suggestion")
+    .select("uploaded_file_id, suggestion, resolved, status")
     .eq("engagement_id", engagementId);
+  let rows = primary.data as Array<Record<string, unknown>> | null;
+  let error = primary.error;
+  // Graceful fallback if 0440 (resolved) isn't applied yet — re-read without it.
+  if (error && isMissingSchema(error)) {
+    const fb = await sb
+      .from("quickbooks_transaction_suggestions")
+      .select("uploaded_file_id, suggestion, status")
+      .eq("engagement_id", engagementId);
+    rows = fb.data as Array<Record<string, unknown>> | null;
+    error = fb.error;
+  }
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] getSuggestionsForEngagement failed:", error);
     }
     return out;
   }
-  for (const row of data ?? []) {
-    const fileId = row.uploaded_file_id as string | null;
-    const suggestion = row.suggestion as TransactionSuggestion | null;
-    if (fileId && suggestion) out.set(fileId, suggestion);
+  for (const row of rows ?? []) {
+    const r = row as {
+      uploaded_file_id: string | null;
+      suggestion: TransactionSuggestion | null;
+      resolved?: ResolvedEntry | null;
+      status?: string | null;
+    };
+    if (r.uploaded_file_id && r.suggestion) {
+      out.set(r.uploaded_file_id, {
+        suggestion: r.suggestion,
+        resolved: r.resolved ?? null,
+        status: r.status ?? "draft",
+      });
+    }
   }
   return out;
+}
+
+// Read just the AI suggestion + accountant's resolved picks for one file, used to
+// authorize + merge a partial edit. Authenticated (RLS firm-scoped) — a row for
+// another firm simply isn't returned.
+export async function getDraftForFile(
+  uploadedFileId: string,
+): Promise<{ engagementId: string; resolved: ResolvedEntry | null } | null> {
+  const sb = await getServerSupabase();
+  const primary = await sb
+    .from("quickbooks_transaction_suggestions")
+    .select("engagement_id, resolved")
+    .eq("uploaded_file_id", uploadedFileId)
+    .maybeSingle();
+  let row = primary.data as Record<string, unknown> | null;
+  let error = primary.error;
+  if (error && isMissingSchema(error)) {
+    const fb = await sb
+      .from("quickbooks_transaction_suggestions")
+      .select("engagement_id")
+      .eq("uploaded_file_id", uploadedFileId)
+      .maybeSingle();
+    row = fb.data as Record<string, unknown> | null;
+    error = fb.error;
+  }
+  if (error || !row) return null;
+  return {
+    engagementId: row.engagement_id as string,
+    resolved: (row.resolved as ResolvedEntry | null) ?? null,
+  };
+}
+
+// Persist the accountant's resolved mapping for one file (service role — the
+// table has no authenticated write grant). Stamps who/when. Best-effort +
+// graceful pre-0440 (a missing column is logged and swallowed).
+export async function saveResolvedForFile(input: {
+  uploadedFileId: string;
+  resolved: ResolvedEntry;
+  reviewerId: string | null;
+}): Promise<boolean> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("quickbooks_transaction_suggestions")
+    .update({
+      resolved: input.resolved,
+      reviewed_by: input.reviewerId,
+      reviewed_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("uploaded_file_id", input.uploadedFileId);
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] saveResolvedForFile failed:", error);
+    }
+    return false;
+  }
+  return true;
 }
 
 // Persist (insert or replace) the draft suggestion for one uploaded file.
