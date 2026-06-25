@@ -1,10 +1,11 @@
-// Undo a posted draft (Stage 5, Phase 1) via a STABLE URL endpoint: VOID the
-// transaction in QuickBooks (keeps a voided record, audit-safe — never a hard
-// delete) and return the draft to 'approved' so it can be fixed and re-posted.
+// Undo a posted draft (Stage 5, Phase 1) via a STABLE URL endpoint: DELETE the
+// transaction in QuickBooks (a Bill can't be voided via the API — QuickBooks
+// still keeps the deletion in its Audit Log) and return the draft to 'approved'
+// so it can be fixed and re-posted.
 //
-// Auth + RLS-scoped read (getDraftForFile) is the authorization. bumping
+// Auth + RLS-scoped read (getDraftForFile) is the authorization. Bumping
 // post_attempt on success means a later re-post uses a FRESH idempotency
-// requestid instead of re-fetching the now-voided transaction.
+// requestid instead of re-fetching the now-deleted transaction.
 
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
@@ -15,7 +16,7 @@ import {
   recordDraftPostError,
 } from "@/lib/db/quickbooks-suggestions";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
-import { quickbooksVoid, QuickbooksError } from "@/lib/quickbooks/client";
+import { quickbooksDelete, QuickbooksError } from "@/lib/quickbooks/client";
 import { logUserActivity } from "@/lib/db/activity";
 
 export const runtime = "nodejs";
@@ -73,7 +74,7 @@ export async function POST(
   }
 
   try {
-    await quickbooksVoid(
+    await quickbooksDelete(
       ctx,
       "bill",
       draft.postedQboId,
@@ -82,7 +83,7 @@ export async function POST(
   } catch (e) {
     const detail =
       e instanceof QuickbooksError ? e.message : (e as Error).message;
-    // The draft stays 'posted'; surface the void error on its card.
+    // The draft stays 'posted'; surface the undo error on its card.
     await recordDraftPostError({
       uploadedFileId: fileId,
       error: `Undo failed: ${detail}`,

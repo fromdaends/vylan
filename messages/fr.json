@@ -2026,7 +2026,7 @@
     "posted_by": "Comptabilisé par {name}",
     "undo_button": "Annuler",
     "undo_title": "Annuler cette comptabilisation?",
-    "undo_body": "Ceci annule la transaction dans QuickBooks (elle reste comme enregistrement annulé) et redonne le statut Approuvé au brouillon.",
+    "undo_body": "Ceci supprime la facture dans QuickBooks (QuickBooks la conserve dans son journal d’audit) et redonne le statut Approuvé au brouillon.",
     "undo_go": "Annuler la comptabilisation",
     "undo_failed": "Échec de l’annulation. Réessayez."
   }

@@ -414,11 +414,12 @@ export async function quickbooksCreate(
   return parseEntityResult(json, "Bill");
 }
 
-// VOID a posted transaction (the Stage 5 undo). A void zeroes the amounts and
-// marks it Voided in QuickBooks but KEEPS the record (audit-safe), unlike a hard
-// delete. Uses the sparse update form (?operation=void) with the entity Id +
-// current SyncToken. Throws a typed QuickbooksError on any non-2xx.
-export async function quickbooksVoid(
+// DELETE a posted transaction (the Stage 5 undo). A QuickBooks BILL cannot be
+// voided via the API (void is only for sales transactions / payments), so the
+// undo is a delete: POST ?operation=delete with the entity Id + current
+// SyncToken. QuickBooks still records the deletion in its own Audit Log. Throws
+// a typed QuickbooksError on any non-2xx OR an in-body Fault.
+export async function quickbooksDelete(
   ctx: { accessToken: string; realmId: string; environment?: QuickbooksEnvironment },
   entity: "bill",
   id: string,
@@ -426,7 +427,7 @@ export async function quickbooksVoid(
 ): Promise<QboEntityResult> {
   const url =
     `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}` +
-    `/${entity}?operation=void&minorversion=${QBO_MINORVERSION}`;
+    `/${entity}?operation=delete&minorversion=${QBO_MINORVERSION}`;
   let res: Response;
   try {
     res = await fetch(url, {
@@ -443,29 +444,38 @@ export async function quickbooksVoid(
   } catch (e) {
     throw new QuickbooksError(
       "request_failed",
-      `QuickBooks void request failed: ${(e as Error).message}`,
+      `QuickBooks delete request failed: ${(e as Error).message}`,
     );
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new QuickbooksError(
       "write_failed",
-      `QuickBooks void failed (${res.status}): ${truncate(detail)}`,
+      `QuickBooks delete failed (${res.status}): ${truncate(detail)}`,
       res.status,
     );
   }
+  // A delete only needs to have SUCCEEDED — we don't consume the returned id (the
+  // create path does). QuickBooks can still return a 200 with a Fault (e.g. a
+  // stale SyncToken or "object not found"); surface that. Otherwise it's done.
   const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  return parseEntityResult(json, "Bill");
+  const fault = extractFault(json);
+  if (fault) throw new QuickbooksError("write_failed", fault);
+  return { id, syncToken };
 }
 
-// Pull { Id, SyncToken } out of an Intuit create/void response shaped like
-// { "Bill": { "Id": "123", "SyncToken": "0", ... } }. Throws write_failed if the
-// id is missing (a malformed/unexpected 2xx body) so the caller never records a
-// bogus posting.
+// Pull { Id, SyncToken } out of an Intuit create/delete response shaped like
+// { "Bill": { "Id": "123", "SyncToken": "0", ... } }. QuickBooks can return a
+// 200 with a Fault (a business-rule rejection, e.g. an unsupported operation) —
+// surface that real message rather than a generic one. Throws write_failed if
+// neither a usable entity Id nor a Fault is present, so the caller never records
+// a bogus result.
 function parseEntityResult(
   json: Record<string, unknown> | null,
   key: string,
 ): QboEntityResult {
+  const fault = extractFault(json);
+  if (fault) throw new QuickbooksError("write_failed", fault);
   const entity = (json?.[key] ?? null) as Record<string, unknown> | null;
   const id = entity && typeof entity.Id === "string" ? entity.Id : null;
   const syncToken =
@@ -473,10 +483,23 @@ function parseEntityResult(
   if (!id) {
     throw new QuickbooksError(
       "write_failed",
-      "QuickBooks returned no transaction id.",
+      "QuickBooks returned an unexpected response.",
     );
   }
   return { id, syncToken };
+}
+
+// Pull a human-readable message out of an Intuit `Fault` element (returned on
+// some 200 responses), e.g. { Fault: { Error: [{ Message, Detail }] } }.
+function extractFault(json: Record<string, unknown> | null): string | null {
+  const fault = (json?.Fault ?? null) as { Error?: unknown } | null;
+  if (!fault) return null;
+  const errors = Array.isArray(fault.Error) ? fault.Error : [];
+  const first = (errors[0] ?? null) as
+    | { Message?: string; Detail?: string }
+    | null;
+  const msg = first?.Detail || first?.Message || "QuickBooks rejected the request.";
+  return truncate(msg);
 }
 
 // Cap any upstream error body we keep so a large/HTML error page can't bloat a
