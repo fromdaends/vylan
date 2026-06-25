@@ -26,8 +26,10 @@ export const runtime = "nodejs";
 
 const LOCALES = ["en", "fr"] as const;
 
-// The activity-log action string for each target state (audit trail).
-const ACTION: Record<DraftStatus, string> = {
+// The activity-log action string for each target state (audit trail). 'posted'
+// is intentionally absent — posting/undo go through the dedicated /post + /void
+// routes, and canTransitionDraft never allows 'posted' as a target here.
+const ACTION: Partial<Record<DraftStatus, string>> = {
   approved: "approve_qbo_draft",
   dismissed: "dismiss_qbo_draft",
   draft: "reopen_qbo_draft",
@@ -114,7 +116,7 @@ export async function POST(
 
   // Audit trail (best-effort: a failure here must not fail an applied status).
   try {
-    await logUserActivity(draft.firmId, draft.engagementId, ACTION[target], {
+    await logUserActivity(draft.firmId, draft.engagementId, ACTION[target] ?? "qbo_draft_status", {
       file_id: fileId,
     });
   } catch (err) {

@@ -20,44 +20,57 @@ import {
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import type { TransactionExtraction } from "@/lib/ai/transaction-extract";
 
+// The Stage 5 post columns a row may carry (all null/0 before migration 0450).
+export type PostState = {
+  postedQboId: string | null;
+  postedAt: string | null;
+  postedBy: string | null;
+  postError: string | null;
+};
+
 // One stored draft: the AI suggestion + the accountant's resolved picks (Stage 4,
 // null until they edit) + its status + who last reviewed it (approved / dismissed
-// / reopened / edited) and when.
+// / reopened / edited) and when + (Stage 5) its post state.
 export type StoredDraft = {
   suggestion: TransactionSuggestion;
   resolved: ResolvedEntry | null;
   status: DraftStatus;
   reviewedBy: string | null;
   reviewedAt: string | null;
-};
+} & PostState;
+
+// The select column sets, widest first. Each reader tries them in order and
+// falls through on a missing-schema error, so the app degrades gracefully across
+// the migration windows (0450 = posted_* columns; 0440 = resolved + reviewed_*).
+const ENGAGEMENT_SELECTS = [
+  "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error",
+  "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at",
+  "uploaded_file_id, suggestion, status",
+] as const;
 
 // Read every draft suggestion for an engagement, keyed by uploaded_file_id, so
 // the page can drop the right card under each receipt/invoice. Authenticated +
 // RLS firm-scoped. Returns an EMPTY map (never throws) when the table doesn't
-// exist yet or on any read error — the cards just don't show. `resolved` is null
-// before migration 0440 is applied (select degrades to the pre-0440 columns).
+// exist yet or on any read error — the cards just don't show.
 export async function getSuggestionsForEngagement(
   engagementId: string,
 ): Promise<Map<string, StoredDraft>> {
   const out = new Map<string, StoredDraft>();
   const sb = await getServerSupabase();
-  const primary = await sb
-    .from("quickbooks_transaction_suggestions")
-    .select(
-      "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at",
-    )
-    .eq("engagement_id", engagementId);
-  let rows = primary.data as Array<Record<string, unknown>> | null;
-  let error = primary.error;
-  // Graceful fallback if 0440 (resolved + reviewed_by/at) isn't applied yet —
-  // re-read without those columns.
-  if (error && isMissingSchema(error)) {
-    const fb = await sb
+  let rows: Array<Record<string, unknown>> | null = null;
+  let error: { code?: string; message?: string } | null = null;
+  for (const sel of ENGAGEMENT_SELECTS) {
+    const res = await sb
       .from("quickbooks_transaction_suggestions")
-      .select("uploaded_file_id, suggestion, status")
+      .select(sel)
       .eq("engagement_id", engagementId);
-    rows = fb.data as Array<Record<string, unknown>> | null;
-    error = fb.error;
+    if (res.error && isMissingSchema(res.error)) {
+      error = res.error;
+      continue; // try the narrower column set
+    }
+    rows = res.data as Array<Record<string, unknown>> | null;
+    error = res.error;
+    break;
   }
   if (error) {
     if (!isMissingSchema(error)) {
@@ -73,6 +86,10 @@ export async function getSuggestionsForEngagement(
       status?: string | null;
       reviewed_by?: string | null;
       reviewed_at?: string | null;
+      posted_qbo_id?: string | null;
+      posted_at?: string | null;
+      posted_by?: string | null;
+      post_error?: string | null;
     };
     if (r.uploaded_file_id && r.suggestion) {
       out.set(r.uploaded_file_id, {
@@ -81,6 +98,10 @@ export async function getSuggestionsForEngagement(
         status: normalizeDraftStatus(r.status),
         reviewedBy: r.reviewed_by ?? null,
         reviewedAt: r.reviewed_at ?? null,
+        postedQboId: r.posted_qbo_id ?? null,
+        postedAt: r.posted_at ?? null,
+        postedBy: r.posted_by ?? null,
+        postError: r.post_error ?? null,
       });
     }
   }
@@ -103,7 +124,13 @@ export type FirmDraftRow = {
   reviewedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
-};
+} & PostState;
+
+const FIRM_SELECTS = [
+  "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error",
+  "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at",
+  "uploaded_file_id, engagement_id, suggestion, status, created_at, updated_at",
+] as const;
 
 // Read EVERY draft for the firm (newest first) with its client/engagement/file
 // context, for the firm-wide queue page. Authenticated + RLS firm-scoped (the
@@ -114,24 +141,20 @@ export type FirmDraftRow = {
 // the table doesn't exist yet (pre-migration) or on any read error.
 export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
   const sb = await getServerSupabase();
-  const primary = await sb
-    .from("quickbooks_transaction_suggestions")
-    .select(
-      "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at",
-    )
-    .order("created_at", { ascending: false });
-  let rows = primary.data as Array<Record<string, unknown>> | null;
-  let error = primary.error;
-  // Graceful fallback if 0440 (resolved + reviewed_*) isn't applied yet.
-  if (error && isMissingSchema(error)) {
-    const fb = await sb
+  let rows: Array<Record<string, unknown>> | null = null;
+  let error: { code?: string; message?: string } | null = null;
+  for (const sel of FIRM_SELECTS) {
+    const res = await sb
       .from("quickbooks_transaction_suggestions")
-      .select(
-        "uploaded_file_id, engagement_id, suggestion, status, created_at, updated_at",
-      )
+      .select(sel)
       .order("created_at", { ascending: false });
-    rows = fb.data as Array<Record<string, unknown>> | null;
-    error = fb.error;
+    if (res.error && isMissingSchema(res.error)) {
+      error = res.error;
+      continue;
+    }
+    rows = res.data as Array<Record<string, unknown>> | null;
+    error = res.error;
+    break;
   }
   if (error) {
     if (!isMissingSchema(error)) {
@@ -220,6 +243,10 @@ export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
       reviewedAt: (r.reviewed_at as string | null) ?? null,
       createdAt: (r.created_at as string | null) ?? null,
       updatedAt: (r.updated_at as string | null) ?? null,
+      postedQboId: (r.posted_qbo_id as string | null) ?? null,
+      postedAt: (r.posted_at as string | null) ?? null,
+      postedBy: (r.posted_by as string | null) ?? null,
+      postError: (r.post_error as string | null) ?? null,
     };
   });
 }
@@ -235,23 +262,37 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
   resolved: ResolvedEntry | null;
   suggestion: TransactionSuggestion | null;
   status: DraftStatus;
+  // Stage 5 post state. postReady is true only when the 0450 columns exist — the
+  // post/void routes refuse to touch QuickBooks when false, so a write can always
+  // be recorded (no post-without-record / double-post window).
+  postedQboId: string | null;
+  postedSyncToken: string | null;
+  postAttempt: number;
+  postReady: boolean;
 } | null> {
   const sb = await getServerSupabase();
-  const primary = await sb
-    .from("quickbooks_transaction_suggestions")
-    .select("engagement_id, firm_id, resolved, suggestion, status")
-    .eq("uploaded_file_id", uploadedFileId)
-    .maybeSingle();
-  let row = primary.data as Record<string, unknown> | null;
-  let error = primary.error;
-  if (error && isMissingSchema(error)) {
-    const fb = await sb
+  const selects = [
+    "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt",
+    "engagement_id, firm_id, resolved, suggestion, status",
+    "engagement_id, firm_id, suggestion, status",
+  ] as const;
+  let row: Record<string, unknown> | null = null;
+  let error: { code?: string; message?: string } | null = null;
+  let tier = 0;
+  for (let i = 0; i < selects.length; i++) {
+    const res = await sb
       .from("quickbooks_transaction_suggestions")
-      .select("engagement_id, firm_id, suggestion, status")
+      .select(selects[i])
       .eq("uploaded_file_id", uploadedFileId)
       .maybeSingle();
-    row = fb.data as Record<string, unknown> | null;
-    error = fb.error;
+    if (res.error && isMissingSchema(res.error)) {
+      error = res.error;
+      continue;
+    }
+    row = res.data as Record<string, unknown> | null;
+    error = res.error;
+    tier = i;
+    break;
   }
   if (error || !row) return null;
   return {
@@ -260,6 +301,11 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
     resolved: (row.resolved as ResolvedEntry | null) ?? null,
     suggestion: (row.suggestion as TransactionSuggestion | null) ?? null,
     status: normalizeDraftStatus(row.status as string | null),
+    postedQboId: (row.posted_qbo_id as string | null) ?? null,
+    postedSyncToken: (row.posted_qbo_sync_token as string | null) ?? null,
+    postAttempt: (row.post_attempt as number | null) ?? 0,
+    // Only the widest select (tier 0) carries the 0450 columns.
+    postReady: tier === 0,
   };
 }
 
@@ -288,6 +334,109 @@ export async function setDraftStatus(input: {
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] setDraftStatus failed:", error);
+    }
+    return false;
+  }
+  return true;
+}
+
+// "ok" = recorded; "conflict" = the row changed under us (a concurrent reopen or
+// void) so we did NOT record — the caller must not claim success; "error" = a
+// genuine DB failure.
+export type RecordPostedResult = "ok" | "conflict" | "error";
+
+// Stage 5 — record a SUCCESSFUL post: flip status to 'posted', store the QBO
+// transaction id + SyncToken (needed to void later), stamp who/when, and clear
+// any prior post_error. Service-role write, but CONDITIONAL: it only applies when
+// the row is STILL status='approved' AND post_attempt is unchanged from what the
+// post used to build its idempotency requestid. This closes two races on the
+// write path: (a) a concurrent void bumps post_attempt, so our requestid would
+// have deduped to the now-voided transaction — the attempt mismatch makes us
+// refuse to record it; (b) a concurrent reopen flips status away from 'approved'
+// — the status guard refuses the illegal -> 'posted' transition. In both cases
+// we return "conflict" (a 0-row update) instead of recording bad state; the
+// stable requestid means the genuine retry re-finds the same transaction.
+export async function recordDraftPosted(input: {
+  uploadedFileId: string;
+  expectedAttempt: number;
+  postedQboId: string;
+  postedSyncToken: string;
+  posterId: string | null;
+}): Promise<RecordPostedResult> {
+  const sb = getServiceRoleSupabase();
+  const now = new Date().toISOString();
+  const { data, error } = await sb
+    .from("quickbooks_transaction_suggestions")
+    .update({
+      status: "posted",
+      posted_qbo_id: input.postedQboId,
+      posted_qbo_sync_token: input.postedSyncToken,
+      posted_at: now,
+      posted_by: input.posterId,
+      post_error: null,
+      updated_at: now,
+    })
+    .eq("uploaded_file_id", input.uploadedFileId)
+    .eq("status", "approved")
+    .eq("post_attempt", input.expectedAttempt)
+    .select("uploaded_file_id");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] recordDraftPosted failed:", error);
+    }
+    return "error";
+  }
+  return data && data.length > 0 ? "ok" : "conflict";
+}
+
+// Stage 5 — record a FAILED post: keep status 'approved' (so it can be retried)
+// and store the error for the accountant to see. Service-role write.
+export async function recordDraftPostError(input: {
+  uploadedFileId: string;
+  error: string;
+}): Promise<boolean> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("quickbooks_transaction_suggestions")
+    .update({
+      post_error: input.error.slice(0, 500),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("uploaded_file_id", input.uploadedFileId);
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] recordDraftPostError failed:", error);
+    }
+    return false;
+  }
+  return true;
+}
+
+// Stage 5 — record an UNDO (the QBO transaction was voided): return the draft to
+// 'approved', clear the posted id/sync token, bump post_attempt (so a re-post
+// uses a FRESH idempotency requestid rather than re-fetching the voided txn), and
+// clear posted_at/by + any error. Service-role write.
+export async function recordDraftVoided(input: {
+  uploadedFileId: string;
+  nextAttempt: number;
+}): Promise<boolean> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("quickbooks_transaction_suggestions")
+    .update({
+      status: "approved",
+      posted_qbo_id: null,
+      posted_qbo_sync_token: null,
+      post_attempt: input.nextAttempt,
+      posted_at: null,
+      posted_by: null,
+      post_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("uploaded_file_id", input.uploadedFileId);
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] recordDraftVoided failed:", error);
     }
     return false;
   }

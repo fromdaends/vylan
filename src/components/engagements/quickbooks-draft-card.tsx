@@ -18,6 +18,7 @@ import {
 import { deriveQuickbooksDraftView } from "./quickbooks-draft-view";
 import { RegenerateDraftButton } from "./regenerate-draft-button";
 import { DraftStatusControls } from "./draft-status-controls";
+import { PostDraftControls } from "@/components/quickbooks/post-draft-controls";
 import {
   QuickbooksEditableField,
   type PickOption,
@@ -50,6 +51,9 @@ export async function QuickbooksDraftCard({
   reviewedByName,
   reviewedAt,
   documentName = null,
+  postedAt = null,
+  postedByName = null,
+  postError = null,
   showStatusControls = true,
 }: {
   suggestion: TransactionSuggestion;
@@ -67,6 +71,11 @@ export async function QuickbooksDraftCard({
   // Stage 4, Phase 3: the source document's name, used as the card title when
   // there's no resolved/matched vendor or customer to name it by.
   documentName?: string | null;
+  // Stage 5: post state. postError surfaces a failed post/undo; postedAt/by show
+  // when a 'posted' draft was written and by whom.
+  postedAt?: string | null;
+  postedByName?: string | null;
+  postError?: string | null;
   // Stage 4, Phase 3: hide the footer Approve/Dismiss/Reopen controls when the
   // surrounding surface already renders them (the firm-wide queue row does), so
   // they're not shown twice. Defaults true (the engagement page keeps them).
@@ -87,11 +96,13 @@ export async function QuickbooksDraftCard({
 
   // State pill in the header.
   const statusPill =
-    status === "approved"
-      ? { label: t("status_approved"), cls: "bg-success/10 text-success" }
-      : status === "dismissed"
-        ? { label: t("status_dismissed"), cls: "bg-muted text-muted-foreground" }
-        : { label: t("status_draft"), cls: "bg-muted text-muted-foreground" };
+    status === "posted"
+      ? { label: t("status_posted"), cls: "bg-accent/10 text-accent" }
+      : status === "approved"
+        ? { label: t("status_approved"), cls: "bg-success/10 text-success" }
+        : status === "dismissed"
+          ? { label: t("status_dismissed"), cls: "bg-muted text-muted-foreground" }
+          : { label: t("status_draft"), cls: "bg-muted text-muted-foreground" };
 
   // "Approved by X · date" / "Dismissed by X · date" footer line (name may be
   // null if the reviewer left the firm — fall back to the bare state label).
@@ -302,6 +313,20 @@ export async function QuickbooksDraftCard({
           )}
         </div>
       </div>
+
+      {/* Stage 5: posting row — Post to QuickBooks (approved) / Posted + Undo. */}
+      {(status === "approved" || status === "posted") && (
+        <div className="border-t border-border/40 px-3 py-2">
+          <PostDraftControls
+            fileId={fileId}
+            status={status}
+            direction={v.direction}
+            postedAtLabel={postedAt ? formatDate(postedAt, locale, "medium") : null}
+            postedByName={postedByName}
+            postError={postError}
+          />
+        </div>
+      )}
     </div>
   );
 }

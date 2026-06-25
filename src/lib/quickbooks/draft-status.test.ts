@@ -56,13 +56,28 @@ describe("normalizeDraftStatus", () => {
 });
 
 describe("isDraftStatus", () => {
-  it("accepts only the three states", () => {
+  it("accepts only the known states", () => {
     expect(isDraftStatus("draft")).toBe(true);
     expect(isDraftStatus("approved")).toBe(true);
     expect(isDraftStatus("dismissed")).toBe(true);
+    expect(isDraftStatus("posted")).toBe(true);
     expect(isDraftStatus("nope")).toBe(false);
     expect(isDraftStatus(null)).toBe(false);
     expect(isDraftStatus(2)).toBe(false);
+  });
+});
+
+describe("canTransitionDraft — posted (Stage 5)", () => {
+  it("the generic status route can never move to or from 'posted'", () => {
+    // posting + undo go through the dedicated /post and /void routes, not here.
+    expect(canTransitionDraft("approved", "posted")).toBe(false);
+    expect(canTransitionDraft("posted", "approved")).toBe(false);
+    expect(canTransitionDraft("posted", "draft")).toBe(false);
+    expect(canTransitionDraft("draft", "posted")).toBe(false);
+    expect(canTransitionDraft("posted", "dismissed")).toBe(false);
+  });
+  it("normalizes 'posted' to itself", () => {
+    expect(normalizeDraftStatus("posted")).toBe("posted");
   });
 });
 

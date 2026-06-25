@@ -23,11 +23,13 @@ export async function QueueRow({
   options,
   locale,
   reviewedByName,
+  postedByName,
 }: {
   row: FirmDraftRow;
   options: DraftCardOptions;
   locale: AppLocale;
   reviewedByName: string | null;
+  postedByName: string | null;
 }) {
   const t = await getTranslations("Quickbooks");
   const s = row.suggestion;
@@ -57,6 +59,7 @@ export async function QueueRow({
     needs_input: { label: t("bucket_needs_input"), cls: "bg-warning/10 text-warning" },
     ready: { label: t("bucket_ready"), cls: "bg-accent/10 text-accent" },
     approved: { label: t("status_approved"), cls: "bg-success/10 text-success" },
+    posted: { label: t("status_posted"), cls: "bg-accent/10 text-accent" },
     dismissed: { label: t("status_dismissed"), cls: "bg-muted text-muted-foreground" },
   };
   const pill = bucketPill[bucket];
@@ -129,6 +132,9 @@ export async function QueueRow({
         reviewedByName={reviewedByName}
         reviewedAt={row.reviewedAt}
         documentName={row.documentName}
+        postedAt={row.postedAt}
+        postedByName={postedByName}
+        postError={row.postError}
         showStatusControls={false}
       />
     </QueueRowDisclosure>

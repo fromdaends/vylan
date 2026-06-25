@@ -44,7 +44,8 @@ export class QuickbooksError extends Error {
       | "invalid_grant"
       | "company_info_failed"
       | "read_failed"
-      | "request_failed",
+      | "request_failed"
+      | "write_failed",
     message: string,
     public readonly status?: number,
   ) {
@@ -362,6 +363,120 @@ export async function quickbooksQuery(
     QueryResponse?: Record<string, unknown>;
   } | null;
   return json?.QueryResponse ?? {};
+}
+
+// The minimal shape we read back from a created/voided transaction.
+export type QboEntityResult = { id: string; syncToken: string };
+
+// CREATE a transaction in QuickBooks (Stage 5 — the first write). POSTs `body`
+// to /v3/company/{realmId}/{entity}. `requestId` is Intuit's idempotency key: a
+// retried POST with the SAME requestId returns the ORIGINAL transaction instead
+// of creating a duplicate (so a lost response / double click can't double-post).
+// The caller must pass a requestId that is STABLE for one logical post and FRESH
+// after a void+re-post. Throws a typed QuickbooksError on any non-2xx.
+export async function quickbooksCreate(
+  ctx: { accessToken: string; realmId: string; environment?: QuickbooksEnvironment },
+  entity: "bill",
+  body: Record<string, unknown>,
+  requestId: string,
+): Promise<QboEntityResult> {
+  const url =
+    `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}` +
+    `/${entity}?minorversion=${QBO_MINORVERSION}&requestid=${encodeURIComponent(requestId)}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.accessToken}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new QuickbooksError(
+      "request_failed",
+      `QuickBooks create request failed: ${(e as Error).message}`,
+    );
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new QuickbooksError(
+      "write_failed",
+      `QuickBooks create failed (${res.status}): ${truncate(detail)}`,
+      res.status,
+    );
+  }
+  const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  return parseEntityResult(json, "Bill");
+}
+
+// VOID a posted transaction (the Stage 5 undo). A void zeroes the amounts and
+// marks it Voided in QuickBooks but KEEPS the record (audit-safe), unlike a hard
+// delete. Uses the sparse update form (?operation=void) with the entity Id +
+// current SyncToken. Throws a typed QuickbooksError on any non-2xx.
+export async function quickbooksVoid(
+  ctx: { accessToken: string; realmId: string; environment?: QuickbooksEnvironment },
+  entity: "bill",
+  id: string,
+  syncToken: string,
+): Promise<QboEntityResult> {
+  const url =
+    `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}` +
+    `/${entity}?operation=void&minorversion=${QBO_MINORVERSION}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.accessToken}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ Id: id, SyncToken: syncToken }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new QuickbooksError(
+      "request_failed",
+      `QuickBooks void request failed: ${(e as Error).message}`,
+    );
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new QuickbooksError(
+      "write_failed",
+      `QuickBooks void failed (${res.status}): ${truncate(detail)}`,
+      res.status,
+    );
+  }
+  const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  return parseEntityResult(json, "Bill");
+}
+
+// Pull { Id, SyncToken } out of an Intuit create/void response shaped like
+// { "Bill": { "Id": "123", "SyncToken": "0", ... } }. Throws write_failed if the
+// id is missing (a malformed/unexpected 2xx body) so the caller never records a
+// bogus posting.
+function parseEntityResult(
+  json: Record<string, unknown> | null,
+  key: string,
+): QboEntityResult {
+  const entity = (json?.[key] ?? null) as Record<string, unknown> | null;
+  const id = entity && typeof entity.Id === "string" ? entity.Id : null;
+  const syncToken =
+    entity && typeof entity.SyncToken === "string" ? entity.SyncToken : "0";
+  if (!id) {
+    throw new QuickbooksError(
+      "write_failed",
+      "QuickBooks returned no transaction id.",
+    );
+  }
+  return { id, syncToken };
 }
 
 // Cap any upstream error body we keep so a large/HTML error page can't bloat a
