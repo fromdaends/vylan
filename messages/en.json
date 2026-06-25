@@ -2026,7 +2026,7 @@
     "posted_by": "Posted by {name}",
     "undo_button": "Undo",
     "undo_title": "Undo this post?",
-    "undo_body": "This voids the transaction in QuickBooks (it stays as a voided record) and returns the draft to Approved.",
+    "undo_body": "This deletes the Bill in QuickBooks (QuickBooks keeps it in its Audit Log) and returns the draft to Approved.",
     "undo_go": "Undo",
     "undo_failed": "Couldn't undo. Try again."
   }
