@@ -15,6 +15,7 @@ import {
   draftQueueBucket,
   parseQueueFilter,
   matchesQueueFilter,
+  bucketRank,
 } from "@/lib/quickbooks/draft-queue";
 import { DraftsQueue } from "@/components/quickbooks/drafts-queue";
 import { QueueRow } from "@/components/quickbooks/queue-row";
@@ -107,17 +108,33 @@ export default async function QuickbooksDraftsPage({
   const activeClient =
     typeof sp.client === "string" && sp.client ? sp.client : null;
 
-  // Server-side filter by status bucket + client (text search is client-side).
-  const visibleRows = rows.filter((r) => {
-    const bucket = draftQueueBucket({
+  // Compute each row's bucket once, then filter + sort.
+  const withBucket = rows.map((r) => ({
+    r,
+    bucket: draftQueueBucket({
       suggestion: r.suggestion,
       resolved: r.resolved,
       status: r.status,
-    });
-    if (!matchesQueueFilter(activeFilter, bucket)) return false;
-    if (activeClient && r.clientId !== activeClient) return false;
-    return true;
-  });
+    }),
+  }));
+
+  // Ready drafts for the active client filter — what "Approve all ready" covers.
+  const readyCount = withBucket.filter(
+    (x) =>
+      x.bucket === "ready" && (!activeClient || x.r.clientId === activeClient),
+  ).length;
+
+  // Server-side filter by status bucket + client (text search is client-side),
+  // then a priority sort so what needs attention leads (newest-first within each
+  // bucket is preserved by the stable sort over the already newest-first rows).
+  const visibleRows = withBucket
+    .filter(
+      (x) =>
+        matchesQueueFilter(activeFilter, x.bucket) &&
+        (!activeClient || x.r.clientId === activeClient),
+    )
+    .sort((a, b) => bucketRank(a.bucket) - bucketRank(b.bucket))
+    .map((x) => x.r);
 
   return (
     <div className="space-y-6">
@@ -127,6 +144,7 @@ export default async function QuickbooksDraftsPage({
       />
       <DraftsQueue
         counts={counts}
+        readyCount={readyCount}
         totalCad={summary.totalCad}
         hasForeignCurrency={summary.hasForeignCurrency}
         activeFilter={activeFilter}

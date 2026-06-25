@@ -2007,6 +2007,12 @@
     "queue_empty_search": "Aucun brouillon ne correspond à votre recherche.",
     "queue_connect_owner": "Connectez QuickBooks pour transformer reçus et factures en écritures brouillons.",
     "queue_connect_staff": "QuickBooks n’est pas encore connecté. Demandez au propriétaire du cabinet de le connecter dans les Réglages.",
-    "queue_connect_cta": "Aller aux Intégrations"
+    "queue_connect_cta": "Aller aux Intégrations",
+    "approve_ready": "Approuver les prêts ({count})",
+    "approve_ready_title": "Approuver les brouillons prêts",
+    "approve_ready_confirm": "Approuver {count, plural, one {# brouillon prêt} other {# brouillons prêts}}? Vous pourrez en rouvrir n’importe lequel plus tard. Rien n’est encore envoyé à QuickBooks.",
+    "approve_ready_go": "Approuver {count}",
+    "approve_ready_cancel": "Annuler",
+    "approve_ready_failed": "Échec de l’approbation. Réessayez."
   }
 }
