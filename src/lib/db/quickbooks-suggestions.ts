@@ -340,18 +340,32 @@ export async function setDraftStatus(input: {
   return true;
 }
 
+// "ok" = recorded; "conflict" = the row changed under us (a concurrent reopen or
+// void) so we did NOT record — the caller must not claim success; "error" = a
+// genuine DB failure.
+export type RecordPostedResult = "ok" | "conflict" | "error";
+
 // Stage 5 — record a SUCCESSFUL post: flip status to 'posted', store the QBO
 // transaction id + SyncToken (needed to void later), stamp who/when, and clear
-// any prior post_error. Service-role write. Best-effort: returns false on error.
+// any prior post_error. Service-role write, but CONDITIONAL: it only applies when
+// the row is STILL status='approved' AND post_attempt is unchanged from what the
+// post used to build its idempotency requestid. This closes two races on the
+// write path: (a) a concurrent void bumps post_attempt, so our requestid would
+// have deduped to the now-voided transaction — the attempt mismatch makes us
+// refuse to record it; (b) a concurrent reopen flips status away from 'approved'
+// — the status guard refuses the illegal -> 'posted' transition. In both cases
+// we return "conflict" (a 0-row update) instead of recording bad state; the
+// stable requestid means the genuine retry re-finds the same transaction.
 export async function recordDraftPosted(input: {
   uploadedFileId: string;
+  expectedAttempt: number;
   postedQboId: string;
   postedSyncToken: string;
   posterId: string | null;
-}): Promise<boolean> {
+}): Promise<RecordPostedResult> {
   const sb = getServiceRoleSupabase();
   const now = new Date().toISOString();
-  const { error } = await sb
+  const { data, error } = await sb
     .from("quickbooks_transaction_suggestions")
     .update({
       status: "posted",
@@ -362,14 +376,17 @@ export async function recordDraftPosted(input: {
       post_error: null,
       updated_at: now,
     })
-    .eq("uploaded_file_id", input.uploadedFileId);
+    .eq("uploaded_file_id", input.uploadedFileId)
+    .eq("status", "approved")
+    .eq("post_attempt", input.expectedAttempt)
+    .select("uploaded_file_id");
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] recordDraftPosted failed:", error);
     }
-    return false;
+    return "error";
   }
-  return true;
+  return data && data.length > 0 ? "ok" : "conflict";
 }
 
 // Stage 5 — record a FAILED post: keep status 'approved' (so it can be retried)

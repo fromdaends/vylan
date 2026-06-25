@@ -137,12 +137,27 @@ export async function POST(
 
   const recorded = await recordDraftPosted({
     uploadedFileId: fileId,
+    expectedAttempt: draft.postAttempt,
     postedQboId: result.id,
     postedSyncToken: result.syncToken,
     posterId: auth.user.id,
   });
   revalidate(draft.engagementId);
-  if (!recorded) {
+  if (recorded === "conflict") {
+    // The draft changed while we were posting (a concurrent reopen or undo). We
+    // did NOT record — so we never mark a voided transaction as posted, nor make
+    // an illegal -> 'posted' transition. The stable requestid means the genuine
+    // retry re-finds the same QuickBooks transaction (no duplicate).
+    return NextResponse.json(
+      {
+        error: "conflict",
+        detail:
+          "This draft changed while posting. Refresh and check QuickBooks before retrying.",
+      },
+      { status: 409 },
+    );
+  }
+  if (recorded !== "ok") {
     // Posted in QuickBooks but the DB write failed. The stable requestid means a
     // retry will NOT double-post (QBO returns this same transaction), so surface
     // loudly and let the accountant retry.
