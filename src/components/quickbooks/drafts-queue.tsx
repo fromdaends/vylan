@@ -83,6 +83,7 @@ export function DraftsQueue({
     needs_input: t("bucket_needs_input"),
     ready: t("bucket_ready"),
     approved: t("status_approved"),
+    posted: t("status_posted"),
     dismissed: t("status_dismissed"),
   };
   const filterCount: Record<QueueFilter, number> = {
@@ -90,6 +91,7 @@ export function DraftsQueue({
     needs_input: counts.needs_input,
     ready: counts.ready,
     approved: counts.approved,
+    posted: counts.posted,
     dismissed: counts.dismissed,
   };
 

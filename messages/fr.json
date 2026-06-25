@@ -2013,6 +2013,21 @@
     "approve_ready_confirm": "Approuver {count, plural, one {# brouillon prêt} other {# brouillons prêts}}? Vous pourrez en rouvrir n’importe lequel plus tard. Rien n’est encore envoyé à QuickBooks.",
     "approve_ready_go": "Approuver {count}",
     "approve_ready_cancel": "Annuler",
-    "approve_ready_failed": "Échec de l’approbation. Réessayez."
+    "approve_ready_failed": "Échec de l’approbation. Réessayez.",
+    "status_posted": "Comptabilisé",
+    "post_button": "Envoyer à QuickBooks",
+    "post_title": "Envoyer à QuickBooks",
+    "post_body": "Créer ceci comme une facture fournisseur dans QuickBooks? Vous pourrez l’annuler ensuite.",
+    "post_go": "Envoyer",
+    "post_cancel": "Annuler",
+    "post_failed": "Échec de l’envoi. Réessayez.",
+    "post_income_unsupported": "L’envoi des revenus n’est pas encore pris en charge.",
+    "posted_label": "Comptabilisé dans QuickBooks",
+    "posted_by": "Comptabilisé par {name}",
+    "undo_button": "Annuler",
+    "undo_title": "Annuler cette comptabilisation?",
+    "undo_body": "Ceci annule la transaction dans QuickBooks (elle reste comme enregistrement annulé) et redonne le statut Approuvé au brouillon.",
+    "undo_go": "Annuler la comptabilisation",
+    "undo_failed": "Échec de l’annulation. Réessayez."
   }
 }

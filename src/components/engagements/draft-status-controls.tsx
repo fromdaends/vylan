@@ -51,6 +51,10 @@ export function DraftStatusControls({
     });
   }
 
+  // A posted draft has no approve/dismiss/reopen here — undo (void) lives in the
+  // PostDraftControls on the card (it must touch QuickBooks first).
+  if (status === "posted") return null;
+
   const spinner = (
     <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden="true" />
   );

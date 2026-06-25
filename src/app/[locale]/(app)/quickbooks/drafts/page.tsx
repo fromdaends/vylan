@@ -166,6 +166,9 @@ export default async function QuickbooksDraftsPage({
             reviewedByName={
               r.reviewedBy ? (reviewerNameById.get(r.reviewedBy) ?? null) : null
             }
+            postedByName={
+              r.postedBy ? (reviewerNameById.get(r.postedBy) ?? null) : null
+            }
           />
         ))}
       </DraftsQueue>

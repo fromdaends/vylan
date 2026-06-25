@@ -114,6 +114,7 @@ describe("countQueueBuckets", () => {
       item(sugg()), // ready
       item(sugg({ party: noMatch })), // needs_input
       item(sugg(), "approved"),
+      item(sugg(), "posted"),
       item(sugg(), "dismissed"),
       item(sugg(), "dismissed"),
     ]);
@@ -121,8 +122,9 @@ describe("countQueueBuckets", () => {
       needs_input: 1,
       ready: 1,
       approved: 1,
+      posted: 1,
       dismissed: 2,
-      total: 5,
+      total: 6,
     });
   });
   it("an empty set is all zeros", () => {
@@ -130,9 +132,25 @@ describe("countQueueBuckets", () => {
       needs_input: 0,
       ready: 0,
       approved: 0,
+      posted: 0,
       dismissed: 0,
       total: 0,
     });
+  });
+});
+
+describe("posted bucket (Stage 5)", () => {
+  it("a posted draft is in the 'posted' bucket regardless of completeness", () => {
+    expect(draftQueueBucket(item(sugg(), "posted"))).toBe("posted");
+    expect(draftQueueBucket(item(sugg({ account: noMatch }), "posted"))).toBe(
+      "posted",
+    );
+  });
+  it("'all' excludes both posted and dismissed; the posted filter shows only posted", () => {
+    expect(matchesQueueFilter("all", "posted")).toBe(false);
+    expect(matchesQueueFilter("all", "dismissed")).toBe(false);
+    expect(matchesQueueFilter("posted", "posted")).toBe(true);
+    expect(matchesQueueFilter("posted", "approved")).toBe(false);
   });
 });
 

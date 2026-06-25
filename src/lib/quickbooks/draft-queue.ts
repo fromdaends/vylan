@@ -25,6 +25,7 @@ export const QUEUE_BUCKETS = [
   "needs_input",
   "ready",
   "approved",
+  "posted",
   "dismissed",
 ] as const;
 export type QueueBucket = (typeof QUEUE_BUCKETS)[number];
@@ -39,6 +40,7 @@ export type QueueItem = {
 // Which bucket a single draft falls into.
 export function draftQueueBucket(item: QueueItem): QueueBucket {
   const state = normalizeDraftStatus(item.status ?? null);
+  if (state === "posted") return "posted";
   if (state === "approved") return "approved";
   if (state === "dismissed") return "dismissed";
   // status === 'draft': complete ones are "ready", the rest "needs_input".
@@ -54,6 +56,7 @@ export const QUEUE_FILTERS = [
   "needs_input",
   "ready",
   "approved",
+  "posted",
   "dismissed",
 ] as const;
 export type QueueFilter = (typeof QUEUE_FILTERS)[number];
@@ -65,12 +68,13 @@ export function parseQueueFilter(v: string | null | undefined): QueueFilter {
 }
 
 // Does a bucket pass the active filter? "all" shows everything but dismissed; a
-// specific filter shows only that bucket.
+// specific filter shows only that bucket. "all" is the active working set, so it
+// excludes both dismissed (skipped) and posted (done).
 export function matchesQueueFilter(
   filter: QueueFilter,
   bucket: QueueBucket,
 ): boolean {
-  if (filter === "all") return bucket !== "dismissed";
+  if (filter === "all") return bucket !== "dismissed" && bucket !== "posted";
   return filter === bucket;
 }
 
@@ -82,7 +86,8 @@ export const QUEUE_BUCKET_RANK: Record<QueueBucket, number> = {
   needs_input: 0,
   ready: 1,
   approved: 2,
-  dismissed: 3,
+  posted: 3,
+  dismissed: 4,
 };
 
 export function bucketRank(bucket: QueueBucket): number {
@@ -98,6 +103,7 @@ export function countQueueBuckets(items: QueueItem[]): QueueCounts {
     needs_input: 0,
     ready: 0,
     approved: 0,
+    posted: 0,
     dismissed: 0,
     total: items.length,
   };

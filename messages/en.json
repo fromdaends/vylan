@@ -2013,6 +2013,21 @@
     "approve_ready_confirm": "Approve {count, plural, one {# ready draft} other {# ready drafts}}? You can reopen any of them later. Nothing is posted to QuickBooks yet.",
     "approve_ready_go": "Approve {count}",
     "approve_ready_cancel": "Cancel",
-    "approve_ready_failed": "Couldn't approve them. Try again."
+    "approve_ready_failed": "Couldn't approve them. Try again.",
+    "status_posted": "Posted",
+    "post_button": "Post to QuickBooks",
+    "post_title": "Post to QuickBooks",
+    "post_body": "Create this as a Bill in QuickBooks? You can undo it afterward.",
+    "post_go": "Post",
+    "post_cancel": "Cancel",
+    "post_failed": "Couldn't post. Try again.",
+    "post_income_unsupported": "Posting income isn't supported yet.",
+    "posted_label": "Posted to QuickBooks",
+    "posted_by": "Posted by {name}",
+    "undo_button": "Undo",
+    "undo_title": "Undo this post?",
+    "undo_body": "This voids the transaction in QuickBooks (it stays as a voided record) and returns the draft to Approved.",
+    "undo_go": "Undo",
+    "undo_failed": "Couldn't undo. Try again."
   }
 }

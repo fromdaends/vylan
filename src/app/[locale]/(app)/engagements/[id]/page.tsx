@@ -852,6 +852,13 @@ async function ItemRow({
                           }
                           reviewedAt={d.reviewedAt}
                           documentName={f.display_name ?? f.original_filename}
+                          postedAt={d.postedAt}
+                          postedByName={
+                            d.postedBy
+                              ? (reviewerNameById.get(d.postedBy) ?? null)
+                              : null
+                          }
+                          postError={d.postError}
                         />
                       );
                     })()
