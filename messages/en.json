@@ -2007,6 +2007,12 @@
     "queue_empty_search": "No drafts match your search.",
     "queue_connect_owner": "Connect QuickBooks to start turning receipts and invoices into draft entries.",
     "queue_connect_staff": "QuickBooks isn't connected yet. Ask your firm owner to connect it in Settings.",
-    "queue_connect_cta": "Go to Integrations"
+    "queue_connect_cta": "Go to Integrations",
+    "approve_ready": "Approve all ready ({count})",
+    "approve_ready_title": "Approve ready drafts",
+    "approve_ready_confirm": "Approve {count, plural, one {# ready draft} other {# ready drafts}}? You can reopen any of them later. Nothing is posted to QuickBooks yet.",
+    "approve_ready_go": "Approve {count}",
+    "approve_ready_cancel": "Cancel",
+    "approve_ready_failed": "Couldn't approve them. Try again."
   }
 }

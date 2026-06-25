@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   QUEUE_FILTERS,
+  QUEUE_BUCKETS,
   draftQueueBucket,
   parseQueueFilter,
   matchesQueueFilter,
   countQueueBuckets,
+  bucketRank,
   type QueueItem,
 } from "./draft-queue";
 import type {
@@ -131,5 +133,40 @@ describe("countQueueBuckets", () => {
       dismissed: 0,
       total: 0,
     });
+  });
+});
+
+describe("bucketRank", () => {
+  it("orders needs_input < ready < approved < dismissed", () => {
+    expect(bucketRank("needs_input")).toBeLessThan(bucketRank("ready"));
+    expect(bucketRank("ready")).toBeLessThan(bucketRank("approved"));
+    expect(bucketRank("approved")).toBeLessThan(bucketRank("dismissed"));
+  });
+  it("sorts a mixed list so attention-needing rows lead, stably", () => {
+    // Tag each bucket with an index to assert stability within a bucket.
+    const rows = [
+      { bucket: "approved" as const, i: 0 },
+      { bucket: "needs_input" as const, i: 1 },
+      { bucket: "ready" as const, i: 2 },
+      { bucket: "needs_input" as const, i: 3 },
+      { bucket: "dismissed" as const, i: 4 },
+      { bucket: "ready" as const, i: 5 },
+    ];
+    const sorted = [...rows].sort(
+      (a, b) => bucketRank(a.bucket) - bucketRank(b.bucket),
+    );
+    expect(sorted.map((r) => r.bucket)).toEqual([
+      "needs_input",
+      "needs_input",
+      "ready",
+      "ready",
+      "approved",
+      "dismissed",
+    ]);
+    // Stable: original order preserved within each bucket.
+    expect(sorted.map((r) => r.i)).toEqual([1, 3, 2, 5, 0, 4]);
+  });
+  it("ranks every known bucket", () => {
+    for (const b of QUEUE_BUCKETS) expect(typeof bucketRank(b)).toBe("number");
   });
 });

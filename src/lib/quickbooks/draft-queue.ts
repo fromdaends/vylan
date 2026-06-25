@@ -74,6 +74,21 @@ export function matchesQueueFilter(
   return filter === bucket;
 }
 
+// Display priority: the work that needs the accountant floats to the top, then
+// the ready-to-approve, then the already-decided. Used to sort the queue so the
+// "All" view leads with what needs attention (newest-first within each bucket,
+// preserved by a stable sort).
+export const QUEUE_BUCKET_RANK: Record<QueueBucket, number> = {
+  needs_input: 0,
+  ready: 1,
+  approved: 2,
+  dismissed: 3,
+};
+
+export function bucketRank(bucket: QueueBucket): number {
+  return QUEUE_BUCKET_RANK[bucket];
+}
+
 export type QueueCounts = Record<QueueBucket, number> & { total: number };
 
 // Count how many drafts fall in each bucket (over the WHOLE set, so the toolbar

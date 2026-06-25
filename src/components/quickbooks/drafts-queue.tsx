@@ -20,6 +20,7 @@ import {
   type QueueFilter,
   type QueueCounts,
 } from "@/lib/quickbooks/draft-queue";
+import { ApproveReadyButton } from "./approve-ready-button";
 
 // Firm-wide QuickBooks drafts queue (Stage 4, Phase 3) — the client shell.
 // Status + client filters round-trip via the URL (server re-filters + re-renders
@@ -27,6 +28,7 @@ import {
 // rendered, matched against a parallel `searchIndex` (same order as `children`).
 export function DraftsQueue({
   counts,
+  readyCount,
   totalCad,
   hasForeignCurrency,
   activeFilter,
@@ -38,6 +40,8 @@ export function DraftsQueue({
   children,
 }: {
   counts: QueueCounts;
+  // Ready drafts matching the active client filter — drives "Approve all ready".
+  readyCount: number;
   totalCad: number | null;
   hasForeignCurrency: boolean;
   activeFilter: QueueFilter;
@@ -91,11 +95,11 @@ export function DraftsQueue({
 
   return (
     <div className="space-y-4">
-      {/* Roll-up strip. */}
+      {/* Roll-up strip — count + running total (the page header already names
+          it, so no repeated label here). */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-xs">
         <BookOpen className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-        <span className="font-medium">{t("summary_label")}</span>
-        <span className="text-muted-foreground">
+        <span className="font-medium">
           {t("summary_drafts", { count: counts.total })}
         </span>
         {totalCad != null && (
@@ -137,7 +141,8 @@ export function DraftsQueue({
             );
           })}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <ApproveReadyButton readyCount={readyCount} client={activeClient} />
           {clients.length > 0 && (
             <Select
               value={activeClient ?? "all"}
