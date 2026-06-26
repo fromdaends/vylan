@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
 import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
+import { Analytics } from "@vercel/analytics/next";
 import { routing } from "@/i18n/routing";
 import { brand } from "@/lib/brand";
 import { ThemeProvider } from "@/components/theme/theme-provider";
@@ -60,6 +61,7 @@ export default async function LocaleLayout({
         <ThemeProvider>
           <NextIntlClientProvider>{children}</NextIntlClientProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
