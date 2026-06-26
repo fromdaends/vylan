@@ -151,6 +151,18 @@ export function AddItemDialog({
               maxLength={500}
             />
           </div>
+          {/* Optional per-item AI note (steers the AI's assessment; blank =
+              default). Uncontrolled like the other fields (autofill-safe). */}
+          <div className="space-y-1.5">
+            <Label htmlFor="ai_instructions">{t("ai_instructions_label")}</Label>
+            <Textarea
+              id="ai_instructions"
+              name="ai_instructions"
+              rows={2}
+              maxLength={1000}
+              placeholder={t("ai_instructions_placeholder")}
+            />
+          </div>
           <div className="flex items-center gap-3 text-sm">
             <div className="space-y-1.5 flex-1">
               <Label htmlFor="doc_type">{t("doc_type")}</Label>
