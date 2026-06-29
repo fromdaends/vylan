@@ -73,10 +73,13 @@ export async function POST(
     );
   }
 
+  // Match the entity we posted: income -> Invoice, expense -> Bill.
+  const entity =
+    draft.suggestion?.direction === "income" ? "invoice" : "bill";
   try {
     await quickbooksDelete(
       ctx,
-      "bill",
+      entity,
       draft.postedQboId,
       draft.postedSyncToken ?? "0",
     );

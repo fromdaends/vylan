@@ -368,6 +368,14 @@ export async function quickbooksQuery(
 // The minimal shape we read back from a created/voided transaction.
 export type QboEntityResult = { id: string; syncToken: string };
 
+// Transaction entities we post: a Bill (expense) or an Invoice (income). The URL
+// path is lowercase; the JSON response wraps the object under the capitalized
+// name (e.g. { "Invoice": { Id, SyncToken } }).
+export type QboTxnEntity = "bill" | "invoice";
+function entityResponseKey(entity: QboTxnEntity): string {
+  return entity === "invoice" ? "Invoice" : "Bill";
+}
+
 // CREATE a transaction in QuickBooks (Stage 5 — the first write). POSTs `body`
 // to /v3/company/{realmId}/{entity}. `requestId` is Intuit's idempotency key: a
 // retried POST with the SAME requestId returns the ORIGINAL transaction instead
@@ -376,7 +384,7 @@ export type QboEntityResult = { id: string; syncToken: string };
 // after a void+re-post. Throws a typed QuickbooksError on any non-2xx.
 export async function quickbooksCreate(
   ctx: { accessToken: string; realmId: string; environment?: QuickbooksEnvironment },
-  entity: "bill",
+  entity: QboTxnEntity,
   body: Record<string, unknown>,
   requestId: string,
 ): Promise<QboEntityResult> {
@@ -411,7 +419,7 @@ export async function quickbooksCreate(
     );
   }
   const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-  return parseEntityResult(json, "Bill");
+  return parseEntityResult(json, entityResponseKey(entity));
 }
 
 // DELETE a posted transaction (the Stage 5 undo). A QuickBooks BILL cannot be
@@ -421,7 +429,7 @@ export async function quickbooksCreate(
 // a typed QuickbooksError on any non-2xx OR an in-body Fault.
 export async function quickbooksDelete(
   ctx: { accessToken: string; realmId: string; environment?: QuickbooksEnvironment },
-  entity: "bill",
+  entity: QboTxnEntity,
   id: string,
   syncToken: string,
 ): Promise<QboEntityResult> {
