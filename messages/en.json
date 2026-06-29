@@ -2021,6 +2021,7 @@
     "post_button": "Post to QuickBooks",
     "post_title": "Post to QuickBooks",
     "post_body": "Create this as a Bill in QuickBooks? You can undo it afterward.",
+    "post_body_income": "Create this as an Invoice in QuickBooks? You can undo it afterward.",
     "post_go": "Post",
     "post_cancel": "Cancel",
     "post_failed": "Couldn't post. Try again.",

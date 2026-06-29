@@ -130,7 +130,8 @@ export default async function QuickbooksDraftsPage({
   const postableCount = withBucket.filter(
     (x) =>
       x.bucket === "approved" &&
-      x.r.suggestion.direction === "expense" &&
+      (x.r.suggestion.direction === "expense" ||
+        x.r.suggestion.direction === "income") &&
       !x.r.postedQboId &&
       (!activeClient || x.r.clientId === activeClient),
   ).length;

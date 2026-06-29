@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildBillPayload, checkBillPostable } from "./post-transaction";
+import {
+  buildBillPayload,
+  checkBillPostable,
+  buildInvoicePayload,
+  checkInvoicePostable,
+} from "./post-transaction";
 import type { QuickbooksLists } from "./read";
 
 describe("buildBillPayload", () => {
@@ -107,5 +112,96 @@ describe("checkBillPostable", () => {
   });
   it("skips active checks when the lists aren't available (live API is the backstop)", () => {
     expect(checkBillPostable({ ...ok, lists: null })).toEqual([]);
+  });
+});
+
+describe("buildInvoicePayload", () => {
+  it("builds a minimal valid Invoice with a single item line", () => {
+    const inv = buildInvoicePayload({
+      customerId: "c1",
+      itemId: "i1",
+      amount: 250,
+      date: "2026-02-18",
+      memo: "Posted from Vylan",
+    });
+    expect(inv).toEqual({
+      CustomerRef: { value: "c1" },
+      TxnDate: "2026-02-18",
+      PrivateNote: "Posted from Vylan",
+      Line: [
+        {
+          DetailType: "SalesItemLineDetail",
+          Amount: 250,
+          SalesItemLineDetail: { ItemRef: { value: "i1" } },
+        },
+      ],
+    });
+  });
+  it("rounds the amount and omits TxnDate/PrivateNote when absent", () => {
+    const inv = buildInvoicePayload({
+      customerId: "c1",
+      itemId: "i1",
+      amount: 10.005,
+      date: null,
+    });
+    expect((inv.Line as Array<{ Amount: number }>)[0].Amount).toBe(10.01);
+    expect("TxnDate" in inv).toBe(false);
+    expect("PrivateNote" in inv).toBe(false);
+  });
+});
+
+const incomeLists = (over: Partial<QuickbooksLists> = {}): QuickbooksLists => ({
+  accounts: [],
+  vendors: [],
+  customers: [{ id: "c1", name: "A Client", active: true }],
+  taxCodes: [],
+  items: [
+    { id: "i1", name: "Consulting", itemType: "Service", incomeAccountId: "x", active: true },
+  ],
+  ...over,
+});
+
+describe("checkInvoicePostable", () => {
+  const ok = {
+    direction: "income",
+    party: { id: "c1", name: "A Client" },
+    item: { id: "i1", name: "Consulting" },
+    amount: 250,
+  };
+  it("a complete active income draft is postable", () => {
+    expect(checkInvoicePostable({ ...ok, lists: incomeLists() })).toEqual([]);
+  });
+  it("rejects a non-income direction", () => {
+    expect(
+      checkInvoicePostable({ ...ok, direction: "expense", lists: incomeLists() }),
+    ).toContain("not_income");
+  });
+  it("flags a missing customer / item / amount", () => {
+    expect(checkInvoicePostable({ ...ok, party: null, lists: incomeLists() })).toContain(
+      "missing_customer",
+    );
+    expect(checkInvoicePostable({ ...ok, item: null, lists: incomeLists() })).toContain(
+      "missing_item",
+    );
+    expect(checkInvoicePostable({ ...ok, amount: 0, lists: incomeLists() })).toContain(
+      "missing_amount",
+    );
+  });
+  it("flags an archived customer or item", () => {
+    const archivedCustomer = incomeLists({
+      customers: [{ id: "c1", name: "A Client", active: false }],
+    });
+    expect(checkInvoicePostable({ ...ok, lists: archivedCustomer })).toContain(
+      "customer_inactive",
+    );
+    const archivedItem = incomeLists({
+      items: [{ id: "i1", name: "Consulting", itemType: "Service", incomeAccountId: "x", active: false }],
+    });
+    expect(checkInvoicePostable({ ...ok, lists: archivedItem })).toContain(
+      "item_inactive",
+    );
+  });
+  it("skips active checks when the lists aren't available", () => {
+    expect(checkInvoicePostable({ ...ok, lists: null })).toEqual([]);
   });
 });

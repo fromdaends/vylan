@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
   const targets = rows.filter(
     (r) =>
       r.status === "approved" &&
-      r.suggestion.direction === "expense" &&
+      (r.suggestion.direction === "expense" ||
+        r.suggestion.direction === "income") &&
       !r.postedQboId &&
       (!client || r.clientId === client),
   );

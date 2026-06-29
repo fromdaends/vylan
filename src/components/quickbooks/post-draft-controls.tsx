@@ -124,8 +124,8 @@ export function PostDraftControls({
     );
   }
 
-  // Approved but income/unknown: not supported in Phase 1.
-  if (direction !== "expense") {
+  // Approved but direction unknown (neither expense nor income) — can't post.
+  if (direction !== "expense" && direction !== "income") {
     return (
       <p className="text-[11px] text-muted-foreground">
         {t("post_income_unsupported")}
@@ -133,7 +133,10 @@ export function PostDraftControls({
     );
   }
 
-  // Approved expense: Post (with retry error if a prior attempt failed).
+  // Income posts an Invoice; expense posts a Bill — the confirm copy reflects it.
+  const confirmBody = direction === "income" ? t("post_body_income") : t("post_body");
+
+  // Approved expense/income: Post (with retry error if a prior attempt failed).
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       {(failed || postError) && (
@@ -152,7 +155,7 @@ export function PostDraftControls({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t("post_title")}</DialogTitle>
-            <DialogDescription>{t("post_body")}</DialogDescription>
+            <DialogDescription>{confirmBody}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button

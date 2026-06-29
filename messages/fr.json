@@ -2021,6 +2021,7 @@
     "post_button": "Envoyer à QuickBooks",
     "post_title": "Envoyer à QuickBooks",
     "post_body": "Créer ceci comme une facture fournisseur dans QuickBooks? Vous pourrez l’annuler ensuite.",
+    "post_body_income": "Créer ceci comme une facture de vente dans QuickBooks? Vous pourrez l’annuler ensuite.",
     "post_go": "Envoyer",
     "post_cancel": "Annuler",
     "post_failed": "Échec de l’envoi. Réessayez.",

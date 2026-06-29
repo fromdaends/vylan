@@ -40,6 +40,76 @@ export function buildBillPayload(input: BillInput): Record<string, unknown> {
   return bill;
 }
 
+export type InvoiceInput = {
+  customerId: string;
+  itemId: string;
+  amount: number;
+  date: string | null; // ISO YYYY-MM-DD; omitted -> QBO uses today
+  memo?: string | null;
+};
+
+// Build the minimal valid QuickBooks Invoice body for one approved income draft.
+// Income lines post to a product/service ITEM (SalesItemLineDetail), not an
+// account. Like the Bill path, Phase 1 posts the GROSS total on a single line
+// with no tax code (tax handling is a later refinement).
+export function buildInvoicePayload(input: InvoiceInput): Record<string, unknown> {
+  const amount = Math.round(input.amount * 100) / 100;
+  const invoice: Record<string, unknown> = {
+    CustomerRef: { value: input.customerId },
+    Line: [
+      {
+        DetailType: "SalesItemLineDetail",
+        Amount: amount,
+        SalesItemLineDetail: {
+          ItemRef: { value: input.itemId },
+        },
+      },
+    ],
+  };
+  if (input.date) invoice.TxnDate = input.date;
+  if (input.memo) invoice.PrivateNote = input.memo;
+  return invoice;
+}
+
+// Why an INCOME draft can't be posted. Empty array = postable.
+export type InvoicePostabilityProblem =
+  | "not_income"
+  | "missing_customer"
+  | "missing_item"
+  | "missing_amount"
+  | "customer_inactive"
+  | "item_inactive";
+
+// Pure server-side guard for income, re-checked at post time: an income draft
+// with an active customer + active item + positive amount. Active checks run only
+// when the cached lists are available (the live QuickBooks call is the backstop).
+export function checkInvoicePostable(input: {
+  direction: string;
+  party: ResolvedRef | null; // the customer
+  item: ResolvedRef | null;
+  amount: number | null;
+  lists: QuickbooksLists | null;
+}): InvoicePostabilityProblem[] {
+  const problems: InvoicePostabilityProblem[] = [];
+  if (input.direction !== "income") problems.push("not_income");
+  if (!input.party) problems.push("missing_customer");
+  if (!input.item) problems.push("missing_item");
+  if (input.amount == null || !(input.amount > 0)) {
+    problems.push("missing_amount");
+  }
+  const customers = input.lists?.customers;
+  if (input.party && customers) {
+    const c = customers.find((x) => x.id === input.party!.id);
+    if (!c || !c.active) problems.push("customer_inactive");
+  }
+  const items = input.lists?.items;
+  if (input.item && items) {
+    const it = items.find((x) => x.id === input.item!.id);
+    if (!it || !it.active) problems.push("item_inactive");
+  }
+  return problems;
+}
+
 // Why a draft can't be posted (Phase 1). Empty array = postable.
 export type PostabilityProblem =
   | "not_expense" // income/unknown — not supported in Phase 1

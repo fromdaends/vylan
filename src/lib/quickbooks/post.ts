@@ -20,7 +20,10 @@ import { effectiveMapping } from "@/lib/quickbooks/draft-resolve";
 import {
   buildBillPayload,
   checkBillPostable,
+  buildInvoicePayload,
+  checkInvoicePostable,
   type PostabilityProblem,
+  type InvoicePostabilityProblem,
 } from "@/lib/quickbooks/post-transaction";
 
 export type PostOutcomeKind =
@@ -41,7 +44,8 @@ export type PostOutcome = {
   firmId: string | null;
   postedQboId?: string | null;
   detail?: string;
-  problems?: PostabilityProblem[];
+  // Bill (expense) or Invoice (income) postability problems — informational.
+  problems?: (PostabilityProblem | InvoicePostabilityProblem)[];
 };
 
 // Post one approved EXPENSE draft as a QuickBooks Bill. Idempotent + safe:
@@ -77,15 +81,49 @@ export async function postApprovedDraft(
 
   const lists =
     opts && "lists" in opts ? opts.lists : await readCachedQuickbooksLists();
-  const problems = checkBillPostable({
-    direction: s.direction,
-    party: eff.party,
-    account: eff.account,
-    amount: s.amount,
-    lists: lists ?? null,
-  });
-  if (problems.length > 0 || !eff.party || !eff.account || s.amount == null) {
-    return { kind: "not_postable", ...base, problems };
+
+  // Branch by direction: an EXPENSE posts a Bill (account line), INCOME posts an
+  // Invoice (item line). Both validate against the firm's CURRENT lists.
+  let entity: "bill" | "invoice";
+  let payload: Record<string, unknown>;
+  if (s.direction === "income") {
+    const problems = checkInvoicePostable({
+      direction: s.direction,
+      party: eff.party,
+      item: eff.item,
+      amount: s.amount,
+      lists: lists ?? null,
+    });
+    if (problems.length > 0 || !eff.party || !eff.item || s.amount == null) {
+      return { kind: "not_postable", ...base, problems };
+    }
+    entity = "invoice";
+    payload = buildInvoicePayload({
+      customerId: eff.party.id,
+      itemId: eff.item.id,
+      amount: s.amount,
+      date: s.date,
+      memo: "Posted from Vylan",
+    });
+  } else {
+    const problems = checkBillPostable({
+      direction: s.direction,
+      party: eff.party,
+      account: eff.account,
+      amount: s.amount,
+      lists: lists ?? null,
+    });
+    if (problems.length > 0 || !eff.party || !eff.account || s.amount == null) {
+      return { kind: "not_postable", ...base, problems };
+    }
+    entity = "bill";
+    payload = buildBillPayload({
+      vendorId: eff.party.id,
+      accountId: eff.account.id,
+      amount: s.amount,
+      date: s.date,
+      memo: "Posted from Vylan",
+    });
   }
 
   const ctx =
@@ -95,17 +133,10 @@ export async function postApprovedDraft(
   if (!ctx) return { kind: "not_connected", ...base };
 
   const requestId = `${fileId}-${draft.postAttempt}`;
-  const payload = buildBillPayload({
-    vendorId: eff.party.id,
-    accountId: eff.account.id,
-    amount: s.amount,
-    date: s.date,
-    memo: "Posted from Vylan",
-  });
 
   let result: { id: string; syncToken: string };
   try {
-    result = await quickbooksCreate(ctx, "bill", payload, requestId);
+    result = await quickbooksCreate(ctx, entity, payload, requestId);
   } catch (e) {
     const detail =
       e instanceof QuickbooksError ? e.message : (e as Error).message;
