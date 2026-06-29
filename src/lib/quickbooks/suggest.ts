@@ -378,11 +378,14 @@ export function suggestItem(
     ? pool.filter((i) => i.incomeAccountId === accountId)
     : [];
   if (forAccount.length > 0) {
-    const active = forAccount.filter((i) => i.active);
+    // Confident pick must be ACTIVE and SELLABLE — never auto-pick a Category /
+    // Bundle even if it's the only item on the account (an Invoice line can't
+    // post to it). Such an item still appears in candidates for the accountant.
+    const active = forAccount.filter((i) => i.active && isSellableItem(i.itemType));
     const cands = toCandidates(
       forAccount.map((i) => ({ id: i.id, name: i.name, active: i.active, score: 0.9 })),
     );
-    // One active item maps to this income account -> confident pick.
+    // One active sellable item maps to this income account -> confident pick.
     if (active.length === 1) {
       const m = active[0];
       return {

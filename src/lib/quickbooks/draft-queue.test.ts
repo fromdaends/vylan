@@ -162,6 +162,12 @@ describe("income drafts (need an item, not an account)", () => {
       ),
     ).toBe("ready");
   });
+  it("an old income suggestion missing the item field still needs input (defensive)", () => {
+    // Simulate a pre-income suggestion stored in the DB with no `item` key.
+    const s = incomeSugg();
+    delete (s as { item?: unknown }).item;
+    expect(draftQueueBucket(item(s))).toBe("needs_input");
+  });
   it("a resolved item makes an income draft ready", () => {
     expect(
       draftQueueBucket(
