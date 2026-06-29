@@ -16,10 +16,11 @@ import {
 import { Button } from "@/components/ui/button";
 import type { DraftStatus } from "@/lib/quickbooks/draft-status";
 
-// Stage 5, Phase 1 posting controls on a QuickBooks draft card.
-//   approved + expense  -> "Post to QuickBooks" (confirm) [+ retry error]
-//   approved + income   -> a muted "income not supported yet" note
-//   posted              -> "Posted · {when}" + "Undo (void)" (confirm)
+// Stage 5 posting controls on a QuickBooks draft card.
+//   approved + expense  -> "Post to QuickBooks" (confirm; posts a Bill)
+//   approved + income   -> "Post to QuickBooks" (confirm; posts an Invoice)
+//   approved + unknown  -> a muted "not supported" note (can't tell the type)
+//   posted              -> "Posted · {when}" + "Undo" (confirm; deletes it)
 // Posts to the stable /post and /void endpoints, then refreshes. Read-only on
 // QuickBooks until clicked; the server re-validates everything before writing.
 export function PostDraftControls({

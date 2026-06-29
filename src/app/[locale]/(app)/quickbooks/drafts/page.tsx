@@ -125,8 +125,8 @@ export default async function QuickbooksDraftsPage({
       x.bucket === "ready" && (!activeClient || x.r.clientId === activeClient),
   ).length;
 
-  // Approved EXPENSE drafts for the active client filter — what "Post all
-  // approved" covers (income/incomplete aren't postable in Phase 1).
+  // Approved expense + income drafts for the active client filter — what "Post
+  // all approved" covers (unknown-direction / unposted-only are excluded).
   const postableCount = withBucket.filter(
     (x) =>
       x.bucket === "approved" &&
