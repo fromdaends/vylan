@@ -234,6 +234,7 @@ export default async function EngagementDetailPage({
     customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
     accounts: (qboLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
     taxCodes: (qboLists?.taxCodes ?? []).filter((x) => x.active).map(toOpt),
+    items: (qboLists?.items ?? []).filter((x) => x.active).map(toOpt),
   };
 
   // Prompt B: signature items (the accountant supplies a document, the client

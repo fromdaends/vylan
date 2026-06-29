@@ -19,6 +19,7 @@
 import type {
   QbNamed,
   QbAccount,
+  QbItem,
   QuickbooksLists,
 } from "@/lib/quickbooks/read";
 import type {
@@ -35,6 +36,9 @@ export type ResolvedEntry = {
   party: ResolvedRef | null;
   account: ResolvedRef | null;
   taxCode: ResolvedRef | null;
+  // The product/service item for an INCOME line (Invoice lines need an item, not
+  // an account). Optional: rows resolved before income support lack it.
+  item?: ResolvedRef | null;
 };
 
 // A reference to one cached QuickBooks entity. `active` is carried so the
@@ -60,6 +64,10 @@ export type TransactionSuggestion = {
   partyKind: PartyKind | null;
   party: MatchField; // the vendor (expense) or customer (income)
   account: MatchField; // suggested chart-of-accounts entry
+  // For an INCOME draft: the product/service item the line posts to (derived from
+  // the matched income account). Empty for expense/unknown. Optional so older
+  // stored suggestions (pre-income) deserialize cleanly.
+  item?: MatchField;
   taxCode: MatchField; // matched tax code
   amount: number | null; // grand total incl. tax (the headline)
   subtotal: number | null; // pre-tax
@@ -340,6 +348,64 @@ export function suggestAccount(
   return { match, confidence, candidates: toCandidates(sorted) };
 }
 
+// ── Item suggestion (income) ─────────────────────────────────────────────────
+
+// Sellable item types that can carry an income Invoice line. Category/Bundle
+// items (and anything unrecognised that isn't blank) are excluded.
+function isSellableItem(t: string | null): boolean {
+  const s = (t ?? "").toLowerCase();
+  return s === "service" || s === "noninventory" || s === "inventory" || s === "";
+}
+
+// Suggest the product/service item for an INCOME line. A QuickBooks Invoice line
+// references an Item, not an account — so we bridge from the matched income
+// account to the item(s) whose income account is that account. Exactly one active
+// such item -> confident pick; several -> candidates, no confident pick; none (or
+// no account matched) -> a shortlist of sellable items for the accountant to pick.
+// Expense / unknown directions don't use an item -> empty.
+export function suggestItem(
+  direction: TransactionExtraction["direction"],
+  accountId: string | null,
+  items: QbItem[] | null | undefined,
+): MatchField {
+  if (direction !== "income" || !items || items.length === 0) {
+    return { match: null, confidence: 0, candidates: [] };
+  }
+  const sellable = items.filter((i) => isSellableItem(i.itemType));
+  const pool = sellable.length > 0 ? sellable : items;
+
+  const forAccount = accountId
+    ? pool.filter((i) => i.incomeAccountId === accountId)
+    : [];
+  if (forAccount.length > 0) {
+    // Confident pick must be ACTIVE and SELLABLE — never auto-pick a Category /
+    // Bundle even if it's the only item on the account (an Invoice line can't
+    // post to it). Such an item still appears in candidates for the accountant.
+    const active = forAccount.filter((i) => i.active && isSellableItem(i.itemType));
+    const cands = toCandidates(
+      forAccount.map((i) => ({ id: i.id, name: i.name, active: i.active, score: 0.9 })),
+    );
+    // One active sellable item maps to this income account -> confident pick.
+    if (active.length === 1) {
+      const m = active[0];
+      return {
+        match: { id: m.id, name: m.name, active: m.active },
+        confidence: 0.9,
+        candidates: cands,
+      };
+    }
+    // Several map to it -> let the accountant choose.
+    return { match: null, confidence: 0, candidates: cands };
+  }
+
+  // No account match (or no items for it) -> shortlist sellable items, active first.
+  const shortlist = [...pool]
+    .sort((a, b) => Number(b.active) - Number(a.active))
+    .slice(0, MAX_CANDIDATES)
+    .map((i) => ({ id: i.id, name: i.name, active: i.active, score: 0 }));
+  return { match: null, confidence: 0, candidates: shortlist };
+}
+
 // ── Orchestrator ──────────────────────────────────────────────────────────────
 
 export function buildTransactionSuggestion(
@@ -415,6 +481,17 @@ export function buildTransactionSuggestion(
     );
   }
 
+  // Income lines post to a product/service ITEM (not an account). Derive it from
+  // the matched income account. Empty for expense/unknown.
+  const item = suggestItem(direction, account.match?.id ?? null, lists.items);
+  if (direction === "income") {
+    if (item.match && !item.match.active) {
+      notes.push(`Item "${item.match.name}" is archived in QuickBooks.`);
+    } else if (!item.match) {
+      notes.push("Choose a product/service for this income entry.");
+    }
+  }
+
   const taxCode = matchTaxCode(extraction.taxes, lists.taxCodes);
   if (extraction.taxes.length > 0 && lists.taxCodes === null) {
     notes.push("Your QuickBooks tax codes aren't loaded yet.");
@@ -450,6 +527,7 @@ export function buildTransactionSuggestion(
     partyKind,
     party,
     account,
+    item,
     taxCode,
     amount: extraction.total,
     subtotal: extraction.subtotal,

@@ -19,7 +19,7 @@ import type { ResolvedEntry, ResolvedRef } from "@/lib/quickbooks/suggest";
 export const runtime = "nodejs";
 
 const LOCALES = ["en", "fr"] as const;
-const FIELDS = ["party", "account", "taxCode"] as const;
+const FIELDS = ["party", "account", "taxCode", "item"] as const;
 type Field = (typeof FIELDS)[number];
 
 // A value is either null (cleared) or a {id,name} ref. Anything else is rejected.

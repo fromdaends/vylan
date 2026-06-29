@@ -5,10 +5,11 @@ import {
   taxTokensFrom,
   matchTaxCode,
   suggestAccount,
+  suggestItem,
   buildTransactionSuggestion,
   MATCH_THRESHOLD,
 } from "./suggest";
-import type { QbNamed, QbAccount, QuickbooksLists } from "./read";
+import type { QbNamed, QbAccount, QbItem, QuickbooksLists } from "./read";
 import type { TransactionExtraction } from "@/lib/ai/transaction-extract";
 
 const vendors: QbNamed[] = [
@@ -363,5 +364,47 @@ describe("buildTransactionSuggestion", () => {
     expect(unidentified.overallConfidence).toBeLessThan(
       matched.overallConfidence,
     );
+  });
+});
+
+describe("suggestItem (income)", () => {
+  const items: QbItem[] = [
+    { id: "i1", name: "Consulting", itemType: "Service", incomeAccountId: "a1", active: true },
+    { id: "i2", name: "Design", itemType: "Service", incomeAccountId: "a2", active: true },
+    { id: "i3", name: "Design Rush", itemType: "Service", incomeAccountId: "a2", active: true },
+    { id: "i4", name: "Old Service", itemType: "Service", incomeAccountId: "a3", active: false },
+    { id: "i5", name: "A Category", itemType: "Category", incomeAccountId: "a1", active: true },
+  ];
+
+  it("returns empty for expense / unknown directions", () => {
+    expect(suggestItem("expense", "a1", items)).toEqual({
+      match: null,
+      confidence: 0,
+      candidates: [],
+    });
+    expect(suggestItem("unknown", "a1", items).match).toBeNull();
+  });
+
+  it("confidently picks the single active item that maps to the income account", () => {
+    const r = suggestItem("income", "a1", items);
+    // i5 is a Category (excluded), so a1 has exactly one sellable item: i1.
+    expect(r.match).toEqual({ id: "i1", name: "Consulting", active: true });
+  });
+
+  it("does not confidently pick when several items map to the account (candidates only)", () => {
+    const r = suggestItem("income", "a2", items);
+    expect(r.match).toBeNull();
+    expect(r.candidates.map((c) => c.id).sort()).toEqual(["i2", "i3"]);
+  });
+
+  it("falls back to a shortlist when no account matched", () => {
+    const r = suggestItem("income", null, items);
+    expect(r.match).toBeNull();
+    expect(r.candidates.length).toBeGreaterThan(0);
+  });
+
+  it("returns empty when there are no items", () => {
+    expect(suggestItem("income", "a1", null).candidates).toEqual([]);
+    expect(suggestItem("income", "a1", []).candidates).toEqual([]);
   });
 });

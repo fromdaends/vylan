@@ -21,7 +21,7 @@ import {
 import type { ResolvedRef } from "@/lib/quickbooks/suggest";
 
 export type PickOption = { id: string; name: string };
-type DraftField = "party" | "account" | "taxCode";
+type DraftField = "party" | "account" | "taxCode" | "item";
 
 // One editable mapping cell on a QuickBooks draft (Stage 4): the accountant picks
 // the real vendor/customer, account, or tax code from their connected QuickBooks
