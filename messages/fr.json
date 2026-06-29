@@ -748,6 +748,7 @@
     "qbo_section_vendors": "Fournisseurs",
     "qbo_section_customers": "Clients",
     "qbo_section_taxcodes": "Codes de taxe",
+    "qbo_section_items": "Produits et services",
     "qbo_section_empty": "Aucun trouvé.",
     "qbo_section_error": "Impossible de charger cette liste.",
     "qbo_refresh_cta": "Actualiser depuis QuickBooks",

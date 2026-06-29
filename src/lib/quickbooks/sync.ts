@@ -10,6 +10,7 @@ import {
   setFirmSyncState,
   replaceCachedEntity,
 } from "@/lib/db/quickbooks-cache";
+import { isMissingSchema } from "@/lib/db/quickbooks";
 import { enqueueJob, cancelPendingJobs } from "@/lib/db/jobs";
 
 export type SyncResult = { ok: boolean; detail: string };
@@ -62,6 +63,17 @@ export async function syncQuickbooksLists(firmId: string): Promise<SyncResult> {
     if (lists.taxCodes)
       await replaceCachedEntity(firmId, "taxCodes", lists.taxCodes, syncedAt);
     else failed.push("taxCodes");
+    // Items (0460) sync best-effort + strictly additive: before the migration is
+    // applied the table doesn't exist (skip silently), and a failed items read
+    // (null) must NOT make the whole sync "partial" — the four core lists are
+    // what gate lastSyncedAt. So items never push to `failed`.
+    if (lists.items) {
+      try {
+        await replaceCachedEntity(firmId, "items", lists.items, syncedAt);
+      } catch (e) {
+        if (!isMissingSchema(e as { code?: string; message?: string })) throw e;
+      }
+    }
   } catch (e) {
     await setFirmSyncState(firmId, {
       status: "error",

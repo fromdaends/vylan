@@ -26,7 +26,7 @@ export function isMissingSchema(
     err.code === "42P01" ||
     err.code === "PGRST204" ||
     err.code === "42703" ||
-    /quickbooks_(connections|accounts|vendors|customers|tax_codes)/i.test(
+    /quickbooks_(connections|accounts|vendors|customers|tax_codes|items)/i.test(
       err.message ?? "",
     ) ||
     /could not find the table|relation .* does not exist|column .* does not exist/i.test(
