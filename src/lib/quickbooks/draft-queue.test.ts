@@ -139,6 +139,43 @@ describe("countQueueBuckets", () => {
   });
 });
 
+describe("income drafts (need an item, not an account)", () => {
+  const matchedItem = { id: "it1", name: "Consulting", active: true };
+  // An income draft with customer + tax matched, account matched, but NO item.
+  function incomeSugg(over: Partial<TransactionSuggestion> = {}) {
+    return sugg({
+      direction: "income",
+      partyKind: "customer",
+      party: matched("A Client"),
+      item: { match: null, confidence: 0, candidates: [] },
+      ...over,
+    });
+  }
+
+  it("an income draft with no item needs input even though the account is matched", () => {
+    expect(draftQueueBucket(item(incomeSugg()))).toBe("needs_input");
+  });
+  it("an income draft with a matched item is ready (item satisfies the mapping)", () => {
+    expect(
+      draftQueueBucket(
+        item({ ...incomeSugg(), item: { match: matchedItem, confidence: 0.9, candidates: [] } }),
+      ),
+    ).toBe("ready");
+  });
+  it("a resolved item makes an income draft ready", () => {
+    expect(
+      draftQueueBucket(
+        item(incomeSugg(), "draft", {
+          party: null,
+          account: null,
+          taxCode: null,
+          item: { id: "it9", name: "Picked" },
+        }),
+      ),
+    ).toBe("ready");
+  });
+});
+
 describe("posted bucket (Stage 5)", () => {
   it("a posted draft is in the 'posted' bucket regardless of completeness", () => {
     expect(draftQueueBucket(item(sugg(), "posted"))).toBe("posted");

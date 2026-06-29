@@ -16,6 +16,8 @@ export type EffectiveMapping = {
   party: ResolvedRef | null;
   account: ResolvedRef | null;
   taxCode: ResolvedRef | null;
+  // The product/service item for an income line (Invoice). Null for expenses.
+  item: ResolvedRef | null;
 };
 
 function matchRef(
@@ -25,6 +27,8 @@ function matchRef(
 }
 
 // The accountant's pick wins; otherwise fall back to the AI's confident match.
+// `item` is defensive about older suggestions/resolved rows that predate income
+// support (suggestion.item / resolved.item may be absent).
 export function effectiveMapping(
   suggestion: TransactionSuggestion,
   resolved: ResolvedEntry | null,
@@ -33,22 +37,27 @@ export function effectiveMapping(
     party: resolved?.party ?? matchRef(suggestion.party.match),
     account: resolved?.account ?? matchRef(suggestion.account.match),
     taxCode: resolved?.taxCode ?? matchRef(suggestion.taxCode.match),
+    item: resolved?.item ?? matchRef(suggestion.item?.match ?? null),
   };
 }
 
 // Does this draft still need the accountant's input before it could be posted?
-// Party + account always matter; the tax code only when the document showed tax.
-// A foreign currency or a missing total also flag. Used by the roll-up and to
-// tint the card.
+// Party always matters; the "mapping target" differs by direction — an INCOME
+// line needs an ITEM (Invoice lines post to an item), an expense needs an
+// ACCOUNT (Bill lines post to an account). The tax code matters only when the
+// document showed tax. A foreign currency or a missing total also flag. Used by
+// the roll-up and to tint the card.
 export function draftNeedsInput(
   suggestion: TransactionSuggestion,
   resolved: ResolvedEntry | null,
 ): boolean {
   const eff = effectiveMapping(suggestion, resolved);
   const hasTax = suggestion.taxTotal != null;
+  const mappingMissing =
+    suggestion.direction === "income" ? eff.item == null : eff.account == null;
   return (
     eff.party == null ||
-    eff.account == null ||
+    mappingMissing ||
     (hasTax && eff.taxCode == null) ||
     (suggestion.currency != null && suggestion.currency !== "CAD") ||
     suggestion.amount == null

@@ -31,6 +31,7 @@ export type DraftCardOptions = {
   customers: PickOption[];
   accounts: PickOption[];
   taxCodes: PickOption[];
+  items: PickOption[];
 };
 
 // "QuickBooks draft" card (Stage 4). Sits under a receipt / invoice on the
@@ -265,16 +266,31 @@ export async function QuickbooksDraftCard({
           choosePrompt={partyChoose}
           disabled={!isDraft}
         />
-        <QuickbooksEditableField
-          key={`account-${eff.account?.id ?? "none"}`}
-          fileId={fileId}
-          field="account"
-          label={t("field_account")}
-          options={options.accounts}
-          initial={eff.account}
-          choosePrompt={t("choose_account")}
-          disabled={!isDraft}
-        />
+        {/* Income lines post to a product/service ITEM (QuickBooks Invoice);
+            expenses post to an account (Bill). Show the right cell per direction. */}
+        {v.direction === "income" ? (
+          <QuickbooksEditableField
+            key={`item-${eff.item?.id ?? "none"}`}
+            fileId={fileId}
+            field="item"
+            label={t("field_item")}
+            options={options.items}
+            initial={eff.item}
+            choosePrompt={t("choose_item")}
+            disabled={!isDraft}
+          />
+        ) : (
+          <QuickbooksEditableField
+            key={`account-${eff.account?.id ?? "none"}`}
+            fileId={fileId}
+            field="account"
+            label={t("field_account")}
+            options={options.accounts}
+            initial={eff.account}
+            choosePrompt={t("choose_account")}
+            disabled={!isDraft}
+          />
+        )}
         {v.hasTax && (
           <QuickbooksEditableField
             key={`tax-${eff.taxCode?.id ?? "none"}`}
