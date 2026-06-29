@@ -124,6 +124,16 @@ export default async function QuickbooksDraftsPage({
       x.bucket === "ready" && (!activeClient || x.r.clientId === activeClient),
   ).length;
 
+  // Approved EXPENSE drafts for the active client filter — what "Post all
+  // approved" covers (income/incomplete aren't postable in Phase 1).
+  const postableCount = withBucket.filter(
+    (x) =>
+      x.bucket === "approved" &&
+      x.r.suggestion.direction === "expense" &&
+      !x.r.postedQboId &&
+      (!activeClient || x.r.clientId === activeClient),
+  ).length;
+
   // Server-side filter by status bucket + client (text search is client-side),
   // then a priority sort so what needs attention leads (newest-first within each
   // bucket is preserved by the stable sort over the already newest-first rows).
@@ -145,6 +155,7 @@ export default async function QuickbooksDraftsPage({
       <DraftsQueue
         counts={counts}
         readyCount={readyCount}
+        postableCount={postableCount}
         totalCad={summary.totalCad}
         hasForeignCurrency={summary.hasForeignCurrency}
         activeFilter={activeFilter}

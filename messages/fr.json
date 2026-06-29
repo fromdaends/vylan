@@ -2028,6 +2028,11 @@
     "undo_title": "Annuler cette comptabilisation?",
     "undo_body": "Ceci supprime la facture dans QuickBooks (QuickBooks la conserve dans son journal d’audit) et redonne le statut Approuvé au brouillon.",
     "undo_go": "Annuler la comptabilisation",
-    "undo_failed": "Échec de l’annulation. Réessayez."
+    "undo_failed": "Échec de l’annulation. Réessayez.",
+    "post_all": "Tout envoyer ({count})",
+    "post_all_title": "Envoyer toutes les dépenses approuvées",
+    "post_all_confirm": "Envoyer {count, plural, one {# dépense approuvée} other {# dépenses approuvées}} à QuickBooks comme factures fournisseurs? Vous pourrez annuler chacune ensuite.",
+    "post_all_go": "Envoyer {count}",
+    "post_all_failed": "Échec de l’envoi. Réessayez."
   }
 }

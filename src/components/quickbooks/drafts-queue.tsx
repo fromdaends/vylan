@@ -21,6 +21,7 @@ import {
   type QueueCounts,
 } from "@/lib/quickbooks/draft-queue";
 import { ApproveReadyButton } from "./approve-ready-button";
+import { PostApprovedButton } from "./post-approved-button";
 
 // Firm-wide QuickBooks drafts queue (Stage 4, Phase 3) — the client shell.
 // Status + client filters round-trip via the URL (server re-filters + re-renders
@@ -29,6 +30,7 @@ import { ApproveReadyButton } from "./approve-ready-button";
 export function DraftsQueue({
   counts,
   readyCount,
+  postableCount,
   totalCad,
   hasForeignCurrency,
   activeFilter,
@@ -42,6 +44,8 @@ export function DraftsQueue({
   counts: QueueCounts;
   // Ready drafts matching the active client filter — drives "Approve all ready".
   readyCount: number;
+  // Approved expense drafts matching the client filter — drives "Post all approved".
+  postableCount: number;
   totalCad: number | null;
   hasForeignCurrency: boolean;
   activeFilter: QueueFilter;
@@ -145,6 +149,7 @@ export function DraftsQueue({
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <ApproveReadyButton readyCount={readyCount} client={activeClient} />
+          <PostApprovedButton postableCount={postableCount} client={activeClient} />
           {clients.length > 0 && (
             <Select
               value={activeClient ?? "all"}
