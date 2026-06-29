@@ -83,9 +83,15 @@ export async function POST(request: NextRequest) {
     }
     if (out.engagementId) engagementIds.add(out.engagementId);
     if (out.kind === "posted" || out.kind === "already_posted") posted++;
-    else if (out.kind === "post_failed" || out.kind === "record_failed")
+    // 'conflict' + 'record_failed' both mean "posted to QuickBooks but couldn't
+    // record it locally" — a real problem that needs attention, NOT a benign skip.
+    else if (
+      out.kind === "post_failed" ||
+      out.kind === "record_failed" ||
+      out.kind === "conflict"
+    )
       failed++;
-    else skipped++; // not_postable / conflict / not_connected / not_approved
+    else skipped++; // not_postable / not_connected / not_approved
   }
 
   // Bust the cache for the queue + each touched engagement (both locales).

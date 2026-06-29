@@ -130,6 +130,7 @@ export default async function QuickbooksDraftsPage({
     (x) =>
       x.bucket === "approved" &&
       x.r.suggestion.direction === "expense" &&
+      !x.r.postedQboId &&
       (!activeClient || x.r.clientId === activeClient),
   ).length;
 
