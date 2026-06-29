@@ -18,6 +18,14 @@ import { quickbooksQuery, QuickbooksError } from "@/lib/quickbooks/client";
 // One name + status, shared by vendors/customers/tax codes.
 export type QbNamed = { id: string; name: string; active: boolean };
 export type QbAccount = QbNamed & { accountType: string | null };
+// A product/service Item. itemType = QBO Type (Service/NonInventory/…);
+// incomeAccountId = the item's income account (so a draft mapped to an income
+// account can be matched to its item). Used for income posting (Invoice lines
+// reference an Item, not an account).
+export type QbItem = QbNamed & {
+  itemType: string | null;
+  incomeAccountId: string | null;
+};
 
 export type QuickbooksLists = {
   // null for a given list means "couldn't load this one" — the others still show.
@@ -25,6 +33,9 @@ export type QuickbooksLists = {
   vendors: QbNamed[] | null;
   customers: QbNamed[] | null;
   taxCodes: QbNamed[] | null;
+  // Optional + added later (0460): older readers/constructors omit it. null =
+  // couldn't load / not synced yet.
+  items?: QbItem[] | null;
 };
 
 export type ReadListsResult =
@@ -89,6 +100,24 @@ export function toTaxCode(r: {
   return {
     id: String(r.Id ?? ""),
     name: (r.Name ?? "").trim(),
+    active: r.Active !== false,
+  };
+}
+
+export function toItem(r: {
+  Id?: string;
+  Name?: string;
+  FullyQualifiedName?: string;
+  Type?: string;
+  Active?: boolean;
+  IncomeAccountRef?: { value?: string };
+}): QbItem {
+  return {
+    id: String(r.Id ?? ""),
+    // Sub-items read as "Parent:Child" via FullyQualifiedName when present.
+    name: (r.FullyQualifiedName ?? r.Name ?? "").trim(),
+    itemType: r.Type ?? null,
+    incomeAccountId: r.IncomeAccountRef?.value ?? null,
     active: r.Active !== false,
   };
 }
@@ -167,5 +196,6 @@ export async function readQuickbooksLists(
   const vendors = await safeRead(ctx, "Vendor", toVendor);
   const customers = await safeRead(ctx, "Customer", toCustomer);
   const taxCodes = await safeRead(ctx, "TaxCode", toTaxCode);
-  return { ok: true, data: { accounts, vendors, customers, taxCodes } };
+  const items = await safeRead(ctx, "Item", toItem);
+  return { ok: true, data: { accounts, vendors, customers, taxCodes, items } };
 }

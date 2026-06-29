@@ -7,7 +7,13 @@
 
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isMissingSchema } from "@/lib/db/quickbooks";
-import type { QbAccount, QbNamed, QuickbooksLists } from "@/lib/quickbooks/read";
+import type {
+  QbAccount,
+  QbItem,
+  QbNamed,
+  QuickbooksLists,
+} from "@/lib/quickbooks/read";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type QuickbooksSyncStatus = "idle" | "syncing" | "ok" | "error";
 export type FirmSyncState = {
@@ -57,6 +63,38 @@ function toCachedNamed(r: Record<string, unknown>): QbNamed {
     active: r.active !== false,
   };
 }
+function toCachedItem(r: Record<string, unknown>): QbItem {
+  return {
+    id: String(r.qbo_id ?? ""),
+    name: (r.name as string | null) ?? "",
+    itemType: (r.item_type as string | null) ?? null,
+    incomeAccountId: (r.income_account_qbo_id as string | null) ?? null,
+    active: r.active !== false,
+  };
+}
+
+// Read the cached Items list TOLERANTLY: a missing quickbooks_items table
+// (before migration 0460) or any read error returns null ("no items yet")
+// instead of failing — so adding items never breaks the four core lists. Pass a
+// firmId for the service-role variant (no RLS scoping).
+async function readCachedItems(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sb: SupabaseClient<any, any, any>,
+  firmId?: string,
+): Promise<QbItem[] | null> {
+  let q = sb
+    .from("quickbooks_items")
+    .select("qbo_id, name, item_type, income_account_qbo_id, active");
+  if (firmId) q = q.eq("firm_id", firmId);
+  const { data, error } = await q;
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] readCachedItems failed:", error);
+    }
+    return null;
+  }
+  return (data ?? []).map(toCachedItem);
+}
 
 // Read the firm's cached lists (authenticated, RLS firm-scoped). Returns null
 // when the cache tables don't exist yet (caller falls back to a live read).
@@ -81,6 +119,7 @@ export async function readCachedQuickbooksLists(): Promise<QuickbooksLists | nul
     vendors: (ven.data ?? []).map(toCachedNamed),
     customers: (cus.data ?? []).map(toCachedNamed),
     taxCodes: (tax.data ?? []).map(toCachedNamed),
+    items: await readCachedItems(sb),
   };
 }
 
@@ -118,6 +157,7 @@ export async function readCachedQuickbooksListsForFirm(
     vendors: (ven.data ?? []).map(toCachedNamed),
     customers: (cus.data ?? []).map(toCachedNamed),
     taxCodes: (tax.data ?? []).map(toCachedNamed),
+    items: await readCachedItems(sb, firmId),
   };
 }
 
@@ -155,6 +195,7 @@ const TABLE_BY_ENTITY = {
   vendors: "quickbooks_vendors",
   customers: "quickbooks_customers",
   taxCodes: "quickbooks_tax_codes",
+  items: "quickbooks_items",
 } as const;
 
 export type CacheEntity = keyof typeof TABLE_BY_ENTITY;
@@ -164,6 +205,8 @@ type CacheRow = {
   name: string;
   active: boolean;
   accountType?: string | null;
+  itemType?: string | null;
+  incomeAccountId?: string | null;
 };
 
 // Replace a firm's cached rows for one entity: upsert the fresh rows (stamped
@@ -190,6 +233,12 @@ export async function replaceCachedEntity(
     name: r.name,
     active: r.active,
     ...(entity === "accounts" ? { account_type: r.accountType ?? null } : {}),
+    ...(entity === "items"
+      ? {
+          item_type: r.itemType ?? null,
+          income_account_qbo_id: r.incomeAccountId ?? null,
+        }
+      : {}),
     synced_at: syncedAt,
   }));
   // Upsert in chunks so a very large company can't exceed request limits.

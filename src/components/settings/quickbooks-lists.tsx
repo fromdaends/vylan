@@ -11,6 +11,7 @@ type Lists = {
   vendors: Named[] | null;
   customers: Named[] | null;
   taxCodes: Named[] | null;
+  items?: Named[] | null;
 };
 type SyncState = {
   lastSyncedAt: string | null;
@@ -221,6 +222,9 @@ export function QuickbooksLists() {
         <ListSection label={t("qbo_section_vendors")} rows={lists.vendors} />
         <ListSection label={t("qbo_section_customers")} rows={lists.customers} />
         <ListSection label={t("qbo_section_taxcodes")} rows={lists.taxCodes} />
+        {lists.items !== undefined && (
+          <ListSection label={t("qbo_section_items")} rows={lists.items} />
+        )}
       </div>
     </div>
   );

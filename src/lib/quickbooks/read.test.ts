@@ -16,6 +16,7 @@ import {
   toVendor,
   toCustomer,
   toTaxCode,
+  toItem,
 } from "./read";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
 import { quickbooksQuery, QuickbooksError } from "@/lib/quickbooks/client";
@@ -51,6 +52,21 @@ describe("mappers", () => {
       name: "Bob",
       active: true,
     });
+    expect(
+      toItem({
+        Id: "7",
+        Name: "Consulting",
+        FullyQualifiedName: "Services:Consulting",
+        Type: "Service",
+        IncomeAccountRef: { value: "10" },
+      }),
+    ).toEqual({
+      id: "7",
+      name: "Services:Consulting",
+      itemType: "Service",
+      incomeAccountId: "10",
+      active: true,
+    });
     expect(toTaxCode({ Id: "6", Name: "GST", Active: false })).toEqual({
       id: "6",
       name: "GST",
@@ -68,6 +84,17 @@ function singlePageMock() {
     if (sql.includes("FROM Customer"))
       return { Customer: [{ Id: "3", DisplayName: "Bob" }] };
     if (sql.includes("FROM TaxCode")) return { TaxCode: [{ Id: "4", Name: "GST" }] };
+    if (sql.includes("FROM Item"))
+      return {
+        Item: [
+          {
+            Id: "7",
+            Name: "Consulting",
+            Type: "Service",
+            IncomeAccountRef: { value: "10" },
+          },
+        ],
+      };
     return {};
   });
 }
@@ -82,7 +109,7 @@ describe("readQuickbooksLists", () => {
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
-  it("reads all four lists and maps each", async () => {
+  it("reads all five lists and maps each", async () => {
     mockCtx.mockResolvedValue(CTX);
     singlePageMock();
     const r = await readQuickbooksLists("f1");
@@ -93,6 +120,15 @@ describe("readQuickbooksLists", () => {
         vendors: [{ id: "2", name: "Acme", active: true }],
         customers: [{ id: "3", name: "Bob", active: true }],
         taxCodes: [{ id: "4", name: "GST", active: true }],
+        items: [
+          {
+            id: "7",
+            name: "Consulting",
+            itemType: "Service",
+            incomeAccountId: "10",
+            active: true,
+          },
+        ],
       },
     });
     // Sequential, paged, and includes inactive records (WHERE Active IN ...).

@@ -741,6 +741,7 @@
     "qbo_section_vendors": "Vendors",
     "qbo_section_customers": "Customers",
     "qbo_section_taxcodes": "Tax codes",
+    "qbo_section_items": "Products & services",
     "qbo_section_empty": "None found.",
     "qbo_section_error": "Couldn't load this list.",
     "qbo_refresh_cta": "Refresh from QuickBooks",
