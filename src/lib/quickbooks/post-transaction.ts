@@ -88,23 +88,38 @@ export function resolveTaxApplication(input: {
 // printed on the document before we flag a discrepancy.
 export const TAX_VARIANCE_TOLERANCE = 0.02;
 
-// After posting with tax, compare the tax QuickBooks COMPUTED (from the code's
-// rate) against the tax the document showed. Returns a short human note when they
-// differ beyond the tolerance (a rate mismatch or a wrong/combined code), else
-// null. Pure so it's unit-tested; null when either number is unknown.
+// After posting with tax, compare what QuickBooks recorded against the document.
+// Two checks: the GROSS TOTAL (catches a mis-read subtotal OR tax — the total is
+// net + QBO-computed tax) and, as a fallback, the TAX itself. Returns a short
+// human note when either differs beyond the tolerance (a wrong/combined code, a
+// rate mismatch, or a bad extracted amount), else null. The total check is
+// preferred because it's the most complete signal; the tax check covers the case
+// where QuickBooks didn't return a total. Pure so it's unit-tested.
 export function taxDiscrepancyNote(input: {
   computedTax: number | null;
   documentTax: number | null;
+  computedTotal: number | null;
+  documentTotal: number | null;
 }): string | null {
-  const { computedTax, documentTax } = input;
-  if (computedTax == null || documentTax == null) return null;
-  if (Math.abs(computedTax - documentTax) <= TAX_VARIANCE_TOLERANCE)
-    return null;
   const money = (n: number) => `$${n.toFixed(2)}`;
-  return (
-    `QuickBooks calculated ${money(computedTax)} of tax, but the document showed ` +
-    `${money(documentTax)}. Check the tax code in QuickBooks.`
-  );
+  const drifts = (a: number | null, b: number | null): boolean =>
+    a != null && b != null && Math.abs(a - b) > TAX_VARIANCE_TOLERANCE;
+
+  if (drifts(input.computedTotal, input.documentTotal)) {
+    return (
+      `QuickBooks recorded a total of ${money(input.computedTotal!)}, but the ` +
+      `document showed ${money(input.documentTotal!)}. Check the amount and tax ` +
+      `code in QuickBooks.`
+    );
+  }
+  if (drifts(input.computedTax, input.documentTax)) {
+    return (
+      `QuickBooks calculated ${money(input.computedTax!)} of tax, but the ` +
+      `document showed ${money(input.documentTax!)}. Check the tax code in ` +
+      `QuickBooks.`
+    );
+  }
+  return null;
 }
 
 export type BillInput = {

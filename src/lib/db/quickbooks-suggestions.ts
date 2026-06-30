@@ -450,25 +450,39 @@ export async function recordDraftPostError(input: {
 // Stage 5 — record an UNDO (the QBO transaction was voided): return the draft to
 // 'approved', clear the posted id/sync token, bump post_attempt (so a re-post
 // uses a FRESH idempotency requestid rather than re-fetching the voided txn), and
-// clear posted_at/by + any error. Service-role write.
+// clear posted_at/by + any error + any tax note. Service-role write.
 export async function recordDraftVoided(input: {
   uploadedFileId: string;
   nextAttempt: number;
 }): Promise<boolean> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb
-    .from("quickbooks_transaction_suggestions")
-    .update({
-      status: "approved",
-      posted_qbo_id: null,
-      posted_qbo_sync_token: null,
-      post_attempt: input.nextAttempt,
-      posted_at: null,
-      posted_by: null,
-      post_error: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("uploaded_file_id", input.uploadedFileId);
+  const base = {
+    status: "approved",
+    posted_qbo_id: null,
+    posted_qbo_sync_token: null,
+    post_attempt: input.nextAttempt,
+    posted_at: null,
+    posted_by: null,
+    post_error: null,
+    updated_at: new Date().toISOString(),
+  };
+  // Also clear posted_tax_note (0470); fall back to the pre-0470 column set on a
+  // missing-column error so undo keeps working before the migration lands (a
+  // single update naming the missing column would otherwise fail the whole undo).
+  let error = (
+    await sb
+      .from("quickbooks_transaction_suggestions")
+      .update({ ...base, posted_tax_note: null })
+      .eq("uploaded_file_id", input.uploadedFileId)
+  ).error;
+  if (error && isMissingSchema(error)) {
+    error = (
+      await sb
+        .from("quickbooks_transaction_suggestions")
+        .update(base)
+        .eq("uploaded_file_id", input.uploadedFileId)
+    ).error;
+  }
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] recordDraftVoided failed:", error);

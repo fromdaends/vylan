@@ -161,7 +161,12 @@ export async function postApprovedDraft(
 
   const requestId = `${fileId}-${draft.postAttempt}`;
 
-  let result: { id: string; syncToken: string; totalTax?: number | null };
+  let result: {
+    id: string;
+    syncToken: string;
+    totalTax?: number | null;
+    totalAmt?: number | null;
+  };
   try {
     result = await quickbooksCreate(ctx, entity, payload, requestId);
   } catch (e) {
@@ -196,6 +201,8 @@ export async function postApprovedDraft(
     ? taxDiscrepancyNote({
         computedTax: result.totalTax ?? null,
         documentTax: s.taxTotal,
+        computedTotal: result.totalAmt ?? null,
+        documentTotal: s.amount,
       })
     : null;
   await recordDraftTaxNote({

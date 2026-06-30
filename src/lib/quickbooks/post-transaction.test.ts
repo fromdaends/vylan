@@ -167,23 +167,52 @@ describe("resolveTaxApplication", () => {
 });
 
 describe("taxDiscrepancyNote", () => {
-  it("returns null when the computed tax matches within tolerance", () => {
+  const agree = {
+    computedTax: 15,
+    documentTax: 15,
+    computedTotal: 115,
+    documentTotal: 115,
+  };
+  it("returns null when total + tax both match within tolerance", () => {
+    expect(taxDiscrepancyNote(agree)).toBeNull();
     expect(
-      taxDiscrepancyNote({ computedTax: 15, documentTax: 15.01 }),
+      taxDiscrepancyNote({
+        ...agree,
+        documentTax: 15.01,
+        documentTotal: 115.01,
+      }),
     ).toBeNull();
-    expect(taxDiscrepancyNote({ computedTax: 15, documentTax: 15 })).toBeNull();
   });
-  it("returns a note when the tax drifts beyond tolerance", () => {
-    const note = taxDiscrepancyNote({ computedTax: 14.5, documentTax: 15 });
+  it("flags a GROSS-TOTAL drift (catches a mis-read subtotal even if tax matches)", () => {
+    // net mis-read low -> QBO total understated, but computed tax happens to match.
+    const note = taxDiscrepancyNote({
+      computedTax: 15,
+      documentTax: 15,
+      computedTotal: 103.5,
+      documentTotal: 115,
+    });
+    expect(note).toContain("total");
+    expect(note).toContain("103.50");
+    expect(note).toContain("115.00");
+  });
+  it("flags a TAX drift when the total isn't available", () => {
+    const note = taxDiscrepancyNote({
+      computedTax: 14.5,
+      documentTax: 15,
+      computedTotal: null,
+      documentTotal: 115,
+    });
     expect(note).toContain("14.50");
     expect(note).toContain("15.00");
   });
-  it("returns null when either amount is unknown", () => {
+  it("returns null when the relevant amounts are unknown", () => {
     expect(
-      taxDiscrepancyNote({ computedTax: null, documentTax: 15 }),
-    ).toBeNull();
-    expect(
-      taxDiscrepancyNote({ computedTax: 15, documentTax: null }),
+      taxDiscrepancyNote({
+        computedTax: null,
+        documentTax: 15,
+        computedTotal: null,
+        documentTotal: 115,
+      }),
     ).toBeNull();
   });
 });
