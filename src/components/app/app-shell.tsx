@@ -226,7 +226,7 @@ export function AppShell({
         href: "/quickbooks/drafts",
         label: labels.integrations,
         icon: Plug,
-        color: "text-icon-cyan",
+        color: "text-icon-purple",
       }
     : null;
 
