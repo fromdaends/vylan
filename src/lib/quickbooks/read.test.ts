@@ -24,7 +24,12 @@ import { quickbooksQuery, QuickbooksError } from "@/lib/quickbooks/client";
 const mockCtx = vi.mocked(getQuickbooksReadContext);
 const mockQuery = vi.mocked(quickbooksQuery);
 
-const CTX = { accessToken: "AT", realmId: "r1", environment: "sandbox" as const };
+const CTX = {
+  accessToken: "AT",
+  realmId: "r1",
+  environment: "sandbox" as const,
+  companyCountry: null,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -33,18 +38,24 @@ beforeEach(() => {
 
 describe("mappers", () => {
   it("toAccount maps name+type and defaults Active to true when omitted", () => {
-    expect(toAccount({ Id: "1", Name: " Checking ", AccountType: "Bank" })).toEqual({
+    expect(
+      toAccount({ Id: "1", Name: " Checking ", AccountType: "Bank" }),
+    ).toEqual({
       id: "1",
       name: "Checking",
       accountType: "Bank",
       active: true,
     });
-    expect(toAccount({ Id: "2", Name: "Old", Active: false }).active).toBe(false);
+    expect(toAccount({ Id: "2", Name: "Old", Active: false }).active).toBe(
+      false,
+    );
     expect(toAccount({}).accountType).toBeNull();
   });
   it("toVendor prefers DisplayName, falls back to CompanyName", () => {
     expect(toVendor({ Id: "3", DisplayName: "Acme" }).name).toBe("Acme");
-    expect(toVendor({ Id: "4", CompanyName: "Beta Inc" }).name).toBe("Beta Inc");
+    expect(toVendor({ Id: "4", CompanyName: "Beta Inc" }).name).toBe(
+      "Beta Inc",
+    );
   });
   it("toCustomer + toTaxCode map id/name/active", () => {
     expect(toCustomer({ Id: "5", DisplayName: "Bob" })).toEqual({
@@ -80,10 +91,12 @@ function singlePageMock() {
   mockQuery.mockImplementation(async (_at, _realm, sql) => {
     if (sql.includes("FROM Account"))
       return { Account: [{ Id: "1", Name: "Checking", AccountType: "Bank" }] };
-    if (sql.includes("FROM Vendor")) return { Vendor: [{ Id: "2", DisplayName: "Acme" }] };
+    if (sql.includes("FROM Vendor"))
+      return { Vendor: [{ Id: "2", DisplayName: "Acme" }] };
     if (sql.includes("FROM Customer"))
       return { Customer: [{ Id: "3", DisplayName: "Bob" }] };
-    if (sql.includes("FROM TaxCode")) return { TaxCode: [{ Id: "4", Name: "GST" }] };
+    if (sql.includes("FROM TaxCode"))
+      return { TaxCode: [{ Id: "4", Name: "GST" }] };
     if (sql.includes("FROM Item"))
       return {
         Item: [
@@ -116,7 +129,9 @@ describe("readQuickbooksLists", () => {
     expect(r).toEqual({
       ok: true,
       data: {
-        accounts: [{ id: "1", name: "Checking", accountType: "Bank", active: true }],
+        accounts: [
+          { id: "1", name: "Checking", accountType: "Bank", active: true },
+        ],
         vendors: [{ id: "2", name: "Acme", active: true }],
         customers: [{ id: "3", name: "Bob", active: true }],
         taxCodes: [{ id: "4", name: "GST", active: true }],
@@ -146,7 +161,8 @@ describe("readQuickbooksLists", () => {
       if (sql.includes("FROM Vendor")) {
         throw new QuickbooksError("read_failed", "boom", 500);
       }
-      if (sql.includes("FROM Account")) return { Account: [{ Id: "1", Name: "A" }] };
+      if (sql.includes("FROM Account"))
+        return { Account: [{ Id: "1", Name: "A" }] };
       return {};
     });
     const r = await readQuickbooksLists("f1");
@@ -169,7 +185,8 @@ describe("readQuickbooksLists", () => {
     mockQuery.mockImplementation(async (_at, _realm, sql) => {
       if (sql.includes("FROM Account")) {
         if (sql.includes("STARTPOSITION 1 ")) return { Account: fullPage };
-        if (sql.includes("STARTPOSITION 1001 ")) return { Account: [{ Id: "x", Name: "last" }] };
+        if (sql.includes("STARTPOSITION 1001 "))
+          return { Account: [{ Id: "x", Name: "last" }] };
         return {};
       }
       return {};
@@ -192,7 +209,8 @@ describe("readQuickbooksLists rate-limit handling", () => {
     mockQuery.mockImplementation(async (_at, _realm, sql) => {
       if (sql.includes("FROM Account")) {
         accountCalls++;
-        if (accountCalls === 1) throw new QuickbooksError("read_failed", "429", 429);
+        if (accountCalls === 1)
+          throw new QuickbooksError("read_failed", "429", 429);
         return { Account: [{ Id: "1", Name: "A" }] };
       }
       return {};

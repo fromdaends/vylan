@@ -11,7 +11,10 @@
 // is reported as a typed result / null so callers show a clean "set up" message
 // instead of a 500.
 
-import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import {
+  getServerSupabase,
+  getServiceRoleSupabase,
+} from "@/lib/supabase/server";
 import type { QuickbooksEnvironment } from "@/lib/quickbooks/client";
 
 // PostgREST surfaces a not-yet-applied migration as a missing table (PGRST205 /
@@ -76,13 +79,13 @@ export type UpsertQuickbooksConnectionInput = {
   accessTokenExpiresAt: string | null;
   refreshTokenExpiresAt: string | null;
   companyName: string | null;
+  companyCountry: string | null;
   environment: QuickbooksEnvironment;
   connectedBy: string | null;
 };
 
 export type UpsertConnectionResult =
-  | { ok: true }
-  | { ok: false; reason: "migration_pending" | "error" };
+  { ok: true } | { ok: false; reason: "migration_pending" | "error" };
 
 // Persist (insert or replace) the firm's QuickBooks connection after a successful
 // OAuth exchange. Service-role write — the column is not authenticated-writable.
@@ -93,27 +96,64 @@ export async function upsertFirmQuickbooksConnection(
   input: UpsertQuickbooksConnectionInput,
 ): Promise<UpsertConnectionResult> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb.from("quickbooks_connections").upsert(
-    {
-      firm_id: firmId,
-      realm_id: input.realmId,
-      access_token: input.accessToken,
-      refresh_token: input.refreshToken,
-      access_token_expires_at: input.accessTokenExpiresAt,
-      refresh_token_expires_at: input.refreshTokenExpiresAt,
-      company_name: input.companyName,
-      environment: input.environment,
-      connected_by: input.connectedBy,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "firm_id" },
-  );
+  const base = {
+    firm_id: firmId,
+    realm_id: input.realmId,
+    access_token: input.accessToken,
+    refresh_token: input.refreshToken,
+    access_token_expires_at: input.accessTokenExpiresAt,
+    refresh_token_expires_at: input.refreshTokenExpiresAt,
+    company_name: input.companyName,
+    environment: input.environment,
+    connected_by: input.connectedBy,
+    updated_at: new Date().toISOString(),
+  };
+  // Try with company_country (0470); fall back to the pre-0470 column set on a
+  // missing-column error so connecting still works before the migration lands.
+  let error = (
+    await sb.from("quickbooks_connections").upsert(
+      { ...base, company_country: input.companyCountry },
+      {
+        onConflict: "firm_id",
+      },
+    )
+  ).error;
+  if (error && isMissingSchema(error)) {
+    error = (
+      await sb
+        .from("quickbooks_connections")
+        .upsert(base, { onConflict: "firm_id" })
+    ).error;
+  }
   if (error) {
-    if (isMissingSchema(error)) return { ok: false, reason: "migration_pending" };
+    if (isMissingSchema(error))
+      return { ok: false, reason: "migration_pending" };
     console.error("[quickbooks] upsertFirmQuickbooksConnection failed:", error);
     return { ok: false, reason: "error" };
   }
   return { ok: true };
+}
+
+// Self-heal the connected company's country (service role). Used by the sync job
+// so a connection that predates the tax-line feature (or pre-0470) gets its
+// country populated without a reconnect. Best-effort + graceful: a missing column
+// (pre-0470) or error is swallowed. Only writes when `country` is non-null.
+export async function updateFirmQuickbooksCompanyCountry(
+  firmId: string,
+  country: string | null,
+): Promise<void> {
+  if (!country) return;
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("quickbooks_connections")
+    .update({ company_country: country })
+    .eq("firm_id", firmId);
+  if (error && !isMissingSchema(error)) {
+    console.error(
+      "[quickbooks] updateFirmQuickbooksCompanyCountry failed:",
+      error,
+    );
+  }
 }
 
 // Cheap service-role "is this firm connected to QuickBooks?" check, for the
@@ -146,6 +186,7 @@ export type QuickbooksConnectionWithTokens = {
   accessTokenExpiresAt: string | null;
   refreshTokenExpiresAt: string | null;
   environment: QuickbooksEnvironment;
+  companyCountry: string | null;
 };
 
 // Service-role read of the FULL connection, including the OAuth tokens, for token
@@ -156,13 +197,29 @@ export async function getFirmQuickbooksConnectionWithTokens(
   firmId: string,
 ): Promise<QuickbooksConnectionWithTokens | null> {
   const sb = getServiceRoleSupabase();
-  const { data, error } = await sb
-    .from("quickbooks_connections")
-    .select(
-      "realm_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, environment",
-    )
-    .eq("firm_id", firmId)
-    .maybeSingle();
+  // Widest select first (0470 company_country); fall back to the pre-0470 column
+  // set on a missing-column error so token refresh keeps working before the
+  // migration lands.
+  const selects = [
+    "realm_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, environment, company_country",
+    "realm_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, environment",
+  ] as const;
+  let data: Record<string, unknown> | null = null;
+  let error: { code?: string; message?: string } | null = null;
+  for (const sel of selects) {
+    const res = await sb
+      .from("quickbooks_connections")
+      .select(sel)
+      .eq("firm_id", firmId)
+      .maybeSingle();
+    if (res.error && isMissingSchema(res.error)) {
+      error = res.error;
+      continue;
+    }
+    data = res.data as Record<string, unknown> | null;
+    error = res.error;
+    break;
+  }
   if (error) {
     if (!isMissingSchema(error)) {
       console.error(
@@ -177,11 +234,13 @@ export async function getFirmQuickbooksConnectionWithTokens(
     realmId: data.realm_id as string,
     accessToken: data.access_token as string,
     refreshToken: data.refresh_token as string,
-    accessTokenExpiresAt: (data.access_token_expires_at as string | null) ?? null,
+    accessTokenExpiresAt:
+      (data.access_token_expires_at as string | null) ?? null,
     refreshTokenExpiresAt:
       (data.refresh_token_expires_at as string | null) ?? null,
     environment:
       (data.environment as string) === "production" ? "production" : "sandbox",
+    companyCountry: (data.company_country as string | null) ?? null,
   };
 }
 
@@ -238,7 +297,9 @@ export async function updateFirmQuickbooksTokens(
     }
     return { outcome: "error" };
   }
-  return data && data.length > 0 ? { outcome: "updated" } : { outcome: "raced" };
+  return data && data.length > 0
+    ? { outcome: "updated" }
+    : { outcome: "raced" };
 }
 
 // Remove the firm's connection entirely (disconnect). Service-role delete. Safe

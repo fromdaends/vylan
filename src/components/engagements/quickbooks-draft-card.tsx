@@ -23,7 +23,12 @@ import {
   QuickbooksEditableField,
   type PickOption,
 } from "./quickbooks-editable-field";
-import { formatCurrency, formatDate, formatNumber, type AppLocale } from "@/lib/format";
+import {
+  formatCurrency,
+  formatDate,
+  formatNumber,
+  type AppLocale,
+} from "@/lib/format";
 import { cn } from "@/lib/cn";
 
 export type DraftCardOptions = {
@@ -55,6 +60,7 @@ export async function QuickbooksDraftCard({
   postedAt = null,
   postedByName = null,
   postError = null,
+  postedTaxNote = null,
   showStatusControls = true,
 }: {
   suggestion: TransactionSuggestion;
@@ -77,6 +83,9 @@ export async function QuickbooksDraftCard({
   postedAt?: string | null;
   postedByName?: string | null;
   postError?: string | null;
+  // Stage 5 (tax-line): a tax-discrepancy note on a posted draft (QuickBooks'
+  // computed tax vs the document's tax); null when they agree.
+  postedTaxNote?: string | null;
   // Stage 4, Phase 3: hide the footer Approve/Dismiss/Reopen controls when the
   // surrounding surface already renders them (the firm-wide queue row does), so
   // they're not shown twice. Defaults true (the engagement page keeps them).
@@ -102,12 +111,17 @@ export async function QuickbooksDraftCard({
       : status === "approved"
         ? { label: t("status_approved"), cls: "bg-success/10 text-success" }
         : status === "dismissed"
-          ? { label: t("status_dismissed"), cls: "bg-muted text-muted-foreground" }
+          ? {
+              label: t("status_dismissed"),
+              cls: "bg-muted text-muted-foreground",
+            }
           : { label: t("status_draft"), cls: "bg-muted text-muted-foreground" };
 
   // "Approved by X · date" / "Dismissed by X · date" footer line (name may be
   // null if the reviewer left the firm — fall back to the bare state label).
-  const reviewedDate = reviewedAt ? formatDate(reviewedAt, locale, "medium") : null;
+  const reviewedDate = reviewedAt
+    ? formatDate(reviewedAt, locale, "medium")
+    : null;
   let reviewerMeta: string | null = null;
   if (status === "approved") {
     const base = reviewedByName
@@ -171,9 +185,7 @@ export async function QuickbooksDraftCard({
     <div
       className={cn(
         "mt-1.5 overflow-hidden rounded-xl border bg-card/70 shadow-sm",
-        status === "approved"
-          ? "border-success/30"
-          : "border-border/60",
+        status === "approved" ? "border-success/30" : "border-border/60",
         status === "dismissed" ? "opacity-70" : "",
       )}
     >
@@ -337,9 +349,12 @@ export async function QuickbooksDraftCard({
             fileId={fileId}
             status={status}
             direction={v.direction}
-            postedAtLabel={postedAt ? formatDate(postedAt, locale, "medium") : null}
+            postedAtLabel={
+              postedAt ? formatDate(postedAt, locale, "medium") : null
+            }
             postedByName={postedByName}
             postError={postError}
+            taxNote={postedTaxNote}
           />
         </div>
       )}

@@ -8,12 +8,17 @@ import {
   getDraftForFile,
   recordDraftPosted,
   recordDraftPostError,
+  recordDraftTaxNote,
 } from "@/lib/db/quickbooks-suggestions";
 import {
   getQuickbooksReadContext,
   type QuickbooksReadContext,
 } from "@/lib/quickbooks/connection";
-import { quickbooksCreate, QuickbooksError } from "@/lib/quickbooks/client";
+import {
+  quickbooksCreate,
+  quickbooksTaxLinesEnabled,
+  QuickbooksError,
+} from "@/lib/quickbooks/client";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { effectiveMapping } from "@/lib/quickbooks/draft-resolve";
@@ -22,6 +27,9 @@ import {
   checkBillPostable,
   buildInvoicePayload,
   checkInvoicePostable,
+  resolveTaxApplication,
+  taxDiscrepancyNote,
+  type TaxApplication,
   type PostabilityProblem,
   type InvoicePostabilityProblem,
 } from "@/lib/quickbooks/post-transaction";
@@ -46,6 +54,10 @@ export type PostOutcome = {
   detail?: string;
   // Bill (expense) or Invoice (income) postability problems — informational.
   problems?: (PostabilityProblem | InvoicePostabilityProblem)[];
+  // Set when a posted transaction's QuickBooks-computed tax differs from the
+  // document's tax (a discrepancy worth the accountant's attention); null/absent
+  // otherwise.
+  taxNote?: string | null;
 };
 
 // Post one approved EXPENSE draft as a QuickBooks Bill. Idempotent + safe:
@@ -82,6 +94,25 @@ export async function postApprovedDraft(
   const lists =
     opts && "lists" in opts ? opts.lists : await readCachedQuickbooksLists();
 
+  // The connection context is needed up front: the company COUNTRY decides whether
+  // we send the non-US GlobalTaxCalculation, so it shapes the payload.
+  const ctx =
+    opts && "ctx" in opts
+      ? opts.ctx
+      : await getQuickbooksReadContext(draft.firmId);
+  if (!ctx) return { kind: "not_connected", ...base };
+
+  // Decide whether to attach tax (net + tax code, QBO computes) or fall back to
+  // the gross-no-tax line. Direction-agnostic — used by both builders below.
+  const tax: TaxApplication | null = resolveTaxApplication({
+    enabled: quickbooksTaxLinesEnabled(),
+    country: ctx.companyCountry,
+    taxCodeId: eff.taxCode?.id ?? null,
+    subtotal: s.subtotal,
+    total: s.amount,
+    taxTotal: s.taxTotal,
+  });
+
   // Branch by direction: an EXPENSE posts a Bill (account line), INCOME posts an
   // Invoice (item line). Both validate against the firm's CURRENT lists.
   let entity: "bill" | "invoice";
@@ -104,6 +135,7 @@ export async function postApprovedDraft(
       amount: s.amount,
       date: s.date,
       memo: "Posted from Vylan",
+      tax,
     });
   } else {
     const problems = checkBillPostable({
@@ -123,18 +155,13 @@ export async function postApprovedDraft(
       amount: s.amount,
       date: s.date,
       memo: "Posted from Vylan",
+      tax,
     });
   }
 
-  const ctx =
-    opts && "ctx" in opts
-      ? opts.ctx
-      : await getQuickbooksReadContext(draft.firmId);
-  if (!ctx) return { kind: "not_connected", ...base };
-
   const requestId = `${fileId}-${draft.postAttempt}`;
 
-  let result: { id: string; syncToken: string };
+  let result: { id: string; syncToken: string; totalTax?: number | null };
   try {
     result = await quickbooksCreate(ctx, entity, payload, requestId);
   } catch (e) {
@@ -160,5 +187,22 @@ export async function postApprovedDraft(
       detail: "Posted to QuickBooks but couldn't save it.",
     };
   }
-  return { kind: "posted", ...base, postedQboId: result.id };
+
+  // When we posted WITH tax, compare QuickBooks' computed tax against the
+  // document's tax and flag a material drift (best-effort, never affects the post
+  // outcome). Always called on success — passing null when there's no drift clears
+  // any stale note from a prior post of this draft.
+  const taxNote = tax
+    ? taxDiscrepancyNote({
+        computedTax: result.totalTax ?? null,
+        documentTax: s.taxTotal,
+      })
+    : null;
+  await recordDraftTaxNote({
+    uploadedFileId: fileId,
+    postedQboId: result.id,
+    note: taxNote,
+  });
+
+  return { kind: "posted", ...base, postedQboId: result.id, taxNote };
 }
