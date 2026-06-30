@@ -1710,6 +1710,13 @@ a.vy-contact-card:hover {
 
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
+  /* The decorative 6-column overlay (.wwd-grid) is a subtle editorial touch on
+     wide desktop, but on a phone the 6 lines crowd together and read as a
+     rendering glitch (thin white vertical lines). Hide it on mobile; the
+     desktop grid is untouched. */
+  .wwd-grid {
+    display: none;
+  }
   .wwd-hero {
     padding: 130px 24px 90px;
   }
