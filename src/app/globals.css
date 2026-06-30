@@ -57,6 +57,7 @@
   /* Vibrant per-feature icon hues — deeper in light mode for contrast. */
   --icon-blue: oklch(0.55 0.18 255);
   --icon-indigo: oklch(0.52 0.2 285);
+  --icon-purple: oklch(0.52 0.21 305);
   --icon-emerald: oklch(0.55 0.15 162);
   --icon-amber: oklch(0.62 0.16 70);
   --icon-cyan: oklch(0.56 0.13 215);
@@ -109,6 +110,7 @@
   /* Bright, saturated icon hues that pop on near-black. */
   --icon-blue: oklch(0.70 0.17 252);
   --icon-indigo: oklch(0.71 0.19 286);
+  --icon-purple: oklch(0.71 0.2 305);
   --icon-emerald: oklch(0.75 0.16 162);
   --icon-amber: oklch(0.82 0.15 80);
   --icon-cyan: oklch(0.77 0.13 205);
@@ -154,6 +156,7 @@
 
   --color-icon-blue: var(--icon-blue);
   --color-icon-indigo: var(--icon-indigo);
+  --color-icon-purple: var(--icon-purple);
   --color-icon-emerald: var(--icon-emerald);
   --color-icon-amber: var(--icon-amber);
   --color-icon-cyan: var(--icon-cyan);
