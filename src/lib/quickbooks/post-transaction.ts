@@ -1,40 +1,158 @@
 // QuickBooks Stage 5 — building + validating the transaction we POST (pure).
 //
-// Phase 1 posts EXPENSES ONLY, as a QuickBooks "Bill" (records the expense
-// against the vendor; needs no bank/credit-card account). Income (SalesReceipt /
-// Invoice) is deferred — it requires product/service "items" we don't sync yet.
+// Posts EXPENSES as a QuickBooks "Bill" (records the expense against the vendor)
+// and INCOME as an "Invoice" (a product/service item line).
 //
-// Phase 1 records the GROSS total as a single expense line with NO tax code
-// (GlobalTaxCalculation is left to the company default). Splitting GST/QST onto
-// the line is a deliberate later refinement, so the first write can never
-// mis-state tax. Kept pure (no I/O) so it is unit-tested on its own.
+// TAX HANDLING. When tax-line posting is enabled AND the document showed tax AND
+// an active tax code was approved AND we can determine the pre-tax (net) amount,
+// we post the NET amount on the line, attach the line's TaxCodeRef, and let
+// QuickBooks COMPUTE the tax from that code's rate (option "a"). For non-US
+// (Canadian) companies that means GlobalTaxCalculation = "TaxExcluded" (the field
+// is non-US-only — see resolveTaxApplication). Otherwise (tax-lines off, no tax on
+// the document, no code, or no derivable net) we fall back to posting the GROSS
+// total on a single line with no tax code, exactly as before — so the change can
+// never mis-state a transaction it doesn't have clean data for. Kept pure (no I/O)
+// so it is unit-tested on its own.
 
 import type { QuickbooksLists } from "./read";
 import type { ResolvedRef } from "./suggest";
 
+// How QuickBooks should interpret line amounts for tax (transaction-level). Only
+// "TaxExcluded" is produced today (line amounts are net; QBO adds tax on top).
+export type GlobalTaxCalculation =
+  "TaxExcluded" | "TaxInclusive" | "NotApplicable";
+
+// The resolved tax to apply to a posted transaction. `null` globalTaxCalculation
+// means "omit the field" (US companies — their Automated Sales Tax engine computes
+// from the line's tax code and the field is not valid for them).
+export type TaxApplication = {
+  taxCodeId: string;
+  netAmount: number; // the pre-tax line amount QuickBooks adds tax onto
+  globalTaxCalculation: GlobalTaxCalculation | null;
+};
+
+// Round a dollar amount to cents (QuickBooks rejects sub-cent precision).
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+// The pre-tax (net) line amount to post: prefer the extracted subtotal; otherwise
+// derive it as total - tax (both extracted). Returns null when neither yields a
+// positive net, so the caller falls back to the gross-no-tax path.
+export function deriveNetAmount(
+  subtotal: number | null,
+  total: number | null,
+  taxTotal: number | null,
+): number | null {
+  if (subtotal != null && subtotal > 0) return round2(subtotal);
+  if (total != null && taxTotal != null) {
+    const net = round2(total - taxTotal);
+    if (net > 0) return net;
+  }
+  return null;
+}
+
+// A company is treated as US (so GlobalTaxCalculation is omitted) when its country
+// is US or unknown. "GlobalTaxCalculation" is a non-US field; omitting it is the
+// safe default when we don't yet know the country (the value is back-filled on
+// connect/sync), and a Canadian connection always carries "CA" from connect time.
+function isUsCompany(country: string | null): boolean {
+  const c = (country ?? "").trim().toUpperCase();
+  return c === "" || c === "US" || c === "USA" || c === "UNITED STATES";
+}
+
+// Decide whether (and how) to attach tax to a posted transaction. Returns null —
+// post the gross total with no tax code — when tax-lines are off, the document
+// had no tax, no tax code was approved, or we cannot determine a positive net.
+export function resolveTaxApplication(input: {
+  enabled: boolean;
+  country: string | null;
+  taxCodeId: string | null;
+  subtotal: number | null;
+  total: number | null;
+  taxTotal: number | null;
+}): TaxApplication | null {
+  if (!input.enabled) return null;
+  if (input.taxTotal == null) return null; // no tax on the document
+  if (!input.taxCodeId) return null; // nothing to attach the tax to
+  const net = deriveNetAmount(input.subtotal, input.total, input.taxTotal);
+  if (net == null) return null;
+  return {
+    taxCodeId: input.taxCodeId,
+    netAmount: net,
+    globalTaxCalculation: isUsCompany(input.country) ? null : "TaxExcluded",
+  };
+}
+
+// Cents of acceptable rounding drift between QuickBooks' computed tax and the tax
+// printed on the document before we flag a discrepancy.
+export const TAX_VARIANCE_TOLERANCE = 0.02;
+
+// After posting with tax, compare what QuickBooks recorded against the document.
+// Two checks: the GROSS TOTAL (catches a mis-read subtotal OR tax — the total is
+// net + QBO-computed tax) and, as a fallback, the TAX itself. Returns a short
+// human note when either differs beyond the tolerance (a wrong/combined code, a
+// rate mismatch, or a bad extracted amount), else null. The total check is
+// preferred because it's the most complete signal; the tax check covers the case
+// where QuickBooks didn't return a total. Pure so it's unit-tested.
+export function taxDiscrepancyNote(input: {
+  computedTax: number | null;
+  documentTax: number | null;
+  computedTotal: number | null;
+  documentTotal: number | null;
+}): string | null {
+  const money = (n: number) => `$${n.toFixed(2)}`;
+  const drifts = (a: number | null, b: number | null): boolean =>
+    a != null && b != null && Math.abs(a - b) > TAX_VARIANCE_TOLERANCE;
+
+  if (drifts(input.computedTotal, input.documentTotal)) {
+    return (
+      `QuickBooks recorded a total of ${money(input.computedTotal!)}, but the ` +
+      `document showed ${money(input.documentTotal!)}. Check the amount and tax ` +
+      `code in QuickBooks.`
+    );
+  }
+  if (drifts(input.computedTax, input.documentTax)) {
+    return (
+      `QuickBooks calculated ${money(input.computedTax!)} of tax, but the ` +
+      `document showed ${money(input.documentTax!)}. Check the tax code in ` +
+      `QuickBooks.`
+    );
+  }
+  return null;
+}
+
 export type BillInput = {
   vendorId: string;
   accountId: string;
-  amount: number;
+  amount: number; // gross total — the fallback line amount when no tax is applied
   date: string | null; // ISO YYYY-MM-DD; omitted -> QBO uses today
   memo?: string | null;
+  // When set, post the NET amount + the line's tax code and let QBO compute tax.
+  tax?: TaxApplication | null;
 };
 
 // Build the minimal valid QuickBooks Bill body for one approved expense draft.
 export function buildBillPayload(input: BillInput): Record<string, unknown> {
-  const amount = Math.round(input.amount * 100) / 100;
+  const tax = input.tax ?? null;
+  const lineAmount = round2(tax ? tax.netAmount : input.amount);
+  const lineDetail: Record<string, unknown> = {
+    AccountRef: { value: input.accountId },
+  };
+  if (tax) lineDetail.TaxCodeRef = { value: tax.taxCodeId };
   const bill: Record<string, unknown> = {
     VendorRef: { value: input.vendorId },
     Line: [
       {
         DetailType: "AccountBasedExpenseLineDetail",
-        Amount: amount,
-        AccountBasedExpenseLineDetail: {
-          AccountRef: { value: input.accountId },
-        },
+        Amount: lineAmount,
+        AccountBasedExpenseLineDetail: lineDetail,
       },
     ],
   };
+  if (tax && tax.globalTaxCalculation) {
+    bill.GlobalTaxCalculation = tax.globalTaxCalculation;
+  }
   if (input.date) bill.TxnDate = input.date;
   if (input.memo) bill.PrivateNote = input.memo;
   return bill;
@@ -43,29 +161,38 @@ export function buildBillPayload(input: BillInput): Record<string, unknown> {
 export type InvoiceInput = {
   customerId: string;
   itemId: string;
-  amount: number;
+  amount: number; // gross total — the fallback line amount when no tax is applied
   date: string | null; // ISO YYYY-MM-DD; omitted -> QBO uses today
   memo?: string | null;
+  // When set, post the NET amount + the line's tax code and let QBO compute tax.
+  tax?: TaxApplication | null;
 };
 
 // Build the minimal valid QuickBooks Invoice body for one approved income draft.
 // Income lines post to a product/service ITEM (SalesItemLineDetail), not an
-// account. Like the Bill path, Phase 1 posts the GROSS total on a single line
-// with no tax code (tax handling is a later refinement).
-export function buildInvoicePayload(input: InvoiceInput): Record<string, unknown> {
-  const amount = Math.round(input.amount * 100) / 100;
+// account; the tax code (when applied) rides on the same line detail.
+export function buildInvoicePayload(
+  input: InvoiceInput,
+): Record<string, unknown> {
+  const tax = input.tax ?? null;
+  const lineAmount = round2(tax ? tax.netAmount : input.amount);
+  const lineDetail: Record<string, unknown> = {
+    ItemRef: { value: input.itemId },
+  };
+  if (tax) lineDetail.TaxCodeRef = { value: tax.taxCodeId };
   const invoice: Record<string, unknown> = {
     CustomerRef: { value: input.customerId },
     Line: [
       {
         DetailType: "SalesItemLineDetail",
-        Amount: amount,
-        SalesItemLineDetail: {
-          ItemRef: { value: input.itemId },
-        },
+        Amount: lineAmount,
+        SalesItemLineDetail: lineDetail,
       },
     ],
   };
+  if (tax && tax.globalTaxCalculation) {
+    invoice.GlobalTaxCalculation = tax.globalTaxCalculation;
+  }
   if (input.date) invoice.TxnDate = input.date;
   if (input.memo) invoice.PrivateNote = input.memo;
   return invoice;

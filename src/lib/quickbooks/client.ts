@@ -73,6 +73,16 @@ export function quickbooksEnvironment(): QuickbooksEnvironment {
     : "sandbox";
 }
 
+// Tax-line posting kill-switch. OFF unless QBO_TAX_LINES_ENABLED is exactly
+// "true" (case-insensitive), so posting behaves exactly as before (gross total,
+// no tax code) until the founder verifies the tax math on a real Canadian
+// QuickBooks company and turns it on. Fails safe to OFF.
+export function quickbooksTaxLinesEnabled(): boolean {
+  return (
+    (process.env.QBO_TAX_LINES_ENABLED ?? "").trim().toLowerCase() === "true"
+  );
+}
+
 // The exact redirect URI Intuit sends the accountant back to. Intuit requires it
 // to match a URI registered in the app settings EXACTLY, so it is an explicit env
 // var; it falls back to APP_URL so local dev works without extra config.
@@ -87,7 +97,9 @@ export function quickbooksRedirectUri(): string {
 // global QBO_ENVIRONMENT switch, so flipping the global switch can never point an
 // already-connected firm at the wrong QuickBooks. Falls back to the global switch
 // when no environment is given.
-export function quickbooksApiBaseUrl(environment?: QuickbooksEnvironment): string {
+export function quickbooksApiBaseUrl(
+  environment?: QuickbooksEnvironment,
+): string {
   const env = environment ?? quickbooksEnvironment();
   return env === "production"
     ? "https://quickbooks.api.intuit.com"
@@ -136,7 +148,8 @@ export function tokensFromResponse(
       "Intuit token response missing access_token or refresh_token",
     );
   }
-  const accessSecs = typeof json.expires_in === "number" ? json.expires_in : 3600;
+  const accessSecs =
+    typeof json.expires_in === "number" ? json.expires_in : 3600;
   const refreshSecs =
     typeof json.x_refresh_token_expires_in === "number"
       ? json.x_refresh_token_expires_in
@@ -284,15 +297,19 @@ export function isAccessTokenStale(
   return t - nowMs <= bufferMs;
 }
 
-// ONE identity-only read: the connected company's display name, so the connected
-// card can show it. This is NOT financial data and touches no transactions or
-// documents. Returns null on any failure (the connection is still valid; we just
-// fall back to showing the company id).
-export async function fetchCompanyName(
+// The connected company's identity: display name + country. The country drives
+// whether GlobalTaxCalculation (a non-US-only field) is sent when posting with
+// tax. Both fields fail soft to null (the connection is valid regardless).
+export type CompanyProfile = { name: string | null; country: string | null };
+
+// ONE identity-only read of CompanyInfo. NOT financial data, touches no
+// transactions or documents. Returns { name: null, country: null } on any failure.
+export async function fetchCompanyProfile(
   accessToken: string,
   realmId: string,
   environment?: QuickbooksEnvironment,
-): Promise<string | null> {
+): Promise<CompanyProfile> {
+  const empty: CompanyProfile = { name: null, country: null };
   const url =
     `${quickbooksApiBaseUrl(environment)}/v3/company/${encodeURIComponent(realmId)}` +
     `/companyinfo/${encodeURIComponent(realmId)}?minorversion=${QBO_MINORVERSION}`;
@@ -300,23 +317,40 @@ export async function fetchCompanyName(
   try {
     res = await fetch(url, {
       method: "GET",
-      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
       cache: "no-store",
       signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
     });
   } catch {
-    return null;
+    return empty;
   }
-  if (!res.ok) return null;
+  if (!res.ok) return empty;
   try {
     const json = (await res.json()) as {
-      CompanyInfo?: { CompanyName?: string };
+      CompanyInfo?: { CompanyName?: string; Country?: string };
     };
     const name = json.CompanyInfo?.CompanyName?.trim();
-    return name && name.length > 0 ? name : null;
+    const country = json.CompanyInfo?.Country?.trim();
+    return {
+      name: name && name.length > 0 ? name : null,
+      country: country && country.length > 0 ? country : null,
+    };
   } catch {
-    return null;
+    return empty;
   }
+}
+
+// Back-compat: the company's display name only (Stage 1 callers). Thin wrapper
+// over fetchCompanyProfile.
+export async function fetchCompanyName(
+  accessToken: string,
+  realmId: string,
+  environment?: QuickbooksEnvironment,
+): Promise<string | null> {
+  return (await fetchCompanyProfile(accessToken, realmId, environment)).name;
 }
 
 // Run a read-only QBO query (the SQL-like /query endpoint) and return the raw
@@ -365,8 +399,15 @@ export async function quickbooksQuery(
   return json?.QueryResponse ?? {};
 }
 
-// The minimal shape we read back from a created/voided transaction.
-export type QboEntityResult = { id: string; syncToken: string };
+// The minimal shape we read back from a created/voided transaction. A CREATE also
+// surfaces QuickBooks' own computed totals (used to detect tax drift vs the
+// document); they're absent on a delete and on responses that omit them.
+export type QboEntityResult = {
+  id: string;
+  syncToken: string;
+  totalAmt?: number | null; // transaction TotalAmt (gross) QuickBooks recorded
+  totalTax?: number | null; // TxnTaxDetail.TotalTax QuickBooks computed
+};
 
 // Transaction entities we post: a Bill (expense) or an Invoice (income). The URL
 // path is lowercase; the JSON response wraps the object under the capitalized
@@ -383,7 +424,11 @@ function entityResponseKey(entity: QboTxnEntity): string {
 // The caller must pass a requestId that is STABLE for one logical post and FRESH
 // after a void+re-post. Throws a typed QuickbooksError on any non-2xx.
 export async function quickbooksCreate(
-  ctx: { accessToken: string; realmId: string; environment?: QuickbooksEnvironment },
+  ctx: {
+    accessToken: string;
+    realmId: string;
+    environment?: QuickbooksEnvironment;
+  },
   entity: QboTxnEntity,
   body: Record<string, unknown>,
   requestId: string,
@@ -418,7 +463,10 @@ export async function quickbooksCreate(
       res.status,
     );
   }
-  const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  const json = (await res.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
   return parseEntityResult(json, entityResponseKey(entity));
 }
 
@@ -428,7 +476,11 @@ export async function quickbooksCreate(
 // SyncToken. QuickBooks still records the deletion in its own Audit Log. Throws
 // a typed QuickbooksError on any non-2xx OR an in-body Fault.
 export async function quickbooksDelete(
-  ctx: { accessToken: string; realmId: string; environment?: QuickbooksEnvironment },
+  ctx: {
+    accessToken: string;
+    realmId: string;
+    environment?: QuickbooksEnvironment;
+  },
   entity: QboTxnEntity,
   id: string,
   syncToken: string,
@@ -466,7 +518,10 @@ export async function quickbooksDelete(
   // A delete only needs to have SUCCEEDED — we don't consume the returned id (the
   // create path does). QuickBooks can still return a 200 with a Fault (e.g. a
   // stale SyncToken or "object not found"); surface that. Otherwise it's done.
-  const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  const json = (await res.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
   const fault = extractFault(json);
   if (fault) throw new QuickbooksError("write_failed", fault);
   return { id, syncToken };
@@ -494,7 +549,25 @@ function parseEntityResult(
       "QuickBooks returned an unexpected response.",
     );
   }
-  return { id, syncToken };
+  return {
+    id,
+    syncToken,
+    totalAmt: numOrNull(entity?.TotalAmt),
+    totalTax: numOrNull(
+      (entity?.TxnTaxDetail as { TotalTax?: unknown } | undefined)?.TotalTax,
+    ),
+  };
+}
+
+// Coerce a QuickBooks numeric field (sometimes a JSON number, sometimes a numeric
+// string) to a number, or null when absent/unparseable.
+function numOrNull(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 // Pull a human-readable message out of an Intuit `Fault` element (returned on
@@ -503,10 +576,12 @@ function extractFault(json: Record<string, unknown> | null): string | null {
   const fault = (json?.Fault ?? null) as { Error?: unknown } | null;
   if (!fault) return null;
   const errors = Array.isArray(fault.Error) ? fault.Error : [];
-  const first = (errors[0] ?? null) as
-    | { Message?: string; Detail?: string }
-    | null;
-  const msg = first?.Detail || first?.Message || "QuickBooks rejected the request.";
+  const first = (errors[0] ?? null) as {
+    Message?: string;
+    Detail?: string;
+  } | null;
+  const msg =
+    first?.Detail || first?.Message || "QuickBooks rejected the request.";
   return truncate(msg);
 }
 

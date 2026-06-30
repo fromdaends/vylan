@@ -6,7 +6,10 @@
 // degrades gracefully (isMissingSchema) before 0430 is applied to the remote DB,
 // so the engagement page never 500s if the migration hasn't landed yet.
 
-import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import {
+  getServerSupabase,
+  getServiceRoleSupabase,
+} from "@/lib/supabase/server";
 import { isMissingSchema } from "@/lib/db/quickbooks";
 import {
   buildTransactionSuggestion,
@@ -21,11 +24,14 @@ import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import type { TransactionExtraction } from "@/lib/ai/transaction-extract";
 
 // The Stage 5 post columns a row may carry (all null/0 before migration 0450).
+// postedTaxNote (0470) flags a discrepancy between QuickBooks' computed tax and
+// the document's tax on a posted transaction; null when they agree / pre-0470.
 export type PostState = {
   postedQboId: string | null;
   postedAt: string | null;
   postedBy: string | null;
   postError: string | null;
+  postedTaxNote: string | null;
 };
 
 // One stored draft: the AI suggestion + the accountant's resolved picks (Stage 4,
@@ -43,6 +49,7 @@ export type StoredDraft = {
 // falls through on a missing-schema error, so the app degrades gracefully across
 // the migration windows (0450 = posted_* columns; 0440 = resolved + reviewed_*).
 const ENGAGEMENT_SELECTS = [
+  "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at",
   "uploaded_file_id, suggestion, status",
@@ -90,6 +97,7 @@ export async function getSuggestionsForEngagement(
       posted_at?: string | null;
       posted_by?: string | null;
       post_error?: string | null;
+      posted_tax_note?: string | null;
     };
     if (r.uploaded_file_id && r.suggestion) {
       out.set(r.uploaded_file_id, {
@@ -102,6 +110,7 @@ export async function getSuggestionsForEngagement(
         postedAt: r.posted_at ?? null,
         postedBy: r.posted_by ?? null,
         postError: r.post_error ?? null,
+        postedTaxNote: r.posted_tax_note ?? null,
       });
     }
   }
@@ -127,6 +136,7 @@ export type FirmDraftRow = {
 } & PostState;
 
 const FIRM_SELECTS = [
+  "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at",
   "uploaded_file_id, engagement_id, suggestion, status, created_at, updated_at",
@@ -204,8 +214,8 @@ export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
   const fileById = new Map(
     ((fileRes.data as Array<Record<string, unknown>> | null) ?? []).map((f) => [
       f.id as string,
-      ((f.display_name as string | null) ??
-        (f.original_filename as string | null)) ??
+      (f.display_name as string | null) ??
+        (f.original_filename as string | null) ??
         null,
     ]),
   );
@@ -247,6 +257,7 @@ export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
       postedAt: (r.posted_at as string | null) ?? null,
       postedBy: (r.posted_by as string | null) ?? null,
       postError: (r.post_error as string | null) ?? null,
+      postedTaxNote: (r.posted_tax_note as string | null) ?? null,
     };
   });
 }
@@ -389,6 +400,30 @@ export async function recordDraftPosted(input: {
   return data && data.length > 0 ? "ok" : "conflict";
 }
 
+// Stage 5 (tax-line) — set/clear the tax-discrepancy note on a JUST-POSTED draft.
+// Best-effort + fully decoupled from recordDraftPosted: it runs AFTER the post is
+// recorded, so a missing column (pre-0470) just means "no note" and can never
+// fail the post itself. Conditional on the row still being the SAME posted
+// transaction (status='posted' AND posted_qbo_id matches) so a concurrent
+// void/re-post can't get a stale note. Pass note=null to clear (every successful
+// post calls this, so a prior post's note never lingers on a re-post).
+export async function recordDraftTaxNote(input: {
+  uploadedFileId: string;
+  postedQboId: string;
+  note: string | null;
+}): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("quickbooks_transaction_suggestions")
+    .update({ posted_tax_note: input.note?.slice(0, 500) ?? null })
+    .eq("uploaded_file_id", input.uploadedFileId)
+    .eq("status", "posted")
+    .eq("posted_qbo_id", input.postedQboId);
+  if (error && !isMissingSchema(error)) {
+    console.error("[quickbooks] recordDraftTaxNote failed:", error);
+  }
+}
+
 // Stage 5 — record a FAILED post: keep status 'approved' (so it can be retried)
 // and store the error for the accountant to see. Service-role write.
 export async function recordDraftPostError(input: {
@@ -415,25 +450,39 @@ export async function recordDraftPostError(input: {
 // Stage 5 — record an UNDO (the QBO transaction was voided): return the draft to
 // 'approved', clear the posted id/sync token, bump post_attempt (so a re-post
 // uses a FRESH idempotency requestid rather than re-fetching the voided txn), and
-// clear posted_at/by + any error. Service-role write.
+// clear posted_at/by + any error + any tax note. Service-role write.
 export async function recordDraftVoided(input: {
   uploadedFileId: string;
   nextAttempt: number;
 }): Promise<boolean> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb
-    .from("quickbooks_transaction_suggestions")
-    .update({
-      status: "approved",
-      posted_qbo_id: null,
-      posted_qbo_sync_token: null,
-      post_attempt: input.nextAttempt,
-      posted_at: null,
-      posted_by: null,
-      post_error: null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("uploaded_file_id", input.uploadedFileId);
+  const base = {
+    status: "approved",
+    posted_qbo_id: null,
+    posted_qbo_sync_token: null,
+    post_attempt: input.nextAttempt,
+    posted_at: null,
+    posted_by: null,
+    post_error: null,
+    updated_at: new Date().toISOString(),
+  };
+  // Also clear posted_tax_note (0470); fall back to the pre-0470 column set on a
+  // missing-column error so undo keeps working before the migration lands (a
+  // single update naming the missing column would otherwise fail the whole undo).
+  let error = (
+    await sb
+      .from("quickbooks_transaction_suggestions")
+      .update({ ...base, posted_tax_note: null })
+      .eq("uploaded_file_id", input.uploadedFileId)
+  ).error;
+  if (error && isMissingSchema(error)) {
+    error = (
+      await sb
+        .from("quickbooks_transaction_suggestions")
+        .update(base)
+        .eq("uploaded_file_id", input.uploadedFileId)
+    ).error;
+  }
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] recordDraftVoided failed:", error);
@@ -541,7 +590,11 @@ export async function backfillMissingSuggestions(input: {
       });
       created++;
     } catch (err) {
-      console.warn("[quickbooks] backfillMissingSuggestions failed for", f.id, err);
+      console.warn(
+        "[quickbooks] backfillMissingSuggestions failed for",
+        f.id,
+        err,
+      );
     }
   }
   return created;
@@ -560,6 +613,9 @@ export async function deleteTransactionSuggestionForFile(
     .delete()
     .eq("uploaded_file_id", uploadedFileId);
   if (error && !isMissingSchema(error)) {
-    console.error("[quickbooks] deleteTransactionSuggestionForFile failed:", error);
+    console.error(
+      "[quickbooks] deleteTransactionSuggestionForFile failed:",
+      error,
+    );
   }
 }

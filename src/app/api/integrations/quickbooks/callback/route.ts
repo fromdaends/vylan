@@ -6,7 +6,7 @@ import { getCurrentUser } from "@/lib/db/users";
 import {
   isQuickbooksConfigured,
   exchangeCodeForTokens,
-  fetchCompanyName,
+  fetchCompanyProfile,
   quickbooksEnvironment,
   QuickbooksError,
 } from "@/lib/quickbooks/client";
@@ -64,9 +64,9 @@ export async function GET(request: Request) {
 
   try {
     const tokens = await exchangeCodeForTokens(code);
-    // One identity-only read for the friendly company name (best-effort; the
-    // connection is valid regardless).
-    const companyName = await fetchCompanyName(tokens.accessToken, realmId);
+    // One identity-only read for the friendly company name + country (best-effort;
+    // the connection is valid regardless). Country drives the non-US tax field.
+    const profile = await fetchCompanyProfile(tokens.accessToken, realmId);
 
     const saved = await upsertFirmQuickbooksConnection(firm.id, {
       realmId,
@@ -74,7 +74,8 @@ export async function GET(request: Request) {
       refreshToken: tokens.refreshToken,
       accessTokenExpiresAt: tokens.accessTokenExpiresAt,
       refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
-      companyName,
+      companyName: profile.name,
+      companyCountry: profile.country,
       environment: quickbooksEnvironment(),
       connectedBy: auth.user.id,
     });

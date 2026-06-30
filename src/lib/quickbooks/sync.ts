@@ -10,8 +10,32 @@ import {
   setFirmSyncState,
   replaceCachedEntity,
 } from "@/lib/db/quickbooks-cache";
-import { isMissingSchema } from "@/lib/db/quickbooks";
+import {
+  isMissingSchema,
+  updateFirmQuickbooksCompanyCountry,
+} from "@/lib/db/quickbooks";
+import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
+import { fetchCompanyProfile } from "@/lib/quickbooks/client";
 import { enqueueJob, cancelPendingJobs } from "@/lib/db/jobs";
+
+// Best-effort self-heal: populate company_country for a connection that predates
+// the tax-line feature (or pre-0470), so posting can decide whether to send the
+// non-US GlobalTaxCalculation without a reconnect. Only does a CompanyInfo read
+// when the country isn't already known; never throws.
+async function backfillCompanyCountry(firmId: string): Promise<void> {
+  try {
+    const ctx = await getQuickbooksReadContext(firmId);
+    if (!ctx || ctx.companyCountry) return; // not connected, or already known
+    const profile = await fetchCompanyProfile(
+      ctx.accessToken,
+      ctx.realmId,
+      ctx.environment,
+    );
+    await updateFirmQuickbooksCompanyCountry(firmId, profile.country);
+  } catch (e) {
+    console.warn("[quickbooks] backfillCompanyCountry failed:", e);
+  }
+}
 
 export type SyncResult = { ok: boolean; detail: string };
 
@@ -20,10 +44,7 @@ export type SyncResult = { ok: boolean; detail: string };
 // 'syncing'. Best-effort: never throws (callers are connect/refresh/self-heal).
 export async function enqueueQuickbooksSync(firmId: string): Promise<void> {
   try {
-    await cancelPendingJobs(
-      "sync_quickbooks",
-      (p) => p.firmId === firmId,
-    );
+    await cancelPendingJobs("sync_quickbooks", (p) => p.firmId === firmId);
     await enqueueJob({
       kind: "sync_quickbooks",
       payload: { firmId },
@@ -98,6 +119,9 @@ export async function syncQuickbooksLists(firmId: string): Promise<SyncResult> {
     error: null,
     lastSyncedAt: syncedAt,
   });
+  // Self-heal the company country (best-effort, no-op once known) so tax-line
+  // posting can branch US vs non-US. Off the critical path — failures are ignored.
+  await backfillCompanyCountry(firmId);
   return { ok: true, detail: "ok" };
 }
 

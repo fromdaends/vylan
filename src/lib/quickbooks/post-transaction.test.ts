@@ -4,6 +4,9 @@ import {
   checkBillPostable,
   buildInvoicePayload,
   checkInvoicePostable,
+  deriveNetAmount,
+  resolveTaxApplication,
+  taxDiscrepancyNote,
 } from "./post-transaction";
 import type { QuickbooksLists } from "./read";
 
@@ -49,10 +52,175 @@ describe("buildBillPayload", () => {
     expect("TxnDate" in bill).toBe(false);
     expect("PrivateNote" in bill).toBe(false);
   });
+  it("posts the GROSS amount and no tax fields when no tax is applied", () => {
+    const bill = buildBillPayload({
+      vendorId: "v1",
+      accountId: "a1",
+      amount: 115,
+      date: null,
+      tax: null,
+    });
+    const line = (bill.Line as Array<Record<string, unknown>>)[0];
+    expect(line.Amount).toBe(115);
+    expect(
+      (line.AccountBasedExpenseLineDetail as Record<string, unknown>)
+        .TaxCodeRef,
+    ).toBeUndefined();
+    expect("GlobalTaxCalculation" in bill).toBe(false);
+  });
+  it("posts the NET amount + TaxCodeRef + GlobalTaxCalculation for a non-US tax", () => {
+    const bill = buildBillPayload({
+      vendorId: "v1",
+      accountId: "a1",
+      amount: 115, // gross — must NOT be used when tax is applied
+      date: null,
+      tax: {
+        taxCodeId: "TC5",
+        netAmount: 100,
+        globalTaxCalculation: "TaxExcluded",
+      },
+    });
+    const line = (bill.Line as Array<Record<string, unknown>>)[0];
+    expect(line.Amount).toBe(100);
+    expect(
+      (line.AccountBasedExpenseLineDetail as Record<string, unknown>)
+        .TaxCodeRef,
+    ).toEqual({ value: "TC5" });
+    expect(bill.GlobalTaxCalculation).toBe("TaxExcluded");
+  });
+  it("attaches the TaxCodeRef but OMITS GlobalTaxCalculation for a US tax (null)", () => {
+    const bill = buildBillPayload({
+      vendorId: "v1",
+      accountId: "a1",
+      amount: 108,
+      date: null,
+      tax: { taxCodeId: "TAX", netAmount: 100, globalTaxCalculation: null },
+    });
+    const line = (bill.Line as Array<Record<string, unknown>>)[0];
+    expect(line.Amount).toBe(100);
+    expect(
+      (line.AccountBasedExpenseLineDetail as Record<string, unknown>)
+        .TaxCodeRef,
+    ).toEqual({ value: "TAX" });
+    expect("GlobalTaxCalculation" in bill).toBe(false);
+  });
+});
+
+describe("deriveNetAmount", () => {
+  it("prefers a positive subtotal", () => {
+    expect(deriveNetAmount(100, 115, 15)).toBe(100);
+  });
+  it("derives total - tax when subtotal is missing", () => {
+    expect(deriveNetAmount(null, 115, 15)).toBe(100);
+  });
+  it("rounds the derived net to cents", () => {
+    expect(deriveNetAmount(null, 115.005, 15)).toBe(100.01);
+  });
+  it("returns null when neither yields a positive net", () => {
+    expect(deriveNetAmount(null, null, 15)).toBeNull();
+    expect(deriveNetAmount(0, null, null)).toBeNull();
+    expect(deriveNetAmount(null, 15, 15)).toBeNull(); // total - tax = 0
+    expect(deriveNetAmount(null, 10, 15)).toBeNull(); // negative
+  });
+});
+
+describe("resolveTaxApplication", () => {
+  const base = {
+    enabled: true,
+    country: "CA",
+    taxCodeId: "TC5",
+    subtotal: 100,
+    total: 115,
+    taxTotal: 15,
+  };
+  it("non-US: net + code + TaxExcluded", () => {
+    expect(resolveTaxApplication(base)).toEqual({
+      taxCodeId: "TC5",
+      netAmount: 100,
+      globalTaxCalculation: "TaxExcluded",
+    });
+  });
+  it("US: net + code but no GlobalTaxCalculation (null)", () => {
+    const r = resolveTaxApplication({ ...base, country: "US" });
+    expect(r?.globalTaxCalculation).toBeNull();
+    expect(r?.netAmount).toBe(100);
+  });
+  it("unknown country is treated as US (omits the field)", () => {
+    expect(
+      resolveTaxApplication({ ...base, country: null })?.globalTaxCalculation,
+    ).toBeNull();
+  });
+  it("returns null (gross fallback) when the flag is off", () => {
+    expect(resolveTaxApplication({ ...base, enabled: false })).toBeNull();
+  });
+  it("returns null when the document had no tax", () => {
+    expect(resolveTaxApplication({ ...base, taxTotal: null })).toBeNull();
+  });
+  it("returns null when no tax code was approved", () => {
+    expect(resolveTaxApplication({ ...base, taxCodeId: null })).toBeNull();
+  });
+  it("returns null when the net can't be determined", () => {
+    expect(
+      resolveTaxApplication({ ...base, subtotal: null, total: null }),
+    ).toBeNull();
+  });
+});
+
+describe("taxDiscrepancyNote", () => {
+  const agree = {
+    computedTax: 15,
+    documentTax: 15,
+    computedTotal: 115,
+    documentTotal: 115,
+  };
+  it("returns null when total + tax both match within tolerance", () => {
+    expect(taxDiscrepancyNote(agree)).toBeNull();
+    expect(
+      taxDiscrepancyNote({
+        ...agree,
+        documentTax: 15.01,
+        documentTotal: 115.01,
+      }),
+    ).toBeNull();
+  });
+  it("flags a GROSS-TOTAL drift (catches a mis-read subtotal even if tax matches)", () => {
+    // net mis-read low -> QBO total understated, but computed tax happens to match.
+    const note = taxDiscrepancyNote({
+      computedTax: 15,
+      documentTax: 15,
+      computedTotal: 103.5,
+      documentTotal: 115,
+    });
+    expect(note).toContain("total");
+    expect(note).toContain("103.50");
+    expect(note).toContain("115.00");
+  });
+  it("flags a TAX drift when the total isn't available", () => {
+    const note = taxDiscrepancyNote({
+      computedTax: 14.5,
+      documentTax: 15,
+      computedTotal: null,
+      documentTotal: 115,
+    });
+    expect(note).toContain("14.50");
+    expect(note).toContain("15.00");
+  });
+  it("returns null when the relevant amounts are unknown", () => {
+    expect(
+      taxDiscrepancyNote({
+        computedTax: null,
+        documentTax: 15,
+        computedTotal: null,
+        documentTotal: 115,
+      }),
+    ).toBeNull();
+  });
 });
 
 const lists = (over: Partial<QuickbooksLists> = {}): QuickbooksLists => ({
-  accounts: [{ id: "a1", name: "Supplies", active: true, accountType: "Expense" }],
+  accounts: [
+    { id: "a1", name: "Supplies", active: true, accountType: "Expense" },
+  ],
   vendors: [{ id: "v1", name: "Home Depot", active: true }],
   customers: [],
   taxCodes: [],
@@ -71,40 +239,46 @@ describe("checkBillPostable", () => {
     expect(checkBillPostable({ ...ok, lists: lists() })).toEqual([]);
   });
   it("rejects income / unknown direction", () => {
-    expect(checkBillPostable({ ...ok, direction: "income", lists: lists() })).toContain(
-      "not_expense",
-    );
-    expect(checkBillPostable({ ...ok, direction: "unknown", lists: lists() })).toContain(
-      "not_expense",
-    );
+    expect(
+      checkBillPostable({ ...ok, direction: "income", lists: lists() }),
+    ).toContain("not_expense");
+    expect(
+      checkBillPostable({ ...ok, direction: "unknown", lists: lists() }),
+    ).toContain("not_expense");
   });
   it("flags a missing vendor / account / amount", () => {
-    expect(
-      checkBillPostable({ ...ok, party: null, lists: lists() }),
-    ).toContain("missing_vendor");
+    expect(checkBillPostable({ ...ok, party: null, lists: lists() })).toContain(
+      "missing_vendor",
+    );
     expect(
       checkBillPostable({ ...ok, account: null, lists: lists() }),
     ).toContain("missing_account");
-    expect(checkBillPostable({ ...ok, amount: null, lists: lists() })).toContain(
-      "missing_amount",
-    );
+    expect(
+      checkBillPostable({ ...ok, amount: null, lists: lists() }),
+    ).toContain("missing_amount");
     expect(checkBillPostable({ ...ok, amount: 0, lists: lists() })).toContain(
       "missing_amount",
     );
   });
   it("flags a vendor archived in QuickBooks since approval", () => {
-    const archived = lists({ vendors: [{ id: "v1", name: "Home Depot", active: false }] });
+    const archived = lists({
+      vendors: [{ id: "v1", name: "Home Depot", active: false }],
+    });
     expect(checkBillPostable({ ...ok, lists: archived })).toContain(
       "vendor_inactive",
     );
   });
   it("flags a vendor that no longer exists in the lists", () => {
     const gone = lists({ vendors: [{ id: "other", name: "X", active: true }] });
-    expect(checkBillPostable({ ...ok, lists: gone })).toContain("vendor_inactive");
+    expect(checkBillPostable({ ...ok, lists: gone })).toContain(
+      "vendor_inactive",
+    );
   });
   it("flags an inactive account", () => {
     const archived = lists({
-      accounts: [{ id: "a1", name: "Supplies", active: false, accountType: "Expense" }],
+      accounts: [
+        { id: "a1", name: "Supplies", active: false, accountType: "Expense" },
+      ],
     });
     expect(checkBillPostable({ ...ok, lists: archived })).toContain(
       "account_inactive",
@@ -148,6 +322,25 @@ describe("buildInvoicePayload", () => {
     expect("TxnDate" in inv).toBe(false);
     expect("PrivateNote" in inv).toBe(false);
   });
+  it("posts the NET amount + TaxCodeRef on the item line + GlobalTaxCalculation", () => {
+    const inv = buildInvoicePayload({
+      customerId: "c1",
+      itemId: "i1",
+      amount: 287.5, // gross — must NOT be used when tax is applied
+      date: null,
+      tax: {
+        taxCodeId: "TC5",
+        netAmount: 250,
+        globalTaxCalculation: "TaxExcluded",
+      },
+    });
+    const line = (inv.Line as Array<Record<string, unknown>>)[0];
+    expect(line.Amount).toBe(250);
+    expect(
+      (line.SalesItemLineDetail as Record<string, unknown>).TaxCodeRef,
+    ).toEqual({ value: "TC5" });
+    expect(inv.GlobalTaxCalculation).toBe("TaxExcluded");
+  });
 });
 
 const incomeLists = (over: Partial<QuickbooksLists> = {}): QuickbooksLists => ({
@@ -156,7 +349,13 @@ const incomeLists = (over: Partial<QuickbooksLists> = {}): QuickbooksLists => ({
   customers: [{ id: "c1", name: "A Client", active: true }],
   taxCodes: [],
   items: [
-    { id: "i1", name: "Consulting", itemType: "Service", incomeAccountId: "x", active: true },
+    {
+      id: "i1",
+      name: "Consulting",
+      itemType: "Service",
+      incomeAccountId: "x",
+      active: true,
+    },
   ],
   ...over,
 });
@@ -173,19 +372,23 @@ describe("checkInvoicePostable", () => {
   });
   it("rejects a non-income direction", () => {
     expect(
-      checkInvoicePostable({ ...ok, direction: "expense", lists: incomeLists() }),
+      checkInvoicePostable({
+        ...ok,
+        direction: "expense",
+        lists: incomeLists(),
+      }),
     ).toContain("not_income");
   });
   it("flags a missing customer / item / amount", () => {
-    expect(checkInvoicePostable({ ...ok, party: null, lists: incomeLists() })).toContain(
-      "missing_customer",
-    );
-    expect(checkInvoicePostable({ ...ok, item: null, lists: incomeLists() })).toContain(
-      "missing_item",
-    );
-    expect(checkInvoicePostable({ ...ok, amount: 0, lists: incomeLists() })).toContain(
-      "missing_amount",
-    );
+    expect(
+      checkInvoicePostable({ ...ok, party: null, lists: incomeLists() }),
+    ).toContain("missing_customer");
+    expect(
+      checkInvoicePostable({ ...ok, item: null, lists: incomeLists() }),
+    ).toContain("missing_item");
+    expect(
+      checkInvoicePostable({ ...ok, amount: 0, lists: incomeLists() }),
+    ).toContain("missing_amount");
   });
   it("flags an archived customer or item", () => {
     const archivedCustomer = incomeLists({
@@ -195,7 +398,15 @@ describe("checkInvoicePostable", () => {
       "customer_inactive",
     );
     const archivedItem = incomeLists({
-      items: [{ id: "i1", name: "Consulting", itemType: "Service", incomeAccountId: "x", active: false }],
+      items: [
+        {
+          id: "i1",
+          name: "Consulting",
+          itemType: "Service",
+          incomeAccountId: "x",
+          active: false,
+        },
+      ],
     });
     expect(checkInvoicePostable({ ...ok, lists: archivedItem })).toContain(
       "item_inactive",

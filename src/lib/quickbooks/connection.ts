@@ -69,12 +69,16 @@ export type QuickbooksReadContext = {
   accessToken: string;
   realmId: string;
   environment: QuickbooksEnvironment;
+  // The connected company's country (e.g. "US", "CA"); null before it's been
+  // back-filled (pre-0470 or a connection that predates the tax-line feature).
+  // Posting uses it to decide whether to send the non-US GlobalTaxCalculation.
+  companyCountry: string | null;
 };
 
-// Everything a read needs for a firm, together: a fresh access token + the realm
-// id + the per-connection environment (which selects the API base URL). Returns
-// null when the firm is not connected / not configured / the token cannot be
-// refreshed. This is the single entry point Stage 2 read code calls.
+// Everything a read/post needs for a firm, together: a fresh access token + the
+// realm id + the per-connection environment (which selects the API base URL) +
+// the company country. Returns null when the firm is not connected / not
+// configured / the token cannot be refreshed.
 export async function getQuickbooksReadContext(
   firmId: string,
 ): Promise<QuickbooksReadContext | null> {
@@ -82,13 +86,20 @@ export async function getQuickbooksReadContext(
   if (!conn) return null;
   const accessToken = await getValidAccessToken(firmId);
   if (!accessToken) return null;
-  return { accessToken, realmId: conn.realmId, environment: conn.environment };
+  return {
+    accessToken,
+    realmId: conn.realmId,
+    environment: conn.environment,
+    companyCountry: conn.companyCountry,
+  };
 }
 
 // Best-effort keep-alive used when a member opens Settings: refreshes only when
 // the access token is stale, so a dormant connection stays alive. Never throws
 // and never blocks rendering on a failure.
-export async function ensureFreshQuickbooksToken(firmId: string): Promise<void> {
+export async function ensureFreshQuickbooksToken(
+  firmId: string,
+): Promise<void> {
   try {
     await getValidAccessToken(firmId);
   } catch {

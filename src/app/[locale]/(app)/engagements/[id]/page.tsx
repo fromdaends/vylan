@@ -860,6 +860,7 @@ async function ItemRow({
                               : null
                           }
                           postError={d.postError}
+                          postedTaxNote={d.postedTaxNote}
                         />
                       );
                     })()

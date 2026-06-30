@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Upload, RotateCcw, Loader2, CheckCircle2, TriangleAlert } from "lucide-react";
+import {
+  Upload,
+  RotateCcw,
+  Loader2,
+  CheckCircle2,
+  TriangleAlert,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +36,7 @@ export function PostDraftControls({
   postedAtLabel,
   postedByName,
   postError,
+  taxNote,
 }: {
   fileId: string;
   status: DraftStatus;
@@ -38,6 +45,9 @@ export function PostDraftControls({
   postedAtLabel: string | null;
   postedByName: string | null;
   postError: string | null;
+  // Set when QuickBooks' computed tax differs from the document's tax on this
+  // posted transaction (a discrepancy to review); null otherwise.
+  taxNote?: string | null;
 }) {
   const t = useTranslations("Quickbooks");
   const router = useRouter();
@@ -68,58 +78,80 @@ export function PostDraftControls({
     }
   }
 
-  // Posted: show who/when + an Undo (void) control.
+  // Posted: show who/when + an Undo (void) control, plus a tax-discrepancy note
+  // when QuickBooks' computed tax didn't match the document.
   if (status === "posted") {
     return (
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success">
-          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-          {postedByName
-            ? t("posted_by", { name: postedByName })
-            : t("posted_label")}
-          {postedAtLabel ? ` · ${postedAtLabel}` : ""}
-        </span>
-        <div className="flex items-center gap-2">
-          {(failed || postError) && (
-            <span role="alert" className="text-[11px] text-warning">
-              {failed ? t("undo_failed") : postError}
-            </span>
-          )}
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 gap-1 text-[11px] text-muted-foreground"
-              >
-                <RotateCcw className="h-3 w-3" aria-hidden="true" />
-                {t("undo_button")}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>{t("undo_title")}</DialogTitle>
-                <DialogDescription>{t("undo_body")}</DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
+      <div className="flex flex-col gap-1.5">
+        {taxNote && (
+          <p
+            role="alert"
+            className="flex items-start gap-1 text-[11px] text-warning"
+          >
+            <TriangleAlert
+              className="mt-px h-3 w-3 shrink-0"
+              aria-hidden="true"
+            />
+            <span>{taxNote}</span>
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success">
+            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+            {postedByName
+              ? t("posted_by", { name: postedByName })
+              : t("posted_label")}
+            {postedAtLabel ? ` · ${postedAtLabel}` : ""}
+          </span>
+          <div className="flex items-center gap-2">
+            {(failed || postError) && (
+              <span role="alert" className="text-[11px] text-warning">
+                {failed ? t("undo_failed") : postError}
+              </span>
+            )}
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
                 <Button
+                  size="sm"
                   variant="ghost"
-                  onClick={() => setOpen(false)}
-                  disabled={pending}
+                  className="h-7 gap-1 text-[11px] text-muted-foreground"
                 >
-                  {t("post_cancel")}
+                  <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                  {t("undo_button")}
                 </Button>
-                <Button onClick={() => run("void")} disabled={pending} className="gap-1.5">
-                  {pending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <RotateCcw className="h-4 w-4" aria-hidden="true" />
-                  )}
-                  {t("undo_go")}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>{t("undo_title")}</DialogTitle>
+                  <DialogDescription>{t("undo_body")}</DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button
+                    variant="ghost"
+                    onClick={() => setOpen(false)}
+                    disabled={pending}
+                  >
+                    {t("post_cancel")}
+                  </Button>
+                  <Button
+                    onClick={() => run("void")}
+                    disabled={pending}
+                    className="gap-1.5"
+                  >
+                    {pending ? (
+                      <Loader2
+                        className="h-4 w-4 animate-spin"
+                        aria-hidden="true"
+                      />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    {t("undo_go")}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </div>
     );
@@ -135,13 +167,17 @@ export function PostDraftControls({
   }
 
   // Income posts an Invoice; expense posts a Bill — the confirm copy reflects it.
-  const confirmBody = direction === "income" ? t("post_body_income") : t("post_body");
+  const confirmBody =
+    direction === "income" ? t("post_body_income") : t("post_body");
 
   // Approved expense/income: Post (with retry error if a prior attempt failed).
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">
       {(failed || postError) && (
-        <span role="alert" className="inline-flex items-center gap-1 text-[11px] text-warning">
+        <span
+          role="alert"
+          className="inline-flex items-center gap-1 text-[11px] text-warning"
+        >
           <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
           {failed ? t("post_failed") : postError}
         </span>
@@ -166,7 +202,11 @@ export function PostDraftControls({
             >
               {t("post_cancel")}
             </Button>
-            <Button onClick={() => run("post")} disabled={pending} className="gap-1.5">
+            <Button
+              onClick={() => run("post")}
+              disabled={pending}
+              className="gap-1.5"
+            >
               {pending ? (
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
               ) : (

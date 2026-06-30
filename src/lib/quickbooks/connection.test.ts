@@ -36,6 +36,7 @@ function conn(
     accessTokenExpiresAt: FRESH,
     refreshTokenExpiresAt: null,
     environment: "sandbox",
+    companyCountry: null,
     ...overrides,
   };
 }

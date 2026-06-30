@@ -135,6 +135,7 @@ export async function QueueRow({
         postedAt={row.postedAt}
         postedByName={postedByName}
         postError={row.postError}
+        postedTaxNote={row.postedTaxNote}
         showStatusControls={false}
       />
     </QueueRowDisclosure>
