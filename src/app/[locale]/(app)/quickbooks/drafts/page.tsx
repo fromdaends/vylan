@@ -6,7 +6,11 @@ export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
 import { Link } from "@/i18n/navigation";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
-import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import {
+  getCurrentUser,
+  listFirmUsers,
+  userDisplayLabel,
+} from "@/lib/db/users";
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import { summarizeDrafts } from "@/lib/quickbooks/draft-summary";
@@ -19,6 +23,7 @@ import {
 } from "@/lib/quickbooks/draft-queue";
 import { DraftsQueue } from "@/components/quickbooks/drafts-queue";
 import { QueueRow } from "@/components/quickbooks/queue-row";
+import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import type { DraftCardOptions } from "@/components/engagements/quickbooks-draft-card";
 import { Button } from "@/components/ui/button";
 import { BookOpen } from "lucide-react";
@@ -49,7 +54,10 @@ export default async function QuickbooksDraftsPage({
       <div className="space-y-6">
         <Header title={t("queue_title")} subtitle={t("queue_subtitle")} />
         <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border/40 bg-muted/20 py-16 text-center">
-          <BookOpen className="h-9 w-9 text-muted-foreground/50" aria-hidden="true" />
+          <BookOpen
+            className="h-9 w-9 text-muted-foreground/50"
+            aria-hidden="true"
+          />
           <p className="max-w-sm text-sm text-muted-foreground">
             {isOwner ? t("queue_connect_owner") : t("queue_connect_staff")}
           </p>
@@ -74,7 +82,10 @@ export default async function QuickbooksDraftsPage({
   const reviewerNameById = new Map(
     firmUsers.map((u) => [u.id, userDisplayLabel(u)]),
   );
-  const toOpt = (x: { id: string; name: string }) => ({ id: x.id, name: x.name });
+  const toOpt = (x: { id: string; name: string }) => ({
+    id: x.id,
+    name: x.name,
+  });
   const options: DraftCardOptions = {
     vendors: (qboLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
     customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
@@ -100,10 +111,15 @@ export default async function QuickbooksDraftsPage({
         .filter((r) => r.clientId)
         .map((r) => [
           r.clientId as string,
-          { id: r.clientId as string, name: r.clientName ?? t("queue_unknown_client") },
+          {
+            id: r.clientId as string,
+            name: r.clientName ?? t("queue_unknown_client"),
+          },
         ]),
     ).values(),
-  ].sort((a, b) => a.name.localeCompare(b.name, locale === "fr" ? "fr-CA" : "en-CA"));
+  ].sort((a, b) =>
+    a.name.localeCompare(b.name, locale === "fr" ? "fr-CA" : "en-CA"),
+  );
 
   const activeFilter = parseQueueFilter(sp.status);
   const activeClient =
@@ -193,7 +209,10 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+        <div className="flex items-center gap-2.5">
+          <QuickbooksLogo className="h-7 w-7 shrink-0" />
+          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
+        </div>
         <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
       </div>
     </header>
