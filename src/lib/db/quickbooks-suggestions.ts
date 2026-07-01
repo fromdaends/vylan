@@ -333,15 +333,34 @@ export async function setDraftStatus(input: {
 }): Promise<boolean> {
   const sb = getServiceRoleSupabase();
   const now = new Date().toISOString();
-  const { error } = await sb
-    .from("quickbooks_transaction_suggestions")
-    .update({
-      status: input.status,
-      reviewed_by: input.reviewerId,
-      reviewed_at: now,
-      updated_at: now,
-    })
-    .eq("uploaded_file_id", input.uploadedFileId);
+  const base = {
+    status: input.status,
+    reviewed_by: input.reviewerId,
+    reviewed_at: now,
+    updated_at: now,
+  };
+  // Reopening a draft (-> 'draft') clears any stale post error from a previous
+  // failed attempt: once the accountant changes the mapping and re-approves, an
+  // error tied to the OLD config would only mislead. Tiered write so it stays
+  // safe before migration 0450 (which added post_error) is applied.
+  const withClear =
+    input.status === "draft" ? { ...base, post_error: null } : null;
+  let error = withClear
+    ? (
+        await sb
+          .from("quickbooks_transaction_suggestions")
+          .update(withClear)
+          .eq("uploaded_file_id", input.uploadedFileId)
+      ).error
+    : null;
+  if ((error && isMissingSchema(error)) || !withClear) {
+    error = (
+      await sb
+        .from("quickbooks_transaction_suggestions")
+        .update(base)
+        .eq("uploaded_file_id", input.uploadedFileId)
+    ).error;
+  }
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] setDraftStatus failed:", error);
