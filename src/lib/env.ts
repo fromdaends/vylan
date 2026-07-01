@@ -57,6 +57,11 @@ const ServerEnvSchema = z.object({
   // APP_URL + /api/integrations/quickbooks/callback.
   QBO_CLIENT_ID: optionalSecret(),
   QBO_CLIENT_SECRET: optionalSecret(),
+  // Symmetric key (base64 or hex, 32 bytes) that encrypts the stored QuickBooks
+  // OAuth tokens at rest (AES-256-GCM). Optional: when unset, tokens are stored as
+  // today (plaintext, service-role-read-only) so nothing breaks; set it to turn on
+  // encryption for the production go-live. See quickbooks/token-cipher.ts.
+  QBO_TOKEN_ENC_KEY: optionalSecret(),
   QBO_ENVIRONMENT: z.preprocess(
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().optional(),

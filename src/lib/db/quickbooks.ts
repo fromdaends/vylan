@@ -15,6 +15,11 @@ import {
   getServerSupabase,
   getServiceRoleSupabase,
 } from "@/lib/supabase/server";
+import {
+  maybeEncryptToken,
+  decryptToken,
+  tokenFingerprint,
+} from "@/lib/quickbooks/token-cipher";
 import type { QuickbooksEnvironment } from "@/lib/quickbooks/client";
 
 // PostgREST surfaces a not-yet-applied migration as a missing table (PGRST205 /
@@ -96,11 +101,9 @@ export async function upsertFirmQuickbooksConnection(
   input: UpsertQuickbooksConnectionInput,
 ): Promise<UpsertConnectionResult> {
   const sb = getServiceRoleSupabase();
-  const base = {
+  const common = {
     firm_id: firmId,
     realm_id: input.realmId,
-    access_token: input.accessToken,
-    refresh_token: input.refreshToken,
     access_token_expires_at: input.accessTokenExpiresAt,
     refresh_token_expires_at: input.refreshTokenExpiresAt,
     company_name: input.companyName,
@@ -108,22 +111,41 @@ export async function upsertFirmQuickbooksConnection(
     connected_by: input.connectedBy,
     updated_at: new Date().toISOString(),
   };
-  // Try with company_country (0470); fall back to the pre-0470 column set on a
-  // missing-column error so connecting still works before the migration lands.
+  const onConflict = "firm_id";
+  const upsert = (record: Record<string, unknown>) =>
+    sb.from("quickbooks_connections").upsert(record, { onConflict });
+  // Tier 1 (0480 + 0470): ENCRYPTED tokens + the refresh-token fingerprint (the
+  // optimistic-lock key) + company_country.
   let error = (
-    await sb.from("quickbooks_connections").upsert(
-      { ...base, company_country: input.companyCountry },
-      {
-        onConflict: "firm_id",
-      },
-    )
+    await upsert({
+      ...common,
+      access_token: maybeEncryptToken(input.accessToken),
+      refresh_token: maybeEncryptToken(input.refreshToken),
+      refresh_token_fingerprint: tokenFingerprint(input.refreshToken),
+      company_country: input.companyCountry,
+    })
   ).error;
   if (error && isMissingSchema(error)) {
+    // Tier 2 (0470, no 0480): no fingerprint column, so we must NOT encrypt — the
+    // legacy optimistic lock still matches on the RAW refresh token. Store plaintext.
     error = (
-      await sb
-        .from("quickbooks_connections")
-        .upsert(base, { onConflict: "firm_id" })
+      await upsert({
+        ...common,
+        access_token: input.accessToken,
+        refresh_token: input.refreshToken,
+        company_country: input.companyCountry,
+      })
     ).error;
+    if (error && isMissingSchema(error)) {
+      // Tier 3 (pre-0470): plaintext tokens only.
+      error = (
+        await upsert({
+          ...common,
+          access_token: input.accessToken,
+          refresh_token: input.refreshToken,
+        })
+      ).error;
+    }
   }
   if (error) {
     if (isMissingSchema(error))
@@ -230,10 +252,23 @@ export async function getFirmQuickbooksConnectionWithTokens(
     return null;
   }
   if (!data) return null;
+  // Decrypt the tokens (a legacy plaintext value passes through unchanged). A
+  // decrypt failure (missing/rotated key, tamper) means the stored token is
+  // unusable — treat the connection as not-connected rather than handing out
+  // garbage, so the UI prompts a reconnect instead of the API silently 401ing.
+  const accessToken = decryptToken(data.access_token as string);
+  const refreshToken = decryptToken(data.refresh_token as string);
+  if (accessToken === null || refreshToken === null) {
+    console.error(
+      "[quickbooks] could not decrypt stored tokens for firm",
+      firmId,
+    );
+    return null;
+  }
   return {
     realmId: data.realm_id as string,
-    accessToken: data.access_token as string,
-    refreshToken: data.refresh_token as string,
+    accessToken,
+    refreshToken,
     accessTokenExpiresAt:
       (data.access_token_expires_at as string | null) ?? null,
     refreshTokenExpiresAt:
@@ -265,6 +300,11 @@ export type UpdateTokensResult =
 // refresh_token_expires_at is overwritten ONLY when the response carried a value:
 // Intuit's refresh-token expiry counts DOWN toward the original grant, and a
 // partial response must not wipe the known expiry with NULL.
+//
+// When tokens are encrypted, the stored refresh_token is non-deterministic
+// ciphertext and can't be matched directly, so the optimistic lock matches on the
+// stable refresh_token_fingerprint (sha256 of the plaintext) instead — same guard,
+// same semantics. Falls back to the legacy raw-token match before migration 0480.
 export async function updateFirmQuickbooksTokens(
   firmId: string,
   expectedRefreshToken: string,
@@ -276,28 +316,56 @@ export async function updateFirmQuickbooksTokens(
   },
 ): Promise<UpdateTokensResult> {
   const sb = getServiceRoleSupabase();
-  const patch: Record<string, unknown> = {
-    access_token: tokens.accessToken,
-    refresh_token: tokens.refreshToken,
+  const expiryPatch =
+    tokens.refreshTokenExpiresAt != null
+      ? { refresh_token_expires_at: tokens.refreshTokenExpiresAt }
+      : {};
+  const commonPatch = {
     access_token_expires_at: tokens.accessTokenExpiresAt,
     updated_at: new Date().toISOString(),
+    ...expiryPatch,
   };
-  if (tokens.refreshTokenExpiresAt != null) {
-    patch.refresh_token_expires_at = tokens.refreshTokenExpiresAt;
-  }
-  const { data, error } = await sb
+
+  // Primary path (0480): store ENCRYPTED tokens + the new fingerprint, and match
+  // the old row by its fingerprint (identical whether the old token is stored
+  // encrypted or as legacy plaintext — the fingerprint is always of the plaintext).
+  let res = await sb
     .from("quickbooks_connections")
-    .update(patch)
+    .update({
+      ...commonPatch,
+      access_token: maybeEncryptToken(tokens.accessToken),
+      refresh_token: maybeEncryptToken(tokens.refreshToken),
+      refresh_token_fingerprint: tokenFingerprint(tokens.refreshToken),
+    })
     .eq("firm_id", firmId)
-    .eq("refresh_token", expectedRefreshToken)
+    .eq("refresh_token_fingerprint", tokenFingerprint(expectedRefreshToken))
     .select("id");
-  if (error) {
-    if (!isMissingSchema(error)) {
-      console.error("[quickbooks] updateFirmQuickbooksTokens failed:", error);
+
+  if (res.error && isMissingSchema(res.error)) {
+    // Pre-0480: no fingerprint column. Store PLAINTEXT (so encryption isn't left
+    // un-matchable) and match on the raw refresh token, exactly as before.
+    res = await sb
+      .from("quickbooks_connections")
+      .update({
+        ...commonPatch,
+        access_token: tokens.accessToken,
+        refresh_token: tokens.refreshToken,
+      })
+      .eq("firm_id", firmId)
+      .eq("refresh_token", expectedRefreshToken)
+      .select("id");
+  }
+
+  if (res.error) {
+    if (!isMissingSchema(res.error)) {
+      console.error(
+        "[quickbooks] updateFirmQuickbooksTokens failed:",
+        res.error,
+      );
     }
     return { outcome: "error" };
   }
-  return data && data.length > 0
+  return res.data && res.data.length > 0
     ? { outcome: "updated" }
     : { outcome: "raced" };
 }
