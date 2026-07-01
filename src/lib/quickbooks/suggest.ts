@@ -206,7 +206,12 @@ function pickConfident(
 function toCandidates(sorted: Scored[]): ScoredRef[] {
   return sorted
     .slice(0, MAX_CANDIDATES)
-    .map((r) => ({ id: r.id, name: r.name, active: r.active, score: round2(r.score) }));
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      active: r.active,
+      score: round2(r.score),
+    }));
 }
 
 // Rank a cached list against a query name. Returns the confident match (clear
@@ -239,7 +244,17 @@ const TAX_ALIASES: Record<string, string> = {
   TVH: "HST",
   TVP: "PST",
 };
-const KNOWN_TAX_WORDS = ["GST", "HST", "QST", "PST", "VAT", "TPS", "TVQ", "TVH", "TVP"];
+const KNOWN_TAX_WORDS = [
+  "GST",
+  "HST",
+  "QST",
+  "PST",
+  "VAT",
+  "TPS",
+  "TVQ",
+  "TVH",
+  "TVP",
+];
 
 // The canonical tax tokens contained in a string, matched on WORD BOUNDARIES
 // (not raw substring) so "Private services" never yields "VAT" and a French
@@ -269,7 +284,8 @@ export function matchTaxCode(
   // Canonical tax tokens the document actually shows (junk labels contribute
   // nothing and so don't pollute the denominator).
   const wanted = new Set<string>();
-  for (const t of taxes) for (const tok of taxTokensFrom(t.type)) wanted.add(tok);
+  for (const t of taxes)
+    for (const tok of taxTokensFrom(t.type)) wanted.add(tok);
   if (wanted.size === 0) return { match: null, confidence: 0, candidates: [] };
 
   const sorted = taxCodes
@@ -284,7 +300,8 @@ export function matchTaxCode(
     .filter((c) => c.score > 0)
     .sort(byScoreThenActive);
 
-  if (sorted.length === 0) return { match: null, confidence: 0, candidates: [] };
+  if (sorted.length === 0)
+    return { match: null, confidence: 0, candidates: [] };
   // A confident tax match requires an EXACT token-set match (Jaccard === 1).
   const { match, confidence } = pickConfident(sorted, 1);
   return { match, confidence, candidates: toCandidates(sorted) };
@@ -351,10 +368,15 @@ export function suggestAccount(
 // ── Item suggestion (income) ─────────────────────────────────────────────────
 
 // Sellable item types that can carry an income Invoice line. Category/Bundle
-// items (and anything unrecognised that isn't blank) are excluded.
-function isSellableItem(t: string | null): boolean {
+// items (and anything unrecognised that isn't blank) are excluded. Exported so the
+// cache layer can hide non-sellable items from the picker too — QuickBooks rejects
+// an Invoice line whose ItemRef points at a Category ("set up as a category
+// instead of a product or service").
+export function isSellableItem(t: string | null): boolean {
   const s = (t ?? "").toLowerCase();
-  return s === "service" || s === "noninventory" || s === "inventory" || s === "";
+  return (
+    s === "service" || s === "noninventory" || s === "inventory" || s === ""
+  );
 }
 
 // Suggest the product/service item for an INCOME line. A QuickBooks Invoice line
@@ -381,9 +403,16 @@ export function suggestItem(
     // Confident pick must be ACTIVE and SELLABLE — never auto-pick a Category /
     // Bundle even if it's the only item on the account (an Invoice line can't
     // post to it). Such an item still appears in candidates for the accountant.
-    const active = forAccount.filter((i) => i.active && isSellableItem(i.itemType));
+    const active = forAccount.filter(
+      (i) => i.active && isSellableItem(i.itemType),
+    );
     const cands = toCandidates(
-      forAccount.map((i) => ({ id: i.id, name: i.name, active: i.active, score: 0.9 })),
+      forAccount.map((i) => ({
+        id: i.id,
+        name: i.name,
+        active: i.active,
+        score: 0.9,
+      })),
     );
     // One active sellable item maps to this income account -> confident pick.
     if (active.length === 1) {
@@ -433,12 +462,16 @@ export function buildTransactionSuggestion(
     partyKind = "vendor";
     partyQuery = extraction.vendor_name;
     partyList = lists.vendors;
-    notes.push("Couldn't tell if this is an expense or income — assumed a vendor.");
+    notes.push(
+      "Couldn't tell if this is an expense or income — assumed a vendor.",
+    );
   } else if (extraction.customer_name) {
     partyKind = "customer";
     partyQuery = extraction.customer_name;
     partyList = lists.customers;
-    notes.push("Couldn't tell if this is an expense or income — assumed a customer.");
+    notes.push(
+      "Couldn't tell if this is an expense or income — assumed a customer.",
+    );
   } else {
     notes.push("Couldn't tell if this is an expense or income.");
   }
@@ -495,7 +528,11 @@ export function buildTransactionSuggestion(
   const taxCode = matchTaxCode(extraction.taxes, lists.taxCodes);
   if (extraction.taxes.length > 0 && lists.taxCodes === null) {
     notes.push("Your QuickBooks tax codes aren't loaded yet.");
-  } else if (extraction.taxes.length > 0 && taxCode.match && !taxCode.match.active) {
+  } else if (
+    extraction.taxes.length > 0 &&
+    taxCode.match &&
+    !taxCode.match.active
+  ) {
     notes.push(`Tax code "${taxCode.match.name}" is archived in QuickBooks.`);
   } else if (extraction.taxes.length > 0 && !taxCode.match) {
     notes.push("Couldn't confidently match the tax — confirm the tax code.");
@@ -519,7 +556,9 @@ export function buildTransactionSuggestion(
     taxTotal != null &&
     Math.abs(extraction.subtotal + taxTotal - extraction.total) > 0.05
   ) {
-    notes.push("Subtotal plus tax doesn't match the total — double-check the amounts.");
+    notes.push(
+      "Subtotal plus tax doesn't match the total — double-check the amounts.",
+    );
   }
 
   return {
