@@ -150,8 +150,15 @@ export function buildBillPayload(input: BillInput): Record<string, unknown> {
       },
     ],
   };
-  if (tax && tax.globalTaxCalculation) {
-    bill.GlobalTaxCalculation = tax.globalTaxCalculation;
+  if (tax) {
+    // Transaction-level tax code: MANDATORY to signal Automated-Sales-Tax intent
+    // to QuickBooks. Without it an AST company (all modern QBO companies, incl.
+    // Canada) returns error 6000 "encountered an error while calculating tax".
+    // QBO then computes the tax from the line's TaxCodeRef.
+    bill.TxnTaxDetail = { TxnTaxCodeRef: { value: tax.taxCodeId } };
+    if (tax.globalTaxCalculation) {
+      bill.GlobalTaxCalculation = tax.globalTaxCalculation;
+    }
   }
   if (input.date) bill.TxnDate = input.date;
   if (input.memo) bill.PrivateNote = input.memo;
@@ -190,8 +197,15 @@ export function buildInvoicePayload(
       },
     ],
   };
-  if (tax && tax.globalTaxCalculation) {
-    invoice.GlobalTaxCalculation = tax.globalTaxCalculation;
+  if (tax) {
+    // Transaction-level tax code: MANDATORY to signal Automated-Sales-Tax intent
+    // to QuickBooks. Without it an AST company (all modern QBO companies, incl.
+    // Canada) returns error 6000 "encountered an error while calculating tax".
+    // QBO then computes the tax from the line's TaxCodeRef.
+    invoice.TxnTaxDetail = { TxnTaxCodeRef: { value: tax.taxCodeId } };
+    if (tax.globalTaxCalculation) {
+      invoice.GlobalTaxCalculation = tax.globalTaxCalculation;
+    }
   }
   if (input.date) invoice.TxnDate = input.date;
   if (input.memo) invoice.PrivateNote = input.memo;

@@ -67,6 +67,7 @@ describe("buildBillPayload", () => {
         .TaxCodeRef,
     ).toBeUndefined();
     expect("GlobalTaxCalculation" in bill).toBe(false);
+    expect("TxnTaxDetail" in bill).toBe(false);
   });
   it("posts the NET amount + TaxCodeRef + GlobalTaxCalculation for a non-US tax", () => {
     const bill = buildBillPayload({
@@ -87,6 +88,8 @@ describe("buildBillPayload", () => {
         .TaxCodeRef,
     ).toEqual({ value: "TC5" });
     expect(bill.GlobalTaxCalculation).toBe("TaxExcluded");
+    // Transaction-level tax code (mandatory AST intent) — else QBO errors 6000.
+    expect(bill.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: "TC5" } });
   });
   it("attaches the TaxCodeRef but OMITS GlobalTaxCalculation for a US tax (null)", () => {
     const bill = buildBillPayload({
@@ -103,6 +106,8 @@ describe("buildBillPayload", () => {
         .TaxCodeRef,
     ).toEqual({ value: "TAX" });
     expect("GlobalTaxCalculation" in bill).toBe(false);
+    // TxnTaxDetail is still sent (AST intent) even when GlobalTaxCalculation isn't.
+    expect(bill.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: "TAX" } });
   });
 });
 
@@ -340,6 +345,8 @@ describe("buildInvoicePayload", () => {
       (line.SalesItemLineDetail as Record<string, unknown>).TaxCodeRef,
     ).toEqual({ value: "TC5" });
     expect(inv.GlobalTaxCalculation).toBe("TaxExcluded");
+    // Transaction-level tax code (mandatory AST intent) — else QBO errors 6000.
+    expect(inv.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: "TC5" } });
   });
 });
 
