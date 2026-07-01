@@ -6,6 +6,7 @@ import {
   matchTaxCode,
   suggestAccount,
   suggestItem,
+  isSellableItem,
   buildTransactionSuggestion,
   MATCH_THRESHOLD,
 } from "./suggest";
@@ -25,9 +26,19 @@ const customers: QbNamed[] = [
 const accounts: QbAccount[] = [
   { id: "a1", name: "Supplies", accountType: "Expense", active: true },
   { id: "a2", name: "Telephone", accountType: "Expense", active: true },
-  { id: "a3", name: "Cost of Goods Sold", accountType: "Cost of Goods Sold", active: true },
+  {
+    id: "a3",
+    name: "Cost of Goods Sold",
+    accountType: "Cost of Goods Sold",
+    active: true,
+  },
   { id: "a4", name: "Sales", accountType: "Income", active: true },
-  { id: "a5", name: "Consulting Revenue", accountType: "Other Income", active: true },
+  {
+    id: "a5",
+    name: "Consulting Revenue",
+    accountType: "Other Income",
+    active: true,
+  },
   { id: "a6", name: "Chequing", accountType: "Bank", active: true },
 ];
 const taxCodes: QbNamed[] = [
@@ -106,8 +117,14 @@ describe("nameScore", () => {
 
 describe("taxTokensFrom (word-boundary, FR aliases)", () => {
   it("resolves combined and French codes to canonical tokens", () => {
-    expect([...taxTokensFrom("GST/QST QC - 9.975")].sort()).toEqual(["GST", "QST"]);
-    expect([...taxTokensFrom("TPS/TVQ (5%/9.975%)")].sort()).toEqual(["GST", "QST"]);
+    expect([...taxTokensFrom("GST/QST QC - 9.975")].sort()).toEqual([
+      "GST",
+      "QST",
+    ]);
+    expect([...taxTokensFrom("TPS/TVQ (5%/9.975%)")].sort()).toEqual([
+      "GST",
+      "QST",
+    ]);
     expect([...taxTokensFrom("HST ON")]).toEqual(["HST"]);
   });
   it("does NOT substring-match a tax token inside a real word", () => {
@@ -119,7 +136,11 @@ describe("taxTokensFrom (word-boundary, FR aliases)", () => {
 describe("matchTaxCode", () => {
   it("matches the combined GST/QST code when both taxes are present", () => {
     const m = matchTaxCode(extraction().taxes, taxCodes);
-    expect(m.match).toEqual({ id: "t2", name: "GST/QST QC - 9.975", active: true });
+    expect(m.match).toEqual({
+      id: "t2",
+      name: "GST/QST QC - 9.975",
+      active: true,
+    });
     expect(m.confidence).toBe(1);
   });
   it("matches the PLAIN GST code for a GST-only receipt (no over-match to combined)", () => {
@@ -134,18 +155,27 @@ describe("matchTaxCode", () => {
       ],
       taxCodes,
     );
-    expect(m.match).toEqual({ id: "t2", name: "GST/QST QC - 9.975", active: true });
+    expect(m.match).toEqual({
+      id: "t2",
+      name: "GST/QST QC - 9.975",
+      active: true,
+    });
   });
   it("matches a French-NAMED QBO tax code", () => {
     const m = matchTaxCode(extraction().taxes, [
       { id: "f1", name: "TPS/TVQ (5%/9.975%)", active: true },
     ]);
-    expect(m.match).toEqual({ id: "f1", name: "TPS/TVQ (5%/9.975%)", active: true });
+    expect(m.match).toEqual({
+      id: "f1",
+      name: "TPS/TVQ (5%/9.975%)",
+      active: true,
+    });
   });
   it("does not confidently match a 'VAT' line against a non-tax code name", () => {
-    const m = matchTaxCode([{ type: "VAT", amount: 2, rate: null }], [
-      { id: "x", name: "Private services", active: true },
-    ]);
+    const m = matchTaxCode(
+      [{ type: "VAT", amount: 2, rate: null }],
+      [{ id: "x", name: "Private services", active: true }],
+    );
     expect(m.match).toBeNull();
     expect(m.candidates).toEqual([]);
   });
@@ -158,7 +188,11 @@ describe("matchTaxCode", () => {
       ],
       taxCodes,
     );
-    expect(m.match).toEqual({ id: "t2", name: "GST/QST QC - 9.975", active: true });
+    expect(m.match).toEqual({
+      id: "t2",
+      name: "GST/QST QC - 9.975",
+      active: true,
+    });
   });
   it("returns no match when the document has no tax / no codes loaded", () => {
     expect(matchTaxCode([], taxCodes).match).toBeNull();
@@ -215,7 +249,12 @@ describe("suggestAccount", () => {
   });
   it("returns active-sorted kind-filtered candidates when there's no party name", () => {
     const withInactive: QbAccount[] = [
-      { id: "i1", name: "Archived Expense", accountType: "Expense", active: false },
+      {
+        id: "i1",
+        name: "Archived Expense",
+        accountType: "Expense",
+        active: false,
+      },
       ...accounts,
     ];
     const m = suggestAccount("expense", null, withInactive);
@@ -231,13 +270,20 @@ describe("suggestAccount", () => {
 
 describe("archived (inactive) entities", () => {
   it("still matches an archived account but flags it active:false + a note", () => {
-    const s = buildTransactionSuggestion(extraction({ vendor_name: "Telephone" }), {
-      ...lists,
-      accounts: [
-        { id: "z", name: "Telephone", accountType: "Expense", active: false },
-      ],
+    const s = buildTransactionSuggestion(
+      extraction({ vendor_name: "Telephone" }),
+      {
+        ...lists,
+        accounts: [
+          { id: "z", name: "Telephone", accountType: "Expense", active: false },
+        ],
+      },
+    );
+    expect(s.account.match).toEqual({
+      id: "z",
+      name: "Telephone",
+      active: false,
     });
-    expect(s.account.match).toEqual({ id: "z", name: "Telephone", active: false });
     expect(s.notes.some((n) => n.includes("archived"))).toBe(true);
   });
   it("flags an archived vendor match", () => {
@@ -274,9 +320,9 @@ describe("buildTransactionSuggestion", () => {
     expect(s.taxTotal).toBe(14.98);
     expect(s.date).toBe("2024-03-14");
     expect(s.account.match).toBeNull();
-    expect(s.notes.some((n) => n.toLowerCase().includes("expense account"))).toBe(
-      true,
-    );
+    expect(
+      s.notes.some((n) => n.toLowerCase().includes("expense account")),
+    ).toBe(true);
     expect(s.overallConfidence).toBeGreaterThan(0.5);
   });
 
@@ -295,9 +341,9 @@ describe("buildTransactionSuggestion", () => {
       name: "Acme Manufacturing Inc.",
       active: true,
     });
-    expect(s.notes.some((n) => n.toLowerCase().includes("income account"))).toBe(
-      true,
-    );
+    expect(
+      s.notes.some((n) => n.toLowerCase().includes("income account")),
+    ).toBe(true);
   });
 
   it("notes when no vendor match is found", () => {
@@ -315,12 +361,19 @@ describe("buildTransactionSuggestion", () => {
       lists,
     );
     expect(s.partyKind).toBe("vendor");
-    expect(s.party.match).toEqual({ id: "v2", name: "Bell Canada", active: true });
+    expect(s.party.match).toEqual({
+      id: "v2",
+      name: "Bell Canada",
+      active: true,
+    });
     expect(s.notes.some((n) => n.includes("expense or income"))).toBe(true);
   });
 
   it("flags a foreign currency", () => {
-    const s = buildTransactionSuggestion(extraction({ currency: "USD" }), lists);
+    const s = buildTransactionSuggestion(
+      extraction({ currency: "USD" }),
+      lists,
+    );
     expect(s.notes.some((n) => n.includes("USD"))).toBe(true);
   });
 
@@ -329,7 +382,9 @@ describe("buildTransactionSuggestion", () => {
       extraction({ subtotal: 100, total: 200 }),
       lists,
     );
-    expect(s.notes.some((n) => n.includes("doesn't match the total"))).toBe(true);
+    expect(s.notes.some((n) => n.includes("doesn't match the total"))).toBe(
+      true,
+    );
   });
 
   it("degrades gracefully when cached lists are unavailable", () => {
@@ -342,23 +397,34 @@ describe("buildTransactionSuggestion", () => {
     expect(s.party.match).toBeNull();
     expect(s.taxCode.match).toBeNull();
     expect(s.account.match).toBeNull();
-    expect(s.notes.some((n) => n.includes("vendor list isn't loaded"))).toBe(true);
-    expect(s.notes.some((n) => n.includes("chart of accounts isn't loaded"))).toBe(
+    expect(s.notes.some((n) => n.includes("vendor list isn't loaded"))).toBe(
       true,
     );
+    expect(
+      s.notes.some((n) => n.includes("chart of accounts isn't loaded")),
+    ).toBe(true);
   });
 
   it("handles a document with no readable party name", () => {
-    const s = buildTransactionSuggestion(extraction({ vendor_name: null }), lists);
+    const s = buildTransactionSuggestion(
+      extraction({ vendor_name: null }),
+      lists,
+    );
     expect(s.partyKind).toBe("vendor");
     expect(s.party.match).toBeNull();
-    expect(s.notes.some((n) => n.includes("No vendor name was read"))).toBe(true);
+    expect(s.notes.some((n) => n.includes("No vendor name was read"))).toBe(
+      true,
+    );
   });
 
   it("scores an unidentified doc no higher than a matched one (readiness counts the missing party)", () => {
     const matched = buildTransactionSuggestion(extraction(), lists);
     const unidentified = buildTransactionSuggestion(
-      extraction({ direction: "unknown", vendor_name: null, customer_name: null }),
+      extraction({
+        direction: "unknown",
+        vendor_name: null,
+        customer_name: null,
+      }),
       lists,
     );
     expect(unidentified.overallConfidence).toBeLessThan(
@@ -367,13 +433,63 @@ describe("buildTransactionSuggestion", () => {
   });
 });
 
+describe("isSellableItem", () => {
+  it("accepts Service / Inventory / NonInventory (any case) + blank", () => {
+    for (const t of [
+      "Service",
+      "service",
+      "Inventory",
+      "NonInventory",
+      "",
+      null,
+    ]) {
+      expect(isSellableItem(t)).toBe(true);
+    }
+  });
+  it("rejects Category and Bundle (can't be an Invoice line)", () => {
+    expect(isSellableItem("Category")).toBe(false);
+    expect(isSellableItem("Bundle")).toBe(false);
+    expect(isSellableItem("Group")).toBe(false);
+  });
+});
+
 describe("suggestItem (income)", () => {
   const items: QbItem[] = [
-    { id: "i1", name: "Consulting", itemType: "Service", incomeAccountId: "a1", active: true },
-    { id: "i2", name: "Design", itemType: "Service", incomeAccountId: "a2", active: true },
-    { id: "i3", name: "Design Rush", itemType: "Service", incomeAccountId: "a2", active: true },
-    { id: "i4", name: "Old Service", itemType: "Service", incomeAccountId: "a3", active: false },
-    { id: "i5", name: "A Category", itemType: "Category", incomeAccountId: "a1", active: true },
+    {
+      id: "i1",
+      name: "Consulting",
+      itemType: "Service",
+      incomeAccountId: "a1",
+      active: true,
+    },
+    {
+      id: "i2",
+      name: "Design",
+      itemType: "Service",
+      incomeAccountId: "a2",
+      active: true,
+    },
+    {
+      id: "i3",
+      name: "Design Rush",
+      itemType: "Service",
+      incomeAccountId: "a2",
+      active: true,
+    },
+    {
+      id: "i4",
+      name: "Old Service",
+      itemType: "Service",
+      incomeAccountId: "a3",
+      active: false,
+    },
+    {
+      id: "i5",
+      name: "A Category",
+      itemType: "Category",
+      incomeAccountId: "a1",
+      active: true,
+    },
   ];
 
   it("returns empty for expense / unknown directions", () => {

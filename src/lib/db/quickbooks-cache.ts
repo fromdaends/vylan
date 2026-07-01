@@ -5,8 +5,12 @@
 // firm members SELECT). WRITES (the background sync job) go through the SERVICE
 // role. Everything degrades gracefully (isMissingSchema) before 0420 is applied.
 
-import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import {
+  getServerSupabase,
+  getServiceRoleSupabase,
+} from "@/lib/supabase/server";
 import { isMissingSchema } from "@/lib/db/quickbooks";
+import { isSellableItem } from "@/lib/quickbooks/suggest";
 import type {
   QbAccount,
   QbItem,
@@ -93,7 +97,13 @@ async function readCachedItems(
     }
     return null;
   }
-  return (data ?? []).map(toCachedItem);
+  // Hide non-sellable items (QuickBooks "Category" groupings, Bundles) from every
+  // consumer — the accountant's item picker AND the matcher. An Invoice line whose
+  // ItemRef points at a category is rejected by QuickBooks ("an item in this
+  // transaction is set up as a category instead of a product or service").
+  return (data ?? [])
+    .map(toCachedItem)
+    .filter((i) => isSellableItem(i.itemType));
 }
 
 // Read the firm's cached lists (authenticated, RLS firm-scoped). Returns null
@@ -109,7 +119,10 @@ export async function readCachedQuickbooksLists(): Promise<QuickbooksLists | nul
   for (const r of [acc, ven, cus, tax]) {
     if (r.error) {
       if (!isMissingSchema(r.error)) {
-        console.error("[quickbooks] readCachedQuickbooksLists failed:", r.error);
+        console.error(
+          "[quickbooks] readCachedQuickbooksLists failed:",
+          r.error,
+        );
       }
       return null;
     }
@@ -137,9 +150,18 @@ export async function readCachedQuickbooksListsForFirm(
       .from("quickbooks_accounts")
       .select("qbo_id, name, account_type, active")
       .eq("firm_id", firmId),
-    sb.from("quickbooks_vendors").select("qbo_id, name, active").eq("firm_id", firmId),
-    sb.from("quickbooks_customers").select("qbo_id, name, active").eq("firm_id", firmId),
-    sb.from("quickbooks_tax_codes").select("qbo_id, name, active").eq("firm_id", firmId),
+    sb
+      .from("quickbooks_vendors")
+      .select("qbo_id, name, active")
+      .eq("firm_id", firmId),
+    sb
+      .from("quickbooks_customers")
+      .select("qbo_id, name, active")
+      .eq("firm_id", firmId),
+    sb
+      .from("quickbooks_tax_codes")
+      .select("qbo_id, name, active")
+      .eq("firm_id", firmId),
   ]);
   for (const r of [acc, ven, cus, tax]) {
     if (r.error) {
@@ -180,7 +202,8 @@ export async function setFirmSyncState(
     sync_error: input.error ?? null,
     updated_at: new Date().toISOString(),
   };
-  if (input.lastSyncedAt !== undefined) patch.last_synced_at = input.lastSyncedAt;
+  if (input.lastSyncedAt !== undefined)
+    patch.last_synced_at = input.lastSyncedAt;
   const { error } = await sb
     .from("quickbooks_connections")
     .update(patch)
