@@ -18,20 +18,18 @@
 -- AND stores tokens as PLAINTEXT until BOTH this column exists and QBO_TOKEN_ENC_KEY
 -- is set, so applying this alone changes nothing until the key is configured.
 
--- pgcrypto (for digest()) is already installed into the PUBLIC schema by 0001;
--- this is a no-op that just documents the dependency. Its functions live in
--- public, so the backfill below calls public.digest(...) — NOT extensions.digest.
-create extension if not exists pgcrypto;
-
 alter table quickbooks_connections
   add column if not exists refresh_token_fingerprint text;
 
 -- Backfill existing (plaintext) rows so the fingerprint match works immediately.
 -- Tokens are still plaintext at this point: encryption only activates once the key
--- is set, which is done AFTER this migration. public.digest(text,'sha256') hashes
--- the token's UTF-8 bytes, matching Node's crypto sha256 hex exactly.
+-- is set, which is done AFTER this migration. We use the BUILT-IN sha256(bytea)
+-- (core Postgres, PG11+) rather than pgcrypto's digest() so there is no dependency
+-- on which schema pgcrypto lives in. convert_to(...,'UTF8') gives the token's UTF-8
+-- bytes, so the result matches Node's crypto.createHash('sha256')...digest('hex')
+-- exactly (see tokenFingerprint in token-cipher.ts).
 update quickbooks_connections
 set refresh_token_fingerprint =
-  encode(public.digest(refresh_token, 'sha256'), 'hex')
+  encode(sha256(convert_to(refresh_token, 'UTF8')), 'hex')
 where refresh_token is not null
   and refresh_token_fingerprint is null;

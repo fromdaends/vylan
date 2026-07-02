@@ -118,7 +118,7 @@ export function decryptToken(stored: string): string | null {
 
 // A deterministic sha256 (hex) of the PLAINTEXT refresh token, used as the
 // optimistic-concurrency match key (migration 0480 stores + backfills the same
-// value via pgcrypto: encode(public.digest(refresh_token,'sha256'),'hex')).
+// value via the built-in encode(sha256(convert_to(refresh_token,'UTF8')),'hex')).
 export function tokenFingerprint(plaintext: string): string {
   return createHash("sha256").update(plaintext, "utf8").digest("hex");
 }
