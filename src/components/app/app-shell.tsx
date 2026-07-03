@@ -217,18 +217,22 @@ export function AppShell({
     },
   ];
 
-  // Integrations hub (QuickBooks today; more software later) — a destination
-  // only when the firm has an integration connected. Rendered after the
+  // Integrations hub (QuickBooks today; more software later). Rendered after the
   // Engagements section in the sidebar. Currently lands on the QuickBooks drafts
-  // queue, the only integration surface so far.
-  const integrationsNav: NavItemDef | null = quickbooksConnected
-    ? {
-        href: "/quickbooks/drafts",
-        label: labels.integrations,
-        icon: Plug,
-        color: "text-icon-purple",
-      }
-    : null;
+  // queue, the only integration surface so far. Shown to OWNERS at all times so
+  // they can discover + connect it (they land on the page's connect prompt when
+  // nothing is linked yet); staff only see it once an integration is connected,
+  // since they can't connect and the queue is empty/irrelevant to them until it
+  // is. Connect/disconnect stay owner-only in Settings -> Integrations.
+  const integrationsNav: NavItemDef | null =
+    quickbooksConnected || isOwner
+      ? {
+          href: "/quickbooks/drafts",
+          label: labels.integrations,
+          icon: Plug,
+          color: "text-icon-purple",
+        }
+      : null;
 
   // Firm + Settings used to live in a sidebar "ACCOUNT" section; they
   // now live in the avatar dropdown menu (and the mobile sheet's

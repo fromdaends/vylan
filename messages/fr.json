@@ -2009,7 +2009,7 @@
     "queue_empty_filtered": "Aucun brouillon ne correspond à ce filtre.",
     "queue_empty_search": "Aucun brouillon ne correspond à votre recherche.",
     "queue_connect_headline": "Transformez vos reçus en brouillons QuickBooks",
-    "queue_connect_owner": "Connectez QuickBooks et Vylan transforme les reçus et factures de vos clients en écritures brouillons que vous révisez et approuvez. Aucune saisie manuelle.",
+    "queue_connect_owner": "Vylan transforme les reçus et factures de vos clients en écritures QuickBooks brouillons que vous révisez et approuvez. Aucune saisie manuelle.",
     "queue_connect_staff": "Demandez au propriétaire du cabinet de connecter QuickBooks pour transformer reçus et factures en écritures brouillons que vous révisez et approuvez.",
     "queue_connect_cta": "Connecter QuickBooks",
     "queue_connect_steps_label": "Comment ça marche",
