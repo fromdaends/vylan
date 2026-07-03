@@ -41,7 +41,8 @@ export async function POST() {
   }
 
   const state = randomUUID();
-  const res = NextResponse.json({ url: buildAuthorizeUrl(state) });
+  const url = await buildAuthorizeUrl(state);
+  const res = NextResponse.json({ url });
   res.cookies.set(QBO_STATE_COOKIE, state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

@@ -6,10 +6,12 @@
 // production is a runtime switch (QBO_ENVIRONMENT) so going live is one env-var
 // change with no code change.
 //
-// Endpoints (per https://developer.intuit.com — OAuth 2.0):
+// Endpoints (per https://developer.intuit.com — OAuth 2.0) are resolved at
+// runtime from Intuit's OpenID discovery document (see ./discovery), which falls
+// back to these well-known values if discovery is briefly unreachable:
 //   authorize : https://appcenter.intuit.com/connect/oauth2
 //   token     : https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer
-//   revoke    : https://developer.api.intuit.com/v2/oauth2/tokens/revoke   (Phase 2)
+//   revoke    : https://developer.api.intuit.com/v2/oauth2/tokens/revoke
 //   API base  : sandbox    https://sandbox-quickbooks.api.intuit.com
 //               production https://quickbooks.api.intuit.com
 //
@@ -19,13 +21,19 @@
 // CompanyInfo read to display the company name. No financial data, no
 // transactions, no documents.
 
-const AUTHORIZE_URL = "https://appcenter.intuit.com/connect/oauth2";
-const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
-const REVOKE_URL = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke";
+import { getOAuthEndpoints } from "./discovery";
+
 // Bound every Intuit network call so a slow/hung endpoint can never block a
 // server render (the Settings keep-alive awaits refreshTokens) or a route. 10s is
 // well under the platform request timeout. Same approach as src/app/api/files.
 const QBO_FETCH_TIMEOUT_MS = 10_000;
+// Automatic retry for TRANSIENT token-endpoint failures (network error, timeout,
+// HTTP 429, or 5xx). We retry these with a short exponential backoff so a passing
+// blip on Intuit's side self-heals instead of breaking a refresh. Permanent auth
+// failures (invalid_grant, other 4xx) are NEVER retried — retrying only hammers
+// the endpoint and can't succeed.
+const TOKEN_RETRY_MAX_ATTEMPTS = 3;
+const TOKEN_RETRY_BASE_MS = 300;
 // QuickBooks Online Accounting scope — what later stages will need to read/write
 // the books. Requesting it now means the accountant approves once.
 const ACCOUNTING_SCOPE = "com.intuit.quickbooks.accounting";
@@ -107,8 +115,10 @@ export function quickbooksApiBaseUrl(
 }
 
 // Build the Intuit authorization URL the browser is sent to. `state` is an
-// opaque anti-forgery value we verify on the callback.
-export function buildAuthorizeUrl(state: string): string {
+// opaque anti-forgery value we verify on the callback. The authorize endpoint is
+// resolved from Intuit's discovery document (falling back to the well-known URL).
+export async function buildAuthorizeUrl(state: string): Promise<string> {
+  const { authorize } = await getOAuthEndpoints(quickbooksEnvironment());
   const params = new URLSearchParams({
     client_id: process.env.QBO_CLIENT_ID?.trim() ?? "",
     response_type: "code",
@@ -116,7 +126,7 @@ export function buildAuthorizeUrl(state: string): string {
     redirect_uri: quickbooksRedirectUri(),
     state,
   });
-  return `${AUTHORIZE_URL}?${params.toString()}`;
+  return `${authorize}?${params.toString()}`;
 }
 
 export type QuickbooksTokens = {
@@ -171,6 +181,70 @@ function basicAuthHeader(): string {
   return `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`;
 }
 
+// Sleep helper for the retry backoff.
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// A 429 (rate limited) or any 5xx is a transient Intuit-side condition worth
+// retrying; everything else is either success or a permanent client error.
+function isTransientStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+// POST a form body to Intuit's token endpoint (resolved from the discovery
+// document) with automatic retry on TRANSIENT failures — a network error/timeout,
+// a 429, or a 5xx — using a short exponential backoff. Returns the final Response
+// for the caller to interpret: a permanent non-2xx (e.g. invalid_grant) is
+// returned as-is, NOT retried. Throws QuickbooksError("request_failed") only after
+// every attempt hit a network error / timeout.
+async function fetchTokenEndpoint(body: string): Promise<Response> {
+  const { token } = await getOAuthEndpoints(quickbooksEnvironment());
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= TOKEN_RETRY_MAX_ATTEMPTS; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(token, {
+        method: "POST",
+        headers: {
+          Authorization: basicAuthHeader(),
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body,
+        cache: "no-store",
+        signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+      });
+    } catch (e) {
+      // Network error / timeout — transient. Back off and retry unless we're out
+      // of attempts, then surface a request_failed.
+      lastError = e;
+      if (attempt < TOKEN_RETRY_MAX_ATTEMPTS) {
+        await delay(TOKEN_RETRY_BASE_MS * 2 ** (attempt - 1));
+        continue;
+      }
+      throw new QuickbooksError(
+        "request_failed",
+        `QuickBooks token request failed after ${TOKEN_RETRY_MAX_ATTEMPTS} attempts: ${(e as Error).message}`,
+      );
+    }
+    // Retry a transient HTTP status; otherwise return the response (success, or a
+    // permanent error the caller will map).
+    if (isTransientStatus(res.status) && attempt < TOKEN_RETRY_MAX_ATTEMPTS) {
+      await delay(TOKEN_RETRY_BASE_MS * 2 ** (attempt - 1));
+      continue;
+    }
+    return res;
+  }
+  // Unreachable: the loop always returns or throws. Kept for exhaustiveness.
+  throw new QuickbooksError(
+    "request_failed",
+    lastError instanceof Error
+      ? lastError.message
+      : "QuickBooks token request failed",
+  );
+}
+
 // Exchange the one-time authorization code for tokens (the callback step).
 export async function exchangeCodeForTokens(
   code: string,
@@ -178,29 +252,13 @@ export async function exchangeCodeForTokens(
   if (!isQuickbooksConfigured()) {
     throw new QuickbooksError("not_configured", "QuickBooks is not configured");
   }
-  let res: Response;
-  try {
-    res = await fetch(TOKEN_URL, {
-      method: "POST",
-      headers: {
-        Authorization: basicAuthHeader(),
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: quickbooksRedirectUri(),
-      }).toString(),
-      cache: "no-store",
-      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
-    });
-  } catch (e) {
-    throw new QuickbooksError(
-      "request_failed",
-      `QuickBooks token request failed: ${(e as Error).message}`,
-    );
-  }
+  const res = await fetchTokenEndpoint(
+    new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: quickbooksRedirectUri(),
+    }).toString(),
+  );
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new QuickbooksError(
@@ -224,28 +282,12 @@ export async function refreshTokens(
   if (!isQuickbooksConfigured()) {
     throw new QuickbooksError("not_configured", "QuickBooks is not configured");
   }
-  let res: Response;
-  try {
-    res = await fetch(TOKEN_URL, {
-      method: "POST",
-      headers: {
-        Authorization: basicAuthHeader(),
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: refreshToken,
-      }).toString(),
-      cache: "no-store",
-      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
-    });
-  } catch (e) {
-    throw new QuickbooksError(
-      "request_failed",
-      `QuickBooks token refresh request failed: ${(e as Error).message}`,
-    );
-  }
+  const res = await fetchTokenEndpoint(
+    new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+    }).toString(),
+  );
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     const dead = /invalid_grant/i.test(detail);
@@ -266,7 +308,8 @@ export async function refreshTokens(
 export async function revokeToken(token: string): Promise<boolean> {
   if (!isQuickbooksConfigured()) return false;
   try {
-    const res = await fetch(REVOKE_URL, {
+    const { revoke } = await getOAuthEndpoints(quickbooksEnvironment());
+    const res = await fetch(revoke, {
       method: "POST",
       headers: {
         Authorization: basicAuthHeader(),
