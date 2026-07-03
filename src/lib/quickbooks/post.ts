@@ -132,7 +132,15 @@ export async function postApprovedDraft(
   // line's account as a representative so the vendor/amount/paid-from checks run.
   let expenseLines: ExpenseLine[] | undefined;
   let expenseAccount = eff.account;
-  if (s.direction === "expense" && effectiveSplit(s, draft.resolved)) {
+  // Splitting only applies when tax-lines are ON: the line amounts are PRE-TAX
+  // (they sum to the subtotal) and rely on QuickBooks adding the tax on top to
+  // reach the gross total. With tax OFF we'd post the bare subtotal and DROP the
+  // tax, so a split is ignored (single gross line) unless `tax` is applied.
+  if (
+    s.direction === "expense" &&
+    tax != null &&
+    effectiveSplit(s, draft.resolved)
+  ) {
     const effLines = effectiveLines(s, draft.resolved);
     if (effLines.some((l) => l.account == null)) {
       return { kind: "not_postable", ...base, problems: ["missing_account"] };

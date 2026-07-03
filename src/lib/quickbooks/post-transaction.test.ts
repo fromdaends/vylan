@@ -129,6 +129,25 @@ describe("buildBillPayload", () => {
     ).toEqual({ value: "TC5" });
     expect(bill.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: "TC5" } });
   });
+  it("IGNORES split lines when NO tax is applied and posts one GROSS line (never drops tax)", () => {
+    // The split lines are pre-tax ($200); with no tax code, a naive split would
+    // post $200 and lose the $29.95 tax baked into the $229.95 gross. Guard: fall
+    // back to a single gross line so the total is right.
+    const bill = buildBillPayload({
+      vendorId: "v1",
+      accountId: "a1",
+      amount: 229.95, // gross
+      date: null,
+      tax: null,
+      lines: [
+        { amount: 159, accountId: "a1" },
+        { amount: 41, accountId: "a2" },
+      ],
+    });
+    const lines = bill.Line as Array<Record<string, unknown>>;
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.Amount).toBe(229.95);
+  });
   it("attaches the TaxCodeRef but OMITS GlobalTaxCalculation for a US tax (null)", () => {
     const bill = buildBillPayload({
       vendorId: "v1",

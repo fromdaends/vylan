@@ -20,6 +20,7 @@ import {
   canApproveDraft,
   type DraftStatus,
 } from "@/lib/quickbooks/draft-status";
+import { quickbooksTaxLinesEnabled } from "@/lib/quickbooks/client";
 import { deriveQuickbooksDraftView } from "./quickbooks-draft-view";
 import { RegenerateDraftButton } from "./regenerate-draft-button";
 import { DraftStatusControls } from "./draft-status-controls";
@@ -106,10 +107,15 @@ export async function QuickbooksDraftCard({
   // Bill (unpaid) vs Purchase (paid) for an expense — drives the toggle + whether
   // the "paid from" account cell shows.
   const expenseMode = effectiveExpenseMode(suggestion, resolved);
-  // Split-across-accounts (expense with ≥2 reconciled line items). When split is
-  // ON, the single account cell is replaced by the per-line editor.
+  // Split-across-accounts (expense with ≥2 reconciled line items). Only offered
+  // when tax-lines posting is ON — a split posts PRE-TAX per-line amounts and
+  // relies on QuickBooks adding the tax, so with tax OFF a split would drop the
+  // tax. When split is ON, the single account cell is replaced by the per-line
+  // editor.
   const canSplit =
-    v.direction === "expense" && (suggestion.lines?.length ?? 0) >= 2;
+    v.direction === "expense" &&
+    (suggestion.lines?.length ?? 0) >= 2 &&
+    quickbooksTaxLinesEnabled();
   const isSplit = effectiveSplit(suggestion, resolved);
   const splitLines = canSplit ? effectiveLines(suggestion, resolved) : [];
   const readinessPct = Math.round(v.readiness * 100);
@@ -337,9 +343,12 @@ export async function QuickbooksDraftCard({
         )}
       </div>
 
-      {/* Expense with legible line items: optionally SPLIT across accounts. */}
+      {/* Expense with legible line items: optionally SPLIT across accounts. The
+          key re-seeds the client state whenever the server's split flag or any
+          per-line effective account changes (e.g. after a Refresh). */}
       {canSplit && (
         <QuickbooksSplitSection
+          key={`split-${isSplit}-${splitLines.map((l) => l.account?.id ?? "none").join(",")}`}
           fileId={fileId}
           lines={splitLines}
           split={isSplit}

@@ -146,14 +146,18 @@ function buildExpenseLineArray(
 }
 
 // The effective expense lines: the multi-line SPLIT override when given, else a
-// single line for the whole net (when taxed) / gross amount.
+// single line for the whole net (when taxed) / gross amount. Splitting is only
+// valid WITH tax applied — the split line amounts are PRE-TAX (they sum to the
+// subtotal) and rely on QuickBooks adding the tax to reach the gross total. So
+// with no tax we ignore the split and post one GROSS line (the caller gates this
+// too; this is the matching safety net so the builder can never drop the tax).
 function resolveExpenseLines(
   singleAccountId: string,
   singleAmount: number,
   tax: TaxApplication | null,
   lines: ExpenseLine[] | undefined,
 ): ExpenseLine[] {
-  if (lines && lines.length > 0) return lines;
+  if (tax && lines && lines.length > 0) return lines;
   return [
     { amount: tax ? tax.netAmount : singleAmount, accountId: singleAccountId },
   ];
