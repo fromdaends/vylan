@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import { upsertTransactionSuggestion } from "@/lib/db/quickbooks-suggestions";
 import { parseTransaction } from "@/lib/ai/transaction-extract";
@@ -60,7 +61,9 @@ export async function regenerateDraftAction(
   const cached = await readCachedQuickbooksLists();
   if (!cached) return { ok: false, error: "no_lists" };
 
-  const suggestion = buildTransactionSuggestion(transaction, cached);
+  // Feature 3: apply the firm's remembered corrections (RLS read; {} pre-0490).
+  const learned = await readFirmLearnedMappings();
+  const suggestion = buildTransactionSuggestion(transaction, cached, learned);
   await upsertTransactionSuggestion({
     firmId: firm.id,
     uploadedFileId: file.id,

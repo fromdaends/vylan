@@ -69,6 +69,26 @@ export type MatchField = {
 
 export type PartyKind = "vendor" | "customer";
 
+// ── Learned mappings (Feature 3) ──────────────────────────────────────────────
+// The firm's remembered corrections, consulted BEFORE fuzzy matching. Keyed by
+// signal, then by the normalized source key. Loaded from the DB by the caller and
+// passed into buildTransactionSuggestion; `{}` = no learning (pre-migration, or a
+// firm that hasn't corrected anything yet) so matching behaves exactly as before.
+export type LearnSignal =
+  | "vendor"
+  | "customer"
+  | "expense_account"
+  | "line_account"
+  | "tax";
+export type LearnedRef = { id: string; name: string };
+export type LearnedMappings = Partial<
+  Record<LearnSignal, Record<string, LearnedRef>>
+>;
+
+// A learned overlay is very confident but deliberately < 1: exact-name identity
+// (nameScore === 1) stays the only thing that scores a perfect 1.
+const LEARNED_CONFIDENCE = 0.99;
+
 // One suggested EXPENSE line for splitting a receipt across accounts: the item's
 // description + its pre-tax amount, plus a suggested chart-of-accounts entry (from
 // the description). The accountant confirms/overrides the account per line.
@@ -106,6 +126,13 @@ export type TransactionSuggestion = {
   lines?: LineSuggestion[];
   date: string | null;
   currency: string | null;
+  // The RAW source signals this draft was built from, kept so the resolve route
+  // can learn from a correction without re-reading the extraction (Feature 3):
+  // partySource = the vendor/customer name read off the document; taxSource = the
+  // canonical tax-token key ("GST+QST"). Optional so older stored suggestions
+  // (pre-learning) deserialize cleanly — an absent value just means "don't learn".
+  partySource?: string | null;
+  taxSource?: string | null;
   // A rough 0..1 readiness score: how complete + confident this draft is. NOT a
   // precise probability — just a blend of the AI's own confidence and how many
   // key fields we could fill, so the UI can sort/flag drafts.
@@ -262,6 +289,63 @@ function bestMatches(query: string | null, list: QbNamed[] | null): MatchField {
 
   const { match, confidence } = pickConfident(sorted, MATCH_THRESHOLD);
   return { match, confidence, candidates: toCandidates(sorted) };
+}
+
+// ── Learned mapping lookup (Feature 3) ────────────────────────────────────────
+
+// The normalized lookup key for a NAME signal (vendor / customer / account-by-
+// vendor / line-by-description): the meaningful tokens joined, so "The Home Depot
+// Inc." and "Home Depot" share one key. null when the name has no usable tokens
+// (so we never learn/lookup an empty key). Exported for the resolve route + tests.
+export function learnKeyForName(raw: string | null): string | null {
+  if (!raw) return null;
+  const toks = nameTokens(raw);
+  return toks.length ? toks.join(" ") : null;
+}
+
+// The normalized key for a TAX signal: the canonical tax tokens the document shows
+// (GST/HST/QST/PST, FR TPS/TVQ aliases folded), sorted + joined ("GST+QST"). null
+// when the document shows no recognizable tax. Exported for the resolve route.
+export function learnKeyForTaxes(taxes: TransactionTaxLine[]): string | null {
+  const set = new Set<string>();
+  for (const t of taxes) for (const tok of taxTokensFrom(t.type)) set.add(tok);
+  if (set.size === 0) return null;
+  return [...set].sort().join("+");
+}
+
+// Resolve a learned mapping to a CURRENT cached entity. The remembered target is
+// used only if it still EXISTS and is ACTIVE in the firm's cached list (a vendor
+// archived or deleted in QuickBooks falls back to fuzzy matching). Returns a
+// QboRef (active) or null. This is what makes learned picks degrade safely.
+function learnedMatch(
+  signal: LearnSignal,
+  key: string | null,
+  learned: LearnedMappings,
+  list: QbNamed[] | null,
+): QboRef | null {
+  if (!key || !list) return null;
+  const ref = learned[signal]?.[key];
+  if (!ref) return null;
+  const row = list.find((r) => r.id === ref.id);
+  if (!row || !row.active) return null;
+  return { id: row.id, name: row.name, active: row.active };
+}
+
+// Overlay a learned match onto a fuzzy MatchField: the remembered pick becomes the
+// confident match and is hoisted to the top of the candidates, while the fuzzy
+// alternatives remain for the accountant. A no-op when there's no learned match,
+// so the fuzzy result passes through untouched.
+function overlayLearned(field: MatchField, learned: QboRef | null): MatchField {
+  if (!learned) return field;
+  const rest = field.candidates.filter((c) => c.id !== learned.id);
+  return {
+    match: learned,
+    confidence: LEARNED_CONFIDENCE,
+    candidates: [{ ...learned, score: LEARNED_CONFIDENCE }, ...rest].slice(
+      0,
+      MAX_CANDIDATES,
+    ),
+  };
 }
 
 // ── Tax code matching ─────────────────────────────────────────────────────────
@@ -534,17 +618,29 @@ export function suggestLines(
   lineItems: TransactionExtraction["line_items"],
   subtotal: number | null,
   accounts: QbAccount[] | null | undefined,
+  learned: LearnedMappings = {},
 ): LineSuggestion[] {
   if (direction === "income") return [];
   if (!lineItems || lineItems.length < 2) return [];
   if (subtotal == null) return [];
   const sum = round2(lineItems.reduce((s, l) => s + l.amount, 0));
   if (Math.abs(sum - subtotal) > LINE_RECONCILE_TOLERANCE) return [];
-  return lineItems.map((l) => ({
-    description: l.description,
-    amount: round2(l.amount),
-    account: suggestAccount(direction, l.description, accounts ?? null),
-  }));
+  return lineItems.map((l) => {
+    // A remembered per-line account (keyed by this line's description) wins over
+    // the fuzzy description->account guess; otherwise the guess passes through.
+    const fuzzy = suggestAccount(direction, l.description, accounts ?? null);
+    const learnedRef = learnedMatch(
+      "line_account",
+      learnKeyForName(l.description),
+      learned,
+      accounts ?? null,
+    );
+    return {
+      description: l.description,
+      amount: round2(l.amount),
+      account: overlayLearned(fuzzy, learnedRef),
+    };
+  });
 }
 
 // ── Orchestrator ──────────────────────────────────────────────────────────────
@@ -552,6 +648,7 @@ export function suggestLines(
 export function buildTransactionSuggestion(
   extraction: TransactionExtraction,
   lists: QuickbooksLists,
+  learned: LearnedMappings = {},
 ): TransactionSuggestion {
   const notes: string[] = [];
   const direction = extraction.direction;
@@ -588,7 +685,12 @@ export function buildTransactionSuggestion(
     notes.push("Couldn't tell if this is an expense or income.");
   }
 
-  const party = bestMatches(partyQuery, partyList);
+  // A remembered vendor/customer for this exact name wins over fuzzy matching.
+  const partyLearned =
+    partyKind === "vendor" || partyKind === "customer"
+      ? learnedMatch(partyKind, learnKeyForName(partyQuery), learned, partyList)
+      : null;
+  const party = overlayLearned(bestMatches(partyQuery, partyList), partyLearned);
   if (partyKind && partyQuery && partyList === null) {
     notes.push(
       `Your QuickBooks ${partyKind} list isn't loaded yet, so we couldn't match "${partyQuery}".`,
@@ -611,7 +713,23 @@ export function buildTransactionSuggestion(
     notes.push(`No ${partyKind} name was read off the document.`);
   }
 
-  const account = suggestAccount(direction, partyQuery, lists.accounts);
+  // A remembered EXPENSE account for this vendor wins over the (weak) fuzzy
+  // description->account guess — this is where "generic/odd account guesses" get
+  // fixed once the accountant corrects them once. Expenses only (income posts to
+  // an item, not an account).
+  const accountLearned =
+    direction === "expense"
+      ? learnedMatch(
+          "expense_account",
+          learnKeyForName(partyQuery),
+          learned,
+          lists.accounts,
+        )
+      : null;
+  const account = overlayLearned(
+    suggestAccount(direction, partyQuery, lists.accounts),
+    accountLearned,
+  );
   if (lists.accounts === null) {
     notes.push("Your QuickBooks chart of accounts isn't loaded yet.");
   } else if (account.match && !account.match.active) {
@@ -637,7 +755,17 @@ export function buildTransactionSuggestion(
     }
   }
 
-  const taxCode = matchTaxCode(extraction.taxes, lists.taxCodes);
+  // A remembered tax code for this document's tax set wins over token matching.
+  const taxLearned = learnedMatch(
+    "tax",
+    learnKeyForTaxes(extraction.taxes),
+    learned,
+    lists.taxCodes,
+  );
+  const taxCode = overlayLearned(
+    matchTaxCode(extraction.taxes, lists.taxCodes),
+    taxLearned,
+  );
   if (extraction.taxes.length > 0 && lists.taxCodes === null) {
     notes.push("Your QuickBooks tax codes aren't loaded yet.");
   } else if (
@@ -672,7 +800,26 @@ export function buildTransactionSuggestion(
     extraction.line_items,
     extraction.subtotal,
     lists.accounts,
+    learned,
   );
+
+  // If any field was filled from a past correction, say so once — transparent,
+  // and never a lock (the accountant can still change any field). Checks the same
+  // per-line lookups suggestLines used so a learned split line also counts.
+  const anyLineLearned = lines.some(
+    (l, i) =>
+      learnedMatch(
+        "line_account",
+        learnKeyForName(extraction.line_items?.[i]?.description ?? null),
+        learned,
+        lists.accounts,
+      ) != null,
+  );
+  if (partyLearned || accountLearned || taxLearned || anyLineLearned) {
+    notes.push(
+      "Filled in from choices you've made before — change any field if it's off.",
+    );
+  }
 
   const taxTotal =
     extraction.taxes.length > 0
@@ -713,6 +860,8 @@ export function buildTransactionSuggestion(
     lines,
     date: extraction.document_date,
     currency: extraction.currency,
+    partySource: partyQuery,
+    taxSource: learnKeyForTaxes(extraction.taxes),
     overallConfidence: overallReadiness(extraction, party),
     notes,
   };

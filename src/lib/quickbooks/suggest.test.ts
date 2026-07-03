@@ -10,8 +10,11 @@ import {
   suggestLines,
   isSellableItem,
   buildTransactionSuggestion,
+  learnKeyForName,
+  learnKeyForTaxes,
   MATCH_THRESHOLD,
 } from "./suggest";
+import type { LearnedMappings } from "./suggest";
 import type { QbNamed, QbAccount, QbItem, QuickbooksLists } from "./read";
 import type { TransactionExtraction } from "@/lib/ai/transaction-extract";
 
@@ -599,5 +602,161 @@ describe("suggestItem (income)", () => {
   it("returns empty when there are no items", () => {
     expect(suggestItem("income", "a1", null).candidates).toEqual([]);
     expect(suggestItem("income", "a1", []).candidates).toEqual([]);
+  });
+});
+
+// ── Feature 3: learn from corrections ────────────────────────────────────────
+
+describe("learnKeyForName", () => {
+  it("keys on the meaningful tokens so variants collide", () => {
+    expect(learnKeyForName("The Home Depot Inc.")).toBe("home depot");
+    expect(learnKeyForName("HOME DEPOT")).toBe("home depot");
+    expect(learnKeyForName("Hydro-Québec")).toBe("hydro quebec");
+  });
+  it("returns null when there's nothing to key on", () => {
+    expect(learnKeyForName(null)).toBeNull();
+    expect(learnKeyForName("")).toBeNull();
+    expect(learnKeyForName("   ")).toBeNull();
+  });
+});
+
+describe("learnKeyForTaxes", () => {
+  it("canonicalizes + sorts so order and FR aliases collide", () => {
+    expect(
+      learnKeyForTaxes([
+        { type: "QST", amount: 9.98, rate: 9.975 },
+        { type: "GST", amount: 5, rate: 5 },
+      ]),
+    ).toBe("GST+QST");
+    expect(
+      learnKeyForTaxes([
+        { type: "TPS", amount: 5, rate: 5 },
+        { type: "TVQ", amount: 9.98, rate: 9.975 },
+      ]),
+    ).toBe("GST+QST");
+    expect(learnKeyForTaxes([{ type: "HST", amount: 26, rate: 13 }])).toBe(
+      "HST",
+    );
+  });
+  it("returns null when no recognizable tax", () => {
+    expect(learnKeyForTaxes([])).toBeNull();
+    expect(learnKeyForTaxes([{ type: "Service", amount: 1, rate: 0 }])).toBeNull();
+  });
+});
+
+describe("buildTransactionSuggestion — source signals", () => {
+  it("carries the raw party name + canonical tax key for learning", () => {
+    const s = buildTransactionSuggestion(extraction(), lists);
+    expect(s.partySource).toBe("Home Depot");
+    expect(s.taxSource).toBe("GST+QST");
+  });
+  it("does not add the learned note when nothing was learned", () => {
+    const s = buildTransactionSuggestion(extraction(), lists);
+    expect(s.notes.some((n) => n.includes("Filled in from choices"))).toBe(
+      false,
+    );
+  });
+});
+
+describe("buildTransactionSuggestion — learned overlay", () => {
+  it("a remembered vendor wins over fuzzy matching", () => {
+    // "home depot" fuzzy-matches v1; the firm remembered it as v2 -> v2 wins.
+    const learned: LearnedMappings = {
+      vendor: { "home depot": { id: "v2", name: "Bell Canada" } },
+    };
+    const s = buildTransactionSuggestion(extraction(), lists, learned);
+    expect(s.party.match?.id).toBe("v2");
+    expect(s.party.confidence).toBe(0.99);
+    expect(s.notes.some((n) => n.includes("Filled in from choices"))).toBe(
+      true,
+    );
+  });
+
+  it("a remembered vendor fills a name fuzzy can't match", () => {
+    const learned: LearnedMappings = {
+      vendor: { "hd supply": { id: "v1", name: "The Home Depot Inc." } },
+    };
+    const s = buildTransactionSuggestion(
+      extraction({ vendor_name: "HD Supply" }),
+      lists,
+      learned,
+    );
+    expect(s.party.match?.id).toBe("v1");
+  });
+
+  it("falls back to fuzzy when the remembered target is archived", () => {
+    // v4 exists but is inactive -> the learned pick is ignored, fuzzy (v1) wins.
+    const learned: LearnedMappings = {
+      vendor: { "home depot": { id: "v4", name: "Old Supplier Ltd" } },
+    };
+    const s = buildTransactionSuggestion(extraction(), lists, learned);
+    expect(s.party.match?.id).toBe("v1");
+    expect(s.notes.some((n) => n.includes("Filled in from choices"))).toBe(
+      false,
+    );
+  });
+
+  it("falls back to fuzzy when the remembered target no longer exists", () => {
+    const learned: LearnedMappings = {
+      vendor: { "home depot": { id: "gone", name: "Deleted Vendor" } },
+    };
+    const s = buildTransactionSuggestion(extraction(), lists, learned);
+    expect(s.party.match?.id).toBe("v1");
+  });
+
+  it("remembers an EXPENSE account keyed by the vendor name", () => {
+    const learned: LearnedMappings = {
+      expense_account: { "home depot": { id: "a2", name: "Telephone" } },
+    };
+    const s = buildTransactionSuggestion(extraction(), lists, learned);
+    expect(s.account.match?.id).toBe("a2");
+    expect(s.account.confidence).toBe(0.99);
+  });
+
+  it("does NOT apply an expense-account memory to an income draft", () => {
+    const learned: LearnedMappings = {
+      expense_account: { acme: { id: "a1", name: "Supplies" } },
+    };
+    const s = buildTransactionSuggestion(
+      extraction({
+        direction: "income",
+        vendor_name: null,
+        customer_name: "Acme",
+      }),
+      lists,
+      learned,
+    );
+    // Income never learns/uses an expense account; a1 must not be force-picked.
+    expect(s.account.match?.id).not.toBe("a1");
+  });
+
+  it("a remembered tax code wins over token matching", () => {
+    // GST+QST token-matches t2; the firm remembered t1 -> t1 wins.
+    const learned: LearnedMappings = {
+      tax: { "GST+QST": { id: "t1", name: "GST" } },
+    };
+    const s = buildTransactionSuggestion(extraction(), lists, learned);
+    expect(s.taxCode.match?.id).toBe("t1");
+  });
+
+  it("remembers a per-line account keyed by the line description", () => {
+    const learned: LearnedMappings = {
+      line_account: { "printer paper": { id: "a1", name: "Supplies" } },
+    };
+    const s = buildTransactionSuggestion(
+      extraction({
+        subtotal: 100,
+        line_items: [
+          { description: "Printer paper", amount: 60 },
+          { description: "Fuel", amount: 40 },
+        ],
+      }),
+      lists,
+      learned,
+    );
+    expect(s.lines?.[0]?.account.match?.id).toBe("a1");
+    expect(s.notes.some((n) => n.includes("Filled in from choices"))).toBe(
+      true,
+    );
   });
 });
