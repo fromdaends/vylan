@@ -409,12 +409,14 @@ export type QboEntityResult = {
   totalTax?: number | null; // TxnTaxDetail.TotalTax QuickBooks computed
 };
 
-// Transaction entities we post: a Bill (expense) or an Invoice (income). The URL
-// path is lowercase; the JSON response wraps the object under the capitalized
-// name (e.g. { "Invoice": { Id, SyncToken } }).
-export type QboTxnEntity = "bill" | "invoice";
+// Transaction entities we post: a Bill (unpaid expense), a Purchase (paid
+// expense), or an Invoice (income). The URL path is lowercase; the JSON response
+// wraps the object under the capitalized name (e.g. { "Invoice": { Id, SyncToken } }).
+export type QboTxnEntity = "bill" | "invoice" | "purchase";
 function entityResponseKey(entity: QboTxnEntity): string {
-  return entity === "invoice" ? "Invoice" : "Bill";
+  if (entity === "invoice") return "Invoice";
+  if (entity === "purchase") return "Purchase";
+  return "Bill";
 }
 
 // CREATE a transaction in QuickBooks (Stage 5 — the first write). POSTs `body`

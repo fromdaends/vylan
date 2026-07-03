@@ -10,7 +10,10 @@ import type {
   TransactionSuggestion,
   ResolvedEntry,
 } from "@/lib/quickbooks/suggest";
-import { effectiveMapping } from "@/lib/quickbooks/draft-resolve";
+import {
+  effectiveMapping,
+  effectiveExpenseMode,
+} from "@/lib/quickbooks/draft-resolve";
 import {
   canApproveDraft,
   type DraftStatus,
@@ -18,6 +21,7 @@ import {
 import { deriveQuickbooksDraftView } from "./quickbooks-draft-view";
 import { RegenerateDraftButton } from "./regenerate-draft-button";
 import { DraftStatusControls } from "./draft-status-controls";
+import { QuickbooksPaidToggle } from "./quickbooks-paid-toggle";
 import { PostDraftControls } from "@/components/quickbooks/post-draft-controls";
 import {
   QuickbooksEditableField,
@@ -37,6 +41,8 @@ export type DraftCardOptions = {
   accounts: PickOption[];
   taxCodes: PickOption[];
   items: PickOption[];
+  // Bank + credit-card accounts only — the "paid from" options for a Purchase.
+  paymentAccounts: PickOption[];
 };
 
 // "QuickBooks draft" card (Stage 4). Sits under a receipt / invoice on the
@@ -94,6 +100,9 @@ export async function QuickbooksDraftCard({
   const t = await getTranslations("Quickbooks");
   const v = deriveQuickbooksDraftView(suggestion);
   const eff = effectiveMapping(suggestion, resolved);
+  // Bill (unpaid) vs Purchase (paid) for an expense — drives the toggle + whether
+  // the "paid from" account cell shows.
+  const expenseMode = effectiveExpenseMode(suggestion, resolved);
   const readinessPct = Math.round(v.readiness * 100);
   const ready = v.readiness >= 0.7;
   // Once approved or dismissed the draft is LOCKED: the cells become read-only and
@@ -317,6 +326,31 @@ export async function QuickbooksDraftCard({
         )}
       </div>
 
+      {/* Expense: was it already paid? A paid receipt posts a Purchase (against a
+          bank/credit-card account); an unpaid bill posts a Bill. Income has no
+          such choice. */}
+      {v.direction === "expense" && (
+        <div className="grid grid-cols-1 gap-1.5 px-3 pt-1.5 sm:grid-cols-2">
+          <QuickbooksPaidToggle
+            fileId={fileId}
+            mode={expenseMode}
+            disabled={!isDraft}
+          />
+          {expenseMode === "purchase" && (
+            <QuickbooksEditableField
+              key={`paymentAccount-${eff.paymentAccount?.id ?? "none"}`}
+              fileId={fileId}
+              field="paymentAccount"
+              label={t("field_paid_from")}
+              options={options.paymentAccounts}
+              initial={eff.paymentAccount}
+              choosePrompt={t("choose_paid_from")}
+              disabled={!isDraft}
+            />
+          )}
+        </div>
+      )}
+
       {v.foreignCurrency && v.currency && (
         <p className="mt-2 flex items-center gap-1 px-3 text-[11px] text-warning">
           <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
@@ -349,6 +383,7 @@ export async function QuickbooksDraftCard({
             fileId={fileId}
             status={status}
             direction={v.direction}
+            expenseMode={expenseMode}
             postedAtLabel={
               postedAt ? formatDate(postedAt, locale, "medium") : null
             }

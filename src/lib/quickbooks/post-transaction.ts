@@ -212,6 +212,118 @@ export function buildInvoicePayload(
   return invoice;
 }
 
+// QuickBooks payment types we produce for a Purchase. Derived from the paid-from
+// account's type so PaymentType and AccountRef never disagree.
+export type QboPaymentType = "Cash" | "Check" | "CreditCard";
+
+// A Credit Card account pays via "CreditCard"; a bank account via "Cash" (a safe,
+// always-valid default for a bank Purchase). QuickBooks requires PaymentType to be
+// consistent with the account, so we key it off the account's type.
+export function paymentTypeForAccount(
+  accountType: string | null,
+): QboPaymentType {
+  return (accountType ?? "").toLowerCase() === "credit card"
+    ? "CreditCard"
+    : "Cash";
+}
+
+export type PurchaseInput = {
+  vendorId: string;
+  accountId: string; // the expense (chart-of-accounts) category
+  paymentAccountId: string; // the bank/credit-card account it was PAID FROM
+  paymentType: QboPaymentType;
+  amount: number; // gross total — the fallback line amount when no tax is applied
+  date: string | null;
+  memo?: string | null;
+  tax?: TaxApplication | null;
+};
+
+// Build a QuickBooks "Purchase" (an already-paid expense) for one approved draft.
+// Unlike a Bill (an unpaid payable), a Purchase records money already spent: it
+// posts the expense line AND credits the bank/credit-card account it came from
+// (AccountRef) with a PaymentType. Tax rides on the same line + transaction as the
+// Bill/Invoice path.
+export function buildPurchasePayload(
+  input: PurchaseInput,
+): Record<string, unknown> {
+  const tax = input.tax ?? null;
+  const lineAmount = round2(tax ? tax.netAmount : input.amount);
+  const lineDetail: Record<string, unknown> = {
+    AccountRef: { value: input.accountId },
+  };
+  if (tax) lineDetail.TaxCodeRef = { value: tax.taxCodeId };
+  const purchase: Record<string, unknown> = {
+    PaymentType: input.paymentType,
+    AccountRef: { value: input.paymentAccountId }, // the account paid FROM
+    EntityRef: { value: input.vendorId, type: "Vendor" },
+    Line: [
+      {
+        DetailType: "AccountBasedExpenseLineDetail",
+        Amount: lineAmount,
+        AccountBasedExpenseLineDetail: lineDetail,
+      },
+    ],
+  };
+  if (tax) {
+    purchase.TxnTaxDetail = { TxnTaxCodeRef: { value: tax.taxCodeId } };
+    if (tax.globalTaxCalculation) {
+      purchase.GlobalTaxCalculation = tax.globalTaxCalculation;
+    }
+  }
+  if (input.date) purchase.TxnDate = input.date;
+  if (input.memo) purchase.PrivateNote = input.memo;
+  return purchase;
+}
+
+// Why a PAID-expense (Purchase) draft can't be posted. Empty array = postable.
+export type PurchasePostabilityProblem =
+  | "not_expense"
+  | "missing_vendor"
+  | "missing_account"
+  | "missing_payment_account"
+  | "missing_amount"
+  | "vendor_inactive"
+  | "account_inactive"
+  | "payment_account_inactive";
+
+// Pure server-side guard for a Purchase, re-checked at post time: an expense with
+// an active vendor + active expense account + active paid-from account + positive
+// amount. Active checks run only when the cached lists are available.
+export function checkPurchasePostable(input: {
+  direction: string;
+  party: ResolvedRef | null;
+  account: ResolvedRef | null;
+  paymentAccount: ResolvedRef | null;
+  amount: number | null;
+  lists: QuickbooksLists | null;
+}): PurchasePostabilityProblem[] {
+  const problems: PurchasePostabilityProblem[] = [];
+  if (input.direction !== "expense") problems.push("not_expense");
+  if (!input.party) problems.push("missing_vendor");
+  if (!input.account) problems.push("missing_account");
+  if (!input.paymentAccount) problems.push("missing_payment_account");
+  if (input.amount == null || !(input.amount > 0)) {
+    problems.push("missing_amount");
+  }
+  const vendors = input.lists?.vendors;
+  if (input.party && vendors) {
+    const v = vendors.find((x) => x.id === input.party!.id);
+    if (!v || !v.active) problems.push("vendor_inactive");
+  }
+  const accounts = input.lists?.accounts;
+  if (accounts) {
+    if (input.account) {
+      const a = accounts.find((x) => x.id === input.account!.id);
+      if (!a || !a.active) problems.push("account_inactive");
+    }
+    if (input.paymentAccount) {
+      const pa = accounts.find((x) => x.id === input.paymentAccount!.id);
+      if (!pa || !pa.active) problems.push("payment_account_inactive");
+    }
+  }
+  return problems;
+}
+
 // Why an INCOME draft can't be posted. Empty array = postable.
 export type InvoicePostabilityProblem =
   | "not_income"

@@ -21,7 +21,7 @@ import {
 import type { ResolvedRef } from "@/lib/quickbooks/suggest";
 
 export type PickOption = { id: string; name: string };
-type DraftField = "party" | "account" | "taxCode" | "item";
+type DraftField = "party" | "account" | "taxCode" | "item" | "paymentAccount";
 
 // One editable mapping cell on a QuickBooks draft (Stage 4): the accountant picks
 // the real vendor/customer, account, or tax code from their connected QuickBooks
@@ -111,18 +111,26 @@ export function QuickbooksEditableField({
             aria-label={empty ? choosePrompt : value!.name}
             className={cn(
               "mt-0.5 flex w-full items-center gap-1 rounded-sm text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
-              empty ? "text-warning" : "text-foreground hover:text-foreground/80",
+              empty
+                ? "text-warning"
+                : "text-foreground hover:text-foreground/80",
             )}
           >
             {pending ? (
-              <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden="true" />
+              <Loader2
+                className="h-3 w-3 shrink-0 animate-spin"
+                aria-hidden="true"
+              />
             ) : empty ? (
               <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
             ) : null}
             <span className="min-w-0 flex-1 truncate font-medium">
               {empty ? choosePrompt : value!.name}
             </span>
-            <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" aria-hidden="true" />
+            <ChevronsUpDown
+              className="h-3 w-3 shrink-0 opacity-50"
+              aria-hidden="true"
+            />
           </button>
         </PopoverTrigger>
         <PopoverContent

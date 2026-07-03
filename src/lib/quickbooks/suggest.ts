@@ -39,6 +39,12 @@ export type ResolvedEntry = {
   // The product/service item for an INCOME line (Invoice lines need an item, not
   // an account). Optional: rows resolved before income support lack it.
   item?: ResolvedRef | null;
+  // EXPENSE payment: the accountant's override of "was this paid?" (null = use the
+  // AI's read) and, when paid, the bank/credit-card account it was paid FROM (a
+  // QuickBooks Purchase posts against that account). Optional: pre-Purchase rows
+  // lack them.
+  paid?: boolean | null;
+  paymentAccount?: ResolvedRef | null;
 };
 
 // A reference to one cached QuickBooks entity. `active` is carried so the
@@ -72,6 +78,13 @@ export type TransactionSuggestion = {
   amount: number | null; // grand total incl. tax (the headline)
   subtotal: number | null; // pre-tax
   taxTotal: number | null; // sum of the extracted tax lines (null when none)
+  // EXPENSE payment: whether the receipt was already PAID (true -> posts a
+  // Purchase, false/null -> a Bill), how it was paid, and a suggested bank/credit-
+  // card account to post the Purchase against. All optional so older stored
+  // suggestions (pre-Purchase) deserialize cleanly.
+  paid?: boolean | null;
+  paymentMethod?: string | null;
+  paymentAccount?: MatchField; // suggested "paid from" bank/CC account
   date: string | null;
   currency: string | null;
   // A rough 0..1 readiness score: how complete + confident this draft is. NOT a
@@ -204,14 +217,12 @@ function pickConfident(
 }
 
 function toCandidates(sorted: Scored[]): ScoredRef[] {
-  return sorted
-    .slice(0, MAX_CANDIDATES)
-    .map((r) => ({
-      id: r.id,
-      name: r.name,
-      active: r.active,
-      score: round2(r.score),
-    }));
+  return sorted.slice(0, MAX_CANDIDATES).map((r) => ({
+    id: r.id,
+    name: r.name,
+    active: r.active,
+    score: round2(r.score),
+  }));
 }
 
 // Rank a cached list against a query name. Returns the confident match (clear
@@ -435,6 +446,63 @@ export function suggestItem(
   return { match: null, confidence: 0, candidates: shortlist };
 }
 
+// The QuickBooks account TYPES money can be paid FROM (a Purchase posts against a
+// bank or credit-card account). Matched case-insensitively.
+function isPaymentAccountType(t: string | null): boolean {
+  const s = (t ?? "").toLowerCase();
+  return s === "bank" || s === "credit card";
+}
+
+// True when the printed payment method looks like a credit card (so we prefer a
+// Credit Card account over a Bank account).
+function looksLikeCard(method: string | null): boolean {
+  const s = (method ?? "").toLowerCase();
+  return /visa|master|amex|american express|discover|credit|card/.test(s);
+}
+
+// Suggest the "paid from" account for a PAID expense (a QuickBooks Purchase posts
+// against a bank/credit-card account). Only the payment method hints at which one,
+// so we narrow the bank/CC accounts by that hint and confidently pick only when
+// exactly one active candidate remains; otherwise we shortlist and let the
+// accountant choose. Empty for income / unpaid / unknown-paid expenses.
+export function suggestPaymentAccount(
+  direction: TransactionExtraction["direction"],
+  paid: boolean | null,
+  paymentMethod: string | null,
+  accounts: QbAccount[] | null | undefined,
+): MatchField {
+  if (direction === "income" || paid !== true || !accounts) {
+    return { match: null, confidence: 0, candidates: [] };
+  }
+  const payable = accounts.filter((a) => isPaymentAccountType(a.accountType));
+  if (payable.length === 0)
+    return { match: null, confidence: 0, candidates: [] };
+
+  // Narrow by the payment method's hint, but never to nothing.
+  const card = looksLikeCard(paymentMethod);
+  const preferred = payable.filter((a) =>
+    card
+      ? (a.accountType ?? "").toLowerCase() === "credit card"
+      : (a.accountType ?? "").toLowerCase() === "bank",
+  );
+  const pool = preferred.length > 0 ? preferred : payable;
+
+  const active = pool.filter((a) => a.active);
+  const cands = toCandidates(
+    pool.map((a) => ({ id: a.id, name: a.name, active: a.active, score: 0.6 })),
+  );
+  // Exactly one active candidate of the preferred kind -> confident pick.
+  if (active.length === 1) {
+    const m = active[0];
+    return {
+      match: { id: m.id, name: m.name, active: m.active },
+      confidence: 0.6,
+      candidates: cands,
+    };
+  }
+  return { match: null, confidence: 0, candidates: cands };
+}
+
 // ── Orchestrator ──────────────────────────────────────────────────────────────
 
 export function buildTransactionSuggestion(
@@ -538,6 +606,21 @@ export function buildTransactionSuggestion(
     notes.push("Couldn't confidently match the tax — confirm the tax code.");
   }
 
+  // EXPENSE payment: a paid receipt posts a QuickBooks Purchase (against a
+  // bank/credit-card account); an unpaid bill posts a Bill (as before). Suggest
+  // the "paid from" account when we can; flag when the accountant must choose it.
+  const paymentAccount = suggestPaymentAccount(
+    direction,
+    extraction.paid,
+    extraction.payment_method,
+    lists.accounts,
+  );
+  if (direction !== "income" && extraction.paid === true) {
+    if (!paymentAccount.match) {
+      notes.push("This looks paid — choose the account it was paid from.");
+    }
+  }
+
   const taxTotal =
     extraction.taxes.length > 0
       ? round2(extraction.taxes.reduce((sum, t) => sum + t.amount, 0))
@@ -571,6 +654,9 @@ export function buildTransactionSuggestion(
     amount: extraction.total,
     subtotal: extraction.subtotal,
     taxTotal,
+    paid: extraction.paid,
+    paymentMethod: extraction.payment_method,
+    paymentAccount,
     date: extraction.document_date,
     currency: extraction.currency,
     overallConfidence: overallReadiness(extraction, party),

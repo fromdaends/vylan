@@ -69,12 +69,30 @@ describe("parseTransaction", () => {
   });
 
   it("defaults an unknown/garbage direction to 'unknown'", () => {
-    expect(parseTransaction({ ...rawGood, direction: "refund" })!.direction).toBe(
-      "unknown",
-    );
+    expect(
+      parseTransaction({ ...rawGood, direction: "refund" })!.direction,
+    ).toBe("unknown");
     expect(parseTransaction({ ...rawGood, direction: 7 })!.direction).toBe(
       "unknown",
     );
+  });
+
+  it("parses paid + payment_method, defaulting a non-boolean paid to null", () => {
+    const paid = parseTransaction({
+      ...rawGood,
+      paid: true,
+      payment_method: "Visa",
+    });
+    expect(paid!.paid).toBe(true);
+    expect(paid!.payment_method).toBe("Visa");
+    // Missing / non-boolean paid -> null; blank method -> null.
+    expect(parseTransaction(rawGood)!.paid).toBeNull();
+    expect(
+      parseTransaction({ ...rawGood, paid: "yes", payment_method: "  " })!.paid,
+    ).toBeNull();
+    expect(
+      parseTransaction({ ...rawGood, payment_method: "  " })!.payment_method,
+    ).toBeNull();
   });
 
   it("keeps a valid income direction", () => {
@@ -89,15 +107,21 @@ describe("parseTransaction", () => {
   });
 
   it("clamps confidence into 0..1", () => {
-    expect(parseTransaction({ ...rawGood, confidence: 1.7 })!.confidence).toBe(1);
-    expect(parseTransaction({ ...rawGood, confidence: -3 })!.confidence).toBe(0);
-    expect(parseTransaction({ ...rawGood, confidence: "high" })!.confidence).toBe(
+    expect(parseTransaction({ ...rawGood, confidence: 1.7 })!.confidence).toBe(
+      1,
+    );
+    expect(parseTransaction({ ...rawGood, confidence: -3 })!.confidence).toBe(
       0,
     );
+    expect(
+      parseTransaction({ ...rawGood, confidence: "high" })!.confidence,
+    ).toBe(0);
   });
 
   it("nulls a non-ISO currency (symbol or word) and upper-cases a code", () => {
-    expect(parseTransaction({ ...rawGood, currency: "$" })!.currency).toBeNull();
+    expect(
+      parseTransaction({ ...rawGood, currency: "$" })!.currency,
+    ).toBeNull();
     expect(
       parseTransaction({ ...rawGood, currency: "dollars" })!.currency,
     ).toBeNull();
@@ -145,7 +169,9 @@ describe("parseTransaction", () => {
   });
 
   it("returns an empty tax array when taxes is missing or not an array", () => {
-    expect(parseTransaction({ ...rawGood, taxes: undefined })!.taxes).toEqual([]);
+    expect(parseTransaction({ ...rawGood, taxes: undefined })!.taxes).toEqual(
+      [],
+    );
     expect(parseTransaction({ ...rawGood, taxes: "GST 5" })!.taxes).toEqual([]);
   });
 

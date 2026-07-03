@@ -4,6 +4,9 @@ import {
   checkBillPostable,
   buildInvoicePayload,
   checkInvoicePostable,
+  buildPurchasePayload,
+  checkPurchasePostable,
+  paymentTypeForAccount,
   deriveNetAmount,
   resolveTaxApplication,
   taxDiscrepancyNote,
@@ -421,5 +424,125 @@ describe("checkInvoicePostable", () => {
   });
   it("skips active checks when the lists aren't available", () => {
     expect(checkInvoicePostable({ ...ok, lists: null })).toEqual([]);
+  });
+});
+
+const purchaseLists = (
+  over: Partial<QuickbooksLists> = {},
+): QuickbooksLists => ({
+  accounts: [
+    { id: "a1", name: "Supplies", active: true, accountType: "Expense" },
+    { id: "cc1", name: "Visa", active: true, accountType: "Credit Card" },
+    { id: "bank1", name: "Chequing", active: true, accountType: "Bank" },
+  ],
+  vendors: [{ id: "v1", name: "Home Depot", active: true }],
+  customers: [],
+  taxCodes: [],
+  ...over,
+});
+
+describe("paymentTypeForAccount", () => {
+  it("maps a Credit Card account to CreditCard, everything else to Cash", () => {
+    expect(paymentTypeForAccount("Credit Card")).toBe("CreditCard");
+    expect(paymentTypeForAccount("credit card")).toBe("CreditCard");
+    expect(paymentTypeForAccount("Bank")).toBe("Cash");
+    expect(paymentTypeForAccount(null)).toBe("Cash");
+  });
+});
+
+describe("buildPurchasePayload", () => {
+  it("posts a paid expense against the payment account with a vendor + PaymentType", () => {
+    const p = buildPurchasePayload({
+      vendorId: "v1",
+      accountId: "a1",
+      paymentAccountId: "cc1",
+      paymentType: "CreditCard",
+      amount: 113,
+      date: "2026-06-18",
+      memo: "Posted from Vylan",
+    });
+    expect(p).toEqual({
+      PaymentType: "CreditCard",
+      AccountRef: { value: "cc1" },
+      EntityRef: { value: "v1", type: "Vendor" },
+      TxnDate: "2026-06-18",
+      PrivateNote: "Posted from Vylan",
+      Line: [
+        {
+          DetailType: "AccountBasedExpenseLineDetail",
+          Amount: 113,
+          AccountBasedExpenseLineDetail: { AccountRef: { value: "a1" } },
+        },
+      ],
+    });
+  });
+  it("posts NET + line tax code + TxnTaxDetail + GlobalTaxCalculation when tax applies", () => {
+    const p = buildPurchasePayload({
+      vendorId: "v1",
+      accountId: "a1",
+      paymentAccountId: "bank1",
+      paymentType: "Cash",
+      amount: 113, // gross — must NOT be used when tax is applied
+      date: null,
+      tax: {
+        taxCodeId: "TC5",
+        netAmount: 100,
+        globalTaxCalculation: "TaxExcluded",
+      },
+    });
+    const line = (p.Line as Array<Record<string, unknown>>)[0];
+    expect(line.Amount).toBe(100);
+    expect(
+      (line.AccountBasedExpenseLineDetail as Record<string, unknown>)
+        .TaxCodeRef,
+    ).toEqual({ value: "TC5" });
+    expect(p.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: "TC5" } });
+    expect(p.GlobalTaxCalculation).toBe("TaxExcluded");
+    expect(p.AccountRef).toEqual({ value: "bank1" });
+  });
+});
+
+describe("checkPurchasePostable", () => {
+  const ok = {
+    direction: "expense",
+    party: { id: "v1", name: "Home Depot" },
+    account: { id: "a1", name: "Supplies" },
+    paymentAccount: { id: "cc1", name: "Visa" },
+    amount: 113,
+  };
+  it("a complete active paid expense is postable", () => {
+    expect(checkPurchasePostable({ ...ok, lists: purchaseLists() })).toEqual(
+      [],
+    );
+  });
+  it("rejects income and flags a missing paid-from account", () => {
+    expect(
+      checkPurchasePostable({
+        ...ok,
+        direction: "income",
+        lists: purchaseLists(),
+      }),
+    ).toContain("not_expense");
+    expect(
+      checkPurchasePostable({
+        ...ok,
+        paymentAccount: null,
+        lists: purchaseLists(),
+      }),
+    ).toContain("missing_payment_account");
+  });
+  it("flags an archived paid-from account", () => {
+    const archived = purchaseLists({
+      accounts: [
+        { id: "a1", name: "Supplies", active: true, accountType: "Expense" },
+        { id: "cc1", name: "Visa", active: false, accountType: "Credit Card" },
+      ],
+    });
+    expect(checkPurchasePostable({ ...ok, lists: archived })).toContain(
+      "payment_account_inactive",
+    );
+  });
+  it("skips active checks when the lists aren't available", () => {
+    expect(checkPurchasePostable({ ...ok, lists: null })).toEqual([]);
   });
 });
