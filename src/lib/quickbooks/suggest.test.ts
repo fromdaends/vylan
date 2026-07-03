@@ -7,6 +7,7 @@ import {
   suggestAccount,
   suggestItem,
   suggestPaymentAccount,
+  suggestLines,
   isSellableItem,
   buildTransactionSuggestion,
   MATCH_THRESHOLD,
@@ -65,6 +66,7 @@ function extraction(
       { type: "GST", amount: 5, rate: 5 },
       { type: "QST", amount: 9.98, rate: 9.975 },
     ],
+    line_items: [],
     paid: null,
     payment_method: null,
     confidence: 0.9,
@@ -433,6 +435,37 @@ describe("buildTransactionSuggestion", () => {
     expect(unidentified.overallConfidence).toBeLessThan(
       matched.overallConfidence,
     );
+  });
+});
+
+describe("suggestLines", () => {
+  const li = (description: string, amount: number) => ({ description, amount });
+  it("splits when ≥2 lines reconcile to the subtotal", () => {
+    const lines = suggestLines(
+      "expense",
+      [li("Supplies box", 60), li("Telephone bill", 40)],
+      100,
+      accounts,
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.description).toBe("Supplies box");
+    expect(lines[0]!.amount).toBe(60);
+    // The description drives a per-line account suggestion.
+    expect(lines[1]!.account.match?.name).toBe("Telephone");
+  });
+  it("returns [] when the lines don't reconcile to the subtotal", () => {
+    expect(
+      suggestLines("expense", [li("A", 60), li("B", 30)], 100, accounts),
+    ).toEqual([]); // 90 != 100
+  });
+  it("returns [] for income, a single line, or a missing subtotal", () => {
+    expect(
+      suggestLines("income", [li("A", 60), li("B", 40)], 100, accounts),
+    ).toEqual([]);
+    expect(suggestLines("expense", [li("A", 100)], 100, accounts)).toEqual([]);
+    expect(
+      suggestLines("expense", [li("A", 60), li("B", 40)], null, accounts),
+    ).toEqual([]);
   });
 });
 

@@ -13,6 +13,8 @@ import type {
 import {
   effectiveMapping,
   effectiveExpenseMode,
+  effectiveSplit,
+  effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
 import {
   canApproveDraft,
@@ -22,6 +24,7 @@ import { deriveQuickbooksDraftView } from "./quickbooks-draft-view";
 import { RegenerateDraftButton } from "./regenerate-draft-button";
 import { DraftStatusControls } from "./draft-status-controls";
 import { QuickbooksPaidToggle } from "./quickbooks-paid-toggle";
+import { QuickbooksSplitSection } from "./quickbooks-split-section";
 import { PostDraftControls } from "@/components/quickbooks/post-draft-controls";
 import {
   QuickbooksEditableField,
@@ -103,6 +106,12 @@ export async function QuickbooksDraftCard({
   // Bill (unpaid) vs Purchase (paid) for an expense — drives the toggle + whether
   // the "paid from" account cell shows.
   const expenseMode = effectiveExpenseMode(suggestion, resolved);
+  // Split-across-accounts (expense with ≥2 reconciled line items). When split is
+  // ON, the single account cell is replaced by the per-line editor.
+  const canSplit =
+    v.direction === "expense" && (suggestion.lines?.length ?? 0) >= 2;
+  const isSplit = effectiveSplit(suggestion, resolved);
+  const splitLines = canSplit ? effectiveLines(suggestion, resolved) : [];
   const readinessPct = Math.round(v.readiness * 100);
   const ready = v.readiness >= 0.7;
   // Once approved or dismissed the draft is LOCKED: the cells become read-only and
@@ -288,7 +297,9 @@ export async function QuickbooksDraftCard({
           disabled={!isDraft}
         />
         {/* Income lines post to a product/service ITEM (QuickBooks Invoice);
-            expenses post to an account (Bill). Show the right cell per direction. */}
+            expenses post to an account (Bill/Expense). When an expense is SPLIT
+            across accounts, the single account cell is replaced by the per-line
+            editor below, so hide it here. */}
         {v.direction === "income" ? (
           <QuickbooksEditableField
             key={`item-${eff.item?.id ?? "none"}`}
@@ -300,7 +311,7 @@ export async function QuickbooksDraftCard({
             choosePrompt={t("choose_item")}
             disabled={!isDraft}
           />
-        ) : (
+        ) : isSplit ? null : (
           <QuickbooksEditableField
             key={`account-${eff.account?.id ?? "none"}`}
             fileId={fileId}
@@ -325,6 +336,18 @@ export async function QuickbooksDraftCard({
           />
         )}
       </div>
+
+      {/* Expense with legible line items: optionally SPLIT across accounts. */}
+      {canSplit && (
+        <QuickbooksSplitSection
+          fileId={fileId}
+          lines={splitLines}
+          split={isSplit}
+          accountOptions={options.accounts}
+          locale={locale}
+          disabled={!isDraft}
+        />
+      )}
 
       {/* Expense: was it already paid? A paid receipt posts a Purchase (against a
           bank/credit-card account); an unpaid bill posts a Bill. Income has no

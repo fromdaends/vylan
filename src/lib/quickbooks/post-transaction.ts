@@ -122,6 +122,58 @@ export function taxDiscrepancyNote(input: {
   return null;
 }
 
+// One posted expense line: an amount against a chart-of-accounts entry. A
+// single-line post has one; a SPLIT post has several (each their own account).
+export type ExpenseLine = { amount: number; accountId: string };
+
+// Build the QuickBooks expense Line[] (AccountBasedExpenseLineDetail) shared by
+// Bill + Purchase. The (shared) tax code rides on every line when tax applies.
+function buildExpenseLineArray(
+  lines: ExpenseLine[],
+  taxCodeId: string | null,
+): Record<string, unknown>[] {
+  return lines.map((l) => {
+    const detail: Record<string, unknown> = {
+      AccountRef: { value: l.accountId },
+    };
+    if (taxCodeId) detail.TaxCodeRef = { value: taxCodeId };
+    return {
+      DetailType: "AccountBasedExpenseLineDetail",
+      Amount: round2(l.amount),
+      AccountBasedExpenseLineDetail: detail,
+    };
+  });
+}
+
+// The effective expense lines: the multi-line SPLIT override when given, else a
+// single line for the whole net (when taxed) / gross amount.
+function resolveExpenseLines(
+  singleAccountId: string,
+  singleAmount: number,
+  tax: TaxApplication | null,
+  lines: ExpenseLine[] | undefined,
+): ExpenseLine[] {
+  if (lines && lines.length > 0) return lines;
+  return [
+    { amount: tax ? tax.netAmount : singleAmount, accountId: singleAccountId },
+  ];
+}
+
+// Attach the transaction-level Automated-Sales-Tax fields to an expense txn (Bill
+// or Purchase). Shared so the tax handling can never drift between them.
+function applyExpenseTax(
+  txn: Record<string, unknown>,
+  tax: TaxApplication | null,
+): void {
+  if (!tax) return;
+  // TxnTaxDetail.TxnTaxCodeRef is MANDATORY to signal AST intent — without it an
+  // AST company returns error 6000 "encountered an error while calculating tax".
+  txn.TxnTaxDetail = { TxnTaxCodeRef: { value: tax.taxCodeId } };
+  if (tax.globalTaxCalculation) {
+    txn.GlobalTaxCalculation = tax.globalTaxCalculation;
+  }
+}
+
 export type BillInput = {
   vendorId: string;
   accountId: string;
@@ -130,36 +182,25 @@ export type BillInput = {
   memo?: string | null;
   // When set, post the NET amount + the line's tax code and let QBO compute tax.
   tax?: TaxApplication | null;
+  // When set (≥1), SPLIT across these lines instead of one; each line already
+  // carries its pre-tax amount + chosen account.
+  lines?: ExpenseLine[];
 };
 
 // Build the minimal valid QuickBooks Bill body for one approved expense draft.
 export function buildBillPayload(input: BillInput): Record<string, unknown> {
   const tax = input.tax ?? null;
-  const lineAmount = round2(tax ? tax.netAmount : input.amount);
-  const lineDetail: Record<string, unknown> = {
-    AccountRef: { value: input.accountId },
-  };
-  if (tax) lineDetail.TaxCodeRef = { value: tax.taxCodeId };
+  const lineList = resolveExpenseLines(
+    input.accountId,
+    input.amount,
+    tax,
+    input.lines,
+  );
   const bill: Record<string, unknown> = {
     VendorRef: { value: input.vendorId },
-    Line: [
-      {
-        DetailType: "AccountBasedExpenseLineDetail",
-        Amount: lineAmount,
-        AccountBasedExpenseLineDetail: lineDetail,
-      },
-    ],
+    Line: buildExpenseLineArray(lineList, tax ? tax.taxCodeId : null),
   };
-  if (tax) {
-    // Transaction-level tax code: MANDATORY to signal Automated-Sales-Tax intent
-    // to QuickBooks. Without it an AST company (all modern QBO companies, incl.
-    // Canada) returns error 6000 "encountered an error while calculating tax".
-    // QBO then computes the tax from the line's TaxCodeRef.
-    bill.TxnTaxDetail = { TxnTaxCodeRef: { value: tax.taxCodeId } };
-    if (tax.globalTaxCalculation) {
-      bill.GlobalTaxCalculation = tax.globalTaxCalculation;
-    }
-  }
+  applyExpenseTax(bill, tax);
   if (input.date) bill.TxnDate = input.date;
   if (input.memo) bill.PrivateNote = input.memo;
   return bill;
@@ -236,6 +277,8 @@ export type PurchaseInput = {
   date: string | null;
   memo?: string | null;
   tax?: TaxApplication | null;
+  // When set (≥1), SPLIT the expense across these lines instead of one.
+  lines?: ExpenseLine[];
 };
 
 // Build a QuickBooks "Purchase" (an already-paid expense) for one approved draft.
@@ -247,29 +290,19 @@ export function buildPurchasePayload(
   input: PurchaseInput,
 ): Record<string, unknown> {
   const tax = input.tax ?? null;
-  const lineAmount = round2(tax ? tax.netAmount : input.amount);
-  const lineDetail: Record<string, unknown> = {
-    AccountRef: { value: input.accountId },
-  };
-  if (tax) lineDetail.TaxCodeRef = { value: tax.taxCodeId };
+  const lineList = resolveExpenseLines(
+    input.accountId,
+    input.amount,
+    tax,
+    input.lines,
+  );
   const purchase: Record<string, unknown> = {
     PaymentType: input.paymentType,
     AccountRef: { value: input.paymentAccountId }, // the account paid FROM
     EntityRef: { value: input.vendorId, type: "Vendor" },
-    Line: [
-      {
-        DetailType: "AccountBasedExpenseLineDetail",
-        Amount: lineAmount,
-        AccountBasedExpenseLineDetail: lineDetail,
-      },
-    ],
+    Line: buildExpenseLineArray(lineList, tax ? tax.taxCodeId : null),
   };
-  if (tax) {
-    purchase.TxnTaxDetail = { TxnTaxCodeRef: { value: tax.taxCodeId } };
-    if (tax.globalTaxCalculation) {
-      purchase.GlobalTaxCalculation = tax.globalTaxCalculation;
-    }
-  }
+  applyExpenseTax(purchase, tax);
   if (input.date) purchase.TxnDate = input.date;
   if (input.memo) purchase.PrivateNote = input.memo;
   return purchase;

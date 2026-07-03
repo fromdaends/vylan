@@ -2028,6 +2028,8 @@
     "record_as_purchase": "Dépense (payée)",
     "field_paid_from": "Payé depuis",
     "choose_paid_from": "Choisissez le compte payeur",
+    "split_across_accounts": "Répartir entre les comptes",
+    "split_on": "Réparti entre les comptes",
     "post_go": "Envoyer",
     "post_cancel": "Annuler",
     "post_failed": "Échec de l’envoi. Réessayez.",

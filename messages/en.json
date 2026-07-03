@@ -2028,6 +2028,8 @@
     "record_as_purchase": "Expense (paid)",
     "field_paid_from": "Paid from",
     "choose_paid_from": "Choose the account it was paid from",
+    "split_across_accounts": "Split across accounts",
+    "split_on": "Split across accounts",
     "post_go": "Post",
     "post_cancel": "Cancel",
     "post_failed": "Couldn't post. Try again.",

@@ -58,6 +58,13 @@ export type TransactionTaxLine = {
   rate: number | null; // percent, e.g. 5 for 5%, or null when not printed
 };
 
+// One line item read off an EXPENSE document. `amount` is PRE-TAX (its share of
+// the subtotal). Used to split a receipt across multiple QuickBooks accounts.
+export type TransactionLineItem = {
+  description: string;
+  amount: number;
+};
+
 export type TransactionExtraction = {
   // expense = money the client PAID OUT (a purchase receipt / bill);
   // income = money the client RECEIVED (a sales invoice they issued);
@@ -73,6 +80,9 @@ export type TransactionExtraction = {
   subtotal: number | null; // pre-tax amount
   total: number | null; // grand total including tax
   taxes: TransactionTaxLine[]; // 0..n tax lines (empty when none legible)
+  // EXPENSE line items (pre-tax), for splitting a receipt across accounts. Empty
+  // for income or when only a single total is legible.
+  line_items: TransactionLineItem[];
   // EXPENSE payment status: true = already paid (a POS receipt -> a QuickBooks
   // Purchase), false = an unpaid bill (-> a QuickBooks Bill), null = unclear.
   paid: boolean | null;
@@ -158,6 +168,27 @@ const TRANSACTION_TOOL = {
         description:
           "Each tax line shown on the document. Empty array when no tax is itemized.",
       },
+      line_items: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            description: {
+              type: "string",
+              description:
+                "The line item's name/description as printed (e.g. 'Cordless drill kit', 'Coffee beans 1kg').",
+            },
+            amount: {
+              type: "number",
+              description:
+                "This line item's PRE-TAX amount (its share of the subtotal), extended for quantity. Do NOT include tax.",
+            },
+          },
+          required: ["description", "amount"],
+        },
+        description:
+          "Each distinct line item on an EXPENSE receipt/bill, pre-tax. Their amounts should sum to the subtotal. Empty array for income, or when individual lines aren't legible / there's only a single total. Do NOT include tax, tip, subtotal, or total rows as line items.",
+      },
       paid: {
         type: ["boolean", "null"],
         description:
@@ -190,6 +221,7 @@ const TRANSACTION_TOOL = {
       "subtotal",
       "total",
       "taxes",
+      "line_items",
       "paid",
       "payment_method",
       "confidence",
@@ -225,6 +257,10 @@ Then capture:
   amount and, when printed, the rate. Quebec receipts often show GST/TPS at 5%
   AND QST/TVQ at 9.975%; capture BOTH as separate lines. Empty array when no tax
   is itemized.
+- line_items — for an EXPENSE, each distinct product/service line with its
+  description and its PRE-TAX amount (extended for quantity). They should sum to
+  the subtotal. Do NOT include the subtotal, tax, tip, or total rows. Empty array
+  when the lines aren't legible or there's only a single total.
 - paid — for an EXPENSE, whether it was ALREADY PAID. A point-of-sale receipt
   showing a card/cash tender line, "Approved", "PAID", or change due is paid
   (true). An unpaid bill/invoice showing a balance due, a due date, or payment
@@ -380,6 +416,7 @@ export function parseTransaction(
     subtotal: num(raw.subtotal),
     total: num(raw.total),
     taxes: parseTaxes(raw.taxes),
+    line_items: parseLineItems(raw.line_items),
     paid: typeof raw.paid === "boolean" ? raw.paid : null,
     payment_method: str(raw.payment_method),
     confidence:
@@ -423,4 +460,22 @@ function parseTaxes(v: unknown): TransactionTaxLine[] {
     })
     .filter((x): x is TransactionTaxLine => x !== null)
     .slice(0, 6);
+}
+
+// Keep only well-formed line items: a non-empty description + a finite POSITIVE
+// amount (a $0 / negative "line" is noise or a discount we don't split on). Cap at
+// 40 so a huge itemized receipt can't bloat the stored JSON or the UI.
+function parseLineItems(v: unknown): TransactionLineItem[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => {
+      if (!x || typeof x !== "object") return null;
+      const o = x as Record<string, unknown>;
+      const description = str(o.description);
+      const amount = num(o.amount);
+      if (description === null || amount === null || amount <= 0) return null;
+      return { description, amount };
+    })
+    .filter((x): x is TransactionLineItem => x !== null)
+    .slice(0, 40);
 }

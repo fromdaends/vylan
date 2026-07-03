@@ -45,6 +45,12 @@ export type ResolvedEntry = {
   // lack them.
   paid?: boolean | null;
   paymentAccount?: ResolvedRef | null;
+  // EXPENSE line splitting: the accountant OPTED to split across accounts, and
+  // their per-line account picks keyed by line index ("0","1",…). The client
+  // sends the FULL map on each change (merge_qbo_resolved does a shallow jsonb
+  // replace of this key). Absent = single line (today's behavior).
+  split?: boolean | null;
+  lineAccounts?: Record<string, ResolvedRef | null>;
 };
 
 // A reference to one cached QuickBooks entity. `active` is carried so the
@@ -62,6 +68,15 @@ export type MatchField = {
 };
 
 export type PartyKind = "vendor" | "customer";
+
+// One suggested EXPENSE line for splitting a receipt across accounts: the item's
+// description + its pre-tax amount, plus a suggested chart-of-accounts entry (from
+// the description). The accountant confirms/overrides the account per line.
+export type LineSuggestion = {
+  description: string;
+  amount: number; // pre-tax
+  account: MatchField;
+};
 
 export type TransactionSuggestion = {
   direction: "expense" | "income" | "unknown";
@@ -85,6 +100,10 @@ export type TransactionSuggestion = {
   paid?: boolean | null;
   paymentMethod?: string | null;
   paymentAccount?: MatchField; // suggested "paid from" bank/CC account
+  // EXPENSE line items for splitting across accounts (empty/absent = single line).
+  // Populated ONLY when the extracted lines reconcile to the subtotal, so a
+  // mis-read can never post a wrong total. Older stored suggestions lack it.
+  lines?: LineSuggestion[];
   date: string | null;
   currency: string | null;
   // A rough 0..1 readiness score: how complete + confident this draft is. NOT a
@@ -503,6 +522,31 @@ export function suggestPaymentAccount(
   return { match: null, confidence: 0, candidates: cands };
 }
 
+// Cents of tolerance when checking the line items reconcile to the subtotal.
+export const LINE_RECONCILE_TOLERANCE = 0.02;
+
+// Suggest per-line EXPENSE splits, but ONLY when it's safe: at least two legible
+// line items whose amounts add up to the subtotal (within tolerance). Otherwise
+// returns [] so the draft stays single-line (a mis-read never posts a wrong
+// total). Each line gets a suggested account matched from its description.
+export function suggestLines(
+  direction: TransactionExtraction["direction"],
+  lineItems: TransactionExtraction["line_items"],
+  subtotal: number | null,
+  accounts: QbAccount[] | null | undefined,
+): LineSuggestion[] {
+  if (direction === "income") return [];
+  if (!lineItems || lineItems.length < 2) return [];
+  if (subtotal == null) return [];
+  const sum = round2(lineItems.reduce((s, l) => s + l.amount, 0));
+  if (Math.abs(sum - subtotal) > LINE_RECONCILE_TOLERANCE) return [];
+  return lineItems.map((l) => ({
+    description: l.description,
+    amount: round2(l.amount),
+    account: suggestAccount(direction, l.description, accounts ?? null),
+  }));
+}
+
 // ── Orchestrator ──────────────────────────────────────────────────────────────
 
 export function buildTransactionSuggestion(
@@ -621,6 +665,15 @@ export function buildTransactionSuggestion(
     }
   }
 
+  // Per-line splits (expenses only, only when the lines reconcile to the
+  // subtotal). Empty -> the draft stays single-line.
+  const lines = suggestLines(
+    direction,
+    extraction.line_items,
+    extraction.subtotal,
+    lists.accounts,
+  );
+
   const taxTotal =
     extraction.taxes.length > 0
       ? round2(extraction.taxes.reduce((sum, t) => sum + t.amount, 0))
@@ -657,6 +710,7 @@ export function buildTransactionSuggestion(
     paid: extraction.paid,
     paymentMethod: extraction.payment_method,
     paymentAccount,
+    lines,
     date: extraction.document_date,
     currency: extraction.currency,
     overallConfidence: overallReadiness(extraction, party),

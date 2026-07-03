@@ -94,6 +94,41 @@ describe("buildBillPayload", () => {
     // Transaction-level tax code (mandatory AST intent) — else QBO errors 6000.
     expect(bill.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: "TC5" } });
   });
+  it("SPLITS across lines when lines[] is given (each its own account + shared tax code)", () => {
+    const bill = buildBillPayload({
+      vendorId: "v1",
+      accountId: "a1", // single-line fallback — ignored when lines[] present
+      amount: 229.95,
+      date: null,
+      tax: {
+        taxCodeId: "TC5",
+        netAmount: 200,
+        globalTaxCalculation: "TaxExcluded",
+      },
+      lines: [
+        { amount: 159, accountId: "a1" },
+        { amount: 41, accountId: "a2" },
+      ],
+    });
+    const lines = bill.Line as Array<Record<string, unknown>>;
+    expect(lines).toHaveLength(2);
+    expect(lines[0]!.Amount).toBe(159);
+    expect(
+      (lines[0]!.AccountBasedExpenseLineDetail as Record<string, unknown>)
+        .AccountRef,
+    ).toEqual({ value: "a1" });
+    expect(lines[1]!.Amount).toBe(41);
+    expect(
+      (lines[1]!.AccountBasedExpenseLineDetail as Record<string, unknown>)
+        .AccountRef,
+    ).toEqual({ value: "a2" });
+    // Shared tax code on every line + the transaction-level AST fields.
+    expect(
+      (lines[0]!.AccountBasedExpenseLineDetail as Record<string, unknown>)
+        .TaxCodeRef,
+    ).toEqual({ value: "TC5" });
+    expect(bill.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: "TC5" } });
+  });
   it("attaches the TaxCodeRef but OMITS GlobalTaxCalculation for a US tax (null)", () => {
     const bill = buildBillPayload({
       vendorId: "v1",
