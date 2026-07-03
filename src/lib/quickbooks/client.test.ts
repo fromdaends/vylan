@@ -13,6 +13,17 @@ import {
   QuickbooksError,
 } from "./client";
 
+// Isolate OAuth-endpoint resolution: the discovery document is exercised on its
+// own in discovery.test.ts. Here it always yields the well-known endpoints
+// (no network), so the fetch mock only ever sees the token / revoke POSTs.
+vi.mock("./discovery", () => ({
+  getOAuthEndpoints: vi.fn(async () => ({
+    authorize: "https://appcenter.intuit.com/connect/oauth2",
+    token: "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer",
+    revoke: "https://developer.api.intuit.com/v2/oauth2/tokens/revoke",
+  })),
+}));
+
 // Snapshot + restore the env vars these helpers read, so tests don't leak.
 const ENV_KEYS = [
   "QBO_CLIENT_ID",
@@ -99,10 +110,10 @@ describe("quickbooksRedirectUri", () => {
 });
 
 describe("buildAuthorizeUrl", () => {
-  it("includes the accounting scope, state, redirect, and client id", () => {
+  it("includes the accounting scope, state, redirect, and client id", async () => {
     process.env.QBO_CLIENT_ID = "client-123";
     process.env.QBO_REDIRECT_URI = "https://app.example.com/cb";
-    const url = new URL(buildAuthorizeUrl("state-xyz"));
+    const url = new URL(await buildAuthorizeUrl("state-xyz"));
     expect(url.origin + url.pathname).toBe(
       "https://appcenter.intuit.com/connect/oauth2",
     );
@@ -187,7 +198,10 @@ function mockResponse(opts: {
 }
 
 describe("refreshTokens", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
 
   it("posts grant_type=refresh_token with Basic auth and maps the response", async () => {
     process.env.QBO_CLIENT_ID = "cid";
@@ -237,24 +251,107 @@ describe("refreshTokens", () => {
     });
   });
 
-  it("throws token_refresh_failed on other errors", async () => {
+  it("retries a persistent 5xx then throws token_refresh_failed", async () => {
+    vi.useFakeTimers();
     process.env.QBO_CLIENT_ID = "cid";
     process.env.QBO_CLIENT_SECRET = "csecret";
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        mockResponse({ ok: false, status: 500, text: "server error" }),
-      ),
+    const fetchMock = vi.fn(async () =>
+      mockResponse({ ok: false, status: 500, text: "server error" }),
     );
-    await expect(refreshTokens("rt")).rejects.toMatchObject({
+    vi.stubGlobal("fetch", fetchMock);
+    const promise = refreshTokens("rt");
+    // Attach the rejection handler BEFORE draining the backoff timers so the
+    // eventual rejection is never flagged as unhandled.
+    const assertion = expect(promise).rejects.toMatchObject({
       code: "token_refresh_failed",
     });
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(3); // exhausts all attempts
   });
 
   it("throws not_configured without app keys", async () => {
     await expect(refreshTokens("rt")).rejects.toMatchObject({
       code: "not_configured",
     });
+  });
+});
+
+// The transient-retry behavior is shared by every token-endpoint call (exchange +
+// refresh); we exercise it through refreshTokens.
+describe("token endpoint transient retry", () => {
+  beforeEach(() => {
+    process.env.QBO_CLIENT_ID = "cid";
+    process.env.QBO_CLIENT_SECRET = "csecret";
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  const okBody = {
+    ok: true,
+    json: {
+      access_token: "new-at",
+      refresh_token: "new-rt",
+      expires_in: 3600,
+    },
+  };
+
+  it("retries a 5xx and succeeds on the next attempt", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockResponse({ ok: false, status: 503, text: "unavailable" }),
+      )
+      .mockResolvedValueOnce(mockResponse(okBody));
+    vi.stubGlobal("fetch", fetchMock);
+    const promise = refreshTokens("old-rt");
+    await vi.runAllTimersAsync();
+    await expect(promise).resolves.toMatchObject({ accessToken: "new-at" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a 429 rate limit", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockResponse({ ok: false, status: 429, text: "slow down" }),
+      )
+      .mockResolvedValueOnce(mockResponse(okBody));
+    vi.stubGlobal("fetch", fetchMock);
+    const promise = refreshTokens("old-rt");
+    await vi.runAllTimersAsync();
+    await expect(promise).resolves.toMatchObject({ accessToken: "new-at" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries network errors, then throws request_failed after the last attempt", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const promise = refreshTokens("old-rt");
+    const assertion = expect(promise).rejects.toMatchObject({
+      code: "request_failed",
+    });
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("does NOT retry a permanent invalid_grant (fails fast)", async () => {
+    const fetchMock = vi.fn(async () =>
+      mockResponse({ ok: false, status: 400, text: '{"error":"invalid_grant"}' }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(refreshTokens("dead")).rejects.toMatchObject({
+      code: "invalid_grant",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
