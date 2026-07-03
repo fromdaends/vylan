@@ -15,6 +15,7 @@ import {
   buildTransactionSuggestion,
   type TransactionSuggestion,
   type ResolvedEntry,
+  type LearnedMappings,
 } from "@/lib/quickbooks/suggest";
 import {
   normalizeDraftStatus,
@@ -579,6 +580,9 @@ export async function backfillMissingSuggestions(input: {
   engagementId: string;
   files: { id: string; ai_extracted_fields: Record<string, unknown> | null }[];
   lists: QuickbooksLists | null;
+  // Feature 3 — the firm's remembered corrections, applied while regenerating a
+  // missing draft. Optional/defaulted so pre-learning callers stay valid.
+  learned?: LearnedMappings;
   existingFileIds: Set<string>;
 }): Promise<number> {
   if (!input.lists) return 0;
@@ -600,6 +604,7 @@ export async function backfillMissingSuggestions(input: {
       const suggestion = buildTransactionSuggestion(
         rawTxn as TransactionExtraction,
         input.lists,
+        input.learned ?? {},
       );
       await upsertTransactionSuggestion({
         firmId: input.firmId,

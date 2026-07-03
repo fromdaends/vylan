@@ -48,6 +48,8 @@ import {
 } from "@/lib/db/quickbooks-suggestions";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
+import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ReopenFileButton } from "@/components/engagements/reopen-file-button";
@@ -203,12 +205,13 @@ export default async function EngagementDetailPage({
   // keyed by uploaded file. Both reads degrade gracefully (no connection / no
   // 0430 migration yet -> nothing shows).
   const quickbooksConnected = (await getFirmQuickbooksStatus()) != null;
-  const [initialSuggestions, qboLists] = quickbooksConnected
+  const [initialSuggestions, qboLists, qboLearned] = quickbooksConnected
     ? await Promise.all([
         getSuggestionsForEngagement(id),
         readCachedQuickbooksLists(),
+        readFirmLearnedMappings(),
       ])
-    : [new Map<string, StoredDraft>(), null];
+    : [new Map<string, StoredDraft>(), null, {} as LearnedMappings];
   let suggestionsByFile = initialSuggestions;
   // Self-heal: regenerate any draft that's missing but whose file already has a
   // stored transaction read (re-upload race / pre-migration classify / cleanup),
@@ -223,6 +226,7 @@ export default async function EngagementDetailPage({
         ai_extracted_fields: u.ai_extracted_fields,
       })),
       lists: qboLists,
+      learned: qboLearned,
       existingFileIds: new Set(suggestionsByFile.keys()),
     });
     if (created > 0) suggestionsByFile = await getSuggestionsForEngagement(id);

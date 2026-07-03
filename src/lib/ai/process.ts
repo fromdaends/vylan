@@ -26,6 +26,7 @@ import {
 } from "./transaction-extract";
 import { isFirmQuickbooksConnected } from "@/lib/db/quickbooks";
 import { readCachedQuickbooksListsForFirm } from "@/lib/db/quickbooks-cache";
+import { readLearnedMappingsForFirm } from "@/lib/db/quickbooks-learned";
 import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import {
   upsertTransactionSuggestion,
@@ -285,7 +286,14 @@ export async function processClassifyJob(
         // Only (re)write when we have lists to map against; a transient empty
         // cache must not wipe a previously-good draft.
         if (cached) {
-          const suggestion = buildTransactionSuggestion(transaction, cached);
+          // Feature 3: consult the firm's remembered corrections before fuzzy
+          // matching (service-role read; {} pre-0490, so no behavior change).
+          const learned = await readLearnedMappingsForFirm(limitFirmId);
+          const suggestion = buildTransactionSuggestion(
+            transaction,
+            cached,
+            learned,
+          );
           await upsertTransactionSuggestion({
             firmId: limitFirmId,
             uploadedFileId: file.id,

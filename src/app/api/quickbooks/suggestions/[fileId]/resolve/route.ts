@@ -14,6 +14,8 @@ import {
   getDraftForFile,
   saveResolvedPatch,
 } from "@/lib/db/quickbooks-suggestions";
+import { recordLearnedMapping } from "@/lib/db/quickbooks-learned";
+import { learnedWritesFromResolve } from "@/lib/quickbooks/learn";
 import type { ResolvedEntry, ResolvedRef } from "@/lib/quickbooks/suggest";
 
 export const runtime = "nodejs";
@@ -149,6 +151,31 @@ export async function POST(
   });
   if (!ok) {
     return NextResponse.json({ error: "save_failed" }, { status: 500 });
+  }
+
+  // Feature 3 — LEARN from this correction (best-effort; never blocks the save).
+  // Each concrete pick (vendor/customer, expense account, tax code, split line
+  // account) is remembered per firm, keyed by the normalized source name/tax, so
+  // the next matching document auto-picks the same QuickBooks entity. Degrades to
+  // a no-op before migration 0490 (recordLearnedMapping swallows a missing table).
+  if (draft.suggestion) {
+    try {
+      const writes = learnedWritesFromResolve(patch, draft.suggestion);
+      await Promise.all(
+        writes.map((w) =>
+          recordLearnedMapping({
+            firmId: draft.firmId,
+            signalType: w.signalType,
+            sourceKey: w.sourceKey,
+            sourceSample: w.sourceSample,
+            target: w.target,
+            reviewerId: auth.user.id,
+          }),
+        ),
+      );
+    } catch (err) {
+      console.warn("[quickbooks] learn-from-resolve failed:", err);
+    }
   }
 
   for (const loc of LOCALES) {
