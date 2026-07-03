@@ -23,10 +23,7 @@ import {
   getProvider,
   getOpenAiModel,
 } from "./classify";
-import {
-  classifyWithOpenAI,
-  isOpenAiConfigured,
-} from "./openai-classify";
+import { classifyWithOpenAI, isOpenAiConfigured } from "./openai-classify";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -76,6 +73,10 @@ export type TransactionExtraction = {
   subtotal: number | null; // pre-tax amount
   total: number | null; // grand total including tax
   taxes: TransactionTaxLine[]; // 0..n tax lines (empty when none legible)
+  // EXPENSE payment status: true = already paid (a POS receipt -> a QuickBooks
+  // Purchase), false = an unpaid bill (-> a QuickBooks Bill), null = unclear.
+  paid: boolean | null;
+  payment_method: string | null; // e.g. "Visa", "Cash"; null when not shown
   confidence: number; // 0..1, how sure the extraction is overall
   notes: string | null; // a short free-text caveat the accountant should see
 };
@@ -157,6 +158,16 @@ const TRANSACTION_TOOL = {
         description:
           "Each tax line shown on the document. Empty array when no tax is itemized.",
       },
+      paid: {
+        type: ["boolean", "null"],
+        description:
+          "For an EXPENSE: was this ALREADY PAID? true when the document is a paid receipt — it shows a tender/payment line (a card 'Visa …1234', 'Cash', 'Interac', 'Approved', 'PAID', a change-due line, a point-of-sale receipt). false when it is an UNPAID bill/invoice that shows a balance/amount due, payment terms ('Net 30'), or a due date. null when you genuinely can't tell (or for income).",
+      },
+      payment_method: {
+        type: ["string", "null"],
+        description:
+          "How it was paid, if shown: 'Visa', 'Mastercard', 'Amex', 'Debit', 'Interac', 'Cash', etc. Null when not shown or not paid.",
+      },
       confidence: {
         type: "number",
         minimum: 0,
@@ -179,6 +190,8 @@ const TRANSACTION_TOOL = {
       "subtotal",
       "total",
       "taxes",
+      "paid",
+      "payment_method",
       "confidence",
       "notes",
     ],
@@ -212,6 +225,12 @@ Then capture:
   amount and, when printed, the rate. Quebec receipts often show GST/TPS at 5%
   AND QST/TVQ at 9.975%; capture BOTH as separate lines. Empty array when no tax
   is itemized.
+- paid — for an EXPENSE, whether it was ALREADY PAID. A point-of-sale receipt
+  showing a card/cash tender line, "Approved", "PAID", or change due is paid
+  (true). An unpaid bill/invoice showing a balance due, a due date, or payment
+  terms like "Net 30" is not paid (false). null when unclear or for income.
+- payment_method — how it was paid if shown (Visa, Mastercard, Amex, Debit,
+  Interac, Cash), else null.
 - confidence — your honest overall confidence; lower it when amounts were hard
   to read or the direction was ambiguous.
 - notes — one short caveat if something is off (cut off, multiple receipts in
@@ -237,7 +256,11 @@ export async function extractTransaction(opts: {
   const isPdf = mt === "application/pdf";
 
   const provider = getProvider();
-  if (provider === "openai" ? !isOpenAiConfigured() : !process.env.ANTHROPIC_API_KEY?.trim()) {
+  if (
+    provider === "openai"
+      ? !isOpenAiConfigured()
+      : !process.env.ANTHROPIC_API_KEY?.trim()
+  ) {
     return null;
   }
 
@@ -271,22 +294,40 @@ export async function extractTransaction(opts: {
     if (!c) return null;
 
     type ContentBlock =
-      | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string } }
-      | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+      | {
+          type: "document";
+          source: {
+            type: "base64";
+            media_type: "application/pdf";
+            data: string;
+          };
+        }
+      | {
+          type: "image";
+          source: { type: "base64"; media_type: string; data: string };
+        }
       | { type: "text"; text: string };
 
     const content: ContentBlock[] = isPdf
       ? [
           {
             type: "document",
-            source: { type: "base64", media_type: "application/pdf", data: base64 },
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: base64,
+            },
           },
           { type: "text", text: userText },
         ]
       : [
           {
             type: "image",
-            source: { type: "base64", media_type: prepared.mimeType, data: base64 },
+            source: {
+              type: "base64",
+              media_type: prepared.mimeType,
+              data: base64,
+            },
           },
           { type: "text", text: userText },
         ];
@@ -339,6 +380,8 @@ export function parseTransaction(
     subtotal: num(raw.subtotal),
     total: num(raw.total),
     taxes: parseTaxes(raw.taxes),
+    paid: typeof raw.paid === "boolean" ? raw.paid : null,
+    payment_method: str(raw.payment_method),
     confidence:
       typeof raw.confidence === "number"
         ? Math.max(0, Math.min(1, raw.confidence))

@@ -228,13 +228,21 @@ export default async function EngagementDetailPage({
     if (created > 0) suggestionsByFile = await getSuggestionsForEngagement(id);
   }
   // The cached QuickBooks lists the accountant picks from (active entries only).
-  const toOpt = (x: { id: string; name: string }) => ({ id: x.id, name: x.name });
+  const toOpt = (x: { id: string; name: string }) => ({
+    id: x.id,
+    name: x.name,
+  });
+  const isPayFrom = (t: string | null) =>
+    ["bank", "credit card"].includes((t ?? "").toLowerCase());
   const qboOptions: DraftCardOptions = {
     vendors: (qboLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
     customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
     accounts: (qboLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
     taxCodes: (qboLists?.taxCodes ?? []).filter((x) => x.active).map(toOpt),
     items: (qboLists?.items ?? []).filter((x) => x.active).map(toOpt),
+    paymentAccounts: (qboLists?.accounts ?? [])
+      .filter((x) => x.active && isPayFrom(x.accountType))
+      .map(toOpt),
   };
 
   // Prompt B: signature items (the accountant supplies a document, the client
@@ -372,7 +380,10 @@ export default async function EngagementDetailPage({
             )}
             {engagement.due_date && (
               <span className="text-muted-foreground">
-                · {t("due", { date: formatDate(engagement.due_date, locale, "medium") })}
+                ·{" "}
+                {t("due", {
+                  date: formatDate(engagement.due_date, locale, "medium"),
+                })}
               </span>
             )}
             {engagement.reminders_paused && (
@@ -385,7 +396,10 @@ export default async function EngagementDetailPage({
                 never sent to the AI, so the per-document AI verdicts below are
                 hidden. Surfaced here so the accountant knows why. */}
             {engagement.ai_enabled === false && (
-              <Badge variant="outline" className="text-xs text-muted-foreground">
+              <Badge
+                variant="outline"
+                className="text-xs text-muted-foreground"
+              >
                 <Sparkles className="size-3" />
                 {t("ai_off_badge")}
               </Badge>
@@ -598,23 +612,23 @@ export default async function EngagementDetailPage({
               )}
               <ul className="space-y-2">
                 {collectionItems.map((item) => (
-                <ItemRow
-                  key={item.id}
-                  item={item}
-                  files={filesByItem.get(item.id) ?? []}
-                  suggestionsByFile={suggestionsByFile}
-                  qboOptions={qboOptions}
-                  reviewerNameById={reviewerNameById}
-                  locale={locale}
-                  canEdit={isLive}
-                  clientName={client?.display_name ?? null}
-                  expectedYear={expectedYearFromTitle(engagement.title)}
-                  // AI off for this engagement → hide the per-document AI
-                  // verdicts (they'd otherwise sit on a permanent "Not
-                  // analyzed" chip). `=== false` so pre-migration (undefined)
-                  // keeps AI shown.
-                  aiEnabled={engagement.ai_enabled !== false}
-                />
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    files={filesByItem.get(item.id) ?? []}
+                    suggestionsByFile={suggestionsByFile}
+                    qboOptions={qboOptions}
+                    reviewerNameById={reviewerNameById}
+                    locale={locale}
+                    canEdit={isLive}
+                    clientName={client?.display_name ?? null}
+                    expectedYear={expectedYearFromTitle(engagement.title)}
+                    // AI off for this engagement → hide the per-document AI
+                    // verdicts (they'd otherwise sit on a permanent "Not
+                    // analyzed" chip). `=== false` so pre-migration (undefined)
+                    // keeps AI shown.
+                    aiEnabled={engagement.ai_enabled !== false}
+                  />
                 ))}
               </ul>
             </>
@@ -676,8 +690,7 @@ async function ItemRow({
 }) {
   const t = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
-  const label =
-    locale === "fr" && item.label_fr ? item.label_fr : item.label;
+  const label = locale === "fr" && item.label_fr ? item.label_fr : item.label;
   const hasSubmittedFiles = files.length > 0;
   const hasReason = item.status === "rejected" && !!item.rejection_reason;
   // A missing-page block reads as "rejected" in the roll-up but isn't a file
@@ -687,8 +700,7 @@ async function ItemRow({
   // accountant's eye (submitted = awaiting review, rejected = shows the reason)
   // start open; resolved/empty items start collapsed so a long list stays calm.
   const hasBody = hasSubmittedFiles || hasReason;
-  const defaultOpen =
-    item.status === "submitted" || item.status === "rejected";
+  const defaultOpen = item.status === "submitted" || item.status === "rejected";
 
   const summary = (
     <>
@@ -712,20 +724,14 @@ async function ItemRow({
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {missingPageBlock ? (
-            <Badge
-              variant="outline"
-              className="border-warning/40 text-warning"
-            >
+            <Badge variant="outline" className="border-warning/40 text-warning">
               {t("set_incomplete_badge")}
             </Badge>
           ) : item.status === "rejected" ? (
             // A document under this item was sent back — the line isn't
             // "rejected/closed", it's waiting on the client to resend. Soft
             // amber, not a hard red "Rejected".
-            <Badge
-              variant="outline"
-              className="border-warning/40 text-warning"
-            >
+            <Badge variant="outline" className="border-warning/40 text-warning">
               {t("awaiting_client_badge")}
             </Badge>
           ) : (

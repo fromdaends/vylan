@@ -33,6 +33,7 @@ export function PostDraftControls({
   fileId,
   status,
   direction,
+  expenseMode = "bill",
   postedAtLabel,
   postedByName,
   postError,
@@ -41,6 +42,9 @@ export function PostDraftControls({
   fileId: string;
   status: DraftStatus;
   direction: "expense" | "income" | "unknown";
+  // For an expense: "purchase" (already paid) posts a QuickBooks Expense; "bill"
+  // (unpaid) posts a Bill. Drives only the confirm copy. Ignored for income.
+  expenseMode?: "bill" | "purchase";
   // Pre-formatted posted date (server formats it; null when not posted).
   postedAtLabel: string | null;
   postedByName: string | null;
@@ -168,7 +172,11 @@ export function PostDraftControls({
 
   // Income posts an Invoice; expense posts a Bill — the confirm copy reflects it.
   const confirmBody =
-    direction === "income" ? t("post_body_income") : t("post_body");
+    direction === "income"
+      ? t("post_body_income")
+      : expenseMode === "purchase"
+        ? t("post_body_purchase")
+        : t("post_body");
 
   // Approved expense/income: Post (with retry error if a prior attempt failed).
   return (

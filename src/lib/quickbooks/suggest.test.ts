@@ -6,6 +6,7 @@ import {
   matchTaxCode,
   suggestAccount,
   suggestItem,
+  suggestPaymentAccount,
   isSellableItem,
   buildTransactionSuggestion,
   MATCH_THRESHOLD,
@@ -64,6 +65,8 @@ function extraction(
       { type: "GST", amount: 5, rate: 5 },
       { type: "QST", amount: 9.98, rate: 9.975 },
     ],
+    paid: null,
+    payment_method: null,
     confidence: 0.9,
     notes: null,
     ...over,
@@ -430,6 +433,47 @@ describe("buildTransactionSuggestion", () => {
     expect(unidentified.overallConfidence).toBeLessThan(
       matched.overallConfidence,
     );
+  });
+});
+
+describe("suggestPaymentAccount", () => {
+  const payAccts: QbAccount[] = [
+    { id: "cc1", name: "Visa", accountType: "Credit Card", active: true },
+    { id: "bank1", name: "Chequing", accountType: "Bank", active: true },
+    { id: "exp1", name: "Supplies", accountType: "Expense", active: true },
+  ];
+  it("returns nothing for income, unpaid, or unknown-paid", () => {
+    expect(
+      suggestPaymentAccount("income", true, "Visa", payAccts).match,
+    ).toBeNull();
+    expect(
+      suggestPaymentAccount("expense", false, "Visa", payAccts).match,
+    ).toBeNull();
+    expect(
+      suggestPaymentAccount("expense", null, "Visa", payAccts).match,
+    ).toBeNull();
+  });
+  it("confidently picks the single credit-card account for a card payment", () => {
+    const m = suggestPaymentAccount("expense", true, "Visa ...4127", payAccts);
+    expect(m.match).toEqual({ id: "cc1", name: "Visa", active: true });
+  });
+  it("confidently picks the single bank account for a cash payment", () => {
+    const m = suggestPaymentAccount("expense", true, "Cash", payAccts);
+    expect(m.match).toEqual({ id: "bank1", name: "Chequing", active: true });
+  });
+  it("only offers bank/credit-card accounts, never expense accounts", () => {
+    const m = suggestPaymentAccount("expense", true, null, payAccts);
+    const ids = m.candidates.map((c) => c.id);
+    expect(ids).not.toContain("exp1");
+  });
+  it("no confident pick when two accounts of the preferred kind exist", () => {
+    const two = [
+      { id: "cc1", name: "Visa", accountType: "Credit Card", active: true },
+      { id: "cc2", name: "Amex", accountType: "Credit Card", active: true },
+    ];
+    const m = suggestPaymentAccount("expense", true, "Visa", two);
+    expect(m.match).toBeNull();
+    expect(m.candidates).toHaveLength(2);
   });
 });
 

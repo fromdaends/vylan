@@ -86,12 +86,17 @@ export default async function QuickbooksDraftsPage({
     id: x.id,
     name: x.name,
   });
+  const isPayFrom = (t: string | null) =>
+    ["bank", "credit card"].includes((t ?? "").toLowerCase());
   const options: DraftCardOptions = {
     vendors: (qboLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
     customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
     accounts: (qboLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
     taxCodes: (qboLists?.taxCodes ?? []).filter((x) => x.active).map(toOpt),
     items: (qboLists?.items ?? []).filter((x) => x.active).map(toOpt),
+    paymentAccounts: (qboLists?.accounts ?? [])
+      .filter((x) => x.active && isPayFrom(x.accountType))
+      .map(toOpt),
   };
 
   // Counts + pipeline total over ALL drafts (so the chips show totals

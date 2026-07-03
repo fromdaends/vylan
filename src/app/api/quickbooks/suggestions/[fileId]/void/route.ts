@@ -17,6 +17,7 @@ import {
 } from "@/lib/db/quickbooks-suggestions";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
 import { quickbooksDelete, QuickbooksError } from "@/lib/quickbooks/client";
+import { effectiveExpenseMode } from "@/lib/quickbooks/draft-resolve";
 import { logUserActivity } from "@/lib/db/activity";
 
 export const runtime = "nodejs";
@@ -73,9 +74,16 @@ export async function POST(
     );
   }
 
-  // Match the entity we posted: income -> Invoice, expense -> Bill.
+  // Match the entity we posted: income -> Invoice; a PAID expense -> Purchase; an
+  // unpaid expense -> Bill. Deleting via the wrong endpoint fails, so this must
+  // mirror the branch in post.ts exactly (effectiveExpenseMode).
   const entity =
-    draft.suggestion?.direction === "income" ? "invoice" : "bill";
+    draft.suggestion?.direction === "income"
+      ? "invoice"
+      : draft.suggestion &&
+          effectiveExpenseMode(draft.suggestion, draft.resolved) === "purchase"
+        ? "purchase"
+        : "bill";
   try {
     await quickbooksDelete(
       ctx,

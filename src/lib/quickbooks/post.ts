@@ -21,17 +21,24 @@ import {
 } from "@/lib/quickbooks/client";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
-import { effectiveMapping } from "@/lib/quickbooks/draft-resolve";
+import {
+  effectiveMapping,
+  effectiveExpenseMode,
+} from "@/lib/quickbooks/draft-resolve";
 import {
   buildBillPayload,
   checkBillPostable,
   buildInvoicePayload,
   checkInvoicePostable,
+  buildPurchasePayload,
+  checkPurchasePostable,
+  paymentTypeForAccount,
   resolveTaxApplication,
   taxDiscrepancyNote,
   type TaxApplication,
   type PostabilityProblem,
   type InvoicePostabilityProblem,
+  type PurchasePostabilityProblem,
 } from "@/lib/quickbooks/post-transaction";
 
 export type PostOutcomeKind =
@@ -52,8 +59,10 @@ export type PostOutcome = {
   firmId: string | null;
   postedQboId?: string | null;
   detail?: string;
-  // Bill (expense) or Invoice (income) postability problems — informational.
-  problems?: (PostabilityProblem | InvoicePostabilityProblem)[];
+  // Bill/Purchase (expense) or Invoice (income) postability problems — informational.
+  problems?: (
+    PostabilityProblem | InvoicePostabilityProblem | PurchasePostabilityProblem
+  )[];
   // Set when a posted transaction's QuickBooks-computed tax differs from the
   // document's tax (a discrepancy worth the accountant's attention); null/absent
   // otherwise.
@@ -113,9 +122,10 @@ export async function postApprovedDraft(
     taxTotal: s.taxTotal,
   });
 
-  // Branch by direction: an EXPENSE posts a Bill (account line), INCOME posts an
-  // Invoice (item line). Both validate against the firm's CURRENT lists.
-  let entity: "bill" | "invoice";
+  // Branch: INCOME posts an Invoice (item line). An EXPENSE posts either a
+  // PURCHASE (already paid — against a bank/credit-card account) or a BILL (unpaid
+  // payable), decided by effectiveExpenseMode. All validate against CURRENT lists.
+  let entity: "bill" | "invoice" | "purchase";
   let payload: Record<string, unknown>;
   if (s.direction === "income") {
     const problems = checkInvoicePostable({
@@ -132,6 +142,50 @@ export async function postApprovedDraft(
     payload = buildInvoicePayload({
       customerId: eff.party.id,
       itemId: eff.item.id,
+      amount: s.amount,
+      date: s.date,
+      memo: "Posted from Vylan",
+      tax,
+    });
+  } else if (effectiveExpenseMode(s, draft.resolved) === "purchase") {
+    const problems = checkPurchasePostable({
+      direction: s.direction,
+      party: eff.party,
+      account: eff.account,
+      paymentAccount: eff.paymentAccount,
+      amount: s.amount,
+      lists: lists ?? null,
+    });
+    if (
+      problems.length > 0 ||
+      !eff.party ||
+      !eff.account ||
+      !eff.paymentAccount ||
+      s.amount == null
+    ) {
+      return { kind: "not_postable", ...base, problems };
+    }
+    entity = "purchase";
+    // PaymentType must agree with the paid-from account's type (Bank -> Cash,
+    // Credit Card -> CreditCard). Derive it from the cached account — but NEVER
+    // guess: if the cache is unavailable so we can't read the account's type,
+    // refuse to post rather than send a Cash PaymentType that would contradict a
+    // credit-card AccountRef (QuickBooks rejects that).
+    const paAcct = (lists?.accounts ?? []).find(
+      (a) => a.id === eff.paymentAccount!.id,
+    );
+    if (!paAcct) {
+      return {
+        kind: "not_postable",
+        ...base,
+        problems: ["payment_account_type_unknown"],
+      };
+    }
+    payload = buildPurchasePayload({
+      vendorId: eff.party.id,
+      accountId: eff.account.id,
+      paymentAccountId: eff.paymentAccount.id,
+      paymentType: paymentTypeForAccount(paAcct.accountType),
       amount: s.amount,
       date: s.date,
       memo: "Posted from Vylan",

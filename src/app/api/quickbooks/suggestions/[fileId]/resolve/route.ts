@@ -19,7 +19,15 @@ import type { ResolvedEntry, ResolvedRef } from "@/lib/quickbooks/suggest";
 export const runtime = "nodejs";
 
 const LOCALES = ["en", "fr"] as const;
-const FIELDS = ["party", "account", "taxCode", "item"] as const;
+// Ref-valued fields (an {id,name} pick or null). `paid` is handled separately
+// below because it's a boolean, not a ref.
+const FIELDS = [
+  "party",
+  "account",
+  "taxCode",
+  "item",
+  "paymentAccount",
+] as const;
 type Field = (typeof FIELDS)[number];
 
 // A value is either null (cleared) or a {id,name} ref. Anything else is rejected.
@@ -76,6 +84,17 @@ export async function POST(
       }
       patch[f as Field] = ref;
     }
+  }
+  // `paid` (Bill vs Purchase override) is a boolean or null, not a ref.
+  if (Object.prototype.hasOwnProperty.call(body, "paid")) {
+    const p = body.paid;
+    if (p !== null && typeof p !== "boolean") {
+      return NextResponse.json(
+        { error: "bad_request", detail: "Invalid paid." },
+        { status: 400 },
+      );
+    }
+    patch.paid = p;
   }
   if (Object.keys(patch).length === 0) {
     return NextResponse.json(

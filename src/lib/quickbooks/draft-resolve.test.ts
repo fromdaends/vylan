@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { effectiveMapping, draftNeedsInput } from "./draft-resolve";
+import {
+  effectiveMapping,
+  draftNeedsInput,
+  effectiveExpenseMode,
+} from "./draft-resolve";
 import type {
   TransactionSuggestion,
   MatchField,
@@ -13,7 +17,9 @@ const matched = (id: string, name: string): MatchField => ({
 });
 const noMatch: MatchField = { match: null, confidence: 0, candidates: [] };
 
-function sugg(over: Partial<TransactionSuggestion> = {}): TransactionSuggestion {
+function sugg(
+  over: Partial<TransactionSuggestion> = {},
+): TransactionSuggestion {
   return {
     direction: "expense",
     partyKind: "vendor",
@@ -86,5 +92,70 @@ describe("draftNeedsInput", () => {
     };
     expect(draftNeedsInput(sugg({ currency: "USD" }), full)).toBe(true);
     expect(draftNeedsInput(sugg({ amount: null }), full)).toBe(true);
+  });
+
+  it("a PAID expense (Purchase) also needs the paid-from account", () => {
+    // Account chosen, but it's paid and no paymentAccount yet -> still needs input.
+    const s = sugg({ paid: true });
+    const resolvedNoPay: ResolvedEntry = {
+      party: null,
+      account: { id: "a1", name: "Supplies" },
+      taxCode: null,
+    };
+    expect(draftNeedsInput(s, resolvedNoPay)).toBe(true);
+    // Once the paid-from account is chosen, it's satisfied.
+    expect(
+      draftNeedsInput(s, {
+        ...resolvedNoPay,
+        paymentAccount: { id: "cc1", name: "Visa" },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("effectiveExpenseMode", () => {
+  it("defaults to 'bill' when paid is unknown (no behavior change)", () => {
+    expect(effectiveExpenseMode(sugg({ paid: null }), null)).toBe("bill");
+  });
+  it("is 'purchase' when the AI read it as paid", () => {
+    expect(effectiveExpenseMode(sugg({ paid: true }), null)).toBe("purchase");
+  });
+  it("the accountant's override wins over the AI", () => {
+    expect(
+      effectiveExpenseMode(sugg({ paid: true }), {
+        party: null,
+        account: null,
+        taxCode: null,
+        paid: false,
+      }),
+    ).toBe("bill");
+    expect(
+      effectiveExpenseMode(sugg({ paid: false }), {
+        party: null,
+        account: null,
+        taxCode: null,
+        paid: true,
+      }),
+    ).toBe("purchase");
+  });
+  it("is always 'bill' for income AND unknown direction (Purchase is expense-only)", () => {
+    expect(
+      effectiveExpenseMode(sugg({ direction: "income", paid: true }), null),
+    ).toBe("bill");
+    // Unknown-direction + AI paid=true must NOT become a Purchase (there is no UI
+    // to set the paid-from account for it -> it would be stuck non-approvable).
+    expect(
+      effectiveExpenseMode(sugg({ direction: "unknown", paid: true }), null),
+    ).toBe("bill");
+  });
+  it("an unknown+paid draft doesn't demand a paid-from account", () => {
+    const s = sugg({ direction: "unknown", paid: true });
+    expect(
+      draftNeedsInput(s, {
+        party: { id: "v1", name: "X" },
+        account: { id: "a1", name: "Supplies" },
+        taxCode: { id: "t1", name: "GST" },
+      }),
+    ).toBe(false);
   });
 });
