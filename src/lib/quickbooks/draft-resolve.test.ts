@@ -138,9 +138,24 @@ describe("effectiveExpenseMode", () => {
       }),
     ).toBe("purchase");
   });
-  it("is always 'bill' for income (a Purchase is expense-only)", () => {
+  it("is always 'bill' for income AND unknown direction (Purchase is expense-only)", () => {
     expect(
       effectiveExpenseMode(sugg({ direction: "income", paid: true }), null),
     ).toBe("bill");
+    // Unknown-direction + AI paid=true must NOT become a Purchase (there is no UI
+    // to set the paid-from account for it -> it would be stuck non-approvable).
+    expect(
+      effectiveExpenseMode(sugg({ direction: "unknown", paid: true }), null),
+    ).toBe("bill");
+  });
+  it("an unknown+paid draft doesn't demand a paid-from account", () => {
+    const s = sugg({ direction: "unknown", paid: true });
+    expect(
+      draftNeedsInput(s, {
+        party: { id: "v1", name: "X" },
+        account: { id: "a1", name: "Supplies" },
+        taxCode: { id: "t1", name: "GST" },
+      }),
+    ).toBe(false);
   });
 });

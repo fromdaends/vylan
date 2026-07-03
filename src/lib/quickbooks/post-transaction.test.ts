@@ -542,6 +542,16 @@ describe("checkPurchasePostable", () => {
       "payment_account_inactive",
     );
   });
+  it("flags a paid-from account that isn't a bank/credit-card type", () => {
+    // Resolve the paid-from account to an Expense-type account (a1) — invalid.
+    expect(
+      checkPurchasePostable({
+        ...ok,
+        paymentAccount: { id: "a1", name: "Supplies" },
+        lists: purchaseLists(),
+      }),
+    ).toContain("payment_account_wrong_type");
+  });
   it("skips active checks when the lists aren't available", () => {
     expect(checkPurchasePostable({ ...ok, lists: null })).toEqual([]);
   });

@@ -284,7 +284,20 @@ export type PurchasePostabilityProblem =
   | "missing_amount"
   | "vendor_inactive"
   | "account_inactive"
-  | "payment_account_inactive";
+  | "payment_account_inactive"
+  // The paid-from account isn't a bank/credit-card account (PaymentType can't be
+  // derived / QuickBooks would reject it).
+  | "payment_account_wrong_type"
+  // The paid-from account's type couldn't be determined (cached lists unavailable),
+  // so we refuse to GUESS PaymentType (a wrong guess is rejected by QuickBooks).
+  | "payment_account_type_unknown";
+
+// Account types a Purchase can be paid FROM (mirrors the picker filter). Exported
+// so the post path can refuse to guess PaymentType for anything else.
+export function isPaymentAccountType(t: string | null): boolean {
+  const s = (t ?? "").toLowerCase();
+  return s === "bank" || s === "credit card";
+}
 
 // Pure server-side guard for a Purchase, re-checked at post time: an expense with
 // an active vendor + active expense account + active paid-from account + positive
@@ -319,6 +332,9 @@ export function checkPurchasePostable(input: {
     if (input.paymentAccount) {
       const pa = accounts.find((x) => x.id === input.paymentAccount!.id);
       if (!pa || !pa.active) problems.push("payment_account_inactive");
+      else if (!isPaymentAccountType(pa.accountType)) {
+        problems.push("payment_account_wrong_type");
+      }
     }
   }
   return problems;

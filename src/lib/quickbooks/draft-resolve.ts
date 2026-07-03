@@ -54,7 +54,11 @@ export function effectiveExpenseMode(
   suggestion: TransactionSuggestion,
   resolved: ResolvedEntry | null,
 ): "bill" | "purchase" {
-  if (suggestion.direction === "income") return "bill"; // n/a for income
+  // Only a genuine EXPENSE can be a Purchase. Income (n/a) and unknown-direction
+  // drafts stay "bill" — the paid toggle + paid-from picker are expense-only in
+  // the UI, so an unknown+paid draft must never demand a paid-from account it has
+  // no way to set (which would make it permanently non-approvable).
+  if (suggestion.direction !== "expense") return "bill";
   const paid = resolved?.paid ?? suggestion.paid ?? false;
   return paid ? "purchase" : "bill";
 }

@@ -332,6 +332,7 @@ export async function QuickbooksDraftCard({
       {v.direction === "expense" && (
         <div className="grid grid-cols-1 gap-1.5 px-3 pt-1.5 sm:grid-cols-2">
           <QuickbooksPaidToggle
+            key={`paid-${expenseMode}`}
             fileId={fileId}
             mode={expenseMode}
             disabled={!isDraft}

@@ -167,15 +167,25 @@ export async function postApprovedDraft(
     }
     entity = "purchase";
     // PaymentType must agree with the paid-from account's type (Bank -> Cash,
-    // Credit Card -> CreditCard); derive it from the cached account.
+    // Credit Card -> CreditCard). Derive it from the cached account — but NEVER
+    // guess: if the cache is unavailable so we can't read the account's type,
+    // refuse to post rather than send a Cash PaymentType that would contradict a
+    // credit-card AccountRef (QuickBooks rejects that).
     const paAcct = (lists?.accounts ?? []).find(
       (a) => a.id === eff.paymentAccount!.id,
     );
+    if (!paAcct) {
+      return {
+        kind: "not_postable",
+        ...base,
+        problems: ["payment_account_type_unknown"],
+      };
+    }
     payload = buildPurchasePayload({
       vendorId: eff.party.id,
       accountId: eff.account.id,
       paymentAccountId: eff.paymentAccount.id,
-      paymentType: paymentTypeForAccount(paAcct?.accountType ?? null),
+      paymentType: paymentTypeForAccount(paAcct.accountType),
       amount: s.amount,
       date: s.date,
       memo: "Posted from Vylan",
