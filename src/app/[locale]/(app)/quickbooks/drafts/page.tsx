@@ -26,7 +26,7 @@ import { QueueRow } from "@/components/quickbooks/queue-row";
 import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import type { DraftCardOptions } from "@/components/engagements/quickbooks-draft-card";
 import { Button } from "@/components/ui/button";
-import { BookOpen } from "lucide-react";
+import { CheckCircle2, Sparkles, UploadCloud } from "lucide-react";
 
 export default async function QuickbooksDraftsPage({
   params,
@@ -50,24 +50,91 @@ export default async function QuickbooksDraftsPage({
   const isOwner = user?.role === "owner";
 
   if (!status) {
+    // Not-connected state = a welcoming CONNECT prompt (not a bare empty box).
+    // Reachable via the sidebar (owners see Integrations even before connecting)
+    // or by direct URL. Owners get a primary "Connect QuickBooks" CTA into
+    // Settings -> Integrations (where the real connect flow + errors live);
+    // staff get a calm "ask your owner" note. "Mesh, don't box": a centered
+    // hero, hairline-separated "how it works" row, no hard card border.
+    const steps = [
+      {
+        icon: UploadCloud,
+        color: "text-icon-blue",
+        title: t("queue_connect_step1_title"),
+        desc: t("queue_connect_step1_desc"),
+      },
+      {
+        icon: Sparkles,
+        color: "text-icon-purple",
+        title: t("queue_connect_step2_title"),
+        desc: t("queue_connect_step2_desc"),
+      },
+      {
+        icon: CheckCircle2,
+        color: "text-icon-emerald",
+        title: t("queue_connect_step3_title"),
+        desc: t("queue_connect_step3_desc"),
+      },
+    ];
     return (
-      <div className="space-y-6">
-        <Header title={t("queue_title")} subtitle={t("queue_subtitle")} />
-        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border/40 bg-muted/20 py-16 text-center">
-          <BookOpen
-            className="h-9 w-9 text-muted-foreground/50"
-            aria-hidden="true"
-          />
-          <p className="max-w-sm text-sm text-muted-foreground">
-            {isOwner ? t("queue_connect_owner") : t("queue_connect_staff")}
-          </p>
-          {isOwner && (
-            <Link href="/settings?tab=integrations">
-              <Button size="sm" variant="secondary">
+      <div className="mx-auto max-w-2xl py-10 text-center animate-in-up sm:py-16">
+        {/* Brand mark on a soft QuickBooks-green tile — the logo keeps its real
+            brand color; the tint ties the page to QuickBooks without a border. */}
+        <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#2CA01C]/10 ring-1 ring-inset ring-[#2CA01C]/20">
+          <QuickbooksLogo className="h-8 w-8" />
+        </div>
+        <h1 className="mt-6 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
+          {t("queue_connect_headline")}
+        </h1>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground sm:text-base">
+          {t("queue_connect_owner")}
+        </p>
+
+        {isOwner ? (
+          <div className="mt-7">
+            <Button asChild size="lg" className="gap-2">
+              <Link href="/settings?tab=integrations">
+                <QuickbooksLogo className="h-4 w-4" />
                 {t("queue_connect_cta")}
-              </Button>
-            </Link>
-          )}
+              </Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="mx-auto mt-7 max-w-md rounded-xl bg-muted/30 px-4 py-3">
+            <p className="text-sm text-muted-foreground">
+              {t("queue_connect_staff")}
+            </p>
+          </div>
+        )}
+
+        {/* How it works — three plain steps, no boxes; a hairline sets them off. */}
+        <div className="mt-12 border-t border-border/40 pt-8 text-left">
+          <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+            {t("queue_connect_steps_label")}
+          </p>
+          <ol className="mt-5 grid gap-7 sm:grid-cols-3 sm:gap-5">
+            {steps.map((step, i) => {
+              const Icon = step.icon;
+              return (
+                <li
+                  key={i}
+                  className="flex flex-col items-center gap-3 text-center sm:items-start sm:text-left"
+                >
+                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-secondary/60">
+                    <Icon className={`size-5 ${step.color}`} aria-hidden />
+                  </span>
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium leading-snug">
+                      {step.title}
+                    </div>
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {step.desc}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
         </div>
       </div>
     );

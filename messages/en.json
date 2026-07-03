@@ -2009,7 +2009,7 @@
     "queue_empty_filtered": "No drafts match this filter.",
     "queue_empty_search": "No drafts match your search.",
     "queue_connect_headline": "Turn receipts into QuickBooks drafts",
-    "queue_connect_owner": "Connect QuickBooks and Vylan turns your clients' receipts and invoices into draft entries you review and approve. No manual data entry.",
+    "queue_connect_owner": "Vylan turns your clients' receipts and invoices into draft QuickBooks entries you review and approve. No manual data entry.",
     "queue_connect_staff": "Ask your firm owner to connect QuickBooks to start turning receipts and invoices into draft entries you review and approve.",
     "queue_connect_cta": "Connect QuickBooks",
     "queue_connect_steps_label": "How it works",
