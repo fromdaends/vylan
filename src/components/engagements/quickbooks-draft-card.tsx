@@ -13,15 +13,19 @@ import type {
 import {
   effectiveMapping,
   effectiveExpenseMode,
+  effectiveSplit,
+  effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
 import {
   canApproveDraft,
   type DraftStatus,
 } from "@/lib/quickbooks/draft-status";
+import { quickbooksTaxLinesEnabled } from "@/lib/quickbooks/client";
 import { deriveQuickbooksDraftView } from "./quickbooks-draft-view";
 import { RegenerateDraftButton } from "./regenerate-draft-button";
 import { DraftStatusControls } from "./draft-status-controls";
 import { QuickbooksPaidToggle } from "./quickbooks-paid-toggle";
+import { QuickbooksSplitSection } from "./quickbooks-split-section";
 import { PostDraftControls } from "@/components/quickbooks/post-draft-controls";
 import {
   QuickbooksEditableField,
@@ -103,6 +107,17 @@ export async function QuickbooksDraftCard({
   // Bill (unpaid) vs Purchase (paid) for an expense — drives the toggle + whether
   // the "paid from" account cell shows.
   const expenseMode = effectiveExpenseMode(suggestion, resolved);
+  // Split-across-accounts (expense with ≥2 reconciled line items). Only offered
+  // when tax-lines posting is ON — a split posts PRE-TAX per-line amounts and
+  // relies on QuickBooks adding the tax, so with tax OFF a split would drop the
+  // tax. When split is ON, the single account cell is replaced by the per-line
+  // editor.
+  const canSplit =
+    v.direction === "expense" &&
+    (suggestion.lines?.length ?? 0) >= 2 &&
+    quickbooksTaxLinesEnabled();
+  const isSplit = effectiveSplit(suggestion, resolved);
+  const splitLines = canSplit ? effectiveLines(suggestion, resolved) : [];
   const readinessPct = Math.round(v.readiness * 100);
   const ready = v.readiness >= 0.7;
   // Once approved or dismissed the draft is LOCKED: the cells become read-only and
@@ -288,7 +303,9 @@ export async function QuickbooksDraftCard({
           disabled={!isDraft}
         />
         {/* Income lines post to a product/service ITEM (QuickBooks Invoice);
-            expenses post to an account (Bill). Show the right cell per direction. */}
+            expenses post to an account (Bill/Expense). When an expense is SPLIT
+            across accounts, the single account cell is replaced by the per-line
+            editor below, so hide it here. */}
         {v.direction === "income" ? (
           <QuickbooksEditableField
             key={`item-${eff.item?.id ?? "none"}`}
@@ -300,7 +317,7 @@ export async function QuickbooksDraftCard({
             choosePrompt={t("choose_item")}
             disabled={!isDraft}
           />
-        ) : (
+        ) : isSplit ? null : (
           <QuickbooksEditableField
             key={`account-${eff.account?.id ?? "none"}`}
             fileId={fileId}
@@ -325,6 +342,21 @@ export async function QuickbooksDraftCard({
           />
         )}
       </div>
+
+      {/* Expense with legible line items: optionally SPLIT across accounts. The
+          key re-seeds the client state whenever the server's split flag or any
+          per-line effective account changes (e.g. after a Refresh). */}
+      {canSplit && (
+        <QuickbooksSplitSection
+          key={`split-${isSplit}-${splitLines.map((l) => l.account?.id ?? "none").join(",")}`}
+          fileId={fileId}
+          lines={splitLines}
+          split={isSplit}
+          accountOptions={options.accounts}
+          locale={locale}
+          disabled={!isDraft}
+        />
+      )}
 
       {/* Expense: was it already paid? A paid receipt posts a Purchase (against a
           bank/credit-card account); an unpaid bill posts a Bill. Income has no

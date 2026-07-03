@@ -182,4 +182,30 @@ describe("parseTransaction", () => {
     });
     expect(t!.taxes).toEqual([{ type: "HST", amount: 13, rate: null }]);
   });
+
+  it("parses line_items, dropping blanks / non-positive / malformed", () => {
+    const t = parseTransaction({
+      ...rawGood,
+      line_items: [
+        { description: "Drill", amount: 129 }, // good
+        { description: "Tool bag", amount: 71 }, // good
+        { description: "", amount: 5 }, // blank description
+        { description: "Discount", amount: -10 }, // negative
+        { description: "Zero", amount: 0 }, // zero
+        { description: "Bad", amount: "lots" }, // non-number
+        "nonsense", // not an object
+      ],
+    });
+    expect(t!.line_items).toEqual([
+      { description: "Drill", amount: 129 },
+      { description: "Tool bag", amount: 71 },
+    ]);
+  });
+
+  it("returns an empty line_items array when missing or not an array", () => {
+    expect(parseTransaction(rawGood)!.line_items).toEqual([]);
+    expect(
+      parseTransaction({ ...rawGood, line_items: "nope" })!.line_items,
+    ).toEqual([]);
+  });
 });

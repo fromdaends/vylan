@@ -45,6 +45,47 @@ export function effectiveMapping(
   };
 }
 
+// One effective expense line for a split post: its description + pre-tax amount +
+// the effective account (the accountant's pick, else the AI's per-line match).
+export type EffectiveLine = {
+  description: string;
+  amount: number;
+  account: ResolvedRef | null;
+};
+
+// The per-line accounts to use when splitting: the accountant's pick for a line
+// (resolved.lineAccounts["i"]) else the AI's suggested account for it. Empty when
+// the suggestion has no reconciled lines.
+export function effectiveLines(
+  suggestion: TransactionSuggestion,
+  resolved: ResolvedEntry | null,
+): EffectiveLine[] {
+  const lines = suggestion.lines ?? [];
+  return lines.map((l, i) => {
+    const override = resolved?.lineAccounts?.[String(i)];
+    return {
+      description: l.description,
+      amount: l.amount,
+      // `override` may be an explicit null (cleared) — only fall back to the AI
+      // match when the accountant hasn't touched this line at all (undefined).
+      account: override !== undefined ? override : matchRef(l.account.match),
+    };
+  });
+}
+
+// Is this expense draft effectively SPLIT across accounts? Only when it has ≥2
+// reconciled line items AND the accountant opted in (resolved.split). Default is
+// single-line (no behavior change) — a multi-item receipt for one account never
+// forces per-line work unless the accountant asks. Income/unknown never split.
+export function effectiveSplit(
+  suggestion: TransactionSuggestion,
+  resolved: ResolvedEntry | null,
+): boolean {
+  if (suggestion.direction !== "expense") return false;
+  const canSplit = (suggestion.lines?.length ?? 0) >= 2;
+  return canSplit && (resolved?.split ?? false);
+}
+
 // How an EXPENSE should post: a PAID receipt is a QuickBooks "Purchase" (against a
 // bank/credit-card account), an unpaid bill is a "Bill". The accountant's override
 // wins; otherwise the AI's read; default to "bill" (today's behavior) when unknown
@@ -84,8 +125,13 @@ export function draftNeedsInput(
   } else {
     const isPurchase =
       effectiveExpenseMode(suggestion, resolved) === "purchase";
+    // A SPLIT expense needs EVERY line's account chosen; otherwise the single
+    // expense account. A Purchase also needs the paid-from account either way.
+    const accountMissing = effectiveSplit(suggestion, resolved)
+      ? effectiveLines(suggestion, resolved).some((l) => l.account == null)
+      : eff.account == null;
     mappingMissing =
-      eff.account == null || (isPurchase && eff.paymentAccount == null);
+      accountMissing || (isPurchase && eff.paymentAccount == null);
   }
   return (
     eff.party == null ||

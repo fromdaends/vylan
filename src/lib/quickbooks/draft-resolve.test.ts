@@ -3,6 +3,8 @@ import {
   effectiveMapping,
   draftNeedsInput,
   effectiveExpenseMode,
+  effectiveSplit,
+  effectiveLines,
 } from "./draft-resolve";
 import type {
   TransactionSuggestion,
@@ -108,6 +110,80 @@ describe("draftNeedsInput", () => {
       draftNeedsInput(s, {
         ...resolvedNoPay,
         paymentAccount: { id: "cc1", name: "Visa" },
+      }),
+    ).toBe(false);
+  });
+});
+
+const withLines = (over: Partial<TransactionSuggestion> = {}) =>
+  sugg({
+    lines: [
+      { description: "Drill", amount: 60, account: matched("a1", "Supplies") },
+      { description: "Fuel", amount: 40, account: noMatch },
+    ],
+    ...over,
+  });
+
+describe("effectiveSplit + effectiveLines", () => {
+  it("is not split by default (single line, no behavior change)", () => {
+    expect(effectiveSplit(withLines(), null)).toBe(false);
+  });
+  it("splits only when opted in AND ≥2 lines", () => {
+    expect(
+      effectiveSplit(withLines(), {
+        party: null,
+        account: null,
+        taxCode: null,
+        split: true,
+      }),
+    ).toBe(true);
+    // Fewer than 2 lines can't split even if opted in.
+    expect(
+      effectiveSplit(sugg({ lines: [] }), {
+        party: null,
+        account: null,
+        taxCode: null,
+        split: true,
+      }),
+    ).toBe(false);
+  });
+  it("income never splits", () => {
+    expect(
+      effectiveSplit(withLines({ direction: "income" }), {
+        party: null,
+        account: null,
+        taxCode: null,
+        split: true,
+      }),
+    ).toBe(false);
+  });
+  it("effectiveLines uses the AI account, then the per-line override", () => {
+    const eff = effectiveLines(withLines(), null);
+    expect(eff[0]!.account).toEqual({ id: "a1", name: "Supplies" }); // AI match
+    expect(eff[1]!.account).toBeNull(); // AI had no match
+    const overridden = effectiveLines(withLines(), {
+      party: null,
+      account: null,
+      taxCode: null,
+      lineAccounts: { "1": { id: "a2", name: "Fuel Exp" } },
+    });
+    expect(overridden[1]!.account).toEqual({ id: "a2", name: "Fuel Exp" });
+  });
+  it("a split draft needs EVERY line's account", () => {
+    const s = withLines();
+    const split: ResolvedEntry = {
+      party: { id: "v1", name: "X" },
+      account: null,
+      taxCode: { id: "t1", name: "GST" },
+      split: true,
+    };
+    // Line 2 (Fuel) has no account -> needs input.
+    expect(draftNeedsInput(s, split)).toBe(true);
+    // Fill it -> satisfied.
+    expect(
+      draftNeedsInput(s, {
+        ...split,
+        lineAccounts: { "1": { id: "a2", name: "Fuel Exp" } },
       }),
     ).toBe(false);
   });

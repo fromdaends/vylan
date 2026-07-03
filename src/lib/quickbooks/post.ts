@@ -24,6 +24,8 @@ import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import {
   effectiveMapping,
   effectiveExpenseMode,
+  effectiveSplit,
+  effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
 import {
   buildBillPayload,
@@ -36,6 +38,7 @@ import {
   resolveTaxApplication,
   taxDiscrepancyNote,
   type TaxApplication,
+  type ExpenseLine,
   type PostabilityProblem,
   type InvoicePostabilityProblem,
   type PurchasePostabilityProblem,
@@ -122,6 +125,45 @@ export async function postApprovedDraft(
     taxTotal: s.taxTotal,
   });
 
+  // EXPENSE line SPLIT: when the accountant opted to split across accounts, post
+  // one line per item. Validate every line has an ACTIVE account, then build the
+  // multi-line array. `expenseAccount` is the account the shared postability gate
+  // + single-line builders use — the single pick, or (when split) the first
+  // line's account as a representative so the vendor/amount/paid-from checks run.
+  let expenseLines: ExpenseLine[] | undefined;
+  let expenseAccount = eff.account;
+  // Splitting only applies when tax-lines are ON: the line amounts are PRE-TAX
+  // (they sum to the subtotal) and rely on QuickBooks adding the tax on top to
+  // reach the gross total. With tax OFF we'd post the bare subtotal and DROP the
+  // tax, so a split is ignored (single gross line) unless `tax` is applied.
+  if (
+    s.direction === "expense" &&
+    tax != null &&
+    effectiveSplit(s, draft.resolved)
+  ) {
+    const effLines = effectiveLines(s, draft.resolved);
+    if (effLines.some((l) => l.account == null)) {
+      return { kind: "not_postable", ...base, problems: ["missing_account"] };
+    }
+    if (lists?.accounts) {
+      for (const l of effLines) {
+        const a = lists.accounts.find((x) => x.id === l.account!.id);
+        if (!a || !a.active) {
+          return {
+            kind: "not_postable",
+            ...base,
+            problems: ["account_inactive"],
+          };
+        }
+      }
+    }
+    expenseLines = effLines.map((l) => ({
+      amount: l.amount,
+      accountId: l.account!.id,
+    }));
+    expenseAccount = effLines[0]!.account;
+  }
+
   // Branch: INCOME posts an Invoice (item line). An EXPENSE posts either a
   // PURCHASE (already paid — against a bank/credit-card account) or a BILL (unpaid
   // payable), decided by effectiveExpenseMode. All validate against CURRENT lists.
@@ -151,7 +193,7 @@ export async function postApprovedDraft(
     const problems = checkPurchasePostable({
       direction: s.direction,
       party: eff.party,
-      account: eff.account,
+      account: expenseAccount,
       paymentAccount: eff.paymentAccount,
       amount: s.amount,
       lists: lists ?? null,
@@ -159,7 +201,7 @@ export async function postApprovedDraft(
     if (
       problems.length > 0 ||
       !eff.party ||
-      !eff.account ||
+      !expenseAccount ||
       !eff.paymentAccount ||
       s.amount == null
     ) {
@@ -183,33 +225,40 @@ export async function postApprovedDraft(
     }
     payload = buildPurchasePayload({
       vendorId: eff.party.id,
-      accountId: eff.account.id,
+      accountId: expenseAccount.id,
       paymentAccountId: eff.paymentAccount.id,
       paymentType: paymentTypeForAccount(paAcct.accountType),
       amount: s.amount,
       date: s.date,
       memo: "Posted from Vylan",
       tax,
+      lines: expenseLines,
     });
   } else {
     const problems = checkBillPostable({
       direction: s.direction,
       party: eff.party,
-      account: eff.account,
+      account: expenseAccount,
       amount: s.amount,
       lists: lists ?? null,
     });
-    if (problems.length > 0 || !eff.party || !eff.account || s.amount == null) {
+    if (
+      problems.length > 0 ||
+      !eff.party ||
+      !expenseAccount ||
+      s.amount == null
+    ) {
       return { kind: "not_postable", ...base, problems };
     }
     entity = "bill";
     payload = buildBillPayload({
       vendorId: eff.party.id,
-      accountId: eff.account.id,
+      accountId: expenseAccount.id,
       amount: s.amount,
       date: s.date,
       memo: "Posted from Vylan",
       tax,
+      lines: expenseLines,
     });
   }
 

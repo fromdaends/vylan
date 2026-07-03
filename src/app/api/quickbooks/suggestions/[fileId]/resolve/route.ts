@@ -85,16 +85,44 @@ export async function POST(
       patch[f as Field] = ref;
     }
   }
-  // `paid` (Bill vs Purchase override) is a boolean or null, not a ref.
-  if (Object.prototype.hasOwnProperty.call(body, "paid")) {
-    const p = body.paid;
-    if (p !== null && typeof p !== "boolean") {
+  // `paid` (Bill vs Purchase) and `split` (split-across-accounts) are boolean|null.
+  for (const bf of ["paid", "split"] as const) {
+    if (Object.prototype.hasOwnProperty.call(body, bf)) {
+      const val = body[bf];
+      if (val !== null && typeof val !== "boolean") {
+        return NextResponse.json(
+          { error: "bad_request", detail: `Invalid ${bf}.` },
+          { status: 400 },
+        );
+      }
+      patch[bf] = val;
+    }
+  }
+  // `lineAccounts` is the FULL map of line index ("0","1",…) -> ref|null. The
+  // client always sends the whole map (merge_qbo_resolved shallow-replaces it).
+  if (Object.prototype.hasOwnProperty.call(body, "lineAccounts")) {
+    const la = body.lineAccounts;
+    if (la === null) {
+      patch.lineAccounts = {};
+    } else if (typeof la === "object" && !Array.isArray(la)) {
+      const map: Record<string, ResolvedRef | null> = {};
+      for (const [k, v] of Object.entries(la as Record<string, unknown>)) {
+        const ref = parseRef(v);
+        if (ref === undefined) {
+          return NextResponse.json(
+            { error: "bad_request", detail: "Invalid lineAccounts." },
+            { status: 400 },
+          );
+        }
+        map[k] = ref;
+      }
+      patch.lineAccounts = map;
+    } else {
       return NextResponse.json(
-        { error: "bad_request", detail: "Invalid paid." },
+        { error: "bad_request", detail: "Invalid lineAccounts." },
         { status: 400 },
       );
     }
-    patch.paid = p;
   }
   if (Object.keys(patch).length === 0) {
     return NextResponse.json(
