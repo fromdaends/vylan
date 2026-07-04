@@ -275,6 +275,15 @@ export async function postApprovedDraft(
   } catch (e) {
     const detail =
       e instanceof QuickbooksError ? e.message : (e as Error).message;
+    // Log to the server too (like the read/refresh paths do). `detail` carries the
+    // intuit_tid at its front, so it reaches our logs even if the DB post_error
+    // write below fails — and the post/write failure is exactly the case you'd
+    // open an Intuit support ticket for.
+    console.error(
+      "[quickbooks] post failed:",
+      e instanceof QuickbooksError ? e.code : "unknown",
+      detail,
+    );
     await recordDraftPostError({ uploadedFileId: fileId, error: detail });
     return { kind: "post_failed", ...base, detail };
   }
