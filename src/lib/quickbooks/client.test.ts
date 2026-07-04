@@ -10,6 +10,7 @@ import {
   revokeToken,
   isAccessTokenStale,
   quickbooksQuery,
+  quickbooksCreate,
   QuickbooksError,
 } from "./client";
 
@@ -188,12 +189,17 @@ function mockResponse(opts: {
   status?: number;
   json?: unknown;
   text?: string;
+  tid?: string; // value returned for the intuit_tid response header
 }) {
   return {
     ok: opts.ok,
     status: opts.status ?? (opts.ok ? 200 : 400),
     json: async () => opts.json,
     text: async () => opts.text ?? "",
+    headers: {
+      get: (name: string) =>
+        name.toLowerCase() === "intuit_tid" ? (opts.tid ?? null) : null,
+    },
   } as unknown as Response;
 }
 
@@ -441,5 +447,82 @@ describe("quickbooksQuery", () => {
   it("returns {} when the response has no QueryResponse", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => mockResponse({ ok: true, json: {} })));
     expect(await quickbooksQuery("AT", "r", "Q", "sandbox")).toEqual({});
+  });
+});
+
+describe("intuit_tid capture on failures", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("captures the intuit_tid header on a read failure (on the error + in the message)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        mockResponse({ ok: false, status: 400, text: "bad query", tid: "TID-READ-1" }),
+      ),
+    );
+    const err = (await quickbooksQuery("AT", "r", "Q", "sandbox").catch(
+      (e) => e,
+    )) as QuickbooksError;
+    expect(err).toBeInstanceOf(QuickbooksError);
+    expect(err.code).toBe("read_failed");
+    expect(err.tid).toBe("TID-READ-1");
+    expect(err.message).toContain("intuit_tid: TID-READ-1");
+  });
+
+  it("captures the intuit_tid header on a token refresh failure", async () => {
+    process.env.QBO_CLIENT_ID = "cid";
+    process.env.QBO_CLIENT_SECRET = "csecret";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        mockResponse({
+          ok: false,
+          status: 400,
+          text: '{"error":"invalid_grant"}',
+          tid: "TID-TOK-9",
+        }),
+      ),
+    );
+    const err = (await refreshTokens("dead").catch(
+      (e) => e,
+    )) as QuickbooksError;
+    expect(err.code).toBe("invalid_grant");
+    expect(err.tid).toBe("TID-TOK-9");
+    expect(err.message).toContain("intuit_tid: TID-TOK-9");
+  });
+
+  it("leaves tid undefined and adds no suffix when the header is absent", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => mockResponse({ ok: false, status: 500, text: "err" })),
+    );
+    const err = (await quickbooksQuery("AT", "r", "Q", "sandbox").catch(
+      (e) => e,
+    )) as QuickbooksError;
+    expect(err.tid).toBeUndefined();
+    expect(err.message).not.toContain("intuit_tid");
+  });
+
+  it("keeps the tid at the front so it survives the 500-char post_error cap (write path)", async () => {
+    // Regression guard: a long Intuit fault body used to push a TRAILING tid past
+    // 500 chars, where recordDraftPostError's slice(0, 500) dropped it — exactly on
+    // the failed-post path that most needs it. Prepending keeps it.
+    const longBody = "x".repeat(2000);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        mockResponse({ ok: false, status: 400, text: longBody, tid: "TID-POST-7" }),
+      ),
+    );
+    const err = (await quickbooksCreate(
+      { accessToken: "AT", realmId: "r", environment: "sandbox" },
+      "bill",
+      {},
+      "req-1",
+    ).catch((e) => e)) as QuickbooksError;
+    expect(err.code).toBe("write_failed");
+    expect(err.tid).toBe("TID-POST-7");
+    // The tid must survive a downstream slice(0, 500) — the DB post_error cap.
+    expect(err.message.slice(0, 500)).toContain("intuit_tid: TID-POST-7");
   });
 });

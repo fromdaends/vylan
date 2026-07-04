@@ -75,7 +75,17 @@ async function fetchDiscovery(
       cache: "no-store",
       signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
     });
-    if (!res.ok) return FALLBACK_ENDPOINTS;
+    if (!res.ok) {
+      // Don't fail silently: a persistent discovery outage should be visible in
+      // the logs even though we degrade gracefully to the well-known endpoints.
+      const tid = res.headers?.get?.("intuit_tid");
+      console.warn(
+        `[quickbooks] discovery ${environment} fetch failed (${res.status})${
+          tid ? ` [intuit_tid: ${tid}]` : ""
+        }; using well-known endpoints`,
+      );
+      return FALLBACK_ENDPOINTS;
+    }
     const doc = (await res.json().catch(() => null)) as IntuitDiscoveryDoc | null;
     // Take each endpoint from the document when it's a non-empty string; otherwise
     // fall back per-field, so a partial document still yields a complete set.
@@ -84,7 +94,12 @@ async function fetchDiscovery(
       token: str(doc?.token_endpoint) ?? FALLBACK_ENDPOINTS.token,
       revoke: str(doc?.revocation_endpoint) ?? FALLBACK_ENDPOINTS.revoke,
     };
-  } catch {
+  } catch (e) {
+    console.warn(
+      `[quickbooks] discovery ${environment} fetch errored (${
+        (e as Error).message
+      }); using well-known endpoints`,
+    );
     return FALLBACK_ENDPOINTS;
   }
 }

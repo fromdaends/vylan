@@ -14,9 +14,14 @@ function mockResponse(opts: { ok: boolean; status?: number; json?: unknown }) {
 }
 
 // The cache is module-level, so clear it around every test to keep them isolated.
-beforeEach(() => __clearDiscoveryCacheForTests());
+// Silence the fallback warnings (we assert on them where it matters).
+beforeEach(() => {
+  __clearDiscoveryCacheForTests();
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   __clearDiscoveryCacheForTests();
 });
 
@@ -59,6 +64,8 @@ describe("getOAuthEndpoints", () => {
       }),
     );
     expect(await getOAuthEndpoints("production")).toEqual(FALLBACK_ENDPOINTS);
+    // The outage is logged, not swallowed silently.
+    expect(console.warn).toHaveBeenCalled();
   });
 
   it("falls back on a non-2xx discovery response", async () => {

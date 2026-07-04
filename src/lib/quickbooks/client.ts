@@ -56,10 +56,32 @@ export class QuickbooksError extends Error {
       | "write_failed",
     message: string,
     public readonly status?: number,
+    // Intuit's per-response trace id (the `intuit_tid` response header). Captured
+    // on failures and appended to `message` so it lands in our logs; quoting it in
+    // an Intuit support ticket lets their team pinpoint the exact failed request.
+    public readonly tid?: string,
   ) {
     super(message);
     this.name = "QuickbooksError";
   }
+}
+
+// Read Intuit's `intuit_tid` trace id off a response (header names are
+// case-insensitive). Defensive `?.` so a partial mock in tests can't throw — a
+// real fetch Response always has a Headers object.
+function tidOf(res: Response): string | undefined {
+  const tid = res.headers?.get?.("intuit_tid");
+  return tid && tid.trim() ? tid.trim() : undefined;
+}
+
+// PREPEND the trace id to an error message, e.g. "[intuit_tid: abc] <message>".
+// Prepending (not appending) is deliberate: the write path stores this message in
+// a `post_error` column capped at 500 chars, and Intuit fault bodies are often
+// long — a trailing tid would be sliced off exactly on the failed-post path that
+// most needs it. At the front it always survives truncation and heads every log
+// line. Returns the message unchanged when there is no tid.
+function withTid(message: string, tid: string | undefined): string {
+  return tid ? `[intuit_tid: ${tid}] ${message}` : message;
 }
 
 // Both the client id and secret must be present for the connection to work. When
@@ -261,10 +283,15 @@ export async function exchangeCodeForTokens(
   );
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+    const tid = tidOf(res);
     throw new QuickbooksError(
       "token_exchange_failed",
-      `QuickBooks token exchange failed (${res.status}): ${truncate(detail)}`,
+      withTid(
+        `QuickBooks token exchange failed (${res.status}): ${truncate(detail)}`,
+        tid,
+      ),
       res.status,
+      tid,
     );
   }
   const json = (await res.json()) as IntuitTokenResponse;
@@ -291,10 +318,15 @@ export async function refreshTokens(
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     const dead = /invalid_grant/i.test(detail);
+    const tid = tidOf(res);
     throw new QuickbooksError(
       dead ? "invalid_grant" : "token_refresh_failed",
-      `QuickBooks token refresh failed (${res.status}): ${truncate(detail)}`,
+      withTid(
+        `QuickBooks token refresh failed (${res.status}): ${truncate(detail)}`,
+        tid,
+      ),
       res.status,
+      tid,
     );
   }
   const json = (await res.json()) as IntuitTokenResponse;
@@ -370,7 +402,14 @@ export async function fetchCompanyProfile(
   } catch {
     return empty;
   }
-  if (!res.ok) return empty;
+  if (!res.ok) {
+    // Fail soft (the connection is still valid), but record the trace id so a
+    // recurring identity-read failure is diagnosable with Intuit support.
+    console.warn(
+      withTid(`[quickbooks] company info read failed (${res.status})`, tidOf(res)),
+    );
+    return empty;
+  }
   try {
     const json = (await res.json()) as {
       CompanyInfo?: { CompanyName?: string; Country?: string };
@@ -430,10 +469,12 @@ export async function quickbooksQuery(
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+    const tid = tidOf(res);
     throw new QuickbooksError(
       "read_failed",
-      `QuickBooks query failed (${res.status}): ${truncate(detail)}`,
+      withTid(`QuickBooks query failed (${res.status}): ${truncate(detail)}`, tid),
       res.status,
+      tid,
     );
   }
   const json = (await res.json().catch(() => null)) as {
@@ -500,19 +541,21 @@ export async function quickbooksCreate(
       `QuickBooks create request failed: ${(e as Error).message}`,
     );
   }
+  const tid = tidOf(res);
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new QuickbooksError(
       "write_failed",
-      `QuickBooks create failed (${res.status}): ${truncate(detail)}`,
+      withTid(`QuickBooks create failed (${res.status}): ${truncate(detail)}`, tid),
       res.status,
+      tid,
     );
   }
   const json = (await res.json().catch(() => null)) as Record<
     string,
     unknown
   > | null;
-  return parseEntityResult(json, entityResponseKey(entity));
+  return parseEntityResult(json, entityResponseKey(entity), tid);
 }
 
 // DELETE a posted transaction (the Stage 5 undo). A QuickBooks BILL cannot be
@@ -552,12 +595,14 @@ export async function quickbooksDelete(
       `QuickBooks delete request failed: ${(e as Error).message}`,
     );
   }
+  const tid = tidOf(res);
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     throw new QuickbooksError(
       "write_failed",
-      `QuickBooks delete failed (${res.status}): ${truncate(detail)}`,
+      withTid(`QuickBooks delete failed (${res.status}): ${truncate(detail)}`, tid),
       res.status,
+      tid,
     );
   }
   // A delete only needs to have SUCCEEDED — we don't consume the returned id (the
@@ -568,7 +613,8 @@ export async function quickbooksDelete(
     unknown
   > | null;
   const fault = extractFault(json);
-  if (fault) throw new QuickbooksError("write_failed", fault);
+  if (fault)
+    throw new QuickbooksError("write_failed", withTid(fault, tid), undefined, tid);
   return { id, syncToken };
 }
 
@@ -581,9 +627,11 @@ export async function quickbooksDelete(
 function parseEntityResult(
   json: Record<string, unknown> | null,
   key: string,
+  tid?: string,
 ): QboEntityResult {
   const fault = extractFault(json);
-  if (fault) throw new QuickbooksError("write_failed", fault);
+  if (fault)
+    throw new QuickbooksError("write_failed", withTid(fault, tid), undefined, tid);
   const entity = (json?.[key] ?? null) as Record<string, unknown> | null;
   const id = entity && typeof entity.Id === "string" ? entity.Id : null;
   const syncToken =
@@ -591,7 +639,9 @@ function parseEntityResult(
   if (!id) {
     throw new QuickbooksError(
       "write_failed",
-      "QuickBooks returned an unexpected response.",
+      withTid("QuickBooks returned an unexpected response.", tid),
+      undefined,
+      tid,
     );
   }
   return {
