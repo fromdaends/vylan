@@ -48,10 +48,9 @@ the security answers, and reviewing anything Intuit sends back. Just ask.
 When Intuit gives you **production keys**, we go live in this exact order. Nothing here
 changes anything for real users until the last step.
 
-1. **Apply the token-encryption migration.** In your Supabase SQL editor
-   (<https://supabase.com/dashboard/project/mttllgxgkvjjqlzlyeum/sql/new>), paste and run
-   the contents of `supabase/migrations/0480_quickbooks_token_fingerprint.sql`. Tell me
-   "0480 applied" and I'll verify it. (Safe to do now — it changes nothing on its own.)
+1. **Apply the token-encryption migration.** ✅ **DONE** — `0480` is applied in
+   production (verified 2026-07-05: the `refresh_token_fingerprint` column exists on
+   `quickbooks_connections`). Nothing to do here.
 2. **Generate the encryption key.** In your terminal, run:
    ```
    node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
@@ -82,5 +81,7 @@ changes anything for real users until the last step.
 ## Quick status
 
 - Token encryption at rest: **done** (ships behind `QBO_TOKEN_ENC_KEY`, off until you set it).
-- Migration `0480`: **written, waiting for you to apply** (Track B, step 1).
+- Migration `0480`: **applied in production** ✅ (verified 2026-07-05).
+- The one thing left before encryption is actually live: set `QBO_TOKEN_ENC_KEY` in
+  Vercel (Track B, step 3) — do this at go-live, after Intuit approval.
 - Everything else in Track B: **ready**, waiting on Intuit approval (Track A).
