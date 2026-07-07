@@ -69,9 +69,19 @@ changes anything for real users until the last step.
 6. **Reconnect.** Sandbox connections don't carry over to production. Each firm (starting
    with you) goes to Settings → Integrations and connects to their **real** QuickBooks
    company. From then on, tokens are stored encrypted.
+   - **Tip:** connect the new company directly (just click Connect) — do NOT disconnect
+     first. When the connected company changes, Vylan automatically clears the old
+     company's cached lists and learned matches and retires its unposted drafts, so
+     sandbox leftovers can't bleed into the real books. (If you disconnect first, that
+     automatic cleanup can't tell the companies apart — then dismiss any leftover
+     sandbox drafts in the QuickBooks queue by hand.)
 
 **Safety notes**
 - Steps 1–4 are inert until the redeploy in step 5. You can stage them calmly.
+- **The key is now enforced in code:** if `QBO_ENVIRONMENT=production` is set but
+  `QBO_TOKEN_ENC_KEY` is missing (or malformed), the app REFUSES to connect a
+  QuickBooks company and Settings shows exactly what to fix — so forgetting step 3
+  can no longer silently store unencrypted tokens.
 - The `QBO_TAX_LINES_ENABLED` switch is independent — leave it as you have it.
 - If anything looks wrong after go-live, set `QBO_ENVIRONMENT` back to `sandbox` and
   redeploy to fall back safely (it fails safe to sandbox unless it says exactly "production").

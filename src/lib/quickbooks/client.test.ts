@@ -11,6 +11,7 @@ import {
   isAccessTokenStale,
   quickbooksQuery,
   quickbooksCreate,
+  quickbooksProductionKeyMissing,
   QuickbooksError,
 } from "./client";
 
@@ -31,6 +32,7 @@ const ENV_KEYS = [
   "QBO_CLIENT_SECRET",
   "QBO_ENVIRONMENT",
   "QBO_REDIRECT_URI",
+  "QBO_TOKEN_ENC_KEY",
   "APP_URL",
 ] as const;
 
@@ -72,6 +74,37 @@ describe("quickbooksEnvironment", () => {
     expect(quickbooksEnvironment()).toBe("production");
     process.env.QBO_ENVIRONMENT = "PRODUCTION";
     expect(quickbooksEnvironment()).toBe("production");
+  });
+});
+
+describe("quickbooksProductionKeyMissing", () => {
+  // A valid 32-byte key (base64). The guard only cares that it parses.
+  const VALID_KEY = Buffer.alloc(32, 7).toString("base64");
+
+  it("never blocks sandbox (key or no key)", () => {
+    expect(quickbooksProductionKeyMissing()).toBe(false);
+    process.env.QBO_ENVIRONMENT = "sandbox";
+    expect(quickbooksProductionKeyMissing()).toBe(false);
+  });
+
+  it("blocks production without an encryption key", () => {
+    process.env.QBO_ENVIRONMENT = "production";
+    expect(quickbooksProductionKeyMissing()).toBe(true);
+  });
+
+  it("blocks production with a malformed key (not 32 bytes)", () => {
+    // Silence the expected "not a 32-byte key" complaint from the key parser.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    process.env.QBO_ENVIRONMENT = "production";
+    process.env.QBO_TOKEN_ENC_KEY = "too-short";
+    expect(quickbooksProductionKeyMissing()).toBe(true);
+    spy.mockRestore();
+  });
+
+  it("allows production once a valid key is set", () => {
+    process.env.QBO_ENVIRONMENT = "production";
+    process.env.QBO_TOKEN_ENC_KEY = VALID_KEY;
+    expect(quickbooksProductionKeyMissing()).toBe(false);
   });
 });
 

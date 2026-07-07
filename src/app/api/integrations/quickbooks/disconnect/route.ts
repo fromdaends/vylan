@@ -7,6 +7,7 @@ import {
   getFirmQuickbooksConnectionWithTokens,
   clearFirmQuickbooksConnection,
 } from "@/lib/db/quickbooks";
+import { purgeFirmQuickbooksCache } from "@/lib/db/quickbooks-cache";
 
 export const runtime = "nodejs";
 
@@ -38,5 +39,11 @@ export async function POST() {
     await revokeToken(conn.refreshToken);
   }
   await clearFirmQuickbooksConnection(firm.id);
+  // Drop the cached reference lists too: they belong to the disconnected company
+  // and are fully rebuilt by the automatic sync on the next connect. Learned
+  // mappings and drafts are kept — reconnecting the SAME company (the common
+  // fix for a dead connection) must not lose them; a COMPANY change is handled
+  // by the callback's realm comparison.
+  await purgeFirmQuickbooksCache(firm.id);
   return NextResponse.json({ ok: true });
 }

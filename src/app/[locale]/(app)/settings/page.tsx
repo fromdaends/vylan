@@ -15,7 +15,7 @@ import {
   quickbooksEnvironment,
 } from "@/lib/quickbooks/client";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
-import { ensureFreshQuickbooksToken } from "@/lib/quickbooks/connection";
+import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import { listFirmPaymentsWithNames } from "@/lib/db/payment-requests";
 import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
@@ -117,24 +117,27 @@ export default async function SettingsPage({
   // section. Reads the firm's connection (RLS-scoped; the tokens are not even
   // selectable) and defaults gracefully to "not connected" before migration 0410
   // is applied. The ?qbo=<status> flag is set by the OAuth callback.
-  const qboCallbackAllowed = ["done", "denied", "error", "setup"] as const;
+  const qboCallbackAllowed = ["done", "denied", "error", "setup", "enc"] as const;
   const qboCallbackStatus = qboCallbackAllowed.includes(
     qboParam as (typeof qboCallbackAllowed)[number],
   )
-    ? (qboParam as "done" | "denied" | "error" | "setup")
+    ? (qboParam as "done" | "denied" | "error" | "setup" | "enc")
     : null;
   // Status + read access are available to ANY firm member (connect/disconnect are
   // gated to owners inside IntegrationsSection). getFirmQuickbooksStatus reads via
   // RLS, so a staff member sees only their own firm's connection.
   const qboConnection = await getFirmQuickbooksStatus();
-  // Keep the connection alive: when connected, refresh the access token if it is
-  // stale (best-effort; never blocks the page on failure).
-  if (qboConnection?.connected) {
-    await ensureFreshQuickbooksToken(firm.id);
-  }
+  // Connection health: refreshes a stale token as a side effect (the keep-alive)
+  // AND detects a DEAD connection (expired/revoked refresh token) so the
+  // Integrations card can show "reconnect needed" instead of a false green
+  // "Connected". Best-effort; never blocks the page on failure.
+  const qboHealth = qboConnection?.connected
+    ? await getQuickbooksConnectionHealth(firm.id)
+    : "ok";
   const quickbooks = {
     configured: isQuickbooksConfigured(),
     connected: Boolean(qboConnection?.connected),
+    needsReconnect: qboHealth === "reconnect_required",
     companyName: qboConnection?.companyName ?? null,
     realmId: qboConnection?.realmId ?? null,
     environment: qboConnection?.environment ?? quickbooksEnvironment(),

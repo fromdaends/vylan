@@ -19,6 +19,7 @@ import {
   maybeEncryptToken,
   decryptToken,
   tokenFingerprint,
+  isTokenEncryptionConfigured,
 } from "@/lib/quickbooks/token-cipher";
 import type { QuickbooksEnvironment } from "@/lib/quickbooks/client";
 
@@ -126,6 +127,17 @@ export async function upsertFirmQuickbooksConnection(
     })
   ).error;
   if (error && isMissingSchema(error)) {
+    // The fallback tiers below store PLAINTEXT (pre-0480 the optimistic lock
+    // matches on the raw refresh token, so encrypting would break refresh). When
+    // an encryption key IS configured, silently falling back would defeat the
+    // whole point of the key — refuse instead. The callback maps
+    // "migration_pending" to the "finish setup" message (apply 0480, then retry).
+    if (isTokenEncryptionConfigured()) {
+      console.error(
+        "[quickbooks] refusing plaintext fallback: QBO_TOKEN_ENC_KEY is set but migration 0480 (refresh_token_fingerprint) is not applied",
+      );
+      return { ok: false, reason: "migration_pending" };
+    }
     // Tier 2 (0470, no 0480): no fingerprint column, so we must NOT encrypt — the
     // legacy optimistic lock still matches on the RAW refresh token. Store plaintext.
     error = (
@@ -211,13 +223,23 @@ export type QuickbooksConnectionWithTokens = {
   companyCountry: string | null;
 };
 
+// Rich result for the full-connection read, so callers can tell a connection
+// that is genuinely UNUSABLE (no row, pre-migration, or stored tokens that can't
+// be decrypted — only a reconnect fixes those) apart from a TRANSIENT read
+// failure (network/DB blip — retrying may succeed). The health check maps
+// "absent" to a reconnect banner and "read_error" to "ok", so a one-off blip
+// never shows a false alarm.
+export type QuickbooksConnectionReadResult =
+  | { kind: "ok"; conn: QuickbooksConnectionWithTokens }
+  | { kind: "absent" }
+  | { kind: "read_error" };
+
 // Service-role read of the FULL connection, including the OAuth tokens, for token
 // refresh + disconnect. The token columns are not readable by the authenticated
-// client (migration 0410), so this MUST go through the service role. Returns null
-// when not connected or before the migration is applied.
-export async function getFirmQuickbooksConnectionWithTokens(
+// client (migration 0410), so this MUST go through the service role.
+export async function readFirmQuickbooksConnection(
   firmId: string,
-): Promise<QuickbooksConnectionWithTokens | null> {
+): Promise<QuickbooksConnectionReadResult> {
   const sb = getServiceRoleSupabase();
   // Widest select first (0470 company_country); fall back to the pre-0470 column
   // set on a missing-column error so token refresh keeps working before the
@@ -243,15 +265,17 @@ export async function getFirmQuickbooksConnectionWithTokens(
     break;
   }
   if (error) {
-    if (!isMissingSchema(error)) {
-      console.error(
-        "[quickbooks] getFirmQuickbooksConnectionWithTokens failed:",
-        error,
-      );
-    }
-    return null;
+    // Pre-migration = the feature isn't live: genuinely absent. Anything else is
+    // a transient DB/network failure — report it as such, NOT as a dead
+    // connection.
+    if (isMissingSchema(error)) return { kind: "absent" };
+    console.error(
+      "[quickbooks] readFirmQuickbooksConnection failed:",
+      error,
+    );
+    return { kind: "read_error" };
   }
-  if (!data) return null;
+  if (!data) return { kind: "absent" };
   // Decrypt the tokens (a legacy plaintext value passes through unchanged). A
   // decrypt failure (missing/rotated key, tamper) means the stored token is
   // unusable — treat the connection as not-connected rather than handing out
@@ -263,20 +287,34 @@ export async function getFirmQuickbooksConnectionWithTokens(
       "[quickbooks] could not decrypt stored tokens for firm",
       firmId,
     );
-    return null;
+    return { kind: "absent" };
   }
   return {
-    realmId: data.realm_id as string,
-    accessToken,
-    refreshToken,
-    accessTokenExpiresAt:
-      (data.access_token_expires_at as string | null) ?? null,
-    refreshTokenExpiresAt:
-      (data.refresh_token_expires_at as string | null) ?? null,
-    environment:
-      (data.environment as string) === "production" ? "production" : "sandbox",
-    companyCountry: (data.company_country as string | null) ?? null,
+    kind: "ok",
+    conn: {
+      realmId: data.realm_id as string,
+      accessToken,
+      refreshToken,
+      accessTokenExpiresAt:
+        (data.access_token_expires_at as string | null) ?? null,
+      refreshTokenExpiresAt:
+        (data.refresh_token_expires_at as string | null) ?? null,
+      environment:
+        (data.environment as string) === "production"
+          ? "production"
+          : "sandbox",
+      companyCountry: (data.company_country as string | null) ?? null,
+    },
   };
+}
+
+// Back-compat thin wrapper: the token itself, or null for BOTH "absent" and
+// "read_error" (callers that just need a token treat every miss the same).
+export async function getFirmQuickbooksConnectionWithTokens(
+  firmId: string,
+): Promise<QuickbooksConnectionWithTokens | null> {
+  const res = await readFirmQuickbooksConnection(firmId);
+  return res.kind === "ok" ? res.conn : null;
 }
 
 export type UpdateTokensResult =
@@ -342,6 +380,16 @@ export async function updateFirmQuickbooksTokens(
     .select("id");
 
   if (res.error && isMissingSchema(res.error)) {
+    // Same plaintext-refusal rule as the upsert: with an encryption key
+    // configured, never write plaintext tokens just because 0480 is missing.
+    // "error" makes the caller discard the rotation (the connection degrades
+    // gracefully) instead of silently downgrading to plaintext at rest.
+    if (isTokenEncryptionConfigured()) {
+      console.error(
+        "[quickbooks] refusing plaintext token rotation: QBO_TOKEN_ENC_KEY is set but migration 0480 is not applied",
+      );
+      return { outcome: "error" };
+    }
     // Pre-0480: no fingerprint column. Store PLAINTEXT (so encryption isn't left
     // un-matchable) and match on the raw refresh token, exactly as before.
     res = await sb
@@ -383,4 +431,32 @@ export async function clearFirmQuickbooksConnection(
   if (error && !isMissingSchema(error)) {
     console.error("[quickbooks] clearFirmQuickbooksConnection failed:", error);
   }
+}
+
+// Service-role read of just WHICH company a firm is connected to (realm +
+// environment) — no token columns, so it works even when the stored tokens can't
+// be decrypted. Used by the OAuth callback to detect that the connected COMPANY
+// changed and old cached/learned/draft data must be retired. Returns null when
+// not connected or pre-migration.
+export async function getFirmQuickbooksRealm(
+  firmId: string,
+): Promise<{ realmId: string; environment: QuickbooksEnvironment } | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("quickbooks_connections")
+    .select("realm_id, environment")
+    .eq("firm_id", firmId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] getFirmQuickbooksRealm failed:", error);
+    }
+    return null;
+  }
+  if (!data) return null;
+  return {
+    realmId: data.realm_id as string,
+    environment:
+      (data.environment as string) === "production" ? "production" : "sandbox",
+  };
 }

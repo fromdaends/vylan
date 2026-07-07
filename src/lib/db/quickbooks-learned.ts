@@ -101,3 +101,18 @@ export async function recordLearnedMapping(input: {
     console.error("[quickbooks] recordLearnedMapping failed:", error);
   }
 }
+
+// Delete ALL of a firm's learned mappings. Used when the connected QuickBooks
+// COMPANY changes (different realm / sandbox->production): every learned target
+// id belongs to the old company and would mis-map new documents. Service role;
+// best-effort (missing table pre-0490 is a no-op).
+export async function purgeFirmLearnedMappings(firmId: string): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("quickbooks_learned_mappings")
+    .delete()
+    .eq("firm_id", firmId);
+  if (error && !isMissingSchema(error)) {
+    console.error("[quickbooks] purgeFirmLearnedMappings failed:", error);
+  }
+}

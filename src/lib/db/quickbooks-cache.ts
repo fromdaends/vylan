@@ -280,3 +280,18 @@ export async function replaceCachedEntity(
     .lt("synced_at", syncedAt);
   if (delErr) throw delErr;
 }
+
+// Delete ALL of a firm's cached QuickBooks reference rows (all five entity
+// tables). Used on disconnect and when the connected COMPANY changes: cached rows
+// hold the old company's internal ids, and the next sync rebuilds everything from
+// the newly connected company, so purging loses nothing durable. Service role;
+// per-table best-effort (a missing table pre-migration is a no-op).
+export async function purgeFirmQuickbooksCache(firmId: string): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  for (const table of Object.values(TABLE_BY_ENTITY)) {
+    const { error } = await sb.from(table).delete().eq("firm_id", firmId);
+    if (error && !isMissingSchema(error)) {
+      console.error(`[quickbooks] purge ${table} failed:`, error);
+    }
+  }
+}

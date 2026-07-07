@@ -22,6 +22,7 @@
 // transactions, no documents.
 
 import { getOAuthEndpoints } from "./discovery";
+import { isTokenEncryptionConfigured } from "./token-cipher";
 
 // Bound every Intuit network call so a slow/hung endpoint can never block a
 // server render (the Settings keep-alive awaits refreshTokens) or a route. 10s is
@@ -101,6 +102,17 @@ export function quickbooksEnvironment(): QuickbooksEnvironment {
     "production"
     ? "production"
     : "sandbox";
+}
+
+// The go-live safety lock: PRODUCTION connections may only be stored when token
+// encryption at rest is configured (QBO_TOKEN_ENC_KEY parses to a 32-byte key).
+// Without this, one forgotten env var would silently store REAL clients' OAuth
+// tokens as plaintext. Sandbox is exempt so local dev needs no key. Both the
+// connect and callback routes refuse when this returns true.
+export function quickbooksProductionKeyMissing(): boolean {
+  return (
+    quickbooksEnvironment() === "production" && !isTokenEncryptionConfigured()
+  );
 }
 
 // Tax-line posting kill-switch. OFF unless QBO_TAX_LINES_ENABLED is exactly
