@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/db/users";
 import {
   isQuickbooksConfigured,
   buildAuthorizeUrl,
+  quickbooksProductionKeyMissing,
 } from "@/lib/quickbooks/client";
 
 export const runtime = "nodejs";
@@ -20,10 +21,6 @@ export const QBO_STATE_COOKIE = "qbo_oauth_state";
 // Starts QuickBooks (Intuit) OAuth for the current firm. Owner-only. Returns the
 // Intuit authorization URL the browser redirects to. Stage 1: connection only.
 export async function POST() {
-  if (!isQuickbooksConfigured()) {
-    return NextResponse.json({ error: "quickbooks_not_configured" }, { status: 503 });
-  }
-
   const sb = await getServerSupabase();
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) {
@@ -38,6 +35,24 @@ export async function POST() {
   const firm = await getCurrentFirm();
   if (!firm) {
     return NextResponse.json({ error: "no_firm" }, { status: 400 });
+  }
+
+  // Config checks AFTER auth, so an anonymous probe can't learn deployment
+  // posture (e.g. "production is running without its encryption key").
+  if (!isQuickbooksConfigured()) {
+    return NextResponse.json({ error: "quickbooks_not_configured" }, { status: 503 });
+  }
+  // Go-live safety lock: never START a production OAuth flow while token
+  // encryption at rest is unconfigured — the resulting tokens would be stored
+  // plaintext. The callback re-checks (defense in depth).
+  if (quickbooksProductionKeyMissing()) {
+    console.error(
+      "[quickbooks/connect] refused: QBO_ENVIRONMENT=production but QBO_TOKEN_ENC_KEY is not set (or not a 32-byte key). Set the key before connecting production companies.",
+    );
+    return NextResponse.json(
+      { error: "quickbooks_encryption_required" },
+      { status: 503 },
+    );
   }
 
   const state = randomUUID();

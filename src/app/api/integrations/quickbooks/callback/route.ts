@@ -8,9 +8,16 @@ import {
   exchangeCodeForTokens,
   fetchCompanyProfile,
   quickbooksEnvironment,
+  quickbooksProductionKeyMissing,
   QuickbooksError,
 } from "@/lib/quickbooks/client";
-import { upsertFirmQuickbooksConnection } from "@/lib/db/quickbooks";
+import {
+  upsertFirmQuickbooksConnection,
+  getFirmQuickbooksRealm,
+} from "@/lib/db/quickbooks";
+import { purgeFirmQuickbooksCache } from "@/lib/db/quickbooks-cache";
+import { purgeFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
+import { retireUnpostedDrafts } from "@/lib/db/quickbooks-suggestions";
 import { enqueueQuickbooksSync } from "@/lib/quickbooks/sync";
 import { QBO_STATE_COOKIE } from "../connect/route";
 
@@ -62,12 +69,26 @@ export async function GET(request: Request) {
   const firm = await getCurrentFirm();
   if (!firm) return back("error");
 
+  // Go-live safety lock (re-checked here in case the flow was started before the
+  // env changed): never STORE production tokens while encryption is unconfigured.
+  if (quickbooksProductionKeyMissing()) {
+    console.error(
+      "[quickbooks/callback] refused to store a production connection: QBO_TOKEN_ENC_KEY is not set (or not a 32-byte key).",
+    );
+    return back("enc");
+  }
+
   try {
+    // Remember which company was connected BEFORE this upsert, so we can detect a
+    // company change (realm/environment) and retire data tied to the old one.
+    const previous = await getFirmQuickbooksRealm(firm.id);
+
     const tokens = await exchangeCodeForTokens(code);
     // One identity-only read for the friendly company name + country (best-effort;
     // the connection is valid regardless). Country drives the non-US tax field.
     const profile = await fetchCompanyProfile(tokens.accessToken, realmId);
 
+    const environment = quickbooksEnvironment();
     const saved = await upsertFirmQuickbooksConnection(firm.id, {
       realmId,
       accessToken: tokens.accessToken,
@@ -76,13 +97,30 @@ export async function GET(request: Request) {
       refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
       companyName: profile.name,
       companyCountry: profile.country,
-      environment: quickbooksEnvironment(),
+      environment,
       connectedBy: auth.user.id,
     });
     if (!saved.ok) {
       // Pre-migration (0410 not applied) or a DB error: tell the UI to show the
       // "finish setup" note rather than a silent failure.
       return back(saved.reason === "migration_pending" ? "setup" : "error");
+    }
+    // The connected COMPANY changed (different realm, or sandbox <-> production).
+    // Everything derived from the old company is now meaningless here: cached
+    // reference lists and learned mappings hold the old company's internal ids,
+    // and unposted drafts resolve to them. Purge/retire so the old company's data
+    // can never leak into the new one's suggestions or posts. Posted drafts are
+    // history and are kept. Best-effort: a failure here must not undo the connect.
+    if (
+      previous &&
+      (previous.realmId !== realmId || previous.environment !== environment)
+    ) {
+      console.warn(
+        `[quickbooks/callback] connected company changed (realm ${previous.realmId} -> ${realmId}, env ${previous.environment} -> ${environment}); purging cached lists + learned mappings and retiring unposted drafts`,
+      );
+      await purgeFirmQuickbooksCache(firm.id);
+      await purgeFirmLearnedMappings(firm.id);
+      await retireUnpostedDrafts(firm.id);
     }
     // Kick off the first cache sync in the background (best-effort, off the
     // connect path). A no-op if the cache migration (0420) isn't applied yet.

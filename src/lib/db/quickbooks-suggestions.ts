@@ -643,3 +643,46 @@ export async function deleteTransactionSuggestionForFile(
     );
   }
 }
+
+// Retire every UNPOSTED draft (status 'draft' or 'approved') for a firm by
+// dismissing it. Used when the connected QuickBooks COMPANY changes: those
+// drafts' resolved refs (vendor/account/tax/item ids) belong to the old company
+// and can never post correctly against the new one. Posted rows are history and
+// dismissed rows are already out of the queue — both are left untouched. Service
+// role; best-effort (missing table pre-migration is a no-op). Returns the number
+// of drafts retired, or null on error.
+export async function retireUnpostedDrafts(
+  firmId: string,
+): Promise<number | null> {
+  const sb = getServiceRoleSupabase();
+  const now = new Date().toISOString();
+  // reviewed_by is CLEARED and reviewed_at re-stamped: this dismissal is the
+  // SYSTEM's (the company changed), not the human who last approved the draft —
+  // the card then shows a neutral "Dismissed · <retirement date>" instead of
+  // falsely attributing it to that person with a stale date. A leftover
+  // post_error from the old company is cleared too (tiered, pre-0450 safe).
+  const base = {
+    status: "dismissed",
+    reviewed_by: null,
+    reviewed_at: now,
+    updated_at: now,
+  };
+  const retire = (patch: Record<string, unknown>) =>
+    sb
+      .from("quickbooks_transaction_suggestions")
+      .update(patch)
+      .eq("firm_id", firmId)
+      .in("status", ["draft", "approved"])
+      .select("uploaded_file_id");
+  let { data, error } = await retire({ ...base, post_error: null });
+  if (error && isMissingSchema(error)) {
+    ({ data, error } = await retire(base));
+  }
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] retireUnpostedDrafts failed:", error);
+    }
+    return null;
+  }
+  return (data ?? []).length;
+}

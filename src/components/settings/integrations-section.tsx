@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Plug, CheckCircle2 } from "lucide-react";
+import { Plug, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { QuickbooksLists } from "@/components/settings/quickbooks-lists";
 
@@ -16,14 +16,19 @@ export type QuickbooksStatus = {
   // QBO_CLIENT_SECRET).
   configured: boolean;
   connected: boolean;
+  // A connection row exists but its tokens can no longer be used (refresh token
+  // expired after ~100 days of disuse, access revoked at Intuit, or the stored
+  // tokens can't be read). Only reconnecting fixes it — show the amber card.
+  needsReconnect: boolean;
   companyName: string | null;
   realmId: string | null;
   environment: "sandbox" | "production";
   // The status flag the callback redirected back with, if any. On "done" the
   // connection was written synchronously before the redirect, so the connected
   // card already renders — no separate "confirming" state is needed (unlike
-  // Stripe, whose status arrives later via webhook).
-  callbackStatus: "done" | "denied" | "error" | "setup" | null;
+  // Stripe, whose status arrives later via webhook). "enc" = the go-live safety
+  // lock refused a production connect because token encryption isn't configured.
+  callbackStatus: "done" | "denied" | "error" | "setup" | "enc" | null;
 };
 
 export function IntegrationsSection({
@@ -48,7 +53,9 @@ export function IntegrationsSection({
         ? t("qbo_connect_denied")
         : quickbooks.callbackStatus === "setup"
           ? t("qbo_connect_setup")
-          : null;
+          : quickbooks.callbackStatus === "enc"
+            ? t("qbo_encryption_required")
+            : null;
 
   async function startConnect() {
     setLoading(true);
@@ -67,7 +74,9 @@ export function IntegrationsSection({
       setError(
         data?.error === "quickbooks_not_configured"
           ? t("qbo_unavailable")
-          : t("qbo_connect_error"),
+          : data?.error === "quickbooks_encryption_required"
+            ? t("qbo_encryption_required")
+            : t("qbo_connect_error"),
       );
     } catch {
       setError(t("qbo_connect_error"));
@@ -94,6 +103,51 @@ export function IntegrationsSection({
     setDisconnecting(false);
   }
 
+  // The owner's disconnect affordance (small text button + inline confirm).
+  // Shared by the green "Connected" card AND the amber "reconnect needed" card —
+  // a DEAD connection must still be disconnectable without reconnecting first.
+  const disconnectControl = isOwner ? (
+    <div className="pt-1">
+      {confirmingDisconnect ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {t("qbo_disconnect_confirm_q")}
+          </span>
+          <button
+            type="button"
+            onClick={doDisconnect}
+            disabled={disconnecting}
+            aria-busy={disconnecting}
+            className="text-xs font-medium text-destructive hover:underline disabled:opacity-60"
+          >
+            {disconnecting ? "…" : t("qbo_disconnect_confirm_yes")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmingDisconnect(false)}
+            disabled={disconnecting}
+            className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-60"
+          >
+            {t("qbo_disconnect_cancel")}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setConfirmingDisconnect(true)}
+          className="text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          {t("qbo_disconnect_cta")}
+        </button>
+      )}
+      {disconnectError && (
+        <p role="alert" className="mt-1 text-xs text-destructive">
+          {disconnectError}
+        </p>
+      )}
+    </div>
+  ) : null;
+
   return (
     <section>
       <h2 className="text-sm font-semibold">{t("qbo_title")}</h2>
@@ -102,6 +156,50 @@ export function IntegrationsSection({
       {!quickbooks.configured ? (
         <div className="mt-4 max-w-xl rounded-lg border border-border/50 px-4 py-3 text-xs text-muted-foreground">
           {t("qbo_unavailable")}
+        </div>
+      ) : quickbooks.connected && quickbooks.needsReconnect ? (
+        // The connection exists but is DEAD (expired/revoked): an amber card with
+        // a Reconnect action instead of a false green "Connected".
+        <div className="mt-4 max-w-xl rounded-lg border border-warning/40 bg-warning/[0.06] p-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+            <div className="space-y-2">
+              <div className="text-sm font-medium">
+                {t("qbo_reconnect_title")}
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {quickbooks.companyName
+                  ? t("qbo_reconnect_hint_company", {
+                      company: quickbooks.companyName,
+                    })
+                  : t("qbo_reconnect_hint")}
+              </p>
+              {isOwner ? (
+                <>
+                  <div className="pt-1">
+                    <Button
+                      size="sm"
+                      onClick={startConnect}
+                      disabled={loading}
+                      aria-busy={loading}
+                    >
+                      {loading ? "…" : t("qbo_reconnect_cta")}
+                    </Button>
+                  </div>
+                  {(error || callbackError) && (
+                    <p role="alert" className="text-xs text-destructive">
+                      {error ?? callbackError}
+                    </p>
+                  )}
+                  {disconnectControl}
+                </>
+              ) : (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {t("qbo_reconnect_staff")}
+                </p>
+              )}
+            </div>
+          </div>
         </div>
       ) : quickbooks.connected ? (
         <>
@@ -133,47 +231,7 @@ export function IntegrationsSection({
                     })
                   : t("qbo_connected_hint")}
               </p>
-              {isOwner && (
-                <div className="pt-1">
-                  {confirmingDisconnect ? (
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-xs text-muted-foreground">
-                        {t("qbo_disconnect_confirm_q")}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={doDisconnect}
-                        disabled={disconnecting}
-                        aria-busy={disconnecting}
-                        className="text-xs font-medium text-destructive hover:underline disabled:opacity-60"
-                      >
-                        {disconnecting ? "…" : t("qbo_disconnect_confirm_yes")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmingDisconnect(false)}
-                        disabled={disconnecting}
-                        className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-60"
-                      >
-                        {t("qbo_disconnect_cancel")}
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmingDisconnect(true)}
-                      className="text-xs font-medium text-muted-foreground hover:text-foreground"
-                    >
-                      {t("qbo_disconnect_cta")}
-                    </button>
-                  )}
-                  {disconnectError && (
-                    <p role="alert" className="mt-1 text-xs text-destructive">
-                      {disconnectError}
-                    </p>
-                  )}
-                </div>
-              )}
+              {disconnectControl}
             </div>
           </div>
         </div>

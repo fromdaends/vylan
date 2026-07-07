@@ -6,6 +6,7 @@
 
 import {
   getFirmQuickbooksConnectionWithTokens,
+  readFirmQuickbooksConnection,
   updateFirmQuickbooksTokens,
 } from "@/lib/db/quickbooks";
 import {
@@ -15,17 +16,27 @@ import {
   type QuickbooksEnvironment,
 } from "@/lib/quickbooks/client";
 
-// Return a valid access token for the firm's QuickBooks connection, refreshing
-// (and persisting the ROTATED tokens) when the current one is stale. Returns null
-// when not connected, not configured, or the refresh fails.
-export async function getValidAccessToken(
+// The result of trying to obtain a usable access token: the token itself (or
+// null), plus whether the connection is DEAD — i.e. only a reconnect can fix it
+// (invalid_grant: the refresh token expired after ~100 days of disuse, or the
+// customer revoked access on Intuit's side). A transient failure (network, 5xx,
+// persist race) is NOT dead — it may succeed on the next call.
+type TokenAcquisition = { token: string | null; dead: boolean };
+
+async function acquireValidAccessToken(
   firmId: string,
-): Promise<string | null> {
-  const conn = await getFirmQuickbooksConnectionWithTokens(firmId);
-  if (!conn) return null;
+): Promise<TokenAcquisition> {
+  const read = await readFirmQuickbooksConnection(firmId);
+  // A transient DB/network failure reading the row is NOT a dead connection —
+  // report it like any other transient miss so no false reconnect alarm shows.
+  if (read.kind === "read_error") return { token: null, dead: false };
+  // No row, pre-migration, or stored tokens that can't be decrypted: unusable
+  // without a reconnect.
+  if (read.kind === "absent") return { token: null, dead: true };
+  const conn = read.conn;
 
   if (!isAccessTokenStale(conn.accessTokenExpiresAt, Date.now())) {
-    return conn.accessToken;
+    return { token: conn.accessToken, dead: false };
   }
 
   try {
@@ -38,12 +49,13 @@ export async function getValidAccessToken(
       accessTokenExpiresAt: fresh.accessTokenExpiresAt,
       refreshTokenExpiresAt: fresh.refreshTokenExpiresAt,
     });
-    if (result.outcome === "updated") return fresh.accessToken;
+    if (result.outcome === "updated")
+      return { token: fresh.accessToken, dead: false };
     if (result.outcome === "raced") {
       // A concurrent refresh already rotated + stored the token. Use the stored
       // (valid) access token rather than ours, which may already be superseded.
       const latest = await getFirmQuickbooksConnectionWithTokens(firmId);
-      return latest?.accessToken ?? null;
+      return { token: latest?.accessToken ?? null, dead: false };
     }
     // "error": the rotated refresh token was NOT durably stored. Do NOT hand out
     // our access token — the next refresh would use a dead refresh token and the
@@ -51,17 +63,48 @@ export async function getValidAccessToken(
     console.error(
       "[quickbooks] could not persist refreshed tokens; discarding to avoid a broken connection",
     );
-    return null;
+    return { token: null, dead: false };
   } catch (e) {
     // invalid_grant = the connection is dead (refresh token expired/revoked). We
     // deliberately do NOT auto-delete here: a transient failure must not wipe a
     // connection, and the owner can disconnect/reconnect explicitly.
     if (e instanceof QuickbooksError) {
       console.error("[quickbooks] refresh failed:", e.code, e.message);
-    } else {
-      console.error("[quickbooks] refresh unexpected error:", e);
+      return { token: null, dead: e.code === "invalid_grant" };
     }
-    return null;
+    console.error("[quickbooks] refresh unexpected error:", e);
+    return { token: null, dead: false };
+  }
+}
+
+// Return a valid access token for the firm's QuickBooks connection, refreshing
+// (and persisting the ROTATED tokens) when the current one is stale. Returns null
+// when not connected, not configured, or the refresh fails.
+export async function getValidAccessToken(
+  firmId: string,
+): Promise<string | null> {
+  return (await acquireValidAccessToken(firmId)).token;
+}
+
+// Health of an EXISTING connection, for surfacing a "reconnect QuickBooks"
+// banner. Only meaningful when the caller has already seen a connection row
+// (getFirmQuickbooksStatus). "reconnect_required" means no token can be obtained
+// AND retrying won't help (dead refresh token, revoked access, or undecryptable
+// stored tokens) — the owner must click Connect again. Transient failures report
+// "ok" so a network blip never shows a false alarm. As a side effect this
+// refreshes a stale token, so it doubles as the Settings keep-alive.
+export type QuickbooksConnectionHealth = "ok" | "reconnect_required";
+
+export async function getQuickbooksConnectionHealth(
+  firmId: string,
+): Promise<QuickbooksConnectionHealth> {
+  try {
+    const { token, dead } = await acquireValidAccessToken(firmId);
+    if (token) return "ok";
+    return dead ? "reconnect_required" : "ok";
+  } catch {
+    // Never let a health check break a page render.
+    return "ok";
   }
 }
 
@@ -94,15 +137,3 @@ export async function getQuickbooksReadContext(
   };
 }
 
-// Best-effort keep-alive used when a member opens Settings: refreshes only when
-// the access token is stale, so a dormant connection stays alive. Never throws
-// and never blocks rendering on a failure.
-export async function ensureFreshQuickbooksToken(
-  firmId: string,
-): Promise<void> {
-  try {
-    await getValidAccessToken(firmId);
-  } catch {
-    // Swallow — this is purely a keep-alive; the page renders regardless.
-  }
-}

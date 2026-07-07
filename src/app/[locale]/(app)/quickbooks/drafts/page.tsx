@@ -6,6 +6,8 @@ export const dynamic = "force-dynamic";
 import { assertLocale } from "@/lib/locale";
 import { Link } from "@/i18n/navigation";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
+import { getCurrentFirm } from "@/lib/db/firms";
+import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import {
   getCurrentUser,
   listFirmUsers,
@@ -26,7 +28,12 @@ import { QueueRow } from "@/components/quickbooks/queue-row";
 import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import type { DraftCardOptions } from "@/components/engagements/quickbooks-draft-card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Sparkles, UploadCloud } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Sparkles,
+  UploadCloud,
+} from "lucide-react";
 
 export default async function QuickbooksDraftsPage({
   params,
@@ -43,9 +50,10 @@ export default async function QuickbooksDraftsPage({
 
   // Connection gate. The nav item is hidden until QuickBooks is connected, but
   // the page is reachable by direct URL, so show a friendly prompt either way.
-  const [status, user] = await Promise.all([
+  const [status, user, firm] = await Promise.all([
     getFirmQuickbooksStatus(),
     getCurrentUser(),
+    getCurrentFirm(),
   ]);
   const isOwner = user?.role === "owner";
 
@@ -140,10 +148,25 @@ export default async function QuickbooksDraftsPage({
     );
   }
 
-  const [rows, qboLists, firmUsers] = await Promise.all([
+  // Connection health rides along with the data reads: a DEAD connection
+  // (expired/revoked tokens) gets a "reconnect" banner instead of letting every
+  // post fail with no explanation. Capped at 3s — when the stored token is stale
+  // the check calls Intuit, and this page must never wait on a slow upstream
+  // (the un-awaited check still finishes the keep-alive refresh in background;
+  // an inconclusive check just reports "ok", i.e. no banner this load).
+  const HEALTH_BUDGET_MS = 3000;
+  const [rows, qboLists, firmUsers, health] = await Promise.all([
     listFirmDrafts(),
     readCachedQuickbooksLists(),
     listFirmUsers(),
+    firm
+      ? Promise.race([
+          getQuickbooksConnectionHealth(firm.id),
+          new Promise<"ok">((resolve) =>
+            setTimeout(() => resolve("ok"), HEALTH_BUDGET_MS),
+          ),
+        ])
+      : Promise.resolve("ok" as const),
   ]);
 
   const reviewerNameById = new Map(
@@ -242,6 +265,26 @@ export default async function QuickbooksDraftsPage({
         title={t("queue_title")}
         subtitle={t("summary_drafts", { count: counts.total })}
       />
+      {health === "reconnect_required" && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-warning/40 bg-warning/[0.06] px-4 py-3 animate-in-up"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            {isOwner
+              ? t("queue_reconnect_owner")
+              : t("queue_reconnect_staff")}
+          </p>
+          {isOwner && (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/settings?tab=integrations">
+                {t("queue_reconnect_cta")}
+              </Link>
+            </Button>
+          )}
+        </div>
+      )}
       <DraftsQueue
         counts={counts}
         readyCount={readyCount}
