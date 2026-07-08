@@ -2068,6 +2068,22 @@
     "post_all_failed": "Échec de l’envoi. Réessayez.",
     "receipt_attached": "Reçu joint",
     "attach_receipt_button": "Joindre le reçu",
-    "attach_failed": "Impossible de joindre le reçu. Réessayez."
+    "attach_failed": "Impossible de joindre le reçu. Réessayez.",
+    "match_title": "Déjà dans QuickBooks?",
+    "match_body": "Cette transaction semble déjà exister dans QuickBooks. Joignez le reçu à la transaction existante, ou créez-en une nouvelle.",
+    "match_gone": "Cette transaction ne correspond plus dans QuickBooks. Vous pouvez en créer une nouvelle.",
+    "match_attach": "Joindre à celle-ci",
+    "match_post_new": "Créer une nouvelle transaction",
+    "match_entity_bill": "Facture fournisseur",
+    "match_entity_purchase": "Dépense",
+    "match_entity_invoice": "Facture de vente",
+    "matched_label": "Jumelé à une transaction QuickBooks existante",
+    "unlink_button": "Dissocier",
+    "unlink_title": "Dissocier ce jumelage?",
+    "unlink_body": "Le brouillon redevient Approuvé et le lien est retiré dans Vylan. Rien n’est supprimé dans QuickBooks — la transaction (et tout reçu déjà joint là-bas) reste en place.",
+    "unlink_go": "Dissocier",
+    "unlink_failed": "Impossible de dissocier. Réessayez.",
+    "post_all_needs_review": "{count, plural, one {# brouillon semble} other {# brouillons semblent}} déjà exister dans QuickBooks, ils n’ont donc pas été envoyés. Ouvrez chaque carte pour joindre ou créer la transaction.",
+    "post_all_needs_review_close": "OK"
   }
 }

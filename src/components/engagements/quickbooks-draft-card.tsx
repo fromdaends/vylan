@@ -74,6 +74,7 @@ export async function QuickbooksDraftCard({
   postError = null,
   postedTaxNote = null,
   receiptAttachedAt = null,
+  matchedQboType = null,
   showStatusControls = true,
 }: {
   suggestion: TransactionSuggestion;
@@ -103,6 +104,11 @@ export async function QuickbooksDraftCard({
   // transaction (null = not attached yet → the card offers an "Attach receipt"
   // retry; a value → "Receipt attached").
   receiptAttachedAt?: string | null;
+  // Smart posting part 3: set when this posted draft was MATCHED to a
+  // transaction that was already in QuickBooks (its entity type) — the posting
+  // row shows the matched label and Undo becomes Unlink. Null = Vylan created
+  // the transaction.
+  matchedQboType?: string | null;
   // Stage 4, Phase 3: hide the footer Approve/Dismiss/Reopen controls when the
   // surrounding surface already renders them (the firm-wide queue row does), so
   // they're not shown twice. Defaults true (the engagement page keeps them).
@@ -438,6 +444,8 @@ export async function QuickbooksDraftCard({
             postError={postError}
             taxNote={postedTaxNote}
             receiptAttached={receiptAttachedAt != null}
+            matchedExisting={matchedQboType != null}
+            locale={locale}
           />
         </div>
       )}
