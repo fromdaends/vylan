@@ -67,7 +67,10 @@ const TONE: Record<
   { row: string; text: string; dot: string }
 > = {
   good: {
-    row: "border-success/30 bg-success/[0.04]",
+    // A passing document keeps a plain neutral outline (no green box) — the
+    // colored "Looks right" text + dot still carry the status. Amber/red tones
+    // below stay tinted so documents that NEED attention still stand out.
+    row: "border-border/40 bg-card/40",
     text: "text-success",
     dot: "bg-success",
   },
