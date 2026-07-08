@@ -73,6 +73,7 @@ export async function QuickbooksDraftCard({
   postedByName = null,
   postError = null,
   postedTaxNote = null,
+  receiptAttachedAt = null,
   showStatusControls = true,
 }: {
   suggestion: TransactionSuggestion;
@@ -98,6 +99,10 @@ export async function QuickbooksDraftCard({
   // Stage 5 (tax-line): a tax-discrepancy note on a posted draft (QuickBooks'
   // computed tax vs the document's tax); null when they agree.
   postedTaxNote?: string | null;
+  // Stage 5 (receipt-attach): when the source receipt was attached to the posted
+  // transaction (null = not attached yet → the card offers an "Attach receipt"
+  // retry; a value → "Receipt attached").
+  receiptAttachedAt?: string | null;
   // Stage 4, Phase 3: hide the footer Approve/Dismiss/Reopen controls when the
   // surrounding surface already renders them (the firm-wide queue row does), so
   // they're not shown twice. Defaults true (the engagement page keeps them).
@@ -432,6 +437,7 @@ export async function QuickbooksDraftCard({
             postedByName={postedByName}
             postError={postError}
             taxNote={postedTaxNote}
+            receiptAttached={receiptAttachedAt != null}
           />
         </div>
       )}
