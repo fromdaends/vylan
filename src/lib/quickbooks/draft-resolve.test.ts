@@ -75,6 +75,24 @@ describe("effectiveDate", () => {
     ).toBe("2024-05-01");
     expect(effectiveDate(sugg({ date: null }), null)).toBeNull();
   });
+
+  it("coerces a non-ISO or impossible date to null (not postable)", () => {
+    // The AI may return a date "as printed"; a hand-crafted resolved date could be
+    // impossible. Neither is postable, so both read as null → the draft is blocked.
+    expect(effectiveDate(sugg({ date: "03/14/2024" }), null)).toBeNull();
+    expect(effectiveDate(sugg({ date: "March 14, 2024" }), null)).toBeNull();
+    expect(effectiveDate(sugg({ date: "2024-13-40" }), null)).toBeNull();
+    expect(effectiveDate(sugg({ date: "2024-02-30" }), null)).toBeNull();
+    // A valid override still wins over a junk AI date.
+    expect(
+      effectiveDate(sugg({ date: "03/14/2024" }), {
+        party: null,
+        account: null,
+        taxCode: null,
+        date: "2024-05-01",
+      }),
+    ).toBe("2024-05-01");
+  });
 });
 
 describe("draftNeedsInput", () => {

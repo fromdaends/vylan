@@ -283,6 +283,7 @@ export async function QuickbooksDraftCard({
           <QuickbooksDateField
             fileId={fileId}
             initial={effDate}
+            locale={locale}
             label={t("field_date")}
             prompt={t("date_needed")}
             disabled={!isDraft}

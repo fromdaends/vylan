@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Loader2, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { formatDate, type AppLocale } from "@/lib/format";
 
 // The editable transaction DATE on a QuickBooks draft (Stage 4). A correct date
 // is required to post — it's what lets QuickBooks auto-match the transaction to
@@ -13,14 +14,16 @@ import { cn } from "@/lib/cn";
 export function QuickbooksDateField({
   fileId,
   initial,
+  locale,
   label,
   prompt,
   disabled = false,
 }: {
   fileId: string;
   // The current effective date (accountant's override, else the AI's read), or
-  // null when neither is set — YYYY-MM-DD.
+  // null when neither is a postable ISO date — YYYY-MM-DD.
   initial: string | null;
+  locale: AppLocale;
   // Accessible label (e.g. "Date").
   label: string;
   // Hint shown (as a tooltip) when no date is set yet.
@@ -55,6 +58,18 @@ export function QuickbooksDateField({
 
   const empty = value == null;
 
+  // One leading icon: a spinner while saving, a calendar when locked (there's no
+  // native input then), a warning when empty. When editable AND set, we show NO
+  // lucide icon — the native date input renders its own calendar indicator, so a
+  // second one would just double up.
+  const icon = pending ? (
+    <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden="true" />
+  ) : disabled ? (
+    <CalendarDays className="size-3 shrink-0 opacity-60" aria-hidden="true" />
+  ) : empty ? (
+    <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />
+  ) : null;
+
   return (
     <span
       className={cn(
@@ -66,15 +81,11 @@ export function QuickbooksDateField({
             : "text-muted-foreground hover:bg-muted/60",
       )}
     >
-      {pending ? (
-        <Loader2 className="size-3 shrink-0 animate-spin" aria-hidden="true" />
-      ) : empty && !disabled ? (
-        <TriangleAlert className="size-3 shrink-0" aria-hidden="true" />
-      ) : (
-        <CalendarDays className="size-3 shrink-0 opacity-60" aria-hidden="true" />
-      )}
+      {icon}
       {disabled ? (
-        <span className="font-medium">{empty ? "—" : value}</span>
+        <span className="font-medium">
+          {empty ? "—" : formatDate(value, locale, "medium")}
+        </span>
       ) : (
         <input
           type="date"

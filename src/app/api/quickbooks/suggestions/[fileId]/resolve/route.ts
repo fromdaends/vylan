@@ -17,6 +17,7 @@ import {
 import { recordLearnedMapping } from "@/lib/db/quickbooks-learned";
 import { learnedWritesFromResolve } from "@/lib/quickbooks/learn";
 import type { ResolvedEntry, ResolvedRef } from "@/lib/quickbooks/suggest";
+import { isPostableDate } from "@/lib/quickbooks/draft-resolve";
 
 export const runtime = "nodejs";
 
@@ -104,7 +105,7 @@ export async function POST(
   // date — a transaction can't have its date "cleared" to nothing.
   if (Object.prototype.hasOwnProperty.call(body, "date")) {
     const d = body.date;
-    if (typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    if (typeof d !== "string" || !isPostableDate(d)) {
       return NextResponse.json(
         { error: "bad_request", detail: "Invalid date." },
         { status: 400 },
