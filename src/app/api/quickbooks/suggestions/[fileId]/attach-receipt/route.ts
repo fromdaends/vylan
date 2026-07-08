@@ -85,16 +85,25 @@ export async function POST(
     );
   }
 
-  // Match the entity we posted: income -> Invoice; a PAID expense -> Purchase; an
-  // unpaid expense -> Bill. Attaching to the wrong entity type fails, so this must
-  // mirror the branch in post.ts / the void route exactly (effectiveExpenseMode).
+  // Match the entity actually posted. A MATCHED draft (smart posting part 3)
+  // points at a transaction that was already in QuickBooks, whose type can
+  // DIFFER from what this draft would have created (e.g. the draft says unpaid
+  // Bill but the accountant confirmed a match to a paid Expense) — the stored
+  // matched type wins. Otherwise: income -> Invoice; a PAID expense ->
+  // Purchase; an unpaid expense -> Bill, mirroring the branch in post.ts / the
+  // void route exactly (effectiveExpenseMode).
   const entity =
-    draft.suggestion?.direction === "income"
-      ? "invoice"
-      : draft.suggestion &&
-          effectiveExpenseMode(draft.suggestion, draft.resolved) === "purchase"
-        ? "purchase"
-        : "bill";
+    draft.matchedQboType === "bill" ||
+    draft.matchedQboType === "purchase" ||
+    draft.matchedQboType === "invoice"
+      ? draft.matchedQboType
+      : draft.suggestion?.direction === "income"
+        ? "invoice"
+        : draft.suggestion &&
+            effectiveExpenseMode(draft.suggestion, draft.resolved) ===
+              "purchase"
+          ? "purchase"
+          : "bill";
 
   const outcome = await attachReceiptToPostedDraft({
     ctx,

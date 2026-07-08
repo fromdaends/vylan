@@ -60,7 +60,13 @@ export async function POST(request: NextRequest) {
   );
 
   if (targets.length === 0) {
-    return NextResponse.json({ ok: true, posted: 0, failed: 0, skipped: 0 });
+    return NextResponse.json({
+      ok: true,
+      posted: 0,
+      failed: 0,
+      skipped: 0,
+      needsReview: 0,
+    });
   }
 
   // Fetch the connection context + cached lists ONCE for the whole batch. The
@@ -78,6 +84,10 @@ export async function POST(request: NextRequest) {
   let posted = 0;
   let failed = 0;
   let skipped = 0;
+  // Smart posting part 3: drafts that LOOK like they're already in QuickBooks
+  // but need the accountant's eyes. A bulk run never decides an uncertain match
+  // — these are left untouched and surfaced so each card gets opened.
+  let needsReview = 0;
   const engagementIds = new Set<string>();
   for (const t of targets) {
     let out: PostOutcome;
@@ -88,7 +98,14 @@ export async function POST(request: NextRequest) {
       continue;
     }
     if (out.engagementId) engagementIds.add(out.engagementId);
-    if (out.kind === "posted" || out.kind === "already_posted") posted++;
+    if (
+      out.kind === "posted" ||
+      out.kind === "already_posted" ||
+      // Matched-to-existing counts as success: the receipt is on the books
+      // (attached to the transaction that was already there).
+      out.kind === "matched_existing"
+    )
+      posted++;
     // 'conflict' + 'record_failed' both mean "posted to QuickBooks but couldn't
     // record it locally" — a real problem that needs attention, NOT a benign skip.
     else if (
@@ -97,6 +114,7 @@ export async function POST(request: NextRequest) {
       out.kind === "conflict"
     )
       failed++;
+    else if (out.kind === "needs_match_confirmation") needsReview++;
     else skipped++; // not_postable / not_connected / not_approved
   }
 
@@ -114,6 +132,7 @@ export async function POST(request: NextRequest) {
         posted,
         failed,
         skipped,
+        needs_review: needsReview,
         client,
       });
     }
@@ -121,5 +140,5 @@ export async function POST(request: NextRequest) {
     console.error("[qbo post-approved] audit log failed (posts applied):", err);
   }
 
-  return NextResponse.json({ ok: true, posted, failed, skipped });
+  return NextResponse.json({ ok: true, posted, failed, skipped, needsReview });
 }

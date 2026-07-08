@@ -31,6 +31,10 @@ export function PostApprovedButton({
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Smart posting part 3: how many drafts the run LEFT ALONE because they look
+  // like they're already in QuickBooks (each card must be opened to decide).
+  // Non-null keeps the dialog open on a summary instead of silently closing.
+  const [needsReview, setNeedsReview] = useState<number | null>(null);
 
   if (postableCount <= 0) return null;
 
@@ -43,10 +47,17 @@ export function PostApprovedButton({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ client }),
       });
-      const res = (await r.json().catch(() => null)) as { ok?: boolean } | null;
+      const res = (await r.json().catch(() => null)) as {
+        ok?: boolean;
+        needsReview?: number;
+      } | null;
       if (r.ok && res?.ok) {
-        setOpen(false);
         router.refresh();
+        if (typeof res.needsReview === "number" && res.needsReview > 0) {
+          setNeedsReview(res.needsReview);
+        } else {
+          setOpen(false);
+        }
       } else {
         setFailed(true);
       }
@@ -62,7 +73,10 @@ export function PostApprovedButton({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setFailed(false);
+        if (!o) {
+          setFailed(false);
+          setNeedsReview(null);
+        }
       }}
     >
       <DialogTrigger asChild>
@@ -72,30 +86,55 @@ export function PostApprovedButton({
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>{t("post_all_title")}</DialogTitle>
-          <DialogDescription>
-            {t("post_all_confirm", { count: postableCount })}
-          </DialogDescription>
-        </DialogHeader>
-        {failed && (
-          <p role="alert" className="text-sm text-warning">
-            {t("post_all_failed")}
-          </p>
-        )}
-        <DialogFooter>
-          <Button variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
-            {t("post_cancel")}
-          </Button>
-          <Button onClick={run} disabled={pending} className="gap-1.5">
-            {pending ? (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Upload className="h-4 w-4" aria-hidden="true" />
+        {needsReview != null ? (
+          // The run finished but left some drafts for the accountant: they look
+          // like they may already be in QuickBooks. Summarize instead of
+          // silently closing.
+          <>
+            <DialogHeader>
+              <DialogTitle>{t("post_all_title")}</DialogTitle>
+              <DialogDescription>
+                {t("post_all_needs_review", { count: needsReview })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button onClick={() => setOpen(false)}>
+                {t("post_all_needs_review_close")}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>{t("post_all_title")}</DialogTitle>
+              <DialogDescription>
+                {t("post_all_confirm", { count: postableCount })}
+              </DialogDescription>
+            </DialogHeader>
+            {failed && (
+              <p role="alert" className="text-sm text-warning">
+                {t("post_all_failed")}
+              </p>
             )}
-            {t("post_all_go", { count: postableCount })}
-          </Button>
-        </DialogFooter>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                onClick={() => setOpen(false)}
+                disabled={pending}
+              >
+                {t("post_cancel")}
+              </Button>
+              <Button onClick={run} disabled={pending} className="gap-1.5">
+                {pending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <Upload className="h-4 w-4" aria-hidden="true" />
+                )}
+                {t("post_all_go", { count: postableCount })}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

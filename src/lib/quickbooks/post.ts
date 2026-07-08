@@ -10,7 +10,14 @@ import {
   recordDraftPostError,
   recordDraftTaxNote,
   recordReceiptAttached,
+  listFirmPostedQboIds,
 } from "@/lib/db/quickbooks-suggestions";
+import {
+  findRegisterCandidates,
+  classifyRegisterMatch,
+  REGISTER_MATCH_WINDOW_DAYS,
+  type RegisterCandidate,
+} from "@/lib/quickbooks/register-match";
 import {
   getQuickbooksReadContext,
   type QuickbooksReadContext,
@@ -52,6 +59,14 @@ import {
 
 export type PostOutcomeKind =
   | "posted"
+  // Smart posting part 3: the transaction was ALREADY in QuickBooks (bank feed
+  // or the client's bookkeeper got there first) — the receipt was attached to
+  // it and NOTHING was created. postedQboId is the existing transaction's id.
+  | "matched_existing"
+  // Smart posting part 3: one or more posted transactions look like this draft
+  // but the match isn't beyond doubt — the accountant must choose (attach to
+  // one of matchCandidates, or force a create). Nothing was written anywhere.
+  | "needs_match_confirmation"
   | "already_posted"
   | "not_found"
   | "not_enabled"
@@ -76,7 +91,19 @@ export type PostOutcome = {
   // document's tax (a discrepancy worth the accountant's attention); null/absent
   // otherwise.
   taxNote?: string | null;
+  // Set on 'needs_match_confirmation': the already-posted QuickBooks
+  // transactions this draft may duplicate, for the accountant to choose from.
+  matchCandidates?: RegisterCandidate[];
 };
+
+// The accountant's answer to a needs_match_confirmation prompt:
+//   'create' — post a new transaction, skip the register match entirely;
+//   'attach' — this IS the existing transaction `qboId`; attach the receipt to
+//              it instead of creating. Re-validated server-side: the id must
+//              still be a current amount+date-window candidate.
+export type PostMatchOverride =
+  | { action: "create" }
+  | { action: "attach"; qboId: string };
 
 // Post one approved EXPENSE draft as a QuickBooks Bill. Idempotent + safe:
 //  - schema gate (postReady): never call QuickBooks if we can't record it;
@@ -86,12 +113,15 @@ export type PostOutcome = {
 //    records a voided/reopened draft as posted.
 // `opts.lists` / `opts.ctx` let a bulk caller fetch the lists + connection
 // context ONCE and reuse them across drafts (pass undefined to fetch per call).
+// `opts.match` carries the accountant's answer to a prior
+// needs_match_confirmation (attach to an existing transaction / force-create).
 export async function postApprovedDraft(
   fileId: string,
   posterId: string,
   opts?: {
     lists?: QuickbooksLists | null;
     ctx?: QuickbooksReadContext | null;
+    match?: PostMatchOverride;
   },
 ): Promise<PostOutcome> {
   const draft = await getDraftForFile(fileId);
@@ -274,6 +304,119 @@ export async function postApprovedDraft(
       tax,
       lines: expenseLines,
     });
+  }
+
+  // ── Smart match-or-create (part 3) ─────────────────────────────────────────
+  // Before creating, look for this SAME transaction already POSTED in
+  // QuickBooks (amount to the penny, date within ±5 days): the bank feed or the
+  // client's bookkeeper may have recorded it first. A CLEAR match attaches the
+  // receipt to the existing transaction instead of creating a duplicate; an
+  // uncertain one asks the accountant. FAIL-OPEN: any failure in this block
+  // logs and falls through to the normal create — the duplicate check must
+  // never block a legitimate post. Skipped when the accountant already chose
+  // "post a new one" (match.action === 'create') or pre-migration-0510
+  // (matchReady false — a match couldn't be recorded, so don't look for one).
+  if (opts?.match?.action !== "create" && draft.matchReady) {
+    try {
+      // Exclude every transaction Vylan itself posted for this firm — read
+      // FRESH per post so a draft posted seconds ago (mid-bulk) is already
+      // excluded. A null read means "couldn't check", not "none": skip
+      // matching rather than risk matching a Vylan-posted transaction.
+      const excludeQboIds = await listFirmPostedQboIds(draft.firmId);
+      if (excludeQboIds != null) {
+        // Search both expense registers: a duplicate expense can exist as a
+        // paid Expense (bank-feed accept) OR a Bill (hand-entered) regardless
+        // of which one this draft would post.
+        const entities: QboTxnEntity[] =
+          s.direction === "income" ? ["invoice"] : ["bill", "purchase"];
+        const search = await findRegisterCandidates(ctx, {
+          entities,
+          date: effDate,
+          windowDays: REGISTER_MATCH_WINDOW_DAYS,
+          amount: s.amount!,
+          excludeQboIds,
+        });
+
+        let attachTo: RegisterCandidate | null = null;
+        if (opts?.match?.action === "attach") {
+          // Re-validate the accountant's pick against a FRESH search (the id
+          // must still match on amount + date window). Gone/changed → re-ask
+          // with the current candidates rather than attach blind.
+          const picked = opts.match.qboId;
+          attachTo =
+            search.candidates.find((c) => c.qboId === picked) ?? null;
+          if (!attachTo) {
+            return {
+              kind: "needs_match_confirmation",
+              ...base,
+              matchCandidates: search.candidates,
+            };
+          }
+        } else {
+          const verdict = classifyRegisterMatch({
+            search,
+            draftEntity: entity,
+            draftVendorId: eff.party?.id ?? null,
+            draftVendorNames: [
+              eff.party?.name ?? null,
+              s.partySource ?? null,
+            ],
+          });
+          if (verdict.kind === "confirm") {
+            return {
+              kind: "needs_match_confirmation",
+              ...base,
+              matchCandidates: search.candidates,
+            };
+          }
+          if (verdict.kind === "clear") attachTo = verdict.candidate;
+        }
+
+        if (attachTo) {
+          // Record the match with the same conditional guard as a create (still
+          // approved + attempt unchanged), THEN attach the receipt. Nothing was
+          // created in QuickBooks, so a failed record here is fully benign —
+          // the accountant just retries.
+          const recorded = await recordDraftPosted({
+            uploadedFileId: fileId,
+            expectedAttempt: draft.postAttempt,
+            postedQboId: attachTo.qboId,
+            postedSyncToken: attachTo.syncToken ?? "0",
+            posterId,
+            matchedQboType: attachTo.entity,
+          });
+          if (recorded === "conflict") return { kind: "conflict", ...base };
+          if (recorded !== "ok") {
+            return {
+              kind: "record_failed",
+              ...base,
+              postedQboId: attachTo.qboId,
+              detail:
+                "Found this transaction in QuickBooks but couldn't save the match. Refresh and retry.",
+            };
+          }
+          await attachReceiptToPostedDraft({
+            ctx,
+            entity: attachTo.entity,
+            fileId,
+            postedQboId: attachTo.qboId,
+          });
+          return {
+            kind: "matched_existing",
+            ...base,
+            postedQboId: attachTo.qboId,
+          };
+        }
+      }
+    } catch (e) {
+      // Fail-open: the register read is best-effort. Log (with the intuit_tid
+      // already at the front of a QuickbooksError message) and create as usual.
+      console.error(
+        "[quickbooks] register match check failed (posting anyway):",
+        e instanceof QuickbooksError ? e.code : "unknown",
+        e instanceof QuickbooksError ? e.message : (e as Error).message,
+      );
+    }
   }
 
   const requestId = `${fileId}-${draft.postAttempt}`;

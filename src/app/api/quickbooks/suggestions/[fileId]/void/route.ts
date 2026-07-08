@@ -74,33 +74,45 @@ export async function POST(
     );
   }
 
-  // Match the entity we posted: income -> Invoice; a PAID expense -> Purchase; an
-  // unpaid expense -> Bill. Deleting via the wrong endpoint fails, so this must
-  // mirror the branch in post.ts exactly (effectiveExpenseMode).
-  const entity =
-    draft.suggestion?.direction === "income"
-      ? "invoice"
-      : draft.suggestion &&
-          effectiveExpenseMode(draft.suggestion, draft.resolved) === "purchase"
-        ? "purchase"
-        : "bill";
-  try {
-    await quickbooksDelete(
-      ctx,
-      entity,
-      draft.postedQboId,
-      draft.postedSyncToken ?? "0",
-    );
-  } catch (e) {
-    const detail =
-      e instanceof QuickbooksError ? e.message : (e as Error).message;
-    // The draft stays 'posted'; surface the undo error on its card.
-    await recordDraftPostError({
-      uploadedFileId: fileId,
-      error: `Undo failed: ${detail}`,
-    });
-    revalidate(draft.engagementId);
-    return NextResponse.json({ error: "void_failed", detail }, { status: 502 });
+  // Smart posting part 3: a MATCHED draft points at a transaction that was
+  // ALREADY in QuickBooks (Vylan never created it), so undo must NOT delete it
+  // — it only UNLINKS on our side (the draft returns to Approved; the
+  // transaction, and any receipt already attached to it in QuickBooks, stays).
+  const matched = draft.matchedQboType != null;
+  if (!matched) {
+    // Match the entity we posted: income -> Invoice; a PAID expense ->
+    // Purchase; an unpaid expense -> Bill. Deleting via the wrong endpoint
+    // fails, so this must mirror the branch in post.ts exactly
+    // (effectiveExpenseMode).
+    const entity =
+      draft.suggestion?.direction === "income"
+        ? "invoice"
+        : draft.suggestion &&
+            effectiveExpenseMode(draft.suggestion, draft.resolved) ===
+              "purchase"
+          ? "purchase"
+          : "bill";
+    try {
+      await quickbooksDelete(
+        ctx,
+        entity,
+        draft.postedQboId,
+        draft.postedSyncToken ?? "0",
+      );
+    } catch (e) {
+      const detail =
+        e instanceof QuickbooksError ? e.message : (e as Error).message;
+      // The draft stays 'posted'; surface the undo error on its card.
+      await recordDraftPostError({
+        uploadedFileId: fileId,
+        error: `Undo failed: ${detail}`,
+      });
+      revalidate(draft.engagementId);
+      return NextResponse.json(
+        { error: "void_failed", detail },
+        { status: 502 },
+      );
+    }
   }
 
   const ok = await recordDraftVoided({
@@ -122,6 +134,9 @@ export async function POST(
     await logUserActivity(draft.firmId, draft.engagementId, "void_qbo_draft", {
       file_id: fileId,
       qbo_id: draft.postedQboId,
+      // Distinguish "deleted Vylan's transaction" from "unlinked a matched one
+      // (nothing deleted in QuickBooks)" in the activity feed.
+      unlinked_match: matched || undefined,
     });
   } catch (err) {
     console.error("[qbo void route] audit log failed (void applied):", err);

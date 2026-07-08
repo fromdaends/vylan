@@ -137,6 +137,7 @@ export async function QueueRow({
         postError={row.postError}
         postedTaxNote={row.postedTaxNote}
         receiptAttachedAt={row.receiptAttachedAt}
+        matchedQboType={row.matchedQboType}
         showStatusControls={false}
       />
     </QueueRowDisclosure>
