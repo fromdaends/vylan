@@ -13,6 +13,7 @@ import {
   quickbooksCreate,
   quickbooksUploadAttachment,
   resolveAttachmentMime,
+  canonicalAttachmentName,
   quickbooksProductionKeyMissing,
   QuickbooksError,
 } from "./client";
@@ -503,6 +504,26 @@ describe("resolveAttachmentMime", () => {
   it("returns null for an unsupported type so the caller skips the attach", () => {
     expect(resolveAttachmentMime("application/zip", "a.zip")).toBeNull();
     expect(resolveAttachmentMime("", "noext")).toBeNull();
+  });
+});
+
+describe("canonicalAttachmentName", () => {
+  it("rewrites the extension to match the resolved mime (HEIC->jpg)", () => {
+    expect(canonicalAttachmentName("IMG_1234.heic", "image/jpeg")).toBe(
+      "IMG_1234.jpg",
+    );
+    expect(canonicalAttachmentName("scan.PNG", "application/pdf")).toBe(
+      "scan.pdf",
+    );
+  });
+  it("keeps a matching extension and handles multi-dot / no-extension names", () => {
+    expect(canonicalAttachmentName("a.b.pdf", "application/pdf")).toBe("a.b.pdf");
+    expect(canonicalAttachmentName("receipt", "image/png")).toBe("receipt.png");
+  });
+  it("leaves the name unchanged for an unknown mime", () => {
+    expect(canonicalAttachmentName("weird.xyz", "application/zip")).toBe(
+      "weird.xyz",
+    );
   });
 });
 

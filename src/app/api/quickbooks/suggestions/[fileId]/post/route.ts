@@ -10,6 +10,9 @@ import { postApprovedDraft } from "@/lib/quickbooks/post";
 import { logUserActivity } from "@/lib/db/activity";
 
 export const runtime = "nodejs";
+// The post now also downloads the receipt and uploads it to QuickBooks; give it
+// headroom over the short platform default (matches the storage-heavy routes).
+export const maxDuration = 60;
 
 const LOCALES = ["en", "fr"] as const;
 

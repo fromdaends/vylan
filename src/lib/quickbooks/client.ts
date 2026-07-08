@@ -664,6 +664,27 @@ export function resolveAttachmentMime(
   return byExt[ext] ?? null;
 }
 
+// Rewrite the attachment's FileName extension to match the RESOLVED mime. The
+// upload pipeline transcodes HEIC (iPhone) → JPEG (the stored bytes + mime become
+// JPEG) but keeps the original ".heic" name; QuickBooks validates the FileName
+// extension and rejects ".heic", so the attach would silently fail for phone
+// photos. Rewriting to the canonical extension keeps the name honest and
+// accepted. Exported for unit tests.
+export function canonicalAttachmentName(fileName: string, mime: string): string {
+  const canonExt: Record<string, string> = {
+    "application/pdf": "pdf",
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/gif": "gif",
+    "image/tiff": "tiff",
+    "image/bmp": "bmp",
+  };
+  const want = canonExt[mime];
+  if (!want) return fileName;
+  const base = fileName.replace(/\.[^./\\]+$/, "") || "receipt";
+  return `${base}.${want}`;
+}
+
 // Attach a source document (the receipt/invoice) to a POSTED QuickBooks
 // transaction via the multipart /upload endpoint — one request both uploads the
 // file AND links it to the transaction (Bill/Purchase/Invoice), giving the books
@@ -693,11 +714,14 @@ export async function quickbooksUploadAttachment(
   if (!file.bytes || file.bytes.length === 0) {
     throw new QuickbooksError("request_failed", "Empty attachment");
   }
+  // Keep the FileName extension consistent with the actual bytes/mime (HEIC was
+  // already transcoded to JPEG upstream) — QBO rejects a mismatched extension.
+  const fileName = canonicalAttachmentName(file.fileName, mime);
   const metadata = {
     AttachableRef: [
       { EntityRef: { type: entityResponseKey(entity), value: String(entityId) } },
     ],
-    FileName: file.fileName,
+    FileName: fileName,
     ContentType: mime,
     Category: "Receipt",
   };
@@ -710,7 +734,7 @@ export async function quickbooksUploadAttachment(
   form.append(
     "file_content_01",
     new Blob([new Uint8Array(file.bytes)], { type: mime }),
-    file.fileName,
+    fileName,
   );
   const url =
     `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}/upload`;
