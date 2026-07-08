@@ -27,12 +27,15 @@ import type { TransactionExtraction } from "@/lib/ai/transaction-extract";
 // The Stage 5 post columns a row may carry (all null/0 before migration 0450).
 // postedTaxNote (0470) flags a discrepancy between QuickBooks' computed tax and
 // the document's tax on a posted transaction; null when they agree / pre-0470.
+// receiptAttachedAt (0500) is when the source receipt was successfully attached
+// to the posted transaction; null = not attached yet / attach failed / pre-0500.
 export type PostState = {
   postedQboId: string | null;
   postedAt: string | null;
   postedBy: string | null;
   postError: string | null;
   postedTaxNote: string | null;
+  receiptAttachedAt: string | null;
 };
 
 // One stored draft: the AI suggestion + the accountant's resolved picks (Stage 4,
@@ -50,6 +53,7 @@ export type StoredDraft = {
 // falls through on a missing-schema error, so the app degrades gracefully across
 // the migration windows (0450 = posted_* columns; 0440 = resolved + reviewed_*).
 const ENGAGEMENT_SELECTS = [
+  "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at",
@@ -99,6 +103,7 @@ export async function getSuggestionsForEngagement(
       posted_by?: string | null;
       post_error?: string | null;
       posted_tax_note?: string | null;
+      receipt_attached_at?: string | null;
     };
     if (r.uploaded_file_id && r.suggestion) {
       out.set(r.uploaded_file_id, {
@@ -112,6 +117,7 @@ export async function getSuggestionsForEngagement(
         postedBy: r.posted_by ?? null,
         postError: r.post_error ?? null,
         postedTaxNote: r.posted_tax_note ?? null,
+        receiptAttachedAt: r.receipt_attached_at ?? null,
       });
     }
   }
@@ -137,6 +143,7 @@ export type FirmDraftRow = {
 } & PostState;
 
 const FIRM_SELECTS = [
+  "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at",
@@ -259,6 +266,7 @@ export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
       postedBy: (r.posted_by as string | null) ?? null,
       postError: (r.post_error as string | null) ?? null,
       postedTaxNote: (r.posted_tax_note as string | null) ?? null,
+      receiptAttachedAt: (r.receipt_attached_at as string | null) ?? null,
     };
   });
 }
@@ -281,9 +289,17 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
   postedSyncToken: string | null;
   postAttempt: number;
   postReady: boolean;
+  // Stage 5 (receipt-attach, 0500). receiptAttachedAt = when the source receipt
+  // was attached to the posted transaction (null = not yet / attach failed).
+  // attachReady is true only when the 0500 column exists — the attach-receipt
+  // retry route refuses when false, so a retry can always record its outcome (no
+  // attach-without-record / duplicate-attach window), mirroring postReady.
+  receiptAttachedAt: string | null;
+  attachReady: boolean;
 } | null> {
   const sb = await getServerSupabase();
   const selects = [
+    "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt",
     "engagement_id, firm_id, resolved, suggestion, status",
     "engagement_id, firm_id, suggestion, status",
@@ -316,8 +332,11 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
     postedQboId: (row.posted_qbo_id as string | null) ?? null,
     postedSyncToken: (row.posted_qbo_sync_token as string | null) ?? null,
     postAttempt: (row.post_attempt as number | null) ?? 0,
-    // Only the widest select (tier 0) carries the 0450 columns.
-    postReady: tier === 0,
+    // Tiers 0 (0500) and 1 both carry the 0450 posting columns; only tier 0 also
+    // carries the 0500 receipt-attach column.
+    postReady: tier <= 1,
+    receiptAttachedAt: (row.receipt_attached_at as string | null) ?? null,
+    attachReady: tier === 0,
   };
 }
 
@@ -444,6 +463,30 @@ export async function recordDraftTaxNote(input: {
   }
 }
 
+// Stage 5 (receipt-attach, 0500) — stamp receipt_attached_at on a POSTED draft
+// once the source receipt has been successfully attached to its QuickBooks
+// transaction. Best-effort + fully decoupled from the post record: it runs AFTER
+// the attach upload succeeds, so a missing column (pre-0500) just means "not
+// tracked" and can never fail the post/attach itself. Conditional on the row
+// still being the SAME posted transaction (status='posted' AND posted_qbo_id
+// matches) so a concurrent void/re-post can't leave a stale "attached" flag on a
+// transaction whose receipt was never actually attached.
+export async function recordReceiptAttached(input: {
+  uploadedFileId: string;
+  postedQboId: string;
+}): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("quickbooks_transaction_suggestions")
+    .update({ receipt_attached_at: new Date().toISOString() })
+    .eq("uploaded_file_id", input.uploadedFileId)
+    .eq("status", "posted")
+    .eq("posted_qbo_id", input.postedQboId);
+  if (error && !isMissingSchema(error)) {
+    console.error("[quickbooks] recordReceiptAttached failed:", error);
+  }
+}
+
 // Stage 5 — record a FAILED post: keep status 'approved' (so it can be retried)
 // and store the error for the accountant to see. Service-role write.
 export async function recordDraftPostError(input: {
@@ -486,22 +529,26 @@ export async function recordDraftVoided(input: {
     post_error: null,
     updated_at: new Date().toISOString(),
   };
-  // Also clear posted_tax_note (0470); fall back to the pre-0470 column set on a
-  // missing-column error so undo keeps working before the migration lands (a
-  // single update naming the missing column would otherwise fail the whole undo).
-  let error = (
-    await sb
-      .from("quickbooks_transaction_suggestions")
-      .update({ ...base, posted_tax_note: null })
-      .eq("uploaded_file_id", input.uploadedFileId)
-  ).error;
-  if (error && isMissingSchema(error)) {
+  // Also clear posted_tax_note (0470) AND receipt_attached_at (0500): the posted
+  // transaction is gone, so a re-post must recompute the tax note and re-attach
+  // the receipt from scratch — a stale value would mislabel the fresh post. Fall
+  // back through progressively narrower column sets on a missing-column error so
+  // undo keeps working across every migration window (a single update naming a
+  // not-yet-added column would otherwise fail the whole undo).
+  const patches = [
+    { ...base, posted_tax_note: null, receipt_attached_at: null },
+    { ...base, posted_tax_note: null },
+    base,
+  ];
+  let error: { code?: string; message?: string } | null = null;
+  for (const patch of patches) {
     error = (
       await sb
         .from("quickbooks_transaction_suggestions")
-        .update(base)
+        .update(patch)
         .eq("uploaded_file_id", input.uploadedFileId)
     ).error;
+    if (!error || !isMissingSchema(error)) break;
   }
   if (error) {
     if (!isMissingSchema(error)) {

@@ -2064,6 +2064,9 @@
     "post_all_title": "Envoyer toutes les dépenses approuvées",
     "post_all_confirm": "Envoyer {count, plural, one {# dépense approuvée} other {# dépenses approuvées}} à QuickBooks comme factures fournisseurs? Vous pourrez annuler chacune ensuite.",
     "post_all_go": "Envoyer {count}",
-    "post_all_failed": "Échec de l’envoi. Réessayez."
+    "post_all_failed": "Échec de l’envoi. Réessayez.",
+    "receipt_attached": "Reçu joint",
+    "attach_receipt_button": "Joindre le reçu",
+    "attach_failed": "Impossible de joindre le reçu. Réessayez."
   }
 }
