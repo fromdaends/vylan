@@ -2064,6 +2064,9 @@
     "post_all_title": "Post all approved expenses",
     "post_all_confirm": "Post {count, plural, one {# approved expense} other {# approved expenses}} to QuickBooks as Bills? You can undo each one afterward.",
     "post_all_go": "Post {count}",
-    "post_all_failed": "Couldn't post them. Try again."
+    "post_all_failed": "Couldn't post them. Try again.",
+    "receipt_attached": "Receipt attached",
+    "attach_receipt_button": "Attach receipt",
+    "attach_failed": "Couldn't attach the receipt. Try again."
   }
 }

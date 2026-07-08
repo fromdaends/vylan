@@ -9,6 +9,7 @@ import {
   Loader2,
   CheckCircle2,
   TriangleAlert,
+  Paperclip,
 } from "lucide-react";
 import {
   Dialog,
@@ -38,6 +39,7 @@ export function PostDraftControls({
   postedByName,
   postError,
   taxNote,
+  receiptAttached = false,
 }: {
   fileId: string;
   status: DraftStatus;
@@ -52,12 +54,18 @@ export function PostDraftControls({
   // Set when QuickBooks' computed tax differs from the document's tax on this
   // posted transaction (a discrepancy to review); null otherwise.
   taxNote?: string | null;
+  // Whether the source receipt has been attached to the posted transaction.
+  // false on a posted draft offers a one-click "Attach receipt" retry (the post
+  // attaches best-effort; this recovers a miss without a void + re-post).
+  receiptAttached?: boolean;
 }) {
   const t = useTranslations("Quickbooks");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  const [attachError, setAttachError] = useState<string | null>(null);
 
   async function run(path: "post" | "void") {
     setFailed(false);
@@ -79,6 +87,35 @@ export function PostDraftControls({
       setFailed(true);
     } finally {
       setPending(false);
+    }
+  }
+
+  // Retry attaching the receipt to a posted transaction. No confirm dialog: it's
+  // non-destructive, and the server is idempotent (an already-attached draft
+  // returns ok without re-uploading), so a stray double-click can't duplicate the
+  // QuickBooks attachment. Shows the server's detail on failure (e.g. an
+  // unsupported file type), which retrying won't fix — so it's worth reading.
+  async function runAttach() {
+    setAttachError(null);
+    setAttaching(true);
+    try {
+      const r = await fetch(
+        `/api/quickbooks/suggestions/${fileId}/attach-receipt`,
+        { method: "POST", headers: { "content-type": "application/json" }, body: "{}" },
+      );
+      const res = (await r.json().catch(() => null)) as {
+        ok?: boolean;
+        detail?: string;
+      } | null;
+      if (r.ok && res?.ok) {
+        router.refresh();
+      } else {
+        setAttachError(res?.detail || t("attach_failed"));
+      }
+    } catch {
+      setAttachError(t("attach_failed"));
+    } finally {
+      setAttaching(false);
     }
   }
 
@@ -157,6 +194,36 @@ export function PostDraftControls({
             </Dialog>
           </div>
         </div>
+        {/* Receipt-attach status: confirmed once attached, else a one-click retry
+            so a best-effort miss on post is recoverable without a void + re-post. */}
+        {receiptAttached ? (
+          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Paperclip className="h-3 w-3 shrink-0" aria-hidden="true" />
+            {t("receipt_attached")}
+          </span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={runAttach}
+              disabled={attaching}
+              className="h-7 gap-1 text-[11px] text-muted-foreground"
+            >
+              {attaching ? (
+                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+              ) : (
+                <Paperclip className="h-3 w-3" aria-hidden="true" />
+              )}
+              {t("attach_receipt_button")}
+            </Button>
+            {attachError && (
+              <span role="alert" className="text-[11px] text-warning">
+                {attachError}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     );
   }

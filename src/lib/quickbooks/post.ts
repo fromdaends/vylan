@@ -9,6 +9,7 @@ import {
   recordDraftPosted,
   recordDraftPostError,
   recordDraftTaxNote,
+  recordReceiptAttached,
 } from "@/lib/db/quickbooks-suggestions";
 import {
   getQuickbooksReadContext,
@@ -19,6 +20,7 @@ import {
   quickbooksUploadAttachment,
   quickbooksTaxLinesEnabled,
   QuickbooksError,
+  type QboTxnEntity,
 } from "@/lib/quickbooks/client";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import { getUploadedFileById } from "@/lib/db/uploaded-files";
@@ -328,24 +330,58 @@ export async function postApprovedDraft(
 
   // Best-effort: attach the source receipt to the posted transaction so it lives
   // on the client's books as audit evidence (Dext/Hubdoc parity). NEVER affects
-  // the post outcome — a failed/skipped attach just logs and the post stands.
+  // the post outcome — a failed/skipped attach just logs, records nothing, and the
+  // post stands. A miss can be retried later from the card (attach-receipt route)
+  // WITHOUT a void + re-post, because the outcome is recorded on the row.
+  await attachReceiptToPostedDraft({
+    ctx,
+    entity,
+    fileId,
+    postedQboId: result.id,
+  });
+
+  return { kind: "posted", ...base, postedQboId: result.id, taxNote };
+}
+
+// Attach the source receipt to an ALREADY-POSTED transaction and record the
+// outcome, shared by the post path (above) and the attach-receipt retry route.
+// Best-effort + never throws: on success it stamps receipt_attached_at (so the
+// card shows "Receipt attached" and the retry disappears); on any failure it logs
+// and returns the detail so the caller can surface it (the retry route shows it on
+// the card; the post path just logs — the post already stands). Because the
+// outcome is persisted, a missed attach is recoverable without voiding the post.
+export async function attachReceiptToPostedDraft(input: {
+  ctx: QuickbooksReadContext;
+  entity: QboTxnEntity;
+  fileId: string;
+  postedQboId: string;
+}): Promise<{ kind: "attached" | "failed"; detail?: string }> {
   try {
-    const file = await getUploadedFileById(fileId);
-    if (file) {
-      const bytes = await downloadObject(file.storagePath);
-      await quickbooksUploadAttachment(ctx, entity, result.id, {
-        bytes,
-        fileName: file.fileName,
-        mime: file.mimeType,
-      });
+    const file = await getUploadedFileById(input.fileId);
+    if (!file) {
+      // No source document to attach (deleted since the post). Nothing to record;
+      // retrying can't help, so surface it plainly rather than logging an error.
+      return { kind: "failed", detail: "Source document not found." };
     }
+    const bytes = await downloadObject(file.storagePath);
+    await quickbooksUploadAttachment(input.ctx, input.entity, input.postedQboId, {
+      bytes,
+      fileName: file.fileName,
+      mime: file.mimeType,
+    });
   } catch (e) {
+    const detail =
+      e instanceof QuickbooksError ? e.message : (e as Error).message;
     console.error(
       "[quickbooks] receipt attach failed (post still succeeded):",
       e instanceof QuickbooksError ? e.code : "unknown",
-      e instanceof Error ? e.message : e,
+      detail,
     );
+    return { kind: "failed", detail };
   }
-
-  return { kind: "posted", ...base, postedQboId: result.id, taxNote };
+  await recordReceiptAttached({
+    uploadedFileId: input.fileId,
+    postedQboId: input.postedQboId,
+  });
+  return { kind: "attached" };
 }
