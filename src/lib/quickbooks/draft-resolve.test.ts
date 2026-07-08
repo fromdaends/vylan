@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   effectiveMapping,
+  effectiveDate,
   draftNeedsInput,
   effectiveExpenseMode,
   effectiveSplit,
@@ -61,9 +62,38 @@ describe("effectiveMapping", () => {
   });
 });
 
+describe("effectiveDate", () => {
+  it("prefers the accountant's override, else the AI date, else null", () => {
+    expect(effectiveDate(sugg({ date: "2024-03-14" }), null)).toBe("2024-03-14");
+    expect(
+      effectiveDate(sugg({ date: "2024-03-14" }), {
+        party: null,
+        account: null,
+        taxCode: null,
+        date: "2024-05-01",
+      }),
+    ).toBe("2024-05-01");
+    expect(effectiveDate(sugg({ date: null }), null)).toBeNull();
+  });
+});
+
 describe("draftNeedsInput", () => {
   it("needs input while the account is unchosen", () => {
     expect(draftNeedsInput(sugg(), null)).toBe(true);
+  });
+
+  it("needs input when there is no date (else it would post dated 'today')", () => {
+    const full: ResolvedEntry = {
+      party: null,
+      account: { id: "a1", name: "Supplies" },
+      taxCode: null,
+    };
+    // otherwise-complete, but no date anywhere -> blocked
+    expect(draftNeedsInput(sugg({ date: null }), full)).toBe(true);
+    // fixed by the accountant supplying a date
+    expect(
+      draftNeedsInput(sugg({ date: null }), { ...full, date: "2024-05-01" }),
+    ).toBe(false);
   });
 
   it("is satisfied once party + account + tax are all effective", () => {

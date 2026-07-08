@@ -45,6 +45,17 @@ export function effectiveMapping(
   };
 }
 
+// The transaction date to post: the accountant's override, else the AI's read.
+// A missing effective date BLOCKS posting (draftNeedsInput) — QuickBooks would
+// otherwise stamp "today", which breaks bank-feed auto-matching (a transaction
+// dated today can't match a bank line from a few days ago).
+export function effectiveDate(
+  suggestion: TransactionSuggestion,
+  resolved: ResolvedEntry | null,
+): string | null {
+  return resolved?.date ?? suggestion.date ?? null;
+}
+
 // One effective expense line for a split post: its description + pre-tax amount +
 // the effective account (the accountant's pick, else the AI's per-line match).
 export type EffectiveLine = {
@@ -138,6 +149,9 @@ export function draftNeedsInput(
     mappingMissing ||
     (hasTax && eff.taxCode == null) ||
     (suggestion.currency != null && suggestion.currency !== "CAD") ||
-    suggestion.amount == null
+    suggestion.amount == null ||
+    // A date is required so QuickBooks can auto-match this to the bank feed
+    // instead of posting it dated "today".
+    effectiveDate(suggestion, resolved) == null
   );
 }

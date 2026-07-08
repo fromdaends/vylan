@@ -36,6 +36,12 @@ export type ResolvedEntry = {
   party: ResolvedRef | null;
   account: ResolvedRef | null;
   taxCode: ResolvedRef | null;
+  // The transaction date override (ISO YYYY-MM-DD). The accountant sets it when
+  // the AI missed the date or read it wrong. A correct date is REQUIRED to post
+  // (see draftNeedsInput) and is what lets QuickBooks auto-match the transaction
+  // to the bank feed. Optional: rows resolved before this feature lack it, so the
+  // effective date falls back to suggestion.date.
+  date?: string | null;
   // The product/service item for an INCOME line (Invoice lines need an item, not
   // an account). Optional: rows resolved before income support lack it.
   item?: ResolvedRef | null;

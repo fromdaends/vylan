@@ -100,6 +100,18 @@ export async function POST(
       patch[bf] = val;
     }
   }
+  // `date` is the transaction-date override (ISO YYYY-MM-DD). It must be a valid
+  // date — a transaction can't have its date "cleared" to nothing.
+  if (Object.prototype.hasOwnProperty.call(body, "date")) {
+    const d = body.date;
+    if (typeof d !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+      return NextResponse.json(
+        { error: "bad_request", detail: "Invalid date." },
+        { status: 400 },
+      );
+    }
+    patch.date = d;
+  }
   // `lineAccounts` is the FULL map of line index ("0","1",…) -> ref|null. The
   // client always sends the whole map (merge_qbo_resolved shallow-replaces it).
   if (Object.prototype.hasOwnProperty.call(body, "lineAccounts")) {

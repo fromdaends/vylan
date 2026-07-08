@@ -315,6 +315,7 @@ export function buildPurchasePayload(
 // Why a PAID-expense (Purchase) draft can't be posted. Empty array = postable.
 export type PurchasePostabilityProblem =
   | "not_expense"
+  | "missing_date"
   | "missing_vendor"
   | "missing_account"
   | "missing_payment_account"
@@ -380,6 +381,7 @@ export function checkPurchasePostable(input: {
 // Why an INCOME draft can't be posted. Empty array = postable.
 export type InvoicePostabilityProblem =
   | "not_income"
+  | "missing_date"
   | "missing_customer"
   | "missing_item"
   | "missing_amount"
@@ -419,6 +421,7 @@ export function checkInvoicePostable(input: {
 // Why a draft can't be posted (Phase 1). Empty array = postable.
 export type PostabilityProblem =
   | "not_expense" // income/unknown — not supported in Phase 1
+  | "missing_date"
   | "missing_vendor"
   | "missing_account"
   | "missing_amount"

@@ -1965,6 +1965,8 @@
     "field_customer": "Client",
     "field_party": "Fournisseur / client",
     "field_account": "Compte",
+    "field_date": "Date",
+    "date_needed": "Ajouter une date",
     "field_item": "Produit / service",
     "field_tax": "Code de taxe",
     "field_amount": "Montant",

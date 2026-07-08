@@ -26,6 +26,7 @@ import { downloadObject } from "@/lib/storage";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import {
   effectiveMapping,
+  effectiveDate,
   effectiveExpenseMode,
   effectiveSplit,
   effectiveLines,
@@ -105,6 +106,14 @@ export async function postApprovedDraft(
 
   const s = draft.suggestion;
   const eff = effectiveMapping(s, draft.resolved);
+  // A real transaction date is required so QuickBooks auto-matches this to the
+  // bank feed instead of dating it "today". draftNeedsInput already blocks
+  // approval without one; this re-checks at post time (defense in depth, and it
+  // catches a draft approved before this rule shipped).
+  const effDate = effectiveDate(s, draft.resolved);
+  if (effDate == null) {
+    return { kind: "not_postable", ...base, problems: ["missing_date"] };
+  }
 
   const lists =
     opts && "lists" in opts ? opts.lists : await readCachedQuickbooksLists();
@@ -188,7 +197,7 @@ export async function postApprovedDraft(
       customerId: eff.party.id,
       itemId: eff.item.id,
       amount: s.amount,
-      date: s.date,
+      date: effDate,
       memo: "Posted from Vylan",
       tax,
     });
@@ -232,7 +241,7 @@ export async function postApprovedDraft(
       paymentAccountId: eff.paymentAccount.id,
       paymentType: paymentTypeForAccount(paAcct.accountType),
       amount: s.amount,
-      date: s.date,
+      date: effDate,
       memo: "Posted from Vylan",
       tax,
       lines: expenseLines,
@@ -258,7 +267,7 @@ export async function postApprovedDraft(
       vendorId: eff.party.id,
       accountId: expenseAccount.id,
       amount: s.amount,
-      date: s.date,
+      date: effDate,
       memo: "Posted from Vylan",
       tax,
       lines: expenseLines,
