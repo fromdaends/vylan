@@ -3,6 +3,32 @@ import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { recomputeItemStatus } from "@/lib/db/file-review";
 import { BUCKET } from "@/lib/storage";
 
+// Minimal service-role fetch of ONE file's storage location + type + name — used
+// to attach the source receipt to the posted QuickBooks transaction. Returns null
+// when the file (or its storage path) is missing. Prefers the AI-cleaned
+// display_name for the attachment's QuickBooks filename.
+export async function getUploadedFileById(fileId: string): Promise<{
+  storagePath: string;
+  mimeType: string;
+  fileName: string;
+} | null> {
+  const sb = getServiceRoleSupabase();
+  const { data } = await sb
+    .from("uploaded_files")
+    .select("storage_path, mime_type, original_filename, display_name")
+    .eq("id", fileId)
+    .maybeSingle();
+  if (!data?.storage_path) return null;
+  return {
+    storagePath: data.storage_path as string,
+    mimeType: (data.mime_type as string | null) ?? "",
+    fileName:
+      (data.display_name as string | null) ??
+      (data.original_filename as string | null) ??
+      "receipt",
+  };
+}
+
 export type UploadedFile = {
   id: string;
   request_item_id: string;

@@ -630,6 +630,129 @@ export async function quickbooksDelete(
   return { id, syncToken };
 }
 
+// Map a file's stored MIME (or its extension) to a type QuickBooks accepts for an
+// attachment. QBO REJECTS application/octet-stream, so a missing/generic type is
+// resolved from the filename extension; an unresolvable type returns null so the
+// caller SKIPS the attach rather than sending a rejected upload. Exported for
+// unit tests.
+export function resolveAttachmentMime(
+  mime: string | null,
+  fileName: string,
+): string | null {
+  const supported: Record<string, string> = {
+    "application/pdf": "application/pdf",
+    "image/jpeg": "image/jpeg",
+    "image/jpg": "image/jpeg",
+    "image/png": "image/png",
+    "image/gif": "image/gif",
+    "image/tiff": "image/tiff",
+    "image/bmp": "image/bmp",
+  };
+  const m = (mime ?? "").trim().toLowerCase();
+  if (supported[m]) return supported[m];
+  const byExt: Record<string, string> = {
+    pdf: "application/pdf",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    gif: "image/gif",
+    tif: "image/tiff",
+    tiff: "image/tiff",
+    bmp: "image/bmp",
+  };
+  const ext = (fileName.split(".").pop() ?? "").toLowerCase();
+  return byExt[ext] ?? null;
+}
+
+// Attach a source document (the receipt/invoice) to a POSTED QuickBooks
+// transaction via the multipart /upload endpoint — one request both uploads the
+// file AND links it to the transaction (Bill/Purchase/Invoice), giving the books
+// audit evidence (Dext/Hubdoc parity). Throws a typed QuickbooksError on any
+// failure so the post flow can log it and move on: a failed attach must never
+// undo a real post. Node's global FormData + Blob builds the two required parts
+// (file_metadata_01 JSON + file_content_01 bytes) with the correct PER-PART
+// Content-Type; we must NOT set the request Content-Type (fetch adds the
+// multipart boundary itself).
+export async function quickbooksUploadAttachment(
+  ctx: {
+    accessToken: string;
+    realmId: string;
+    environment?: QuickbooksEnvironment;
+  },
+  entity: QboTxnEntity,
+  entityId: string,
+  file: { bytes: Buffer; fileName: string; mime: string | null },
+): Promise<void> {
+  const mime = resolveAttachmentMime(file.mime, file.fileName);
+  if (!mime) {
+    throw new QuickbooksError(
+      "request_failed",
+      `Unsupported attachment type for "${truncate(file.fileName, 80)}"`,
+    );
+  }
+  if (!file.bytes || file.bytes.length === 0) {
+    throw new QuickbooksError("request_failed", "Empty attachment");
+  }
+  const metadata = {
+    AttachableRef: [
+      { EntityRef: { type: entityResponseKey(entity), value: String(entityId) } },
+    ],
+    FileName: file.fileName,
+    ContentType: mime,
+    Category: "Receipt",
+  };
+  const form = new FormData();
+  form.append(
+    "file_metadata_01",
+    new Blob([JSON.stringify(metadata)], { type: "application/json" }),
+    "attachment.json",
+  );
+  form.append(
+    "file_content_01",
+    new Blob([new Uint8Array(file.bytes)], { type: mime }),
+    file.fileName,
+  );
+  const url =
+    `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}/upload`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      // No Content-Type header — fetch derives the multipart boundary from `form`.
+      headers: {
+        Authorization: `Bearer ${ctx.accessToken}`,
+        Accept: "application/json",
+      },
+      body: form,
+      cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new QuickbooksError(
+      "request_failed",
+      `QuickBooks attachment request failed: ${(e as Error).message}`,
+    );
+  }
+  const tid = tidOf(res);
+  const json = (await res.json().catch(() => null)) as {
+    AttachableResponse?: Array<{ Attachable?: unknown; Fault?: unknown }>;
+  } | null;
+  const entry = json?.AttachableResponse?.[0] ?? null;
+  // A 200 can still carry a per-file Fault, or an empty AttachableResponse — treat
+  // a missing Attachable as failure.
+  if (!res.ok || !entry || entry.Fault || !entry.Attachable) {
+    const detail =
+      extractFault((entry as Record<string, unknown> | null) ?? null) ??
+      `status ${res.status}`;
+    throw new QuickbooksError(
+      "write_failed",
+      withTid(`QuickBooks attachment failed (${res.status}): ${detail}`, tid),
+      res.status,
+      tid,
+    );
+  }
+}
+
 // Pull { Id, SyncToken } out of an Intuit create/delete response shaped like
 // { "Bill": { "Id": "123", "SyncToken": "0", ... } }. QuickBooks can return a
 // 200 with a Fault (a business-rule rejection, e.g. an unsupported operation) —

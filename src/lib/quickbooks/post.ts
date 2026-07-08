@@ -16,10 +16,13 @@ import {
 } from "@/lib/quickbooks/connection";
 import {
   quickbooksCreate,
+  quickbooksUploadAttachment,
   quickbooksTaxLinesEnabled,
   QuickbooksError,
 } from "@/lib/quickbooks/client";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import { getUploadedFileById } from "@/lib/db/uploaded-files";
+import { downloadObject } from "@/lib/storage";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import {
   effectiveMapping,
@@ -322,6 +325,27 @@ export async function postApprovedDraft(
     postedQboId: result.id,
     note: taxNote,
   });
+
+  // Best-effort: attach the source receipt to the posted transaction so it lives
+  // on the client's books as audit evidence (Dext/Hubdoc parity). NEVER affects
+  // the post outcome — a failed/skipped attach just logs and the post stands.
+  try {
+    const file = await getUploadedFileById(fileId);
+    if (file) {
+      const bytes = await downloadObject(file.storagePath);
+      await quickbooksUploadAttachment(ctx, entity, result.id, {
+        bytes,
+        fileName: file.fileName,
+        mime: file.mimeType,
+      });
+    }
+  } catch (e) {
+    console.error(
+      "[quickbooks] receipt attach failed (post still succeeded):",
+      e instanceof QuickbooksError ? e.code : "unknown",
+      e instanceof Error ? e.message : e,
+    );
+  }
 
   return { kind: "posted", ...base, postedQboId: result.id, taxNote };
 }
