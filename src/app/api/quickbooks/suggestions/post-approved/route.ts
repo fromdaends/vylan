@@ -19,6 +19,11 @@ import { postApprovedDraft, type PostOutcome } from "@/lib/quickbooks/post";
 import { logUserActivity } from "@/lib/db/activity";
 
 export const runtime = "nodejs";
+// A batch posts sequentially and each post now also downloads the receipt and
+// uploads it to QuickBooks, so give the function the same headroom the other
+// storage-heavy routes use (process-jobs, zip exports) instead of the short
+// platform default.
+export const maxDuration = 60;
 
 const LOCALES = ["en", "fr"] as const;
 

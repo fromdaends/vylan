@@ -11,6 +11,9 @@ import {
   isAccessTokenStale,
   quickbooksQuery,
   quickbooksCreate,
+  quickbooksUploadAttachment,
+  resolveAttachmentMime,
+  canonicalAttachmentName,
   quickbooksProductionKeyMissing,
   QuickbooksError,
 } from "./client";
@@ -480,6 +483,115 @@ describe("quickbooksQuery", () => {
   it("returns {} when the response has no QueryResponse", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => mockResponse({ ok: true, json: {} })));
     expect(await quickbooksQuery("AT", "r", "Q", "sandbox")).toEqual({});
+  });
+});
+
+describe("resolveAttachmentMime", () => {
+  it("passes supported mimes through and normalizes image/jpg + case", () => {
+    expect(resolveAttachmentMime("application/pdf", "a.pdf")).toBe(
+      "application/pdf",
+    );
+    expect(resolveAttachmentMime("image/jpg", "a.jpg")).toBe("image/jpeg");
+    expect(resolveAttachmentMime("IMAGE/PNG", "a.png")).toBe("image/png");
+  });
+  it("falls back to the filename extension when the mime is missing/generic", () => {
+    expect(resolveAttachmentMime("application/octet-stream", "receipt.pdf")).toBe(
+      "application/pdf",
+    );
+    expect(resolveAttachmentMime("", "scan.PNG")).toBe("image/png");
+    expect(resolveAttachmentMime(null, "x.tiff")).toBe("image/tiff");
+  });
+  it("returns null for an unsupported type so the caller skips the attach", () => {
+    expect(resolveAttachmentMime("application/zip", "a.zip")).toBeNull();
+    expect(resolveAttachmentMime("", "noext")).toBeNull();
+  });
+});
+
+describe("canonicalAttachmentName", () => {
+  it("rewrites the extension to match the resolved mime (HEIC->jpg)", () => {
+    expect(canonicalAttachmentName("IMG_1234.heic", "image/jpeg")).toBe(
+      "IMG_1234.jpg",
+    );
+    expect(canonicalAttachmentName("scan.PNG", "application/pdf")).toBe(
+      "scan.pdf",
+    );
+  });
+  it("keeps a matching extension and handles multi-dot / no-extension names", () => {
+    expect(canonicalAttachmentName("a.b.pdf", "application/pdf")).toBe("a.b.pdf");
+    expect(canonicalAttachmentName("receipt", "image/png")).toBe("receipt.png");
+  });
+  it("leaves the name unchanged for an unknown mime", () => {
+    expect(canonicalAttachmentName("weird.xyz", "application/zip")).toBe(
+      "weird.xyz",
+    );
+  });
+});
+
+describe("quickbooksUploadAttachment", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const ctx = { accessToken: "AT", realmId: "r1", environment: "sandbox" as const };
+
+  it("POSTs multipart to /upload and resolves on a successful AttachableResponse", async () => {
+    const fetchMock = vi.fn(async () =>
+      mockResponse({
+        ok: true,
+        json: { AttachableResponse: [{ Attachable: { Id: "9" } }] },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      quickbooksUploadAttachment(ctx, "bill", "145", {
+        bytes: Buffer.from("pdf-bytes"),
+        fileName: "r.pdf",
+        mime: "application/pdf",
+      }),
+    ).resolves.toBeUndefined();
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toContain("sandbox-quickbooks.api.intuit.com");
+    expect(url).toContain("/v3/company/r1/upload");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBeInstanceOf(FormData);
+    // fetch must set the multipart Content-Type (with boundary) itself.
+    expect(
+      (init.headers as Record<string, string>)["Content-Type"],
+    ).toBeUndefined();
+  });
+
+  it("throws write_failed when the response carries a per-file Fault", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        mockResponse({
+          ok: true,
+          json: {
+            AttachableResponse: [{ Fault: { Error: [{ Message: "bad file" }] } }],
+          },
+        }),
+      ),
+    );
+    await expect(
+      quickbooksUploadAttachment(ctx, "purchase", "1", {
+        bytes: Buffer.from("x"),
+        fileName: "r.pdf",
+        mime: "application/pdf",
+      }),
+    ).rejects.toMatchObject({ code: "write_failed" });
+  });
+
+  it("throws request_failed WITHOUT calling fetch for an unsupported file type", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      quickbooksUploadAttachment(ctx, "bill", "1", {
+        bytes: Buffer.from("x"),
+        fileName: "a.zip",
+        mime: "application/zip",
+      }),
+    ).rejects.toMatchObject({ code: "request_failed" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
