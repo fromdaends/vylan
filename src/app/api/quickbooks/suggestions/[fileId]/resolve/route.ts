@@ -17,6 +17,7 @@ import {
 import { recordLearnedMapping } from "@/lib/db/quickbooks-learned";
 import { learnedWritesFromResolve } from "@/lib/quickbooks/learn";
 import type { ResolvedEntry, ResolvedRef } from "@/lib/quickbooks/suggest";
+import { isPostableDate } from "@/lib/quickbooks/draft-resolve";
 
 export const runtime = "nodejs";
 
@@ -99,6 +100,18 @@ export async function POST(
       }
       patch[bf] = val;
     }
+  }
+  // `date` is the transaction-date override (ISO YYYY-MM-DD). It must be a valid
+  // date — a transaction can't have its date "cleared" to nothing.
+  if (Object.prototype.hasOwnProperty.call(body, "date")) {
+    const d = body.date;
+    if (typeof d !== "string" || !isPostableDate(d)) {
+      return NextResponse.json(
+        { error: "bad_request", detail: "Invalid date." },
+        { status: 400 },
+      );
+    }
+    patch.date = d;
   }
   // `lineAccounts` is the FULL map of line index ("0","1",…) -> ref|null. The
   // client always sends the whole map (merge_qbo_resolved shallow-replaces it).

@@ -45,6 +45,32 @@ export function effectiveMapping(
   };
 }
 
+// A date QuickBooks can actually post: ISO YYYY-MM-DD AND a real calendar date.
+// Two invalid-but-non-null sources exist, so a bare null check isn't enough: the
+// AI's extracted date may be non-ISO ("as printed", e.g. "03/14/2024") and a
+// hand-crafted resolved.date could be structurally-valid-but-impossible
+// ("2024-13-40"). Both would post a date QuickBooks rejects.
+export function isPostableDate(d: string | null | undefined): boolean {
+  if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return false;
+  // Round-trip through UTC: an impossible date (month 13, Feb 30) normalizes to a
+  // different day, so the re-serialized value won't equal the input.
+  const dt = new Date(`${d}T00:00:00Z`);
+  return !Number.isNaN(dt.getTime()) && dt.toISOString().slice(0, 10) === d;
+}
+
+// The transaction date to post: the accountant's override, else the AI's read —
+// but ONLY when it's a postable ISO date. A non-ISO / impossible value is coerced
+// to null so the draft is flagged (amber) and BLOCKED, rather than silently
+// posting a date QuickBooks rejects (or dating it "today", which breaks bank-feed
+// auto-matching).
+export function effectiveDate(
+  suggestion: TransactionSuggestion,
+  resolved: ResolvedEntry | null,
+): string | null {
+  const raw = resolved?.date ?? suggestion.date ?? null;
+  return isPostableDate(raw) ? raw : null;
+}
+
 // One effective expense line for a split post: its description + pre-tax amount +
 // the effective account (the accountant's pick, else the AI's per-line match).
 export type EffectiveLine = {
@@ -138,6 +164,9 @@ export function draftNeedsInput(
     mappingMissing ||
     (hasTax && eff.taxCode == null) ||
     (suggestion.currency != null && suggestion.currency !== "CAD") ||
-    suggestion.amount == null
+    suggestion.amount == null ||
+    // A date is required so QuickBooks can auto-match this to the bank feed
+    // instead of posting it dated "today".
+    effectiveDate(suggestion, resolved) == null
   );
 }

@@ -12,6 +12,7 @@ import type {
 } from "@/lib/quickbooks/suggest";
 import {
   effectiveMapping,
+  effectiveDate,
   effectiveExpenseMode,
   effectiveSplit,
   effectiveLines,
@@ -31,6 +32,7 @@ import {
   QuickbooksEditableField,
   type PickOption,
 } from "./quickbooks-editable-field";
+import { QuickbooksDateField } from "./quickbooks-date-field";
 import {
   formatCurrency,
   formatDate,
@@ -128,6 +130,9 @@ export async function QuickbooksDraftCard({
   // Once approved or dismissed the draft is LOCKED: the cells become read-only and
   // the Refresh button is hidden. Reopen returns it to an editable draft.
   const isDraft = status === "draft";
+  // The transaction date (accountant's override, else the AI's read). Required to
+  // post — editable in the hero, amber when missing.
+  const effDate = effectiveDate(suggestion, resolved);
   const canApprove = canApproveDraft(suggestion, resolved);
   // Pick the right list for the party: customers for income, vendors otherwise.
   const partyOptions =
@@ -280,9 +285,14 @@ export async function QuickbooksDraftCard({
             <DirectionIcon className="h-3 w-3" aria-hidden="true" />
             {directionLabel}
           </span>
-          <span className="text-muted-foreground">
-            {v.date ? formatDate(v.date, locale, "medium") : "—"}
-          </span>
+          <QuickbooksDateField
+            fileId={fileId}
+            initial={effDate}
+            locale={locale}
+            label={t("field_date")}
+            prompt={t("date_needed")}
+            disabled={!isDraft}
+          />
         </div>
       </div>
 
