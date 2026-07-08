@@ -101,6 +101,8 @@ import {
   BellOff,
   Download,
   Sparkles,
+  FileSignature,
+  ExternalLink,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -644,7 +646,7 @@ export default async function EngagementDetailPage({
               {t("signatures_empty")}
             </div>
           ) : (
-            <ul className="divide-y divide-border">
+            <ul className="space-y-3">
               {signatureItems.map((item) => (
                 <SignatureRow
                   key={item.id}
@@ -913,71 +915,113 @@ async function SignatureRow({
     : isAwaiting
       ? "sig_status_awaiting"
       : "sig_status_setup_needed";
-  const badgeVariant = isSigned
-    ? "default"
-    : isAwaiting
-      ? "secondary"
-      : "outline";
   const showTestChip =
     (isAwaiting || isSigned) && signatureRequest?.test_mode === true;
 
-  // Short-lived download link to the signed PDF (with SignWell's audit page)
-  // once it has been pulled back. Forces a download with a readable filename.
-  let signedHref: string | null = null;
+  // Box border + status-badge tint by state (mirrors the QuickBooks draft card's
+  // language: green when done, amber while pending, neutral when not set up).
+  const boxBorder = isSigned
+    ? "border-success/30"
+    : isAwaiting
+      ? "border-warning/40"
+      : "border-border/60";
+  const badgeCls = isSigned
+    ? "border-success/40 text-success"
+    : isAwaiting
+      ? "border-warning/40 text-warning"
+      : "border-border text-muted-foreground";
+
+  // Two short-lived links to the completed PDF (with SignWell's audit page): one
+  // that RENDERS inline — the "View" opens the signed PDF on its own browser tab,
+  // the browser's native PDF view, not a Vylan page — and one that forces a
+  // download with a readable filename. Named to avoid the module-level `viewHref`.
+  let viewSignedHref: string | null = null;
+  let downloadSignedHref: string | null = null;
   if (isSigned && signatureRequest?.signed_file_path) {
     try {
-      signedHref = await signedUrl(
+      viewSignedHref = await signedUrl(signatureRequest.signed_file_path, 3600);
+      downloadSignedHref = await signedUrl(
         signatureRequest.signed_file_path,
         3600,
         `${label}.pdf`,
       );
     } catch {
-      signedHref = null;
+      viewSignedHref = null;
+      downloadSignedHref = null;
     }
   }
 
+  const showFooter = (isSigned && viewSignedHref) || (canEdit && !isSigned);
+
   return (
-    <li className="py-3">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="min-w-0 flex-1">
-          <div className="font-medium truncate">{label}</div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span>{t(statusKey)}</span>
+    <li>
+      <div
+        className={`overflow-hidden rounded-xl border bg-card shadow-card ${boxBorder}`}
+      >
+        <div className="flex items-center gap-3 px-4 py-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+            <FileSignature className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] font-medium uppercase tracking-wide leading-none text-muted-foreground">
+              {t("sig_kicker")}
+            </div>
+            <div className="mt-1 truncate text-base font-semibold leading-none">
+              {label}
+            </div>
             {showTestChip && (
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                {t("sig_test_mode")}
-              </span>
+              <div className="mt-1.5">
+                <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  {t("sig_test_mode")}
+                </span>
+              </div>
             )}
           </div>
-          {signedHref && (
-            <a
-              href={signedHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <Download className="size-3.5" />
-              {t("sig_download_signed")}
-            </a>
-          )}
+          <Badge variant="outline" className={`shrink-0 ${badgeCls}`}>
+            {t(statusKey)}
+          </Badge>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Badge variant={badgeVariant}>{t(statusKey)}</Badge>
-          {canEdit && !isSigned && (
-            <form action={removeItemAction}>
-              <input type="hidden" name="id" value={item.id} />
-              <Button
-                type="submit"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("remove_item")}
-                title={t("remove_item")}
+
+        {showFooter && (
+          <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/40 px-4 py-2.5">
+            {isSigned && viewSignedHref && (
+              <a
+                href={viewSignedHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-md bg-secondary px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/80"
               >
-                <Trash2 className="size-4 text-muted-foreground" />
-              </Button>
-            </form>
-          )}
-        </div>
+                <ExternalLink className="size-3.5" />
+                {t("sig_view_signed")}
+              </a>
+            )}
+            {isSigned && downloadSignedHref && (
+              <a
+                href={downloadSignedHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Download className="size-3.5" />
+                {t("sig_download_signed")}
+              </a>
+            )}
+            {canEdit && !isSigned && (
+              <form action={removeItemAction}>
+                <input type="hidden" name="id" value={item.id} />
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("remove_item")}
+                  title={t("remove_item")}
+                >
+                  <Trash2 className="size-4 text-muted-foreground" />
+                </Button>
+              </form>
+            )}
+          </div>
+        )}
       </div>
     </li>
   );
