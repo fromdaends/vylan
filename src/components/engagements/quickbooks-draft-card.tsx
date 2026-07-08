@@ -208,8 +208,7 @@ export async function QuickbooksDraftCard({
   return (
     <div
       className={cn(
-        "mt-1.5 overflow-hidden rounded-xl border bg-card/70 shadow-sm",
-        status === "approved" ? "border-success/30" : "border-border/60",
+        "mt-1.5 overflow-hidden rounded-xl border border-border/60 bg-card/70 shadow-sm",
         status === "dismissed" ? "opacity-70" : "",
       )}
     >
