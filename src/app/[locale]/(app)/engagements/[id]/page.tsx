@@ -918,13 +918,9 @@ async function SignatureRow({
   const showTestChip =
     (isAwaiting || isSigned) && signatureRequest?.test_mode === true;
 
-  // Box border + status-badge tint by state (mirrors the QuickBooks draft card's
-  // language: green when done, amber while pending, neutral when not set up).
-  const boxBorder = isSigned
-    ? "border-success/30"
-    : isAwaiting
-      ? "border-warning/40"
-      : "border-border/60";
+  // Status-badge tint by state (green when signed, amber while awaiting, neutral
+  // when not set up). The card outline itself stays a plain neutral border in
+  // every state.
   const badgeCls = isSigned
     ? "border-success/40 text-success"
     : isAwaiting
@@ -955,9 +951,7 @@ async function SignatureRow({
 
   return (
     <li>
-      <div
-        className={`overflow-hidden rounded-xl border bg-card shadow-card ${boxBorder}`}
-      >
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-card">
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
             <FileSignature className="size-5" />
