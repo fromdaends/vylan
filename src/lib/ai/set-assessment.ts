@@ -663,18 +663,29 @@ export async function processSetAssessmentJob(
     return { skipped: "no_files" };
   }
 
-  // Files the code-readable fast path already handled (text-layer PDF, Excel,
-  // CSV) are excluded from the set assessment: each is a complete, self-contained
-  // document read in code, not a page-photo that might belong to a larger set —
-  // AND we deliberately kept them off the vision path, so the set assessment must
-  // not spend a model call re-reading one. When every file is code-read (or a
-  // non-vision type), there's nothing to assess.
-  const readable = allFiles.filter(
-    (f) =>
-      isSupportedAiMime(f.mime_type ?? "") &&
-      !isCodeReadFields(f.ai_extracted_fields),
+  // Which files could the vision model read at all? PDFs + images. Of those,
+  // which still NEED the vision model — i.e. weren't already read by the
+  // code-readable fast path? If NONE need vision (a lone or all code-read item,
+  // or only non-vision types), there's nothing to assess: clear any stale set
+  // verdict left by earlier vision files and stop, so a code-read-only item never
+  // keeps a phantom "page X missing" summary.
+  const supported = allFiles.filter((f) => isSupportedAiMime(f.mime_type ?? ""));
+  const needsVision = supported.filter(
+    (f) => !isCodeReadFields(f.ai_extracted_fields),
   );
-  if (readable.length === 0) return { skipped: "no_supported_files" };
+  if (needsVision.length === 0) {
+    await sb
+      .from("request_items")
+      .update({ ai_set_assessment: null })
+      .eq("id", itemId);
+    await recomputeItemStatus(sb, itemId);
+    return { skipped: "no_supported_files" };
+  }
+  // At least one file needs vision, so assess the FULL supported set — INCLUDING
+  // any code-read PDFs — so the page inventory is complete. Excluding them would
+  // make a 4-page statement sent as 2 photos + a 2-page text PDF read as
+  // "pages 3-4 missing" and loop the client on pages already uploaded.
+  const readable = supported;
 
   // Download + prepare, bounded by file count and total bytes. Images get the
   // SAME prep as classify (2048px cap, JPEG q90); PDFs pass through untouched.

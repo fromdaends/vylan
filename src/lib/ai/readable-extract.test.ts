@@ -134,6 +134,65 @@ describe("extractReadable", () => {
     expect(res!.extracted_year).toBe(2024);
   });
 
+  it("keeps shared-string indices aligned across a self-closing <si/>", async () => {
+    // Index 2 must resolve to "Gamma", not shift to "Beta", when an empty
+    // <si/> occupies index 1.
+    const files: Record<string, Uint8Array> = {
+      "xl/workbook.xml": strToU8(
+        '<workbook><sheets><sheet name="S"/></sheets></workbook>',
+      ),
+      "xl/sharedStrings.xml": strToU8(
+        "<sst><si><t>Alpha</t></si><si/><si><t>Gamma</t></si></sst>",
+      ),
+      "xl/worksheets/sheet1.xml": strToU8(
+        '<worksheet><sheetData><row r="1">' +
+          '<c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>2</v></c>' +
+          "</row></sheetData></worksheet>",
+      ),
+    };
+    const res = await extractReadable(
+      Buffer.from(zipSync(files)),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "s.xlsx",
+    );
+    expect(res!.column_headers).toEqual(["Alpha", "Gamma"]);
+  });
+
+  it("does not read a year out of a decimal amount", async () => {
+    const noYear = await extractReadable(
+      Buffer.from("price\n2019.99\n2020.00\n", "utf8"),
+      "text/csv",
+      "p.csv",
+    );
+    expect(noYear!.extracted_year).toBeNull();
+    const withYear = await extractReadable(
+      Buffer.from("label,amount\nRapport 2024,100\n", "utf8"),
+      "text/csv",
+      "r.csv",
+    );
+    expect(withYear!.extracted_year).toBe(2024);
+  });
+
+  it("stays bounded on a crafted worksheet with no closing '>' (no quadratic hang)", async () => {
+    // Without bounded quantifiers this row body would trigger O(n^2) regex
+    // backtracking. With them it returns quickly; assert it completes and yields
+    // a result rather than hanging the event loop.
+    const evil =
+      "<worksheet><sheetData><row>" + "<c".repeat(200_000) + "</row></sheetData></worksheet>";
+    const files: Record<string, Uint8Array> = {
+      "xl/workbook.xml": strToU8('<workbook><sheets><sheet name="S"/></sheets></workbook>'),
+      "xl/worksheets/sheet1.xml": strToU8(evil),
+    };
+    // The 5s per-test timeout below is the guard: a quadratic scan would blow it.
+    const res = await extractReadable(
+      Buffer.from(zipSync(files)),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "evil.xlsx",
+    );
+    // The malformed row yields no cells; we still get a (kind:"xlsx") result.
+    expect(res?.kind).toBe("xlsx");
+  }, 5000);
+
   it("treats a legacy binary .xls (OLE) as readable but with minimal extraction", async () => {
     const ole = Buffer.concat([
       Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),

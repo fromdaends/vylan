@@ -122,14 +122,20 @@ export function PreviewCard({
   // A duplicate reads as a "Duplicate" (its own bucket), not as its underlying
   // rejected/flagged review status — keeps the card, the Duplicates section, and
   // the Duplicates tab all telling the same story.
+  // The neutral "read in code" treatment applies only while the file is still
+  // undecided. Once the accountant approves/rejects it, review_status wins and
+  // doc.status is "approved"/"rejected" — the card must then show that decision
+  // (green/red), not the neutral badge (which would contradict the Undo control
+  // and the Approved/Rejected tab it now sits under).
+  const showCodeRead = doc.codeRead && doc.status === "pending";
   const s = doc.isDuplicate
     ? DUPLICATE_UI
-    : doc.codeRead
+    : showCodeRead
       ? CODE_READ_UI
       : STATUS_UI[doc.status];
   const statusLabel = doc.isDuplicate
     ? t("status_duplicate")
-    : doc.codeRead
+    : showCodeRead
       ? t("status_code_read")
       : t(`status_${doc.status}`);
   const isOther = !doc.isImage && !doc.isPdf;

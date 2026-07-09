@@ -43,6 +43,20 @@ export type ReadableExtraction = {
 // How much of the extracted text we keep as a preview (accountant-facing).
 const PREVIEW_CHARS = 2000;
 
+// Hardening for the .xlsx parser, which runs on UNTRUSTED client uploads:
+//  * refuse any zip entry whose declared uncompressed size is huge (zip-bomb
+//    guard) and only decompress the few parts we actually read,
+//  * skip regex-scanning a part larger than a sane ceiling,
+//  * bound how many cells we pull out of one workbook.
+// All the XML regexes below also bound their `[^>]` / content runs (e.g.
+// `[^>]{0,512}`) so a crafted part with no closing `>` can't cause quadratic
+// backtracking that stalls the event loop.
+const MAX_XLSX_ENTRY_BYTES = 16 * 1024 * 1024;
+const MAX_XML_SCAN_BYTES = 8 * 1024 * 1024;
+const MAX_SHEET_CELLS = 50_000;
+const MAX_ATTR = 512; // longest `[^>]*` run we allow inside a tag
+const MAX_CELL = 32_768; // Excel's own single-cell character ceiling
+
 // A real text layer yields hundreds+ of characters; a scanned or photographed
 // (image-only) PDF yields ~0 because pdf.js finds no text-drawing operators. We
 // require BOTH an absolute floor AND a per-page average so a scanned PDF that
@@ -140,20 +154,37 @@ function extractCsv(bytes: Buffer): ReadableExtraction {
 function extractXlsx(bytes: Buffer): ReadableExtraction | null {
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(new Uint8Array(bytes));
+    files = unzipSync(new Uint8Array(bytes), {
+      // Only decompress the parts we read, and refuse any entry whose declared
+      // uncompressed size is oversized — a zip-bomb guard so a crafted .xlsx
+      // can't inflate to gigabytes and OOM the worker.
+      filter: (f) =>
+        f.originalSize <= MAX_XLSX_ENTRY_BYTES &&
+        (f.name === "xl/sharedStrings.xml" ||
+          f.name === "xl/workbook.xml" ||
+          /^xl\/worksheets\/sheet\d+\.xml$/.test(f.name)),
+    });
   } catch {
     return null; // corrupt/invalid zip → defer to the AI path
   }
 
   // Shared strings: most text cells store an index into this table. An <si>
-  // item may hold several <t> runs (rich text) — concatenate them.
+  // item may hold several <t> runs (rich text) — concatenate them. A self-closing
+  // <si/> (an empty item) still occupies an index, so it must push "" or every
+  // later index shifts.
   const shared: string[] = [];
-  const ss = files["xl/sharedStrings.xml"];
+  const ss = xmlPart(files["xl/sharedStrings.xml"]);
   if (ss) {
-    const xml = strFromU8(ss);
-    for (const si of xml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)) {
-      const runs = [...si[1]!.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map((m) =>
-        decodeXmlEntities(m[1]!),
+    for (const si of ss.matchAll(
+      /<si\b[^>]{0,512}\/>|<si\b[^>]{0,512}>([\s\S]{0,2000000}?)<\/si>/g,
+    )) {
+      const inner = si[1];
+      if (inner == null) {
+        shared.push(""); // self-closing <si/>
+        continue;
+      }
+      const runs = [...inner.matchAll(/<t\b[^>]{0,512}>([\s\S]{0,32768}?)<\/t>/g)].map(
+        (m) => decodeXmlEntities(m[1]!),
       );
       shared.push(runs.join(""));
     }
@@ -161,10 +192,9 @@ function extractXlsx(bytes: Buffer): ReadableExtraction | null {
 
   // Sheet names (display order) off the workbook part.
   const sheetNames: string[] = [];
-  const wb = files["xl/workbook.xml"];
+  const wb = xmlPart(files["xl/workbook.xml"]);
   if (wb) {
-    const xml = strFromU8(wb);
-    for (const m of xml.matchAll(/<sheet\b[^>]*\bname="([^"]*)"/g)) {
+    for (const m of wb.matchAll(/<sheet\b[^>]{0,512}\bname="([^"]{0,512})"/g)) {
       sheetNames.push(decodeXmlEntities(m[1]!));
     }
   }
@@ -175,10 +205,15 @@ function extractXlsx(bytes: Buffer): ReadableExtraction | null {
 
   const textParts: string[] = [];
   let firstSheetRows: string[][] = [];
+  let cellBudget = MAX_SHEET_CELLS;
   for (const path of sheetPaths) {
-    const rows = parseSheetXml(strFromU8(files[path]!), shared);
+    const xml = xmlPart(files[path]);
+    if (!xml) continue;
+    const rows = parseSheetXml(xml, shared, cellBudget);
+    cellBudget -= rows.reduce((n, r) => n + r.length, 0);
     if (path === sheetPaths[0]) firstSheetRows = rows;
     for (const row of rows) textParts.push(row.join("\t"));
+    if (cellBudget <= 0) break;
   }
 
   const text = textParts.join("\n");
@@ -201,31 +236,55 @@ function sheetNum(path: string): number {
   return Number(/sheet(\d+)\.xml$/.exec(path)?.[1] ?? "0");
 }
 
-function parseSheetXml(xml: string, shared: string[]): string[][] {
+// Decode a zip entry to a string, but only if it's within the scan ceiling — a
+// part larger than MAX_XML_SCAN_BYTES is refused (returns null) so we never
+// regex-scan an oversized, possibly-crafted XML body.
+function xmlPart(entry: Uint8Array | undefined): string | null {
+  if (!entry || entry.length > MAX_XML_SCAN_BYTES) return null;
+  return strFromU8(entry);
+}
+
+// Every `[^>]` / content run below is length-bounded (MAX_ATTR / MAX_CELL) so a
+// crafted worksheet with no closing `>` can't trigger quadratic backtracking.
+function parseSheetXml(
+  xml: string,
+  shared: string[],
+  cellBudget: number,
+): string[][] {
   const rows: string[][] = [];
-  for (const rowM of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+  let budget = cellBudget;
+  const cellRe = new RegExp(
+    `<c\\b([^>]{0,${MAX_ATTR}})>([\\s\\S]{0,${MAX_CELL}}?)<\\/c>|<c\\b([^>]{0,${MAX_ATTR}})\\/>`,
+    "g",
+  );
+  const vRe = new RegExp(`<v\\b[^>]{0,${MAX_ATTR}}>([\\s\\S]{0,${MAX_CELL}}?)<\\/v>`);
+  const tRe = new RegExp(`<t\\b[^>]{0,${MAX_ATTR}}>([\\s\\S]{0,${MAX_CELL}}?)<\\/t>`, "g");
+  for (const rowM of xml.matchAll(
+    new RegExp(`<row\\b[^>]{0,${MAX_ATTR}}>([\\s\\S]{0,${MAX_XML_SCAN_BYTES}}?)<\\/row>`, "g"),
+  )) {
+    if (budget <= 0) break;
     const cells: string[] = [];
     // Each cell is <c ...>…</c> or a self-closing empty <c .../>.
-    for (const cM of rowM[1]!.matchAll(
-      /<c\b([^>]*)>([\s\S]*?)<\/c>|<c\b([^>]*)\/>/g,
-    )) {
+    for (const cM of rowM[1]!.matchAll(cellRe)) {
+      if (budget <= 0) break;
+      budget--;
       const attrs = cM[1] ?? cM[3] ?? "";
       const inner = cM[2] ?? "";
-      const t = /\bt="([^"]*)"/.exec(attrs)?.[1];
+      const t = /\bt="([^"]{0,64})"/.exec(attrs)?.[1];
       let value = "";
       if (t === "s") {
         // Shared-string index. Guard the empty-cell case explicitly — Number("")
         // is 0, which would otherwise resolve an empty cell to shared string #0.
-        const raw = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(inner)?.[1];
+        const raw = vRe.exec(inner)?.[1];
         const idx = raw != null ? Number(raw) : NaN;
         value = Number.isInteger(idx) ? (shared[idx] ?? "") : "";
       } else if (t === "inlineStr") {
-        value = [...inner.matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)]
+        value = [...inner.matchAll(tRe)]
           .map((m) => decodeXmlEntities(m[1]!))
           .join("");
       } else {
         // t="str" (formula result) or a number/date — value lives in <v>.
-        const v = /<v\b[^>]*>([\s\S]*?)<\/v>/.exec(inner)?.[1];
+        const v = vRe.exec(inner)?.[1];
         value = v != null ? decodeXmlEntities(v) : "";
       }
       cells.push(value);
@@ -278,6 +337,13 @@ async function extractPdfText(bytes: Buffer): Promise<ReadableExtraction | null>
   const stripped = rawText.replace(/\s+/g, " ").trim();
   const alnum = (stripped.match(/[\p{L}\p{N}]/gu) ?? []).length;
   const pages = Math.max(1, totalPages);
+  // A born-digital PDF has a rich text layer; a scan/photo has ~none. NOTE: a
+  // scan that was OCR'd into a "searchable PDF" DOES carry an extractable text
+  // layer and will pass this test — by design, we treat it as readable (the
+  // task's rule is "a real text layer", which OCR output satisfies). A blurry
+  // scan yields little or garbled text and still falls back to the vision model
+  // via the floor below. If OCR'd scans should instead get the AI usability
+  // check, tighten this to also inspect for full-page raster images.
   const hasTextLayer =
     alnum >= MIN_PDF_TEXT_CHARS_TOTAL &&
     alnum / pages >= MIN_PDF_TEXT_CHARS_PER_PAGE;
@@ -302,9 +368,15 @@ function decodeUtf8(bytes: Buffer): string {
   return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
 }
 
-// First plausible tax year (1990–2099) appearing in the text.
+// First plausible tax year (1990–2099) appearing in the text. The lookarounds
+// keep it from matching inside a number — e.g. the "2019" in "2019.99" or
+// "$12020" is not a year — since extracted_year is a display hint and a
+// monetary token masquerading as a year would mislead.
 function findYear(text: string): number | null {
-  const m = text.match(/\b(199\d|20\d\d)\b/);
+  // Not preceded by a digit / decimal point / currency mark, not part of a
+  // longer number, and not the integer part of a decimal amount (2020.50). A
+  // trailing comma is fine — that's a CSV field separator, not a decimal.
+  const m = text.match(/(?<![\d.,$])(199\d|20\d\d)(?!\.\d)(?!\d)/);
   if (!m) return null;
   const y = Number(m[1]);
   return y >= 1990 && y <= 2099 ? y : null;

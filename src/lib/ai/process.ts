@@ -128,29 +128,11 @@ export async function processClassifyJob(
     clientName: ctxClient?.display_name ?? null,
     expectedYear: expectedYearFromTitle(engCtx?.title ?? ""),
   };
-  // limitFirmId is guaranteed non-null here (we returned above if it wasn't).
-  const rl = await checkRateLimit({
-    key: `ai:classify:firm:${limitFirmId}`,
-    ...AI_CLASSIFY_PER_FIRM_DAILY,
-  });
-  if (!rl.ok) return { skipped: "firm_daily_quota_exceeded" };
-
-  // Per-firm MONTHLY cap (migration 0230): once a firm hits ai_monthly_cap
-  // client-document AI checks this calendar month, auto-pause the AI for the
-  // rest of the month to bound token spend. The upload already succeeded —
-  // we just skip the (paid) classification. Resets next month.
-  const usage = await getFirmAiUsage(limitFirmId);
-  if (usage.paused) {
-    // Trial firms hit a low LIFETIME cap (abuse/cost guard); paid firms hit
-    // the monthly cap. Distinct codes so logs + the portal can tell them
-    // apart. Both are terminal-done in the cron (not in RETRYABLE_SKIPS).
-    return {
-      skipped: usage.isTrial
-        ? "trial_ai_limit_reached"
-        : "firm_monthly_cap_exceeded",
-    };
-  }
-
+  // Fetch the bytes BEFORE the AI-spend guards. The code-readable fast path
+  // makes NO model call, so a machine-readable file must neither be blocked by
+  // NOR consume the firm's daily/monthly/trial AI budget — it should always be
+  // read and settle. The bytes come from our own storage, so this download is
+  // internal and cheap; the paid classifier further down stays fully gated.
   let bytes: Buffer;
   let mimeType: string;
   if (preDownloaded) {
@@ -174,7 +156,8 @@ export async function processClassifyJob(
   // "pending", so the item reads "submitted / awaiting accountant approval",
   // exactly like an AI-classified file that raised no issue. Only files code
   // CANNOT read (scans, photos, image-only PDFs) return null here and fall
-  // through to the vision classifier below, unchanged.
+  // through to the vision classifier below, unchanged. Runs BEFORE the AI caps
+  // so a readable file settles even for a firm that is over quota / trial-paused.
   const readable = await extractReadable(bytes, mimeType, file.original_filename);
   if (readable) {
     await sb
@@ -214,6 +197,30 @@ export async function processClassifyJob(
     // No firm AI usage is charged (no model call), no transaction/QuickBooks
     // pass, and no usability routing — a readable file has nothing to reject.
     return { readable };
+  }
+
+  // ---- AI path only: the file needs the vision model, so enforce the firm's
+  // AI budget now (readable files above never reach or consume this). ----
+  const rl = await checkRateLimit({
+    key: `ai:classify:firm:${limitFirmId}`,
+    ...AI_CLASSIFY_PER_FIRM_DAILY,
+  });
+  if (!rl.ok) return { skipped: "firm_daily_quota_exceeded" };
+
+  // Per-firm MONTHLY cap (migration 0230): once a firm hits ai_monthly_cap
+  // client-document AI checks this calendar month, auto-pause the AI for the
+  // rest of the month to bound token spend. The upload already succeeded —
+  // we just skip the (paid) classification. Resets next month.
+  const usage = await getFirmAiUsage(limitFirmId);
+  if (usage.paused) {
+    // Trial firms hit a low LIFETIME cap (abuse/cost guard); paid firms hit
+    // the monthly cap. Distinct codes so logs + the portal can tell them
+    // apart. Both are terminal-done in the cron (not in RETRYABLE_SKIPS).
+    return {
+      skipped: usage.isTrial
+        ? "trial_ai_limit_reached"
+        : "firm_monthly_cap_exceeded",
+    };
   }
 
   const result = await classifyDocument({

@@ -193,9 +193,15 @@ export function PreviewDetail({
   const header = previewCardTitle(doc, locale);
   // A code-read file's status maps to the neutral "pending" bucket, but we relabel
   // it honestly ("Read in code — no AI needed") rather than "Not analyzed yet".
+  // The neutral pill applies ONLY while undecided; once the accountant approves
+  // or rejects it (doc.status becomes approved/rejected), the header shows that
+  // decision — otherwise it would contradict the Undo control below. The panel +
+  // suppressed-verdict logic further down still keys off the raw codeRead flag,
+  // so a code-read file never shows a fabricated green quality verdict.
   const codeRead = doc.codeRead;
-  const pill = codeRead ? CODE_READ_PILL : STATUS_PILL[doc.status];
-  const statusLabel = codeRead
+  const showCodeReadPill = codeRead && doc.status === "pending";
+  const pill = showCodeReadPill ? CODE_READ_PILL : STATUS_PILL[doc.status];
+  const statusLabel = showCodeReadPill
     ? t("status_code_read")
     : t(`status_${doc.status}`);
 
