@@ -29,6 +29,7 @@ import {
   isSupportedAiMime,
 } from "./classify";
 import { assessSetWithOpenAI } from "./openai-classify";
+import { isCodeReadFields } from "./code-read";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { isEngagementAiEnabled } from "./engagement-ai";
 import { expectedYearFromTitle } from "./matching";
@@ -554,6 +555,7 @@ type FileRow = {
   mime_type: string | null;
   content_hash: string | null;
   uploaded_at: string;
+  ai_extracted_fields: Record<string, unknown> | null;
 };
 
 type PreparedFile = {
@@ -643,7 +645,9 @@ export async function processSetAssessmentJob(
   // The set: every non-duplicate file of the item, in upload order.
   const { data: fileRows } = await sb
     .from("uploaded_files")
-    .select("id, storage_path, mime_type, content_hash, uploaded_at")
+    .select(
+      "id, storage_path, mime_type, content_hash, uploaded_at, ai_extracted_fields",
+    )
     .eq("request_item_id", itemId)
     .eq("is_duplicate", false)
     .order("uploaded_at", { ascending: true });
@@ -659,8 +663,16 @@ export async function processSetAssessmentJob(
     return { skipped: "no_files" };
   }
 
-  const readable = allFiles.filter((f) =>
-    isSupportedAiMime(f.mime_type ?? ""),
+  // Files the code-readable fast path already handled (text-layer PDF, Excel,
+  // CSV) are excluded from the set assessment: each is a complete, self-contained
+  // document read in code, not a page-photo that might belong to a larger set —
+  // AND we deliberately kept them off the vision path, so the set assessment must
+  // not spend a model call re-reading one. When every file is code-read (or a
+  // non-vision type), there's nothing to assess.
+  const readable = allFiles.filter(
+    (f) =>
+      isSupportedAiMime(f.mime_type ?? "") &&
+      !isCodeReadFields(f.ai_extracted_fields),
   );
   if (readable.length === 0) return { skipped: "no_supported_files" };
 

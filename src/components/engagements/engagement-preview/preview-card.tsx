@@ -68,6 +68,16 @@ const DUPLICATE_UI = {
   Icon: Copy,
 };
 
+// A code-read file (text-layer PDF / Excel / CSV) gets the SAME calm neutral
+// treatment as a not-yet-analyzed doc, but with a document glyph + an honest
+// "read in code — no AI needed" label, so it never reads as a green AI pass.
+const CODE_READ_UI = {
+  border: "border-border/50",
+  badge: "bg-muted-foreground/70",
+  text: "text-muted-foreground",
+  Icon: FileText,
+};
+
 // One document in the grid: a recognisable thumbnail (image rendition or PDF
 // first page, lazy-loaded), a couple-word header, an unmistakable colour status
 // (border + corner icon + labelled line — never colour alone), and hover/focus
@@ -112,10 +122,16 @@ export function PreviewCard({
   // A duplicate reads as a "Duplicate" (its own bucket), not as its underlying
   // rejected/flagged review status — keeps the card, the Duplicates section, and
   // the Duplicates tab all telling the same story.
-  const s = doc.isDuplicate ? DUPLICATE_UI : STATUS_UI[doc.status];
+  const s = doc.isDuplicate
+    ? DUPLICATE_UI
+    : doc.codeRead
+      ? CODE_READ_UI
+      : STATUS_UI[doc.status];
   const statusLabel = doc.isDuplicate
     ? t("status_duplicate")
-    : t(`status_${doc.status}`);
+    : doc.codeRead
+      ? t("status_code_read")
+      : t(`status_${doc.status}`);
   const isOther = !doc.isImage && !doc.isPdf;
   const fallback =
     isOther || (doc.isImage && imgError) || (doc.isPdf && pdfError);

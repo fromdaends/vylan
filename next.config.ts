@@ -28,7 +28,11 @@ const nextConfig: NextConfig = {
   // package leaves bundling alone and lets Node `require()` it at
   // runtime. The route handlers that use it (api/engagements/.../files.zip
   // and api/firm/export.zip) are nodejs-runtime only.
-  serverExternalPackages: ["archiver"],
+  //
+  // unpdf bundles pdf.js; keeping it external lets Node require() it at runtime
+  // rather than having Turbopack bundle pdf.js. It's used only by the
+  // code-readable fast path (src/lib/ai/readable-extract.ts), nodejs-runtime.
+  serverExternalPackages: ["archiver", "unpdf"],
   experimental: {
     serverActions: {
       // Default is 1 MB — too small for phone photos (3-8 MB is normal).

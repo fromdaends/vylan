@@ -34,6 +34,11 @@ import {
 } from "@/lib/db/quickbooks-suggestions";
 import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
+import {
+  extractReadable,
+  CODE_SOURCE,
+  type ReadableExtraction,
+} from "./readable-extract";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { isEngagementAiEnabled } from "./engagement-ai";
 
@@ -47,6 +52,10 @@ export async function processClassifyJob(
   skipped?: string;
   classified?: ClassificationResult;
   routed?: DispatcherResult;
+  // Set when the code-readable fast path handled the file (text-layer PDF,
+  // Excel, CSV) — no vision-model call was made. The cron treats this like
+  // `classified` (a result with no `skipped` is terminal-done).
+  readable?: ReadableExtraction;
 }> {
   if (!isAiConfigured()) return { skipped: "ai_not_configured" };
   const fileId = String(payload.uploaded_file_id ?? "");
@@ -156,6 +165,55 @@ export async function processClassifyJob(
     if (!dl) return { skipped: "download_failed" };
     bytes = dl.bytes;
     mimeType = file.mime_type || dl.mimeType;
+  }
+
+  // Code-readable fast path. If code can read this file directly — a PDF with a
+  // real text layer, an Excel workbook, or a CSV — we extract its fields locally
+  // and SKIP the vision model entirely (no GPT-5.4 call, no token spend). The
+  // file still moves through the normal pipeline: it stays review_status
+  // "pending", so the item reads "submitted / awaiting accountant approval",
+  // exactly like an AI-classified file that raised no issue. Only files code
+  // CANNOT read (scans, photos, image-only PDFs) return null here and fall
+  // through to the vision classifier below, unchanged.
+  const readable = await extractReadable(bytes, mimeType, file.original_filename);
+  if (readable) {
+    await sb
+      .from("uploaded_files")
+      .update({
+        // Deliberately NO ai_classification / ai_confidence: code READ the
+        // document, it did not CLASSIFY it. Leaving those null (plus the
+        // source:"code" marker below) drives an honest neutral "read without
+        // AI" badge instead of a fabricated AI verdict.
+        ai_extracted_fields: {
+          source: CODE_SOURCE,
+          kind: readable.kind,
+          extracted_year: readable.extracted_year,
+          char_count: readable.char_count,
+          text_preview: readable.text_preview,
+          sheet_names: readable.sheet_names,
+          row_count: readable.row_count,
+          column_headers: readable.column_headers,
+        },
+        // Readable by definition → usable. This lets the portal's upload-status
+        // poll settle ("received / in review") and guarantees nothing is
+        // auto-rejected. No looks_correct is written: code did not judge whether
+        // this is the RIGHT document for the request (that stays the
+        // accountant's call), so the client sees a neutral in-review state, not
+        // a green "AI confirmed" note.
+        ai_usability: {
+          usable: true,
+          confidence: 1,
+          primary_issue: null,
+          all_issues: [],
+          issue_summary_fr: "",
+          issue_summary_en: "",
+        },
+      })
+      .eq("id", file.id);
+
+    // No firm AI usage is charged (no model call), no transaction/QuickBooks
+    // pass, and no usability routing — a readable file has nothing to reject.
+    return { readable };
   }
 
   const result = await classifyDocument({

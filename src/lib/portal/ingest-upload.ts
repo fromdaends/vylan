@@ -229,10 +229,12 @@ export async function ingestPortalUpload(opts: {
         { uploaded_file_id: insertedFileId },
         { bytes: bytesForAi, mimeType: mimeForAi },
       );
-      if (result.classified) {
+      if (result.classified || result.readable) {
         // Mark the queued job done so the cron skips it. The .eq("status",
         // "pending") guard makes this a no-op if the cron raced us — at
         // worst we do one duplicate classification, never lose one.
+        // `result.readable` covers the code-readable fast path (text-layer
+        // PDF / Excel / CSV), which resolves the file WITHOUT a model call.
         await sb
           .from("jobs")
           .update({ status: "done", last_error: "processed_inline" })

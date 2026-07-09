@@ -45,12 +45,23 @@ const HEIC_MIMES = new Set([
   "image/heif-sequence",
 ]);
 
+// Machine-readable document types (spreadsheets + CSV) that the code-readable
+// fast path reads WITHOUT the vision model (see src/lib/ai/readable-extract.ts).
+// Accepting them lets those files flow through the portal like any other upload.
+const READABLE_DOC_MIMES = new Set([
+  "text/csv",
+  "application/csv",
+  "application/vnd.ms-excel", // legacy .xls
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+]);
+
 const ALLOWED_MIMES = new Set([
   "application/pdf",
   "image/jpeg",
   "image/png",
   "image/webp",
   ...HEIC_MIMES,
+  ...READABLE_DOC_MIMES,
 ]);
 
 export function isHeic(mime: string): boolean {

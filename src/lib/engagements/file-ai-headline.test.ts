@@ -82,6 +82,22 @@ describe("pickAiHeadline", () => {
       pickAiHeadline({ ...base, usable: null, typeConcern: true }),
     ).toEqual({ kind: "wrong_type", tone: "bad" });
   });
+
+  it("shows a neutral code_read state for a code-read file, outranking everything", () => {
+    // codeRead wins even when the (unclassified) file would otherwise read as
+    // analyzing / not-analyzed, and never becomes a type/usability verdict.
+    expect(
+      pickAiHeadline({ ...base, analyzed: false, codeRead: true }),
+    ).toEqual({ kind: "code_read", tone: "neutral" });
+    expect(
+      pickAiHeadline({
+        ...base,
+        analyzed: false,
+        stale: true,
+        codeRead: true,
+      }),
+    ).toEqual({ kind: "code_read", tone: "neutral" });
+  });
 });
 
 describe("deriveFileAi", () => {
@@ -271,6 +287,39 @@ describe("deriveFileAi", () => {
         ai_classification: null,
         ai_confidence: null,
         ai_usability: null,
+        review_status: "approved",
+      }),
+      ctx,
+      NOW,
+    );
+    expect(v.show).toBe(false);
+  });
+
+  it("shows a neutral code_read headline for a code-read file (no spinner, no fake verdict)", () => {
+    const v = deriveFileAi(
+      file({
+        ai_classification: null,
+        ai_confidence: null,
+        ai_usability: { usable: true },
+        ai_extracted_fields: { source: "code", kind: "csv", extracted_year: 2024 },
+      }),
+      ctx,
+      NOW,
+    );
+    expect(v.show).toBe(true);
+    expect(v.headline).toEqual({ kind: "code_read", tone: "neutral" });
+    expect(v.analyzed).toBe(false); // no fake confidence %
+    expect(v.year).toBe(2024);
+    expect(v.mismatch).toBeNull();
+  });
+
+  it("hides the code_read chip once the accountant has decided the file", () => {
+    const v = deriveFileAi(
+      file({
+        ai_classification: null,
+        ai_confidence: null,
+        ai_usability: { usable: true },
+        ai_extracted_fields: { source: "code", kind: "pdf_text" },
         review_status: "approved",
       }),
       ctx,
