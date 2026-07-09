@@ -204,29 +204,6 @@ describe("resolvePreviewStatus", () => {
   it("no verdict yet => pending (neutral)", () => {
     expect(resolvePreviewStatus(file({}))).toBe("pending");
   });
-  it("a code-read file stays neutral (pending), never a fake green 'approved'", () => {
-    // It carries a synthetic usable verdict (so the portal poll settles), but
-    // code never judged whether it's the RIGHT document — keep it neutral.
-    expect(
-      resolvePreviewStatus(
-        file({
-          ai_usability: verdict(true),
-          ai_extracted_fields: { source: "code", kind: "csv" },
-        }),
-      ),
-    ).toBe("pending");
-  });
-  it("still honours the accountant's approval on a code-read file", () => {
-    expect(
-      resolvePreviewStatus(
-        file({
-          review_status: "approved",
-          ai_usability: verdict(true),
-          ai_extracted_fields: { source: "code", kind: "xlsx" },
-        }),
-      ),
-    ).toBe("approved");
-  });
   it("a confident request mismatch => flagged, even on a usable scan", () => {
     expect(
       resolvePreviewStatus(file({ ai_usability: verdict(true) }), true),
@@ -407,7 +384,6 @@ describe("previewHeader", () => {
     seq: 1,
     classification: null,
     extractedYear: null,
-    codeRead: false,
     itemLabel: "Trial Balance",
     itemLabelFr: "Balance de vérification",
     isImage: true,
@@ -980,7 +956,6 @@ describe("previewCardTitle", () => {
       seq: 1,
       classification: null,
       extractedYear: null,
-      codeRead: false,
       itemLabel: "Trial Balance",
       itemLabelFr: "Balance de vérification",
       isImage: true,

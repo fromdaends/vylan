@@ -17,7 +17,11 @@ import {
   type UsabilityIssue,
   type UsabilityVerdict,
 } from "./usability";
-import { classifyWithOpenAI, isOpenAiConfigured } from "./openai-classify";
+import {
+  classifyWithOpenAI,
+  classifyTextWithOpenAI,
+  isOpenAiConfigured,
+} from "./openai-classify";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -788,6 +792,88 @@ export async function classifyDocument(opts: {
       `[ai/classify] provider=anthropic model=${MODEL} in_tokens=${resp.usage?.input_tokens ?? "?"} out_tokens=${resp.usage?.output_tokens ?? "?"}`,
     );
 
+    for (const block of resp.content) {
+      if (block.type === "tool_use" && block.name === "classify_document") {
+        raw = block.input as Record<string, unknown>;
+        break;
+      }
+    }
+  }
+
+  if (!raw) return null;
+  return parseClassification(raw);
+}
+
+// Classify a MACHINE-READABLE document from its extracted TEXT instead of an
+// image. The vision model can't open an Excel workbook or a CSV, so for those we
+// read the text in code (see readable-extract.ts) and hand it here — the model
+// still performs the SAME checklist verification (is this the right document
+// type for the request? does it belong to the client?), just from text. Also
+// usable, and cheaper, for text-layer PDFs. Because code already read it, the
+// document is legible by definition, so the prompt steers the model away from
+// image-quality judgments and toward TYPE + request-match.
+export async function classifyDocumentFromText(opts: {
+  expectedDocType: DocType;
+  text: string;
+  // A human word for the source, woven into the prompt ("spreadsheet", "CSV",
+  // "PDF") so the model knows it's reading extracted text, not prose.
+  sourceLabel: string;
+  request?: RequestContext;
+}): Promise<ClassificationResult | null> {
+  const text = opts.text.trim();
+  if (text === "") return null;
+
+  const provider = getProvider();
+  if (provider === "openai" ? !isOpenAiConfigured() : !isAnthropicConfigured()) {
+    console.warn(`[ai/classify] no API key for provider=${provider} — skipping`);
+    return null;
+  }
+
+  const systemPrompt = buildSystemPrompt(opts.expectedDocType, opts.request);
+  const requestedAs =
+    opts.request?.requestLabel?.trim() ||
+    opts.request?.requestLabelFr?.trim() ||
+    opts.expectedDocType;
+  const userText =
+    `The accountant requested: "${requestedAs}". Below is the FULL machine-extracted ` +
+    `text of an uploaded ${opts.sourceLabel}. It was read directly by software, so it ` +
+    `is legible by definition — do NOT flag blur, glare, image quality, or a missing/` +
+    `unreadable owner just because this is plain text. Judge the document TYPE and ` +
+    `whether it can satisfy the request, and set "usable" to true unless the CONTENT ` +
+    `itself shows this is not a real, usable document. Then classify it.\n\n` +
+    `----- BEGIN DOCUMENT TEXT -----\n${opts.text}\n----- END DOCUMENT TEXT -----`;
+
+  let raw: Record<string, unknown> | null = null;
+
+  if (provider === "openai") {
+    const model = getOpenAiModel();
+    const { raw: r, usage } = await classifyTextWithOpenAI({
+      model,
+      systemPrompt,
+      userText,
+      schema: CLASSIFY_TOOL.input_schema,
+    });
+    raw = r;
+    console.info(
+      `[ai/classify] provider=openai model=${model} mode=text in_tokens=${usage?.input ?? "?"} out_tokens=${usage?.output ?? "?"}`,
+    );
+  } else {
+    const c = client();
+    if (!c) return null;
+    const resp = await c.messages.create(
+      {
+        model: MODEL,
+        max_tokens: 1200,
+        system: systemPrompt,
+        tools: [CLASSIFY_TOOL],
+        tool_choice: { type: "tool", name: "classify_document" },
+        messages: [{ role: "user", content: userText }],
+      },
+      { timeout: 40_000, maxRetries: 1 },
+    );
+    console.info(
+      `[ai/classify] provider=anthropic model=${MODEL} mode=text in_tokens=${resp.usage?.input_tokens ?? "?"} out_tokens=${resp.usage?.output_tokens ?? "?"}`,
+    );
     for (const block of resp.content) {
       if (block.type === "tool_use" && block.name === "classify_document") {
         raw = block.input as Record<string, unknown>;

@@ -23,10 +23,10 @@ type UploadVerdict = {
   confirmed?: boolean;
 };
 
-// Machine-readable documents (Excel / CSV) are accepted too — the code-readable
-// fast path reads them without the AI. Both the MIME types and the extensions
-// are listed so the OS file picker offers them even when a browser reports a
-// generic MIME for a spreadsheet.
+// Machine-readable documents (Excel / CSV) are accepted too — code reads their
+// text so the AI can verify them against the checklist. Both the MIME types and
+// the extensions are listed so the OS file picker offers them even when a
+// browser reports a generic MIME for a spreadsheet.
 const ACCEPT =
   "application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif," +
   "text/csv,application/vnd.ms-excel," +

@@ -4,7 +4,6 @@ import type { SetAssessment } from "@/lib/ai/set-assessment";
 import type { DocType } from "@/lib/db/templates";
 import { DOC_TYPE_LABELS, docTypeLabel } from "@/lib/doc-types";
 import { matchDocument } from "@/lib/ai/matching";
-import { isCodeReadFields } from "@/lib/ai/code-read";
 
 // The at-a-glance states a document can show in the Preview grid:
 //   * approved — the accountant accepted it, OR the AI read it as usable AND
@@ -53,10 +52,6 @@ export type PreviewDoc = {
   // not analysed) + the year it pulled, used for the couple-word header.
   classification: string | null;
   extractedYear: number | null;
-  // True when the code-readable fast path read this file (text-layer PDF /
-  // Excel / CSV) instead of the vision model — drives an honest neutral
-  // "read in code" label/pill instead of a fabricated AI verdict.
-  codeRead: boolean;
   // The parent checklist item's labels, used as the header fallback when the
   // AI hasn't classified the file yet.
   itemLabel: string;
@@ -128,11 +123,6 @@ export function resolvePreviewStatus(
   // unusable scan flags; a clean read shows a green "looks good" SUGGESTION.
   if (file.ai_rejected) return "rejected";
   if (hasRequestMismatch) return "flagged";
-  // Code-read files (text-layer PDF / Excel / CSV) carry a synthetic usable
-  // verdict so the portal poll settles, but code did NOT judge whether they're
-  // the right document — so they must not read as a green "looks good". Keep them
-  // in the neutral bucket; the card/detail relabel it honestly via doc.codeRead.
-  if (isCodeReadFields(file.ai_extracted_fields)) return "pending";
   if (file.ai_usability) {
     if (!file.ai_usability.usable || aiFlaggedConcern(file)) return "flagged";
     return "approved";
@@ -304,7 +294,6 @@ export function buildPreviewDocs(
       seq: seqByFile.get(u.id) ?? 1,
       classification: u.ai_classification,
       extractedYear: year,
-      codeRead: isCodeReadFields(u.ai_extracted_fields),
       itemLabel: item?.label ?? "",
       itemLabelFr: item?.label_fr ?? null,
       isImage: u.mime_type.startsWith("image/"),

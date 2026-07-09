@@ -1,36 +1,30 @@
-// Code-readable fast path — read a document's data in code, with NO vision model.
+// Read a document's text/data in code, so the AI can still VERIFY it against the
+// checklist without the vision model having to "look at" it.
 //
-// Some uploads are machine-readable by definition: a PDF that carries a real
-// text layer, an Excel workbook (.xlsx / .xls), or a CSV. Their contents are
-// already text / structured data, so spending a GPT-5.4 vision call to "read"
-// them is wasted — code can pull the fields out directly. This module detects
-// those files and extracts their data locally, so processClassifyJob can skip
-// the (paid) AI classification for them and let them flow through the portal as
-// normal ("submitted / awaiting accountant approval").
+// The vision model (Claude / GPT-5) reads PDFs and images natively, so those go
+// to it directly. But it CANNOT open an Excel workbook or a CSV. This module
+// pulls the text/data out of those machine-readable files (and, when useful, out
+// of a text-layer PDF) so the classifier can read that text and judge "is this
+// the document the checklist asked for?" — the same verification every other
+// upload gets, just fed as text instead of an image.
 //
-// Anything code CANNOT read — a scanned or photographed PDF with no text layer,
-// an image, a blurry capture — returns null from extractReadable() and falls
-// through to the existing AI vision path untouched. That is the whole rule:
-// readable → code path (no AI); not readable → AI path, exactly as before.
+// extractReadable() returns null for anything code cannot turn into meaningful
+// text (an image, a scanned/image-only PDF) — those go to the vision model.
 
 import { unzipSync, strFromU8 } from "fflate";
 import { parseCsv } from "@/lib/csv";
-import { CODE_READ_SOURCE } from "./code-read";
-
-// Re-exported so the fast-path writer (process.ts) and this extractor share the
-// single marker definition in ./code-read (which is client-safe, unlike this
-// module — it pulls in the PDF/zip parsers).
-export const CODE_SOURCE = CODE_READ_SOURCE;
 
 export type ReadableKind = "pdf_text" | "xlsx" | "xls" | "csv";
 
 export type ReadableExtraction = {
   kind: ReadableKind;
+  // The extracted text/data, capped for use as the classifier's input (in place
+  // of an image). "" when nothing meaningful could be read (e.g. legacy .xls).
+  text: string;
   // Count of extractable alphanumeric characters — this is what the PDF
   // text-layer test is gated on (a scanned/image-only PDF yields ~0 here).
   char_count: number;
-  // First slice of the readable content, so the accountant can eyeball exactly
-  // what code read off the document.
+  // A short slice of the content, for showing the accountant what code read.
   text_preview: string;
   // Best-effort 4-digit tax year read off the text (null when none is present).
   extracted_year: number | null;
@@ -40,8 +34,12 @@ export type ReadableExtraction = {
   column_headers: string[] | null;
 };
 
-// How much of the extracted text we keep as a preview (accountant-facing).
+// A short slice of the content, for accountant-facing display.
 const PREVIEW_CHARS = 2000;
+// How much extracted text we hand the classifier (≈ a few thousand tokens). A
+// document's identifying content (form title, names, totals) is near the top,
+// so a generous cap is plenty and bounds the prompt cost.
+const MAX_CLASSIFY_TEXT = 50_000;
 
 // Hardening for the .xlsx parser, which runs on UNTRUSTED client uploads:
 //  * refuse any zip entry whose declared uncompressed size is huge (zip-bomb
@@ -133,6 +131,7 @@ function extractCsv(bytes: Buffer): ReadableExtraction {
   const headers = rows.length > 0 ? rows[0]! : [];
   return {
     kind: "csv",
+    text: text.slice(0, MAX_CLASSIFY_TEXT),
     char_count: text.trim().length,
     text_preview: text.slice(0, PREVIEW_CHARS),
     extracted_year: findYear(text),
@@ -220,6 +219,7 @@ function extractXlsx(bytes: Buffer): ReadableExtraction | null {
   const headers = firstSheetRows.length > 0 ? firstSheetRows[0]! : [];
   return {
     kind: "xlsx",
+    text: text.slice(0, MAX_CLASSIFY_TEXT),
     char_count: text.trim().length,
     text_preview: text.slice(0, PREVIEW_CHARS),
     extracted_year: findYear(text),
@@ -296,14 +296,17 @@ function parseSheetXml(
 
 // ---------------------------------------------------------------------------
 // Legacy binary .xls (OLE / BIFF). Parsing it safely needs a heavyweight
-// dependency, so we don't read cell data — but it still does NOT need the
-// vision model, so we treat it as code-readable (skip the AI) with a best-effort
-// (empty) extraction. Most "Excel" files today are .xlsx, read in full above.
+// dependency, so we can't read its cells — we return an empty `text`. With no
+// text to verify from, the caller falls back to the vision model, which also
+// can't open a binary .xls, so it's flagged as an unsupported format (the
+// accountant reviews it and can ask the client to re-save as .xlsx or CSV).
+// Almost every "Excel" file today is .xlsx, which is read in full above.
 // ---------------------------------------------------------------------------
 
 function extractLegacyXls(): ReadableExtraction {
   return {
     kind: "xls",
+    text: "",
     char_count: 0,
     text_preview: "",
     extracted_year: null,
@@ -351,6 +354,7 @@ async function extractPdfText(bytes: Buffer): Promise<ReadableExtraction | null>
 
   return {
     kind: "pdf_text",
+    text: stripped.slice(0, MAX_CLASSIFY_TEXT),
     char_count: alnum,
     text_preview: stripped.slice(0, PREVIEW_CHARS),
     extracted_year: findYear(stripped),

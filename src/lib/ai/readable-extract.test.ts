@@ -1,8 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { zipSync, strToU8 } from "fflate";
-import { extractReadable, CODE_SOURCE } from "./readable-extract";
-import { isCodeReadFields } from "./code-read";
+import { extractReadable } from "./readable-extract";
 
 // Build a valid single-page PDF (proper xref, so pdf.js doesn't fall into
 // recovery mode) whose content stream is `content`. `hasFont` wires a Helvetica
@@ -217,15 +216,13 @@ describe("extractReadable", () => {
     );
     expect(res).toBeNull();
   });
-});
 
-describe("isCodeReadFields", () => {
-  it("recognises the code marker and nothing else", () => {
-    expect(isCodeReadFields({ source: CODE_SOURCE })).toBe(true);
-    expect(isCodeReadFields({ source: "code" })).toBe(true);
-    expect(isCodeReadFields({ source: "ai" })).toBe(false);
-    expect(isCodeReadFields({})).toBe(false);
-    expect(isCodeReadFields(null)).toBe(false);
-    expect(isCodeReadFields(undefined)).toBe(false);
+  it("exposes the extracted text (fed to the classifier) for readable files", async () => {
+    const csv = await extractReadable(
+      Buffer.from("name,amount\nAcme,100\n", "utf8"),
+      "text/csv",
+      "x.csv",
+    );
+    expect(csv!.text).toContain("Acme");
   });
 });

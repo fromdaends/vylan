@@ -20,8 +20,7 @@ export type AiHeadlineKind =
   | "escalated" // unusable + repeat strikes — needs human eyes
   | "flagged" // unusable but no auto-action — glance at it
   | "analyzing" // read still in flight
-  | "not_analyzed" // read never ran (quota off / stale)
-  | "code_read"; // read in code (text-layer PDF / Excel / CSV) — no AI needed
+  | "not_analyzed"; // read never ran (quota off / stale)
 
 export type AiHeadline = { kind: AiHeadlineKind; tone: AiHeadlineTone };
 
@@ -33,7 +32,6 @@ export type AiHeadline = { kind: AiHeadlineKind; tone: AiHeadlineTone };
 // ---------------------------------------------------------------------------
 
 import { matchDocument } from "@/lib/ai/matching";
-import { isCodeReadFields } from "@/lib/ai/code-read";
 import type { DocType } from "@/lib/db/templates";
 
 // 15 min: past this an un-run analysis is treated as "never ran", not in-flight.
@@ -88,16 +86,7 @@ export function deriveFileAi(
   const analyzed =
     file.ai_classification != null && file.ai_confidence != null;
 
-  // The code-readable fast path read this file's contents directly (text-layer
-  // PDF / Excel / CSV) — no vision model ran, so ai_classification is null but
-  // the read IS done. Surface an honest neutral "readable" state instead of the
-  // "analyzing" spinner / "not analyzed" the null classification would otherwise
-  // trigger. Only affects code-read files; the AI path is untouched.
-  const codeRead = isCodeReadFields(file.ai_extracted_fields);
-
   // Accountant already ruled on a file the read never finished → stay silent.
-  // (Applies to code-read files too: once approved/rejected, their neutral chip
-  // drops away like any decided file's AI chrome.)
   const supersededUnanalyzed =
     !analyzed &&
     (file.review_status === "approved" || file.review_status === "rejected");
@@ -180,7 +169,6 @@ export function deriveFileAi(
     rejectionCount: ctx.rejectionCount,
     typeConcern,
     lowConfidence: conf < 0.5,
-    codeRead,
   });
 
   const isUsabilityProblem =
@@ -231,14 +219,7 @@ export function pickAiHeadline(p: {
   typeConcern: boolean;
   /** ai_confidence < 0.5 — a hedge worth surfacing even with no hard concern. */
   lowConfidence: boolean;
-  /** File was read in code (text-layer PDF / Excel / CSV) — no AI ran. */
-  codeRead?: boolean;
 }): AiHeadline {
-  // A code-read file is a terminal, honest state of its own — never "analyzing"
-  // or "not analyzed" (the read IS done, just not by the model) and never a
-  // type/usability verdict (code didn't judge the document). Short-circuit first.
-  if (p.codeRead) return { kind: "code_read", tone: "neutral" };
-
   if (!p.analyzed) {
     return p.stale
       ? { kind: "not_analyzed", tone: "neutral" }

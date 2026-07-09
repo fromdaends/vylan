@@ -145,6 +145,62 @@ export async function classifyWithOpenAI(opts: {
   }
 }
 
+// Text-only sibling of classifyWithOpenAI: classify a document from its
+// machine-extracted TEXT instead of a file/image. Used for Excel/CSV (which the
+// model can't open) and, more cheaply, for text-layer PDFs. Same client,
+// Structured Outputs, and toStrictSchema treatment — just no file part.
+export async function classifyTextWithOpenAI(opts: {
+  model: string;
+  systemPrompt: string;
+  userText: string;
+  schema: Record<string, unknown>;
+}): Promise<{
+  raw: Record<string, unknown> | null;
+  usage: { input: number; output: number; reasoning: number | null } | null;
+}> {
+  const c = client();
+  if (!c) return { raw: null, usage: null };
+
+  const resp = await c.chat.completions.create({
+    model: opts.model,
+    max_completion_tokens: 5000,
+    reasoning_effort: REASONING_EFFORT,
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "classify_document",
+        strict: true,
+        schema: toStrictSchema(opts.schema) as Record<string, unknown>,
+      },
+    },
+    messages: [
+      { role: "system", content: opts.systemPrompt },
+      { role: "user", content: opts.userText },
+    ],
+  });
+
+  const u = resp.usage;
+  const usage = u
+    ? {
+        input: u.prompt_tokens,
+        output: u.completion_tokens,
+        reasoning: u.completion_tokens_details?.reasoning_tokens ?? null,
+      }
+    : null;
+
+  const msg = resp.choices?.[0]?.message;
+  if (!msg || msg.refusal) return { raw: null, usage };
+  const content = msg.content;
+  if (typeof content !== "string" || content.trim() === "") {
+    return { raw: null, usage };
+  }
+  try {
+    return { raw: JSON.parse(content) as Record<string, unknown>, usage };
+  } catch {
+    return { raw: null, usage };
+  }
+}
+
 // Multi-file sibling of classifyWithOpenAI for the SET assessment: one call,
 // MANY files, judged together. Each file is preceded by a "File N:" text part
 // so the model's image_index answers anchor unambiguously to upload order.

@@ -108,10 +108,6 @@ function AiStatusIcon({
       return <Loader2 className={cn(className, "animate-spin")} aria-hidden />;
     case "not_analyzed":
       return <CircleHelp className={className} aria-hidden />;
-    case "code_read":
-      // Read in code (text-layer PDF / Excel / CSV) — a plain document glyph,
-      // NOT a spinner or the AI sparkles: no model was involved.
-      return <FileText className={className} aria-hidden />;
     case "wrong_type":
     case "auto_rejected":
     case "escalated":
@@ -247,9 +243,6 @@ export function FilePreviewRow({
     switch (aiView.headline.kind) {
       case "looks_right":
       case "low_confidence":
-      // Code-read files carry no classification, so typeUpper is empty — this
-      // shows just the year when code found one (e.g. "· 2024"), else nothing.
-      case "code_read":
         return [typeUpper, yr].filter(Boolean).join(" · ");
       case "wrong_type":
         if (aiView.isUnknown)

@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Clock,
   Download,
-  FileText,
   Loader2,
   Maximize2,
   Minimize2,
@@ -52,9 +51,6 @@ type ExtractedFields = {
   belongs_to_client?: boolean | null;
   belongs_confidence?: number | null;
   overall_confidence?: number | null;
-  // Code-readable fast path (text-layer PDF / Excel / CSV): a short preview of
-  // the text/data code read straight off the document.
-  text_preview?: string | null;
 };
 
 const STATUS_PILL: Record<
@@ -77,13 +73,6 @@ const STATUS_PILL: Record<
     cls: "border-border/50 bg-muted/40 text-muted-foreground",
     Icon: Clock,
   },
-};
-
-// Code-read files (text-layer PDF / Excel / CSV) get a neutral pill with a
-// document glyph — honest that a read happened, without a fabricated AI verdict.
-const CODE_READ_PILL = {
-  cls: "border-border/50 bg-muted/40 text-muted-foreground",
-  Icon: FileText,
 };
 
 // The click-in detail: the document on one side, the AI's full read on the
@@ -191,27 +180,10 @@ export function PreviewDetail({
   }, [confirmDeleteOpen, deleting, onPrev, onNext]);
 
   const header = previewCardTitle(doc, locale);
-  // A code-read file's status maps to the neutral "pending" bucket, but we relabel
-  // it honestly ("Read in code — no AI needed") rather than "Not analyzed yet".
-  // The neutral pill applies ONLY while undecided; once the accountant approves
-  // or rejects it (doc.status becomes approved/rejected), the header shows that
-  // decision — otherwise it would contradict the Undo control below. The panel +
-  // suppressed-verdict logic further down still keys off the raw codeRead flag,
-  // so a code-read file never shows a fabricated green quality verdict.
-  const codeRead = doc.codeRead;
-  const showCodeReadPill = codeRead && doc.status === "pending";
-  const pill = showCodeReadPill ? CODE_READ_PILL : STATUS_PILL[doc.status];
-  const statusLabel = showCodeReadPill
-    ? t("status_code_read")
-    : t(`status_${doc.status}`);
+  const pill = STATUS_PILL[doc.status];
+  const statusLabel = t(`status_${doc.status}`);
 
   const fields = (file.ai_extracted_fields ?? {}) as ExtractedFields;
-  // The slice of text/data code read off a code-read document, for the neutral
-  // "read in code" panel below (capped so a big spreadsheet can't flood the panel).
-  const codePreview =
-    codeRead && typeof fields.text_preview === "string"
-      ? fields.text_preview.trim().slice(0, 800)
-      : "";
   const classification = file.ai_classification;
   const conf = file.ai_confidence;
   const verdict = file.ai_usability;
@@ -562,10 +534,6 @@ export function PreviewDetail({
                 <div className="mt-1 text-sm font-semibold text-foreground">
                   {typeName}
                 </div>
-              ) : codeRead ? (
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {t("status_code_read")}
-                </div>
               ) : (
                 <div className="mt-1 text-sm text-muted-foreground">
                   {t("status_pending")}
@@ -601,27 +569,7 @@ export function PreviewDetail({
               </section>
             )}
 
-            {/* A code-read file's usability verdict is synthetic (code didn't
-                judge quality) — show an honest neutral "read in code" panel with
-                the extracted preview instead of a green "Quality looks good". */}
-            {codeRead && (
-              <section className="rounded-lg border border-border/50 bg-muted/30 p-3 text-sm">
-                <div className="flex items-center gap-1.5 font-medium text-muted-foreground">
-                  <FileText className="size-4" aria-hidden />
-                  {t("status_code_read")}
-                </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {t("code_read_help")}
-                </p>
-                {codePreview && (
-                  <pre className="mt-2 max-h-40 overflow-auto rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap break-words text-muted-foreground">
-                    {codePreview}
-                  </pre>
-                )}
-              </section>
-            )}
-
-            {verdict && !codeRead && (
+            {verdict && (
               <section
                 className={cn(
                   "rounded-lg border p-3 text-sm",

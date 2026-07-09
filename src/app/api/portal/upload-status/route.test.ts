@@ -80,24 +80,6 @@ describe("isVerdictSettled", () => {
     ).toBe(true);
   });
 
-  // Code-readable fast path: the file skipped the vision model, so
-  // ai_classification stays null, but a usable verdict was written in code. aiRan
-  // is satisfied by ai_usability alone, usable=true keeps the router idle, so the
-  // poll settles immediately — the client sees "in review", never an endless
-  // "Checking…".
-  it("settles a code-read file (null classification, usable verdict in code)", () => {
-    expect(
-      isVerdictSettled(
-        {
-          ai_classification: null,
-          ai_usability: { usable: true, confidence: 1 },
-          ai_rejected: false,
-        },
-        true,
-      ),
-    ).toBe(true);
-  });
-
   // The bug this fix targets: a malformed AI read leaves BOTH columns null but
   // the router still flipped ai_rejected=true. Previously aiRan was false, so
   // the client polled for the full 10 minutes and never resolved.
@@ -178,18 +160,6 @@ describe("isConfirmedVerdict", () => {
     expect(
       isConfirmedVerdict({
         ai_extracted_fields: fields("true"),
-        ai_usability: { usable: true },
-        ai_rejected: false,
-      }),
-    ).toBe(false);
-  });
-
-  it("never shows the green 'looks right' note for a code-read file", () => {
-    // Code-read files carry no looks_correct (code didn't judge the document),
-    // so the client sees the neutral in-review state, not a green AI confirmation.
-    expect(
-      isConfirmedVerdict({
-        ai_extracted_fields: { source: "code", kind: "pdf_text" },
         ai_usability: { usable: true },
         ai_rejected: false,
       }),

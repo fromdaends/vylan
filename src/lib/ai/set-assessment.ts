@@ -29,7 +29,6 @@ import {
   isSupportedAiMime,
 } from "./classify";
 import { assessSetWithOpenAI } from "./openai-classify";
-import { isCodeReadFields } from "./code-read";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { isEngagementAiEnabled } from "./engagement-ai";
 import { expectedYearFromTitle } from "./matching";
@@ -555,7 +554,6 @@ type FileRow = {
   mime_type: string | null;
   content_hash: string | null;
   uploaded_at: string;
-  ai_extracted_fields: Record<string, unknown> | null;
 };
 
 type PreparedFile = {
@@ -645,9 +643,7 @@ export async function processSetAssessmentJob(
   // The set: every non-duplicate file of the item, in upload order.
   const { data: fileRows } = await sb
     .from("uploaded_files")
-    .select(
-      "id, storage_path, mime_type, content_hash, uploaded_at, ai_extracted_fields",
-    )
+    .select("id, storage_path, mime_type, content_hash, uploaded_at")
     .eq("request_item_id", itemId)
     .eq("is_duplicate", false)
     .order("uploaded_at", { ascending: true });
@@ -663,29 +659,10 @@ export async function processSetAssessmentJob(
     return { skipped: "no_files" };
   }
 
-  // Which files could the vision model read at all? PDFs + images. Of those,
-  // which still NEED the vision model — i.e. weren't already read by the
-  // code-readable fast path? If NONE need vision (a lone or all code-read item,
-  // or only non-vision types), there's nothing to assess: clear any stale set
-  // verdict left by earlier vision files and stop, so a code-read-only item never
-  // keeps a phantom "page X missing" summary.
-  const supported = allFiles.filter((f) => isSupportedAiMime(f.mime_type ?? ""));
-  const needsVision = supported.filter(
-    (f) => !isCodeReadFields(f.ai_extracted_fields),
+  const readable = allFiles.filter((f) =>
+    isSupportedAiMime(f.mime_type ?? ""),
   );
-  if (needsVision.length === 0) {
-    await sb
-      .from("request_items")
-      .update({ ai_set_assessment: null })
-      .eq("id", itemId);
-    await recomputeItemStatus(sb, itemId);
-    return { skipped: "no_supported_files" };
-  }
-  // At least one file needs vision, so assess the FULL supported set — INCLUDING
-  // any code-read PDFs — so the page inventory is complete. Excluding them would
-  // make a 4-page statement sent as 2 photos + a 2-page text PDF read as
-  // "pages 3-4 missing" and loop the client on pages already uploaded.
-  const readable = supported;
+  if (readable.length === 0) return { skipped: "no_supported_files" };
 
   // Download + prepare, bounded by file count and total bytes. Images get the
   // SAME prep as classify (2048px cap, JPEG q90); PDFs pass through untouched.

@@ -45,9 +45,10 @@ const HEIC_MIMES = new Set([
   "image/heif-sequence",
 ]);
 
-// Machine-readable document types (spreadsheets + CSV) that the code-readable
-// fast path reads WITHOUT the vision model (see src/lib/ai/readable-extract.ts).
-// Accepting them lets those files flow through the portal like any other upload.
+// Machine-readable document types (spreadsheets + CSV) the vision model can't
+// open. We read their text in code (see src/lib/ai/readable-extract.ts) so the
+// AI can still verify them against the checklist. Accepting them lets those
+// files flow through the portal like any other upload.
 const READABLE_DOC_MIMES = new Set([
   "text/csv",
   "application/csv",
