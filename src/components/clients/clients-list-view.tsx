@@ -33,6 +33,7 @@ export function ClientsListView({
   includeArchived,
   sort,
   activeOnly,
+  teamEnabled,
 }: {
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
@@ -45,6 +46,7 @@ export function ClientsListView({
   includeArchived: boolean;
   sort: SortKey;
   activeOnly: boolean;
+  teamEnabled: boolean;
 }) {
   const t = useTranslations("Clients");
   const [query, setQuery] = useState("");
@@ -70,6 +72,7 @@ export function ClientsListView({
         sort={sort}
         activeOnly={activeOnly}
         ownerFilter={ownerFilter}
+        teamEnabled={teamEnabled}
       />
       {filtered.length === 0 && clients.length > 0 ? (
         // Live-filter empty state: the firm has clients but none
@@ -87,6 +90,7 @@ export function ClientsListView({
           owners={owners}
           currentUserId={currentUserId}
           locale={locale}
+          teamEnabled={teamEnabled}
         />
       )}
     </div>

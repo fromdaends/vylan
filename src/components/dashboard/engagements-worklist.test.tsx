@@ -161,6 +161,7 @@ function renderWorklist(
   items: WorklistRow[] = rows,
   currentUserId = "me",
   isOwner = true,
+  teamEnabled = true,
 ) {
   const { container } = render(
     <NextIntlClientProvider locale="en" messages={en}>
@@ -168,6 +169,7 @@ function renderWorklist(
         rows={items}
         currentUserId={currentUserId}
         isOwner={isOwner}
+        teamEnabled={teamEnabled}
         locale="en"
       />
     </NextIntlClientProvider>,
@@ -203,6 +205,17 @@ describe("EngagementsWorklist", () => {
     expect(
       q.getByRole("tab", { name: en.Dashboard.wl_filter_mine }),
     ).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("hides Mine and assignment details when team mode is off", () => {
+    const q = renderWorklist(rows, "me", true, false);
+
+    expect(
+      q.queryByRole("tab", { name: en.Dashboard.wl_filter_mine }),
+    ).not.toBeInTheDocument();
+    expect(q.queryByText(en.Dashboard.wl_col_assigned)).not.toBeInTheDocument();
+    expect(q.queryByText("Alex")).not.toBeInTheDocument();
+    expect(q.queryByText("Blair")).not.toBeInTheDocument();
   });
 
   it("has no All tab — a Browse all link points to the full list instead", () => {

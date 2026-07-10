@@ -38,6 +38,7 @@ export function EngagementsView({
   canDelete,
   currentUserId,
   badges,
+  teamEnabled,
 }: {
   view: EngagementView;
   rows: WorklistRow[];
@@ -45,6 +46,7 @@ export function EngagementsView({
   canDelete: boolean;
   currentUserId: string | null;
   badges: { ready: number; deleted: number };
+  teamEnabled: boolean;
 }) {
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
@@ -55,10 +57,14 @@ export function EngagementsView({
   // view, else "all" so the list is never mysteriously empty. The choice is
   // then remembered per user (localStorage), which overrides this default.
   const ownsAny =
-    !!currentUserId && rows.some((r) => r.assigneeUserId === currentUserId);
-  const [scope, setScope] = useState<"mine" | "all">(ownsAny ? "mine" : "all");
+    teamEnabled &&
+    !!currentUserId &&
+    rows.some((r) => r.assigneeUserId === currentUserId);
+  const [scope, setScope] = useState<"mine" | "all">(
+    teamEnabled && ownsAny ? "mine" : "all",
+  );
   useEffect(() => {
-    if (!currentUserId) return;
+    if (!currentUserId || !teamEnabled) return;
     let saved: string | null = null;
     try {
       saved = localStorage.getItem(`vylan:eng-scope:${currentUserId}`);
@@ -67,7 +73,7 @@ export function EngagementsView({
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved === "mine" || saved === "all") setScope(saved);
-  }, [currentUserId]);
+  }, [currentUserId, teamEnabled]);
   const chooseScope = (s: "mine" | "all") => {
     setScope(s);
     if (currentUserId) {
@@ -89,9 +95,11 @@ export function EngagementsView({
               r.clientName.toLowerCase().includes(q),
           )
         : rows;
-    if (scope === "mine") base = selectAssignedTo(base, currentUserId);
+    if (teamEnabled && scope === "mine") {
+      base = selectAssignedTo(base, currentUserId);
+    }
     return [...base].sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
-  }, [rows, q, scope, currentUserId]);
+  }, [rows, q, scope, currentUserId, teamEnabled]);
 
   const badgeFor = (v: EngagementView): number | null => {
     if (v === "ready" && badges.ready > 0) return badges.ready;
@@ -160,23 +168,25 @@ export function EngagementsView({
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Select
-          value={scope}
-          onValueChange={(v) => chooseScope(v as "mine" | "all")}
-        >
-          <SelectTrigger
-            size="sm"
-            className="w-[13rem] self-start"
-            aria-label={t("scope_label")}
+        {teamEnabled && (
+          <Select
+            value={scope}
+            onValueChange={(v) => chooseScope(v as "mine" | "all")}
           >
-            <Users className="h-3.5 w-3.5 text-muted-foreground" />
-            <SelectValue placeholder={t("scope_label")} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t("scope_all")}</SelectItem>
-            <SelectItem value="mine">{t("scope_mine")}</SelectItem>
-          </SelectContent>
-        </Select>
+            <SelectTrigger
+              size="sm"
+              className="w-[13rem] self-start"
+              aria-label={t("scope_label")}
+            >
+              <Users className="h-3.5 w-3.5 text-muted-foreground" />
+              <SelectValue placeholder={t("scope_label")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t("scope_all")}</SelectItem>
+              <SelectItem value="mine">{t("scope_mine")}</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         <div className="relative sm:w-72">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -196,6 +206,7 @@ export function EngagementsView({
         emptyText={q !== "" ? tDash("wl_empty_search") : t(`view_${view}_empty`)}
         canDelete={canDelete}
         growNameColumn
+        teamEnabled={teamEnabled}
         countdownFor={
           view === "deleted"
             ? (r) =>

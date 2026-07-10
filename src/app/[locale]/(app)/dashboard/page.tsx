@@ -129,6 +129,7 @@ export default async function DashboardPage({
         rows={worklistRows}
         currentUserId={user?.id ?? null}
         isOwner={user?.role === "owner"}
+        teamEnabled={firm?.team_enabled !== false}
         locale={locale}
         canDelete={user ? canDeleteEngagements(user.role) : false}
       />

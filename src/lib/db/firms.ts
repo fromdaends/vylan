@@ -59,6 +59,10 @@ export type Firm = {
   // applied; getFirmAiUsage defaults it to 400.
   ai_monthly_cap: number;
   is_demo: boolean;
+  // Optional collaboration mode (migration 0530). Existing firms default to
+  // enabled; owners can leave/disband a one-person team without deleting any
+  // firm data, then create the team again later.
+  team_enabled: boolean;
   created_at: string;
 };
 

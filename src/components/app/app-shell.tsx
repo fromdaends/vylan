@@ -148,6 +148,7 @@ export function AppShell({
   labels,
   engagementBadges,
   isOwner = false,
+  teamEnabled = true,
   quickbooksConnected = false,
 }: {
   children: React.ReactNode;
@@ -163,6 +164,9 @@ export function AppShell({
   // Gates owner-only entries (billing, audit log, firm export/delete) in the
   // command palette. Defaults false so non-owners never see them.
   isOwner?: boolean;
+  // Hides team shortcuts when collaboration mode is off. The Settings account
+  // card remains the intentional entry point for creating a team again.
+  teamEnabled?: boolean;
   // Shows the QuickBooks drafts queue nav item — only when the firm has
   // QuickBooks connected (the queue is empty/irrelevant otherwise).
   quickbooksConnected?: boolean;
@@ -266,6 +270,7 @@ export function AppShell({
           userAvatarUrl={userAvatarUrl}
           firmName={firmName}
           firmLogoUrl={firmLogoUrl}
+          teamEnabled={teamEnabled}
           collapsed={collapsed}
           onToggleCollapse={() => setCollapsed((v) => !v)}
         />
@@ -343,6 +348,7 @@ export function AppShell({
             userDisplayName={userDisplayName}
             userEmail={userEmail}
             userAvatarUrl={userAvatarUrl}
+            teamEnabled={teamEnabled}
             onItemClick={() => setMobileAccountOpen(false)}
           />
         </SheetContent>
@@ -466,6 +472,7 @@ function MobileAccountMenu({
   userDisplayName,
   userEmail,
   userAvatarUrl,
+  teamEnabled,
   onItemClick,
 }: {
   labels: Labels;
@@ -473,6 +480,7 @@ function MobileAccountMenu({
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
+  teamEnabled: boolean;
   onItemClick: () => void;
 }) {
   const tTeam = useTranslations("Team");
@@ -515,12 +523,14 @@ function MobileAccountMenu({
             label={labels.firm}
             onClick={onItemClick}
           />
-          <MobileMenuItem
-            href="/settings/team"
-            icon={Users2}
-            label={tTeam("title")}
-            onClick={onItemClick}
-          />
+          {teamEnabled && (
+            <MobileMenuItem
+              href="/settings/team"
+              icon={Users2}
+              label={tTeam("title")}
+              onClick={onItemClick}
+            />
+          )}
           <MobileMenuItem
             href="/settings"
             icon={Settings}
@@ -602,6 +612,7 @@ function SidebarBody({
   userAvatarUrl,
   firmName,
   firmLogoUrl,
+  teamEnabled,
   collapsed,
   onToggleCollapse,
 }: {
@@ -615,6 +626,7 @@ function SidebarBody({
   userAvatarUrl: string | null;
   firmName: string;
   firmLogoUrl: string | null;
+  teamEnabled: boolean;
   collapsed: boolean;
   onToggleCollapse?: () => void;
 }) {
@@ -750,7 +762,8 @@ function SidebarBody({
           members; opens the team page. Kept subtler than the profile card below
           it (smaller avatar, muted xs text, lighter hover) so the profile stays
           the primary identity and this recedes. */}
-      <div className={cn(collapsed ? "px-2 pb-1" : "px-3 pb-1")}>
+      {teamEnabled && (
+        <div className={cn(collapsed ? "px-2 pb-1" : "px-3 pb-1")}>
         <Link
           href="/settings/team"
           title={firmName}
@@ -780,7 +793,8 @@ function SidebarBody({
             </>
           )}
         </Link>
-      </div>
+        </div>
+      )}
 
       {/* Profile card */}
       <div

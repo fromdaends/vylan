@@ -63,10 +63,6 @@ export type ClientEngagementRow = {
   due_date: string | null;
 };
 
-// Column count for the expanded `colSpan` cell. Bump if the row gains
-// or loses a column.
-const TABLE_COLS = 8;
-
 export function ClientsTable({
   clients,
   summaries,
@@ -74,6 +70,7 @@ export function ClientsTable({
   owners,
   currentUserId,
   locale,
+  teamEnabled,
 }: {
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
@@ -81,6 +78,7 @@ export function ClientsTable({
   owners: Record<string, ClientOwner>;
   currentUserId: string;
   locale: AppLocale;
+  teamEnabled: boolean;
 }) {
   const t = useTranslations("Clients");
   // Set of expanded client ids. Multi-expand by design — comparing two
@@ -123,7 +121,9 @@ export function ClientsTable({
             <TableHead className="py-3">{t("col_email")}</TableHead>
             <TableHead className="py-3">{t("col_phone")}</TableHead>
             <TableHead className="py-3">{t("col_engagements")}</TableHead>
-            <TableHead className="py-3">{t("col_owner")}</TableHead>
+            {teamEnabled && (
+              <TableHead className="py-3">{t("col_owner")}</TableHead>
+            )}
             <TableHead className="w-12 text-right" />
           </TableRow>
         </TableHeader>
@@ -147,6 +147,7 @@ export function ClientsTable({
                 isOpen={isOpen}
                 onToggle={() => toggle(c.id)}
                 locale={locale}
+                teamEnabled={teamEnabled}
               />
             );
           })}
@@ -165,6 +166,7 @@ function ClientRowWithDrawer({
   isOpen,
   onToggle,
   locale,
+  teamEnabled,
 }: {
   client: Client;
   summary: ClientEngagementSummary | undefined;
@@ -174,6 +176,7 @@ function ClientRowWithDrawer({
   isOpen: boolean;
   onToggle: () => void;
   locale: AppLocale;
+  teamEnabled: boolean;
 }) {
   const t = useTranslations("Clients");
   // Stop propagation so clicking the name (Link) or the actions menu
@@ -233,16 +236,18 @@ function ClientRowWithDrawer({
         <TableCell className="py-4">
           <EngagementSummaryCell summary={summary} />
         </TableCell>
-        <TableCell className="py-4">
-          <OwnerCell owner={owner} isYou={isYou} />
-        </TableCell>
+        {teamEnabled && (
+          <TableCell className="py-4">
+            <OwnerCell owner={owner} isYou={isYou} />
+          </TableCell>
+        )}
         <TableCell className="py-4 pr-4 text-right" onClick={stop}>
           <RowActions client={client} locale={locale} />
         </TableCell>
       </TableRow>
       {isOpen && (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={TABLE_COLS} className="px-6 py-4">
+          <TableCell colSpan={teamEnabled ? 8 : 7} className="px-6 py-4">
             <ExpandedDrawer
               clientId={client.id}
               engagements={engagements}

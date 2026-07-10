@@ -14,6 +14,8 @@ import {
   Check,
   Lock,
   Building2,
+  Users,
+  LogOut,
 } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
@@ -40,6 +42,8 @@ import {
   deactivateUser,
   reactivateUser,
   transferOwnership,
+  createTeam,
+  leaveTeam,
 } from "@/app/actions/team";
 import { BookCallButton } from "@/components/booking/book-call-button";
 
@@ -90,6 +94,12 @@ function useErrorMessage() {
         return t("error_owner_only");
       case "trial_locked_team":
         return t("error_trial_locked_team");
+      case "team_disabled":
+        return t("error_team_disabled");
+      case "team_has_members":
+        return t("error_team_has_members");
+      case "team_has_invites":
+        return t("error_team_has_invites");
       default:
         return t("error_generic");
     }
@@ -263,6 +273,8 @@ export function TeamManager({
         />
       )}
 
+      {canManage && <LeaveTeamSection />}
+
       {canManage && (
         <InviteModal
           open={inviteOpen}
@@ -271,6 +283,118 @@ export function TeamManager({
         />
       )}
     </section>
+  );
+}
+
+// Empty state shown after the owner leaves/disbands their one-person team.
+// The firm workspace remains intact; creating a team simply restores the
+// collaboration controls and historical assignment labels.
+export function TeamSetup({ firmName }: { firmName: string }) {
+  const t = useTranslations("Team");
+  const errorMessage = useErrorMessage();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function handleCreate() {
+    startTransition(async () => {
+      const result = await createTeam();
+      if (!result.ok) {
+        toast.error(errorMessage(result.error));
+        return;
+      }
+      toast.success(t("create_team_success"));
+      router.refresh();
+    });
+  }
+
+  return (
+    <section className="mx-auto max-w-2xl py-12">
+      <div className="rounded-2xl border border-border/60 bg-card p-8 text-center shadow-sm">
+        <span className="mx-auto inline-flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Users className="size-6" />
+        </span>
+        <h1 className="mt-5 text-2xl font-semibold tracking-tight">
+          {t("create_team_title")}
+        </h1>
+        <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted-foreground">
+          {t("create_team_body", { firm: firmName })}
+        </p>
+        <Button className="mt-6" onClick={handleCreate} disabled={pending}>
+          <UserPlus className="size-4" />
+          {pending ? t("creating_team") : t("create_team")}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function LeaveTeamSection() {
+  const t = useTranslations("Team");
+  const errorMessage = useErrorMessage();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  function confirmLeave() {
+    startTransition(async () => {
+      const result = await leaveTeam();
+      if (!result.ok) {
+        toast.error(errorMessage(result.error));
+        return;
+      }
+      setOpen(false);
+      toast.success(t("leave_team_success"));
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="border-t border-border/60 pt-8">
+      <div className="flex flex-col gap-3 rounded-xl border border-destructive/25 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold">{t("leave_team_title")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("leave_team_hint")}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="shrink-0 text-destructive hover:text-destructive"
+          onClick={() => setOpen(true)}
+        >
+          <LogOut className="size-4" />
+          {t("leave_team")}
+        </Button>
+      </div>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("leave_team_confirm_title")}</DialogTitle>
+            <DialogDescription>{t("leave_team_confirm_body")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={pending}
+            >
+              {t("cancel")}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmLeave}
+              disabled={pending}
+            >
+              {pending ? t("leaving_team") : t("leave_team_confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
 

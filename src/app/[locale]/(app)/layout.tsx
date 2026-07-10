@@ -105,6 +105,7 @@ export default async function AppLayout({
       firmName={firm.name}
       firmLogoUrl={firmLogoUrl}
       isOwner={dbUser.role === "owner"}
+      teamEnabled={firm.team_enabled !== false}
       quickbooksConnected={quickbooksStatus != null}
       topBar={
         firm.is_demo ? (

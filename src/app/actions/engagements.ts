@@ -326,6 +326,7 @@ export async function reassignEngagementAction(
 }> {
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) return { ok: false, error: "no_session" };
+  if (!firm.team_enabled) return { ok: false, error: "invalid_assignee" };
 
   const sb = await getServerSupabase();
   // Target must be an ACTIVE member of the SAME firm.

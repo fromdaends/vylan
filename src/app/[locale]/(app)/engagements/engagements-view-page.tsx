@@ -2,6 +2,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import {
   scopeForView,
@@ -31,9 +32,10 @@ export async function renderEngagementsView({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [rows, user, badges] = await Promise.all([
+  const [rows, user, firm, badges] = await Promise.all([
     loadEngagementWorklist(scopeForView(view)),
     getCurrentUser(),
+    getCurrentFirm(),
     getEngagementBadges(),
   ]);
   const t = await getTranslations("Engagements");
@@ -62,6 +64,7 @@ export async function renderEngagementsView({
         locale={locale}
         canDelete={canDelete}
         currentUserId={user?.id ?? null}
+        teamEnabled={firm?.team_enabled !== false}
         badges={{ ready: badges.readyToReview, deleted: badges.recentlyDeleted }}
       />
     </div>

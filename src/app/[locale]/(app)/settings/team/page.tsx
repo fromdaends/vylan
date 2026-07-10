@@ -13,7 +13,10 @@ import { getFirmSeatUsage } from "@/lib/billing/seats";
 import { inviteState } from "@/lib/team/invites";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { TeamManager } from "@/components/settings/team/team-manager";
+import {
+  TeamManager,
+  TeamSetup,
+} from "@/components/settings/team/team-manager";
 
 export const dynamic = "force-dynamic";
 
@@ -45,6 +48,25 @@ export default async function TeamPage({
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
+
+  const breadcrumb = (
+    <Breadcrumb
+      label={tCommon("breadcrumb")}
+      items={[
+        { label: tApp("nav_settings"), href: "/settings" },
+        { label: t("title") },
+      ]}
+    />
+  );
+
+  if (!firm.team_enabled) {
+    return (
+      <div className="space-y-8">
+        {breadcrumb}
+        <TeamSetup firmName={firm.name} />
+      </div>
+    );
+  }
 
   const nameById = new Map(members.map((m) => [m.id, userDisplayLabel(m)]));
 
@@ -112,13 +134,7 @@ export default async function TeamPage({
 
   return (
     <div className="space-y-8">
-      <Breadcrumb
-        label={tCommon("breadcrumb")}
-        items={[
-          { label: tApp("nav_settings"), href: "/settings" },
-          { label: t("title") },
-        ]}
-      />
+      {breadcrumb}
       <TeamManager
         firmName={firm.name}
         canManage={canManage}

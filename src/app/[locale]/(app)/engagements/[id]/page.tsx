@@ -409,15 +409,17 @@ export default async function EngagementDetailPage({
             )}
           </div>
           {/* Assigned to — accountability control (reassign to any active member). */}
-          <div className="mt-3">
-            <EngagementAssignee
-              engagementId={engagement.id}
-              assigneeId={engagement.assigned_user_id}
-              assigneeName={assignee ? userDisplayLabel(assignee) : null}
-              assigneeDeactivated={!!assignee?.deactivated_at}
-              members={activeMembers}
-            />
-          </div>
+          {firm?.team_enabled !== false && (
+            <div className="mt-3">
+              <EngagementAssignee
+                engagementId={engagement.id}
+                assigneeId={engagement.assigned_user_id}
+                assigneeName={assignee ? userDisplayLabel(assignee) : null}
+                assigneeDeactivated={!!assignee?.deactivated_at}
+                members={activeMembers}
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
