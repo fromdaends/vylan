@@ -40,6 +40,7 @@ function candidate(over: Partial<RegisterCandidate> = {}): RegisterCandidate {
     vendorId: "V1",
     vendorName: "Tim Hortons",
     syncToken: "2",
+    currency: null,
     ...over,
   };
 }
@@ -116,6 +117,44 @@ describe("findRegisterCandidates", () => {
     });
 
     expect(r.candidates.map((c) => c.qboId)).toEqual(["99"]);
+  });
+
+  it("drops vendor REFUNDS (Purchase with Credit=true) even at the exact amount", async () => {
+    mockQuery.mockResolvedValue({
+      Purchase: [
+        purchaseRow({ Id: "50" }), // a real expense -> kept
+        purchaseRow({ Id: "51", Credit: true }), // a same-amount refund -> dropped
+      ],
+    });
+
+    const r = await findRegisterCandidates(ctx, {
+      entities: ["purchase"],
+      date: "2026-07-01",
+      windowDays: 5,
+      amount: 45.2,
+      excludeQboIds: new Set(),
+    });
+
+    expect(r.candidates.map((c) => c.qboId)).toEqual(["50"]);
+  });
+
+  it("captures the transaction currency (multicurrency) and leaves it null otherwise", async () => {
+    mockQuery.mockResolvedValue({
+      Purchase: [
+        purchaseRow({ Id: "60", CurrencyRef: { value: "USD", name: "US Dollar" } }),
+        purchaseRow({ Id: "61" }), // no CurrencyRef -> single-currency company
+      ],
+    });
+
+    const r = await findRegisterCandidates(ctx, {
+      entities: ["purchase"],
+      date: "2026-07-01",
+      windowDays: 5,
+      amount: 45.2,
+      excludeQboIds: new Set(),
+    });
+
+    expect(r.candidates.map((c) => c.currency)).toEqual(["USD", null]);
   });
 
   it("reads the party ref per entity (Bill -> VendorRef, Invoice -> CustomerRef)", async () => {
@@ -271,6 +310,16 @@ describe("classifyRegisterMatch", () => {
         ...base,
         search: search([candidate()], true),
       }).kind,
+    ).toBe("confirm");
+  });
+
+  it("confirm when the single candidate carries a currency (multicurrency file)", () => {
+    // Same amount + vendor as a clear match, but a stated currency means
+    // TotalAmt may not be the home currency the draft posts in — never
+    // auto-attach; the accountant confirms.
+    const c = candidate({ currency: "USD" });
+    expect(
+      classifyRegisterMatch({ ...base, search: search([c]) }).kind,
     ).toBe("confirm");
   });
 });

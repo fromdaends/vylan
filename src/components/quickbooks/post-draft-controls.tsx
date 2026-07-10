@@ -34,6 +34,10 @@ type MatchCandidateView = {
   totalAmt: number | null;
   docNumber: string | null;
   vendorName: string | null;
+  // The transaction's currency code (e.g. "USD"), shown next to the amount so a
+  // multicurrency candidate can't be mistaken for the draft's home-currency
+  // amount. null in a single-currency company.
+  currency: string | null;
 };
 
 // Stage 5 posting controls on a QuickBooks draft card.
@@ -386,6 +390,7 @@ export function PostDraftControls({
                           {c.totalAmt != null
                             ? formatCurrency(c.totalAmt, locale)
                             : "—"}
+                          {c.currency ? ` ${c.currency}` : ""}
                           {c.txnDate
                             ? ` · ${formatDate(c.txnDate, locale, "medium")}`
                             : ""}

@@ -118,6 +118,10 @@ export async function POST(
             totalAmt: c.totalAmt,
             docNumber: c.docNumber,
             vendorName: c.vendorName,
+            // Sent so a multicurrency candidate shows its code next to the
+            // amount (a USD 100.00 vs the draft's CAD $100.00). null in a
+            // single-currency company.
+            currency: c.currency,
           })),
         },
         { status: 409 },

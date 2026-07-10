@@ -216,6 +216,7 @@ const CANDIDATE: RegisterCandidate = {
   vendorId: "V1",
   vendorName: "Tim Hortons",
   syncToken: "3",
+  currency: null,
 };
 
 function primePostableDraft() {
@@ -356,6 +357,34 @@ describe("postApprovedDraft — smart match-or-create", () => {
 
     expect(r.kind).toBe("needs_match_confirmation");
     expect(r.matchCandidates).toEqual([]);
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockRecordPosted).not.toHaveBeenCalled();
+  });
+
+  it("an explicit ATTACH FAILS CLOSED (never creates) when the exclusion read is unavailable", async () => {
+    // The accountant said "this is already in QuickBooks"; a transient DB blip
+    // must NOT silently create the duplicate they were avoiding.
+    mockListPostedIds.mockResolvedValue(null);
+
+    const r = await postApprovedDraft("file-1", "user-1", {
+      match: { action: "attach", qboId: "900" },
+    });
+
+    expect(r.kind).toBe("post_failed");
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(mockRecordPosted).not.toHaveBeenCalled();
+  });
+
+  it("an explicit ATTACH FAILS CLOSED (never creates) when the re-validation search errors", async () => {
+    mockFind.mockRejectedValue(
+      new QuickbooksError("read_failed", "QuickBooks query failed (500)"),
+    );
+
+    const r = await postApprovedDraft("file-1", "user-1", {
+      match: { action: "attach", qboId: "900" },
+    });
+
+    expect(r.kind).toBe("post_failed");
     expect(mockCreate).not.toHaveBeenCalled();
     expect(mockRecordPosted).not.toHaveBeenCalled();
   });

@@ -45,6 +45,13 @@ export type RegisterCandidate = {
   vendorId: string | null;
   vendorName: string | null;
   syncToken: string | null;
+  // The transaction's currency (CurrencyRef.value, e.g. "CAD"/"USD"), or null in
+  // a single-currency company where QuickBooks omits CurrencyRef. A non-null
+  // value means the company has MULTICURRENCY on, so TotalAmt is stated in THIS
+  // currency — which need not be the home currency the draft posts in. Such a
+  // candidate is never auto-attached (classifyRegisterMatch downgrades it to a
+  // confirm) so a USD 100.00 can't silently attach to a CAD $100.00 draft.
+  currency: string | null;
 };
 
 export type RegisterSearch = {
@@ -131,11 +138,23 @@ export async function findRegisterCandidates(
     if (rows.length >= MAX_REGISTER_ROWS) truncated = true;
 
     for (const row of rows) {
+      // A Purchase with Credit=true is a vendor / credit-card REFUND (money back
+      // TO the client), not an expense. QuickBooks stores it in the SAME table
+      // with a POSITIVE TotalAmt, so a $200 refund is otherwise indistinguishable
+      // from a $200 expense in every field we read. It can never be "the same
+      // transaction" as an expense receipt — drop it so it neither auto-attaches
+      // nor pads the confirm list. (Bill/Invoice have no Credit flag, so this is
+      // a no-op for them.)
+      if (row.Credit === true) continue;
       const totalAmt = typeof row.TotalAmt === "number" ? row.TotalAmt : null;
       if (totalAmt == null || !amountsEqual(totalAmt, opts.amount)) continue;
       const id = typeof row.Id === "string" ? row.Id : null;
       if (!id || opts.excludeQboIds.has(id)) continue;
       const ref = partyRefOf(entity, row);
+      const currencyRaw =
+        row.CurrencyRef && typeof row.CurrencyRef === "object"
+          ? (row.CurrencyRef as { value?: unknown }).value
+          : null;
       candidates.push({
         qboId: id,
         entity,
@@ -145,6 +164,7 @@ export async function findRegisterCandidates(
         vendorId: typeof ref?.value === "string" ? ref.value : null,
         vendorName: typeof ref?.name === "string" ? ref.name : null,
         syncToken: typeof row.SyncToken === "string" ? row.SyncToken : null,
+        currency: typeof currencyRaw === "string" ? currencyRaw : null,
       });
     }
   }
@@ -183,10 +203,10 @@ function vendorContradicts(
 }
 
 // The founder-decided bar for attaching WITHOUT asking: exactly one candidate,
-// same entity type the draft would post, vendor not contradicting, and the
-// search wasn't truncated. ANYTHING else with a candidate in play → the
-// accountant confirms. (Amount + date window are already guaranteed by
-// findRegisterCandidates.)
+// same entity type the draft would post, stated in the home currency (no
+// CurrencyRef), vendor not contradicting, and the search wasn't truncated.
+// ANYTHING else with a candidate in play → the accountant confirms. (Amount +
+// date window are already guaranteed by findRegisterCandidates.)
 export function classifyRegisterMatch(input: {
   search: RegisterSearch;
   draftEntity: QboTxnEntity;
@@ -201,6 +221,13 @@ export function classifyRegisterMatch(input: {
   if (candidates.length > 1 || truncated) return { kind: "confirm" };
   const c = candidates[0]!;
   if (c.entity !== input.draftEntity) return { kind: "confirm" };
+  // Multicurrency guard: a candidate carrying a currency (the company has
+  // multicurrency on) has a TotalAmt stated in THAT currency, which may not be
+  // the home currency the draft posts in — a USD 100.00 must never silently
+  // attach to a CAD $100.00 draft. We can't reliably know the home currency
+  // here, so never auto-clear a currency-tagged candidate; let the accountant
+  // confirm (the dialog shows the currency code).
+  if (c.currency != null) return { kind: "confirm" };
   if (vendorContradicts(c, input.draftVendorId, input.draftVendorNames)) {
     return { kind: "confirm" };
   }
