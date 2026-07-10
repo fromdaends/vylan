@@ -148,6 +148,17 @@ export function IntegrationsSection({
     </div>
   ) : null;
 
+  // A short, plain-English walk-through shown before connecting so a new firm
+  // knows exactly what linking does. Literal keys (not interpolated) so typed
+  // messages stay checkable.
+  const connectSteps = [
+    t("qbo_connect_step1"),
+    t("qbo_connect_step2"),
+    t("qbo_connect_step3"),
+    t("qbo_connect_step4"),
+    t("qbo_connect_step5"),
+  ];
+
   return (
     <section>
       <h2 className="text-sm font-semibold">{t("qbo_title")}</h2>
@@ -243,13 +254,34 @@ export function IntegrationsSection({
             <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground">
               <Plug className="h-4 w-4" />
             </span>
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="text-sm font-medium">{t("qbo_connect_title")}</div>
+              {/* What linking does — shown to everyone, so a new firm gets the
+                  context before anyone connects. */}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {t("qbo_connect_hint")}
+              </p>
+              {/* How it works — a short numbered walk-through of the flow. */}
+              <div className="space-y-2 border-t border-border/50 pt-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t("qbo_connect_how_title")}
+                </div>
+                <ol className="space-y-2">
+                  {connectSteps.map((step, i) => (
+                    <li
+                      key={i}
+                      className="flex gap-2.5 text-xs leading-relaxed text-muted-foreground"
+                    >
+                      <span className="mt-px inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-secondary text-[10px] font-semibold text-foreground">
+                        {i + 1}
+                      </span>
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
               {isOwner ? (
                 <>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    {t("qbo_connect_hint")}
-                  </p>
                   <div className="pt-1">
                     <Button
                       size="sm"
