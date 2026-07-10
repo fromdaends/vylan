@@ -101,10 +101,15 @@ export type PostOutcome = {
 //   'create' — post a new transaction, skip the register match entirely;
 //   'attach' — this IS the existing transaction `qboId`; attach the receipt to
 //              it instead of creating. Re-validated server-side: the id must
-//              still be a current amount+date-window candidate.
+//              still be a current amount+date-window candidate. `entity` pins
+//              the pick to the transaction TYPE the accountant chose — QuickBooks
+//              ids are only unique PER type, so a Bill and a Purchase can share a
+//              numeric id; matching on id alone could attach to the sibling.
+//              Optional for backward compatibility with a stale client that only
+//              sends the id (then it falls back to id-only matching).
 export type PostMatchOverride =
   | { action: "create" }
-  | { action: "attach"; qboId: string };
+  | { action: "attach"; qboId: string; entity?: QboTxnEntity };
 
 // Post one approved EXPENSE draft as a QuickBooks Bill. Idempotent + safe:
 //  - schema gate (postReady): never call QuickBooks if we can't record it;
@@ -329,6 +334,7 @@ export async function postApprovedDraft(
     // Capture the pick now, while the union is narrowed to the attach variant
     // (the narrowing is lost across the awaits below, since `opts` is a param).
     const pickedQboId = opts.match.qboId;
+    const pickedEntity = opts.match.entity;
     // A match can't be recorded pre-0510 (the void route relies on the marker
     // to UNLINK instead of deleting a transaction Vylan never created). Rather
     // than create a known duplicate, ask the accountant to retry.
@@ -340,7 +346,7 @@ export async function postApprovedDraft(
           "Couldn't confirm this match in QuickBooks. Please refresh and try again.",
       };
     }
-    const excludeQboIds = await listFirmPostedQboIds(draft.firmId);
+    const excludeQboIds = await listFirmPostedQboIds(draft.firmId, ctx.realmId);
     let search: RegisterSearch | null = null;
     if (excludeQboIds != null) {
       try {
@@ -371,10 +377,18 @@ export async function postApprovedDraft(
       };
     }
     // Re-validate the pick against the FRESH search (the id must still match on
-    // amount + date window). Gone/changed → re-ask with the current candidates
-    // rather than attach blind (and, again, never fall through to a create).
+    // amount + date window). Match on qboId AND the chosen entity type when the
+    // client sent it — QuickBooks ids are unique only per type, so a Bill and a
+    // Purchase can share an id and matching on id alone could attach to the
+    // sibling. (A stale client that omits the entity falls back to id-only.)
+    // Gone/changed → re-ask with the current candidates rather than attach blind
+    // (and, again, never fall through to a create).
     const attachTo =
-      search.candidates.find((c) => c.qboId === pickedQboId) ?? null;
+      search.candidates.find(
+        (c) =>
+          c.qboId === pickedQboId &&
+          (pickedEntity == null || c.entity === pickedEntity),
+      ) ?? null;
     if (!attachTo) {
       return {
         kind: "needs_match_confirmation",
@@ -398,11 +412,11 @@ export async function postApprovedDraft(
   // (match.action === 'create', so opts.match is set) or pre-0510.
   if (!opts?.match && draft.matchReady) {
     try {
-      // Exclude every transaction Vylan itself posted for this firm — read
-      // FRESH per post so a draft posted seconds ago (mid-bulk) is already
-      // excluded. A null read means "couldn't check", not "none": skip
-      // matching rather than risk matching a Vylan-posted transaction.
-      const excludeQboIds = await listFirmPostedQboIds(draft.firmId);
+      // Exclude every transaction Vylan itself posted for this firm (under the
+      // CURRENT company) — read FRESH per post so a draft posted seconds ago
+      // (mid-bulk) is already excluded. A null read means "couldn't check", not
+      // "none": skip matching rather than risk matching a Vylan-posted one.
+      const excludeQboIds = await listFirmPostedQboIds(draft.firmId, ctx.realmId);
       if (excludeQboIds != null) {
         const search = await findRegisterCandidates(ctx, {
           entities: searchEntities,
@@ -478,6 +492,7 @@ export async function postApprovedDraft(
     postedQboId: result.id,
     postedSyncToken: result.syncToken,
     posterId,
+    postedRealmId: ctx.realmId,
   });
   if (recorded === "conflict") return { kind: "conflict", ...base };
   if (recorded !== "ok") {
@@ -545,6 +560,7 @@ async function recordMatchAndAttach(input: {
     postedSyncToken: attachTo.syncToken ?? "0",
     posterId: input.posterId,
     matchedQboType: attachTo.entity,
+    postedRealmId: input.ctx.realmId,
   });
   if (recorded === "conflict") return { kind: "conflict", ...base };
   if (recorded !== "ok") {

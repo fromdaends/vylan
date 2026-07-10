@@ -48,7 +48,13 @@ export async function POST(
       typeof body.attachQboId === "string" &&
       body.attachQboId
     ) {
-      match = { action: "attach", qboId: body.attachQboId };
+      // attachEntity pins the pick to the chosen transaction TYPE (Bill/Purchase/
+      // Invoice) — QBO ids are unique only per type. Optional: a stale client may
+      // omit it, and postApprovedDraft then falls back to id-only matching.
+      const e = body.attachEntity;
+      const entity =
+        e === "bill" || e === "purchase" || e === "invoice" ? e : undefined;
+      match = { action: "attach", qboId: body.attachQboId, entity };
     }
   } catch {
     match = undefined;
