@@ -1,0 +1,110 @@
+// Tiny module-level store for the Vylan Assistant panel, shared between the
+// panel itself (mounted once in the app layout) and the pages that talk to it
+// (the engagement detail page publishes its engagement so the panel can
+// preselect it). Same useSyncExternalStore pattern as the sidebar-collapse
+// preference in app-shell.tsx — no context provider, no prop drilling across
+// the layout boundary.
+
+export type AssistantTab = "chat" | "activity";
+
+// What an engagement page publishes about itself while mounted. The panel
+// uses it to preselect the engagement and to decide the FAB badge.
+export type PageEngagement = {
+  id: string;
+  title: string;
+  clientName: string | null;
+  status: string;
+  createdAt: string;
+};
+
+// An engagement as selectable in the panel's picker (also the payload shape
+// of GET /api/engagement-chat/engagements).
+export type EngagementOption = {
+  id: string;
+  title: string;
+  status: string;
+  clientName: string | null;
+};
+
+export type AssistantState = {
+  open: boolean;
+  tab: AssistantTab;
+  pageEngagement: PageEngagement | null;
+  // The engagement the panel is scoped to (drives the Activity tab; the Chat
+  // tab starts using it in Phase 2).
+  selected: EngagementOption | null;
+};
+
+let state: AssistantState = {
+  open: false,
+  tab: "chat",
+  pageEngagement: null,
+  selected: null,
+};
+
+const listeners = new Set<() => void>();
+
+function emit() {
+  for (const listener of listeners) listener();
+}
+
+export function subscribeAssistant(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+export function getAssistantState(): AssistantState {
+  return state;
+}
+
+// Stable object for the server snapshot — useSyncExternalStore requires the
+// server snapshot to be referentially stable across calls.
+const SERVER_SNAPSHOT: AssistantState = {
+  open: false,
+  tab: "chat",
+  pageEngagement: null,
+  selected: null,
+};
+
+export function getAssistantServerSnapshot(): AssistantState {
+  return SERVER_SNAPSHOT;
+}
+
+export function openAssistant(tab?: AssistantTab) {
+  // Preselect the current page's engagement on every closed → open
+  // transition ("when opened from an engagement page, it preselects that
+  // engagement"). A manual pick made while the panel stays open sticks.
+  const preselect =
+    !state.open && state.pageEngagement
+      ? {
+          id: state.pageEngagement.id,
+          title: state.pageEngagement.title,
+          status: state.pageEngagement.status,
+          clientName: state.pageEngagement.clientName,
+        }
+      : state.selected;
+  state = { ...state, open: true, tab: tab ?? state.tab, selected: preselect };
+  emit();
+}
+
+export function closeAssistant() {
+  state = { ...state, open: false };
+  emit();
+}
+
+export function setAssistantTab(tab: AssistantTab) {
+  state = { ...state, tab };
+  emit();
+}
+
+export function setPageEngagement(engagement: PageEngagement | null) {
+  state = { ...state, pageEngagement: engagement };
+  emit();
+}
+
+export function setSelectedEngagement(option: EngagementOption | null) {
+  state = { ...state, selected: option };
+  emit();
+}

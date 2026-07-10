@@ -2091,5 +2091,20 @@
     "unlink_failed": "Impossible de dissocier. Réessayez.",
     "post_all_needs_review": "{count, plural, one {# brouillon semble} other {# brouillons semblent}} déjà exister dans QuickBooks, ils n’ont donc pas été envoyés. Ouvrez chaque carte pour joindre ou créer la transaction.",
     "post_all_needs_review_close": "OK"
+  },
+  "Assistant": {
+    "panel_title": "Assistant Vylan",
+    "tab_chat": "Discussion",
+    "tab_activity": "Activité",
+    "select_engagement": "Choisir un mandat",
+    "select_engagement_placeholder": "Rechercher un mandat…",
+    "no_engagements": "Aucun mandat trouvé.",
+    "loading": "Chargement…",
+    "no_engagement_selected": "Choisissez un mandat ci-dessus pour voir son activité.",
+    "activity_error": "Le chargement a échoué. Vérifiez votre connexion et réessayez.",
+    "retry": "Réessayer",
+    "resize_handle": "Redimensionner le panneau",
+    "resize_hint": "Glissez pour redimensionner. Double-cliquez pour réinitialiser.",
+    "new_engagement_badge": "Nouveau mandat"
   }
 }

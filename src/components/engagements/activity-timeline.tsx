@@ -1,25 +1,43 @@
-import { getTranslations } from "next-intl/server";
-import type { ActivityEntry } from "@/lib/db/activity";
+"use client";
+
+import { useTranslations } from "next-intl";
 import { formatRelative, type AppLocale } from "@/lib/format";
 
-export async function ActivityTimeline({
+// The slim activity shape the timeline renders. Structurally a subset of
+// ActivityEntry (src/lib/db/activity.ts) so server code can pass DB rows
+// straight through; the Assistant panel's Activity tab receives the same
+// shape as JSON from GET /api/engagement-chat/activity.
+export type TimelineEntry = {
+  id: string;
+  actor_type: "user" | "client" | "system";
+  action: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
+// Client component since the panel's Activity tab (a client surface) renders
+// it. Formerly an async server component — the conversion only swapped
+// getTranslations for useTranslations and the two Map props for plain
+// JSON-friendly Records; every describe/actor/issue/tone rule is unchanged so
+// events read byte-identically to the old slide-out.
+export function ActivityTimeline({
   entries,
   locale,
   filenamesByFileId,
   rejectionReasonsByItemId,
 }: {
-  entries: ActivityEntry[];
+  entries: TimelineEntry[];
   locale: AppLocale;
   // Live lookup of the current filename for an uploaded_files row. The
   // activity row only stores `file_id` (Phase 5) so the timeline reads
   // the filename from the parent record at render time. If the file is
   // deleted, the filename is too — that's intentional, retention is
   // bound to the file's lifecycle rather than the 2-year audit log.
-  filenamesByFileId?: Map<string, string>;
+  filenamesByFileId?: Record<string, string>;
   // Same shape for the live rejection_reason of a request_item.
-  rejectionReasonsByItemId?: Map<string, string | null>;
+  rejectionReasonsByItemId?: Record<string, string | null>;
 }) {
-  const t = await getTranslations("Activity");
+  const t = useTranslations("Activity");
 
   // The classifier writes one `ai_classified` row for every upload as a
   // raw debug breadcrumb (document_type + confidence). It's noise in the
@@ -31,46 +49,43 @@ export async function ActivityTimeline({
   const visible = entries.filter((e) => e.action !== "ai_classified");
 
   return (
-    <div className="space-y-3">
-      <h2 className="text-base font-semibold tracking-tight text-foreground">
-        {t("title")}
-      </h2>
-      <div>
-        {visible.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-2">{t("empty")}</p>
-        ) : (
-          <ol className="space-y-4 text-sm">
-            {visible.map((e) => (
-              <li key={e.id} className="flex items-start gap-3">
-                <span
-                  className={
-                    "mt-1.5 size-2 rounded-full shrink-0 ring-2 ring-background " +
-                    actorDot(e.actor_type)
-                  }
-                  aria-hidden
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="leading-snug text-foreground">
-                    {describe(e, t, filenamesByFileId, rejectionReasonsByItemId)}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
-                    <span className="font-medium">
-                      {actorLabel(e.actor_type, t)}
-                    </span>
-                    <span aria-hidden>·</span>
-                    <span>{formatRelative(e.created_at, locale)}</span>
-                  </div>
+    <div>
+      {visible.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-2">{t("empty")}</p>
+      ) : (
+        <ol className="space-y-4 text-sm">
+          {visible.map((e) => (
+            <li key={e.id} className="flex items-start gap-3">
+              <span
+                className={
+                  "mt-1.5 size-2 rounded-full shrink-0 ring-2 ring-background " +
+                  actorDot(e.actor_type)
+                }
+                aria-hidden
+              />
+              <div className="flex-1 min-w-0">
+                <div className="leading-snug text-foreground">
+                  {describe(e, t, filenamesByFileId, rejectionReasonsByItemId)}
                 </div>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
+                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                  <span className="font-medium">
+                    {actorLabel(e.actor_type, t)}
+                  </span>
+                  <span aria-hidden>·</span>
+                  <span>{formatRelative(e.created_at, locale)}</span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }
 
-function actorDot(actor: ActivityEntry["actor_type"]): string {
+type Translator = ReturnType<typeof useTranslations<"Activity">>;
+
+function actorDot(actor: TimelineEntry["actor_type"]): string {
   if (actor === "client") return "bg-success";
   if (actor === "user") return "bg-primary";
   // System / Vylan events get a quiet muted dot so client + manual
@@ -79,20 +94,17 @@ function actorDot(actor: ActivityEntry["actor_type"]): string {
   return "bg-muted-foreground/50";
 }
 
-function actorLabel(
-  actor: ActivityEntry["actor_type"],
-  t: Awaited<ReturnType<typeof getTranslations<"Activity">>>,
-): string {
+function actorLabel(actor: TimelineEntry["actor_type"], t: Translator): string {
   if (actor === "client") return t("actor_client");
   if (actor === "user") return t("actor_user");
   return t("actor_system");
 }
 
 function describe(
-  entry: ActivityEntry,
-  t: Awaited<ReturnType<typeof getTranslations<"Activity">>>,
-  filenamesByFileId?: Map<string, string>,
-  rejectionReasonsByItemId?: Map<string, string | null>,
+  entry: TimelineEntry,
+  t: Translator,
+  filenamesByFileId?: Record<string, string>,
+  rejectionReasonsByItemId?: Record<string, string | null>,
 ): string {
   const meta = entry.metadata as Record<string, string | undefined>;
   switch (entry.action) {
@@ -101,9 +113,7 @@ function describe(
       // Fall back to legacy `meta.filename` for rows written before
       // Phase 5 / before the 0069 backfill ran. After backfill, both
       // are absent for old rows → display "—".
-      const live = meta.file_id
-        ? filenamesByFileId?.get(meta.file_id)
-        : undefined;
+      const live = meta.file_id ? filenamesByFileId?.[meta.file_id] : undefined;
       const filename = live ?? meta.filename ?? "—";
       return t("client_uploaded", { filename });
     }
@@ -117,7 +127,7 @@ function describe(
       // Same pattern: live rejection_reason from the request_items row,
       // legacy fallback during the transition window.
       const live = meta.item_id
-        ? rejectionReasonsByItemId?.get(meta.item_id)
+        ? rejectionReasonsByItemId?.[meta.item_id]
         : undefined;
       const reason = live ?? meta.reason ?? "—";
       return t("reject_item", { reason });
@@ -200,10 +210,7 @@ const KNOWN_ISSUES: Record<string, string> = {
   other: "issue_other",
 };
 
-function issueLabel(
-  raw: unknown,
-  t: Awaited<ReturnType<typeof getTranslations<"Activity">>>,
-): string {
+function issueLabel(raw: unknown, t: Translator): string {
   if (typeof raw !== "string" || !raw) return "—";
   const key = KNOWN_ISSUES[raw];
   if (key) {
@@ -223,10 +230,7 @@ const KNOWN_TONES: Record<string, string> = {
   overdue: "tone_overdue",
 };
 
-function toneLabel(
-  raw: unknown,
-  t: Awaited<ReturnType<typeof getTranslations<"Activity">>>,
-): string {
+function toneLabel(raw: unknown, t: Translator): string {
   if (typeof raw !== "string" || !raw) return "—";
   const key = KNOWN_TONES[raw];
   if (key) {
