@@ -440,6 +440,11 @@ export async function recordDraftPosted(input: {
   // relies on it to UNLINK instead of deleting a transaction Vylan never
   // created.
   matchedQboType?: "bill" | "purchase" | "invoice";
+  // Smart match (0520): the realm (QuickBooks company) this was posted/matched
+  // under, so listFirmPostedQboIds can scope the exclusion set to the live
+  // company. Stamped on the widest tier; dropped pre-0520 (matching just stays
+  // firm-wide). Never affects whether the post is recorded.
+  postedRealmId?: string | null;
 }): Promise<RecordPostedResult> {
   const sb = getServiceRoleSupabase();
   const now = new Date().toISOString();
@@ -452,12 +457,21 @@ export async function recordDraftPosted(input: {
     post_error: null,
     updated_at: now,
   };
+  const realm = { posted_realm_id: input.postedRealmId ?? null };
   // A CREATED post explicitly stamps matched_qbo_type null (defense against any
-  // stale marker), falling back to the bare update pre-0510. A MATCHED post
-  // requires the column — no fallback, so the marker can't be lost.
+  // stale marker), falling back through narrower column sets pre-0520 / pre-0510.
+  // A MATCHED post requires the 0510 column — its fallback keeps the marker (only
+  // the 0520 realm is dropped), so the marker can't be lost.
   const patches = input.matchedQboType
-    ? [{ ...base, matched_qbo_type: input.matchedQboType }]
-    : [{ ...base, matched_qbo_type: null }, base];
+    ? [
+        { ...base, matched_qbo_type: input.matchedQboType, ...realm },
+        { ...base, matched_qbo_type: input.matchedQboType },
+      ]
+    : [
+        { ...base, matched_qbo_type: null, ...realm },
+        { ...base, matched_qbo_type: null },
+        base,
+      ];
   let data: Array<Record<string, unknown>> | null = null;
   let error: { code?: string; message?: string } | null = null;
   for (const patch of patches) {
@@ -618,15 +632,43 @@ export async function recordDraftVoided(input: {
 // excluded for the next draft. Service-role read scoped to the firm; returns
 // NULL on any error so the caller can tell "no posted drafts" apart from
 // "couldn't check" (and skip matching rather than trust an empty set).
+//
+// SCOPED TO THE CURRENT REALM (0520): only ids posted under the currently
+// connected QuickBooks company are excluded, so ids from a PREVIOUSLY connected
+// company (whose per-company sequential ids readily collide) can't poison the
+// exclusion set after a company switch. Rows with a null realm — posted in the
+// brief window between applying 0520 and deploying the writer — belong to the
+// live connection and stay included. Falls back to the prior firm-wide read when
+// the column isn't there yet (pre-0520) or when no realm is supplied.
 export async function listFirmPostedQboIds(
   firmId: string,
+  realmId?: string | null,
 ): Promise<Set<string> | null> {
   const sb = getServiceRoleSupabase();
-  const { data, error } = await sb
-    .from("quickbooks_transaction_suggestions")
-    .select("posted_qbo_id")
-    .eq("firm_id", firmId)
-    .not("posted_qbo_id", "is", null);
+  const baseQuery = () =>
+    sb
+      .from("quickbooks_transaction_suggestions")
+      .select("posted_qbo_id")
+      .eq("firm_id", firmId)
+      .not("posted_qbo_id", "is", null);
+  let data: Array<{ posted_qbo_id: string | null }> | null = null;
+  let error: { code?: string; message?: string } | null = null;
+  // QuickBooks realm ids are numeric strings; require that shape before
+  // interpolating into the PostgREST .or() filter (defense-in-depth — realmId
+  // comes from our own connection row, not user input). Anything unexpected
+  // falls back to the safe firm-wide read rather than a malformed filter.
+  const safeRealm = realmId && /^\d+$/.test(realmId) ? realmId : null;
+  if (safeRealm) {
+    ({ data, error } = await baseQuery().or(
+      `posted_realm_id.eq.${safeRealm},posted_realm_id.is.null`,
+    ));
+    // pre-0520: the column doesn't exist — retry firm-wide (prior behavior).
+    if (error && isMissingSchema(error)) {
+      ({ data, error } = await baseQuery());
+    }
+  } else {
+    ({ data, error } = await baseQuery());
+  }
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] listFirmPostedQboIds failed:", error);

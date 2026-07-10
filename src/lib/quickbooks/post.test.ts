@@ -256,6 +256,8 @@ describe("postApprovedDraft — smart match-or-create", () => {
       postedSyncToken: "3",
       posterId: "user-1",
       matchedQboType: "purchase",
+      // Stamped with the live realm so the exclusion set stays company-scoped.
+      postedRealmId: "r",
     });
     // The receipt lands on the MATCHED transaction (its entity, not the draft's).
     expect(mockUpload).toHaveBeenCalledWith(READ_CTX, "purchase", "900", {
@@ -346,6 +348,47 @@ describe("postApprovedDraft — smart match-or-create", () => {
     // The explicit pick bypasses classification (the accountant decided).
     expect(mockClassify).not.toHaveBeenCalled();
     expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it("attaches to the picked ENTITY when a Bill and Purchase share the same id", async () => {
+    // QBO ids are unique only per type; a Bill#900 and a Purchase#900 can both
+    // match the amount+window. The accountant picked the Purchase — matching on
+    // id alone would wrongly attach to the Bill (searched first).
+    const bill900: RegisterCandidate = {
+      ...CANDIDATE,
+      entity: "bill",
+      syncToken: "7",
+    };
+    const purchase900: RegisterCandidate = {
+      ...CANDIDATE,
+      entity: "purchase",
+      syncToken: "8",
+    };
+    mockFind.mockResolvedValue({
+      candidates: [bill900, purchase900],
+      truncated: false,
+    });
+
+    const r = await postApprovedDraft("file-1", "user-1", {
+      match: { action: "attach", qboId: "900", entity: "purchase" },
+    });
+
+    expect(r.kind).toBe("matched_existing");
+    expect(mockCreate).not.toHaveBeenCalled();
+    // Attached to the Purchase (its syncToken + entity), not the Bill.
+    expect(mockRecordPosted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        postedQboId: "900",
+        postedSyncToken: "8",
+        matchedQboType: "purchase",
+      }),
+    );
+    expect(mockUpload).toHaveBeenCalledWith(
+      READ_CTX,
+      "purchase",
+      "900",
+      expect.anything(),
+    );
   });
 
   it("re-asks when the accountant's pick is no longer a valid candidate", async () => {

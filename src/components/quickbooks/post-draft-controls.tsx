@@ -404,6 +404,9 @@ export function PostDraftControls({
                           run("post", {
                             matchAction: "attach",
                             attachQboId: c.qboId,
+                            // Pin to the chosen type — QBO ids are unique only
+                            // per type (a Bill and a Purchase can share an id).
+                            attachEntity: c.entity,
                           })
                         }
                         disabled={pending}
