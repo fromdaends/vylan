@@ -34,6 +34,9 @@ alter table user_mfa_recovery_codes enable row level security;
 -- A user can read their own recovery-code rows (the timestamps are
 -- useful for showing "7 of 8 codes remaining" in the UI later). The
 -- code_hash column being readable is fine — it's a hash.
+-- Drop-first so re-applying this migration doesn't error on the existing policy
+-- (this is the statement that was stalling the production migration chain).
+drop policy if exists user_mfa_recovery_codes_select_self on user_mfa_recovery_codes;
 create policy user_mfa_recovery_codes_select_self
   on user_mfa_recovery_codes
   for select to authenticated

@@ -69,6 +69,9 @@ begin
 end;
 $$;
 
+-- Drop-first so re-applying this migration doesn't error on the existing trigger
+-- (create trigger has no "if not exists"). No-op on a fresh database.
+drop trigger if exists demo_requests_updated_at on demo_requests;
 create trigger demo_requests_updated_at
 before update on demo_requests
 for each row execute function demo_requests_set_updated_at();
