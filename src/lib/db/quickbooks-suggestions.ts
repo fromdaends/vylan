@@ -36,6 +36,11 @@ export type PostState = {
   postError: string | null;
   postedTaxNote: string | null;
   receiptAttachedAt: string | null;
+  // Smart posting part 3 (0510): set when this 'posted' draft was MATCHED to an
+  // existing QuickBooks transaction instead of created by Vylan — and which
+  // entity type it was ('bill' | 'purchase' | 'invoice'). Null = Vylan created
+  // it (or nothing is posted).
+  matchedQboType: string | null;
 };
 
 // One stored draft: the AI suggestion + the accountant's resolved picks (Stage 4,
@@ -53,6 +58,7 @@ export type StoredDraft = {
 // falls through on a missing-schema error, so the app degrades gracefully across
 // the migration windows (0450 = posted_* columns; 0440 = resolved + reviewed_*).
 const ENGAGEMENT_SELECTS = [
+  "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at, matched_qbo_type",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error",
@@ -104,6 +110,7 @@ export async function getSuggestionsForEngagement(
       post_error?: string | null;
       posted_tax_note?: string | null;
       receipt_attached_at?: string | null;
+      matched_qbo_type?: string | null;
     };
     if (r.uploaded_file_id && r.suggestion) {
       out.set(r.uploaded_file_id, {
@@ -118,6 +125,7 @@ export async function getSuggestionsForEngagement(
         postError: r.post_error ?? null,
         postedTaxNote: r.posted_tax_note ?? null,
         receiptAttachedAt: r.receipt_attached_at ?? null,
+        matchedQboType: r.matched_qbo_type ?? null,
       });
     }
   }
@@ -143,6 +151,7 @@ export type FirmDraftRow = {
 } & PostState;
 
 const FIRM_SELECTS = [
+  "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at, matched_qbo_type",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error",
@@ -267,6 +276,7 @@ export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
       postError: (r.post_error as string | null) ?? null,
       postedTaxNote: (r.posted_tax_note as string | null) ?? null,
       receiptAttachedAt: (r.receipt_attached_at as string | null) ?? null,
+      matchedQboType: (r.matched_qbo_type as string | null) ?? null,
     };
   });
 }
@@ -296,9 +306,17 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
   // attach-without-record / duplicate-attach window), mirroring postReady.
   receiptAttachedAt: string | null;
   attachReady: boolean;
+  // Smart posting part 3 (0510). matchedQboType = the entity type of the
+  // EXISTING QuickBooks transaction this posted draft was matched to (null =
+  // Vylan created it). matchReady is true only when the 0510 column exists —
+  // the register-match step is skipped entirely when false, so a match can
+  // always be recorded (posting just behaves as before the feature).
+  matchedQboType: string | null;
+  matchReady: boolean;
 } | null> {
   const sb = await getServerSupabase();
   const selects = [
+    "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt",
     "engagement_id, firm_id, resolved, suggestion, status",
@@ -332,11 +350,14 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
     postedQboId: (row.posted_qbo_id as string | null) ?? null,
     postedSyncToken: (row.posted_qbo_sync_token as string | null) ?? null,
     postAttempt: (row.post_attempt as number | null) ?? 0,
-    // Tiers 0 (0500) and 1 both carry the 0450 posting columns; only tier 0 also
-    // carries the 0500 receipt-attach column.
-    postReady: tier <= 1,
+    // Tiers 0 (0510), 1 (0500) and 2 all carry the 0450 posting columns; tiers
+    // 0–1 also carry the 0500 receipt-attach column; only tier 0 carries the
+    // 0510 register-match column.
+    postReady: tier <= 2,
     receiptAttachedAt: (row.receipt_attached_at as string | null) ?? null,
-    attachReady: tier === 0,
+    attachReady: tier <= 1,
+    matchedQboType: (row.matched_qbo_type as string | null) ?? null,
+    matchReady: tier === 0,
   };
 }
 
@@ -412,24 +433,45 @@ export async function recordDraftPosted(input: {
   postedQboId: string;
   postedSyncToken: string;
   posterId: string | null;
+  // Smart posting part 3 (0510): when the draft was MATCHED to an existing
+  // QuickBooks transaction instead of created, the matched entity type. The
+  // caller only passes this when the 0510 column exists (matchReady) — a
+  // matched record must never silently drop the marker, because the void route
+  // relies on it to UNLINK instead of deleting a transaction Vylan never
+  // created.
+  matchedQboType?: "bill" | "purchase" | "invoice";
 }): Promise<RecordPostedResult> {
   const sb = getServiceRoleSupabase();
   const now = new Date().toISOString();
-  const { data, error } = await sb
-    .from("quickbooks_transaction_suggestions")
-    .update({
-      status: "posted",
-      posted_qbo_id: input.postedQboId,
-      posted_qbo_sync_token: input.postedSyncToken,
-      posted_at: now,
-      posted_by: input.posterId,
-      post_error: null,
-      updated_at: now,
-    })
-    .eq("uploaded_file_id", input.uploadedFileId)
-    .eq("status", "approved")
-    .eq("post_attempt", input.expectedAttempt)
-    .select("uploaded_file_id");
+  const base = {
+    status: "posted",
+    posted_qbo_id: input.postedQboId,
+    posted_qbo_sync_token: input.postedSyncToken,
+    posted_at: now,
+    posted_by: input.posterId,
+    post_error: null,
+    updated_at: now,
+  };
+  // A CREATED post explicitly stamps matched_qbo_type null (defense against any
+  // stale marker), falling back to the bare update pre-0510. A MATCHED post
+  // requires the column — no fallback, so the marker can't be lost.
+  const patches = input.matchedQboType
+    ? [{ ...base, matched_qbo_type: input.matchedQboType }]
+    : [{ ...base, matched_qbo_type: null }, base];
+  let data: Array<Record<string, unknown>> | null = null;
+  let error: { code?: string; message?: string } | null = null;
+  for (const patch of patches) {
+    const res = await sb
+      .from("quickbooks_transaction_suggestions")
+      .update(patch)
+      .eq("uploaded_file_id", input.uploadedFileId)
+      .eq("status", "approved")
+      .eq("post_attempt", input.expectedAttempt)
+      .select("uploaded_file_id");
+    data = res.data as Array<Record<string, unknown>> | null;
+    error = res.error;
+    if (!error || !isMissingSchema(error)) break;
+  }
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] recordDraftPosted failed:", error);
@@ -529,13 +571,22 @@ export async function recordDraftVoided(input: {
     post_error: null,
     updated_at: new Date().toISOString(),
   };
-  // Also clear posted_tax_note (0470) AND receipt_attached_at (0500): the posted
-  // transaction is gone, so a re-post must recompute the tax note and re-attach
-  // the receipt from scratch — a stale value would mislabel the fresh post. Fall
-  // back through progressively narrower column sets on a missing-column error so
-  // undo keeps working across every migration window (a single update naming a
-  // not-yet-added column would otherwise fail the whole undo).
+  // Also clear posted_tax_note (0470), receipt_attached_at (0500) AND
+  // matched_qbo_type (0510): the posted/matched transaction link is gone, so a
+  // re-post must recompute the tax note, re-attach the receipt, and re-run the
+  // register match from scratch — a stale value would mislabel the fresh post
+  // (a lingering matched marker would even make a future undo skip the
+  // QuickBooks delete). Fall back through progressively narrower column sets on
+  // a missing-column error so undo keeps working across every migration window
+  // (a single update naming a not-yet-added column would otherwise fail the
+  // whole undo).
   const patches = [
+    {
+      ...base,
+      posted_tax_note: null,
+      receipt_attached_at: null,
+      matched_qbo_type: null,
+    },
     { ...base, posted_tax_note: null, receipt_attached_at: null },
     { ...base, posted_tax_note: null },
     base,
@@ -557,6 +608,36 @@ export async function recordDraftVoided(input: {
     return false;
   }
   return true;
+}
+
+// Smart posting part 3 — every QuickBooks transaction id this firm's drafts are
+// posted/matched to. The register-match step EXCLUDES these ids so a
+// transaction Vylan itself posted never reads as "already in QuickBooks" (two
+// same-priced receipts in the same week must not flag each other). Read fresh
+// per post — inside a bulk run, a draft posted moments ago must already be
+// excluded for the next draft. Service-role read scoped to the firm; returns
+// NULL on any error so the caller can tell "no posted drafts" apart from
+// "couldn't check" (and skip matching rather than trust an empty set).
+export async function listFirmPostedQboIds(
+  firmId: string,
+): Promise<Set<string> | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("quickbooks_transaction_suggestions")
+    .select("posted_qbo_id")
+    .eq("firm_id", firmId)
+    .not("posted_qbo_id", "is", null);
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] listFirmPostedQboIds failed:", error);
+    }
+    return null;
+  }
+  return new Set(
+    (data ?? [])
+      .map((r) => (r as { posted_qbo_id: string | null }).posted_qbo_id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0),
+  );
 }
 
 // Atomically MERGE the changed field(s) of the accountant's resolved mapping for

@@ -2068,6 +2068,22 @@
     "post_all_failed": "Couldn't post them. Try again.",
     "receipt_attached": "Receipt attached",
     "attach_receipt_button": "Attach receipt",
-    "attach_failed": "Couldn't attach the receipt. Try again."
+    "attach_failed": "Couldn't attach the receipt. Try again.",
+    "match_title": "Already in QuickBooks?",
+    "match_body": "This looks like it may already be in QuickBooks. Attach the receipt to the existing transaction, or post a new one.",
+    "match_gone": "That transaction is no longer a match in QuickBooks. You can post a new one.",
+    "match_attach": "Attach to this one",
+    "match_post_new": "Post a new transaction",
+    "match_entity_bill": "Bill",
+    "match_entity_purchase": "Expense",
+    "match_entity_invoice": "Invoice",
+    "matched_label": "Matched to an existing QuickBooks transaction",
+    "unlink_button": "Unlink",
+    "unlink_title": "Unlink this match?",
+    "unlink_body": "This returns the draft to Approved and removes the link in Vylan. Nothing is deleted in QuickBooks — the transaction (and any receipt already attached there) stays.",
+    "unlink_go": "Unlink",
+    "unlink_failed": "Couldn't unlink. Try again.",
+    "post_all_needs_review": "{count, plural, one {# draft looks} other {# drafts look}} like they may already be in QuickBooks, so they weren't posted. Open each card to attach or post it.",
+    "post_all_needs_review_close": "OK"
   }
 }

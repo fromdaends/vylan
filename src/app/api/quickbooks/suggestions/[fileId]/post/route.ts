@@ -6,7 +6,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { postApprovedDraft } from "@/lib/quickbooks/post";
+import {
+  postApprovedDraft,
+  type PostMatchOverride,
+} from "@/lib/quickbooks/post";
 import { logUserActivity } from "@/lib/db/activity";
 
 export const runtime = "nodejs";
@@ -31,13 +34,34 @@ export async function POST(
     );
   }
 
-  const r = await postApprovedDraft(fileId, auth.user.id);
+  // Smart posting part 3: the body may carry the accountant's answer to a
+  // prior "already in QuickBooks?" prompt — attach to a specific existing
+  // transaction, or force a create. Anything malformed is ignored (normal
+  // match-or-create behavior).
+  let match: PostMatchOverride | undefined;
+  try {
+    const body = (await request.json()) as Record<string, unknown>;
+    if (body.matchAction === "create") {
+      match = { action: "create" };
+    } else if (
+      body.matchAction === "attach" &&
+      typeof body.attachQboId === "string" &&
+      body.attachQboId
+    ) {
+      match = { action: "attach", qboId: body.attachQboId };
+    }
+  } catch {
+    match = undefined;
+  }
+
+  const r = await postApprovedDraft(fileId, auth.user.id, { match });
 
   // Revalidate when QuickBooks state may have changed (posted) or an error was
   // recorded — never let it hinge on the best-effort audit below.
   if (
     r.engagementId &&
     (r.kind === "posted" ||
+      r.kind === "matched_existing" ||
       r.kind === "post_failed" ||
       r.kind === "conflict" ||
       r.kind === "record_failed")
@@ -61,6 +85,47 @@ export async function POST(
         console.error("[qbo post route] audit log failed (post applied):", err);
       }
       return NextResponse.json({ ok: true, postedQboId: r.postedQboId });
+    case "matched_existing":
+      // Nothing was created: the receipt was attached to a transaction that was
+      // ALREADY in QuickBooks. Same audit action with a matched flag so the
+      // activity feed tells the two apart.
+      try {
+        if (r.firmId) {
+          await logUserActivity(r.firmId, r.engagementId, "post_qbo_draft", {
+            file_id: fileId,
+            qbo_id: r.postedQboId,
+            matched_existing: true,
+          });
+        }
+      } catch (err) {
+        console.error("[qbo post route] audit log failed (match applied):", err);
+      }
+      return NextResponse.json({
+        ok: true,
+        matched: true,
+        postedQboId: r.postedQboId,
+      });
+    case "needs_match_confirmation":
+      // Nothing was written — the accountant must choose. 409 (not an error
+      // state, but not a success either) with the candidates for the dialog.
+      return NextResponse.json(
+        {
+          error: "needs_match_confirmation",
+          candidates: (r.matchCandidates ?? []).map((c) => ({
+            qboId: c.qboId,
+            entity: c.entity,
+            txnDate: c.txnDate,
+            totalAmt: c.totalAmt,
+            docNumber: c.docNumber,
+            vendorName: c.vendorName,
+            // Sent so a multicurrency candidate shows its code next to the
+            // amount (a USD 100.00 vs the draft's CAD $100.00). null in a
+            // single-currency company.
+            currency: c.currency,
+          })),
+        },
+        { status: 409 },
+      );
     case "already_posted":
       return NextResponse.json({
         ok: true,

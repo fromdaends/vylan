@@ -874,6 +874,7 @@ async function ItemRow({
                           postError={d.postError}
                           postedTaxNote={d.postedTaxNote}
                           receiptAttachedAt={d.receiptAttachedAt}
+                          matchedQboType={d.matchedQboType}
                         />
                       );
                     })()
