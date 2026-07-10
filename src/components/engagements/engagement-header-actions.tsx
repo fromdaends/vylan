@@ -94,11 +94,13 @@ export function EngagementMoreMenu({
   const openActivity = () => {
     // Defer so the dropdown fully closes (releasing its focus trap) before the
     // Assistant panel takes focus. The panel (mounted in the app layout)
-    // listens for this event and opens on its Activity tab.
+    // listens for this event and opens on its Activity tab; scopeToPage makes
+    // it rescope to THIS engagement even if the panel is already open on
+    // another one.
     window.setTimeout(() => {
       window.dispatchEvent(
         new CustomEvent("vylan:assistant:open", {
-          detail: { tab: "activity" },
+          detail: { tab: "activity", scopeToPage: true },
         }),
       );
     }, 0);

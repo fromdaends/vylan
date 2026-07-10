@@ -18,9 +18,11 @@ export function OpenAssistantActivityButton() {
       aria-label={t("title")}
       title={t("title")}
       onClick={() => {
+        // scopeToPage: this control means "THIS engagement's activity", so
+        // the panel must rescope to the current page even if already open.
         window.dispatchEvent(
           new CustomEvent("vylan:assistant:open", {
-            detail: { tab: "activity" },
+            detail: { tab: "activity", scopeToPage: true },
           }),
         );
       }}

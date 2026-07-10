@@ -7,6 +7,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { useTranslations } from "next-intl";
 import { usePathname } from "next/navigation";
@@ -28,6 +29,11 @@ import {
   submitFeedbackAction,
   type FeedbackState,
 } from "@/app/actions/feedback";
+import {
+  getAssistantServerSnapshot,
+  getAssistantState,
+  subscribeAssistant,
+} from "@/components/assistant/assistant-store";
 
 // The Assistant panel's Chat tab. Phase 1 ports the existing "Ask Vylan"
 // product-help chat (POST /api/assistant, streamed plain text) unchanged so
@@ -54,6 +60,21 @@ export function ChatTab({
   userDisplayName: string;
 }) {
   const [view, setView] = useState<View>("chat");
+  const { open } = useSyncExternalStore(
+    subscribeAssistant,
+    getAssistantState,
+    getAssistantServerSnapshot,
+  );
+
+  // Every (re)open lands on the chat view — the old sheet reset to chat on
+  // the Help-menu open event, and a panel reopening straight onto the
+  // feedback form reads as broken. Scheduled in a frame callback so the
+  // effect body stays free of synchronous state writes.
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => setView("chat"));
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
 
   return (
     <AnimatePresence mode="wait" initial={false}>
@@ -110,8 +131,21 @@ function ChatView({
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const { open } = useSyncExternalStore(
+    subscribeAssistant,
+    getAssistantState,
+    getAssistantServerSnapshot,
+  );
 
   const isEmpty = messages.length === 0;
+
+  // The old Sheet unmounted this view on close, killing any in-flight
+  // stream via the unmount cleanup. The panel keeps the tab mounted, so
+  // stop the stream explicitly when the panel closes — no point paying for
+  // tokens nobody is reading. Whatever already streamed in stays visible.
+  useEffect(() => {
+    if (!open) abortRef.current?.abort();
+  }, [open]);
 
   // Auto-scroll to bottom on new content. useLayoutEffect so the scroll
   // happens in the same paint as the layout update — no flicker.
@@ -225,6 +259,16 @@ function ChatView({
         if ((e as Error).name !== "AbortError") {
           setError(t("ai_error"));
           setMessages((prev) => prev.slice(0, -1));
+        } else {
+          // Aborted (panel closed / reset) before any text arrived: drop the
+          // still-empty placeholder so a blank assistant bubble doesn't
+          // linger in the kept-mounted history.
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            return last && last.role === "assistant" && last.content === ""
+              ? prev.slice(0, -1)
+              : prev;
+          });
         }
       } finally {
         setStreaming(false);

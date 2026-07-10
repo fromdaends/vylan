@@ -18,6 +18,7 @@ import {
   getAssistantServerSnapshot,
   getAssistantState,
   openAssistant,
+  openAssistantOnPageEngagement,
   setAssistantTab,
   setSelectedEngagement,
   subscribeAssistant,
@@ -29,6 +30,8 @@ import {
   defaultPanelWidth,
   isFreshEngagement,
   markEngagementSeen,
+  PANEL_MAX_FRACTION,
+  PANEL_MIN_WIDTH_PX,
   readSeenEngagements,
   readStoredPanelWidth,
   storePanelWidth,
@@ -65,6 +68,8 @@ export function AssistantPanel({
   );
 
   const panelRef = useRef<HTMLElement | null>(null);
+  const fabRef = useRef<HTMLButtonElement | null>(null);
+  const wasOpenRef = useRef(false);
 
   // -------------------------------------------------------------------------
   // FAB badge — a quiet dot inviting the accountant in on a fresh engagement
@@ -90,13 +95,19 @@ export function AssistantPanel({
   }, [pageEngagement, open, userId]);
 
   // On open: focus the panel (so Esc + keyboard flow land here) and mark the
-  // page's engagement as seen (clears the invitation badge for good). Both
-  // are external-system writes, which is what effects are for.
+  // page's engagement as seen (clears the invitation badge for good). On
+  // close: hand focus back to the FAB, matching what the old Radix Sheet did
+  // by restoring focus to its trigger — otherwise keyboard focus drops to
+  // <body>. All external-system writes, which is what effects are for.
   useEffect(() => {
-    if (!open) return;
-    panelRef.current?.focus();
-    const pe = getAssistantState().pageEngagement;
-    if (pe) markEngagementSeen(userId, pe.id);
+    if (open) {
+      panelRef.current?.focus();
+      const pe = getAssistantState().pageEngagement;
+      if (pe) markEngagementSeen(userId, pe.id);
+    } else if (wasOpenRef.current) {
+      fabRef.current?.focus();
+    }
+    wasOpenRef.current = open;
   }, [open, userId]);
 
   // -------------------------------------------------------------------------
@@ -110,9 +121,16 @@ export function AssistantPanel({
     }
     function onOpenAssistant(e: Event) {
       const detail = (e as CustomEvent).detail as
-        | { tab?: AssistantTab }
+        | { tab?: AssistantTab; scopeToPage?: boolean }
         | undefined;
-      openAssistant(detail?.tab ?? "chat");
+      // scopeToPage (the engagement page's Activity triggers): rescope to the
+      // current page's engagement even when the panel is already open —
+      // the user explicitly asked for THIS engagement.
+      if (detail?.scopeToPage) {
+        openAssistantOnPageEngagement(detail?.tab ?? "chat");
+      } else {
+        openAssistant(detail?.tab ?? "chat");
+      }
     }
     window.addEventListener("vylan:open-help", onOpenHelp);
     window.addEventListener("vylan:assistant:open", onOpenAssistant);
@@ -128,6 +146,9 @@ export function AssistantPanel({
   // behavior only — below the sm breakpoint the panel is full-width via CSS.
   // -------------------------------------------------------------------------
   const [width, setWidth] = useState<number | null>(null);
+  // Viewport width mirror — only used to expose the separator's dynamic
+  // aria-valuemax; updated alongside width.
+  const [viewportW, setViewportW] = useState<number | null>(null);
   const widthRef = useRef<number | null>(null);
   const [dragging, setDragging] = useState(false);
   const draggingRef = useRef(false);
@@ -144,6 +165,7 @@ export function AssistantPanel({
     const frame = requestAnimationFrame(() => {
       const vw = window.innerWidth;
       const stored = readStoredPanelWidth(userId);
+      setViewportW(vw);
       applyWidth(
         stored != null ? clampPanelWidth(stored, vw) : defaultPanelWidth(vw),
       );
@@ -154,6 +176,7 @@ export function AssistantPanel({
   // Keep the width within bounds when the window resizes.
   useEffect(() => {
     function onResize() {
+      setViewportW(window.innerWidth);
       const current = widthRef.current;
       if (current == null) return;
       applyWidth(clampPanelWidth(current, window.innerWidth));
@@ -244,13 +267,20 @@ export function AssistantPanel({
       {/* Floating "Ask Vylan" button — hidden while the panel is open. */}
       {!open && (
         <motion.button
+          ref={fabRef}
           type="button"
           whileHover={{ scale: 1.04, y: -1 }}
           whileTap={{ scale: 0.97 }}
           transition={{ type: "spring", stiffness: 400, damping: 28 }}
           onClick={() => openAssistant()}
           className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 right-4 sm:right-6 z-50 group inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-[0_10px_30px_-10px_rgba(0,0,0,0.45)] ring-1 ring-black/5 dark:ring-white/5 hover:shadow-[0_16px_40px_-12px_rgba(0,0,0,0.5)] transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label={tHelp("open_help")}
+          // aria-label supersedes name-from-contents, so the badge has to be
+          // folded in here for screen readers to hear the invitation.
+          aria-label={
+            badge
+              ? `${tHelp("open_help")} (${t("new_engagement_badge")})`
+              : tHelp("open_help")
+          }
         >
           <span className="relative inline-flex items-center justify-center">
             <span
@@ -263,8 +293,7 @@ export function AssistantPanel({
           {badge && (
             <span
               className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full bg-accent ring-2 ring-background"
-              role="status"
-              aria-label={t("new_engagement_badge")}
+              aria-hidden
             />
           )}
         </motion.button>
@@ -283,7 +312,11 @@ export function AssistantPanel({
         aria-label={t("panel_title")}
         tabIndex={-1}
         onKeyDown={(e) => {
-          if (e.key === "Escape") closeAssistant();
+          // defaultPrevented guard: a Radix layer inside the panel (the
+          // engagement-selector popover, a dropdown…) handles its own Escape
+          // and preventDefault()s it — that press must dismiss only that
+          // layer, not the whole panel.
+          if (e.key === "Escape" && !e.defaultPrevented) closeAssistant();
         }}
         style={
           {
@@ -306,6 +339,17 @@ export function AssistantPanel({
           role="separator"
           aria-orientation="vertical"
           aria-label={t("resize_handle")}
+          // A focusable separator is an ARIA window splitter and must expose
+          // its position (axe aria-required-attr).
+          aria-valuenow={width ?? undefined}
+          aria-valuemin={PANEL_MIN_WIDTH_PX}
+          aria-valuemax={
+            viewportW != null
+              ? Math.round(
+                  Math.max(PANEL_MIN_WIDTH_PX, viewportW * PANEL_MAX_FRACTION),
+                )
+              : undefined
+          }
           title={t("resize_hint")}
           tabIndex={0}
           onPointerDown={onHandlePointerDown}

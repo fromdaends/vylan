@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,11 @@ export function EngagementSelector({
   const [options, setOptions] = useState<EngagementOption[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  // When the list last landed — the panel lives for the whole session, so a
+  // list fetched once would never show engagements created afterwards.
+  // Reopening the picker after the TTL quietly refetches (existing options
+  // stay visible during the refresh).
+  const fetchedAtRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,6 +50,7 @@ export function EngagementSelector({
       const res = await fetch("/api/engagement-chat/engagements");
       if (!res.ok) throw new Error(`status ${res.status}`);
       const body = (await res.json()) as { engagements: EngagementOption[] };
+      fetchedAtRef.current = Date.now();
       setOptions(body.engagements);
     } catch {
       setFailed(true);
@@ -53,9 +59,15 @@ export function EngagementSelector({
     }
   }, []);
 
+  const LIST_TTL_MS = 60_000;
+
   const onOpenChange = (next: boolean) => {
     setOpen(next);
-    if (next && options === null && !loading) {
+    if (!next || loading) return;
+    const stale =
+      fetchedAtRef.current == null ||
+      Date.now() - fetchedAtRef.current > LIST_TTL_MS;
+    if (options === null || stale) {
       void load();
     }
   };
@@ -88,12 +100,12 @@ export function EngagementSelector({
         <Command>
           <CommandInput placeholder={t("select_engagement_placeholder")} />
           <CommandList>
-            {loading ? (
+            {loading && options === null ? (
               <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" aria-hidden />
                 {t("loading")}
               </div>
-            ) : failed ? (
+            ) : failed && options === null ? (
               <div className="flex flex-col items-center gap-2 py-6 text-sm text-muted-foreground">
                 <span>{t("activity_error")}</span>
                 <Button

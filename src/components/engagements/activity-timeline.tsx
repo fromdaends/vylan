@@ -57,8 +57,12 @@ export function ActivityTimeline({
           {visible.map((e) => (
             <li key={e.id} className="flex items-start gap-3">
               <span
+                // ring-card, not ring-background: the timeline now renders on
+                // the Assistant panel's bg-card surface, and the old
+                // background-colored halo reads as a dark ring there in dark
+                // mode.
                 className={
-                  "mt-1.5 size-2 rounded-full shrink-0 ring-2 ring-background " +
+                  "mt-1.5 size-2 rounded-full shrink-0 ring-2 ring-card " +
                   actorDot(e.actor_type)
                 }
                 aria-hidden

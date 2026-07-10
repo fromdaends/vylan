@@ -89,6 +89,25 @@ export function openAssistant(tab?: AssistantTab) {
   emit();
 }
 
+// Open scoped to the CURRENT PAGE's engagement, even if the panel is already
+// open on something else. Used by the engagement page's Activity triggers —
+// the user clicked a control that says "this engagement's activity", so the
+// selection must follow, unlike the generic openAssistant() preselect that
+// only fires on a closed → open transition.
+export function openAssistantOnPageEngagement(tab?: AssistantTab) {
+  const pe = state.pageEngagement;
+  const selected = pe
+    ? {
+        id: pe.id,
+        title: pe.title,
+        status: pe.status,
+        clientName: pe.clientName,
+      }
+    : state.selected;
+  state = { ...state, open: true, tab: tab ?? state.tab, selected };
+  emit();
+}
+
 export function closeAssistant() {
   state = { ...state, open: false };
   emit();

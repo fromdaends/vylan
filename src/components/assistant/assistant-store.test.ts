@@ -3,6 +3,7 @@ import {
   closeAssistant,
   getAssistantState,
   openAssistant,
+  openAssistantOnPageEngagement,
   setAssistantTab,
   setPageEngagement,
   setSelectedEngagement,
@@ -91,6 +92,40 @@ describe("assistant store", () => {
     closeAssistant();
     openAssistant();
     expect(getAssistantState().selected?.id).toBe("e1");
+  });
+
+  it("openAssistantOnPageEngagement rescopes to the page even when already open", () => {
+    setPageEngagement({
+      id: "e1",
+      title: "T1 2025",
+      clientName: "Client Inc",
+      status: "sent",
+      createdAt: "2026-07-01T00:00:00Z",
+    });
+    openAssistant();
+    setSelectedEngagement({
+      id: "e2",
+      title: "T2 2025",
+      clientName: null,
+      status: "in_progress",
+    });
+    // The page's Activity button while the panel is open on e2: must land on
+    // e1's activity, not e2's (the old drawer always showed THIS page's feed).
+    openAssistantOnPageEngagement("activity");
+    expect(getAssistantState().open).toBe(true);
+    expect(getAssistantState().tab).toBe("activity");
+    expect(getAssistantState().selected?.id).toBe("e1");
+  });
+
+  it("openAssistantOnPageEngagement without a page engagement keeps the selection", () => {
+    setSelectedEngagement({
+      id: "e5",
+      title: "Books",
+      clientName: null,
+      status: "sent",
+    });
+    openAssistantOnPageEngagement("activity");
+    expect(getAssistantState().selected?.id).toBe("e5");
   });
 
   it("opening without a page engagement keeps the previous selection", () => {

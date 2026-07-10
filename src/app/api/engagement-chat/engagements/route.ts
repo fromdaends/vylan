@@ -9,6 +9,7 @@
 
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/db/users";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,15 @@ export async function GET() {
   const supabase = await getServerSupabase();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth.user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+  // Deactivated (removed) teammates keep a technically-valid session until
+  // they next render the app layout, which is what force-signs them out. The
+  // panel polls these routes from the client without ever re-running the
+  // layout, so the routes must enforce the deactivation flag themselves or
+  // an ex-member's open tab would keep receiving firm data indefinitely.
+  const dbUser = await getCurrentUser();
+  if (!dbUser || dbUser.deactivated_at) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

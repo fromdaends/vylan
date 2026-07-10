@@ -47,6 +47,11 @@ export function ActivityTab({
   // The engagement id whose initial load failed — clears on retry/switch.
   const [failedFor, setFailedFor] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Mirrors the engagementId prop so a late response for a previously
+  // selected engagement can be dropped instead of clobbering the current one
+  // (rapid A → B → A switches: B's in-flight response must not evict A's
+  // already-rendered feed).
+  const currentIdRef = useRef<string | null>(engagementId);
 
   const isLoaded = loaded !== null && loaded.engagementId === engagementId;
   const failed = failedFor !== null && failedFor === engagementId;
@@ -62,15 +67,27 @@ export function ActivityTab({
       );
       if (!res.ok) throw new Error(`status ${res.status}`);
       const body = (await res.json()) as ActivityPayload;
+      // Selection moved on while this request was in flight — drop it.
+      if (currentIdRef.current !== id) return;
       setLoaded({ engagementId: id, payload: body });
       setFailedFor(null);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       // A failed quiet refresh keeps showing the last good feed; only a
       // failed initial load surfaces the error state.
-      if (!silent) setFailedFor(id);
+      if (!silent && currentIdRef.current === id) setFailedFor(id);
     }
   }, []);
+
+  // Track the current selection and cancel whatever was in flight for the
+  // previous one. Runs BEFORE the load effect below (declaration order), so
+  // a fresh fetch for the new engagement is never the one aborted.
+  useEffect(() => {
+    currentIdRef.current = engagementId;
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [engagementId]);
 
   // Initial load + reload on engagement switch. State writes land in the
   // fetch continuation inside load(), never synchronously — the disable
@@ -90,11 +107,6 @@ export function ActivityTab({
     }, REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [active, engagementId, isLoaded, load]);
-
-  // Abort any in-flight fetch on unmount.
-  useEffect(() => {
-    return () => abortRef.current?.abort();
-  }, []);
 
   if (!engagementId) {
     return (
