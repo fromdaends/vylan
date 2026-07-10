@@ -653,9 +653,14 @@ export async function listFirmPostedQboIds(
       .not("posted_qbo_id", "is", null);
   let data: Array<{ posted_qbo_id: string | null }> | null = null;
   let error: { code?: string; message?: string } | null = null;
-  if (realmId) {
+  // QuickBooks realm ids are numeric strings; require that shape before
+  // interpolating into the PostgREST .or() filter (defense-in-depth — realmId
+  // comes from our own connection row, not user input). Anything unexpected
+  // falls back to the safe firm-wide read rather than a malformed filter.
+  const safeRealm = realmId && /^\d+$/.test(realmId) ? realmId : null;
+  if (safeRealm) {
     ({ data, error } = await baseQuery().or(
-      `posted_realm_id.eq.${realmId},posted_realm_id.is.null`,
+      `posted_realm_id.eq.${safeRealm},posted_realm_id.is.null`,
     ));
     // pre-0520: the column doesn't exist — retry firm-wide (prior behavior).
     if (error && isMissingSchema(error)) {
