@@ -7,18 +7,11 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { useTranslations } from "next-intl";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -31,21 +24,26 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
-  X,
 } from "lucide-react";
 import {
   submitFeedbackAction,
   type FeedbackState,
 } from "@/app/actions/feedback";
+import {
+  getAssistantServerSnapshot,
+  getAssistantState,
+  subscribeAssistant,
+} from "@/components/assistant/assistant-store";
+
+// The Assistant panel's Chat tab. Phase 1 ports the existing "Ask Vylan"
+// product-help chat (POST /api/assistant, streamed plain text) unchanged so
+// nothing regresses while the panel shell ships; Phase 2 swaps the backend to
+// the engagement-scoped chat endpoint. Strings stay in the `Help` namespace
+// for the same reason — they already exist in both languages.
 
 // Order matches Help.ai_suggested_1..4. The icon for each suggestion is
 // chosen to telegraph what kind of help the user is about to get.
 const SUGGESTION_ICONS = [Send, ShieldCheck, Lock, Download] as const;
-
-type Props = {
-  locale: "en" | "fr";
-  userDisplayName: string;
-};
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -54,79 +52,60 @@ type ChatMessage = {
 
 type View = "chat" | "feedback";
 
-export function HelpSidebar({ locale, userDisplayName }: Props) {
-  const t = useTranslations("Help");
-  const [open, setOpen] = useState(false);
+export function ChatTab({
+  locale,
+  userDisplayName,
+}: {
+  locale: "en" | "fr";
+  userDisplayName: string;
+}) {
   const [view, setView] = useState<View>("chat");
+  const { open } = useSyncExternalStore(
+    subscribeAssistant,
+    getAssistantState,
+    getAssistantServerSnapshot,
+  );
 
-  // The profile dropdown's "Help" menu item dispatches this event so
-  // we can open the sheet without lifting state to a shared context.
+  // Every (re)open lands on the chat view — the old sheet reset to chat on
+  // the Help-menu open event, and a panel reopening straight onto the
+  // feedback form reads as broken. Scheduled in a frame callback so the
+  // effect body stays free of synchronous state writes.
   useEffect(() => {
-    function onOpen() {
-      setOpen(true);
-      setView("chat");
-    }
-    window.addEventListener("vylan:open-help", onOpen);
-    return () => window.removeEventListener("vylan:open-help", onOpen);
-  }, []);
+    if (!open) return;
+    const frame = requestAnimationFrame(() => setView("chat"));
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <motion.button
-          type="button"
-          whileHover={{ scale: 1.04, y: -1 }}
-          whileTap={{ scale: 0.97 }}
-          transition={{ type: "spring", stiffness: 400, damping: 28 }}
-          className="fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6 right-4 sm:right-6 z-50 group inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-[0_10px_30px_-10px_rgba(0,0,0,0.45)] ring-1 ring-black/5 dark:ring-white/5 hover:shadow-[0_16px_40px_-12px_rgba(0,0,0,0.5)] transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-          aria-label={t("open_help")}
+    <AnimatePresence mode="wait" initial={false}>
+      {view === "chat" ? (
+        <motion.div
+          key="chat"
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -8 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="flex flex-col h-full min-h-0"
         >
-          <span className="relative inline-flex items-center justify-center">
-            <span
-              aria-hidden
-              className="absolute inset-0 -m-1 rounded-full bg-accent/40 blur-md opacity-0 group-hover:opacity-100 transition-opacity"
-            />
-            <Sparkles className="relative size-4" aria-hidden />
-          </span>
-          <span>{t("ai_button")}</span>
-        </motion.button>
-      </SheetTrigger>
-      <SheetContent
-        side="right"
-        showCloseButton={false}
-        className="w-full sm:max-w-lg flex flex-col p-0 gap-0 border-l border-border/60"
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          {view === "chat" ? (
-            <motion.div
-              key="chat"
-              initial={{ opacity: 0, x: 8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -8 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="flex flex-col h-full"
-            >
-              <ChatView
-                locale={locale}
-                userDisplayName={userDisplayName}
-                onSwitchToFeedback={() => setView("feedback")}
-              />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="feedback"
-              initial={{ opacity: 0, x: 8 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -8 }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
-              className="flex flex-col h-full"
-            >
-              <FeedbackView onBack={() => setView("chat")} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </SheetContent>
-    </Sheet>
+          <ChatView
+            locale={locale}
+            userDisplayName={userDisplayName}
+            onSwitchToFeedback={() => setView("feedback")}
+          />
+        </motion.div>
+      ) : (
+        <motion.div
+          key="feedback"
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -8 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="flex flex-col h-full min-h-0"
+        >
+          <FeedbackView onBack={() => setView("chat")} />
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -144,7 +123,6 @@ function ChatView({
   onSwitchToFeedback: () => void;
 }) {
   const t = useTranslations("Help");
-  const tc = useTranslations("Common");
   const pathname = usePathname();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -153,8 +131,21 @@ function ChatView({
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
+  const { open } = useSyncExternalStore(
+    subscribeAssistant,
+    getAssistantState,
+    getAssistantServerSnapshot,
+  );
 
   const isEmpty = messages.length === 0;
+
+  // The old Sheet unmounted this view on close, killing any in-flight
+  // stream via the unmount cleanup. The panel keeps the tab mounted, so
+  // stop the stream explicitly when the panel closes — no point paying for
+  // tokens nobody is reading. Whatever already streamed in stays visible.
+  useEffect(() => {
+    if (!open) abortRef.current?.abort();
+  }, [open]);
 
   // Auto-scroll to bottom on new content. useLayoutEffect so the scroll
   // happens in the same paint as the layout update — no flicker.
@@ -164,8 +155,7 @@ function ChatView({
     el.scrollTop = el.scrollHeight;
   }, [messages, streaming]);
 
-  // Cleanup any in-flight stream if the sheet closes / component
-  // unmounts.
+  // Cleanup any in-flight stream if the panel closes / component unmounts.
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
@@ -269,6 +259,16 @@ function ChatView({
         if ((e as Error).name !== "AbortError") {
           setError(t("ai_error"));
           setMessages((prev) => prev.slice(0, -1));
+        } else {
+          // Aborted (panel closed / reset) before any text arrived: drop the
+          // still-empty placeholder so a blank assistant bubble doesn't
+          // linger in the kept-mounted history.
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            return last && last.role === "assistant" && last.content === ""
+              ? prev.slice(0, -1)
+              : prev;
+          });
         }
       } finally {
         setStreaming(false);
@@ -295,61 +295,8 @@ function ChatView({
 
   return (
     <>
-      {/* Header */}
-      <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border/40 bg-gradient-to-b from-accent/[0.03] to-transparent">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="relative shrink-0">
-            <div className="size-9 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center ring-1 ring-accent/20">
-              <Sparkles className="size-4 text-accent" aria-hidden />
-            </div>
-          </div>
-          <div className="min-w-0">
-            <SheetTitle className="text-[15px] font-semibold leading-tight tracking-tight">
-              {t("ai_title")}
-            </SheetTitle>
-            <SheetDescription className="text-xs text-muted-foreground leading-tight mt-0.5">
-              {t("ai_subtitle")}
-            </SheetDescription>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <AnimatePresence>
-            {!isEmpty && (
-              <motion.button
-                key="reset"
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.15 }}
-                whileHover={{ rotate: -90 }}
-                whileTap={{ scale: 0.9 }}
-                type="button"
-                onClick={reset}
-                className="inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-                aria-label={t("ai_reset")}
-                title={t("ai_reset")}
-              >
-                <RefreshCw className="size-4" aria-hidden />
-              </motion.button>
-            )}
-          </AnimatePresence>
-          <SheetClose asChild>
-            <button
-              type="button"
-              className="inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-              aria-label={tc("close")}
-            >
-              <X className="size-4" aria-hidden />
-            </button>
-          </SheetClose>
-        </div>
-      </header>
-
       {/* Body */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto overscroll-contain"
-      >
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain">
         {isEmpty ? (
           <EmptyState
             displayName={userDisplayName}
@@ -402,7 +349,7 @@ function ChatView({
       </div>
 
       {/* Input */}
-      <div className="border-t border-border/40 px-4 pt-3 pb-4 bg-background/95 backdrop-blur-sm">
+      <div className="border-t border-border/40 px-4 pt-3 pb-4">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -443,13 +390,27 @@ function ChatView({
           <span className="hidden sm:inline tabular-nums">
             {t("ai_kbd_hint")}
           </span>
-          <button
-            type="button"
-            onClick={onSwitchToFeedback}
-            className="ml-auto hover:text-foreground transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-          >
-            {t("ai_send_feedback_compact")}
-          </button>
+          <div className="ml-auto flex items-center gap-3">
+            {!isEmpty && (
+              <button
+                type="button"
+                onClick={reset}
+                className="inline-flex items-center gap-1 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                aria-label={t("ai_reset")}
+                title={t("ai_reset")}
+              >
+                <RefreshCw className="size-3" aria-hidden />
+                {t("ai_reset")}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onSwitchToFeedback}
+              className="hover:text-foreground transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            >
+              {t("ai_send_feedback_compact")}
+            </button>
+          </div>
         </div>
       </div>
     </>
@@ -528,7 +489,7 @@ function EmptyState({
               transition={{ type: "spring", stiffness: 400, damping: 30 }}
               type="button"
               onClick={() => onPick(q)}
-              className="group flex items-center gap-3 text-left text-sm rounded-2xl border border-border/50 bg-card hover:border-border/80 hover:bg-secondary/40 px-3.5 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group flex items-center gap-3 text-left text-sm rounded-2xl border border-border/50 bg-background/60 hover:border-border/80 hover:bg-secondary/40 px-3.5 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="shrink-0 size-8 rounded-xl bg-secondary/70 group-hover:bg-accent/10 flex items-center justify-center transition-colors">
                 <Icon
@@ -705,9 +666,8 @@ function firstName(label: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Feedback view (preserved from the prior Help sidebar so we don't
-// lose the surface — just demoted to a secondary view reachable from
-// the chat footer link).
+// Feedback view (preserved from the old Help sidebar — reachable from the
+// chat footer link, exactly as before).
 // ---------------------------------------------------------------------------
 
 function FeedbackView({ onBack }: { onBack: () => void }) {
@@ -726,36 +686,25 @@ function FeedbackView({ onBack }: { onBack: () => void }) {
 
   return (
     <>
-      <header className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border/40">
-        <div className="flex items-center gap-3 min-w-0">
-          <motion.button
-            type="button"
-            whileHover={{ x: -2 }}
-            whileTap={{ scale: 0.9 }}
-            onClick={onBack}
-            className="shrink-0 inline-flex items-center justify-center rounded-full size-8 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-            aria-label={t("ai_back_to_chat")}
-          >
-            <ArrowLeft className="size-4" aria-hidden />
-          </motion.button>
-          <div className="min-w-0">
-            <SheetTitle className="text-[15px] font-semibold leading-tight tracking-tight">
-              {t("feedback_title")}
-            </SheetTitle>
-            <SheetDescription className="text-xs text-muted-foreground leading-tight mt-0.5">
-              {t("feedback_subtitle")}
-            </SheetDescription>
-          </div>
+      <header className="flex items-center gap-3 px-5 py-4 border-b border-border/40">
+        <motion.button
+          type="button"
+          whileHover={{ x: -2 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={onBack}
+          className="shrink-0 inline-flex items-center justify-center rounded-full size-8 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+          aria-label={t("ai_back_to_chat")}
+        >
+          <ArrowLeft className="size-4" aria-hidden />
+        </motion.button>
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold leading-tight tracking-tight">
+            {t("feedback_title")}
+          </h2>
+          <p className="text-xs text-muted-foreground leading-tight mt-0.5">
+            {t("feedback_subtitle")}
+          </p>
         </div>
-        <SheetClose asChild>
-          <button
-            type="button"
-            className="shrink-0 inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-            aria-label={tc("close")}
-          >
-            <X className="size-4" aria-hidden />
-          </button>
-        </SheetClose>
       </header>
 
       <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5">

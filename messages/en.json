@@ -2091,5 +2091,20 @@
     "unlink_failed": "Couldn't unlink. Try again.",
     "post_all_needs_review": "{count, plural, one {# draft looks} other {# drafts look}} like they may already be in QuickBooks, so they weren't posted. Open each card to attach or post it.",
     "post_all_needs_review_close": "OK"
+  },
+  "Assistant": {
+    "panel_title": "Vylan Assistant",
+    "tab_chat": "Chat",
+    "tab_activity": "Activity",
+    "select_engagement": "Choose an engagement",
+    "select_engagement_placeholder": "Search engagements…",
+    "no_engagements": "No engagements found.",
+    "loading": "Loading…",
+    "no_engagement_selected": "Choose an engagement above to see its activity.",
+    "activity_error": "This couldn't load. Check your connection and try again.",
+    "retry": "Retry",
+    "resize_handle": "Resize panel",
+    "resize_hint": "Drag to resize. Double-click to reset.",
+    "new_engagement_badge": "New engagement"
   }
 }

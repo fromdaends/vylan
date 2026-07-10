@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Bell,
@@ -24,7 +24,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import {
   Dialog,
   DialogClose,
@@ -44,7 +43,8 @@ import {
 // row calm: only the primary/secondary buttons (Mark complete / Send reminder /
 // Reopen) and a subtle payment status pill stay visible; everything occasional
 // lives here:
-//   * Activity (the slide-out feed — owned by this menu now, opened by an item)
+//   * Activity (opens the Assistant panel's Activity tab — the panel absorbed
+//     the old slide-out feed)
 //   * Copy client link / Copy payment link
 //   * Pause/Resume reminders, Download all, Cancel, Delete
 // Drafts never get this menu (they keep their inline buttons + a standalone
@@ -59,7 +59,6 @@ export function EngagementMoreMenu({
   canDelete,
   clientLinkToken,
   paymentLinkUrl,
-  activity,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -71,14 +70,10 @@ export function EngagementMoreMenu({
   clientLinkToken?: string;
   // Present when a payment has been requested: enables "Copy payment link".
   paymentLinkUrl?: string;
-  // The Activity feed (ActivityTimeline), rendered inside the slide-out the
-  // "Activity" item opens.
-  activity: ReactNode;
 }) {
   const t = useTranslations("Engagements");
   const tActivity = useTranslations("Activity");
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [activityOpen, setActivityOpen] = useState(false);
   const [copied, setCopied] = useState<null | "client" | "payment">(null);
 
   const copy = async (which: "client" | "payment", url: string) => {
@@ -98,8 +93,17 @@ export function EngagementMoreMenu({
 
   const openActivity = () => {
     // Defer so the dropdown fully closes (releasing its focus trap) before the
-    // Sheet grabs focus — avoids a fight between the two Radix portals.
-    window.setTimeout(() => setActivityOpen(true), 0);
+    // Assistant panel takes focus. The panel (mounted in the app layout)
+    // listens for this event and opens on its Activity tab; scopeToPage makes
+    // it rescope to THIS engagement even if the panel is already open on
+    // another one.
+    window.setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("vylan:assistant:open", {
+          detail: { tab: "activity", scopeToPage: true },
+        }),
+      );
+    }, 0);
   };
 
   const togglePause = () => {
@@ -209,21 +213,6 @@ export function EngagementMoreMenu({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* Activity slide-out, opened by the Activity menu item. Same Sheet the
-          standalone ActivityDrawer uses (drafts still render that one). */}
-      <Sheet open={activityOpen} onOpenChange={setActivityOpen}>
-        <SheetContent
-          side="right"
-          aria-describedby={undefined}
-          className="w-full gap-0 border-l border-border/60 sm:max-w-md"
-        >
-          <SheetTitle className="sr-only">{tActivity("title")}</SheetTitle>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {activity}
-          </div>
-        </SheetContent>
-      </Sheet>
 
       {/* Delete confirmation — controlled, opened by the Delete menu item.
           Confirm submits the server action via a real form so its

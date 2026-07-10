@@ -8,7 +8,6 @@ import {
   signedDownloadUrls,
   type UploadedFile,
 } from "@/lib/db/uploaded-files";
-import { listActivityForEngagement } from "@/lib/db/activity";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -53,8 +52,8 @@ import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ReopenFileButton } from "@/components/engagements/reopen-file-button";
-import { ActivityTimeline } from "@/components/engagements/activity-timeline";
-import { ActivityDrawer } from "@/components/engagements/activity-drawer";
+import { AssistantEngagementBridge } from "@/components/assistant/engagement-panel-bridge";
+import { OpenAssistantActivityButton } from "@/components/assistant/open-assistant-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
@@ -114,12 +113,14 @@ export default async function EngagementDetailPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  // Items / uploads / activity all key off the URL `id` (= engagement.id), so
-  // they don't need to wait for getEngagement — run the whole lot in ONE
-  // parallel batch. The uploads branch also batch-signs every download URL in a
-  // single storage round-trip (was N separate calls, the biggest chunk of this
-  // page's load). Only the client lookup (needs engagement.client_id) waits.
-  const [engagement, items, uploadData, activity, firm, user, firmUsers] =
+  // Items / uploads all key off the URL `id` (= engagement.id), so they don't
+  // need to wait for getEngagement — run the whole lot in ONE parallel batch.
+  // The uploads branch also batch-signs every download URL in a single storage
+  // round-trip (was N separate calls, the biggest chunk of this page's load).
+  // Only the client lookup (needs engagement.client_id) waits. The Activity
+  // feed no longer loads here — it lives in the Assistant panel's Activity
+  // tab, which fetches it on demand via /api/engagement-chat/activity.
+  const [engagement, items, uploadData, firm, user, firmUsers] =
     await Promise.all([
       getEngagement(id),
       listRequestItems(id),
@@ -131,7 +132,6 @@ export default async function EngagementDetailPage({
         );
         return { uploads, urlByPath };
       })(),
-      listActivityForEngagement(id),
       getCurrentFirm(),
       getCurrentUser(),
       listFirmUsers(),
@@ -326,23 +326,20 @@ export default async function EngagementDetailPage({
   const isDraft = engagement.status === "draft";
   const isComplete = engagement.status === "complete";
 
-  // The Activity feed, rendered once and shown either inside the 3-dots menu's
-  // slide-out (non-drafts) or the standalone Activity icon (drafts).
-  const activityFeed = (
-    <ActivityTimeline
-      entries={activity}
-      locale={locale}
-      filenamesByFileId={
-        new Map(uploads.map((u) => [u.id, u.original_filename]))
-      }
-      rejectionReasonsByItemId={
-        new Map(items.map((i) => [i.id, i.rejection_reason ?? null]))
-      }
-    />
-  );
-
   return (
     <div className="space-y-6">
+      {/* Publishes this engagement to the Assistant panel (mounted in the app
+          layout) so the panel preselects it and can badge its button on fresh
+          engagements. Renders nothing. */}
+      <AssistantEngagementBridge
+        engagement={{
+          id: engagement.id,
+          title: engagement.title,
+          clientName: client?.display_name ?? null,
+          status: engagement.status,
+          createdAt: engagement.created_at,
+        }}
+      />
       {/* Auto-refresh while the engagement is still active. Picks up new
           client uploads + AI verdicts + activity-log entries without
           requiring the accountant to hit reload. Skipped for draft /
@@ -530,9 +527,11 @@ export default async function EngagementDetailPage({
               )}
             </>
           )}
-          {/* Activity: drafts keep a standalone slide-out icon; every other
-              state opens it from the "..." menu, so the row stays calm. */}
-          {isDraft && <ActivityDrawer>{activityFeed}</ActivityDrawer>}
+          {/* Activity: drafts keep a standalone icon; every other state opens
+              it from the "..." menu, so the row stays calm. Both now open the
+              Assistant panel's Activity tab (the panel absorbed the old
+              slide-out feed). */}
+          {isDraft && <OpenAssistantActivityButton />}
           {/* The "..." menu holds the occasional actions — Activity, Copy client
               / payment link, Pause/Resume reminders, Download all, Cancel,
               Delete — so only primary buttons + the payment pill stay in the
@@ -554,7 +553,6 @@ export default async function EngagementDetailPage({
                   ? (portalUrl ?? undefined)
                   : undefined
               }
-              activity={activityFeed}
             />
           )}
         </div>
@@ -573,8 +571,8 @@ export default async function EngagementDetailPage({
 
       {/* Checklist + Signatures share one tab switch (Checklist is the default)
           so the page shows one section at a time instead of stacking both. Each
-          tab keeps its own controls. The Activity feed opens from the header
-          slide-out. */}
+          tab keeps its own controls. The Activity feed lives in the Assistant
+          panel's Activity tab, opened from the header. */}
       <EngagementTabs
         checklistCount={collectionItems.length}
         signaturesCount={signatureItems.length}

@@ -8,7 +8,7 @@ import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { getTranslations } from "next-intl/server";
-import { HelpSidebar } from "@/components/help/help-sidebar";
+import { AssistantPanel } from "@/components/assistant/assistant-panel";
 import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 import { AppShell } from "@/components/app/app-shell";
 import { TrialBanner } from "@/components/app/demo-banner";
@@ -151,9 +151,10 @@ export default async function AppLayout({
       }}
     >
       {children}
-      <HelpSidebar
+      <AssistantPanel
         locale={locale === "fr" ? "fr" : "en"}
         userDisplayName={userDisplayLabel(dbUser)}
+        userId={dbUser.id}
       />
       <KeyboardShortcuts />
       <Toaster />
