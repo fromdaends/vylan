@@ -10,8 +10,20 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
-import { Sparkles, X } from "lucide-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Check,
+  History,
+  MessageSquare,
+  MoreHorizontal,
+  Sparkles,
+  X,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/cn";
 import {
   closeAssistant,
@@ -371,18 +383,38 @@ export function AssistantPanel({
           />
         </div>
 
-        {/* Header: brand chip + engagement selector + close. */}
-        <header className="flex items-center gap-2.5 px-4 py-3 border-b border-border/40 bg-gradient-to-b from-accent/[0.03] to-transparent">
-          <div
-            aria-hidden
-            className="shrink-0 size-8 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center ring-1 ring-accent/20"
-          >
-            <Sparkles className="size-4 text-accent" aria-hidden />
-          </div>
+        {/* Header: engagement selector (subtle) + view menu + close. No brand
+            chip, no divider line — kept minimal so the panel reads clean. */}
+        <header className="flex items-center gap-1 px-3 py-2.5">
           <EngagementSelector
             value={selected}
             onChange={setSelectedEngagement}
           />
+          {/* Chat / Activity live behind a kebab menu instead of a tab bar,
+              so the header stays quiet. The active view carries a check. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="shrink-0 inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+                aria-label={t("switch_view")}
+              >
+                <MoreHorizontal className="size-4" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem onSelect={() => setAssistantTab("chat")}>
+                <MessageSquare />
+                {t("tab_chat")}
+                {tab === "chat" && <Check className="ml-auto size-4" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setAssistantTab("activity")}>
+                <History />
+                {t("tab_activity")}
+                {tab === "activity" && <Check className="ml-auto size-4" />}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <button
             type="button"
             onClick={closeAssistant}
@@ -393,38 +425,31 @@ export function AssistantPanel({
           </button>
         </header>
 
-        {/* Tabs: Chat | Activity. Both contents stay mounted (forceMount) so
-            chat history and the activity feed survive tab switches. */}
-        <Tabs
-          value={tab}
-          onValueChange={(v) => setAssistantTab(v as AssistantTab)}
-          className="flex-1 min-h-0 flex flex-col gap-0"
-        >
-          <div className="px-4 pt-1.5 pb-[5px] border-b border-border/40">
-            <TabsList variant="line">
-              <TabsTrigger value="chat">{t("tab_chat")}</TabsTrigger>
-              <TabsTrigger value="activity">{t("tab_activity")}</TabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent
-            value="chat"
-            forceMount
-            className="flex-1 min-h-0 flex flex-col data-[state=inactive]:hidden"
+        {/* Chat + Activity both stay mounted (visibility toggled, not
+            unmounted) so chat history and the activity feed survive a view
+            switch — same guarantee the old forceMount tabs gave. */}
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div
+            className={cn(
+              "flex-1 min-h-0 flex flex-col",
+              tab !== "chat" && "hidden",
+            )}
           >
             <ChatTab locale={locale} userDisplayName={userDisplayName} />
-          </TabsContent>
-          <TabsContent
-            value="activity"
-            forceMount
-            className="flex-1 min-h-0 overflow-y-auto overscroll-contain data-[state=inactive]:hidden"
+          </div>
+          <div
+            className={cn(
+              "flex-1 min-h-0 overflow-y-auto overscroll-contain",
+              tab !== "activity" && "hidden",
+            )}
           >
             <ActivityTab
               engagementId={selected?.id ?? null}
               locale={locale}
               active={open && tab === "activity"}
             />
-          </TabsContent>
-        </Tabs>
+          </div>
+        </div>
       </aside>
     </>
   );
