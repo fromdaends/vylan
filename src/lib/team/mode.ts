@@ -17,3 +17,13 @@ export function canLeaveTeam(input: {
   }
   return { ok: true };
 }
+
+// Assignment UI is useful only when there is another active teammate to
+// assign work to. Requiring both the explicit team switch and two active
+// members makes solo accounts robust against stale/incorrect database flags.
+export function hasActiveTeam(input: {
+  teamEnabled: boolean;
+  activeMemberCount: number;
+}): boolean {
+  return input.teamEnabled && input.activeMemberCount > 1;
+}

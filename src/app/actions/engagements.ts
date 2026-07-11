@@ -27,12 +27,13 @@ import { getFirmLimits } from "@/lib/plan-limits";
 import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
+import { hasActiveTeam } from "@/lib/team/mode";
 
 export type CreateEngagementState = {
   ok?: boolean;
@@ -324,9 +325,20 @@ export async function reassignEngagementAction(
   ok: boolean;
   error?: "no_session" | "invalid_assignee" | "update_failed";
 }> {
-  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  const [user, firm, activeMembers] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    listActiveFirmUsers(),
+  ]);
   if (!user || !firm) return { ok: false, error: "no_session" };
-  if (!firm.team_enabled) return { ok: false, error: "invalid_assignee" };
+  if (
+    !hasActiveTeam({
+      teamEnabled: firm.team_enabled === true,
+      activeMemberCount: activeMembers.length,
+    })
+  ) {
+    return { ok: false, error: "invalid_assignee" };
+  }
 
   const sb = await getServerSupabase();
   // Target must be an ACTIVE member of the SAME firm.

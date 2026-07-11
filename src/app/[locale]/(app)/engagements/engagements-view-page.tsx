@@ -1,7 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
-import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import {
@@ -15,6 +15,7 @@ import { EngagementsView } from "@/components/engagements/engagements-view";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
+import { hasActiveTeam } from "@/lib/team/mode";
 
 // Shared server render for every All-Engagements sub-page. Each route file
 // (/engagements, /engagements/ready, …) just calls this with its view. Loads
@@ -32,10 +33,11 @@ export async function renderEngagementsView({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  const [rows, user, firm, badges] = await Promise.all([
+  const [rows, user, firm, activeMembers, badges] = await Promise.all([
     loadEngagementWorklist(scopeForView(view)),
     getCurrentUser(),
     getCurrentFirm(),
+    listActiveFirmUsers(),
     getEngagementBadges(),
   ]);
   const t = await getTranslations("Engagements");
@@ -64,7 +66,10 @@ export async function renderEngagementsView({
         locale={locale}
         canDelete={canDelete}
         currentUserId={user?.id ?? null}
-        teamEnabled={firm?.team_enabled !== false}
+        teamEnabled={hasActiveTeam({
+          teamEnabled: firm?.team_enabled === true,
+          activeMemberCount: activeMembers.length,
+        })}
         badges={{ ready: badges.readyToReview, deleted: badges.recentlyDeleted }}
       />
     </div>

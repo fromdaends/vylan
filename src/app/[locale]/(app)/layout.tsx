@@ -4,7 +4,12 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { isTrialExpired, trialDaysLeft } from "@/lib/trial";
 import { getFirmAiUsage } from "@/lib/ai/usage";
-import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
+import {
+  getCurrentUser,
+  listActiveFirmUsers,
+  userDisplayLabel,
+} from "@/lib/db/users";
+import { hasActiveTeam } from "@/lib/team/mode";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { getTranslations } from "next-intl/server";
@@ -42,6 +47,7 @@ export default async function AppLayout({
     aalResult,
     dbUser,
     firm,
+    activeFirmUsers,
     t,
     tAuth,
     tProfile,
@@ -50,6 +56,7 @@ export default async function AppLayout({
     supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
     getCurrentUser(),
     getCurrentFirm(),
+    listActiveFirmUsers(),
     getTranslations("App"),
     getTranslations("Auth"),
     getTranslations("Profile"),
@@ -87,6 +94,10 @@ export default async function AppLayout({
   // stays out of the render path (react-hooks purity).
   const trialExpired = isTrialExpired(firm);
   const trialDays = trialDaysLeft(firm);
+  const teamEnabled = hasActiveTeam({
+    teamEnabled: firm.team_enabled === true,
+    activeMemberCount: activeFirmUsers.length,
+  });
   // Trial firms also hit a hard LIFETIME AI cap (abuse/cost guard) well before
   // the 14 days are up. Surface an "upgrade" state in the banner when it's
   // reached. Only query usage for trial firms — paid firms skip the round trip.
@@ -105,7 +116,7 @@ export default async function AppLayout({
       firmName={firm.name}
       firmLogoUrl={firmLogoUrl}
       isOwner={dbUser.role === "owner"}
-      teamEnabled={firm.team_enabled !== false}
+      teamEnabled={teamEnabled}
       quickbooksConnected={quickbooksStatus != null}
       topBar={
         firm.is_demo ? (

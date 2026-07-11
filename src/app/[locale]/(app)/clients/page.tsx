@@ -29,6 +29,7 @@ import type {
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import { assertLocale } from "@/lib/locale";
 import { Upload } from "lucide-react";
+import { hasActiveTeam } from "@/lib/team/mode";
 
 export default async function ClientsPage({
   params,
@@ -90,7 +91,10 @@ export default async function ClientsPage({
   // trial has full access.
   const trialLocked = firm ? isTrialExpired(firm) : false;
   const currentUserId = currentUser?.id ?? "";
-  const teamEnabled = firm?.team_enabled !== false;
+  const teamEnabled = hasActiveTeam({
+    teamEnabled: firm?.team_enabled === true,
+    activeMemberCount: members.filter((m) => !m.deactivated_at).length,
+  });
 
   // Default to the accountant's OWN clients ("mine") when they actually own at
   // least one — so /clients opens on their book. Fall back to "all" when they
