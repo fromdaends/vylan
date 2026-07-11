@@ -29,6 +29,7 @@ import type {
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import { assertLocale } from "@/lib/locale";
 import { Upload } from "lucide-react";
+import { hasActiveTeam } from "@/lib/team/mode";
 
 export default async function ClientsPage({
   params,
@@ -90,6 +91,10 @@ export default async function ClientsPage({
   // trial has full access.
   const trialLocked = firm ? isTrialExpired(firm) : false;
   const currentUserId = currentUser?.id ?? "";
+  const teamEnabled = hasActiveTeam({
+    teamEnabled: firm?.team_enabled === true,
+    activeMemberCount: members.filter((m) => !m.deactivated_at).length,
+  });
 
   // Default to the accountant's OWN clients ("mine") when they actually own at
   // least one — so /clients opens on their book. Fall back to "all" when they
@@ -98,8 +103,9 @@ export default async function ClientsPage({
   const ownsAnyClient = clientsRaw.some(
     (c) => c.assigned_user_id === currentUserId,
   );
-  const ownerFilter: OwnerFilter =
-    explicitOwner ?? (currentUserId && ownsAnyClient ? "mine" : "all");
+  const ownerFilter: OwnerFilter = teamEnabled
+    ? (explicitOwner ?? (currentUserId && ownsAnyClient ? "mine" : "all"))
+    : "all";
 
   // Resolve each firm member's avatar once (small set — seat caps are 1–15)
   // so the table can render an owner badge without N per-row fetches.
@@ -184,7 +190,9 @@ export default async function ClientsPage({
     clients = clients.filter((c) => (summaries[c.id]?.total_live ?? 0) > 0);
   }
   // Apply the "My clients / All firm" owner filter.
-  clients = filterClientsByOwner(clients, ownerFilter, currentUserId);
+  if (teamEnabled) {
+    clients = filterClientsByOwner(clients, ownerFilter, currentUserId);
+  }
 
   // Apply sort. listClients already returns newest-first, so `recent`
   // is a no-op pass-through.
@@ -252,6 +260,7 @@ export default async function ClientsPage({
         includeArchived={includeArchived}
         sort={sort}
         activeOnly={activeOnly}
+        teamEnabled={teamEnabled}
       />
     </div>
   );

@@ -26,6 +26,7 @@ import {
 } from "@/lib/billing/seats";
 import { canDeactivateMember } from "@/lib/team/deactivation";
 import { canTransferOwnershipTo } from "@/lib/team/ownership";
+import { canLeaveTeam } from "@/lib/team/mode";
 import { sendEmail, buildTeamInviteEmail } from "@/lib/email";
 import {
   generateInviteToken,
@@ -60,6 +61,7 @@ export type CreateInviteResult =
         | "no_session"
         | "owner_only"
         | "trial_locked_team"
+        | "team_disabled"
         | "invalid_email"
         | "seat_limit"
         | "email_exists"
@@ -77,6 +79,7 @@ export async function createInvite(
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) return { ok: false, error: "no_session" };
   if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  if (!firm.team_enabled) return { ok: false, error: "team_disabled" };
   // Free-trial firms are owner-only: inviting teammates / adding seats unlocks
   // when they convert to a paid plan. The UI hides the invite control; this is
   // the server-side backstop.
@@ -440,6 +443,7 @@ export type MemberActionResult =
         | "cannot_deactivate_self"
         | "cannot_deactivate_only_owner"
         | "seat_limit"
+        | "team_disabled"
         | "update_failed";
     };
 
@@ -454,6 +458,7 @@ export async function deactivateUser(
   const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!me || !firm) return { ok: false, error: "no_session" };
   if (me.role !== "owner") return { ok: false, error: "owner_only" };
+  if (!firm.team_enabled) return { ok: false, error: "team_disabled" };
 
   const admin = getServiceRoleSupabase();
   const { data: target } = await admin
@@ -507,6 +512,7 @@ export async function reactivateUser(
   const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!me || !firm) return { ok: false, error: "no_session" };
   if (me.role !== "owner") return { ok: false, error: "owner_only" };
+  if (!firm.team_enabled) return { ok: false, error: "team_disabled" };
 
   const admin = getServiceRoleSupabase();
   const { data: target } = await admin
@@ -543,7 +549,12 @@ export type TransferOwnershipResult =
   | { ok: true }
   | {
       ok: false;
-      error: "no_session" | "owner_only" | "invalid_target" | "transfer_failed";
+      error:
+        | "no_session"
+        | "owner_only"
+        | "team_disabled"
+        | "invalid_target"
+        | "transfer_failed";
     };
 
 // Owner-only. Hands ownership to an active staff member: the caller becomes
@@ -557,6 +568,7 @@ export async function transferOwnership(
   const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!me || !firm) return { ok: false, error: "no_session" };
   if (me.role !== "owner") return { ok: false, error: "owner_only" };
+  if (!firm.team_enabled) return { ok: false, error: "team_disabled" };
 
   const admin = getServiceRoleSupabase();
   const { data: target } = await admin
@@ -588,6 +600,94 @@ export async function transferOwnership(
   });
   // The caller is now staff — refresh the whole app tree so their owner-only
   // UI (nav, this page) updates; the UI then sends them to /settings.
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// --- Optional team mode ----------------------------------------------------
+
+export type TeamModeResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error:
+        | "no_session"
+        | "owner_only"
+        | "team_has_members"
+        | "team_has_invites"
+        | "update_failed";
+    };
+
+// Creates (or recreates) the collaboration layer for this firm. The firm is
+// already the workspace/tenant; this simply reveals member, assignment and
+// Mine-filter features. Historical assignments were preserved while disabled.
+export async function createTeam(): Promise<TeamModeResult> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+
+  const admin = getServiceRoleSupabase();
+  const { error } = await admin
+    .from("firms")
+    .update({ team_enabled: true })
+    .eq("id", firm.id);
+  if (error) {
+    console.error("[team] createTeam failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firm.id, null, "team_created", {});
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// Leaves/disbands a one-person team without deleting the firm or any work.
+// Teams with another active member or a live invitation must be resolved first
+// so this action can never surprise someone by removing their collaboration UI.
+export async function leaveTeam(): Promise<TeamModeResult> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+
+  const admin = getServiceRoleSupabase();
+  const nowIso = new Date().toISOString();
+  const [membersResult, invitesResult] = await Promise.all([
+    admin
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("firm_id", firm.id)
+      .is("deactivated_at", null),
+    admin
+      .from("firm_invites")
+      .select("id", { count: "exact", head: true })
+      .eq("firm_id", firm.id)
+      .is("accepted_at", null)
+      .is("revoked_at", null)
+      .gt("expires_at", nowIso),
+  ]);
+  if (membersResult.error || invitesResult.error) {
+    console.error(
+      "[team] leaveTeam preflight failed:",
+      membersResult.error?.message ?? invitesResult.error?.message,
+    );
+    return { ok: false, error: "update_failed" };
+  }
+  const check = canLeaveTeam({
+    activeMemberCount: membersResult.count ?? 1,
+    pendingInviteCount: invitesResult.count ?? 0,
+  });
+  if (!check.ok) return { ok: false, error: check.reason };
+
+  const { error } = await admin
+    .from("firms")
+    .update({ team_enabled: false })
+    .eq("id", firm.id);
+  if (error) {
+    console.error("[team] leaveTeam failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firm.id, null, "team_left", {});
   revalidatePath("/", "layout");
   return { ok: true };
 }

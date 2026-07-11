@@ -114,12 +114,14 @@ export function EngagementsWorklist({
   rows,
   currentUserId,
   isOwner = false,
+  teamEnabled = true,
   locale,
   canDelete = false,
 }: {
   rows: WorklistRow[];
   currentUserId: string | null;
   isOwner?: boolean;
+  teamEnabled?: boolean;
   locale: AppLocale;
   canDelete?: boolean;
 }) {
@@ -127,7 +129,7 @@ export function EngagementsWorklist({
   // Default tab: staff start on THEIR work, owners on the firm-wide Recent
   // view. The choice is remembered per user (localStorage), restored on mount.
   const [filter, setFilterState] = useState<Filter>(
-    isOwner ? "recent" : "mine",
+    !teamEnabled || isOwner ? "recent" : "mine",
   );
   useEffect(() => {
     if (!currentUserId) return;
@@ -137,11 +139,15 @@ export function EngagementsWorklist({
     } catch {
       saved = null;
     }
-    if (saved && (FILTERS as readonly string[]).includes(saved)) {
+    if (
+      saved &&
+      (FILTERS as readonly string[]).includes(saved) &&
+      (teamEnabled || saved !== "mine")
+    ) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setFilterState(saved as Filter);
     }
-  }, [currentUserId]);
+  }, [currentUserId, teamEnabled]);
   const setFilter = (f: Filter) => {
     setFilterState(f);
     if (currentUserId) {
@@ -174,12 +180,16 @@ export function EngagementsWorklist({
     if (filter === "complete") {
       return selectCompleted(rows).sort(byRecency);
     }
-    if (filter === "mine") {
+    if (teamEnabled && filter === "mine") {
       return selectAssignedTo(selectRecent(rows), currentUserId).sort(byRecency);
     }
     // "recent" (default): in-flight + recently cancelled work, newest first.
     return selectRecent(rows).sort(byRecency);
-  }, [rows, filter, q, currentUserId]);
+  }, [rows, filter, q, currentUserId, teamEnabled]);
+
+  const visibleFilters = teamEnabled
+    ? FILTERS
+    : FILTERS.filter((f) => f !== "mine");
 
   const pillLabel = (f: Filter): string =>
     f === "mine"
@@ -215,7 +225,7 @@ export function EngagementsWorklist({
           aria-label={t("wl_filter_label")}
           className="inline-flex items-center gap-5 self-start overflow-x-auto"
         >
-          {FILTERS.map((f) => {
+          {visibleFilters.map((f) => {
             const active = f === filter;
             return (
               <button
@@ -256,6 +266,7 @@ export function EngagementsWorklist({
         emptyText={emptyText()}
         canDelete={canDelete}
         growNameColumn
+        teamEnabled={teamEnabled}
       />
     </section>
   );
@@ -271,6 +282,7 @@ export function WorklistTable({
   canDelete = false,
   countdownFor,
   growNameColumn = false,
+  teamEnabled = true,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -284,6 +296,7 @@ export function WorklistTable({
   // natural widths instead of drifting apart. Below 1800px — and on any table
   // that doesn't pass this — the layout is unchanged.
   growNameColumn?: boolean;
+  teamEnabled?: boolean;
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -344,9 +357,11 @@ export function WorklistTable({
             <TableHead className="hidden px-4 sm:table-cell">
               {t("wl_col_due")}
             </TableHead>
-            <TableHead className="hidden px-4 lg:table-cell">
-              {t("wl_col_assigned")}
-            </TableHead>
+            {teamEnabled && (
+              <TableHead className="hidden px-4 lg:table-cell">
+                {t("wl_col_assigned")}
+              </TableHead>
+            )}
             <TableHead className="hidden px-4 md:table-cell">
               {t("wl_col_progress")}
             </TableHead>
@@ -394,6 +409,7 @@ export function WorklistTable({
               pctLabel={(pct) => t("wl_pct_complete", { pct })}
               canDelete={canDelete}
               countdownText={countdownFor?.(r) ?? null}
+              teamEnabled={teamEnabled}
             />
           ))}
         </TableBody>
@@ -401,7 +417,6 @@ export function WorklistTable({
     </div>
   );
 }
-
 
 function WorklistRowView({
   row,
@@ -416,6 +431,7 @@ function WorklistRowView({
   canDelete,
   countdownText,
   onOptimisticRemoval,
+  teamEnabled,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -429,6 +445,7 @@ function WorklistRowView({
   canDelete: boolean;
   countdownText: string | null;
   onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
+  teamEnabled: boolean;
 }) {
   const tEng = useTranslations("Engagements");
   const router = useRouter();
@@ -546,15 +563,17 @@ function WorklistRowView({
               </div>
             </TableCell>
 
-            <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">
-              {row.assigneeName ? (
-                <span className="text-foreground">{row.assigneeName}</span>
-              ) : (
-                <span className="italic text-muted-foreground">
-                  {unassignedText}
-                </span>
-              )}
-            </TableCell>
+            {teamEnabled && (
+              <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">
+                {row.assigneeName ? (
+                  <span className="text-foreground">{row.assigneeName}</span>
+                ) : (
+                  <span className="italic text-muted-foreground">
+                    {unassignedText}
+                  </span>
+                )}
+              </TableCell>
+            )}
 
             <TableCell className="hidden px-4 py-3 align-top md:table-cell">
               {!showProgress ? (

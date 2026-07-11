@@ -90,6 +90,7 @@ import {
 } from "@/lib/attention";
 import { engagementStatusPillClass } from "@/lib/engagements/status-pill";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { hasActiveTeam } from "@/lib/team/mode";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
 import {
   Send,
@@ -189,6 +190,10 @@ export default async function EngagementDetailPage({
   const activeMembers = firmUsers
     .filter((u) => !u.deactivated_at)
     .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
+  const teamEnabled = hasActiveTeam({
+    teamEnabled: firm?.team_enabled === true,
+    activeMemberCount: activeMembers.length,
+  });
   // Resolve a reviewer id -> display name for the QuickBooks draft cards
   // (who approved / dismissed). Includes deactivated members so history shows.
   const reviewerNameById = new Map<string, string>(
@@ -409,15 +414,17 @@ export default async function EngagementDetailPage({
             )}
           </div>
           {/* Assigned to — accountability control (reassign to any active member). */}
-          <div className="mt-3">
-            <EngagementAssignee
-              engagementId={engagement.id}
-              assigneeId={engagement.assigned_user_id}
-              assigneeName={assignee ? userDisplayLabel(assignee) : null}
-              assigneeDeactivated={!!assignee?.deactivated_at}
-              members={activeMembers}
-            />
-          </div>
+          {teamEnabled && (
+            <div className="mt-3">
+              <EngagementAssignee
+                engagementId={engagement.id}
+                assigneeId={engagement.assigned_user_id}
+                assigneeName={assignee ? userDisplayLabel(assignee) : null}
+                assigneeDeactivated={!!assignee?.deactivated_at}
+                members={activeMembers}
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">

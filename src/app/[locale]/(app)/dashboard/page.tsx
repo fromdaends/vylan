@@ -1,5 +1,5 @@
 import { setRequestLocale } from "next-intl/server";
-import { getCurrentUser } from "@/lib/db/users";
+import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { listTemplates, BLANK_TEMPLATE_ID } from "@/lib/db/templates";
 
@@ -20,6 +20,7 @@ import { localizedTemplateName } from "@/lib/templates/builtin-names";
 import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
 import { WhatsNewBell } from "@/components/inbox/whats-new-bell";
 import { NeedsAttention } from "@/components/dashboard/needs-attention";
+import { hasActiveTeam } from "@/lib/team/mode";
 
 // The Overview is the single home that answers all three of an accountant's
 // questions: what to do now (stats + Needs attention), what's my work (My
@@ -41,12 +42,18 @@ export default async function DashboardPage({
   const viewer = user
     ? { userId: user.id, isOwner: user.role === "owner" }
     : undefined;
-  const [worklistRows, firm, templates, notifications] = await Promise.all([
-    loadEngagementWorklist(),
-    getCurrentFirm(),
-    listTemplates(),
-    listHomeNotifications(12, viewer),
-  ]);
+  const [worklistRows, firm, activeMembers, templates, notifications] =
+    await Promise.all([
+      loadEngagementWorklist(),
+      getCurrentFirm(),
+      listActiveFirmUsers(),
+      listTemplates(),
+      listHomeNotifications(12, viewer),
+    ]);
+  const teamEnabled = hasActiveTeam({
+    teamEnabled: firm?.team_enabled === true,
+    activeMemberCount: activeMembers.length,
+  });
 
   // Needs attention is scoped to a staff member's OWN assigned work (so their
   // Overview is about their work, matching the What's-new feed); owners see the
@@ -129,6 +136,7 @@ export default async function DashboardPage({
         rows={worklistRows}
         currentUserId={user?.id ?? null}
         isOwner={user?.role === "owner"}
+        teamEnabled={teamEnabled}
         locale={locale}
         canDelete={user ? canDeleteEngagements(user.role) : false}
       />
