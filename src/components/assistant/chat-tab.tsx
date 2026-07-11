@@ -700,21 +700,24 @@ function ChatGreeting({
   locale: "en" | "fr";
 }) {
   const ta = useTranslations("Assistant");
-  const [index, setIndex] = useState(0);
   const greetings = [
     ta("greeting_1"),
     ta("greeting_2"),
     ta("greeting_3"),
     ta("greeting_4"),
   ];
+  const fourHoursMs = 4 * 60 * 60 * 1000;
+  const [index, setIndex] = useState(
+    () => Math.floor(Date.now() / fourHoursMs) % greetings.length,
+  );
 
   useEffect(() => {
     const timer = window.setInterval(
       () => setIndex((current) => (current + 1) % greetings.length),
-      6000,
+      fourHoursMs,
     );
     return () => window.clearInterval(timer);
-  }, [greetings.length]);
+  }, [fourHoursMs, greetings.length]);
 
   return (
     <div className="mx-auto max-w-sm px-4 pt-2 text-center">
