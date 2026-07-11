@@ -27,13 +27,19 @@
 --     drop column if exists review_status;
 --   drop type if exists file_review_status;
 
-create type file_review_status as enum ('pending', 'approved', 'rejected');
+do $$
+begin
+  create type file_review_status as enum ('pending', 'approved', 'rejected');
+exception
+  when duplicate_object then null;
+end;
+$$;
 
 alter table uploaded_files
-  add column review_status file_review_status not null default 'pending',
-  add column rejection_reason text,
-  add column reviewed_by uuid references users(id) on delete set null,
-  add column reviewed_at timestamptz;
+  add column if not exists review_status file_review_status not null default 'pending',
+  add column if not exists rejection_reason text,
+  add column if not exists reviewed_by uuid references users(id) on delete set null,
+  add column if not exists reviewed_at timestamptz;
 
 -- Backfill approved items -> approved files.
 update uploaded_files f
@@ -54,5 +60,5 @@ from request_items i
 where f.request_item_id = i.id
   and i.status = 'rejected';
 
-create index uploaded_files_review_status_idx
+create index if not exists uploaded_files_review_status_idx
   on uploaded_files (request_item_id, review_status);
