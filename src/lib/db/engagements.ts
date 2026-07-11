@@ -50,6 +50,22 @@ export async function setRemindersPaused(
   if (error) throw error;
 }
 
+// Change (or clear) the due date after creation — first added for the
+// Assistant panel's phase-3 actions. Callers on a SENT engagement must also
+// cancel + reschedule the reminder jobs, since the "overdue" reminder was
+// enqueued from the original due date (see src/lib/reminders.ts).
+export async function updateEngagementDueDate(
+  id: string,
+  dueDate: string | null,
+): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ due_date: dueDate })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 const tokenAlphabet =
   "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 const generateMagicToken = customAlphabet(tokenAlphabet, 43);

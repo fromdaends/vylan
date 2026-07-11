@@ -71,12 +71,22 @@ export function ActivityTimeline({
                 <div className="leading-snug text-foreground">
                   {describe(e, t, filenamesByFileId, rejectionReasonsByItemId)}
                 </div>
-                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5">
+                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1.5 flex-wrap">
                   <span className="font-medium">
                     {actorLabel(e.actor_type, t)}
                   </span>
                   <span aria-hidden>·</span>
                   <span>{formatRelative(e.created_at, locale)}</span>
+                  {/* Proposed by the assistant, confirmed by a human — the
+                      "AI assists, accountant decides" audit marker. */}
+                  {e.metadata?.via === "assistant" && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span className="text-accent/90">
+                        {t("via_assistant")}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </li>
@@ -160,6 +170,14 @@ function describe(
       return t("complete_engagement");
     case "reopen_engagement":
       return t("reopen_engagement");
+    case "item_updated":
+      return t("item_updated");
+    case "due_date_changed":
+      return meta.to
+        ? t("due_date_changed", { to: meta.to })
+        : t("due_date_cleared");
+    case "engagement_reassigned":
+      return t("engagement_reassigned");
     case "payment_requested":
       return t("payment_requested");
     case "client_paid":

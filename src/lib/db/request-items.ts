@@ -184,6 +184,30 @@ export async function addSignatureItemToEngagement(
   return data as RequestItem;
 }
 
+// Edit an existing item's label / type / required flag (Assistant panel
+// phase 3 — the first surface that can change an item after creation).
+// Status and kind are deliberately NOT editable here: status is a derived
+// roll-up owned by recomputeItemStatus, and signature items are owned by the
+// signature flow.
+export type RequestItemPatch = {
+  label?: string;
+  label_fr?: string | null;
+  doc_type?: DocType;
+  required?: boolean;
+};
+
+export async function updateRequestItem(
+  itemId: string,
+  patch: RequestItemPatch,
+): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("request_items")
+    .update(patch)
+    .eq("id", itemId);
+  if (error) throw error;
+}
+
 export async function removeItem(itemId: string): Promise<void> {
   const supabase = await getServerSupabase();
   // ON DELETE CASCADE on uploaded_files handles file rows; storage objects

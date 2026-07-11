@@ -1,7 +1,8 @@
-// The engagement chat's READ tools (phase 2 — no side effects anywhere).
-// Definitions follow Anthropic's tool schema; execution is dispatched by
-// name with the engagement id bound server-side. Phase 3 adds the
-// propose-only action tools alongside these.
+// The engagement chat's tools: phase-2 READ tools (no side effects) plus the
+// phase-3 PROPOSE tools. A propose tool NEVER executes anything — it
+// validates, writes a pending-action row, and hands the panel a confirm
+// card; the model only ever learns "proposed, awaiting confirmation".
+// Execution lives exclusively behind POST /api/engagement-chat/confirm.
 
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -21,6 +22,16 @@ import {
   fetchLatestPayment,
   fetchUserLabel,
 } from "./data";
+import { listActiveFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { parseActionInput } from "./action-schemas";
+import { buildActionProposal } from "./actions";
+import {
+  createPendingAction,
+  toCard,
+  type ActionCardData,
+} from "./pending-actions";
+import { CHAT_SCHEMA_MISSING } from "./db";
+import { DOC_TYPES } from "@/lib/doc-types";
 
 export const CHAT_TOOLS: Anthropic.Tool[] = [
   {
@@ -114,6 +125,128 @@ export const CHAT_TOOLS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "list_team_members",
+    description:
+      "The firm's active members (user_id + name + role) — the valid targets for propose_change_assignee.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+];
+
+// The PROPOSE tools. Each creates a confirm card for the accountant;
+// NOTHING executes until they press Confirm. Descriptions repeat that so the
+// model never claims an action happened.
+const PROPOSAL_NOTE =
+  "This only PROPOSES the action: the accountant sees a card with Confirm and Cancel, and nothing happens until they confirm. Never say the action was done — say it is waiting for their confirmation.";
+
+export const CHAT_ACTION_TOOLS: Anthropic.Tool[] = [
+  {
+    name: "propose_approve_document",
+    description: `Propose approving one uploaded document. Find its file_id with search_documents first. ${PROPOSAL_NOTE}`,
+    input_schema: {
+      type: "object",
+      properties: {
+        file_id: { type: "string", description: "From a search_documents result." },
+      },
+      required: ["file_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "propose_reject_document",
+    description: `Propose rejecting one uploaded document with a reason the CLIENT will see in their portal (2-500 characters, in the client's language when known). ${PROPOSAL_NOTE}`,
+    input_schema: {
+      type: "object",
+      properties: {
+        file_id: { type: "string", description: "From a search_documents result." },
+        reason: {
+          type: "string",
+          description: "Client-facing reason, e.g. \"Pages 2 à 6 manquantes\".",
+        },
+      },
+      required: ["file_id", "reason"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "propose_send_reminder",
+    description: `Propose emailing the client their portal-link reminder right now. Refused if a manual reminder was already sent recently. ${PROPOSAL_NOTE}`,
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "propose_add_checklist_item",
+    description: `Propose adding a document-collection item to the checklist. ${PROPOSAL_NOTE}`,
+    input_schema: {
+      type: "object",
+      properties: {
+        label: { type: "string", description: "The item name the client sees." },
+        doc_type: {
+          type: "string",
+          description: `Document type code (default "other"). One of: ${DOC_TYPES.join(", ")}.`,
+        },
+        required: {
+          type: "boolean",
+          description: "Whether the client must provide it (default true).",
+        },
+      },
+      required: ["label"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "propose_edit_checklist_item",
+    description: `Propose editing an existing checklist item's name, required flag, or document type. Get item_id from list_checklist_items. Signature items can't be edited. ${PROPOSAL_NOTE}`,
+    input_schema: {
+      type: "object",
+      properties: {
+        item_id: { type: "string", description: "From list_checklist_items." },
+        new_label: { type: "string" },
+        required: { type: "boolean" },
+        doc_type: { type: "string", description: `One of: ${DOC_TYPES.join(", ")}.` },
+      },
+      required: ["item_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "propose_remove_checklist_item",
+    description: `Propose removing a checklist item. Its uploaded documents are removed with it, so the card warns about that. Get item_id from list_checklist_items. ${PROPOSAL_NOTE}`,
+    input_schema: {
+      type: "object",
+      properties: {
+        item_id: { type: "string", description: "From list_checklist_items." },
+      },
+      required: ["item_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "propose_change_due_date",
+    description: `Propose changing the engagement's due date (YYYY-MM-DD), or clearing it with null. Reminders are rescheduled accordingly. ${PROPOSAL_NOTE}`,
+    input_schema: {
+      type: "object",
+      properties: {
+        due_date: {
+          type: ["string", "null"],
+          description: "New date as YYYY-MM-DD, or null to remove the due date.",
+        },
+      },
+      required: ["due_date"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "propose_change_assignee",
+    description: `Propose reassigning the engagement to another active firm member. Get their user_id from list_team_members. ${PROPOSAL_NOTE}`,
+    input_schema: {
+      type: "object",
+      properties: {
+        user_id: { type: "string", description: "From list_team_members." },
+      },
+      required: ["user_id"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 export type ChatToolContext = {
@@ -121,18 +254,27 @@ export type ChatToolContext = {
   engagementId: string;
   // Memoized files fetch — several tools read the same rows per turn.
   getFiles: () => Promise<ChatFileRow[]>;
+  // Phase 3 proposal wiring (from the message route): who is asking, which
+  // conversation the card belongs to, and how to push the card to the panel.
+  firmId: string;
+  userId: string;
+  conversationId: string;
+  onProposal: (card: ActionCardData) => void;
 };
 
-export function createChatToolContext(
-  sb: SupabaseClient,
-  engagementId: string,
-): ChatToolContext {
+export function createChatToolContext(opts: {
+  sb: SupabaseClient;
+  engagementId: string;
+  firmId: string;
+  userId: string;
+  conversationId: string;
+  onProposal: (card: ActionCardData) => void;
+}): ChatToolContext {
   let files: Promise<ChatFileRow[]> | null = null;
   return {
-    sb,
-    engagementId,
+    ...opts,
     getFiles: () => {
-      files ??= fetchChatFiles(sb, engagementId);
+      files ??= fetchChatFiles(opts.sb, opts.engagementId);
       return files;
     },
   };
@@ -183,13 +325,67 @@ export async function runChatTool(
           })),
         };
       }
-      default:
+      case "list_team_members": {
+        const members = await listActiveFirmUsers();
+        return {
+          members: members.map((m) => ({
+            user_id: m.id,
+            name: userDisplayLabel(m),
+            role: m.role,
+          })),
+        };
+      }
+      default: {
+        if (name.startsWith("propose_")) {
+          return await runProposalTool(name, input, ctx);
+        }
         return { error: `Unknown tool: ${name}` };
+      }
     }
   } catch (err) {
     console.error(`[engagement-chat] tool ${name} failed:`, err);
     return { error: "Lookup failed. Answer from what you already have, or say you couldn't check." };
   }
+}
+
+// A propose_* tool call: validate the model's input, enrich it against real
+// state, persist the pending action, push the confirm card to the panel, and
+// tell the model it is now WAITING on the human. No side effects here.
+async function runProposalTool(
+  name: string,
+  input: unknown,
+  ctx: ChatToolContext,
+): Promise<unknown> {
+  const type = name.slice("propose_".length);
+  const parsed = parseActionInput(type, input);
+  if (!parsed.ok) return { error: parsed.error };
+
+  const proposal = await buildActionProposal(parsed.type, parsed.input, {
+    sb: ctx.sb,
+    engagementId: ctx.engagementId,
+  });
+  if (!proposal.ok) return { error: proposal.error };
+
+  const row = await createPendingAction({
+    firmId: ctx.firmId,
+    engagementId: ctx.engagementId,
+    conversationId: ctx.conversationId,
+    userId: ctx.userId,
+    type: parsed.type,
+    payload: proposal.payload,
+  });
+  if (row === CHAT_SCHEMA_MISSING) {
+    return {
+      error:
+        "Actions aren't activated on this account yet (a database update is pending). Answer questions normally and tell the accountant actions will be available soon.",
+    };
+  }
+
+  ctx.onProposal(toCard(row, { includeToken: true, nowMs: Date.now() }));
+  return {
+    status: "proposed",
+    note: "A confirm card is now shown to the accountant. NOTHING has been executed. Do not claim the action happened; say it is waiting for their Confirm.",
+  };
 }
 
 function sanitizeCriteria(input: unknown): SearchCriteria {

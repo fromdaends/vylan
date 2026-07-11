@@ -47,10 +47,13 @@ import {
 } from "@/lib/engagement-chat/data";
 import { buildEngagementChatPrompt } from "@/lib/engagement-chat/prompt";
 import {
+  CHAT_ACTION_TOOLS,
   CHAT_TOOLS,
   createChatToolContext,
   runChatTool,
 } from "@/lib/engagement-chat/tools";
+import { listRecentActionSummaries } from "@/lib/engagement-chat/pending-actions";
+import { ACTION_CONTEXT_COUNT } from "@/lib/engagement-chat/config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -179,7 +182,12 @@ export async function POST(request: NextRequest) {
     nowMs,
   );
 
-  const clientName = await fetchClientName(supabase, engagement.client_id);
+  // Recent proposals feed the prompt so "did you send it?" follow-ups answer
+  // from real card state. Schema-missing (0560 not applied) = no actions yet.
+  const [clientName, recentSummaries] = await Promise.all([
+    fetchClientName(supabase, engagement.client_id),
+    listRecentActionSummaries(supabase, conversationId, ACTION_CONTEXT_COUNT),
+  ]);
   const system = buildEngagementChatPrompt({
     locale: body.locale,
     firmName: firm.name,
@@ -190,6 +198,8 @@ export async function POST(request: NextRequest) {
       status: engagement.status,
       dueDate: engagement.due_date,
     },
+    recentActions:
+      recentSummaries === CHAT_SCHEMA_MISSING ? undefined : recentSummaries,
   });
 
   // Model conversation = persisted history + the new turn. First message
@@ -204,7 +214,6 @@ export async function POST(request: NextRequest) {
     modelMessages.shift();
   }
 
-  const toolCtx = createChatToolContext(supabase, body.engagementId);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -213,6 +222,17 @@ export async function POST(request: NextRequest) {
         controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
       };
       const textParts: string[] = [];
+      // Proposal cards stream to the panel the moment a propose_* tool
+      // lands, carrying the browser-only confirmation token.
+      const toolCtx = createChatToolContext({
+        sb: supabase,
+        engagementId: body.engagementId,
+        firmId: firm.id,
+        userId: user.id,
+        conversationId,
+        onProposal: (card) => emit({ t: "action", action: card }),
+      });
+      const allTools = [...CHAT_TOOLS, ...CHAT_ACTION_TOOLS];
 
       try {
         for (let round = 0; round < CHAT_MAX_TOOL_ROUNDS; round++) {
@@ -225,7 +245,7 @@ export async function POST(request: NextRequest) {
               model: CHAT_MODEL,
               max_tokens: CHAT_MAX_TOKENS,
               system,
-              tools: CHAT_TOOLS,
+              tools: allTools,
               ...(isFinalRound ? { tool_choice: { type: "none" as const } } : {}),
               messages: modelMessages,
             },

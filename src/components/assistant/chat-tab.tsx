@@ -24,6 +24,13 @@ import {
   getAssistantState,
   subscribeAssistant,
 } from "@/components/assistant/assistant-store";
+import {
+  mergeThreadItems,
+  type ActionCardData,
+  type ActionCardStatus,
+  type ThreadItem,
+} from "@/components/assistant/thread";
+import { ActionCard } from "@/components/assistant/action-card";
 
 // The Assistant panel's Chat tab — phase 2: the ENGAGEMENT chat. Scoped to
 // the engagement picked in the panel header; answers come from the model via
@@ -32,11 +39,6 @@ import {
 // engagement server-side and shared by the firm; GET /api/engagement-chat/
 // history loads it on engagement switch along with the caller's rolling
 // message-limit state.
-
-type ChatMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
 
 type LimitState = {
   limit: number;
@@ -115,11 +117,12 @@ function ChatView({
   );
   const engagementId = selected?.id ?? null;
 
-  // The loaded conversation, tagged with its engagement so a switch shows
-  // the loading state instead of another engagement's thread.
+  // The loaded conversation (messages + action confirm-cards interleaved),
+  // tagged with its engagement so a switch shows the loading state instead
+  // of another engagement's thread.
   const [thread, setThread] = useState<{
     engagementId: string;
-    messages: ChatMessage[];
+    items: ThreadItem[];
   } | null>(null);
   const [limit, setLimit] = useState<LimitState | null>(null);
   // null = loading/unknown; false = migration not applied yet ("not
@@ -139,7 +142,7 @@ function ChatView({
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isLoaded = thread !== null && thread.engagementId === engagementId;
-  const messages = isLoaded ? thread.messages : [];
+  const items = isLoaded ? thread.items : [];
   const historyFailed =
     historyFailedFor !== null && historyFailedFor === engagementId;
   const limitReached = limit !== null && limit.remaining <= 0;
@@ -169,7 +172,12 @@ function ChatView({
       if (!res.ok) throw new Error(`status ${res.status}`);
       const body = (await res.json()) as {
         ready: boolean;
-        messages?: { role: "user" | "assistant"; content: string }[];
+        messages?: {
+          role: "user" | "assistant";
+          content: string;
+          createdAt: string;
+        }[];
+        actions?: ActionCardData[];
         limit?: number;
         remaining?: number;
         resetAt?: string | null;
@@ -180,7 +188,7 @@ function ChatView({
       setError(null);
       if (!body.ready) {
         setReady(false);
-        setThread({ engagementId: id, messages: [] });
+        setThread({ engagementId: id, items: [] });
         setLimit(null);
         setHistoryFailedFor(null);
         return;
@@ -188,10 +196,7 @@ function ChatView({
       setReady(true);
       setThread({
         engagementId: id,
-        messages: (body.messages ?? []).map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
+        items: mergeThreadItems(body.messages ?? [], body.actions ?? []),
       });
       setLimit({
         limit: body.limit ?? 0,
@@ -275,13 +280,41 @@ function ChatView({
     }
   }, [input]);
 
-  // Update the loaded thread's messages, guarding against engagement
-  // switches that happened while a request was in flight.
+  // Update the loaded thread's items, guarding against engagement switches
+  // that happened while a request was in flight.
   const patchThread = useCallback(
-    (id: string, fn: (msgs: ChatMessage[]) => ChatMessage[]) => {
+    (id: string, fn: (items: ThreadItem[]) => ThreadItem[]) => {
       setThread((prev) =>
         prev && prev.engagementId === id
-          ? { ...prev, messages: fn(prev.messages) }
+          ? { ...prev, items: fn(prev.items) }
+          : prev,
+      );
+    },
+    [],
+  );
+
+  // Resolve a confirm card in place (after a Confirm/Cancel round-trip, or
+  // an expiry detected by the card itself).
+  const resolveCard = useCallback(
+    (actionId: string, status: ActionCardStatus, cardError: string | null) => {
+      setThread((prev) =>
+        prev
+          ? {
+              ...prev,
+              items: prev.items.map((it) =>
+                it.kind === "action" && it.action.id === actionId
+                  ? {
+                      kind: "action",
+                      action: {
+                        ...it.action,
+                        status,
+                        error: cardError,
+                        token: status === "proposed" ? it.action.token : null,
+                      },
+                    }
+                  : it,
+              ),
+            }
           : prev,
       );
     },
@@ -298,11 +331,12 @@ function ChatView({
 
       setError(null);
       setInput("");
-      patchThread(id, (msgs) => [
-        ...msgs,
-        { role: "user", content: trimmed },
+      const nowIso = new Date().toISOString();
+      patchThread(id, (prev) => [
+        ...prev,
+        { kind: "message", role: "user", content: trimmed, createdAt: nowIso },
         // Placeholder assistant turn filled in as the stream arrives.
-        { role: "assistant", content: "" },
+        { kind: "message", role: "assistant", content: "", createdAt: nowIso },
       ]);
       setStreaming(true);
       setChecking(false);
@@ -311,7 +345,7 @@ function ChatView({
       abortRef.current = controller;
 
       const dropPlaceholderPair = () =>
-        patchThread(id, (msgs) => msgs.slice(0, -2));
+        patchThread(id, (prev) => prev.slice(0, -2));
       // Once the server accepted the request, the user message is persisted
       // and counted — later failures must NOT erase it from the thread (a
       // history reload would just resurrect it, looking like a duplicate).
@@ -370,7 +404,7 @@ function ChatView({
         if (!reader) {
           // Accepted but unreadable — keep the user message (it's persisted
           // server-side), just drop the empty placeholder.
-          patchThread(id, (msgs) => msgs.slice(0, -1));
+          patchThread(id, (prev) => prev.slice(0, -1));
           setError(t("ai_error"));
           setStreaming(false);
           return;
@@ -384,6 +418,7 @@ function ChatView({
           let event: {
             t?: string;
             text?: string;
+            action?: ActionCardData;
             remaining?: number;
             resetAt?: string | null;
             limit?: number;
@@ -396,13 +431,32 @@ function ChatView({
           if (event.t === "delta" && typeof event.text === "string") {
             acc += event.text;
             const current = acc;
-            patchThread(id, (msgs) => {
-              const copy = msgs.slice();
+            patchThread(id, (prev) => {
+              const copy = prev.slice();
               const last = copy[copy.length - 1];
-              if (last && last.role === "assistant") {
-                copy[copy.length - 1] = { role: "assistant", content: current };
+              if (last && last.kind === "message" && last.role === "assistant") {
+                copy[copy.length - 1] = { ...last, content: current };
               }
               return copy;
+            });
+          } else if (event.t === "action" && event.action) {
+            // A confirm card: keep the streaming placeholder LAST so the
+            // model's follow-up text lands under the card.
+            const card = event.action;
+            patchThread(id, (prev) => {
+              const last = prev[prev.length - 1];
+              if (
+                last &&
+                last.kind === "message" &&
+                last.role === "assistant"
+              ) {
+                return [
+                  ...prev.slice(0, -1),
+                  { kind: "action", action: card },
+                  last,
+                ];
+              }
+              return [...prev, { kind: "action", action: card }];
             });
           } else if (event.t === "tool") {
             setChecking(true);
@@ -436,11 +490,14 @@ function ChatView({
         // Stream ended with no text at all (e.g. server error event only):
         // drop the empty placeholder so a blank bubble doesn't linger.
         if (!acc.trim()) {
-          patchThread(id, (msgs) => {
-            const last = msgs[msgs.length - 1];
-            return last && last.role === "assistant" && last.content === ""
-              ? msgs.slice(0, -1)
-              : msgs;
+          patchThread(id, (prev) => {
+            const last = prev[prev.length - 1];
+            return last &&
+              last.kind === "message" &&
+              last.role === "assistant" &&
+              last.content === ""
+              ? prev.slice(0, -1)
+              : prev;
           });
         }
 
@@ -453,11 +510,14 @@ function ChatView({
         }
       } catch (e) {
         const trimEmptyPlaceholder = () =>
-          patchThread(id, (msgs) => {
-            const last = msgs[msgs.length - 1];
-            return last && last.role === "assistant" && last.content === ""
-              ? msgs.slice(0, -1)
-              : msgs;
+          patchThread(id, (prev) => {
+            const last = prev[prev.length - 1];
+            return last &&
+              last.kind === "message" &&
+              last.role === "assistant" &&
+              last.content === ""
+              ? prev.slice(0, -1)
+              : prev;
           });
         if ((e as Error).name !== "AbortError") {
           setError(t("ai_error"));
@@ -542,26 +602,38 @@ function ChatView({
             ))}
           </div>
         ) : (
-          messages.length > 0 && (
+          items.length > 0 && (
             <div className="px-5 py-6 flex flex-col gap-6">
               <AnimatePresence initial={false}>
-                {messages.map((m, i) => (
+                {items.map((item, i) => (
                   <motion.div
-                    key={i}
+                    key={
+                      item.kind === "action" ? `a-${item.action.id}` : `m-${i}`
+                    }
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
                   >
-                    <Message
-                      role={m.role}
-                      content={m.content}
-                      isStreaming={
-                        streaming &&
-                        i === messages.length - 1 &&
-                        m.role === "assistant"
-                      }
-                      checking={checking}
-                    />
+                    {item.kind === "message" ? (
+                      <Message
+                        role={item.role}
+                        content={item.content}
+                        isStreaming={
+                          streaming &&
+                          i === items.length - 1 &&
+                          item.role === "assistant"
+                        }
+                        checking={checking}
+                      />
+                    ) : (
+                      <div className="pl-10">
+                        <ActionCard
+                          card={item.action}
+                          locale={locale}
+                          onResolved={resolveCard}
+                        />
+                      </div>
+                    )}
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -580,7 +652,7 @@ function ChatView({
           )
         )}
 
-        {isLoaded && messages.length === 0 && error && (
+        {isLoaded && items.length === 0 && error && (
           <div className="px-5 pt-4">
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>

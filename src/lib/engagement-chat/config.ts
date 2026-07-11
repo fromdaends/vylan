@@ -39,3 +39,20 @@ export const CHAT_HISTORY_FETCH_LIMIT = 50;
 // src/lib/rate-limit.ts). The DB window above is the product limit; this only
 // caps a whole firm's daily burn if many seats hammer the endpoint at once.
 export const CHAT_PER_FIRM_DAILY = { limit: 500, window: "1 d" as const };
+
+// ---------------------------------------------------------------------------
+// Actions (phase 3 — propose-and-confirm)
+// ---------------------------------------------------------------------------
+
+// How long a proposed action's confirm card stays actionable. Past this the
+// card renders as expired and the confirm endpoint refuses the token.
+export const ACTION_EXPIRY_MINUTES = 15;
+
+// "Send a reminder now" guard: refuse a new manual reminder if one was sent
+// within this window (the existing button has no cooldown; the chat action
+// gets one so a chatty session can't accidentally spam the client).
+export const REMINDER_COOLDOWN_HOURS = 1;
+
+// How many recent action proposals are summarized into the system prompt so
+// the model knows what was confirmed/cancelled on earlier turns.
+export const ACTION_CONTEXT_COUNT = 8;
