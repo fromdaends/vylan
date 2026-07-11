@@ -18,7 +18,7 @@ import {
 // review, overdue, …) with a crisp title tier, a muted metadata tier, and
 // clearly-sized event icons. It answers "what happened", not "what to do".
 // The Overview's permanent right rail is gone: these rows are server-rendered
-// and passed as children into the bell-summoned slide-out (WhatsNewBell),
+// and passed as children into the bell-anchored popover (WhatsNewBell),
 // which owns the title/count/View-all chrome. Data comes from
 // listHomeNotifications; this just renders it.
 export async function WhatsNewFeed({
@@ -59,7 +59,10 @@ function WhatsNewRow({
   const { Icon, tone } = notificationVisual(n.kind);
   return (
     <li>
-      <Link href={n.href} className="group flex items-start gap-3 py-3">
+      <Link
+        href={n.href}
+        className="group flex items-start gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-secondary/40"
+      >
         <span
           className={
             "mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full " +

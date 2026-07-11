@@ -6,19 +6,15 @@ import { Bell, ChevronRight } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import {
-  Sheet,
-  SheetContent,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
-// Bell-summoned "What's new" panel. The Overview no longer pins the activity
-// feed in a permanent right rail — a bell with a recent-events count badge
-// sits with the header actions and slides the same feed in from the right
-// edge over a dimmed backdrop (the same Sheet pattern as the Help panel).
-// The feed rows are server-rendered and passed in as children; this shell
-// only owns open/close. There is no read/unread tracking — the badge is
-// simply the count of recent events (capped upstream), deliberately simple.
+// YouTube-style notification popover: compact, anchored beneath the bell, and
+// scrollable without covering the dashboard. Feed rows are server-rendered and
+// passed as children; this client shell only owns open/close. There is no
+// read/unread tracking — the badge is the recent-event count.
 export function WhatsNewBell({
   count,
   children,
@@ -30,8 +26,8 @@ export function WhatsNewBell({
   const [open, setOpen] = useState(false);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
         <Button
           variant="outline"
           size="icon"
@@ -48,23 +44,25 @@ export function WhatsNewBell({
             </span>
           )}
         </Button>
-      </SheetTrigger>
-      <SheetContent
-        side="right"
-        aria-describedby={undefined}
-        className="w-full gap-0 border-l border-border/60 sm:max-w-md"
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="bottom"
+        sideOffset={10}
+        aria-label={t("whats_new")}
+        className="w-[calc(100vw-2rem)] max-w-md overflow-hidden rounded-xl border-border/70 bg-popover p-0 shadow-2xl"
         // Any link inside (a feed row, View all) navigates away — close the
         // panel right away so it doesn't linger over the route transition.
         onClickCapture={(e) => {
           if ((e.target as HTMLElement).closest("a")) setOpen(false);
         }}
       >
-        {/* Header: title + count left, View all right (kept clear of the X). */}
-        <div className="flex items-baseline justify-between gap-3 border-b border-border/50 py-4 pl-5 pr-12">
+        {/* Compact header + full-width divider, matching the reference. */}
+        <div className="flex h-12 items-center justify-between gap-3 border-b border-border/70 px-4">
           <div className="flex min-w-0 items-baseline gap-1.5">
-            <SheetTitle className="truncate text-sm font-semibold tracking-tight">
+            <h2 className="truncate text-sm font-semibold tracking-tight">
               {t("whats_new")}
-            </SheetTitle>
+            </h2>
             {count > 0 && (
               <span className="inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-secondary px-1.5 text-xs font-semibold tabular-nums text-muted-foreground">
                 {count}
@@ -83,10 +81,10 @@ export function WhatsNewBell({
         </div>
 
         {/* The server-rendered feed rows (or empty state). */}
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+        <div className="max-h-[min(65vh,32rem)] overflow-y-auto px-2 py-1">
           {children}
         </div>
-      </SheetContent>
-    </Sheet>
+      </PopoverContent>
+    </Popover>
   );
 }

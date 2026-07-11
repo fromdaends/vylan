@@ -34,7 +34,7 @@ function renderBell(count: number, children: ReactNode = <p>feed rows</p>) {
 }
 
 describe("WhatsNewBell", () => {
-  it("shows the count badge and opens the slide-out with the feed + View all", () => {
+  it("shows the count badge and opens the popover with the feed + View all", () => {
     renderBell(12);
 
     // Trigger carries an accessible label with the count; the visual badge
@@ -79,7 +79,7 @@ describe("WhatsNewBell", () => {
     expect(screen.getByText("row link")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("row link"));
-    // The sheet unmounts its content on close.
+    // The popover unmounts its content on close.
     expect(screen.queryByText("row link")).toBeNull();
   });
 });
