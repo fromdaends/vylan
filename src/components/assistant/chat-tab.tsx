@@ -73,7 +73,7 @@ export function ChatTab({ locale }: { locale: "en" | "fr" }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -8 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="flex flex-col h-full min-h-0"
+          className="flex h-full min-h-0 flex-col bg-black text-white"
         >
           <ChatView
             locale={locale}
@@ -556,7 +556,7 @@ function ChatView({
               />
 
               {messages.length > 0 && (
-                <div className="text-center text-xs text-muted-foreground/70 tabular-nums">
+                <div className="text-center text-xs text-zinc-500 tabular-nums">
                   {formatConversationTime(messages[0].createdAt, locale)}
                 </div>
               )}
@@ -606,7 +606,7 @@ function ChatView({
       </div>
 
       {/* Status notes + input */}
-      <div className="border-t border-border/40 px-4 pt-3 pb-4">
+      <div className="border-t border-white/10 bg-black px-4 pt-3 pb-4">
         {ready === false && (
           <p className="mb-2.5 px-1 text-xs text-muted-foreground leading-relaxed">
             {ta("chat_not_ready")}{" "}
@@ -656,7 +656,7 @@ function ChatView({
             placeholder={ta("ask_placeholder")}
             maxLength={2000}
             disabled={inputDisabled}
-            className="resize-none min-h-[48px] max-h-[160px] w-full rounded-2xl border-border/60 bg-secondary/40 focus-visible:bg-background focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/20 pr-14 py-3.5 pl-4 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground/70 disabled:opacity-60"
+            className="min-h-[48px] max-h-[160px] w-full resize-none rounded-2xl border-white/10 bg-[#212121] py-3.5 pr-14 pl-4 text-sm leading-relaxed text-white placeholder:text-zinc-500 focus-visible:border-white/20 focus-visible:bg-[#212121] focus-visible:ring-0 disabled:opacity-60"
           />
           <motion.button
             type="submit"
@@ -668,7 +668,7 @@ function ChatView({
             <Send className="size-4" aria-hidden />
           </motion.button>
         </form>
-        <div className="flex items-center justify-between gap-3 mt-2.5 px-1 text-[11px] text-muted-foreground/70">
+        <div className="mt-2.5 flex items-center justify-between gap-3 px-1 text-[11px] text-zinc-500">
           <span className="hidden sm:inline tabular-nums">
             {t("ai_kbd_hint")}
           </span>
@@ -718,15 +718,15 @@ function ChatGreeting({
 
   return (
     <div className="mx-auto max-w-sm px-4 pt-2 text-center">
-      <p className="text-base font-medium tracking-tight text-foreground">
+      <p className="text-base font-medium tracking-tight text-white">
         {greetings[index]}
       </p>
       {engagementTitle && (
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-1 text-xs text-zinc-400">
           {ta("greeting_context", { title: engagementTitle })}
         </p>
       )}
-      <p className="mt-2 text-[10px] tracking-wide text-muted-foreground/50">
+      <p className="mt-2 text-[10px] tracking-wide text-zinc-600">
         {locale === "fr" ? "Propulsé par Haiku 4" : "Powered by Haiku 4"}
       </p>
     </div>
@@ -806,7 +806,7 @@ function Message({
   if (role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[82%] whitespace-pre-wrap break-words rounded-3xl bg-muted px-4 py-2.5 text-sm leading-relaxed text-foreground">
+        <div className="max-w-[82%] whitespace-pre-wrap break-words rounded-3xl bg-[#2f2f2f] px-4 py-2.5 text-sm leading-relaxed text-white">
           {content}
         </div>
       </div>
@@ -830,7 +830,7 @@ function ThinkingIndicator({ checking }: { checking: boolean }) {
   const t = useTranslations("Help");
   const ta = useTranslations("Assistant");
   return (
-    <div className="flex items-center gap-2 text-muted-foreground h-7">
+    <div className="flex h-7 items-center gap-2 text-zinc-400">
       <div className="flex gap-1">
         <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:-280ms] [animation-duration:1.1s]" />
         <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:-140ms] [animation-duration:1.1s]" />
@@ -865,7 +865,7 @@ function AssistantContent({
     return isStreaming ? <StreamingCaret /> : null;
   }
   return (
-    <div className="space-y-3 text-sm leading-relaxed text-foreground">
+    <div className="space-y-3 text-sm leading-relaxed text-zinc-100">
       {paragraphs.map((p, i) => {
         const isLast = i === paragraphs.length - 1;
         return (
