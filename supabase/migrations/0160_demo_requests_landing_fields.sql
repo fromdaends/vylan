@@ -25,10 +25,10 @@
 -- and is completely unaffected.
 
 alter table demo_requests
-  add column practice_type  text,
-  add column active_clients text,
-  add column notes          text,
-  add column source         text;
+  add column if not exists practice_type  text,
+  add column if not exists active_clients text,
+  add column if not exists notes          text,
+  add column if not exists source         text;
 
 comment on column demo_requests.practice_type is
   'Landing lead form: practice type label (Solo / bookkeeper, Small accounting firm, Mid-size practice, Tax & advisory, Other). NULL for /demo-flow leads.';

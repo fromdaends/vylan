@@ -9,7 +9,7 @@
 -- authenticated, which means PostgREST denies both reads and writes
 -- from the public API — the service-role key is the only path in.
 
-create table demo_requests (
+create table if not exists demo_requests (
   id uuid primary key default gen_random_uuid(),
 
   -- Step 1: who you are. email is the only truly required field at
@@ -46,16 +46,26 @@ create table demo_requests (
 
 -- Reasonable bounds on furthest_step so a malformed call can't write
 -- garbage.
-alter table demo_requests
-  add constraint demo_requests_furthest_step_check
-  check (furthest_step in (1, 2, 3));
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'demo_requests_furthest_step_check'
+      and conrelid = 'public.demo_requests'::regclass
+  ) then
+    alter table demo_requests
+      add constraint demo_requests_furthest_step_check
+      check (furthest_step in (1, 2, 3));
+  end if;
+end;
+$$;
 
 -- Indexes:
 -- - email so the founder can search a specific prospect quickly.
 -- - created_at desc so the inbox view (admin tool, later) sorts the
 --   most recent leads first cheaply.
-create index demo_requests_email_idx on demo_requests (email);
-create index demo_requests_created_at_idx on demo_requests (created_at desc);
+create index if not exists demo_requests_email_idx on demo_requests (email);
+create index if not exists demo_requests_created_at_idx on demo_requests (created_at desc);
 
 -- Keep updated_at fresh on every UPDATE — relied on by progressive
 -- save (Step 1 row, then Step 2 + Step 3 updates).

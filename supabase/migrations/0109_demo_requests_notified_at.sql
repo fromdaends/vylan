@@ -18,11 +18,11 @@
 --     fast-booked lead.
 
 alter table demo_requests
-  add column notified_at timestamptz;
+  add column if not exists notified_at timestamptz;
 
 -- Partial index targeted at the cron query. Most rows quickly become
 -- "notified" — a partial index on the NULL ones stays tiny.
-create index demo_requests_pending_notify_idx
+create index if not exists demo_requests_pending_notify_idx
   on demo_requests (updated_at)
   where notified_at is null;
 

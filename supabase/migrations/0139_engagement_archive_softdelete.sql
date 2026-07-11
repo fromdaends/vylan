@@ -16,14 +16,14 @@
 -- server-action layer (see src/lib/engagements/lifecycle.ts: canDeleteEngagements).
 
 alter table engagements
-  add column archived_at timestamptz,
-  add column archived_by_user_id uuid references users(id) on delete set null,
-  add column deleted_at timestamptz,
-  add column deleted_by_user_id uuid references users(id) on delete set null;
+  add column if not exists archived_at timestamptz,
+  add column if not exists archived_by_user_id uuid references users(id) on delete set null,
+  add column if not exists deleted_at timestamptz,
+  add column if not exists deleted_by_user_id uuid references users(id) on delete set null;
 
 -- Partial indexes stay tiny (only the rare archived / deleted rows) and speed
 -- the Archived + Recently Deleted views and the daily purge scan.
-create index engagements_archived_at_idx
+create index if not exists engagements_archived_at_idx
   on engagements (archived_at) where archived_at is not null;
-create index engagements_deleted_at_idx
+create index if not exists engagements_deleted_at_idx
   on engagements (deleted_at) where deleted_at is not null;
