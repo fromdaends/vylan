@@ -14,7 +14,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Gauge, Send } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   submitFeedbackAction,
   type FeedbackState,
@@ -550,10 +555,9 @@ function ChatView({
           </div>
         ) : (
             <div className="flex flex-col gap-6 px-5 py-6">
-              <ChatGreeting
-                engagementTitle={selected?.title ?? ""}
-                locale={locale}
-              />
+              {messages.length === 0 && (
+                <ChatGreeting engagementTitle={selected?.title ?? ""} />
+              )}
 
               {messages.length > 0 && (
                 <div className="text-center text-xs text-zinc-500 tabular-nums">
@@ -578,6 +582,12 @@ function ChatView({
                         m.role === "assistant"
                       }
                       checking={checking}
+                      showFeedback={
+                        !streaming &&
+                        m.role === "assistant" &&
+                        i === messages.length - 1
+                      }
+                      onFeedback={onSwitchToFeedback}
                     />
                   </motion.div>
                 ))}
@@ -668,37 +678,16 @@ function ChatView({
             <Send className="size-4" aria-hidden />
           </motion.button>
         </form>
-        <div className="mt-2.5 flex items-center justify-between gap-3 px-1 text-[11px] text-zinc-500">
-          <span className="hidden sm:inline tabular-nums">
-            {t("ai_kbd_hint")}
-          </span>
-          <div className="ml-auto flex items-center gap-3">
-            {ready === true && limit !== null && !limitReached && (
-              <span className="tabular-nums" aria-live="polite">
-                {ta("remaining", { count: limit.remaining })}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={onSwitchToFeedback}
-              className="hover:text-foreground transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-            >
-              {t("ai_send_feedback_compact")}
-            </button>
-          </div>
+        <div className="mt-2.5 flex items-center justify-between px-1 text-[10px] text-zinc-600">
+          <span>Haiku 4.5</span>
+          <UsagePopover limit={limit} locale={locale} />
         </div>
       </div>
     </>
   );
 }
 
-function ChatGreeting({
-  engagementTitle,
-  locale,
-}: {
-  engagementTitle: string;
-  locale: "en" | "fr";
-}) {
+function ChatGreeting({ engagementTitle }: { engagementTitle: string }) {
   const ta = useTranslations("Assistant");
   const greetings = [
     ta("greeting_1"),
@@ -729,10 +718,66 @@ function ChatGreeting({
           {ta("greeting_context", { title: engagementTitle })}
         </p>
       )}
-      <p className="mt-2 text-[10px] tracking-wide text-zinc-600">
-        {locale === "fr" ? "Propulsé par Haiku 4" : "Powered by Haiku 4"}
-      </p>
     </div>
+  );
+}
+
+function UsagePopover({
+  limit,
+  locale,
+}: {
+  limit: LimitState | null;
+  locale: "en" | "fr";
+}) {
+  const remaining = limit?.remaining ?? 0;
+  const total = limit?.limit ?? 0;
+  const percent =
+    total > 0
+      ? Math.max(0, Math.min(100, (remaining / total) * 100))
+      : 0;
+  const label =
+    locale === "fr"
+      ? `${remaining} message${remaining === 1 ? "" : "s"} restant${remaining === 1 ? "" : "s"}`
+      : `${remaining} message${remaining === 1 ? "" : "s"} left`;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={locale === "fr" ? "Utilisation" : "Usage"}
+          className="inline-flex size-7 items-center justify-center rounded-md text-zinc-500 hover:bg-white/5 hover:text-zinc-300 focus-visible:outline-none"
+        >
+          <Gauge className="size-3.5" aria-hidden />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="top"
+        sideOffset={8}
+        className="w-60 border-white/10 bg-[#212121] p-3 text-white shadow-xl"
+      >
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="font-medium">
+            {locale === "fr" ? "Utilisation" : "Usage"}
+          </span>
+          <span className="text-zinc-400 tabular-nums">{label}</span>
+        </div>
+        <div
+          className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"
+          role="progressbar"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={remaining}
+        >
+          <div
+            className="h-full rounded-full bg-zinc-300"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -800,12 +845,17 @@ function Message({
   content,
   isStreaming,
   checking,
+  showFeedback,
+  onFeedback,
 }: {
   role: "user" | "assistant";
   content: string;
   isStreaming: boolean;
   checking: boolean;
+  showFeedback: boolean;
+  onFeedback: () => void;
 }) {
+  const t = useTranslations("Help");
   if (role === "user") {
     return (
       <div className="flex justify-end">
@@ -823,6 +873,15 @@ function Message({
           <ThinkingIndicator checking={checking} />
         ) : (
           <AssistantContent text={content} isStreaming={isStreaming} />
+        )}
+        {showFeedback && (
+          <button
+            type="button"
+            onClick={onFeedback}
+            className="mt-2 text-[11px] text-zinc-600 hover:text-zinc-400 focus-visible:outline-none"
+          >
+            {t("ai_send_feedback_compact")}
+          </button>
         )}
       </div>
     </div>
