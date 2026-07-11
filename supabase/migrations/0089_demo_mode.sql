@@ -9,7 +9,7 @@
 -- retroactively converted into demos.
 
 alter table firms
-  add column is_demo boolean not null default false;
+  add column if not exists is_demo boolean not null default false;
 
 -- RLS already covers firms via firm_id scoping; no additional policy
 -- needed because this column is read together with the rest of the
