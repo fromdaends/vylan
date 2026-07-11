@@ -400,7 +400,7 @@ export function PreviewOverlay({
     <div
       ref={containerRef}
       onKeyDown={trapTab}
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm motion-safe:animate-in motion-safe:fade-in-0"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -412,7 +412,7 @@ export function PreviewOverlay({
         aria-modal="true"
         aria-label={`${t("eyebrow")} — ${engagementTitle}`}
         inert={rejectTarget != null || undefined}
-        className="relative flex h-[92vh] w-[95vw] max-w-[2100px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-background shadow-2xl outline-none motion-safe:animate-in motion-safe:fade-in-0 motion-safe:zoom-in-95 motion-safe:duration-200"
+        className="relative flex h-[92vh] w-[95vw] max-w-[2100px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-background shadow-2xl outline-none"
       >
         {/* Header: engagement name + Download all + close */}
         <div

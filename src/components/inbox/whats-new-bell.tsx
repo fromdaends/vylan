@@ -2,8 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Bell, ChevronRight } from "lucide-react";
-import { Link } from "@/i18n/navigation";
+import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -58,7 +57,7 @@ export function WhatsNewBell({
         }}
       >
         {/* Compact header + full-width divider, matching the reference. */}
-        <div className="flex h-12 items-center justify-between gap-3 border-b border-border/70 px-4">
+        <div className="flex h-12 items-center gap-3 border-b border-border/70 px-4">
           <div className="flex min-w-0 items-baseline gap-1.5">
             <h2 className="truncate text-sm font-semibold tracking-tight">
               {t("whats_new")}
@@ -69,19 +68,10 @@ export function WhatsNewBell({
               </span>
             )}
           </div>
-          {count > 0 && (
-            <Link
-              href="/notifications"
-              className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {t("view_all")}
-              <ChevronRight className="h-3 w-3" aria-hidden />
-            </Link>
-          )}
         </div>
 
         {/* The server-rendered feed rows (or empty state). */}
-        <div className="max-h-[min(65vh,32rem)] overflow-y-auto px-2 py-1">
+        <div className="max-h-[min(70vh,38rem)] overflow-y-auto overscroll-contain px-2 py-1">
           {children}
         </div>
       </PopoverContent>

@@ -808,7 +808,7 @@ function SidebarBody({
             <button
               type="button"
               className={cn(
-                "group flex items-center rounded-xl hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors",
+                "group flex items-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
                 collapsed
                   ? "w-full justify-center p-1.5"
                   : "w-full gap-3 px-2 py-2",
@@ -833,7 +833,7 @@ function SidebarBody({
                     </div>
                   </div>
                   <ChevronUp
-                    className="size-3.5 text-muted-foreground/70 group-hover:text-foreground transition-colors shrink-0"
+                    className="size-3.5 shrink-0 text-muted-foreground/70 group-hover:text-foreground"
                     aria-hidden
                   />
                 </>

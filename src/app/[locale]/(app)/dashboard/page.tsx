@@ -48,7 +48,9 @@ export default async function DashboardPage({
       getCurrentFirm(),
       listActiveFirmUsers(),
       listTemplates(),
-      listHomeNotifications(12, viewer),
+      // The compact bell panel owns scrolling, so supply every recent event
+      // instead of truncating the feed behind a separate "View all" route.
+      listHomeNotifications(1000, viewer),
     ]);
   const teamEnabled = hasActiveTeam({
     teamEnabled: firm?.team_enabled === true,
