@@ -153,7 +153,6 @@ export default async function AppLayout({
       {children}
       <AssistantPanel
         locale={locale === "fr" ? "fr" : "en"}
-        userDisplayName={userDisplayLabel(dbUser)}
         userId={dbUser.id}
       />
       <KeyboardShortcuts />
