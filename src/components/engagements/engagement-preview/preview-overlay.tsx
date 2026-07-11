@@ -550,7 +550,7 @@ export function PreviewOverlay({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t("search_placeholder")}
                 aria-label={t("search_placeholder")}
-                className="h-9 w-full rounded-lg border border-border/40 bg-card/40 pr-8 pl-8 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/60 sm:w-72"
+                className="h-9 w-full rounded-lg border border-border/40 bg-card/40 pr-8 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-border sm:w-72"
               />
               {query && (
                 <button
@@ -727,7 +727,7 @@ function PreviewItemFilter({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={t("filter_by_item")}
-        className="max-w-[14rem] cursor-pointer appearance-none truncate rounded-md bg-transparent py-2 pr-7 pl-8 text-sm font-medium text-foreground outline-none transition-colors hover:bg-secondary/60 focus-visible:ring-2 focus-visible:ring-ring/60"
+        className="max-w-[14rem] cursor-pointer appearance-none truncate rounded-md bg-transparent py-2 pr-7 pl-8 text-sm font-medium text-foreground outline-none hover:bg-secondary/60 focus-visible:bg-secondary/40"
       >
         <option value="all">{t("filter_all_items")}</option>
         {options.map((g) => (
