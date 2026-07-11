@@ -433,8 +433,13 @@ export function AssistantPanel({
                 <MoreHorizontal className="size-4" aria-hidden />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
+            {/* !animate-none: drop the zoom/fade pop on open+close so the menu
+                just appears — calmer than the default. Scoped here, not on the
+                shared component. Items override the default blue focus fill
+                with a quiet neutral highlight. */}
+            <DropdownMenuContent align="end" className="w-44 !animate-none">
               <DropdownMenuItem
+                className="focus:bg-secondary focus:text-foreground"
                 onSelect={() => {
                   setAssistantTab("chat");
                   setInfoOpen(false);
@@ -445,6 +450,7 @@ export function AssistantPanel({
                 {tab === "chat" && <Check className="ml-auto size-4" />}
               </DropdownMenuItem>
               <DropdownMenuItem
+                className="focus:bg-secondary focus:text-foreground"
                 onSelect={() => {
                   setAssistantTab("activity");
                   setInfoOpen(false);
