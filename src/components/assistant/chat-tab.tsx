@@ -10,12 +10,11 @@ import {
   useSyncExternalStore,
 } from "react";
 import { useTranslations } from "next-intl";
-import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, RefreshCw, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Send, Sparkles } from "lucide-react";
 import {
   submitFeedbackAction,
   type FeedbackState,
@@ -26,15 +25,23 @@ import {
   subscribeAssistant,
 } from "@/components/assistant/assistant-store";
 
-// The Assistant panel's Chat tab. Phase 1 ports the existing "Ask Vylan"
-// product-help chat (POST /api/assistant, streamed plain text) unchanged so
-// nothing regresses while the panel shell ships; Phase 2 swaps the backend to
-// the engagement-scoped chat endpoint. Strings stay in the `Help` namespace
-// for the same reason — they already exist in both languages.
+// The Assistant panel's Chat tab — phase 2: the ENGAGEMENT chat. Scoped to
+// the engagement picked in the panel header; answers come from the model via
+// POST /api/engagement-chat/message (NDJSON stream over a tool loop on the
+// engagement's structured data). The conversation is persisted per
+// engagement server-side and shared by the firm; GET /api/engagement-chat/
+// history loads it on engagement switch along with the caller's rolling
+// message-limit state.
 
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+};
+
+type LimitState = {
+  limit: number;
+  remaining: number;
+  resetAt: string | null;
 };
 
 type View = "chat" | "feedback";
@@ -47,9 +54,8 @@ export function ChatTab({ locale }: { locale: "en" | "fr" }) {
     getAssistantServerSnapshot,
   );
 
-  // Every (re)open lands on the chat view — the old sheet reset to chat on
-  // the Help-menu open event, and a panel reopening straight onto the
-  // feedback form reads as broken. Scheduled in a frame callback so the
+  // Every (re)open lands on the chat view — a panel reopening straight onto
+  // the feedback form reads as broken. Scheduled in a frame callback so the
   // effect body stays free of synchronous state writes.
   useEffect(() => {
     if (!open) return;
@@ -101,53 +107,166 @@ function ChatView({
   onSwitchToFeedback: () => void;
 }) {
   const t = useTranslations("Help");
-  const pathname = usePathname();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [streaming, setStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const inputRef = useRef<HTMLTextAreaElement | null>(null);
-  const { open } = useSyncExternalStore(
+  const ta = useTranslations("Assistant");
+  const { open, selected } = useSyncExternalStore(
     subscribeAssistant,
     getAssistantState,
     getAssistantServerSnapshot,
   );
+  const engagementId = selected?.id ?? null;
 
-  const isEmpty = messages.length === 0;
+  // The loaded conversation, tagged with its engagement so a switch shows
+  // the loading state instead of another engagement's thread.
+  const [thread, setThread] = useState<{
+    engagementId: string;
+    messages: ChatMessage[];
+  } | null>(null);
+  const [limit, setLimit] = useState<LimitState | null>(null);
+  // null = loading/unknown; false = migration not applied yet ("not
+  // activated"); true = chat is live.
+  const [ready, setReady] = useState<boolean | null>(null);
+  const [historyFailedFor, setHistoryFailedFor] = useState<string | null>(null);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  // A lookup ("tool") event was seen for the in-flight turn — the thinking
+  // indicator switches to "checking the engagement…".
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const loadingHistoryRef = useRef<string | null>(null);
+  const engagementIdRef = useRef<string | null>(engagementId);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // The old Sheet unmounted this view on close, killing any in-flight
-  // stream via the unmount cleanup. The panel keeps the tab mounted, so
-  // stop the stream explicitly when the panel closes — no point paying for
+  const isLoaded = thread !== null && thread.engagementId === engagementId;
+  const messages = isLoaded ? thread.messages : [];
+  const historyFailed =
+    historyFailedFor !== null && historyFailedFor === engagementId;
+  const limitReached = limit !== null && limit.remaining <= 0;
+
+  // Track the current engagement and cancel whatever was in flight for the
+  // previous one when the accountant switches.
+  useEffect(() => {
+    engagementIdRef.current = engagementId;
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [engagementId]);
+
+  // Stop an in-flight stream when the panel closes — no point paying for
   // tokens nobody is reading. Whatever already streamed in stays visible.
   useEffect(() => {
     if (!open) abortRef.current?.abort();
   }, [open]);
 
-  // Auto-scroll to bottom on new content. useLayoutEffect so the scroll
-  // happens in the same paint as the layout update — no flicker.
+  const loadHistory = useCallback(async (id: string) => {
+    if (loadingHistoryRef.current === id) return;
+    loadingHistoryRef.current = id;
+    try {
+      const res = await fetch(
+        `/api/engagement-chat/history?engagementId=${encodeURIComponent(id)}`,
+      );
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const body = (await res.json()) as {
+        ready: boolean;
+        messages?: { role: "user" | "assistant"; content: string }[];
+        limit?: number;
+        remaining?: number;
+        resetAt?: string | null;
+      };
+      if (engagementIdRef.current !== id) return;
+      // A load is a clean slate for this engagement — any error banner from
+      // a previous engagement (or a previous attempt) is stale now.
+      setError(null);
+      if (!body.ready) {
+        setReady(false);
+        setThread({ engagementId: id, messages: [] });
+        setLimit(null);
+        setHistoryFailedFor(null);
+        return;
+      }
+      setReady(true);
+      setThread({
+        engagementId: id,
+        messages: (body.messages ?? []).map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+      });
+      setLimit({
+        limit: body.limit ?? 0,
+        remaining: body.remaining ?? 0,
+        resetAt: body.resetAt ?? null,
+      });
+      setHistoryFailedFor(null);
+    } catch {
+      if (engagementIdRef.current === id) {
+        setError(null);
+        setHistoryFailedFor(id);
+      }
+    } finally {
+      if (loadingHistoryRef.current === id) loadingHistoryRef.current = null;
+    }
+  }, []);
+
+  // Load the conversation when the panel is open on an engagement whose
+  // thread isn't loaded yet. State writes land in the fetch continuation —
+  // the disable matches the repo's fetch-on-mount idiom.
+  useEffect(() => {
+    if (!open || !engagementId || isLoaded || historyFailed) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadHistory(engagementId);
+  }, [open, engagementId, isLoaded, historyFailed, loadHistory]);
+
+  // Every reopen quietly resyncs from the server: a teammate may have chatted
+  // meanwhile, the limit window keeps rolling, and a "not activated yet"
+  // state clears itself once the founder applies the migration.
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      const id = engagementIdRef.current;
+      if (id) void loadHistory(id);
+    }
+    wasOpenRef.current = open;
+  }, [open, loadHistory]);
+
+  // When the limit is reached, wake up right after the freeing time and
+  // resync — otherwise the lockout note would outlive the window and the
+  // input would stay disabled until a manual reopen.
+  useEffect(() => {
+    if (!limitReached || !limit?.resetAt) return;
+    const waitMs = new Date(limit.resetAt).getTime() - Date.now() + 2000;
+    const timer = window.setTimeout(
+      () => {
+        const id = engagementIdRef.current;
+        if (id) void loadHistory(id);
+      },
+      Math.max(waitMs, 1000),
+    );
+    return () => window.clearTimeout(timer);
+  }, [limitReached, limit?.resetAt, loadHistory]);
+
+  // Auto-scroll to bottom on new content. Keyed on the thread state itself
+  // (stable reference) rather than the derived `messages` array.
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [messages, streaming]);
+  }, [thread, streaming]);
 
-  // Cleanup any in-flight stream if the panel closes / component unmounts.
+  // Cleanup any in-flight stream on unmount.
   useEffect(() => {
     return () => {
       abortRef.current?.abort();
     };
   }, []);
 
-  // Auto-grow the textarea up to a cap. Reset to natural height when
-  // the field empties so the input shrinks back after a send.
+  // Auto-grow the textarea up to a cap.
   const resizeTextarea = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const next = Math.min(el.scrollHeight, 160);
-    el.style.height = `${next}px`;
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, []);
 
   useEffect(() => {
@@ -156,156 +275,313 @@ function ChatView({
     }
   }, [input]);
 
+  // Update the loaded thread's messages, guarding against engagement
+  // switches that happened while a request was in flight.
+  const patchThread = useCallback(
+    (id: string, fn: (msgs: ChatMessage[]) => ChatMessage[]) => {
+      setThread((prev) =>
+        prev && prev.engagementId === id
+          ? { ...prev, messages: fn(prev.messages) }
+          : prev,
+      );
+    },
+    [],
+  );
+
   const send = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || streaming) return;
+      const id = engagementIdRef.current;
+      if (!trimmed || streaming || !id || ready !== true || limitReached) {
+        return;
+      }
 
       setError(null);
       setInput("");
-
-      const nextHistory: ChatMessage[] = [
-        ...messages,
+      patchThread(id, (msgs) => [
+        ...msgs,
         { role: "user", content: trimmed },
-        // Placeholder assistant turn we'll fill in as the stream
-        // arrives. Empty content prevents flicker.
+        // Placeholder assistant turn filled in as the stream arrives.
         { role: "assistant", content: "" },
-      ];
-      setMessages(nextHistory);
+      ]);
       setStreaming(true);
+      setChecking(false);
 
       const controller = new AbortController();
       abortRef.current = controller;
 
+      const dropPlaceholderPair = () =>
+        patchThread(id, (msgs) => msgs.slice(0, -2));
+      // Once the server accepted the request, the user message is persisted
+      // and counted — later failures must NOT erase it from the thread (a
+      // history reload would just resurrect it, looking like a duplicate).
+      let streamStarted = false;
+      let sawDone = false;
+
       try {
-        const res = await fetch("/api/assistant", {
+        const res = await fetch("/api/engagement-chat/message", {
           method: "POST",
           headers: { "content-type": "application/json" },
           signal: controller.signal,
-          body: JSON.stringify({
-            messages: nextHistory
-              .slice(0, -1)
-              .map((m) => ({ role: m.role, content: m.content })),
-            locale,
-            pathname,
-          }),
+          body: JSON.stringify({ engagementId: id, message: trimmed, locale }),
         });
 
         if (!res.ok) {
-          let key = "ai_error";
-          if (res.status === 401) key = "ai_unauthorized";
-          if (res.status === 429) key = "ai_rate_limited";
-          setError(t(key));
-          setMessages((prev) => prev.slice(0, -1));
+          let code: string | null = null;
+          let payload: { limit?: number; resetAt?: string | null } = {};
+          try {
+            const body = (await res.json()) as {
+              error?: string;
+              limit?: number;
+              resetAt?: string | null;
+            };
+            code = body.error ?? null;
+            payload = body;
+          } catch {
+            // non-JSON error body
+          }
+          // The message was NOT accepted server-side: remove the optimistic
+          // pair and put the text back in the input so nothing typed is lost.
+          dropPlaceholderPair();
+          setInput(trimmed);
+          if (code === "chat_limit") {
+            setLimit({
+              limit: payload.limit ?? 0,
+              remaining: 0,
+              resetAt: payload.resetAt ?? null,
+            });
+          } else if (code === "trial_limit") {
+            setError(ta("trial_limit"));
+          } else if (code === "chat_not_ready") {
+            setReady(false);
+          } else if (res.status === 401) {
+            setError(t("ai_unauthorized"));
+          } else if (res.status === 429) {
+            setError(t("ai_rate_limited"));
+          } else {
+            setError(t("ai_error"));
+          }
           setStreaming(false);
           return;
         }
+        streamStarted = true;
 
         const reader = res.body?.getReader();
         if (!reader) {
+          // Accepted but unreadable — keep the user message (it's persisted
+          // server-side), just drop the empty placeholder.
+          patchThread(id, (msgs) => msgs.slice(0, -1));
           setError(t("ai_error"));
-          setMessages((prev) => prev.slice(0, -1));
           setStreaming(false);
           return;
         }
 
+        // NDJSON: one JSON event per line.
         const decoder = new TextDecoder();
+        let buffer = "";
         let acc = "";
+        const handleEvent = (line: string) => {
+          let event: {
+            t?: string;
+            text?: string;
+            remaining?: number;
+            resetAt?: string | null;
+            limit?: number;
+          };
+          try {
+            event = JSON.parse(line);
+          } catch {
+            return;
+          }
+          if (event.t === "delta" && typeof event.text === "string") {
+            acc += event.text;
+            const current = acc;
+            patchThread(id, (msgs) => {
+              const copy = msgs.slice();
+              const last = copy[copy.length - 1];
+              if (last && last.role === "assistant") {
+                copy[copy.length - 1] = { role: "assistant", content: current };
+              }
+              return copy;
+            });
+          } else if (event.t === "tool") {
+            setChecking(true);
+          } else if (event.t === "done") {
+            sawDone = true;
+            setLimit({
+              limit: event.limit ?? 0,
+              remaining: event.remaining ?? 0,
+              resetAt: event.resetAt ?? null,
+            });
+          } else if (event.t === "error") {
+            setError(t("ai_error"));
+          }
+        };
+
         while (true) {
           const { value, done } = await reader.read();
           if (done) break;
-          acc += decoder.decode(value, { stream: true });
-          setMessages((prev) => {
-            const copy = prev.slice();
-            const last = copy[copy.length - 1];
-            if (last && last.role === "assistant") {
-              copy[copy.length - 1] = { role: "assistant", content: acc };
-            }
-            return copy;
+          buffer += decoder.decode(value, { stream: true });
+          let newline: number;
+          while ((newline = buffer.indexOf("\n")) >= 0) {
+            const line = buffer.slice(0, newline).trim();
+            buffer = buffer.slice(newline + 1);
+            if (line) handleEvent(line);
+          }
+        }
+        buffer += decoder.decode();
+        const tail = buffer.trim();
+        if (tail) handleEvent(tail);
+
+        // Stream ended with no text at all (e.g. server error event only):
+        // drop the empty placeholder so a blank bubble doesn't linger.
+        if (!acc.trim()) {
+          patchThread(id, (msgs) => {
+            const last = msgs[msgs.length - 1];
+            return last && last.role === "assistant" && last.content === ""
+              ? msgs.slice(0, -1)
+              : msgs;
           });
         }
-        acc += decoder.decode();
-        setMessages((prev) => {
-          const copy = prev.slice();
-          const last = copy[copy.length - 1];
-          if (last && last.role === "assistant") {
-            copy[copy.length - 1] = { role: "assistant", content: acc };
-          }
-          return copy;
-        });
+
+        // The stream died before the done event (function timeout, dropped
+        // connection): the server may have persisted more than we displayed
+        // and DID count the message. Quietly resync thread + limit state
+        // from the source of truth.
+        if (!sawDone && engagementIdRef.current === id) {
+          void loadHistory(id);
+        }
       } catch (e) {
+        const trimEmptyPlaceholder = () =>
+          patchThread(id, (msgs) => {
+            const last = msgs[msgs.length - 1];
+            return last && last.role === "assistant" && last.content === ""
+              ? msgs.slice(0, -1)
+              : msgs;
+          });
         if ((e as Error).name !== "AbortError") {
           setError(t("ai_error"));
-          setMessages((prev) => prev.slice(0, -1));
+          if (streamStarted) {
+            // Accepted + partially streamed: keep what arrived (the server
+            // persisted the exchange) and resync from the source of truth.
+            trimEmptyPlaceholder();
+            if (engagementIdRef.current === id) void loadHistory(id);
+          } else {
+            // Never reached the server: undo the optimistic pair and give
+            // the user their text back.
+            dropPlaceholderPair();
+            setInput(trimmed);
+          }
         } else {
-          // Aborted (panel closed / reset) before any text arrived: drop the
-          // still-empty placeholder so a blank assistant bubble doesn't
-          // linger in the kept-mounted history.
-          setMessages((prev) => {
-            const last = prev[prev.length - 1];
-            return last && last.role === "assistant" && last.content === ""
-              ? prev.slice(0, -1)
-              : prev;
-          });
+          // Aborted (panel closed / engagement switched) before any text:
+          // drop the still-empty placeholder.
+          trimEmptyPlaceholder();
         }
       } finally {
         setStreaming(false);
+        setChecking(false);
         abortRef.current = null;
         queueMicrotask(() => inputRef.current?.focus());
       }
     },
-    [messages, streaming, locale, pathname, t],
+    [streaming, ready, limitReached, locale, t, ta, patchThread, loadHistory],
   );
 
-  const reset = useCallback(() => {
-    abortRef.current?.abort();
-    setMessages([]);
-    setError(null);
-    queueMicrotask(() => inputRef.current?.focus());
-  }, []);
+  // ---- Render ----
+
+  if (!engagementId) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
+        <p className="text-sm text-muted-foreground text-center leading-relaxed">
+          {ta("no_engagement_chat")}
+        </p>
+        {/* Feedback stays reachable even before an engagement is picked —
+            it was always available in the old help sheet. */}
+        <button
+          type="button"
+          onClick={onSwitchToFeedback}
+          className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+        >
+          {t("ai_send_feedback_compact")}
+        </button>
+      </div>
+    );
+  }
+
+  const inputDisabled =
+    streaming || ready !== true || limitReached || !isLoaded;
 
   return (
     <>
-      {/* Body — empty until the first message; no greeting or prompts. */}
+      {/* Body */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain">
-        {!isEmpty && (
-          <div className="px-5 py-6 flex flex-col gap-6">
-            <AnimatePresence initial={false}>
-              {messages.map((m, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, ease: "easeOut" }}
-                >
-                  <Message
-                    role={m.role}
-                    content={m.content}
-                    isStreaming={
-                      streaming &&
-                      i === messages.length - 1 &&
-                      m.role === "assistant"
-                    }
-                  />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <Alert variant="destructive">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              </motion.div>
-            )}
+        {historyFailed ? (
+          <div className="flex flex-col items-center gap-3 px-5 py-8">
+            <p className="text-sm text-muted-foreground">
+              {ta("activity_error")}
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setHistoryFailedFor(null)}
+            >
+              {ta("retry")}
+            </Button>
           </div>
+        ) : !isLoaded ? (
+          <div className="space-y-4 px-5 py-6" aria-hidden>
+            {[0, 1].map((i) => (
+              <div key={i} className="flex items-start gap-3 animate-pulse">
+                <span className="mt-1 size-7 rounded-full bg-muted shrink-0" />
+                <div className="flex-1 space-y-2 pt-1.5">
+                  <div className="h-3.5 rounded bg-muted w-2/3" />
+                  <div className="h-3 rounded bg-muted w-2/5" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          messages.length > 0 && (
+            <div className="px-5 py-6 flex flex-col gap-6">
+              <AnimatePresence initial={false}>
+                {messages.map((m, i) => (
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  >
+                    <Message
+                      role={m.role}
+                      content={m.content}
+                      isStreaming={
+                        streaming &&
+                        i === messages.length - 1 &&
+                        m.role === "assistant"
+                      }
+                      checking={checking}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                </motion.div>
+              )}
+            </div>
+          )
         )}
 
-        {isEmpty && error && (
-          <div className="px-5 pb-4">
+        {isLoaded && messages.length === 0 && error && (
+          <div className="px-5 pt-4">
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
@@ -313,8 +589,33 @@ function ChatView({
         )}
       </div>
 
-      {/* Input */}
+      {/* Status notes + input */}
       <div className="border-t border-border/40 px-4 pt-3 pb-4">
+        {ready === false && (
+          <p className="mb-2.5 px-1 text-xs text-muted-foreground leading-relaxed">
+            {ta("chat_not_ready")}{" "}
+            <button
+              type="button"
+              // Clearing the loaded thread re-arms the load effect — the
+              // copy says "try again shortly", so give it a real retry.
+              onClick={() => {
+                setThread(null);
+                setReady(null);
+              }}
+              className="underline underline-offset-2 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            >
+              {ta("retry")}
+            </button>
+          </p>
+        )}
+        {ready === true && limitReached && (
+          <p className="mb-2.5 px-1 text-xs text-muted-foreground leading-relaxed">
+            {ta("limit_reached", {
+              limit: limit?.limit ?? 0,
+              time: formatResetTime(limit?.resetAt ?? null, locale),
+            })}
+          </p>
+        )}
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -337,14 +638,14 @@ function ChatView({
             }}
             rows={1}
             placeholder={t("ai_input_placeholder")}
-            maxLength={4000}
-            disabled={streaming}
-            className="resize-none min-h-[48px] max-h-[160px] w-full rounded-2xl border-border/60 bg-secondary/40 focus-visible:bg-background focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/20 pr-14 py-3.5 pl-4 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground/70"
+            maxLength={2000}
+            disabled={inputDisabled}
+            className="resize-none min-h-[48px] max-h-[160px] w-full rounded-2xl border-border/60 bg-secondary/40 focus-visible:bg-background focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/20 pr-14 py-3.5 pl-4 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground/70 disabled:opacity-60"
           />
           <motion.button
             type="submit"
             whileTap={{ scale: 0.9 }}
-            disabled={streaming || input.trim().length === 0}
+            disabled={inputDisabled || input.trim().length === 0}
             aria-label={t("ai_send")}
             className="absolute right-2 bottom-2 inline-flex items-center justify-center size-9 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-30 disabled:cursor-not-allowed transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 shadow-sm"
           >
@@ -356,17 +657,10 @@ function ChatView({
             {t("ai_kbd_hint")}
           </span>
           <div className="ml-auto flex items-center gap-3">
-            {!isEmpty && (
-              <button
-                type="button"
-                onClick={reset}
-                className="inline-flex items-center gap-1 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-                aria-label={t("ai_reset")}
-                title={t("ai_reset")}
-              >
-                <RefreshCw className="size-3" aria-hidden />
-                {t("ai_reset")}
-              </button>
+            {ready === true && limit !== null && !limitReached && (
+              <span className="tabular-nums" aria-live="polite">
+                {ta("remaining", { count: limit.remaining })}
+              </span>
             )}
             <button
               type="button"
@@ -382,6 +676,35 @@ function ChatView({
   );
 }
 
+// When the next message frees up, in words the founder's clients would use.
+// The window is 36h, so it's always today, tomorrow, or the day after.
+function formatResetTime(iso: string | null, locale: "en" | "fr"): string {
+  if (!iso) return locale === "fr" ? "plus tard" : "later";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) {
+    return locale === "fr" ? "plus tard" : "later";
+  }
+  const intlLocale = locale === "fr" ? "fr-CA" : "en-CA";
+  const time = new Intl.DateTimeFormat(intlLocale, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(d);
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  if (d.toDateString() === now.toDateString()) {
+    return locale === "fr" ? `aujourd'hui à ${time}` : `today at ${time}`;
+  }
+  if (d.toDateString() === tomorrow.toDateString()) {
+    return locale === "fr" ? `demain à ${time}` : `tomorrow at ${time}`;
+  }
+  const date = new Intl.DateTimeFormat(intlLocale, {
+    day: "numeric",
+    month: "long",
+  }).format(d);
+  return locale === "fr" ? `le ${date} à ${time}` : `on ${date} at ${time}`;
+}
+
 // ---------------------------------------------------------------------------
 // Message bubbles
 // ---------------------------------------------------------------------------
@@ -390,10 +713,12 @@ function Message({
   role,
   content,
   isStreaming,
+  checking,
 }: {
   role: "user" | "assistant";
   content: string;
   isStreaming: boolean;
+  checking: boolean;
 }) {
   if (role === "user") {
     return (
@@ -415,7 +740,7 @@ function Message({
       </div>
       <div className="flex-1 min-w-0 pt-0.5">
         {isThinking ? (
-          <ThinkingIndicator />
+          <ThinkingIndicator checking={checking} />
         ) : (
           <AssistantContent text={content} isStreaming={isStreaming} />
         )}
@@ -424,8 +749,9 @@ function Message({
   );
 }
 
-function ThinkingIndicator() {
+function ThinkingIndicator({ checking }: { checking: boolean }) {
   const t = useTranslations("Help");
+  const ta = useTranslations("Assistant");
   return (
     <div className="flex items-center gap-2 text-muted-foreground h-7">
       <div className="flex gap-1">
@@ -433,7 +759,9 @@ function ThinkingIndicator() {
         <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:-140ms] [animation-duration:1.1s]" />
         <span className="size-1.5 rounded-full bg-current animate-bounce [animation-duration:1.1s]" />
       </div>
-      <span className="text-xs">{t("ai_thinking")}</span>
+      <span className="text-xs">
+        {checking ? ta("tool_checking") : t("ai_thinking")}
+      </span>
     </div>
   );
 }
@@ -464,7 +792,7 @@ function AssistantContent({
       {paragraphs.map((p, i) => {
         const isLast = i === paragraphs.length - 1;
         return (
-          <p key={i} className="break-words">
+          <p key={i} className="break-words whitespace-pre-line">
             {p}
             {isStreaming && isLast ? <StreamingCaret /> : null}
           </p>
@@ -479,6 +807,11 @@ function AssistantContent({
 // markdown signal so users see clean prose even if the model regresses.
 // Order matters: do the inline transforms BEFORE the line-collapse
 // step so leading-line markers (- , * , #) still match at line start.
+//
+// One deliberate difference from the old help chat: SINGLE newlines are
+// kept (rendered via whitespace-pre-line) because the engagement chat
+// legitimately answers with short line-separated lists ("what's
+// missing"). Only markdown decoration is stripped.
 function sanitizeAssistantText(raw: string): string {
   let text = raw;
 
@@ -492,8 +825,6 @@ function sanitizeAssistantText(raw: string): string {
   text = text.replace(/\*\*([^*\n]+?)\*\*/g, "$1");
 
   // Italic via single asterisks / underscores → drop the markers.
-  // Negative look-arounds keep us from eating ** that the pass above
-  // already handled, or stray underscores inside identifiers.
   text = text.replace(/(?<![*\w])\*([^*\n]+?)\*(?!\w)/g, "$1");
   text = text.replace(/(?<![_\w])_([^_\n]+?)_(?!\w)/g, "$1");
 
@@ -507,18 +838,10 @@ function sanitizeAssistantText(raw: string): string {
   // Horizontal rules — full lines of ---, ***, or ___ → drop the line.
   text = text.replace(/^[ \t]*[-*_]{3,}[ \t]*$/gm, "");
 
-  // Inside a paragraph, collapse single newlines (soft wraps from the
-  // model) into spaces so the chat panel's own wrapping is what the
-  // user sees. Paragraph breaks (2+ newlines) survive because we
-  // split on those upstream.
-  text = text.replace(/(?<!\n)\n(?!\n)/g, " ");
-
-  // Normalize any run of 3+ newlines down to exactly two so the
-  // paragraph splitter produces consistent spacing.
+  // Normalize any run of 3+ newlines down to exactly two.
   text = text.replace(/\n{3,}/g, "\n\n");
 
-  // Collapse runs of internal whitespace to single spaces (the
-  // newline-to-space pass above can leave doubles).
+  // Collapse runs of internal spaces/tabs to single spaces.
   text = text.replace(/[ \t]{2,}/g, " ");
 
   return text.trim();
