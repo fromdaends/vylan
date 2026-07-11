@@ -60,8 +60,21 @@ drop policy if exists chat_conversations_select on chat_conversations;
 create policy chat_conversations_select on chat_conversations for select
   using (firm_id = public.current_firm_id());
 drop policy if exists chat_conversations_insert on chat_conversations;
+-- The engagement must belong to the caller's firm too. Without that second
+-- check, a member of firm A could insert a row pointing at firm B's
+-- engagement (their own firm_id passes the column check), and the
+-- unique(engagement_id) constraint would then permanently block firm B from
+-- ever creating that engagement's conversation — a cross-tenant denial of
+-- service on the chat.
 create policy chat_conversations_insert on chat_conversations for insert
-  with check (firm_id = public.current_firm_id());
+  with check (
+    firm_id = public.current_firm_id()
+    and exists (
+      select 1 from engagements e
+      where e.id = engagement_id
+        and e.firm_id = public.current_firm_id()
+    )
+  );
 revoke all on chat_conversations from anon, authenticated;
 grant select, insert on chat_conversations to authenticated;
 
@@ -70,9 +83,17 @@ drop policy if exists chat_messages_select on chat_messages;
 create policy chat_messages_select on chat_messages for select
   using (firm_id = public.current_firm_id());
 drop policy if exists chat_messages_insert on chat_messages;
+-- Same containment rule as conversations: a message may only attach to a
+-- conversation of the caller's own firm, so the conversation.firm ==
+-- message.firm invariant holds by construction.
 create policy chat_messages_insert on chat_messages for insert
   with check (
     firm_id = public.current_firm_id()
+    and exists (
+      select 1 from chat_conversations c
+      where c.id = conversation_id
+        and c.firm_id = public.current_firm_id()
+    )
     and (
       (role = 'user' and user_id = auth.uid())
       or (role = 'assistant' and user_id is null)

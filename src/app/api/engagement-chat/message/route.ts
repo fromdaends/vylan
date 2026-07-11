@@ -216,12 +216,17 @@ export async function POST(request: NextRequest) {
 
       try {
         for (let round = 0; round < CHAT_MAX_TOOL_ROUNDS; round++) {
+          // On the last allowed round the model must ANSWER: without this, a
+          // lookup-happy turn could burn every round on tool calls and end
+          // with no text at all (quota spent, user gets silence).
+          const isFinalRound = round === CHAT_MAX_TOOL_ROUNDS - 1;
           const sdkStream = client.messages.stream(
             {
               model: CHAT_MODEL,
               max_tokens: CHAT_MAX_TOKENS,
               system,
               tools: CHAT_TOOLS,
+              ...(isFinalRound ? { tool_choice: { type: "none" as const } } : {}),
               messages: modelMessages,
             },
             // Bound each round so a hung read can't eat the whole function
@@ -271,6 +276,18 @@ export async function POST(request: NextRequest) {
           // Visual paragraph break between pre-tool narration and the
           // post-lookup answer, mirroring what the panel displayed.
           if (roundText.trim()) emit({ t: "delta", text: "\n\n" });
+        }
+
+        // Belt-and-suspenders: if the loop somehow ended with zero text
+        // (e.g. a max_tokens cut mid-tool-call), give the user an honest
+        // line instead of silence — the turn was still counted.
+        if (textParts.join("").trim() === "") {
+          const fallback =
+            body.locale === "fr"
+              ? "Désolé, je n'ai pas réussi à formuler une réponse. Reformulez votre question et réessayez."
+              : "Sorry, I couldn't put an answer together. Rephrase your question and try again.";
+          textParts.push(fallback);
+          emit({ t: "delta", text: fallback });
         }
 
         // Persist the assistant turn exactly as the panel displayed it.

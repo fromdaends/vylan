@@ -175,6 +175,9 @@ function ChatView({
         resetAt?: string | null;
       };
       if (engagementIdRef.current !== id) return;
+      // A load is a clean slate for this engagement — any error banner from
+      // a previous engagement (or a previous attempt) is stale now.
+      setError(null);
       if (!body.ready) {
         setReady(false);
         setThread({ engagementId: id, messages: [] });
@@ -197,7 +200,10 @@ function ChatView({
       });
       setHistoryFailedFor(null);
     } catch {
-      if (engagementIdRef.current === id) setHistoryFailedFor(id);
+      if (engagementIdRef.current === id) {
+        setError(null);
+        setHistoryFailedFor(id);
+      }
     } finally {
       if (loadingHistoryRef.current === id) loadingHistoryRef.current = null;
     }
@@ -211,6 +217,34 @@ function ChatView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadHistory(engagementId);
   }, [open, engagementId, isLoaded, historyFailed, loadHistory]);
+
+  // Every reopen quietly resyncs from the server: a teammate may have chatted
+  // meanwhile, the limit window keeps rolling, and a "not activated yet"
+  // state clears itself once the founder applies the migration.
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      const id = engagementIdRef.current;
+      if (id) void loadHistory(id);
+    }
+    wasOpenRef.current = open;
+  }, [open, loadHistory]);
+
+  // When the limit is reached, wake up right after the freeing time and
+  // resync — otherwise the lockout note would outlive the window and the
+  // input would stay disabled until a manual reopen.
+  useEffect(() => {
+    if (!limitReached || !limit?.resetAt) return;
+    const waitMs = new Date(limit.resetAt).getTime() - Date.now() + 2000;
+    const timer = window.setTimeout(
+      () => {
+        const id = engagementIdRef.current;
+        if (id) void loadHistory(id);
+      },
+      Math.max(waitMs, 1000),
+    );
+    return () => window.clearTimeout(timer);
+  }, [limitReached, limit?.resetAt, loadHistory]);
 
   // Auto-scroll to bottom on new content. Keyed on the thread state itself
   // (stable reference) rather than the derived `messages` array.
@@ -278,6 +312,11 @@ function ChatView({
 
       const dropPlaceholderPair = () =>
         patchThread(id, (msgs) => msgs.slice(0, -2));
+      // Once the server accepted the request, the user message is persisted
+      // and counted — later failures must NOT erase it from the thread (a
+      // history reload would just resurrect it, looking like a duplicate).
+      let streamStarted = false;
+      let sawDone = false;
 
       try {
         const res = await fetch("/api/engagement-chat/message", {
@@ -301,11 +340,11 @@ function ChatView({
           } catch {
             // non-JSON error body
           }
+          // The message was NOT accepted server-side: remove the optimistic
+          // pair and put the text back in the input so nothing typed is lost.
           dropPlaceholderPair();
+          setInput(trimmed);
           if (code === "chat_limit") {
-            // The message wasn't accepted — restore it into the input so
-            // nothing typed is lost, and flip to the limit-reached state.
-            setInput(trimmed);
             setLimit({
               limit: payload.limit ?? 0,
               remaining: 0,
@@ -325,10 +364,13 @@ function ChatView({
           setStreaming(false);
           return;
         }
+        streamStarted = true;
 
         const reader = res.body?.getReader();
         if (!reader) {
-          dropPlaceholderPair();
+          // Accepted but unreadable — keep the user message (it's persisted
+          // server-side), just drop the empty placeholder.
+          patchThread(id, (msgs) => msgs.slice(0, -1));
           setError(t("ai_error"));
           setStreaming(false);
           return;
@@ -365,6 +407,7 @@ function ChatView({
           } else if (event.t === "tool") {
             setChecking(true);
           } else if (event.t === "done") {
+            sawDone = true;
             setLimit({
               limit: event.limit ?? 0,
               remaining: event.remaining ?? 0,
@@ -400,19 +443,39 @@ function ChatView({
               : msgs;
           });
         }
+
+        // The stream died before the done event (function timeout, dropped
+        // connection): the server may have persisted more than we displayed
+        // and DID count the message. Quietly resync thread + limit state
+        // from the source of truth.
+        if (!sawDone && engagementIdRef.current === id) {
+          void loadHistory(id);
+        }
       } catch (e) {
-        if ((e as Error).name !== "AbortError") {
-          setError(t("ai_error"));
-          dropPlaceholderPair();
-        } else {
-          // Aborted (panel closed / engagement switched) before any text:
-          // drop the still-empty placeholder.
+        const trimEmptyPlaceholder = () =>
           patchThread(id, (msgs) => {
             const last = msgs[msgs.length - 1];
             return last && last.role === "assistant" && last.content === ""
               ? msgs.slice(0, -1)
               : msgs;
           });
+        if ((e as Error).name !== "AbortError") {
+          setError(t("ai_error"));
+          if (streamStarted) {
+            // Accepted + partially streamed: keep what arrived (the server
+            // persisted the exchange) and resync from the source of truth.
+            trimEmptyPlaceholder();
+            if (engagementIdRef.current === id) void loadHistory(id);
+          } else {
+            // Never reached the server: undo the optimistic pair and give
+            // the user their text back.
+            dropPlaceholderPair();
+            setInput(trimmed);
+          }
+        } else {
+          // Aborted (panel closed / engagement switched) before any text:
+          // drop the still-empty placeholder.
+          trimEmptyPlaceholder();
         }
       } finally {
         setStreaming(false);
@@ -421,17 +484,26 @@ function ChatView({
         queueMicrotask(() => inputRef.current?.focus());
       }
     },
-    [streaming, ready, limitReached, locale, t, ta, patchThread],
+    [streaming, ready, limitReached, locale, t, ta, patchThread, loadHistory],
   );
 
   // ---- Render ----
 
   if (!engagementId) {
     return (
-      <div className="flex-1 flex items-center justify-center px-8">
+      <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
         <p className="text-sm text-muted-foreground text-center leading-relaxed">
           {ta("no_engagement_chat")}
         </p>
+        {/* Feedback stays reachable even before an engagement is picked —
+            it was always available in the old help sheet. */}
+        <button
+          type="button"
+          onClick={onSwitchToFeedback}
+          className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+        >
+          {t("ai_send_feedback_compact")}
+        </button>
       </div>
     );
   }
@@ -521,7 +593,19 @@ function ChatView({
       <div className="border-t border-border/40 px-4 pt-3 pb-4">
         {ready === false && (
           <p className="mb-2.5 px-1 text-xs text-muted-foreground leading-relaxed">
-            {ta("chat_not_ready")}
+            {ta("chat_not_ready")}{" "}
+            <button
+              type="button"
+              // Clearing the loaded thread re-arms the load effect — the
+              // copy says "try again shortly", so give it a real retry.
+              onClick={() => {
+                setThread(null);
+                setReady(null);
+              }}
+              className="underline underline-offset-2 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+            >
+              {ta("retry")}
+            </button>
           </p>
         )}
         {ready === true && limitReached && (

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeChatLimitState } from "./limit";
+import { CHAT_MESSAGE_LIMIT } from "./config";
 
 const HOUR = 60 * 60 * 1000;
 const NOW = Date.parse("2026-07-11T12:00:00.000Z");
@@ -69,9 +70,9 @@ describe("computeChatLimitState", () => {
     expect(s.used).toBe(1);
   });
 
-  it("uses the exported defaults (30 per 36h)", () => {
+  it("defaults to the config constants (stays a one-line change)", () => {
     const s = computeChatLimitState([hoursAgo(1)], NOW);
-    expect(s.limit).toBe(30);
-    expect(s.remaining).toBe(29);
+    expect(s.limit).toBe(CHAT_MESSAGE_LIMIT);
+    expect(s.remaining).toBe(CHAT_MESSAGE_LIMIT - 1);
   });
 });
