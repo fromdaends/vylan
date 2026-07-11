@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Send } from "lucide-react";
 import {
   submitFeedbackAction,
   type FeedbackState,
@@ -36,6 +36,7 @@ import {
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  createdAt: string;
 };
 
 type LimitState = {
@@ -169,7 +170,11 @@ function ChatView({
       if (!res.ok) throw new Error(`status ${res.status}`);
       const body = (await res.json()) as {
         ready: boolean;
-        messages?: { role: "user" | "assistant"; content: string }[];
+        messages?: {
+          role: "user" | "assistant";
+          content: string;
+          createdAt: string;
+        }[];
         limit?: number;
         remaining?: number;
         resetAt?: string | null;
@@ -191,6 +196,7 @@ function ChatView({
         messages: (body.messages ?? []).map((m) => ({
           role: m.role,
           content: m.content,
+          createdAt: m.createdAt,
         })),
       });
       setLimit({
@@ -298,11 +304,12 @@ function ChatView({
 
       setError(null);
       setInput("");
+      const createdAt = new Date().toISOString();
       patchThread(id, (msgs) => [
         ...msgs,
-        { role: "user", content: trimmed },
+        { role: "user", content: trimmed, createdAt },
         // Placeholder assistant turn filled in as the stream arrives.
-        { role: "assistant", content: "" },
+        { role: "assistant", content: "", createdAt },
       ]);
       setStreaming(true);
       setChecking(false);
@@ -400,7 +407,7 @@ function ChatView({
               const copy = msgs.slice();
               const last = copy[copy.length - 1];
               if (last && last.role === "assistant") {
-                copy[copy.length - 1] = { role: "assistant", content: current };
+                copy[copy.length - 1] = { ...last, content: current };
               }
               return copy;
             });
@@ -542,8 +549,18 @@ function ChatView({
             ))}
           </div>
         ) : (
-          messages.length > 0 && (
-            <div className="px-5 py-6 flex flex-col gap-6">
+            <div className="flex flex-col gap-6 px-5 py-6">
+              <ChatGreeting
+                engagementTitle={selected?.title ?? ""}
+                locale={locale}
+              />
+
+              {messages.length > 0 && (
+                <div className="text-center text-xs text-muted-foreground/70 tabular-nums">
+                  {formatConversationTime(messages[0].createdAt, locale)}
+                </div>
+              )}
+
               <AnimatePresence initial={false}>
                 {messages.map((m, i) => (
                   <motion.div
@@ -577,7 +594,6 @@ function ChatView({
                 </motion.div>
               )}
             </div>
-          )
         )}
 
         {isLoaded && messages.length === 0 && error && (
@@ -676,6 +692,73 @@ function ChatView({
   );
 }
 
+function ChatGreeting({
+  engagementTitle,
+  locale,
+}: {
+  engagementTitle: string;
+  locale: "en" | "fr";
+}) {
+  const ta = useTranslations("Assistant");
+  const [index, setIndex] = useState(0);
+  const greetings = [
+    ta("greeting_1"),
+    ta("greeting_2"),
+    ta("greeting_3"),
+    ta("greeting_4"),
+  ];
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setIndex((current) => (current + 1) % greetings.length),
+      6000,
+    );
+    return () => window.clearInterval(timer);
+  }, [greetings.length]);
+
+  return (
+    <div className="mx-auto max-w-sm px-4 pt-2 text-center">
+      <p className="text-base font-medium tracking-tight text-foreground">
+        {greetings[index]}
+      </p>
+      {engagementTitle && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {ta("greeting_context", { title: engagementTitle })}
+        </p>
+      )}
+      <p className="mt-2 text-[10px] tracking-wide text-muted-foreground/50">
+        {locale === "fr" ? "Propulsé par Haiku 4" : "Powered by Haiku 4"}
+      </p>
+    </div>
+  );
+}
+
+function formatConversationTime(iso: string, locale: "en" | "fr"): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const day =
+    date.toDateString() === now.toDateString()
+      ? locale === "fr"
+        ? "Aujourd’hui"
+        : "Today"
+      : date.toDateString() === yesterday.toDateString()
+        ? locale === "fr"
+          ? "Hier"
+          : "Yesterday"
+        : new Intl.DateTimeFormat(locale === "fr" ? "fr-CA" : "en-CA", {
+            month: "short",
+            day: "numeric",
+          }).format(date);
+  const time = new Intl.DateTimeFormat(locale === "fr" ? "fr-CA" : "en-CA", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+  return `${day} ${time}`;
+}
+
 // When the next message frees up, in words the founder's clients would use.
 // The window is 36h, so it's always today, tomorrow, or the day after.
 function formatResetTime(iso: string | null, locale: "en" | "fr"): string {
@@ -723,7 +806,7 @@ function Message({
   if (role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="rounded-2xl bg-primary text-primary-foreground px-4 py-2.5 text-sm leading-relaxed max-w-[82%] whitespace-pre-wrap break-words shadow-sm">
+        <div className="max-w-[82%] whitespace-pre-wrap break-words rounded-3xl bg-muted px-4 py-2.5 text-sm leading-relaxed text-foreground">
           {content}
         </div>
       </div>
@@ -731,14 +814,8 @@ function Message({
   }
   const isThinking = isStreaming && content.length === 0;
   return (
-    <div className="flex gap-3 items-start">
-      <div
-        aria-hidden
-        className="shrink-0 size-7 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center ring-1 ring-accent/15 mt-0.5"
-      >
-        <Sparkles className="size-3.5 text-accent" aria-hidden />
-      </div>
-      <div className="flex-1 min-w-0 pt-0.5">
+    <div className="flex items-start">
+      <div className="min-w-0 flex-1">
         {isThinking ? (
           <ThinkingIndicator checking={checking} />
         ) : (
