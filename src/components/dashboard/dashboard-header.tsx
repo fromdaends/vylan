@@ -21,7 +21,7 @@ export function DashboardHeader({
   // Static subtitle part (the firm name); the greeting appends today's date
   // from the USER's clock client-side (not the server's UTC "today").
   subtitle: string;
-  // The What's-new bell + slide-out (server-rendered feed inside a client
+  // The What's-new bell + anchored popover (server-rendered feed inside a client
   // shell), passed from the page so this header stays presentation-only.
   bell?: ReactNode;
 }) {

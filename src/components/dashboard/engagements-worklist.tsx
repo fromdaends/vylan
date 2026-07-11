@@ -626,7 +626,7 @@ function WorklistRowView({
                   <button
                     type="button"
                     aria-label={tEng("menu_actions")}
-                    className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="inline-flex size-8 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border"
                   >
                     <MoreHorizontal className="size-4" />
                   </button>
