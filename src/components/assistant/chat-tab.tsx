@@ -15,16 +15,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  ArrowLeft,
-  ChevronRight,
-  Download,
-  Lock,
-  RefreshCw,
-  Send,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft, RefreshCw, Send, Sparkles } from "lucide-react";
 import {
   submitFeedbackAction,
   type FeedbackState,
@@ -40,10 +31,6 @@ import {
 // nothing regresses while the panel shell ships; Phase 2 swaps the backend to
 // the engagement-scoped chat endpoint. Strings stay in the `Help` namespace
 // for the same reason — they already exist in both languages.
-
-// Order matches Help.ai_suggested_1..4. The icon for each suggestion is
-// chosen to telegraph what kind of help the user is about to get.
-const SUGGESTION_ICONS = [Send, ShieldCheck, Lock, Download] as const;
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -277,20 +264,11 @@ function ChatView({
     queueMicrotask(() => inputRef.current?.focus());
   }, []);
 
-  const suggestions = [
-    t("ai_suggested_1"),
-    t("ai_suggested_2"),
-    t("ai_suggested_3"),
-    t("ai_suggested_4"),
-  ];
-
   return (
     <>
-      {/* Body */}
+      {/* Body — empty until the first message; no greeting or prompts. */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain">
-        {isEmpty ? (
-          <EmptyState suggestions={suggestions} onPick={send} />
-        ) : (
+        {!isEmpty && (
           <div className="px-5 py-6 flex flex-col gap-6">
             <AnimatePresence initial={false}>
               {messages.map((m, i) => (
@@ -401,68 +379,6 @@ function ChatView({
         </div>
       </div>
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Empty state
-// ---------------------------------------------------------------------------
-
-function EmptyState({
-  suggestions,
-  onPick,
-}: {
-  suggestions: string[];
-  onPick: (q: string) => void;
-}) {
-  const t = useTranslations("Help");
-  // No greeting, logo, or blurb — the panel opens straight to the suggested
-  // questions. (Assistant capabilities live behind the header Info button.)
-  return (
-    <div className="px-5 pt-6 pb-6">
-      <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/80 font-semibold mb-2.5 px-1">
-        {t("ai_suggested_title")}
-      </div>
-      <motion.div
-        className="grid gap-2"
-        initial="hidden"
-        animate="visible"
-        variants={{
-          visible: { transition: { staggerChildren: 0.05, delayChildren: 0.1 } },
-        }}
-      >
-        {suggestions.map((q, i) => {
-          const Icon = SUGGESTION_ICONS[i] ?? Sparkles;
-          return (
-            <motion.button
-              key={q}
-              variants={{
-                hidden: { opacity: 0, y: 8 },
-                visible: { opacity: 1, y: 0 },
-              }}
-              whileHover={{ x: 2 }}
-              whileTap={{ scale: 0.985 }}
-              transition={{ type: "spring", stiffness: 400, damping: 30 }}
-              type="button"
-              onClick={() => onPick(q)}
-              className="group flex items-center gap-3 text-left text-sm rounded-2xl border border-border/50 bg-background/60 hover:border-border/80 hover:bg-secondary/40 px-3.5 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <span className="shrink-0 size-8 rounded-xl bg-secondary/70 group-hover:bg-accent/10 flex items-center justify-center transition-colors">
-                <Icon
-                  className="size-4 text-muted-foreground group-hover:text-accent transition-colors"
-                  aria-hidden
-                />
-              </span>
-              <span className="leading-snug flex-1">{q}</span>
-              <ChevronRight
-                className="shrink-0 size-4 text-muted-foreground/40 group-hover:text-foreground/60 group-hover:translate-x-0.5 transition-all"
-                aria-hidden
-              />
-            </motion.button>
-          );
-        })}
-      </motion.div>
-    </div>
   );
 }
 
