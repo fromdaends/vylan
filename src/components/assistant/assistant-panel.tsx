@@ -13,6 +13,7 @@ import { motion } from "framer-motion";
 import {
   Check,
   History,
+  Info,
   MessageSquare,
   MoreHorizontal,
   Sparkles,
@@ -51,6 +52,7 @@ import {
 import { EngagementSelector } from "@/components/assistant/engagement-selector";
 import { ChatTab } from "@/components/assistant/chat-tab";
 import { ActivityTab } from "@/components/assistant/activity-tab";
+import { AssistantInfo } from "@/components/assistant/assistant-info";
 
 // The Vylan Assistant panel — the evolution of the old "Ask Vylan" help
 // sheet. A NON-modal, resizable slide-in fixed to the right edge: the page
@@ -63,11 +65,9 @@ import { ActivityTab } from "@/components/assistant/activity-tab";
 // popover and any dialogs stack correctly over the panel.
 export function AssistantPanel({
   locale,
-  userDisplayName,
   userId,
 }: {
   locale: "en" | "fr";
-  userDisplayName: string;
   userId: string;
 }) {
   const t = useTranslations("Assistant");
@@ -80,6 +80,9 @@ export function AssistantPanel({
   );
 
   const panelRef = useRef<HTMLElement | null>(null);
+  // The capabilities overlay (header Info button). Reset to closed on every
+  // fresh open so the panel never reopens onto the info screen.
+  const [infoOpen, setInfoOpen] = useState(false);
   const fabRef = useRef<HTMLButtonElement | null>(null);
   const wasOpenRef = useRef(false);
 
@@ -121,6 +124,15 @@ export function AssistantPanel({
     }
     wasOpenRef.current = open;
   }, [open, userId]);
+
+  // Fresh open always lands on the chat/activity view, never the info
+  // overlay. Scheduled in a frame callback so the effect body stays free of
+  // synchronous state writes (matches the chat-tab view reset).
+  useEffect(() => {
+    if (!open) return;
+    const frame = requestAnimationFrame(() => setInfoOpen(false));
+    return () => cancelAnimationFrame(frame);
+  }, [open]);
 
   // -------------------------------------------------------------------------
   // Legacy + new open events. The profile dropdown / mobile account menu
@@ -327,8 +339,12 @@ export function AssistantPanel({
           // defaultPrevented guard: a Radix layer inside the panel (the
           // engagement-selector popover, a dropdown…) handles its own Escape
           // and preventDefault()s it — that press must dismiss only that
-          // layer, not the whole panel.
-          if (e.key === "Escape" && !e.defaultPrevented) closeAssistant();
+          // layer, not the whole panel. Otherwise Escape closes the info
+          // overlay first (if open), then the panel.
+          if (e.key === "Escape" && !e.defaultPrevented) {
+            if (infoOpen) setInfoOpen(false);
+            else closeAssistant();
+          }
         }}
         style={
           {
@@ -390,6 +406,21 @@ export function AssistantPanel({
             value={selected}
             onChange={setSelectedEngagement}
           />
+          {/* Info: expands the capabilities overlay over the panel body. */}
+          <button
+            type="button"
+            onClick={() => setInfoOpen((v) => !v)}
+            aria-label={t("info_label")}
+            aria-expanded={infoOpen}
+            className={cn(
+              "shrink-0 inline-flex items-center justify-center size-8 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              infoOpen
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
+            )}
+          >
+            <Info className="size-4" aria-hidden />
+          </button>
           {/* Chat / Activity live behind a kebab menu instead of a tab bar,
               so the header stays quiet. The active view carries a check. */}
           <DropdownMenu>
@@ -403,12 +434,22 @@ export function AssistantPanel({
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem onSelect={() => setAssistantTab("chat")}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setAssistantTab("chat");
+                  setInfoOpen(false);
+                }}
+              >
                 <MessageSquare />
                 {t("tab_chat")}
                 {tab === "chat" && <Check className="ml-auto size-4" />}
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setAssistantTab("activity")}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  setAssistantTab("activity");
+                  setInfoOpen(false);
+                }}
+              >
                 <History />
                 {t("tab_activity")}
                 {tab === "activity" && <Check className="ml-auto size-4" />}
@@ -425,30 +466,37 @@ export function AssistantPanel({
           </button>
         </header>
 
-        {/* Chat + Activity both stay mounted (visibility toggled, not
-            unmounted) so chat history and the activity feed survive a view
-            switch — same guarantee the old forceMount tabs gave. */}
-        <div className="flex-1 min-h-0 flex flex-col">
-          <div
-            className={cn(
-              "flex-1 min-h-0 flex flex-col",
-              tab !== "chat" && "hidden",
-            )}
-          >
-            <ChatTab locale={locale} userDisplayName={userDisplayName} />
+        {/* Content region. Chat + Activity both stay mounted (visibility
+            toggled, not unmounted) so chat history and the activity feed
+            survive a view switch — same guarantee the old forceMount tabs
+            gave. The Info overlay, when open, expands over this whole region
+            (the header stays visible above it). */}
+        <div className="relative flex-1 min-h-0">
+          <div className="absolute inset-0 flex flex-col">
+            <div
+              className={cn(
+                "flex-1 min-h-0 flex flex-col",
+                tab !== "chat" && "hidden",
+              )}
+            >
+              <ChatTab locale={locale} />
+            </div>
+            <div
+              className={cn(
+                "flex-1 min-h-0 overflow-y-auto overscroll-contain",
+                tab !== "activity" && "hidden",
+              )}
+            >
+              <ActivityTab
+                engagementId={selected?.id ?? null}
+                locale={locale}
+                active={open && tab === "activity"}
+              />
+            </div>
           </div>
-          <div
-            className={cn(
-              "flex-1 min-h-0 overflow-y-auto overscroll-contain",
-              tab !== "activity" && "hidden",
-            )}
-          >
-            <ActivityTab
-              engagementId={selected?.id ?? null}
-              locale={locale}
-              active={open && tab === "activity"}
-            />
-          </div>
+          {open && infoOpen && (
+            <AssistantInfo onClose={() => setInfoOpen(false)} />
+          )}
         </div>
       </aside>
     </>

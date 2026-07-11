@@ -52,13 +52,7 @@ type ChatMessage = {
 
 type View = "chat" | "feedback";
 
-export function ChatTab({
-  locale,
-  userDisplayName,
-}: {
-  locale: "en" | "fr";
-  userDisplayName: string;
-}) {
+export function ChatTab({ locale }: { locale: "en" | "fr" }) {
   const [view, setView] = useState<View>("chat");
   const { open } = useSyncExternalStore(
     subscribeAssistant,
@@ -89,7 +83,6 @@ export function ChatTab({
         >
           <ChatView
             locale={locale}
-            userDisplayName={userDisplayName}
             onSwitchToFeedback={() => setView("feedback")}
           />
         </motion.div>
@@ -115,11 +108,9 @@ export function ChatTab({
 
 function ChatView({
   locale,
-  userDisplayName,
   onSwitchToFeedback,
 }: {
   locale: "en" | "fr";
-  userDisplayName: string;
   onSwitchToFeedback: () => void;
 }) {
   const t = useTranslations("Help");
@@ -298,11 +289,7 @@ function ChatView({
       {/* Body */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain">
         {isEmpty ? (
-          <EmptyState
-            displayName={userDisplayName}
-            suggestions={suggestions}
-            onPick={send}
-          />
+          <EmptyState suggestions={suggestions} onPick={send} />
         ) : (
           <div className="px-5 py-6 flex flex-col gap-6">
             <AnimatePresence initial={false}>
@@ -422,48 +409,17 @@ function ChatView({
 // ---------------------------------------------------------------------------
 
 function EmptyState({
-  displayName,
   suggestions,
   onPick,
 }: {
-  displayName: string;
   suggestions: string[];
   onPick: (q: string) => void;
 }) {
   const t = useTranslations("Help");
+  // No greeting, logo, or blurb — the panel opens straight to the suggested
+  // questions. (Assistant capabilities live behind the header Info button.)
   return (
-    <div className="px-5 pt-8 pb-6">
-      <motion.div
-        initial={{ opacity: 0, y: 4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-        className="flex flex-col items-center text-center mb-7"
-      >
-        <div className="relative mb-4">
-          <motion.div
-            aria-hidden
-            initial={{ scale: 0.6, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-            className="absolute inset-0 -m-2 rounded-full bg-accent/25 blur-2xl"
-          />
-          <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="relative size-14 rounded-2xl bg-gradient-to-br from-accent/25 via-accent/10 to-transparent flex items-center justify-center ring-1 ring-accent/25 shadow-sm"
-          >
-            <Sparkles className="size-6 text-accent" aria-hidden />
-          </motion.div>
-        </div>
-        <h2 className="text-xl font-semibold tracking-tight">
-          {t("ai_hello", { name: firstName(displayName) || "👋" })}
-        </h2>
-        <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed max-w-[300px]">
-          {t("ai_intro_sub")}
-        </p>
-      </motion.div>
-
+    <div className="px-5 pt-6 pb-6">
       <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/80 font-semibold mb-2.5 px-1">
         {t("ai_suggested_title")}
       </div>
@@ -659,10 +615,6 @@ function StreamingCaret() {
       className="inline-block w-[2px] h-[0.95em] align-text-bottom translate-y-[1px] bg-foreground/70 ml-0.5 animate-pulse [animation-duration:1s]"
     />
   );
-}
-
-function firstName(label: string): string {
-  return label.split(/\s+/)[0] ?? "";
 }
 
 // ---------------------------------------------------------------------------
