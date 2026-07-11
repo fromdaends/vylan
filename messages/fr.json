@@ -2143,6 +2143,12 @@
     "retry": "Réessayer",
     "resize_handle": "Redimensionner le panneau",
     "resize_hint": "Glissez pour redimensionner. Double-cliquez pour réinitialiser.",
-    "new_engagement_badge": "Nouveau mandat"
+    "new_engagement_badge": "Nouveau mandat",
+    "no_engagement_chat": "Choisissez un mandat ci-dessus pour discuter avec l'assistant.",
+    "remaining": "{count, plural, one {# message restant} other {# messages restants}}",
+    "limit_reached": "Vous avez atteint la limite de {limit} messages. Vous pourrez écrire de nouveau {time}.",
+    "chat_not_ready": "L'assistant n'est pas encore activé. Réessayez dans quelques instants.",
+    "trial_limit": "Vous avez atteint la limite d'IA de votre essai gratuit. Passez à un forfait pour continuer à utiliser l'assistant.",
+    "tool_checking": "Consultation du mandat…"
   }
 }
