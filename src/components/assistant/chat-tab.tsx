@@ -637,7 +637,7 @@ function ChatView({
               }
             }}
             rows={1}
-            placeholder={t("ai_input_placeholder")}
+            placeholder={ta("ask_placeholder")}
             maxLength={2000}
             disabled={inputDisabled}
             className="resize-none min-h-[48px] max-h-[160px] w-full rounded-2xl border-border/60 bg-secondary/40 focus-visible:bg-background focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/20 pr-14 py-3.5 pl-4 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground/70 disabled:opacity-60"
