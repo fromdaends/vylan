@@ -2149,6 +2149,7 @@
     "limit_reached": "Vous avez atteint la limite de {limit} messages. Vous pourrez écrire de nouveau {time}.",
     "chat_not_ready": "L'assistant n'est pas encore activé. Réessayez dans quelques instants.",
     "trial_limit": "Vous avez atteint la limite d'IA de votre essai gratuit. Passez à un forfait pour continuer à utiliser l'assistant.",
-    "tool_checking": "Consultation du mandat…"
+    "tool_checking": "Consultation du mandat…",
+    "ask_placeholder": "Posez une question sur ce mandat…"
   }
 }

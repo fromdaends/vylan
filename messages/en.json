@@ -2149,6 +2149,7 @@
     "limit_reached": "You've reached the {limit}-message limit. You can write again {time}.",
     "chat_not_ready": "The assistant isn't activated yet. Try again shortly.",
     "trial_limit": "You've reached your free trial's AI limit. Upgrade to keep using the assistant.",
-    "tool_checking": "Checking the engagement…"
+    "tool_checking": "Checking the engagement…",
+    "ask_placeholder": "Ask about this engagement…"
   }
 }
