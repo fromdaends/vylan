@@ -2096,6 +2096,7 @@
     "panel_title": "Vylan Assistant",
     "tab_chat": "Chat",
     "tab_activity": "Activity",
+    "switch_view": "Switch view",
     "select_engagement": "Choose an engagement",
     "select_engagement_placeholder": "Search engagements…",
     "no_engagements": "No engagements found.",

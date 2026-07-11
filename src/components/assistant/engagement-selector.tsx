@@ -75,15 +75,22 @@ export function EngagementSelector({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
+        {/* Deliberately subtle: no outline, ghost fill, muted text — the
+            engagement scope is context, not a primary control. */}
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
           role="combobox"
           aria-expanded={open}
-          className="flex-1 min-w-0 justify-between font-normal"
+          className="flex-1 min-w-0 justify-start gap-1.5 px-2 h-8 font-normal text-muted-foreground hover:text-foreground hover:bg-secondary/50"
         >
-          <span className={cn("truncate", !value && "text-muted-foreground")}>
+          <span
+            className={cn(
+              "truncate text-sm",
+              value ? "text-foreground/90" : "text-muted-foreground",
+            )}
+          >
             {value
               ? value.clientName
                 ? `${value.title} · ${value.clientName}`
@@ -91,7 +98,7 @@ export function EngagementSelector({
               : t("select_engagement")}
           </span>
           <ChevronsUpDown
-            className="ml-1 size-3.5 shrink-0 text-muted-foreground/70"
+            className="ml-auto size-3 shrink-0 opacity-50"
             aria-hidden
           />
         </Button>
@@ -127,6 +134,10 @@ export function EngagementSelector({
                       // Include the id so two engagements with identical
                       // title + client stay distinct entries for cmdk.
                       value={`${o.title} ${o.clientName ?? ""} ${o.id}`}
+                      // Override cmdk's default blue accent highlight with a
+                      // quiet neutral fill — more minimalist, and it keeps the
+                      // row text legible instead of flipping to white-on-blue.
+                      className="data-[selected=true]:bg-secondary data-[selected=true]:text-foreground"
                       onSelect={() => {
                         onChange(o);
                         setOpen(false);
