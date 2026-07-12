@@ -287,7 +287,7 @@ export function AppShell({
           // horizontally by ~the sidebar width. min-w-0 lets it size to the
           // available width; <main> below clips any remaining child overflow
           // (and the table keeps its own internal scroll).
-          "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin-left] duration-200 ease-out",
+          "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin-left,margin-right] duration-300 ease-out sm:mr-[var(--assistant-shell-offset)]",
           collapsed ? "sm:ml-16" : "sm:ml-64",
         )}
       >

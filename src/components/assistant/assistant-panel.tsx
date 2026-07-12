@@ -286,6 +286,24 @@ export function AssistantPanel({
     };
   }, [dragging]);
 
+  // Desktop split-workspace contract: publish the panel's live width as a
+  // root CSS variable so AppShell can shrink its main column instead of
+  // letting the assistant cover it. The extra 16px accounts for the panel's
+  // right inset and the breathing room between the two surfaces.
+  useEffect(() => {
+    const panelWidth = width ?? defaultPanelWidth(window.innerWidth);
+    document.documentElement.style.setProperty(
+      "--assistant-shell-offset",
+      open ? `${panelWidth + 16}px` : "0px",
+    );
+  }, [open, width]);
+
+  useEffect(() => {
+    return () => {
+      document.documentElement.style.removeProperty("--assistant-shell-offset");
+    };
+  }, []);
+
   return (
     <>
       {/* Floating "Ask Vylan" button — hidden while the panel is open. */}
@@ -352,10 +370,9 @@ export function AssistantPanel({
           } as CSSProperties
         }
         className={cn(
-          "fixed inset-y-0 right-0 z-[45] flex flex-col outline-none",
-          "bg-card text-card-foreground border-l border-border/60",
-          "shadow-[-12px_0_40px_-16px_rgba(0,0,0,0.35)]",
-          "w-full sm:w-[var(--assistant-w)]",
+          "fixed inset-y-0 right-0 z-[45] flex w-full flex-col overflow-hidden bg-black text-white outline-none",
+          "sm:inset-y-2 sm:right-2 sm:w-[var(--assistant-w)] sm:rounded-2xl sm:border sm:border-white/10",
+          "sm:shadow-[-18px_0_48px_-28px_rgba(0,0,0,0.75),0_18px_50px_-30px_rgba(0,0,0,0.8)]",
           dragging
             ? "transition-none"
             : "transition-transform duration-300 ease-out",
@@ -401,7 +418,7 @@ export function AssistantPanel({
 
         {/* Header: engagement selector (subtle) + view menu + close. No brand
             chip, no divider line — kept minimal so the panel reads clean. */}
-        <header className="flex items-center gap-1 px-3 py-2.5">
+        <header className="flex items-center gap-1 border-b border-white/[0.06] bg-[#11110f] px-3 py-2.5">
           <EngagementSelector
             value={selected}
             onChange={setSelectedEngagement}
