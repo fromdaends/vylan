@@ -7,7 +7,6 @@ import {
   BellOff,
   Check,
   Download,
-  History,
   Link as LinkIcon,
   Loader2,
   MoreHorizontal,
@@ -39,17 +38,9 @@ import {
   toggleRemindersPausedAction,
 } from "@/app/actions/engagements";
 
-// The "..." overflow menu for an engagement's header actions. It keeps the top
-// row calm: only the primary/secondary buttons (Mark complete / Send reminder /
-// Reopen) and a subtle payment status pill stay visible; everything occasional
-// lives here:
-//   * Activity (opens the Assistant panel's Activity tab — the panel absorbed
-//     the old slide-out feed)
-//   * Copy client link / Copy payment link
-//   * Pause/Resume reminders, Download all, Cancel, Delete
-// Drafts never get this menu (they keep their inline buttons + a standalone
-// Activity icon), so wherever this menu renders it always has at least the
-// Activity item and never self-hides.
+// The "..." overflow menu for an engagement's occasional actions: copying
+// links, reminder controls, downloads, cancellation, and deletion. Activity
+// remains available in the Assistant and is intentionally absent here.
 export function EngagementMoreMenu({
   engagementId,
   locale,
@@ -72,7 +63,6 @@ export function EngagementMoreMenu({
   paymentLinkUrl?: string;
 }) {
   const t = useTranslations("Engagements");
-  const tActivity = useTranslations("Activity");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [copied, setCopied] = useState<null | "client" | "payment">(null);
 
@@ -90,21 +80,6 @@ export function EngagementMoreMenu({
   // can't drift (the route returns JSON {url}; the browser downloads).
   const { downloading, downloadAll } = useDownloadAll(engagementId);
   const isLive = status === "live";
-
-  const openActivity = () => {
-    // Defer so the dropdown fully closes (releasing its focus trap) before the
-    // Assistant panel takes focus. The panel (mounted in the app layout)
-    // listens for this event and opens on its Activity tab; scopeToPage makes
-    // it rescope to THIS engagement even if the panel is already open on
-    // another one.
-    window.setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent("vylan:assistant:open", {
-          detail: { tab: "activity", scopeToPage: true },
-        }),
-      );
-    }, 0);
-  };
 
   const togglePause = () => {
     const f = new FormData();
@@ -134,12 +109,6 @@ export function EngagementMoreMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
-          <DropdownMenuItem onSelect={openActivity}>
-            <History />
-            {tActivity("title")}
-          </DropdownMenuItem>
-
-          {(clientLinkToken || paymentLinkUrl) && <DropdownMenuSeparator />}
           {clientLinkToken && (
             <>
               <DropdownMenuItem

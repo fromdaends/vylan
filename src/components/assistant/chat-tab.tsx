@@ -14,7 +14,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Gauge, Send } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   submitFeedbackAction,
   type FeedbackState,
@@ -36,6 +41,7 @@ import {
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  createdAt: string;
 };
 
 type LimitState = {
@@ -72,7 +78,7 @@ export function ChatTab({ locale }: { locale: "en" | "fr" }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -8 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="flex flex-col h-full min-h-0"
+          className="flex h-full min-h-0 flex-col bg-black text-white"
         >
           <ChatView
             locale={locale}
@@ -169,7 +175,11 @@ function ChatView({
       if (!res.ok) throw new Error(`status ${res.status}`);
       const body = (await res.json()) as {
         ready: boolean;
-        messages?: { role: "user" | "assistant"; content: string }[];
+        messages?: {
+          role: "user" | "assistant";
+          content: string;
+          createdAt: string;
+        }[];
         limit?: number;
         remaining?: number;
         resetAt?: string | null;
@@ -191,6 +201,7 @@ function ChatView({
         messages: (body.messages ?? []).map((m) => ({
           role: m.role,
           content: m.content,
+          createdAt: m.createdAt,
         })),
       });
       setLimit({
@@ -298,11 +309,12 @@ function ChatView({
 
       setError(null);
       setInput("");
+      const createdAt = new Date().toISOString();
       patchThread(id, (msgs) => [
         ...msgs,
-        { role: "user", content: trimmed },
+        { role: "user", content: trimmed, createdAt },
         // Placeholder assistant turn filled in as the stream arrives.
-        { role: "assistant", content: "" },
+        { role: "assistant", content: "", createdAt },
       ]);
       setStreaming(true);
       setChecking(false);
@@ -400,7 +412,7 @@ function ChatView({
               const copy = msgs.slice();
               const last = copy[copy.length - 1];
               if (last && last.role === "assistant") {
-                copy[copy.length - 1] = { role: "assistant", content: current };
+                copy[copy.length - 1] = { ...last, content: current };
               }
               return copy;
             });
@@ -542,8 +554,17 @@ function ChatView({
             ))}
           </div>
         ) : (
-          messages.length > 0 && (
-            <div className="px-5 py-6 flex flex-col gap-6">
+            <div className="flex flex-col gap-6 px-5 py-6">
+              {messages.length === 0 && (
+                <ChatGreeting engagementTitle={selected?.title ?? ""} />
+              )}
+
+              {messages.length > 0 && (
+                <div className="text-center text-xs text-zinc-500 tabular-nums">
+                  {formatConversationTime(messages[0].createdAt, locale)}
+                </div>
+              )}
+
               <AnimatePresence initial={false}>
                 {messages.map((m, i) => (
                   <motion.div
@@ -561,6 +582,12 @@ function ChatView({
                         m.role === "assistant"
                       }
                       checking={checking}
+                      showFeedback={
+                        !streaming &&
+                        m.role === "assistant" &&
+                        i === messages.length - 1
+                      }
+                      onFeedback={onSwitchToFeedback}
                     />
                   </motion.div>
                 ))}
@@ -577,7 +604,6 @@ function ChatView({
                 </motion.div>
               )}
             </div>
-          )
         )}
 
         {isLoaded && messages.length === 0 && error && (
@@ -590,7 +616,7 @@ function ChatView({
       </div>
 
       {/* Status notes + input */}
-      <div className="border-t border-border/40 px-4 pt-3 pb-4">
+      <div className="border-t border-white/10 bg-black px-4 pt-3 pb-4">
         {ready === false && (
           <p className="mb-2.5 px-1 text-xs text-muted-foreground leading-relaxed">
             {ta("chat_not_ready")}{" "}
@@ -640,7 +666,7 @@ function ChatView({
             placeholder={ta("ask_placeholder")}
             maxLength={2000}
             disabled={inputDisabled}
-            className="resize-none min-h-[48px] max-h-[160px] w-full rounded-2xl border-border/60 bg-secondary/40 focus-visible:bg-background focus-visible:border-border focus-visible:ring-2 focus-visible:ring-ring/20 pr-14 py-3.5 pl-4 text-sm leading-relaxed transition-colors placeholder:text-muted-foreground/70 disabled:opacity-60"
+            className="min-h-[48px] max-h-[160px] w-full resize-none rounded-2xl border-white/10 bg-[#212121] py-3.5 pr-14 pl-4 text-sm leading-relaxed text-white placeholder:text-zinc-500 focus-visible:border-white/20 focus-visible:bg-[#212121] focus-visible:ring-0 disabled:opacity-60"
           />
           <motion.button
             type="submit"
@@ -652,28 +678,133 @@ function ChatView({
             <Send className="size-4" aria-hidden />
           </motion.button>
         </form>
-        <div className="flex items-center justify-between gap-3 mt-2.5 px-1 text-[11px] text-muted-foreground/70">
-          <span className="hidden sm:inline tabular-nums">
-            {t("ai_kbd_hint")}
-          </span>
-          <div className="ml-auto flex items-center gap-3">
-            {ready === true && limit !== null && !limitReached && (
-              <span className="tabular-nums" aria-live="polite">
-                {ta("remaining", { count: limit.remaining })}
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={onSwitchToFeedback}
-              className="hover:text-foreground transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-            >
-              {t("ai_send_feedback_compact")}
-            </button>
-          </div>
+        <div className="mt-2.5 flex items-center justify-between px-1 text-[10px] text-zinc-600">
+          <span>Haiku 4.5</span>
+          <UsagePopover limit={limit} locale={locale} />
         </div>
       </div>
     </>
   );
+}
+
+function ChatGreeting({ engagementTitle }: { engagementTitle: string }) {
+  const ta = useTranslations("Assistant");
+  const greetings = [
+    ta("greeting_1"),
+    ta("greeting_2"),
+    ta("greeting_3"),
+    ta("greeting_4"),
+  ];
+  const fourHoursMs = 4 * 60 * 60 * 1000;
+  const [index, setIndex] = useState(
+    () => Math.floor(Date.now() / fourHoursMs) % greetings.length,
+  );
+
+  useEffect(() => {
+    const timer = window.setInterval(
+      () => setIndex((current) => (current + 1) % greetings.length),
+      fourHoursMs,
+    );
+    return () => window.clearInterval(timer);
+  }, [fourHoursMs, greetings.length]);
+
+  return (
+    <div className="mx-auto max-w-sm px-4 pt-2 text-center">
+      <p className="text-base font-medium tracking-tight text-white">
+        {greetings[index]}
+      </p>
+      {engagementTitle && (
+        <p className="mt-1 text-xs text-zinc-400">
+          {ta("greeting_context", { title: engagementTitle })}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function UsagePopover({
+  limit,
+  locale,
+}: {
+  limit: LimitState | null;
+  locale: "en" | "fr";
+}) {
+  const remaining = limit?.remaining ?? 0;
+  const total = limit?.limit ?? 0;
+  const percent =
+    total > 0
+      ? Math.max(0, Math.min(100, (remaining / total) * 100))
+      : 0;
+  const label =
+    locale === "fr"
+      ? `${remaining} message${remaining === 1 ? "" : "s"} restant${remaining === 1 ? "" : "s"}`
+      : `${remaining} message${remaining === 1 ? "" : "s"} left`;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label={locale === "fr" ? "Utilisation" : "Usage"}
+          className="inline-flex size-7 items-center justify-center rounded-md text-zinc-500 hover:bg-white/5 hover:text-zinc-300 focus-visible:outline-none"
+        >
+          <Gauge className="size-3.5" aria-hidden />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        side="top"
+        sideOffset={8}
+        className="w-60 border-white/10 bg-[#212121] p-3 text-white shadow-xl"
+      >
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="font-medium">
+            {locale === "fr" ? "Utilisation" : "Usage"}
+          </span>
+          <span className="text-zinc-400 tabular-nums">{label}</span>
+        </div>
+        <div
+          className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"
+          role="progressbar"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={remaining}
+        >
+          <div
+            className="h-full rounded-full bg-zinc-300"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function formatConversationTime(iso: string, locale: "en" | "fr"): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const day =
+    date.toDateString() === now.toDateString()
+      ? locale === "fr"
+        ? "Aujourd’hui"
+        : "Today"
+      : date.toDateString() === yesterday.toDateString()
+        ? locale === "fr"
+          ? "Hier"
+          : "Yesterday"
+        : new Intl.DateTimeFormat(locale === "fr" ? "fr-CA" : "en-CA", {
+            month: "short",
+            day: "numeric",
+          }).format(date);
+  const time = new Intl.DateTimeFormat(locale === "fr" ? "fr-CA" : "en-CA", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+  return `${day} ${time}`;
 }
 
 // When the next message frees up, in words the founder's clients would use.
@@ -714,16 +845,21 @@ function Message({
   content,
   isStreaming,
   checking,
+  showFeedback,
+  onFeedback,
 }: {
   role: "user" | "assistant";
   content: string;
   isStreaming: boolean;
   checking: boolean;
+  showFeedback: boolean;
+  onFeedback: () => void;
 }) {
+  const t = useTranslations("Help");
   if (role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="rounded-2xl bg-primary text-primary-foreground px-4 py-2.5 text-sm leading-relaxed max-w-[82%] whitespace-pre-wrap break-words shadow-sm">
+        <div className="max-w-[82%] whitespace-pre-wrap break-words rounded-3xl bg-[#2f2f2f] px-4 py-2.5 text-sm leading-relaxed text-white">
           {content}
         </div>
       </div>
@@ -731,18 +867,21 @@ function Message({
   }
   const isThinking = isStreaming && content.length === 0;
   return (
-    <div className="flex gap-3 items-start">
-      <div
-        aria-hidden
-        className="shrink-0 size-7 rounded-full bg-gradient-to-br from-accent/20 to-accent/5 flex items-center justify-center ring-1 ring-accent/15 mt-0.5"
-      >
-        <Sparkles className="size-3.5 text-accent" aria-hidden />
-      </div>
-      <div className="flex-1 min-w-0 pt-0.5">
+    <div className="flex items-start">
+      <div className="min-w-0 flex-1">
         {isThinking ? (
           <ThinkingIndicator checking={checking} />
         ) : (
           <AssistantContent text={content} isStreaming={isStreaming} />
+        )}
+        {showFeedback && (
+          <button
+            type="button"
+            onClick={onFeedback}
+            className="mt-2 text-[11px] text-zinc-600 hover:text-zinc-400 focus-visible:outline-none"
+          >
+            {t("ai_send_feedback_compact")}
+          </button>
         )}
       </div>
     </div>
@@ -753,7 +892,7 @@ function ThinkingIndicator({ checking }: { checking: boolean }) {
   const t = useTranslations("Help");
   const ta = useTranslations("Assistant");
   return (
-    <div className="flex items-center gap-2 text-muted-foreground h-7">
+    <div className="flex h-7 items-center gap-2 text-zinc-400">
       <div className="flex gap-1">
         <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:-280ms] [animation-duration:1.1s]" />
         <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:-140ms] [animation-duration:1.1s]" />
@@ -788,7 +927,7 @@ function AssistantContent({
     return isStreaming ? <StreamingCaret /> : null;
   }
   return (
-    <div className="space-y-3 text-sm leading-relaxed text-foreground">
+    <div className="space-y-3 text-sm leading-relaxed text-zinc-100">
       {paragraphs.map((p, i) => {
         const isLast = i === paragraphs.length - 1;
         return (
