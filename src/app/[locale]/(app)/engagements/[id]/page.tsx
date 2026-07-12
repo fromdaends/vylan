@@ -486,16 +486,11 @@ export default async function EngagementDetailPage({
                   </Button>
                 </form>
               )}
-              {/* Mark complete — the clear primary action. Success-tinted hover
-                  matches the per-item Approve button (PR #156) so confirm
-                  actions read consistently across the app. */}
+              {/* Mark complete — the clear primary action. Plain default
+                  button hover (no green tint) per founder preference. */}
               <form action={completeEngagementAction}>
                 <input type="hidden" name="id" value={engagement.id} />
-                <Button
-                  type="submit"
-                  size="sm"
-                  className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
-                >
+                <Button type="submit" size="sm">
                   <CheckCircle2 className="size-4" />
                   {t("mark_complete")}
                 </Button>
@@ -751,13 +746,9 @@ async function ItemRow({
           {(item.status === "submitted" || missingPageBlock) && canEdit && (
             <form action={approveItemAction}>
               <input type="hidden" name="id" value={item.id} />
-              {/* Hover effect: flip to the success-green palette + a soft tinted
-                  shadow so the positive action reads as a clear "confirm" cue. */}
-              <Button
-                type="submit"
-                size="sm"
-                className="hover:bg-success hover:text-white hover:shadow-md hover:shadow-success/30 focus-visible:ring-success/40"
-              >
+              {/* Plain default button hover (no green tint) per founder
+                  preference. */}
+              <Button type="submit" size="sm">
                 <CheckCircle2 className="size-4" />
                 {t("approve")}
               </Button>
