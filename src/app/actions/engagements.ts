@@ -53,7 +53,6 @@ const ItemSchema = z.object({
   description_en: z.string().nullable().optional(),
   doc_type: z.string().min(1),
   required: z.boolean(),
-  ai_rules: z.string().max(2000).nullable().optional(),
 });
 
 // Postgres accepts any 8-4-4-4-12 hex string as uuid; Zod 4's strict .uuid()
@@ -179,7 +178,6 @@ export async function createEngagementAction(payload: {
       description_en: i.description_en ?? null,
       doc_type: i.doc_type as DocType,
       required: i.required,
-      ai_rules: i.ai_rules ?? null,
     }));
     const input: CreateEngagementInput = {
       client_id: parsed.data.client_id,

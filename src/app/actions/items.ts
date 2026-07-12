@@ -126,7 +126,6 @@ export async function addItemAction(
     description_fr: description,
     doc_type: d.doc_type as NewItemInput["doc_type"],
     required: d.required,
-    ai_rules: d.ai_rules ?? null,
   };
   // The insert is the ONLY thing that decides success. If it fails, surface the
   // real reason. (Previously a bare catch wrapped the insert AND the logging +

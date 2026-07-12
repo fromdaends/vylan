@@ -192,11 +192,6 @@ export const CHAT_ACTION_TOOLS: Anthropic.Tool[] = [
           type: "boolean",
           description: "Whether the client must provide it (default true).",
         },
-        ai_rules: {
-          type: "string",
-          description:
-            "Optional custom rules for the AI document checker on this item, in the accountant's words (e.g. \"must show tax year 2025 and the client's name\"). The checker flags or rejects uploads that break them.",
-        },
       },
       required: ["label"],
       additionalProperties: false,
@@ -204,7 +199,7 @@ export const CHAT_ACTION_TOOLS: Anthropic.Tool[] = [
   },
   {
     name: "propose_edit_checklist_item",
-    description: `Propose editing an existing checklist item's name, required flag, document type, or its AI checker rules. Get item_id from list_checklist_items. Signature items can't be edited. ${PROPOSAL_NOTE}`,
+    description: `Propose editing an existing checklist item's name, required flag, or document type. Get item_id from list_checklist_items. Signature items can't be edited. ${PROPOSAL_NOTE}`,
     input_schema: {
       type: "object",
       properties: {
@@ -212,11 +207,6 @@ export const CHAT_ACTION_TOOLS: Anthropic.Tool[] = [
         new_label: { type: "string" },
         required: { type: "boolean" },
         doc_type: { type: "string", description: `One of: ${DOC_TYPES.join(", ")}.` },
-        ai_rules: {
-          type: "string",
-          description:
-            "Set or replace the item's custom AI-checker rules. Pass an empty string to clear the rules.",
-        },
       },
       required: ["item_id"],
       additionalProperties: false,
@@ -573,24 +563,6 @@ async function checklist(ctx: ChatToolContext) {
     if (!f.request_item_id) continue;
     filesByItem.set(f.request_item_id, (filesByItem.get(f.request_item_id) ?? 0) + 1);
   }
-  // Per-item AI checker rules (migration 0580), read best-effort and SEPARATELY
-  // from the shared fetchChatItems select so a missing column (pre-0580) just
-  // means "no rules shown" rather than breaking the whole checklist lookup.
-  const rulesByItem = new Map<string, string | null>();
-  {
-    const res = await ctx.sb
-      .from("request_items")
-      .select("id, ai_rules")
-      .eq("engagement_id", ctx.engagementId);
-    if (!res.error) {
-      for (const r of (res.data ?? []) as {
-        id: string;
-        ai_rules: string | null;
-      }[]) {
-        rulesByItem.set(r.id, r.ai_rules ?? null);
-      }
-    }
-  }
   return {
     items: items.map((i) => ({
       item_id: i.id,
@@ -601,8 +573,6 @@ async function checklist(ctx: ChatToolContext) {
       required: i.required,
       status: i.status,
       rejection_reason: i.rejection_reason,
-      // The item's custom AI-checker rules, or null if none set.
-      ai_rules: rulesByItem.get(i.id) ?? null,
       files: filesByItem.get(i.id) ?? 0,
       set_assessment: i.ai_set_assessment
         ? {

@@ -31,9 +31,6 @@ export type TemplateItem = {
   description_en?: string | null;
   doc_type: DocType;
   required: boolean;
-  // Per-item custom rules for the AI document checker (migration 0580). Set in
-  // the engagement builder; undefined on the built-in templates.
-  ai_rules?: string | null;
   // Quebec-specific item that carries a GENERIC doc_type (e.g. the Revenu
   // Québec MR-69 authorization, the Quebec Notice of Assessment), so the
   // doc-type province rule alone can't drop it. When true, the item follows the

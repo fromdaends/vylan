@@ -289,13 +289,6 @@ function CardBody({
           })}
         </Line>,
       );
-      if (str("ai_rules")) {
-        lines.push(
-          <Line key="ar" muted>
-            {t("action_item_rules", { rules: str("ai_rules") ?? "" })}
-          </Line>,
-        );
-      }
       break;
     }
     case "edit_checklist_item": {
@@ -321,18 +314,6 @@ function CardBody({
         lines.push(
           <Line key="dt">
             {t("action_change_doc_type", { value: changes.doc_type })}
-          </Line>,
-        );
-      }
-      // ai_rules present in changes means "change the rules": a string sets
-      // them, null clears them.
-      if ("ai_rules" in changes) {
-        const rules = changes.ai_rules;
-        lines.push(
-          <Line key="ar">
-            {typeof rules === "string" && rules.length > 0
-              ? t("action_change_rules_set", { rules })
-              : t("action_change_rules_clear")}
           </Line>,
         );
       }
