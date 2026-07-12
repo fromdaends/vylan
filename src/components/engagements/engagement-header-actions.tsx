@@ -107,6 +107,7 @@ export function EngagementMoreMenu({
             type="button"
             variant="ghost"
             size="icon-sm"
+            className="focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:bg-muted"
             aria-label={t("more_actions")}
           >
             <MoreHorizontal className="size-4" />
