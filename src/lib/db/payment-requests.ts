@@ -26,6 +26,9 @@ export type PaymentRequest = {
   stripe_payment_intent_id: string | null;
   paid_at: string | null;
   requested_by_user_id: string | null;
+  // True for automated invoices (migration 0590). Optional on the type so reads
+  // survive the pre-migration window; defaults false for manual requests.
+  auto?: boolean;
   created_at: string;
 };
 
@@ -244,18 +247,26 @@ export async function listFirmPaymentsWithNames(
 // Service-role create, for automated invoicing (the completion hook + the
 // scheduled-invoice cron worker, neither of which necessarily has a user
 // session). The caller MUST derive every field from trusted server state (the
-// engagement row), never from client input. Returns null on a missing table
-// (pre-0380) or any insert error, like the session-scoped create.
+// engagement row), never from client input. Marks the row auto=true so the
+// partial unique index (payment_requests_auto_active_uniq, migration 0590) can
+// atomically reject a concurrent second auto-send.
+//
+// Returns the row on success, the string "duplicate" when the unique index
+// rejected a concurrent auto-send (the caller treats this as "already sent",
+// NOT an error), or null on a missing table (pre-0380) / any other failure.
 export async function createPaymentRequestSR(
   input: CreatePaymentRequestInput,
-): Promise<PaymentRequest | null> {
+): Promise<PaymentRequest | "duplicate" | null> {
   const sb = getServiceRoleSupabase();
   const { data, error } = await sb
     .from("payment_requests")
-    .insert(input)
+    .insert({ ...input, auto: true })
     .select("*")
     .single();
   if (error) {
+    // 23505 = unique_violation: a concurrent auto-send won the race. Benign —
+    // there is exactly one live auto invoice, which is the whole point.
+    if (error.code === "23505") return "duplicate";
     if (!isMissingSchema(error)) {
       console.error("[payment-requests] createPaymentRequestSR failed:", error);
     }

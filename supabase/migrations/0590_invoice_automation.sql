@@ -47,3 +47,22 @@ alter table firms
 -- Mirrors the service_prices column grant.
 grant update (default_invoice_auto_mode, default_invoice_delay_days)
   on public.firms to authenticated;
+
+-- Mark AUTOMATED payment requests so we can enforce "at most one live auto
+-- invoice per engagement" WITHOUT blocking the manual "request payment again"
+-- flow (which legitimately makes several requests per engagement). Written only
+-- by the service-role create path (createPaymentRequestSR); the manual path
+-- leaves it false.
+alter table payment_requests
+  add column if not exists auto boolean not null default false;
+
+-- Atomic double-send backstop: two concurrent auto-sends (a double-clicked
+-- "Mark complete", or two delayed jobs drained in the same cron wave) both pass
+-- the application-level "already invoiced?" check and both try to insert. This
+-- partial unique index makes the SECOND insert fail (23505), which the code
+-- treats as "already sent" — so a client can never be auto-billed twice.
+-- Partial (excludes cancelled) so a NEW auto invoice is allowed after a prior
+-- one is cancelled; scoped to auto=true so manual requests stay unconstrained.
+create unique index if not exists payment_requests_auto_active_uniq
+  on payment_requests (engagement_id)
+  where auto and status <> 'canceled';

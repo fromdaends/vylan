@@ -88,6 +88,19 @@ export async function sendEngagementInvoice(
     .maybeSingle();
   if (!client) return { ok: false, reason: "client_or_firm_missing" };
 
+  // Final status re-read right before we bill, to shrink the window where a
+  // reopen (which flips status to in_progress) slips between our first check and
+  // the insert. Not fully atomic — the DB unique index is the hard backstop
+  // against a double-send; this just avoids invoicing freshly-reopened work.
+  const { data: fresh } = await sb
+    .from("engagements")
+    .select("status")
+    .eq("id", engagement.id)
+    .maybeSingle();
+  if (!fresh || fresh.status !== "complete") {
+    return { ok: false, reason: "not_complete" };
+  }
+
   const row = await createPaymentRequestSR({
     firm_id: engagement.firm_id,
     engagement_id: engagement.id,
@@ -101,6 +114,9 @@ export async function sendEngagementInvoice(
     // No human requester: this was automated.
     requested_by_user_id: null,
   });
+  // A concurrent auto-send already created the invoice (DB unique index caught
+  // it): treat as already sent, never as a failure to retry.
+  if (row === "duplicate") return { ok: false, reason: "already_sent" };
   if (!row) return { ok: false, reason: "save_failed" };
 
   // Best-effort email — a send failure never undoes the (recorded) invoice.
