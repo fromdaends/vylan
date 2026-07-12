@@ -53,7 +53,7 @@ export type DraftCardOptions = {
 
 // "QuickBooks draft" card (Stage 4). Sits under a receipt / invoice on the
 // engagement page. Scannable at a glance:
-//   * a header with the title + a match-readiness meter;
+//   * a header with the title + a state pill;
 //   * a HERO line — the amount, with the expense/income direction and date;
 //   * the three mapping targets (vendor/customer, account, tax code) as EDITABLE
 //     cells — the accountant picks each from their connected QuickBooks lists;

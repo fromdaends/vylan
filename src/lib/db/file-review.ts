@@ -16,6 +16,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deriveItemStatus, type FileReview } from "@/lib/review/rollup";
+import { autoApproveDraftForFile } from "@/lib/db/quickbooks-suggestions";
 
 type FileRow = FileReview & {
   rejection_reason: string | null;
@@ -140,6 +141,9 @@ export async function approveFile(
 ): Promise<void> {
   const itemId = await writeFileReview(sb, { fileId }, "approved", null, reviewerId);
   if (itemId) await recomputeItemStatus(sb, itemId);
+  // Accepting the document auto-readies its QuickBooks draft (if complete), so
+  // the card comes up one-click-to-Post instead of a second approval.
+  await autoApproveDraftForFile(fileId, reviewerId);
 }
 
 export async function rejectFile(
@@ -172,4 +176,16 @@ export async function setAllFilesReviewForItem(
 ): Promise<void> {
   await writeFileReview(sb, { itemId }, status, reason, reviewerId);
   await recomputeItemStatus(sb, itemId);
+  // Accepting the document(s) auto-readies each COMPLETE QuickBooks draft under
+  // the item, so its card comes up one-click-to-Post instead of a second
+  // approval. Best-effort per file; an incomplete draft stays editable.
+  if (status === "approved") {
+    const { data: files } = await sb
+      .from("uploaded_files")
+      .select("id")
+      .eq("request_item_id", itemId);
+    for (const f of (files ?? []) as { id: string }[]) {
+      await autoApproveDraftForFile(f.id, reviewerId);
+    }
+  }
 }

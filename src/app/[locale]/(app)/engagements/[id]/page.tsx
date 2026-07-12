@@ -237,6 +237,21 @@ export default async function EngagementDetailPage({
     });
     if (created > 0) suggestionsByFile = await getSuggestionsForEngagement(id);
   }
+  // Only the drafts whose CARD is actually shown feed the engagement roll-up —
+  // a draft's card appears once its document is approved (or it's posted), so
+  // the summary's counts + "needs input" call-to-action must use the same gate,
+  // or it would advertise work against cards the accountant can't see yet. Must
+  // match the per-file footer gate in ItemRow below.
+  const reviewStatusByFile = new Map(
+    uploads.map((u) => [u.id, u.review_status]),
+  );
+  const visibleDrafts = [...suggestionsByFile.entries()]
+    .filter(
+      ([fid, d]) =>
+        reviewStatusByFile.get(fid) === "approved" || d.status === "posted",
+    )
+    .map(([, d]) => d);
+
   // The cached QuickBooks lists the accountant picks from (active entries only).
   const toOpt = (x: { id: string; name: string }) => ({
     id: x.id,
@@ -608,7 +623,7 @@ export default async function EngagementDetailPage({
                   (renders nothing when there are none / AI is off). */}
               {engagement.ai_enabled !== false && (
                 <QuickbooksDraftsSummary
-                  drafts={[...suggestionsByFile.values()]}
+                  drafts={visibleDrafts}
                   locale={locale}
                 />
               )}
