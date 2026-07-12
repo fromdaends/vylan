@@ -35,11 +35,8 @@ import {
   type ActionCardStatus,
 } from "@/components/assistant/thread";
 import { ActionCard } from "@/components/assistant/action-card";
-import {
-  parseAssistantMarkdown,
-  type MarkdownSpan,
-} from "@/components/assistant/assistant-markdown";
-import { cn } from "@/lib/cn";
+import { AssistantContent } from "@/components/assistant/assistant-content";
+import { GeneralChat } from "@/components/assistant/general-chat";
 
 // The Assistant panel's Chat tab — phase 2: the ENGAGEMENT chat. Scoped to
 // the engagement picked in the panel header; answers come from the model via
@@ -566,22 +563,12 @@ function ChatView({
 
   // ---- Render ----
 
+  // No engagement selected → a general "ask about the software" chat (posts to
+  // /api/assistant, the general help assistant), with a big greeting. Picking an
+  // engagement from the selector switches to the engagement-scoped chat below.
   if (!engagementId) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-4 px-8">
-        <p className="text-sm text-muted-foreground text-center leading-relaxed">
-          {ta("no_engagement_chat")}
-        </p>
-        {/* Feedback stays reachable even before an engagement is picked —
-            it was always available in the old help sheet. */}
-        <button
-          type="button"
-          onClick={onSwitchToFeedback}
-          className="text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-        >
-          {t("ai_send_feedback_compact")}
-        </button>
-      </div>
+      <GeneralChat locale={locale} onSwitchToFeedback={onSwitchToFeedback} />
     );
   }
 
@@ -999,112 +986,6 @@ function ThinkingIndicator({ checking }: { checking: boolean }) {
         {checking ? ta("tool_checking") : t("ai_thinking")}
       </span>
     </div>
-  );
-}
-
-// Renders the assistant's reply with LIGHT formatting — bold, italics,
-// inline code, and bullet / numbered lists — parsed by parseAssistantMarkdown
-// into a small block/span tree. Everything is emitted as React elements (never
-// dangerouslySetInnerHTML), so the model's text can never inject markup. A
-// blinking caret trails the final block while the stream is open. A half-typed
-// marker mid-stream (e.g. "**bol") just renders literally until it closes.
-function AssistantContent({
-  text,
-  isStreaming,
-}: {
-  text: string;
-  isStreaming: boolean;
-}) {
-  const blocks = parseAssistantMarkdown(text);
-  if (blocks.length === 0) {
-    return isStreaming ? <StreamingCaret /> : null;
-  }
-  const lastIndex = blocks.length - 1;
-  return (
-    <div className="space-y-2.5 text-sm leading-relaxed text-zinc-100">
-      {blocks.map((block, i) => {
-        const caret = isStreaming && i === lastIndex;
-        if (block.type === "bullets" || block.type === "numbered") {
-          const ordered = block.type === "numbered";
-          const ListTag = ordered ? "ol" : "ul";
-          const lastItem = block.items.length - 1;
-          return (
-            <ListTag
-              key={i}
-              className={cn(
-                "space-y-1 pl-5",
-                ordered ? "list-decimal" : "list-disc",
-                "marker:text-zinc-500",
-              )}
-            >
-              {block.items.map((item, ii) => (
-                <li key={ii} className="break-words pl-0.5">
-                  <MarkdownSpans spans={item} />
-                  {caret && ii === lastItem ? <StreamingCaret /> : null}
-                </li>
-              ))}
-            </ListTag>
-          );
-        }
-        const lastLine = block.lines.length - 1;
-        return (
-          <p key={i} className="break-words">
-            {block.lines.map((lineSpans, li) => (
-              <span key={li}>
-                <MarkdownSpans spans={lineSpans} />
-                {li < lastLine ? <br /> : null}
-              </span>
-            ))}
-            {caret ? <StreamingCaret /> : null}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-
-// Inline spans of one line/list-item. Bold is a real <strong>, italics <em>,
-// inline code a subtle pill. Plain text is a bare string, which React escapes.
-function MarkdownSpans({ spans }: { spans: MarkdownSpan[] }) {
-  return (
-    <>
-      {spans.map((span, i) => {
-        if (span.type === "bold") {
-          return (
-            <strong key={i} className="font-semibold text-white">
-              {span.value}
-            </strong>
-          );
-        }
-        if (span.type === "italic") {
-          return (
-            <em key={i} className="italic">
-              {span.value}
-            </em>
-          );
-        }
-        if (span.type === "code") {
-          return (
-            <code
-              key={i}
-              className="rounded bg-white/10 px-1 py-0.5 font-mono text-[0.85em] text-zinc-200"
-            >
-              {span.value}
-            </code>
-          );
-        }
-        return <span key={i}>{span.value}</span>;
-      })}
-    </>
-  );
-}
-
-function StreamingCaret() {
-  return (
-    <span
-      aria-hidden
-      className="inline-block w-[2px] h-[0.95em] align-text-bottom translate-y-[1px] bg-foreground/70 ml-0.5 animate-pulse [animation-duration:1s]"
-    />
   );
 }
 
