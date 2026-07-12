@@ -18,6 +18,7 @@ import {
   listChatMessages,
   listUserTurnTimes,
 } from "@/lib/engagement-chat/db";
+import { listConversationActions } from "@/lib/engagement-chat/pending-actions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,17 +82,21 @@ export async function GET(req: Request) {
       return NextResponse.json({
         ready: true,
         messages: [],
+        actions: [],
         limit: limitState.limit,
         remaining: limitState.remaining,
         resetAt: limitState.resetAt,
       });
     }
 
-    const rows = await listChatMessages(
-      supabase,
-      conversationId,
-      CHAT_HISTORY_FETCH_LIMIT,
-    );
+    const [rows, actions] = await Promise.all([
+      listChatMessages(supabase, conversationId, CHAT_HISTORY_FETCH_LIMIT),
+      // Confirm cards, with the confirm token attached ONLY to still-live
+      // proposed cards. Service-role read pinned to the conversation +
+      // firm we just RLS-verified — the token column has no authenticated
+      // grant, so this is the only way a reloaded panel can still confirm.
+      listConversationActions(conversationId, user.firm_id, nowMs),
+    ]);
     if (rows === CHAT_SCHEMA_MISSING) {
       return NextResponse.json({ ready: false });
     }
@@ -104,6 +109,8 @@ export async function GET(req: Request) {
         content: m.content,
         createdAt: m.created_at,
       })),
+      // Pre-0560 (actions table not applied yet): no cards, chat still works.
+      actions: actions === CHAT_SCHEMA_MISSING ? [] : actions,
       limit: limitState.limit,
       remaining: limitState.remaining,
       resetAt: limitState.resetAt,

@@ -50,11 +50,30 @@ describe("buildEngagementChatPrompt", () => {
     expect(p).toContain("Due date: none");
   });
 
-  it("locks scope to one engagement and refuses actions", () => {
+  it("locks scope to one engagement and forbids self-execution", () => {
     const p = buildEngagementChatPrompt(baseCtx);
     expect(p).toContain("ONLY this engagement");
-    expect(p).toContain("cannot TAKE any action");
-    expect(p).toContain("Never pretend an action was done");
+    expect(p).toContain("ALWAYS propose, NEVER execute");
+    expect(p).toContain("NOTHING happens until the accountant presses Confirm");
+    expect(p).toContain("NEVER say an action was done");
+  });
+
+  it("summarizes recent proposals with their statuses", () => {
+    const p = buildEngagementChatPrompt({
+      ...baseCtx,
+      recentActions: [
+        { type: "reject_document", status: "confirmed" },
+        { type: "send_reminder", status: "cancelled" },
+      ],
+    });
+    expect(p).toContain("## Recent action proposals in this conversation");
+    expect(p).toContain("reject_document: confirmed");
+    expect(p).toContain("send_reminder: cancelled");
+  });
+
+  it("omits the proposals section when there are none", () => {
+    const p = buildEngagementChatPrompt(baseCtx);
+    expect(p).not.toContain("## Recent action proposals in this conversation");
   });
 
   it("guards against prompt injection from document data", () => {

@@ -29,6 +29,12 @@ import {
   getAssistantState,
   subscribeAssistant,
 } from "@/components/assistant/assistant-store";
+import {
+  mergeThreadItems,
+  type ActionCardData,
+  type ActionCardStatus,
+} from "@/components/assistant/thread";
+import { ActionCard } from "@/components/assistant/action-card";
 
 // The Assistant panel's Chat tab — phase 2: the ENGAGEMENT chat. Scoped to
 // the engagement picked in the panel header; answers come from the model via
@@ -122,10 +128,13 @@ function ChatView({
   const engagementId = selected?.id ?? null;
 
   // The loaded conversation, tagged with its engagement so a switch shows
-  // the loading state instead of another engagement's thread.
+  // the loading state instead of another engagement's thread. Messages and
+  // action confirm-cards are stored separately and interleaved by time at
+  // render — the streaming delta logic only ever touches `messages`.
   const [thread, setThread] = useState<{
     engagementId: string;
     messages: ChatMessage[];
+    actions: ActionCardData[];
   } | null>(null);
   const [limit, setLimit] = useState<LimitState | null>(null);
   // null = loading/unknown; false = migration not applied yet ("not
@@ -146,6 +155,8 @@ function ChatView({
 
   const isLoaded = thread !== null && thread.engagementId === engagementId;
   const messages = isLoaded ? thread.messages : [];
+  const actions = isLoaded ? thread.actions : [];
+  const items = mergeThreadItems(messages, actions);
   const historyFailed =
     historyFailedFor !== null && historyFailedFor === engagementId;
   const limitReached = limit !== null && limit.remaining <= 0;
@@ -180,6 +191,7 @@ function ChatView({
           content: string;
           createdAt: string;
         }[];
+        actions?: ActionCardData[];
         limit?: number;
         remaining?: number;
         resetAt?: string | null;
@@ -190,7 +202,7 @@ function ChatView({
       setError(null);
       if (!body.ready) {
         setReady(false);
-        setThread({ engagementId: id, messages: [] });
+        setThread({ engagementId: id, messages: [], actions: [] });
         setLimit(null);
         setHistoryFailedFor(null);
         return;
@@ -203,6 +215,7 @@ function ChatView({
           content: m.content,
           createdAt: m.createdAt,
         })),
+        actions: body.actions ?? [],
       });
       setLimit({
         limit: body.limit ?? 0,
@@ -293,6 +306,38 @@ function ChatView({
       setThread((prev) =>
         prev && prev.engagementId === id
           ? { ...prev, messages: fn(prev.messages) }
+          : prev,
+      );
+    },
+    [],
+  );
+
+  // Add or replace a streamed/loaded confirm card by id.
+  const upsertAction = useCallback((id: string, card: ActionCardData) => {
+    setThread((prev) => {
+      if (!prev || prev.engagementId !== id) return prev;
+      const idx = prev.actions.findIndex((a) => a.id === card.id);
+      const next =
+        idx === -1
+          ? [...prev.actions, card]
+          : prev.actions.map((a) => (a.id === card.id ? card : a));
+      return { ...prev, actions: next };
+    });
+  }, []);
+
+  // A card resolved (confirmed/cancelled/failed/expired) via the confirm
+  // endpoint — reflect the new status and drop the spent token. Not tied to
+  // the current engagement: the map only touches the matching card id.
+  const resolveCard = useCallback(
+    (cardId: string, status: ActionCardStatus, error: string | null) => {
+      setThread((prev) =>
+        prev
+          ? {
+              ...prev,
+              actions: prev.actions.map((a) =>
+                a.id === cardId ? { ...a, status, error, token: null } : a,
+              ),
+            }
           : prev,
       );
     },
@@ -399,13 +444,18 @@ function ChatView({
             remaining?: number;
             resetAt?: string | null;
             limit?: number;
+            action?: ActionCardData;
           };
           try {
             event = JSON.parse(line);
           } catch {
             return;
           }
-          if (event.t === "delta" && typeof event.text === "string") {
+          if (event.t === "action" && event.action) {
+            // A propose_* tool landed mid-turn — drop its confirm card into
+            // the thread with its browser-held token.
+            upsertAction(id, event.action);
+          } else if (event.t === "delta" && typeof event.text === "string") {
             acc += event.text;
             const current = acc;
             patchThread(id, (msgs) => {
@@ -496,7 +546,17 @@ function ChatView({
         queueMicrotask(() => inputRef.current?.focus());
       }
     },
-    [streaming, ready, limitReached, locale, t, ta, patchThread, loadHistory],
+    [
+      streaming,
+      ready,
+      limitReached,
+      locale,
+      t,
+      ta,
+      patchThread,
+      upsertAction,
+      loadHistory,
+    ],
   );
 
   // ---- Render ----
@@ -522,6 +582,13 @@ function ChatView({
 
   const inputDisabled =
     streaming || ready !== true || limitReached || !isLoaded;
+
+  // Index (within the interleaved items) of the final chat message — where
+  // the streaming caret and feedback link live, even if a card sorts below.
+  const lastMessageIndex = items.reduce(
+    (acc, it, idx) => (it.kind === "message" ? idx : acc),
+    -1,
+  );
 
   return (
     <>
@@ -555,42 +622,67 @@ function ChatView({
           </div>
         ) : (
             <div className="flex flex-col gap-6 px-5 py-6">
-              {messages.length === 0 && (
+              {items.length === 0 && (
                 <ChatGreeting engagementTitle={selected?.title ?? ""} />
               )}
 
-              {messages.length > 0 && (
+              {items.length > 0 && (
                 <div className="text-center text-xs text-zinc-500 tabular-nums">
-                  {formatConversationTime(messages[0].createdAt, locale)}
+                  {formatConversationTime(
+                    items[0].kind === "message"
+                      ? items[0].createdAt
+                      : items[0].action.createdAt,
+                    locale,
+                  )}
                 </div>
               )}
 
               <AnimatePresence initial={false}>
-                {messages.map((m, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2, ease: "easeOut" }}
-                  >
-                    <Message
-                      role={m.role}
-                      content={m.content}
-                      isStreaming={
-                        streaming &&
-                        i === messages.length - 1 &&
-                        m.role === "assistant"
-                      }
-                      checking={checking}
-                      showFeedback={
-                        !streaming &&
-                        m.role === "assistant" &&
-                        i === messages.length - 1
-                      }
-                      onFeedback={onSwitchToFeedback}
-                    />
-                  </motion.div>
-                ))}
+                {items.map((item, i) => {
+                  if (item.kind === "action") {
+                    return (
+                      <motion.div
+                        key={`action:${item.action.id}`}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
+                      >
+                        <ActionCard
+                          card={item.action}
+                          locale={locale}
+                          onResolved={resolveCard}
+                        />
+                      </motion.div>
+                    );
+                  }
+                  // The streaming caret and feedback link belong to the final
+                  // assistant message — the last message item in the thread
+                  // (an action card may sort after it).
+                  const isLastMessage = i === lastMessageIndex;
+                  return (
+                    <motion.div
+                      key={`msg:${i}`}
+                      initial={{ opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, ease: "easeOut" }}
+                    >
+                      <Message
+                        role={item.role}
+                        content={item.content}
+                        isStreaming={
+                          streaming && isLastMessage && item.role === "assistant"
+                        }
+                        checking={checking}
+                        showFeedback={
+                          !streaming &&
+                          item.role === "assistant" &&
+                          isLastMessage
+                        }
+                        onFeedback={onSwitchToFeedback}
+                      />
+                    </motion.div>
+                  );
+                })}
               </AnimatePresence>
 
               {error && (
@@ -606,7 +698,7 @@ function ChatView({
             </div>
         )}
 
-        {isLoaded && messages.length === 0 && error && (
+        {isLoaded && items.length === 0 && error && (
           <div className="px-5 pt-4">
             <Alert variant="destructive">
               <AlertDescription>{error}</AlertDescription>
