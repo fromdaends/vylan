@@ -47,6 +47,7 @@ import {
   type QuickbooksStatus,
 } from "@/components/settings/integrations-section";
 import { PaymentsServicePrices } from "@/components/settings/payments-service-prices";
+import { PaymentsInvoiceDefaults } from "@/components/settings/payments-invoice-defaults";
 import { PaymentsList } from "@/components/payments/payments-list";
 import type { PaymentsListRow } from "@/lib/db/payment-requests";
 import { MfaSection } from "@/components/profile/mfa-section";
@@ -105,6 +106,8 @@ export function SettingsShell({
   autoRequestMissingPages,
   includeQuebecForms,
   chatConfirmActions,
+  invoiceDefaultMode,
+  invoiceDefaultDelayDays,
   aiUsage,
   isOwner,
   billingSlot,
@@ -127,6 +130,9 @@ export function SettingsShell({
   includeQuebecForms: boolean;
   // Engagement-assistant "send confirmation cards" toggle (owner-only).
   chatConfirmActions: boolean;
+  // Firm-wide default invoice automation (owner-only, migration 0590).
+  invoiceDefaultMode: "off" | "on_completion" | "delayed";
+  invoiceDefaultDelayDays: number | null;
   aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -241,6 +247,14 @@ export function SettingsShell({
             {connect && <PaymentsConnectSection connect={connect} />}
             {servicePrices && (
               <PaymentsServicePrices prices={servicePrices} />
+            )}
+            {/* Firm-wide default invoice automation — only useful once the firm
+                can actually receive a payment. */}
+            {connect?.chargesEnabled && (
+              <PaymentsInvoiceDefaults
+                initialMode={invoiceDefaultMode}
+                initialDelayDays={invoiceDefaultDelayDays}
+              />
             )}
             {paymentsList && paymentsList.length > 0 && (
               <section>

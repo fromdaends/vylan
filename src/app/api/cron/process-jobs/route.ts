@@ -19,6 +19,7 @@ import { processClassifyJob } from "@/lib/ai/process";
 import { processSetAssessmentJob } from "@/lib/ai/set-assessment";
 import { processNotifyClientRetryJob } from "@/lib/notify-retry";
 import { processSyncQuickbooksJob } from "@/lib/quickbooks/sync";
+import { sendEngagementInvoice } from "@/lib/invoices/send";
 import {
   backfillContentHashes,
   type BackfillResult,
@@ -158,6 +159,21 @@ async function runJob(
         await markJobFailed(job.id, `sync:${detail.detail}`);
       }
       return { id: job.id, kind: job.kind, ok: detail.ok, detail };
+    }
+    if (job.kind === "send_payment_request") {
+      // Delayed invoice (N days after completion). The helper re-validates the
+      // engagement is still complete + Connect-ready and is idempotent, so a
+      // reopened/already-invoiced engagement just no-ops. Retry ONLY a
+      // transient save failure; every other outcome is terminal (done).
+      const result = await sendEngagementInvoice(
+        String(job.payload.engagementId ?? ""),
+      );
+      if (!result.ok && result.reason === "save_failed") {
+        await markJobFailed(job.id, `invoice:${result.reason}`);
+        return { id: job.id, kind: job.kind, ok: false, detail: result };
+      }
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: result.ok, detail: result };
     }
     // Unknown kind: nothing to do — mark done so it doesn't spin.
     await markJobDone(job.id);

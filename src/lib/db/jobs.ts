@@ -19,7 +19,12 @@ export type JobKind =
   // QuickBooks reference-list cache sync (Stage 2 Phase 4): one job per firm
   // refreshes the cached accounts/vendors/customers/tax codes off the request
   // path. Payload: { firmId }.
-  | "sync_quickbooks";
+  | "sync_quickbooks"
+  // Invoice automation (migration 0590): a delayed invoice send, N days after
+  // an engagement was marked complete. Payload: { engagementId }. The worker
+  // re-validates the engagement is still complete + the firm is Connect-ready,
+  // and is idempotent (skips if an invoice was already sent).
+  | "send_payment_request";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {

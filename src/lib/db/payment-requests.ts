@@ -241,6 +241,29 @@ export async function listFirmPaymentsWithNames(
 // so callers MUST derive ids/amounts from trusted server state (the magic token
 // / the Stripe event), never from client input.
 
+// Service-role create, for automated invoicing (the completion hook + the
+// scheduled-invoice cron worker, neither of which necessarily has a user
+// session). The caller MUST derive every field from trusted server state (the
+// engagement row), never from client input. Returns null on a missing table
+// (pre-0380) or any insert error, like the session-scoped create.
+export async function createPaymentRequestSR(
+  input: CreatePaymentRequestInput,
+): Promise<PaymentRequest | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .insert(input)
+    .select("*")
+    .single();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] createPaymentRequestSR failed:", error);
+    }
+    return null;
+  }
+  return data as PaymentRequest;
+}
+
 export async function getLatestPaymentRequestForEngagementSR(
   engagementId: string,
 ): Promise<PaymentRequest | null> {
