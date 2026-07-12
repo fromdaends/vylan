@@ -126,29 +126,49 @@ export async function addItemToEngagement(
     .maybeSingle();
   const nextIdx = (last?.order_index ?? -1) + 1;
 
+  const baseRow = {
+    engagement_id: input.engagement_id,
+    label: input.label,
+    label_fr: input.label_fr ?? null,
+    description: input.description ?? null,
+    description_fr: input.description_fr ?? null,
+    doc_type: input.doc_type,
+    required: input.required,
+    order_index: nextIdx,
+    status: "pending" as const,
+  };
   const rules = normalizeAiRules(input.ai_rules);
-  const { data, error } = await supabase
+  const row = rules !== null ? { ...baseRow, ai_rules: rules } : baseRow;
+
+  let { data, error } = await supabase
     .from("request_items")
-    .insert({
-      engagement_id: input.engagement_id,
-      label: input.label,
-      label_fr: input.label_fr ?? null,
-      description: input.description ?? null,
-      description_fr: input.description_fr ?? null,
-      doc_type: input.doc_type,
-      required: input.required,
-      // Only send ai_rules when there ARE rules: this keeps adding a plain
-      // item working before migration 0580 is applied (the column doesn't
-      // exist yet, and PostgREST errors on an unknown column). The rules
-      // feature itself only works once the migration lands, which is fine.
-      ...(rules !== null ? { ai_rules: rules } : {}),
-      order_index: nextIdx,
-      status: "pending",
-    })
+    .insert(row)
     .select("*")
     .single();
+  // Pre-migration 0580 the ai_rules column may not exist yet. Mirror
+  // createEngagementWithItems: retry WITHOUT ai_rules on an unknown-column
+  // error so a plain item is still created (the rules are dropped; the feature
+  // needs the migration to work anyway). Only the code-set-rules path can hit
+  // this — a plain add never sends the column.
+  if (error && rules !== null && isUnknownColumnError(error)) {
+    ({ data, error } = await supabase
+      .from("request_items")
+      .insert(baseRow)
+      .select("*")
+      .single());
+  }
   if (error) throw error;
   return data as RequestItem;
+}
+
+// A write that referenced a column the DB doesn't have yet (migration deployed
+// in code but not applied). PostgREST reports a schema-cache miss (PGRST204);
+// Postgres proper reports undefined_column (42703). Matches ONLY these codes,
+// never message text, so an unrelated failure can't trigger a silent retry.
+// (Mirrors the same helper in db/engagements.ts; kept local to avoid an import
+// cycle — engagements.ts already imports normalizeAiRules from here.)
+function isUnknownColumnError(err: { code?: string | null } | null): boolean {
+  return err?.code === "PGRST204" || err?.code === "42703";
 }
 
 // Blank / whitespace-only rules are stored as NULL so "no rules" is a single
