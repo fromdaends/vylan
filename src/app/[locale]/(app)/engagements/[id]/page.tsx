@@ -835,43 +835,48 @@ async function ItemRow({
                   )
                 ) : undefined
               }
-              // QuickBooks draft (Stage 3): the read-only suggested mapping for a
-              // receipt/invoice. Only when AI is on AND a draft exists for this
-              // file (which itself implies QuickBooks is connected).
-              footer={
-                aiEnabled && suggestionsByFile.has(f.id)
-                  ? (() => {
-                      const d = suggestionsByFile.get(f.id)!;
-                      return (
-                        <QuickbooksDraftCard
-                          suggestion={d.suggestion}
-                          resolved={d.resolved}
-                          options={qboOptions}
-                          locale={locale}
-                          fileId={f.id}
-                          status={d.status}
-                          reviewedByName={
-                            d.reviewedBy
-                              ? (reviewerNameById.get(d.reviewedBy) ?? null)
-                              : null
-                          }
-                          reviewedAt={d.reviewedAt}
-                          documentName={f.display_name ?? f.original_filename}
-                          postedAt={d.postedAt}
-                          postedByName={
-                            d.postedBy
-                              ? (reviewerNameById.get(d.postedBy) ?? null)
-                              : null
-                          }
-                          postError={d.postError}
-                          postedTaxNote={d.postedTaxNote}
-                          receiptAttachedAt={d.receiptAttachedAt}
-                          matchedQboType={d.matchedQboType}
-                        />
-                      );
-                    })()
-                  : undefined
-              }
+              // QuickBooks draft: the suggested mapping for a receipt/invoice.
+              // Shown only when AI is on, a draft exists (which implies
+              // QuickBooks is connected), AND the accountant has APPROVED the
+              // document — bookkeeping is the step AFTER accepting the collected
+              // doc, so the card stays out of the way until then. Always kept
+              // visible once posted, so a live transaction never disappears.
+              footer={(() => {
+                const d = aiEnabled ? suggestionsByFile.get(f.id) : undefined;
+                if (
+                  !d ||
+                  (f.review_status !== "approved" && d.status !== "posted")
+                ) {
+                  return undefined;
+                }
+                return (
+                  <QuickbooksDraftCard
+                    suggestion={d.suggestion}
+                    resolved={d.resolved}
+                    options={qboOptions}
+                    locale={locale}
+                    fileId={f.id}
+                    status={d.status}
+                    reviewedByName={
+                      d.reviewedBy
+                        ? (reviewerNameById.get(d.reviewedBy) ?? null)
+                        : null
+                    }
+                    reviewedAt={d.reviewedAt}
+                    documentName={f.display_name ?? f.original_filename}
+                    postedAt={d.postedAt}
+                    postedByName={
+                      d.postedBy
+                        ? (reviewerNameById.get(d.postedBy) ?? null)
+                        : null
+                    }
+                    postError={d.postError}
+                    postedTaxNote={d.postedTaxNote}
+                    receiptAttachedAt={d.receiptAttachedAt}
+                    matchedQboType={d.matchedQboType}
+                  />
+                );
+              })()}
             />
           ))}
         </ul>

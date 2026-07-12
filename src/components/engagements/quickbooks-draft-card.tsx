@@ -131,8 +131,6 @@ export async function QuickbooksDraftCard({
     quickbooksTaxLinesEnabled();
   const isSplit = effectiveSplit(suggestion, resolved);
   const splitLines = canSplit ? effectiveLines(suggestion, resolved) : [];
-  const readinessPct = Math.round(v.readiness * 100);
-  const ready = v.readiness >= 0.7;
   // Once approved or dismissed the draft is LOCKED: the cells become read-only and
   // the Refresh button is hidden. Reopen returns it to an editable draft.
   const isDraft = status === "draft";
@@ -228,7 +226,7 @@ export async function QuickbooksDraftCard({
         status === "dismissed" ? "opacity-70" : "",
       )}
     >
-      {/* Header: title + state pill + (while a draft) a match-readiness meter. */}
+      {/* Header: QuickBooks mark + the entry's title + its state. */}
       <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
           <BookOpen className="h-4 w-4" aria-hidden="true" />
@@ -249,31 +247,6 @@ export async function QuickbooksDraftCard({
         >
           {statusPill.label}
         </span>
-        {isDraft && (
-          <div
-            className="ml-auto flex items-center gap-1.5"
-            aria-label={t("readiness", { pct: readinessPct })}
-            title={t("readiness", { pct: readinessPct })}
-          >
-            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-muted">
-              <div
-                className={cn(
-                  "h-full rounded-full",
-                  ready ? "bg-success" : "bg-warning",
-                )}
-                style={{ width: `${readinessPct}%` }}
-              />
-            </div>
-            <span
-              className={cn(
-                "text-xs font-semibold tabular-nums",
-                ready ? "text-success" : "text-warning",
-              )}
-            >
-              {readinessPct}%
-            </span>
-          </div>
-        )}
       </div>
 
       {/* Hero: the amount, with the direction + date for context. */}
@@ -411,12 +384,14 @@ export async function QuickbooksDraftCard({
         </p>
       )}
 
-      {/* Footer: while a draft, the read-only hint + Refresh + Approve/Dismiss.
-          Once approved/dismissed, who/when + Reopen. */}
+      {/* Footer: while a draft, Refresh + Approve/Dismiss. Once approved or
+          dismissed, who decided it + when, plus Reopen. */}
       <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-border/40 px-3 py-2">
-        <p className="min-w-0 truncate text-[11px] text-muted-foreground">
-          {isDraft ? t("draft_readonly_hint") : reviewerMeta}
-        </p>
+        {!isDraft && reviewerMeta ? (
+          <p className="min-w-0 truncate text-[11px] text-muted-foreground">
+            {reviewerMeta}
+          </p>
+        ) : null}
         <div className="ml-auto flex items-center gap-2">
           {isDraft && <RegenerateDraftButton fileId={fileId} />}
           {showStatusControls && (
