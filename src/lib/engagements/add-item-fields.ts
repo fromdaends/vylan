@@ -28,9 +28,6 @@ export const addItemSchema = z.object({
     .union([z.literal("on"), z.literal("true"), z.literal("false")])
     .optional()
     .transform((v) => v === "on" || v === "true"),
-  // Per-item custom rules for the AI document checker (migration 0580).
-  // Optional free text; absent/blank means no custom rules.
-  ai_rules: z.string().max(2000).optional().nullable(),
 });
 
 export function pickAddItemFields(d: {

@@ -656,18 +656,6 @@ export function EngagementBuilder({
                           {tc("delete")}
                         </button>
                       </div>
-                      {/* Optional per-item rules for the AI document checker
-                          (migration 0580). Empty = no custom rules. */}
-                      <Textarea
-                        value={item.ai_rules ?? ""}
-                        onChange={(e) =>
-                          updateItem(idx, { ai_rules: e.target.value || null })
-                        }
-                        placeholder={t("ai_rules_placeholder")}
-                        rows={1}
-                        maxLength={2000}
-                        className="text-xs"
-                      />
                     </div>
                   </div>
                 </li>

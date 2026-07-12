@@ -113,28 +113,11 @@ export async function processClassifyJob(
   const ctxClient = Array.isArray(engCtx?.clients)
     ? engCtx?.clients[0]
     : engCtx?.clients;
-  // Per-item custom rules (migration 0580), read best-effort and SEPARATELY
-  // from the main join: a missing column (pre-0580) returns an error here that
-  // we swallow to null, so classification keeps working unchanged until the
-  // migration is applied. Null / empty rules = the checker behaves as before.
-  let aiRules: string | null = null;
-  if (file.request_item_id) {
-    const { data: rulesRow, error: rulesErr } = await sb
-      .from("request_items")
-      .select("ai_rules")
-      .eq("id", file.request_item_id)
-      .maybeSingle();
-    if (!rulesErr) {
-      aiRules =
-        (rulesRow as { ai_rules?: string | null } | null)?.ai_rules ?? null;
-    }
-  }
   const requestContext = {
     requestLabel: item?.label ?? null,
     requestLabelFr: item?.label_fr ?? null,
     clientName: ctxClient?.display_name ?? null,
     expectedYear: expectedYearFromTitle(engCtx?.title ?? ""),
-    aiRules,
   };
   // limitFirmId is guaranteed non-null here (we returned above if it wasn't).
   const rl = await checkRateLimit({
