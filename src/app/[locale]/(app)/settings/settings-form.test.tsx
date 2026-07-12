@@ -68,6 +68,7 @@ function renderShell(
         autoRejectDuplicates={false}
         autoRequestMissingPages={false}
         includeQuebecForms={true}
+        chatConfirmActions={true}
         aiUsage={{
           used: 0,
           cap: 400,

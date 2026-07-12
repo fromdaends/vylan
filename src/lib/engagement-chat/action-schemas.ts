@@ -26,6 +26,15 @@ export const ACTION_TYPES = [
 
 export type ChatActionType = (typeof ACTION_TYPES)[number];
 
+// Actions that ALWAYS require a human to press Confirm, even when a firm has
+// turned "send confirmation cards" off. Removing a checklist item permanently
+// deletes any client files attached to it — that can't be undone, so it never
+// auto-executes. (Everything else, when the toggle is off, the server carries
+// out immediately.) Kept as a set so the policy is a one-line change.
+export const ALWAYS_CONFIRM_ACTIONS: ReadonlySet<ChatActionType> = new Set([
+  "remove_checklist_item",
+]);
+
 const uuid = z.string().uuid();
 
 // Matches the reject routes' existing 2..500 rule (min_2_chars / too_long).

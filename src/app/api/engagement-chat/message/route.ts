@@ -200,6 +200,9 @@ export async function POST(request: NextRequest) {
     },
     recentActions:
       recentSummaries === CHAT_SCHEMA_MISSING ? undefined : recentSummaries,
+    // When cards are off the model should phrase actions as done, not "waiting
+    // for Confirm" — the server executes them inline (deletions still confirm).
+    autoConfirmActions: firm.chat_confirm_actions === false,
   });
 
   // Model conversation = persisted history + the new turn. First message
@@ -231,6 +234,10 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         conversationId,
         onProposal: (card) => emit({ t: "action", action: card }),
+        // Firm turned "send confirmation cards" off → server auto-executes
+        // proposed actions (deletions excepted). Undefined pre-0570 defaults
+        // to confirmation ON (=== false is false), the safe behavior.
+        autoConfirm: firm.chat_confirm_actions === false,
       });
       const allTools = [...CHAT_TOOLS, ...CHAT_ACTION_TOOLS];
 
