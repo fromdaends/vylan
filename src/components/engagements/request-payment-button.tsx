@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Wallet } from "lucide-react";
@@ -34,10 +34,14 @@ import { toast } from "sonner";
 export function RequestPaymentButton({
   engagementId,
   defaultAmount,
+  trigger,
 }: {
   engagementId: string;
   // Pre-filled dollar amount as a string ("350.00"), or "" for empty.
   defaultAmount: string;
+  // Optional menu-row trigger; the engagement header uses this to keep the
+  // payment action inside its three-dot overflow menu.
+  trigger?: ReactNode;
 }) {
   const t = useTranslations("Engagements");
   const router = useRouter();
@@ -77,10 +81,12 @@ export function RequestPaymentButton({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
-          <Wallet className="size-4" />
-          {t("request_payment")}
-        </Button>
+        {trigger ?? (
+          <Button variant="outline" size="sm">
+            <Wallet className="size-4" />
+            {t("request_payment")}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
