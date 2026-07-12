@@ -224,7 +224,7 @@ export function GeneralChat({
             placeholder={ta("general_placeholder")}
             maxLength={2000}
             disabled={streaming}
-            className="min-h-[48px] max-h-[160px] w-full resize-none rounded-2xl border-white/10 bg-[#212121] py-3.5 pr-14 pl-4 text-sm leading-relaxed text-white placeholder:text-zinc-500 focus-visible:border-white/20 focus-visible:bg-[#212121] focus-visible:ring-0 disabled:opacity-60"
+            className="min-h-[48px] max-h-[160px] w-full resize-none rounded-2xl border-white/10 bg-[#212121] py-3.5 pr-14 pl-4 text-sm leading-relaxed text-white placeholder:text-zinc-500 focus-visible:border-white/20 focus-visible:bg-[#212121] focus-visible:ring-0 disabled:opacity-60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           />
           <motion.button
             type="submit"
