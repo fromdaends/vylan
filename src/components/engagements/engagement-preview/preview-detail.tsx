@@ -377,7 +377,6 @@ export function PreviewDetail({
             disabled={pending}
             onClick={onApprove}
             aria-label={t("approve")}
-            className="hover:border-success/40 hover:bg-success hover:text-white"
           >
             <CheckCircle2 className="size-4" />
             <span className="hidden sm:inline">{t("approve")}</span>
