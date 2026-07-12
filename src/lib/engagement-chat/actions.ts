@@ -25,10 +25,7 @@ import {
   updateRequestItem,
 } from "@/lib/db/request-items";
 import { updateEngagementDueDate } from "@/lib/db/engagements";
-import {
-  cancelEngagementReminders,
-  scheduleEngagementReminders,
-} from "@/lib/reminders";
+import { rescheduleOverdueReminder } from "@/lib/reminders";
 import { logUserActivity } from "@/lib/db/activity";
 import { listActiveFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
@@ -158,6 +155,7 @@ export async function buildActionProposal(
         file_id: file.id,
         file_name: fileName(file),
         item_label: await itemLabelForFile(sb, engagementId, file.request_item_id),
+        prior_status: file.review_status,
       };
       return { ok: true, payload };
     }
@@ -172,6 +170,7 @@ export async function buildActionProposal(
         file_name: fileName(file),
         item_label: await itemLabelForFile(sb, engagementId, file.request_item_id),
         reason: input.reason as string,
+        prior_status: file.review_status,
       };
       return { ok: true, payload };
     }
@@ -324,6 +323,11 @@ export async function executeAction(
         const p = payload as ActionPayloads["approve_document"];
         const file = await fetchFile(ctx.sb, ctx.engagementId, p.file_id);
         if (!file) return { ok: false, code: "state_changed" };
+        // A teammate changed the file's review status since the card was
+        // proposed — don't silently overwrite their decision.
+        if ((file.review_status ?? null) !== (p.prior_status ?? null)) {
+          return { ok: false, code: "state_changed" };
+        }
         await approveFile(ctx.sb, p.file_id, ctx.userId);
         await logUserActivity(ctx.firmId, ctx.engagementId, "approve_item", {
           item_id: file.request_item_id ?? undefined,
@@ -336,6 +340,9 @@ export async function executeAction(
         const p = payload as ActionPayloads["reject_document"];
         const file = await fetchFile(ctx.sb, ctx.engagementId, p.file_id);
         if (!file) return { ok: false, code: "state_changed" };
+        if ((file.review_status ?? null) !== (p.prior_status ?? null)) {
+          return { ok: false, code: "state_changed" };
+        }
         await rejectFile(ctx.sb, p.file_id, p.reason, ctx.userId);
         await logUserActivity(ctx.firmId, ctx.engagementId, "reject_item", {
           item_id: file.request_item_id ?? undefined,
@@ -409,6 +416,19 @@ export async function executeAction(
         if (!item || item.kind === "signature") {
           return { ok: false, code: "state_changed" };
         }
+        // The card warned about deleting p.files_count documents. If the
+        // client uploaded MORE since the proposal, confirming would silently
+        // delete documents the accountant was never warned about — refuse so
+        // they re-propose against an accurate count. Fewer is fine (no
+        // surprise), so only guard against an increase.
+        const countRes = await ctx.sb
+          .from("uploaded_files")
+          .select("id", { count: "exact", head: true })
+          .eq("request_item_id", p.item_id);
+        if (countRes.error) throw countRes.error;
+        if ((countRes.count ?? 0) > p.files_count) {
+          return { ok: false, code: "state_changed" };
+        }
         await removeItem(p.item_id);
         await logUserActivity(ctx.firmId, ctx.engagementId, "remove_item", {
           item_id: p.item_id,
@@ -421,17 +441,19 @@ export async function executeAction(
         const engagement = await fetchChatEngagement(ctx.sb, ctx.engagementId);
         if (!engagement) return { ok: false, code: "state_changed" };
         await updateEngagementDueDate(ctx.engagementId, p.to);
-        // The "overdue" reminder was scheduled from the ORIGINAL due date at
-        // send time — rebuild the plan for sent engagements. buildReminderPlan
-        // drops past-dated steps and the worker re-validates at fire time, so
-        // a reschedule can't re-fire tones that already went out.
-        if (engagement.sent_at) {
-          await cancelEngagementReminders(ctx.engagementId);
-          await scheduleEngagementReminders({
-            engagementId: ctx.engagementId,
-            sentAt: new Date(engagement.sent_at),
-            dueDate: p.to,
-          });
+        // Only the OVERDUE reminder depends on the due date; move just that
+        // one (rescheduleOverdueReminder leaves the sent-anchored tones
+        // alone). Best-effort so a reminder-queue hiccup doesn't report the
+        // whole action as failed when the date change already succeeded.
+        if (["sent", "in_progress"].includes(engagement.status)) {
+          try {
+            await rescheduleOverdueReminder({
+              engagementId: ctx.engagementId,
+              dueDate: p.to,
+            });
+          } catch (e) {
+            console.error("[engagement-chat] overdue reschedule failed:", e);
+          }
         }
         await logUserActivity(ctx.firmId, ctx.engagementId, "due_date_changed", {
           from: p.from ?? undefined,

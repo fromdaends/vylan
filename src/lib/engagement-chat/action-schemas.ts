@@ -126,12 +126,17 @@ export type ActionPayloads = {
     file_id: string;
     file_name: string;
     item_label: string | null;
+    // Review status at propose time — the executor fails if a teammate
+    // changed it before confirm, so a stale card can't silently overwrite
+    // their decision.
+    prior_status: string | null;
   };
   reject_document: {
     file_id: string;
     file_name: string;
     item_label: string | null;
     reason: string;
+    prior_status: string | null;
   };
   send_reminder: {
     client_name: string | null;

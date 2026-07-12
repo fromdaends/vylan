@@ -27,6 +27,7 @@ import {
   isActionExpired,
   resolvePendingAction,
   tokenMatches,
+  transitionFromProposed,
 } from "@/lib/engagement-chat/pending-actions";
 import { executeAction } from "@/lib/engagement-chat/actions";
 
@@ -77,13 +78,25 @@ export async function POST(request: NextRequest) {
   }
 
   if (isActionExpired(row, Date.now())) {
-    await resolvePendingAction(row.id, firm.id, { status: "expired" });
-    return NextResponse.json({ status: "expired", error: null });
+    // CAS: if a confirm slipped in first, report ITS outcome, not "expired".
+    const won = await transitionFromProposed(row.id, firm.id, "expired");
+    if (won) return NextResponse.json({ status: "expired", error: null });
+    const latest = await getPendingAction(row.id, firm.id);
+    return NextResponse.json({
+      status: latest && latest !== CHAT_SCHEMA_MISSING ? latest.status : "failed",
+      error: latest && latest !== CHAT_SCHEMA_MISSING ? latest.error : null,
+    });
   }
 
   if (body.decision === "cancel") {
-    await resolvePendingAction(row.id, firm.id, { status: "cancelled" });
-    return NextResponse.json({ status: "cancelled", error: null });
+    // CAS so a Cancel can't overwrite a confirm/expire that landed first.
+    const won = await transitionFromProposed(row.id, firm.id, "cancelled");
+    if (won) return NextResponse.json({ status: "cancelled", error: null });
+    const latest = await getPendingAction(row.id, firm.id);
+    return NextResponse.json({
+      status: latest && latest !== CHAT_SCHEMA_MISSING ? latest.status : "failed",
+      error: latest && latest !== CHAT_SCHEMA_MISSING ? latest.error : null,
+    });
   }
 
   // Confirm: claim atomically so two simultaneous confirms execute once.

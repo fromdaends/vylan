@@ -159,6 +159,27 @@ export async function claimPendingAction(
   return (res.data ?? []).length > 0;
 }
 
+// Atomic proposed -> cancelled | expired. Guards the same race as the
+// confirm claim: a Cancel that reads a still-proposed row must NOT overwrite
+// a confirm/expire that landed in between (an unconditional update would
+// falsify the ledger). Returns whether this transition won.
+export async function transitionFromProposed(
+  id: string,
+  firmId: string,
+  to: "cancelled" | "expired",
+): Promise<boolean> {
+  const service = getServiceRoleSupabase();
+  const res = await service
+    .from("chat_pending_actions")
+    .update({ status: to, resolved_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("firm_id", firmId)
+    .eq("status", "proposed")
+    .select("id");
+  if (res.error) throw res.error;
+  return (res.data ?? []).length > 0;
+}
+
 export async function resolvePendingAction(
   id: string,
   firmId: string,

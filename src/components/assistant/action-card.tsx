@@ -192,9 +192,12 @@ function StatusChip({ status }: { status: ActionCardStatus }) {
       : status === "failed"
         ? "bg-destructive/10 text-destructive"
         : "bg-muted text-muted-foreground";
+  // "confirming" is a transient mid-execution state (only ever seen if a
+  // confirm crashed between claim and resolve). Never show it as "Done" —
+  // nothing is guaranteed to have executed.
   const label =
     status === "confirming"
-      ? t("action_status_confirmed")
+      ? t("action_status_confirming")
       : t(`action_status_${status}`);
   return (
     <span

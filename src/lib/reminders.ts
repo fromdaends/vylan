@@ -98,6 +98,37 @@ export async function cancelEngagementReminders(
   );
 }
 
+// Reschedule ONLY the overdue reminder after a due-date change. The
+// gentle/firm/deadline tones are anchored to sent_at and must NOT be
+// rebuilt: re-running scheduleEngagementReminders with the original sentAt
+// would enqueue those tones with past run_after timestamps, which the cron
+// fires immediately (duplicate emails/SMS to the client). Only the overdue
+// tone depends on due_date, so cancel just it and re-enqueue for the new
+// date when that date is still in the future.
+export async function rescheduleOverdueReminder(opts: {
+  engagementId: string;
+  dueDate: string | null;
+}): Promise<void> {
+  await cancelPendingJobs(
+    "send_reminder",
+    (payload) =>
+      payload.engagement_id === opts.engagementId &&
+      payload.tone === "overdue",
+  );
+  if (!opts.dueDate) return;
+  const runAfter = addDays(new Date(`${opts.dueDate}T23:59:59Z`), 1);
+  if (runAfter.getTime() <= Date.now()) return; // already past — no-op
+  await enqueueJob({
+    kind: "send_reminder",
+    payload: {
+      engagement_id: opts.engagementId,
+      tone: "overdue",
+      with_sms: false,
+    },
+    runAfter,
+  });
+}
+
 // Job worker.
 export async function processReminderJob(
   payload: Record<string, unknown>,
