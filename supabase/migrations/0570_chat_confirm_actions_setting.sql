@@ -12,14 +12,22 @@
 -- chat_pending_actions and logged to the activity timeline exactly as a
 -- confirmed action, so there is a full audit trail either way.
 --
--- Owner-only firm policy: the UPDATE grant is column-scoped to authenticated
--- and the /api/firm route rejects non-owners; the model has no path to change
--- it. Additive + reversible (down: drop column). Gated: readers default a
--- missing column to TRUE (confirmation ON) so this ships before the SQL is
--- applied, with zero behavior change until then.
+-- Owner-only firm policy. This is a SECURITY control (it governs whether the
+-- AI may act with no human in the loop), so unlike the other firm toggles it
+-- is SERVICE-ROLE WRITE ONLY: there is deliberately NO authenticated UPDATE
+-- grant (firms revoked blanket UPDATE in 0039, so an ungranted column simply
+-- cannot be PATCHed via PostgREST). The /api/firm/chat-confirm-actions route
+-- checks role === 'owner' and then writes through the service-role client, so
+-- a non-owner member cannot flip it by hitting PostgREST directly (which the
+-- firm's RLS UPDATE policy allows for any same-firm member, regardless of
+-- role). Mirrors seat_cap_override / stripe_connect_* (0190 / 0370).
+--
+-- Additive + reversible (down: drop column). Gated: readers default a missing
+-- column to TRUE (confirmation ON) so this ships before the SQL is applied,
+-- with zero behavior change until then.
 
 alter table firms
   add column if not exists chat_confirm_actions boolean not null default true;
 
--- Column-level UPDATE grant (firms locks updates per-column since 0039).
-grant update (chat_confirm_actions) on public.firms to authenticated;
+-- No authenticated UPDATE grant on purpose: written only by the service role
+-- inside the already owner-checked route (see the header comment above).

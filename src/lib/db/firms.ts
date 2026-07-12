@@ -58,9 +58,12 @@ export type Firm = {
   // TRUE (default) = the assistant proposes actions and the accountant must
   // press Confirm on a card before anything runs. FALSE = a firm that trusts
   // the assistant lets the server carry out proposed actions immediately
-  // (deletions still confirm — see ALWAYS_CONFIRM_ACTIONS). Owner-editable.
-  // May be undefined at runtime until 0570 is applied — readers default it to
-  // true (confirmation ON, the safe behavior).
+  // (deletions still confirm — see ALWAYS_CONFIRM_ACTIONS). This is a security
+  // control, so it is SERVICE-ROLE-WRITE-ONLY (no authenticated UPDATE grant):
+  // deliberately NOT in updateCurrentFirm's whitelist; the owner-checked
+  // /api/firm/chat-confirm-actions route writes it via the service role. May be
+  // undefined at runtime until 0570 is applied — readers default it to true
+  // (confirmation ON, the safe behavior).
   chat_confirm_actions: boolean;
   // Per-firm monthly AI-check cap (migration 0230). Service-role-only — not in
   // the updateCurrentFirm whitelist. May be undefined at runtime until 0230 is
@@ -111,7 +114,6 @@ export async function updateCurrentFirm(
       | "auto_reject_duplicates"
       | "auto_request_missing_pages"
       | "include_quebec_forms"
-      | "chat_confirm_actions"
       | "service_prices"
       | "logo_url"
     >

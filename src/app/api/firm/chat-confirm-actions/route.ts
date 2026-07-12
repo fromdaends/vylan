@@ -1,14 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getServerSupabase } from "@/lib/supabase/server";
-import { updateCurrentFirm } from "@/lib/db/firms";
+import {
+  getServerSupabase,
+  getServiceRoleSupabase,
+} from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 
 // Firm-level "send confirmation cards" toggle for the engagement assistant
 // (migration 0570). When TRUE (default), the assistant proposes actions and
 // the accountant confirms a card before anything runs. When FALSE, the server
-// carries out proposed actions immediately (deletions still confirm). Owner-
-// only firm policy; mirrors the other firm-setting POST routes (plain POST,
-// the client manages the optimistic state).
+// carries out proposed actions immediately (deletions still confirm).
+//
+// This governs whether the AI may act with no human in the loop, so it is a
+// SECURITY control and gets stricter enforcement than the other firm toggles:
+// the column has NO authenticated UPDATE grant (0570), and the firm's RLS
+// UPDATE policy allows any same-firm member (not just the owner). So we check
+// role === 'owner' HERE and write with the SERVICE ROLE — a staff session
+// cannot flip this by PATCHing PostgREST directly.
 
 export const runtime = "nodejs";
 
@@ -32,7 +39,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await updateCurrentFirm({ chat_confirm_actions: enabled });
+    // Service-role write, pinned to the owner's own firm. RLS is bypassed by
+    // the service role, so the owner check above is the only gate — which is
+    // the point (no non-owner PostgREST path exists).
+    const service = getServiceRoleSupabase();
+    const { error } = await service
+      .from("firms")
+      .update({ chat_confirm_actions: enabled })
+      .eq("id", me.firm_id);
+    if (error) throw error;
   } catch (e) {
     console.error("[POST /api/firm/chat-confirm-actions] update failed:", e);
     const detail = e instanceof Error ? e.message : String(e);
