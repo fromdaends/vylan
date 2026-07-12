@@ -30,7 +30,8 @@ export function EngagementSelector({
   onChange,
 }: {
   value: EngagementOption | null;
-  onChange: (option: EngagementOption) => void;
+  // null = the general "ask about the software" chat (no engagement scope).
+  onChange: (option: EngagementOption | null) => void;
 }) {
   const t = useTranslations("Assistant");
   const [open, setOpen] = useState(false);
@@ -95,7 +96,7 @@ export function EngagementSelector({
               ? value.clientName
                 ? `${value.title} · ${value.clientName}`
                 : value.title
-              : t("select_engagement")}
+              : t("general_chat_option")}
           </span>
           <ChevronsUpDown
             className="ml-auto size-3 shrink-0 opacity-50"
@@ -127,6 +128,30 @@ export function EngagementSelector({
             ) : (
               <>
                 <CommandEmpty>{t("no_engagements")}</CommandEmpty>
+                {/* Return to the general "ask about the software" chat by
+                    clearing the engagement scope. Always first. */}
+                <CommandGroup>
+                  <CommandItem
+                    value="general help ask about the software"
+                    className="data-[selected=true]:bg-secondary data-[selected=true]:text-foreground"
+                    onSelect={() => {
+                      onChange(null);
+                      setOpen(false);
+                    }}
+                  >
+                    <span className="truncate">{t("general_chat_option")}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {t("general_chat_option_hint")}
+                    </span>
+                    <Check
+                      className={cn(
+                        "ml-auto size-4",
+                        value === null ? "opacity-100" : "opacity-0",
+                      )}
+                      aria-hidden
+                    />
+                  </CommandItem>
+                </CommandGroup>
                 <CommandGroup>
                   {(options ?? []).map((o) => (
                     <CommandItem

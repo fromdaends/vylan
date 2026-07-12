@@ -2167,6 +2167,8 @@
     "info_limits_2": "Supprimer des documents ou des mandats",
     "info_limits_3": "Travailler sur un mandat autre que celui sélectionné",
     "select_engagement": "Choisir un mandat",
+    "general_chat_option": "Général",
+    "general_chat_option_hint": "Poser une question sur le logiciel",
     "select_engagement_placeholder": "Rechercher un mandat…",
     "no_engagements": "Aucun mandat trouvé.",
     "loading": "Chargement…",
