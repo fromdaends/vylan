@@ -20,6 +20,7 @@ import {
   ChevronRight,
   UserCog,
   Users,
+  Bot,
 } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
@@ -61,7 +62,8 @@ type SectionId =
   | "general"
   | "payments"
   | "integrations"
-  | "documents";
+  | "documents"
+  | "assistant";
 type Translate = (k: string, values?: Record<string, string | number>) => string;
 
 // Same Canadian zones that used to live in /firm. Kept in sync with the
@@ -92,6 +94,7 @@ const SECTION_IDS: SectionId[] = [
   "payments",
   "integrations",
   "documents",
+  "assistant",
 ];
 
 export function SettingsShell({
@@ -101,6 +104,7 @@ export function SettingsShell({
   autoRejectDuplicates,
   autoRequestMissingPages,
   includeQuebecForms,
+  chatConfirmActions,
   aiUsage,
   isOwner,
   billingSlot,
@@ -121,6 +125,8 @@ export function SettingsShell({
   autoRejectDuplicates: boolean;
   autoRequestMissingPages: boolean;
   includeQuebecForms: boolean;
+  // Engagement-assistant "send confirmation cards" toggle (owner-only).
+  chatConfirmActions: boolean;
   aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -169,6 +175,7 @@ export function SettingsShell({
     { id: "payments", label: t("nav_payments"), icon: Wallet },
     { id: "integrations", label: t("nav_integrations"), icon: Plug },
     { id: "documents", label: t("nav_documents"), icon: FileText },
+    { id: "assistant", label: t("nav_assistant"), icon: Bot },
   ];
   // Owner-only tabs (Billing, Documents) are hidden from staff.
   const nav = allNav.filter((n) => isOwner || !isOwnerOnlySettingsSection(n.id));
@@ -264,6 +271,9 @@ export function SettingsShell({
             locale={currentLocale}
             t={t}
           />
+        )}
+        {section === "assistant" && isOwner && (
+          <AssistantSection chatConfirmActions={chatConfirmActions} t={t} />
         )}
       </div>
     </div>
@@ -914,6 +924,78 @@ function DocumentsSection({
       </div>
       {quebecError && (
         <p className="mt-2 text-xs text-destructive">{quebecError}</p>
+      )}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AI Assistant (owner-only) — whether the engagement assistant must show a
+// confirm card before it acts. ON (default) = every action waits for a human
+// Confirm. OFF = the assistant carries out actions itself (deletions still
+// confirm). Same optimistic-save-and-revert pattern as the document toggles.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AssistantSection({
+  chatConfirmActions,
+  t,
+}: {
+  chatConfirmActions: boolean;
+  t: Translate;
+}) {
+  const [enabled, setEnabled] = useState(chatConfirmActions);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onToggle(next: boolean) {
+    setError(null);
+    setEnabled(next);
+    try {
+      const res = await fetch("/api/firm/chat-confirm-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!res.ok) {
+        setError(t("save_failed"));
+        setEnabled(!next);
+      }
+    } catch (e) {
+      console.error("[onToggle] chat-confirm-actions save failed:", e);
+      setError(t("save_failed"));
+      setEnabled(!next);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="text-sm font-semibold">{t("section_assistant")}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {t("section_assistant_hint")}
+      </p>
+
+      <div className="mt-4 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border/50 px-4 py-3">
+        <div className="space-y-1">
+          <div className="text-sm font-medium">{t("confirm_cards_label")}</div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("confirm_cards_help")}
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          onCheckedChange={onToggle}
+          ariaLabel={t("confirm_cards_label")}
+        />
+      </div>
+      {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+
+      {/* When confirmation is OFF, spell out what that means — the assistant
+          now acts on its own (deletions still ask). */}
+      {!enabled && (
+        <div className="mt-3 max-w-xl rounded-lg border border-warning/40 bg-warning/[0.06] px-4 py-3">
+          <p className="text-xs leading-relaxed text-warning">
+            {t("confirm_cards_off_warning")}
+          </p>
+        </div>
       )}
     </section>
   );

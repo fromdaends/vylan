@@ -16,7 +16,8 @@ export type SettingsSectionId =
   | "general"
   | "payments"
   | "integrations"
-  | "documents";
+  | "documents"
+  | "assistant";
 
 // NOTE: "integrations" is NOT owner-only — any firm member may VIEW the
 // QuickBooks connection + read its data. Connect/disconnect are gated to owners
@@ -24,6 +25,9 @@ export type SettingsSectionId =
 export const OWNER_ONLY_SETTINGS_SECTIONS: readonly SettingsSectionId[] = [
   "payments",
   "documents",
+  // Whether the AI may act without a human confirming is a firm-wide safety
+  // policy — owner-only, like document handling.
+  "assistant",
 ];
 
 export function isOwnerOnlySettingsSection(id: string): boolean {
