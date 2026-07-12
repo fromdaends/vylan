@@ -82,6 +82,29 @@ describe("parseActionInput", () => {
     ).toBe(true);
   });
 
+  it("accepts per-item ai_rules on add and edit (edit allows clearing)", () => {
+    expect(
+      parseActionInput("add_checklist_item", {
+        label: "T4",
+        ai_rules: "Must show 2025.",
+      }).ok,
+    ).toBe(true);
+    // ai_rules alone is a valid edit (counts as a change).
+    expect(
+      parseActionInput("edit_checklist_item", {
+        item_id: ITEM_ID,
+        ai_rules: "Reject if the total is blurred.",
+      }).ok,
+    ).toBe(true);
+    // Empty string clears the rules and is still a valid change.
+    expect(
+      parseActionInput("edit_checklist_item", {
+        item_id: ITEM_ID,
+        ai_rules: "",
+      }).ok,
+    ).toBe(true);
+  });
+
   it("due date accepts YYYY-MM-DD or null, rejects garbage", () => {
     expect(parseActionInput("change_due_date", { due_date: "2026-09-30" }).ok).toBe(true);
     expect(parseActionInput("change_due_date", { due_date: null }).ok).toBe(true);

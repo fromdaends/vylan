@@ -42,6 +42,13 @@ export type RequestItem = {
   // worker has run for this item. Fetched by the select("*") in both
   // listRequestItems (accountant) and the portal item query.
   ai_set_assessment: SetAssessment | null;
+  // Per-item custom rules for the document checker (migration 0580). Free text
+  // the accountant writes ("must show 2025 and the client's SIN", "reject if
+  // the total is blurred"); the checker prompt includes it so the accept /
+  // reject / flag verdict for uploads against THIS item follows the rules.
+  // Optional: absent (undefined) until 0580 is applied — the select("*") that
+  // hydrates this simply won't carry the column. Readers default it to null.
+  ai_rules?: string | null;
   created_at: string;
 };
 
@@ -102,6 +109,7 @@ export type NewItemInput = {
   description_fr?: string | null;
   doc_type: DocType;
   required: boolean;
+  ai_rules?: string | null;
 };
 
 export async function addItemToEngagement(
@@ -118,6 +126,7 @@ export async function addItemToEngagement(
     .maybeSingle();
   const nextIdx = (last?.order_index ?? -1) + 1;
 
+  const rules = normalizeAiRules(input.ai_rules);
   const { data, error } = await supabase
     .from("request_items")
     .insert({
@@ -128,6 +137,11 @@ export async function addItemToEngagement(
       description_fr: input.description_fr ?? null,
       doc_type: input.doc_type,
       required: input.required,
+      // Only send ai_rules when there ARE rules: this keeps adding a plain
+      // item working before migration 0580 is applied (the column doesn't
+      // exist yet, and PostgREST errors on an unknown column). The rules
+      // feature itself only works once the migration lands, which is fine.
+      ...(rules !== null ? { ai_rules: rules } : {}),
       order_index: nextIdx,
       status: "pending",
     })
@@ -135,6 +149,16 @@ export async function addItemToEngagement(
     .single();
   if (error) throw error;
   return data as RequestItem;
+}
+
+// Blank / whitespace-only rules are stored as NULL so "no rules" is a single
+// canonical value (the checker treats null and "" identically anyway).
+export function normalizeAiRules(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 export type NewSignatureItemInput = {
@@ -194,6 +218,7 @@ export type RequestItemPatch = {
   label_fr?: string | null;
   doc_type?: DocType;
   required?: boolean;
+  ai_rules?: string | null;
 };
 
 export async function updateRequestItem(
