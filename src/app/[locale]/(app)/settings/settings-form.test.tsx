@@ -69,6 +69,8 @@ function renderShell(
         autoRequestMissingPages={false}
         includeQuebecForms={true}
         chatConfirmActions={true}
+        invoiceDefaultMode="off"
+        invoiceDefaultDelayDays={null}
         aiUsage={{
           used: 0,
           cap: 400,

@@ -65,6 +65,13 @@ export type Firm = {
   // undefined at runtime until 0570 is applied — readers default it to true
   // (confirmation ON, the safe behavior).
   chat_confirm_actions: boolean;
+  // Firm-wide DEFAULT invoice automation (migration 0590) that pre-selects the
+  // choice on every new engagement (still editable per engagement). Owner-
+  // editable via /api/firm/invoice-defaults (granted column, like service_prices).
+  // May be undefined at runtime until 0590 is applied — readers default the mode
+  // to 'off'.
+  default_invoice_auto_mode?: "off" | "on_completion" | "delayed";
+  default_invoice_delay_days?: number | null;
   // Per-firm monthly AI-check cap (migration 0230). Service-role-only — not in
   // the updateCurrentFirm whitelist. May be undefined at runtime until 0230 is
   // applied; getFirmAiUsage defaults it to 400.
@@ -114,6 +121,8 @@ export async function updateCurrentFirm(
       | "auto_reject_duplicates"
       | "auto_request_missing_pages"
       | "include_quebec_forms"
+      | "default_invoice_auto_mode"
+      | "default_invoice_delay_days"
       | "service_prices"
       | "logo_url"
     >

@@ -58,6 +58,10 @@ export default async function NewEngagementPage({
         initialTemplateId={sp.template}
         locale={locale}
         includeQuebecForms={firm?.include_quebec_forms ?? true}
+        servicePrices={firm?.service_prices ?? {}}
+        connectReady={firm?.connect_charges_enabled === true}
+        invoiceDefaultMode={firm?.default_invoice_auto_mode ?? "off"}
+        invoiceDefaultDelayDays={firm?.default_invoice_delay_days ?? null}
       />
     </div>
   );

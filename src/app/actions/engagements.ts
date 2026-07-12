@@ -23,6 +23,10 @@ import {
   scheduleEngagementReminders,
   cancelEngagementReminders,
 } from "@/lib/reminders";
+import {
+  dispatchInvoiceOnCompletion,
+  cancelScheduledInvoice,
+} from "@/lib/invoices/schedule";
 import { getFirmLimits } from "@/lib/plan-limits";
 import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
@@ -69,8 +73,35 @@ const CreateSchema = z.object({
   // "AI Analyze" switch. Optional + defaults true so existing/forgetful callers
   // keep AI on; only an explicit false disables it.
   ai_enabled: z.boolean().optional().default(true),
+  // Invoice automation (migration 0590). Optional + defaults 'off'.
+  invoice_auto_mode: z
+    .enum(["off", "on_completion", "delayed"])
+    .optional()
+    .default("off"),
+  invoice_delay_days: z.number().int().min(1).max(365).nullable().optional(),
+  invoice_amount_cents: z
+    .number()
+    .int()
+    .min(50)
+    .max(99_999_999)
+    .nullable()
+    .optional(),
   items: z.array(ItemSchema).min(0),
-});
+})
+  // Automation needs an amount to bill; 'delayed' needs a number of days.
+  .refine(
+    (v) =>
+      v.invoice_auto_mode === "off" ||
+      (typeof v.invoice_amount_cents === "number" &&
+        v.invoice_amount_cents >= 50),
+    { message: "invoice_amount_required", path: ["invoice_amount_cents"] },
+  )
+  .refine(
+    (v) =>
+      v.invoice_auto_mode !== "delayed" ||
+      (typeof v.invoice_delay_days === "number" && v.invoice_delay_days >= 1),
+    { message: "invoice_delay_required", path: ["invoice_delay_days"] },
+  );
 
 function fieldErrorsFromZod(error: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
@@ -100,6 +131,9 @@ export async function createEngagementAction(payload: {
   type: "t1" | "t2" | "bookkeeping" | "custom";
   due_date: string | null;
   ai_enabled?: boolean;
+  invoice_auto_mode?: "off" | "on_completion" | "delayed";
+  invoice_delay_days?: number | null;
+  invoice_amount_cents?: number | null;
   items: TemplateItem[];
   send: boolean;
   locale: "fr" | "en";
@@ -110,6 +144,9 @@ export async function createEngagementAction(payload: {
     type: payload.type,
     due_date: payload.due_date,
     ai_enabled: payload.ai_enabled,
+    invoice_auto_mode: payload.invoice_auto_mode,
+    invoice_delay_days: payload.invoice_delay_days,
+    invoice_amount_cents: payload.invoice_amount_cents,
     items: payload.items,
   });
   if (!parsed.success) {
@@ -150,6 +187,18 @@ export async function createEngagementAction(payload: {
       type: parsed.data.type,
       due_date: parsed.data.due_date,
       ai_enabled: parsed.data.ai_enabled,
+      invoice_auto_mode: parsed.data.invoice_auto_mode,
+      // Normalize: only carry the delay/amount that the chosen mode uses, so an
+      // 'off' engagement never stores a stray amount and 'on_completion' never
+      // stores a delay.
+      invoice_delay_days:
+        parsed.data.invoice_auto_mode === "delayed"
+          ? (parsed.data.invoice_delay_days ?? null)
+          : null,
+      invoice_amount_cents:
+        parsed.data.invoice_auto_mode === "off"
+          ? null
+          : (parsed.data.invoice_amount_cents ?? null),
       items,
     };
     const created = await createEngagementWithItems(input);
@@ -253,6 +302,14 @@ export async function completeEngagementAction(formData: FormData) {
   const engagement = await getEngagement(id);
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "complete_engagement", {});
+    // Invoice automation: send now, schedule for later, or nothing, per the
+    // engagement's choice. Best-effort — a hiccup here must never block the
+    // completion the accountant just did.
+    try {
+      await dispatchInvoiceOnCompletion(engagement);
+    } catch (e) {
+      console.error("[completeEngagementAction] invoice dispatch failed:", e);
+    }
   }
   revalidateEngagementPaths(id);
 }
@@ -261,6 +318,12 @@ export async function reopenEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
   await reopenEngagement(id);
+  // Reopened work isn't finished, so drop any pending delayed invoice.
+  try {
+    await cancelScheduledInvoice(id);
+  } catch (e) {
+    console.error("[reopenEngagementAction] cancel invoice failed:", e);
+  }
   const engagement = await getEngagement(id);
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "reopen_engagement", {});

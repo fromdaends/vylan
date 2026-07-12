@@ -30,6 +30,15 @@ export type Engagement = {
   // reads survive the pre-migration window (column absent → undefined → treated
   // as ON everywhere via the `=== false` checks).
   ai_enabled?: boolean;
+  // Invoice automation (migration 0590). How/whether the client's invoice is
+  // sent automatically at completion: 'off' (manual, default), 'on_completion'
+  // (send when marked complete), 'delayed' (send invoice_delay_days days after).
+  // invoice_amount_cents is the amount to bill, captured at setup. All optional
+  // on the type so reads survive the pre-migration window (column absent →
+  // undefined → treated as 'off' / no amount).
+  invoice_auto_mode?: "off" | "on_completion" | "delayed";
+  invoice_delay_days?: number | null;
+  invoice_amount_cents?: number | null;
   created_at: string;
   // Lifecycle (migration 0139). archive = hidden from active views, reversible
   // anytime; soft-delete = 30-day recoverable window before the purge cron.
@@ -133,6 +142,10 @@ export type CreateEngagementInput = {
   due_date: string | null;
   // "AI Analyze" switch from the engagement builder. Defaults true upstream.
   ai_enabled: boolean;
+  // Invoice automation (migration 0590). 'off' = no automatic invoice.
+  invoice_auto_mode?: "off" | "on_completion" | "delayed";
+  invoice_delay_days?: number | null;
+  invoice_amount_cents?: number | null;
   items: TemplateItem[];
 };
 
@@ -180,11 +193,33 @@ export async function createEngagementWithItems(
     assigned_user_id: user.user.id,
     assigned_at: new Date().toISOString(),
   };
+  // Invoice-automation columns (migration 0590) ride along ONLY when the
+  // accountant actually turned automation on, so a normal 'off' engagement
+  // never depends on the new columns and creation keeps working pre-0590. When
+  // they ARE included and the column is missing, the tiered retry below drops
+  // them (invoice automation is simply inert until the migration lands).
+  const invoiceCols =
+    input.invoice_auto_mode && input.invoice_auto_mode !== "off"
+      ? {
+          invoice_auto_mode: input.invoice_auto_mode,
+          invoice_delay_days: input.invoice_delay_days ?? null,
+          invoice_amount_cents: input.invoice_amount_cents ?? null,
+        }
+      : {};
   let { data: engagement, error: engErr } = await supabase
     .from("engagements")
-    .insert({ ...baseRow, ai_enabled: input.ai_enabled })
+    .insert({ ...baseRow, ai_enabled: input.ai_enabled, ...invoiceCols })
     .select("*")
     .single();
+  // Retry WITHOUT the invoice columns first (keeps ai_enabled when only 0590 is
+  // missing), then without ai_enabled either (a very old env missing 0340 too).
+  if (engErr && isUnknownColumnError(engErr)) {
+    ({ data: engagement, error: engErr } = await supabase
+      .from("engagements")
+      .insert({ ...baseRow, ai_enabled: input.ai_enabled })
+      .select("*")
+      .single());
+  }
   if (engErr && isUnknownColumnError(engErr)) {
     ({ data: engagement, error: engErr } = await supabase
       .from("engagements")
