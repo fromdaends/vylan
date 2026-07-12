@@ -73,7 +73,6 @@ import {
 } from "@/lib/db/signature-requests";
 import { reconcileSignatureRequest } from "@/lib/signwell/reconcile";
 import { signedUrl } from "@/lib/storage";
-import { RequestPaymentButton } from "@/components/engagements/request-payment-button";
 import { isTrialExpired } from "@/lib/trial";
 import {
   getCurrentUser,
@@ -526,12 +525,6 @@ export default async function EngagementDetailPage({
                   {t("reopen")}
                 </Button>
               </form>
-              {connectReady && (
-                <RequestPaymentButton
-                  engagementId={engagement.id}
-                  defaultAmount={paymentPrefill}
-                />
-              )}
             </>
           )}
           {/* Activity: drafts keep a standalone icon; every other state opens
@@ -559,6 +552,9 @@ export default async function EngagementDetailPage({
                 latestPayment?.status === "requested"
                   ? (portalUrl ?? undefined)
                   : undefined
+              }
+              requestPaymentDefaultAmount={
+                isComplete && connectReady ? paymentPrefill : undefined
               }
             />
           )}

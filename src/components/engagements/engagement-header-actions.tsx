@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDownloadAll } from "./use-download-all";
+import { RequestPaymentButton } from "./request-payment-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +51,7 @@ export function EngagementMoreMenu({
   canDelete,
   clientLinkToken,
   paymentLinkUrl,
+  requestPaymentDefaultAmount,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -61,6 +63,8 @@ export function EngagementMoreMenu({
   clientLinkToken?: string;
   // Present when a payment has been requested: enables "Copy payment link".
   paymentLinkUrl?: string;
+  // Completed + Stripe-ready engagements expose Request payment in this menu.
+  requestPaymentDefaultAmount?: string;
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -109,6 +113,18 @@ export function EngagementMoreMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
+          {requestPaymentDefaultAmount !== undefined && (
+            <RequestPaymentButton
+              engagementId={engagementId}
+              defaultAmount={requestPaymentDefaultAmount}
+              trigger={
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                  <Wallet />
+                  {t("request_payment")}
+                </DropdownMenuItem>
+              }
+            />
+          )}
           {clientLinkToken && (
             <>
               <DropdownMenuItem
