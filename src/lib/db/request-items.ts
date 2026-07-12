@@ -42,6 +42,13 @@ export type RequestItem = {
   // worker has run for this item. Fetched by the select("*") in both
   // listRequestItems (accountant) and the portal item query.
   ai_set_assessment: SetAssessment | null;
+  // Per-item custom rules for the document checker (migration 0580). Free text
+  // the accountant writes ("must show 2025 and the client's SIN", "reject if
+  // the total is blurred"); the checker prompt includes it so the accept /
+  // reject / flag verdict for uploads against THIS item follows the rules.
+  // Optional: absent (undefined) until 0580 is applied — the select("*") that
+  // hydrates this simply won't carry the column. Readers default it to null.
+  ai_rules?: string | null;
   created_at: string;
 };
 
@@ -102,6 +109,7 @@ export type NewItemInput = {
   description_fr?: string | null;
   doc_type: DocType;
   required: boolean;
+  ai_rules?: string | null;
 };
 
 export async function addItemToEngagement(
@@ -118,23 +126,59 @@ export async function addItemToEngagement(
     .maybeSingle();
   const nextIdx = (last?.order_index ?? -1) + 1;
 
-  const { data, error } = await supabase
+  const baseRow = {
+    engagement_id: input.engagement_id,
+    label: input.label,
+    label_fr: input.label_fr ?? null,
+    description: input.description ?? null,
+    description_fr: input.description_fr ?? null,
+    doc_type: input.doc_type,
+    required: input.required,
+    order_index: nextIdx,
+    status: "pending" as const,
+  };
+  const rules = normalizeAiRules(input.ai_rules);
+  const row = rules !== null ? { ...baseRow, ai_rules: rules } : baseRow;
+
+  let { data, error } = await supabase
     .from("request_items")
-    .insert({
-      engagement_id: input.engagement_id,
-      label: input.label,
-      label_fr: input.label_fr ?? null,
-      description: input.description ?? null,
-      description_fr: input.description_fr ?? null,
-      doc_type: input.doc_type,
-      required: input.required,
-      order_index: nextIdx,
-      status: "pending",
-    })
+    .insert(row)
     .select("*")
     .single();
+  // Pre-migration 0580 the ai_rules column may not exist yet. Mirror
+  // createEngagementWithItems: retry WITHOUT ai_rules on an unknown-column
+  // error so a plain item is still created (the rules are dropped; the feature
+  // needs the migration to work anyway). Only the code-set-rules path can hit
+  // this — a plain add never sends the column.
+  if (error && rules !== null && isUnknownColumnError(error)) {
+    ({ data, error } = await supabase
+      .from("request_items")
+      .insert(baseRow)
+      .select("*")
+      .single());
+  }
   if (error) throw error;
   return data as RequestItem;
+}
+
+// A write that referenced a column the DB doesn't have yet (migration deployed
+// in code but not applied). PostgREST reports a schema-cache miss (PGRST204);
+// Postgres proper reports undefined_column (42703). Matches ONLY these codes,
+// never message text, so an unrelated failure can't trigger a silent retry.
+// (Mirrors the same helper in db/engagements.ts; kept local to avoid an import
+// cycle — engagements.ts already imports normalizeAiRules from here.)
+function isUnknownColumnError(err: { code?: string | null } | null): boolean {
+  return err?.code === "PGRST204" || err?.code === "42703";
+}
+
+// Blank / whitespace-only rules are stored as NULL so "no rules" is a single
+// canonical value (the checker treats null and "" identically anyway).
+export function normalizeAiRules(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
 export type NewSignatureItemInput = {
@@ -194,6 +238,7 @@ export type RequestItemPatch = {
   label_fr?: string | null;
   doc_type?: DocType;
   required?: boolean;
+  ai_rules?: string | null;
 };
 
 export async function updateRequestItem(

@@ -68,6 +68,8 @@ export const ACTION_INPUT_SCHEMAS = {
       label,
       doc_type: docType.optional(),
       required: z.boolean().optional(),
+      // Optional custom rules for the AI document checker on this new item.
+      ai_rules: z.string().max(2000).optional(),
     })
     .strict(),
   edit_checklist_item: z
@@ -76,13 +78,16 @@ export const ACTION_INPUT_SCHEMAS = {
       new_label: label.optional(),
       required: z.boolean().optional(),
       doc_type: docType.optional(),
+      // Nullable so the model can CLEAR the rules by passing null / "".
+      ai_rules: z.string().max(2000).nullable().optional(),
     })
     .strict()
     .refine(
       (v) =>
         v.new_label !== undefined ||
         v.required !== undefined ||
-        v.doc_type !== undefined,
+        v.doc_type !== undefined ||
+        v.ai_rules !== undefined,
       { message: "no changes given" },
     ),
   remove_checklist_item: z.object({ item_id: uuid }).strict(),
@@ -155,6 +160,7 @@ export type ActionPayloads = {
     label: string;
     doc_type: string;
     required: boolean;
+    ai_rules: string | null;
   };
   edit_checklist_item: {
     item_id: string;
@@ -163,6 +169,8 @@ export type ActionPayloads = {
       new_label?: string;
       required?: boolean;
       doc_type?: string;
+      // string = set/replace the rules; null = clear them.
+      ai_rules?: string | null;
     };
   };
   remove_checklist_item: {

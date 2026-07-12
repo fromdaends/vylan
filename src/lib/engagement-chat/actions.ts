@@ -21,6 +21,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { approveFile, rejectFile } from "@/lib/db/file-review";
 import {
   addItemToEngagement,
+  normalizeAiRules,
   removeItem,
   updateRequestItem,
 } from "@/lib/db/request-items";
@@ -205,6 +206,7 @@ export async function buildActionProposal(
         label: input.label as string,
         doc_type: (input.doc_type as string | undefined) ?? "other",
         required: (input.required as boolean | undefined) ?? true,
+        ai_rules: normalizeAiRules(input.ai_rules as string | undefined),
       };
       return { ok: true, payload };
     }
@@ -229,6 +231,11 @@ export async function buildActionProposal(
             : {}),
           ...(input.doc_type !== undefined
             ? { doc_type: input.doc_type as string }
+            : {}),
+          // ai_rules present (even null) means "change the rules"; normalize
+          // blank to null so an empty string clears them.
+          ...(input.ai_rules !== undefined
+            ? { ai_rules: normalizeAiRules(input.ai_rules as string | null) }
             : {}),
         },
       };
@@ -379,6 +386,7 @@ export async function executeAction(
           label_fr: p.label,
           doc_type: p.doc_type as DocType,
           required: p.required,
+          ai_rules: p.ai_rules,
         });
         await logUserActivity(ctx.firmId, ctx.engagementId, "add_item", {
           item_id: item.id,
@@ -402,6 +410,9 @@ export async function executeAction(
             : {}),
           ...(p.changes.doc_type !== undefined
             ? { doc_type: p.changes.doc_type as DocType }
+            : {}),
+          ...(p.changes.ai_rules !== undefined
+            ? { ai_rules: p.changes.ai_rules }
             : {}),
         });
         await logUserActivity(ctx.firmId, ctx.engagementId, "item_updated", {

@@ -167,6 +167,21 @@ export function AddItemDialog({
               {t("required")}
             </label>
           </div>
+          {/* Optional per-item rules for the AI document checker. Uncontrolled,
+              read from FormData at submit like the other fields. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="ai_rules">{t("ai_rules_label")}</Label>
+            <Textarea
+              id="ai_rules"
+              name="ai_rules"
+              rows={2}
+              maxLength={2000}
+              placeholder={t("ai_rules_placeholder")}
+            />
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {t("ai_rules_hint")}
+            </p>
+          </div>
           <DialogFooter>
             <Button
               type="button"

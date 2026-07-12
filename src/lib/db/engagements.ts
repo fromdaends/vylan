@@ -1,6 +1,7 @@
 import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
+import { normalizeAiRules } from "./request-items";
 import type { EngagementType, TemplateItem } from "./templates";
 
 export type EngagementStatus =
@@ -194,7 +195,7 @@ export async function createEngagementWithItems(
   if (engErr || !engagement) throw engErr ?? new Error("create_failed");
 
   if (input.items.length > 0) {
-    const rows = input.items.map((item, idx) => ({
+    const baseRows = input.items.map((item, idx) => ({
       engagement_id: engagement.id,
       label: item.label_en,
       label_fr: item.label_fr,
@@ -204,9 +205,21 @@ export async function createEngagementWithItems(
       required: item.required,
       order_index: idx,
     }));
-    const { error: itemsErr } = await supabase
+    // Per-item AI rules (migration 0580). Same graceful-degrade idiom as
+    // ai_enabled above: try with the column, and if the DB doesn't have it yet
+    // retry without it (the rules feature isn't active until 0580 is applied).
+    const rows = baseRows.map((r, i) => ({
+      ...r,
+      ai_rules: normalizeAiRules(input.items[i].ai_rules),
+    }));
+    let { error: itemsErr } = await supabase
       .from("request_items")
       .insert(rows);
+    if (itemsErr && isUnknownColumnError(itemsErr)) {
+      ({ error: itemsErr } = await supabase
+        .from("request_items")
+        .insert(baseRows));
+    }
     if (itemsErr) throw itemsErr;
   }
   return engagement as Engagement;
