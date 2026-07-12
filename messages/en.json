@@ -2167,6 +2167,8 @@
     "info_limits_2": "Delete documents or engagements",
     "info_limits_3": "Work on any engagement other than the selected one",
     "select_engagement": "Choose an engagement",
+    "general_chat_option": "General",
+    "general_chat_option_hint": "Ask about the software",
     "select_engagement_placeholder": "Search engagements…",
     "no_engagements": "No engagements found.",
     "loading": "Loading…",
