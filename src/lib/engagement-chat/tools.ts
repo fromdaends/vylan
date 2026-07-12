@@ -23,13 +23,17 @@ import {
   fetchUserLabel,
 } from "./data";
 import { listActiveFirmUsers, userDisplayLabel } from "@/lib/db/users";
-import { parseActionInput } from "./action-schemas";
-import { buildActionProposal } from "./actions";
+import { ALWAYS_CONFIRM_ACTIONS, parseActionInput } from "./action-schemas";
+import { buildActionProposal, executeAction } from "./actions";
 import {
+  claimPendingAction,
   createPendingAction,
+  resolvePendingAction,
   toCard,
   type ActionCardData,
+  type PendingActionRow,
 } from "./pending-actions";
+import type { AnyActionPayload } from "./action-schemas";
 import { CHAT_SCHEMA_MISSING } from "./db";
 import { DOC_TYPES } from "@/lib/doc-types";
 
@@ -260,6 +264,10 @@ export type ChatToolContext = {
   userId: string;
   conversationId: string;
   onProposal: (card: ActionCardData) => void;
+  // Firm turned "send confirmation cards" OFF: the server carries out a
+  // proposed action immediately (except deletions — see
+  // ALWAYS_CONFIRM_ACTIONS) instead of waiting for a human to confirm.
+  autoConfirm: boolean;
 };
 
 export function createChatToolContext(opts: {
@@ -269,6 +277,7 @@ export function createChatToolContext(opts: {
   userId: string;
   conversationId: string;
   onProposal: (card: ActionCardData) => void;
+  autoConfirm: boolean;
 }): ChatToolContext {
   let files: Promise<ChatFileRow[]> | null = null;
   return {
@@ -349,8 +358,10 @@ export async function runChatTool(
 }
 
 // A propose_* tool call: validate the model's input, enrich it against real
-// state, persist the pending action, push the confirm card to the panel, and
-// tell the model it is now WAITING on the human. No side effects here.
+// state, and persist the pending action. Then either (default) push a confirm
+// card and tell the model it is WAITING on the human, or — when the firm turned
+// confirmation cards off — carry the action out immediately server-side and
+// push a resolved card. Deletions always take the confirm path.
 async function runProposalTool(
   name: string,
   input: unknown,
@@ -381,10 +392,77 @@ async function runProposalTool(
     };
   }
 
+  // Auto-execute when the firm turned confirmation cards off — but NEVER for a
+  // deletion (ALWAYS_CONFIRM_ACTIONS), which is irreversible.
+  if (ctx.autoConfirm && !ALWAYS_CONFIRM_ACTIONS.has(parsed.type)) {
+    return await autoExecuteProposal(row, proposal.payload, ctx);
+  }
+
   ctx.onProposal(toCard(row, { includeToken: true, nowMs: Date.now() }));
   return {
     status: "proposed",
     note: "A confirm card is now shown to the accountant. NOTHING has been executed. Do not claim the action happened; say it is waiting for their Confirm.",
+  };
+}
+
+// Carry out a freshly-proposed action immediately (firm has confirmation cards
+// off). Mirrors POST /api/engagement-chat/confirm's claim -> execute -> resolve
+// sequence, minus the token + expiry checks (we own this brand-new row, so no
+// capability needs verifying). Emits a resolved card — never one with a token.
+async function autoExecuteProposal(
+  pending: PendingActionRow,
+  payload: AnyActionPayload,
+  ctx: ChatToolContext,
+): Promise<unknown> {
+  const claimed = await claimPendingAction(pending.id, ctx.firmId);
+  if (!claimed) {
+    // Vanishingly unlikely on a brand-new row — fall back to a confirm card.
+    ctx.onProposal(toCard(pending, { includeToken: true, nowMs: Date.now() }));
+    return {
+      status: "proposed",
+      note: "A confirm card is now shown to the accountant. NOTHING has been executed yet.",
+    };
+  }
+
+  const result = await executeAction(pending.action_type, payload, {
+    sb: ctx.sb,
+    userId: ctx.userId,
+    firmId: ctx.firmId,
+    engagementId: ctx.engagementId,
+  });
+
+  if (!result.ok) {
+    await resolvePendingAction(pending.id, ctx.firmId, {
+      status: "failed",
+      confirmedBy: ctx.userId,
+      error: result.code,
+    });
+    ctx.onProposal(
+      toCard(
+        { ...pending, status: "failed", error: result.code },
+        { includeToken: false, nowMs: Date.now() },
+      ),
+    );
+    return {
+      status: "failed",
+      error: result.code,
+      note: "The action could NOT be completed. Briefly tell the accountant it did not go through, and why in plain language.",
+    };
+  }
+
+  await resolvePendingAction(pending.id, ctx.firmId, {
+    status: "confirmed",
+    confirmedBy: ctx.userId,
+  });
+  ctx.onProposal(
+    toCard(
+      { ...pending, status: "confirmed", error: null },
+      { includeToken: false, nowMs: Date.now() },
+    ),
+  );
+  return {
+    status: "executed",
+    note: "This firm has confirmation cards off, so the action was carried out immediately. You may tell the accountant it is done.",
   };
 }
 

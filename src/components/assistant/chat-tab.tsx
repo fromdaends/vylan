@@ -35,6 +35,11 @@ import {
   type ActionCardStatus,
 } from "@/components/assistant/thread";
 import { ActionCard } from "@/components/assistant/action-card";
+import {
+  parseAssistantMarkdown,
+  type MarkdownSpan,
+} from "@/components/assistant/assistant-markdown";
+import { cn } from "@/lib/cn";
 
 // The Assistant panel's Chat tab — phase 2: the ENGAGEMENT chat. Scoped to
 // the engagement picked in the panel header; answers come from the model via
@@ -997,12 +1002,12 @@ function ThinkingIndicator({ checking }: { checking: boolean }) {
   );
 }
 
-// Renders the assistant's reply as paragraphs separated by blank lines.
-// The system prompt strictly instructs the model to emit plain prose,
-// but models slip occasionally — sanitizeAssistantText strips any
-// markdown chars that leaked through so the user never sees raw
-// asterisks, hashes, backticks, or bullet dashes. A blinking caret
-// trails the last paragraph while the stream is open.
+// Renders the assistant's reply with LIGHT formatting — bold, italics,
+// inline code, and bullet / numbered lists — parsed by parseAssistantMarkdown
+// into a small block/span tree. Everything is emitted as React elements (never
+// dangerouslySetInnerHTML), so the model's text can never inject markup. A
+// blinking caret trails the final block while the stream is open. A half-typed
+// marker mid-stream (e.g. "**bol") just renders literally until it closes.
 function AssistantContent({
   text,
   isStreaming,
@@ -1010,22 +1015,47 @@ function AssistantContent({
   text: string;
   isStreaming: boolean;
 }) {
-  const cleaned = sanitizeAssistantText(text);
-  const paragraphs = cleaned
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0);
-  if (paragraphs.length === 0) {
+  const blocks = parseAssistantMarkdown(text);
+  if (blocks.length === 0) {
     return isStreaming ? <StreamingCaret /> : null;
   }
+  const lastIndex = blocks.length - 1;
   return (
-    <div className="space-y-3 text-sm leading-relaxed text-zinc-100">
-      {paragraphs.map((p, i) => {
-        const isLast = i === paragraphs.length - 1;
+    <div className="space-y-2.5 text-sm leading-relaxed text-zinc-100">
+      {blocks.map((block, i) => {
+        const caret = isStreaming && i === lastIndex;
+        if (block.type === "bullets" || block.type === "numbered") {
+          const ordered = block.type === "numbered";
+          const ListTag = ordered ? "ol" : "ul";
+          const lastItem = block.items.length - 1;
+          return (
+            <ListTag
+              key={i}
+              className={cn(
+                "space-y-1 pl-5",
+                ordered ? "list-decimal" : "list-disc",
+                "marker:text-zinc-500",
+              )}
+            >
+              {block.items.map((item, ii) => (
+                <li key={ii} className="break-words pl-0.5">
+                  <MarkdownSpans spans={item} />
+                  {caret && ii === lastItem ? <StreamingCaret /> : null}
+                </li>
+              ))}
+            </ListTag>
+          );
+        }
+        const lastLine = block.lines.length - 1;
         return (
-          <p key={i} className="break-words whitespace-pre-line">
-            {p}
-            {isStreaming && isLast ? <StreamingCaret /> : null}
+          <p key={i} className="break-words">
+            {block.lines.map((lineSpans, li) => (
+              <span key={li}>
+                <MarkdownSpans spans={lineSpans} />
+                {li < lastLine ? <br /> : null}
+              </span>
+            ))}
+            {caret ? <StreamingCaret /> : null}
           </p>
         );
       })}
@@ -1033,49 +1063,40 @@ function AssistantContent({
   );
 }
 
-// Defensive post-processing of the streamed model output. The prompt
-// forbids markdown but we cannot trust that — strip every common
-// markdown signal so users see clean prose even if the model regresses.
-// Order matters: do the inline transforms BEFORE the line-collapse
-// step so leading-line markers (- , * , #) still match at line start.
-//
-// One deliberate difference from the old help chat: SINGLE newlines are
-// kept (rendered via whitespace-pre-line) because the engagement chat
-// legitimately answers with short line-separated lists ("what's
-// missing"). Only markdown decoration is stripped.
-function sanitizeAssistantText(raw: string): string {
-  let text = raw;
-
-  // Markdown links → just the visible text. [Click here](https://...) → Click here
-  text = text.replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, "$1");
-
-  // Inline code → drop the backticks, keep the content. \`foo\` → foo
-  text = text.replace(/`+([^`\n]+?)`+/g, "$1");
-
-  // Bold → keep the content but drop the asterisks. **foo** → foo.
-  text = text.replace(/\*\*([^*\n]+?)\*\*/g, "$1");
-
-  // Italic via single asterisks / underscores → drop the markers.
-  text = text.replace(/(?<![*\w])\*([^*\n]+?)\*(?!\w)/g, "$1");
-  text = text.replace(/(?<![_\w])_([^_\n]+?)_(?!\w)/g, "$1");
-
-  // Leading list markers at the start of a line → strip the marker,
-  // keep the content. Handles both - and * bullets.
-  text = text.replace(/^[ \t]*[-*][ \t]+/gm, "");
-
-  // Leading heading markers (#, ##, ###…) → strip, keep title text.
-  text = text.replace(/^[ \t]*#{1,6}[ \t]+/gm, "");
-
-  // Horizontal rules — full lines of ---, ***, or ___ → drop the line.
-  text = text.replace(/^[ \t]*[-*_]{3,}[ \t]*$/gm, "");
-
-  // Normalize any run of 3+ newlines down to exactly two.
-  text = text.replace(/\n{3,}/g, "\n\n");
-
-  // Collapse runs of internal spaces/tabs to single spaces.
-  text = text.replace(/[ \t]{2,}/g, " ");
-
-  return text.trim();
+// Inline spans of one line/list-item. Bold is a real <strong>, italics <em>,
+// inline code a subtle pill. Plain text is a bare string, which React escapes.
+function MarkdownSpans({ spans }: { spans: MarkdownSpan[] }) {
+  return (
+    <>
+      {spans.map((span, i) => {
+        if (span.type === "bold") {
+          return (
+            <strong key={i} className="font-semibold text-white">
+              {span.value}
+            </strong>
+          );
+        }
+        if (span.type === "italic") {
+          return (
+            <em key={i} className="italic">
+              {span.value}
+            </em>
+          );
+        }
+        if (span.type === "code") {
+          return (
+            <code
+              key={i}
+              className="rounded bg-white/10 px-1 py-0.5 font-mono text-[0.85em] text-zinc-200"
+            >
+              {span.value}
+            </code>
+          );
+        }
+        return <span key={i}>{span.value}</span>;
+      })}
+    </>
+  );
 }
 
 function StreamingCaret() {
