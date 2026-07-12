@@ -237,6 +237,21 @@ export default async function EngagementDetailPage({
     });
     if (created > 0) suggestionsByFile = await getSuggestionsForEngagement(id);
   }
+  // Only the drafts whose CARD is actually shown feed the engagement roll-up —
+  // a draft's card appears once its document is approved (or it's posted), so
+  // the summary's counts + "needs input" call-to-action must use the same gate,
+  // or it would advertise work against cards the accountant can't see yet. Must
+  // match the per-file footer gate in ItemRow below.
+  const reviewStatusByFile = new Map(
+    uploads.map((u) => [u.id, u.review_status]),
+  );
+  const visibleDrafts = [...suggestionsByFile.entries()]
+    .filter(
+      ([fid, d]) =>
+        reviewStatusByFile.get(fid) === "approved" || d.status === "posted",
+    )
+    .map(([, d]) => d);
+
   // The cached QuickBooks lists the accountant picks from (active entries only).
   const toOpt = (x: { id: string; name: string }) => ({
     id: x.id,
@@ -608,7 +623,7 @@ export default async function EngagementDetailPage({
                   (renders nothing when there are none / AI is off). */}
               {engagement.ai_enabled !== false && (
                 <QuickbooksDraftsSummary
-                  drafts={[...suggestionsByFile.values()]}
+                  drafts={visibleDrafts}
                   locale={locale}
                 />
               )}
@@ -835,43 +850,48 @@ async function ItemRow({
                   )
                 ) : undefined
               }
-              // QuickBooks draft (Stage 3): the read-only suggested mapping for a
-              // receipt/invoice. Only when AI is on AND a draft exists for this
-              // file (which itself implies QuickBooks is connected).
-              footer={
-                aiEnabled && suggestionsByFile.has(f.id)
-                  ? (() => {
-                      const d = suggestionsByFile.get(f.id)!;
-                      return (
-                        <QuickbooksDraftCard
-                          suggestion={d.suggestion}
-                          resolved={d.resolved}
-                          options={qboOptions}
-                          locale={locale}
-                          fileId={f.id}
-                          status={d.status}
-                          reviewedByName={
-                            d.reviewedBy
-                              ? (reviewerNameById.get(d.reviewedBy) ?? null)
-                              : null
-                          }
-                          reviewedAt={d.reviewedAt}
-                          documentName={f.display_name ?? f.original_filename}
-                          postedAt={d.postedAt}
-                          postedByName={
-                            d.postedBy
-                              ? (reviewerNameById.get(d.postedBy) ?? null)
-                              : null
-                          }
-                          postError={d.postError}
-                          postedTaxNote={d.postedTaxNote}
-                          receiptAttachedAt={d.receiptAttachedAt}
-                          matchedQboType={d.matchedQboType}
-                        />
-                      );
-                    })()
-                  : undefined
-              }
+              // QuickBooks draft: the suggested mapping for a receipt/invoice.
+              // Shown only when AI is on, a draft exists (which implies
+              // QuickBooks is connected), AND the accountant has APPROVED the
+              // document — bookkeeping is the step AFTER accepting the collected
+              // doc, so the card stays out of the way until then. Always kept
+              // visible once posted, so a live transaction never disappears.
+              footer={(() => {
+                const d = aiEnabled ? suggestionsByFile.get(f.id) : undefined;
+                if (
+                  !d ||
+                  (f.review_status !== "approved" && d.status !== "posted")
+                ) {
+                  return undefined;
+                }
+                return (
+                  <QuickbooksDraftCard
+                    suggestion={d.suggestion}
+                    resolved={d.resolved}
+                    options={qboOptions}
+                    locale={locale}
+                    fileId={f.id}
+                    status={d.status}
+                    reviewedByName={
+                      d.reviewedBy
+                        ? (reviewerNameById.get(d.reviewedBy) ?? null)
+                        : null
+                    }
+                    reviewedAt={d.reviewedAt}
+                    documentName={f.display_name ?? f.original_filename}
+                    postedAt={d.postedAt}
+                    postedByName={
+                      d.postedBy
+                        ? (reviewerNameById.get(d.postedBy) ?? null)
+                        : null
+                    }
+                    postError={d.postError}
+                    postedTaxNote={d.postedTaxNote}
+                    receiptAttachedAt={d.receiptAttachedAt}
+                    matchedQboType={d.matchedQboType}
+                  />
+                );
+              })()}
             />
           ))}
         </ul>

@@ -19,6 +19,7 @@ import {
 } from "@/lib/quickbooks/suggest";
 import {
   normalizeDraftStatus,
+  canApproveDraft,
   type DraftStatus,
 } from "@/lib/quickbooks/draft-status";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
@@ -409,6 +410,29 @@ export async function setDraftStatus(input: {
     return false;
   }
   return true;
+}
+
+// Auto-ready: when the accountant APPROVES the source document, flip its
+// QuickBooks draft from a fresh 'draft' straight to 'approved' — so the card
+// comes up one-click-to-Post instead of asking for a second approval right after
+// the document was accepted. Only a COMPLETE draft is readied (canApproveDraft —
+// the same gate the manual Approve button uses); an incomplete one (missing
+// vendor / account / tax / date) stays an editable draft for the accountant to
+// finish, and approved / dismissed / posted drafts are left untouched. Reads via
+// the caller's (RLS) session and writes service-role, like the other transitions.
+// Best-effort + never throws, so it can never break document approval.
+export async function autoApproveDraftForFile(
+  uploadedFileId: string,
+  reviewerId: string | null,
+): Promise<void> {
+  try {
+    const draft = await getDraftForFile(uploadedFileId);
+    if (!draft || !draft.suggestion || draft.status !== "draft") return;
+    if (!canApproveDraft(draft.suggestion, draft.resolved)) return;
+    await setDraftStatus({ uploadedFileId, status: "approved", reviewerId });
+  } catch (e) {
+    console.error("[quickbooks] autoApproveDraftForFile failed:", e);
+  }
 }
 
 // "ok" = recorded; "conflict" = the row changed under us (a concurrent reopen or
