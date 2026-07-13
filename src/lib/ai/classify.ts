@@ -470,6 +470,21 @@ clearly readable. Mark it unusable if ANY of the following are true:
   document is about (employee, recipient, taxpayer, account holder) is covered,
   redacted, scribbled over, or unreadable — Vylan cannot accept a document when
   it cannot confirm whose it is.
+  Flag a DELIBERATE REDACTION here EVEN WHEN every visible amount still
+  reconciles: a solid black bar or box, a whited-out patch, or a heavy marker
+  scribble placed OVER content so that a number, a name, a date, an
+  account/reference number, or a line of text is hidden. A client hiding part of
+  a financial document is exactly what the accountant must review, so flag it
+  and describe what looks covered — never wave it through just because the totals
+  you CAN see add up, or because you did not personally need the hidden value.
+  But do NOT mistake the document's OWN printed design for a redaction: the
+  bank/issuer logo, a coloured or dark HEADER BANNER carrying a product name (for
+  example the black "Day-to-Day Banking" banner across the top of a Scotiabank
+  statement), routine page furniture, and a printed VOID stamp are EXPECTED
+  elements. The test: a redaction HIDES content that should be there; a banner or
+  logo IS content that belongs there. When unsure whether a black area covers a
+  real value or is just the header design, look for a value/label that is now
+  missing where one is clearly expected — only then flag it.
 - partial_capture: the WHOLE page is not in frame. Flag this whenever any
   printed part of the page is sliced off at the edge of the photo so the page is
   not shown in full — a cut-off header, logo, marginal/marketing text, a sliced
