@@ -38,6 +38,11 @@ export type Engagement = {
   invoice_auto_mode?: "off" | "on_completion" | "delayed";
   invoice_delay_days?: number | null;
   invoice_amount_cents?: number | null;
+  // Deliverables-lock preference (migration 0610). Gates the Final documents
+  // when the invoice is unpaid; also the fallback the lock uses before a deferred
+  // invoice row exists.
+  invoice_locks_deliverables?: boolean;
+  invoice_description?: string | null;
   created_at: string;
   // Lifecycle (migration 0139). archive = hidden from active views, reversible
   // anytime; soft-delete = 30-day recoverable window before the purge cron.
@@ -57,6 +62,26 @@ export async function setRemindersPaused(
     .update({ reminders_paused: paused })
     .eq("id", id);
   if (error) throw error;
+}
+
+// Set (or clear) the engagement's deliverables-lock preference (migration 0610).
+// Used by the accountant's "unlock without payment" when no invoice row exists yet
+// (a deferred invoice that hasn't fired) so the fallback lock is lifted. RLS-
+// scoped; returns false on failure (e.g. pre-0610) so the caller can skip logging.
+export async function setEngagementInvoiceLock(
+  id: string,
+  value: boolean,
+): Promise<boolean> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ invoice_locks_deliverables: value })
+    .eq("id", id);
+  if (error) {
+    console.error("[engagements] setEngagementInvoiceLock failed:", error);
+    return false;
+  }
+  return true;
 }
 
 // Change (or clear) the due date after creation — first added for the
@@ -213,7 +238,15 @@ export async function createEngagementWithItems(
         invoice_amount_cents: input.invoice_amount_cents ?? null,
       }
     : {};
-  const invoiceCols610 = automationOn
+  // Persist the lock preference + description whenever the accountant set them —
+  // not only for the deferred (automation) modes but also for a "create now"
+  // invoice (auto_mode 'off'), so the deliverables-lock fallback can gate the
+  // finished work even if the create-now invoice row failed to record.
+  const wants610 =
+    automationOn ||
+    input.invoice_locks_deliverables === true ||
+    (input.invoice_description != null && input.invoice_description !== "");
+  const invoiceCols610 = wants610
     ? {
         invoice_locks_deliverables: input.invoice_locks_deliverables ?? false,
         invoice_description: input.invoice_description ?? null,

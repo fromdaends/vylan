@@ -16,26 +16,49 @@ import { cn } from "@/lib/cn";
 export function EngagementTabs({
   checklistCount,
   signaturesCount,
+  finalCount,
   showSignatures,
+  showFinal,
   checklistControls,
   signaturesControls,
+  finalControls,
   checklist,
   signatures,
+  final,
 }: {
   checklistCount: number;
   signaturesCount: number;
+  finalCount: number;
   // False only when signatures don't apply (not live AND none exist): then it's
   // a plain checklist with no tab bar, matching the old single-section layout.
   showSignatures: boolean;
+  // Whether the Final documents tab applies (finals exist OR the engagement is
+  // live/complete, i.e. there's work to deliver).
+  showFinal: boolean;
   checklistControls: ReactNode;
   signaturesControls: ReactNode;
+  finalControls: ReactNode;
   checklist: ReactNode;
   signatures: ReactNode;
+  final: ReactNode;
 }) {
   const t = useTranslations("Engagements");
-  const [active, setActive] = useState<"checklist" | "signatures">("checklist");
+  const [active, setActive] = useState<"checklist" | "signatures" | "final">(
+    "checklist",
+  );
 
-  if (!showSignatures) {
+  // If the selected tab is no longer shown (e.g. the Signatures tab disappears
+  // when a signature-free engagement is marked complete, while `active` is still
+  // "signatures" after the in-place refresh), fall back to the checklist so the
+  // body is never blank.
+  const effectiveActive =
+    (active === "signatures" && !showSignatures) ||
+    (active === "final" && !showFinal)
+      ? "checklist"
+      : active;
+
+  // No extra tabs apply → plain single-section checklist, no tab bar.
+  if (!showSignatures && !showFinal) {
     return (
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
@@ -59,25 +82,44 @@ export function EngagementTabs({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
         <div className="flex items-center gap-4" role="tablist">
           <TabButton
-            active={active === "checklist"}
+            active={effectiveActive === "checklist"}
             onClick={() => setActive("checklist")}
             label={t("checklist")}
             count={checklistCount}
           />
-          <TabButton
-            active={active === "signatures"}
-            onClick={() => setActive("signatures")}
-            label={t("signatures")}
-            count={signaturesCount}
-          />
+          {showSignatures && (
+            <TabButton
+              active={effectiveActive === "signatures"}
+              onClick={() => setActive("signatures")}
+              label={t("signatures")}
+              count={signaturesCount}
+            />
+          )}
+          {showFinal && (
+            <TabButton
+              active={effectiveActive === "final"}
+              onClick={() => setActive("final")}
+              label={t("final_documents")}
+              count={finalCount}
+            />
+          )}
         </div>
         <div className="flex items-center gap-2 pb-1.5">
-          {active === "checklist" ? checklistControls : signaturesControls}
+          {effectiveActive === "checklist"
+            ? checklistControls
+            : effectiveActive === "signatures"
+              ? signaturesControls
+              : finalControls}
         </div>
       </div>
 
-      <div hidden={active !== "checklist"}>{checklist}</div>
-      <div hidden={active !== "signatures"}>{signatures}</div>
+      <div hidden={effectiveActive !== "checklist"}>{checklist}</div>
+      {showSignatures && (
+        <div hidden={effectiveActive !== "signatures"}>{signatures}</div>
+      )}
+      {showFinal && (
+        <div hidden={effectiveActive !== "final"}>{final}</div>
+      )}
     </section>
   );
 }

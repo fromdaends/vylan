@@ -16,6 +16,8 @@ import type { SignatureStatus } from "@/lib/signwell/client";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
 import { BUCKET } from "@/lib/storage";
+import { listFinalDocumentsForEngagementSR } from "@/lib/db/final-documents";
+import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 
 const TOKEN_REGEX = /^[0-9A-Za-z]{43}$/;
 
@@ -81,6 +83,22 @@ export type PortalContext = {
   // signature card: "sent"/"viewed" => the client can sign, "completed" => signed.
   // Empty before migration 0400 or when there are no signature items.
   signature_status_by_item: Record<string, SignatureStatus>;
+  // Final documents the accountant has uploaded to return to the client (the
+  // "Your completed documents" section), oldest first. Client-safe fields only;
+  // bytes are served through the gated /api/portal/deliverables route, never an
+  // embedded URL. Empty before migration 0620. A later phase adds the invoice
+  // lock, which gates the client's download of these server-side.
+  final_documents: {
+    id: string;
+    original_filename: string;
+    display_name: string | null;
+    mime_type: string | null;
+    size_bytes: number | null;
+  }[];
+  // True when the engagement's invoice locks the final documents and is still
+  // unpaid (and not overridden). The portal then shows a polite locked state
+  // instead of the download links, and the gated download route returns 404.
+  final_documents_locked: boolean;
 };
 
 export async function loadPortalContext(
@@ -229,6 +247,34 @@ export async function loadPortalContext(
       }
     : null;
 
+  // Whether the final documents are locked (Phase 4), via the shared rule so the
+  // portal and the download route never disagree. When an invoice row exists, its
+  // lock fields decide (read best-effort so a pre-0610 env just yields "not
+  // locked" rather than dropping the payment card); when none exists yet (deferred
+  // invoice), fall back to the engagement's captured lock preference.
+  let lockRow: { locks_deliverables?: boolean; override_unlocked?: boolean } | null =
+    null;
+  if (pr) {
+    const { data } = await sb
+      .from("payment_requests")
+      .select("locks_deliverables, override_unlocked")
+      .eq("id", pr.id as string)
+      .maybeSingle();
+    lockRow = data;
+  }
+  const finalDocumentsLocked = computeDeliverablesLocked({
+    invoice: pr
+      ? {
+          locks_deliverables: lockRow?.locks_deliverables === true,
+          status: pr.status as "requested" | "paid" | "failed" | "canceled",
+          override_unlocked: lockRow?.override_unlocked === true,
+        }
+      : null,
+    engagementLocksDeliverables:
+      (engagement as { invoice_locks_deliverables?: boolean })
+        .invoice_locks_deliverables === true,
+  });
+
   // SignWell status per signature item, for the portal signature card. Tolerant
   // of the table being absent before migration 0400 (data stays empty on error).
   const signatureStatusByItem: Record<string, SignatureStatus> = {};
@@ -241,6 +287,17 @@ export async function loadPortalContext(
       r.status as SignatureStatus;
   }
 
+  // Final documents (accountant deliverables) for the "Your completed documents"
+  // section. Tolerant of the table being absent before migration 0620.
+  const finalDocRows = await listFinalDocumentsForEngagementSR(engagement.id);
+  const finalDocuments = finalDocRows.map((d) => ({
+    id: d.id,
+    original_filename: d.original_filename,
+    display_name: d.display_name,
+    mime_type: d.mime_type,
+    size_bytes: d.size_bytes,
+  }));
+
   return {
     engagement: engagement as Engagement,
     client: client as Client,
@@ -252,6 +309,8 @@ export async function loadPortalContext(
     accountant_email: accountantEmail,
     payment_request: paymentRequest,
     signature_status_by_item: signatureStatusByItem,
+    final_documents: finalDocuments,
+    final_documents_locked: finalDocumentsLocked,
   };
 }
 

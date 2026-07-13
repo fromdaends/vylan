@@ -13,6 +13,7 @@ import type { PortalContext } from "@/lib/db/portal";
 import { ItemCard } from "./item-card";
 import { SignatureItemCard } from "./signature-item-card";
 import { PaymentDueCard } from "./payment-due-card";
+import { PortalFinalDocuments } from "./portal-final-documents";
 import { PortalHub, type HubCardData } from "./portal-hub";
 import { splitPortalItems } from "@/lib/portal/split-items";
 import {
@@ -227,6 +228,14 @@ export function PortalShell({
             paymentRequest={ctx.payment_request}
             firmName={ctx.firm.name}
             locale={locale}
+            justReturnedPaid={justReturnedPaid}
+          />
+        )}
+        {ctx.final_documents.length > 0 && (
+          <PortalFinalDocuments
+            docs={ctx.final_documents}
+            token={ctx.engagement.magic_token ?? ""}
+            locked={ctx.final_documents_locked}
             justReturnedPaid={justReturnedPaid}
           />
         )}
