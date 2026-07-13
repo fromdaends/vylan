@@ -82,6 +82,9 @@ export async function waiveInvoiceAction(formData: FormData) {
   }
   const ok = await cancelPaymentRequest(invoice.id);
   if (!ok) return;
+  // Also clear the engagement lock preference so a waived invoice fully unlocks
+  // (otherwise the fallback would keep the finals labelled "locked").
+  await setEngagementInvoiceLock(engagementId, false);
 
   await logUserActivity(firm.id, engagementId, "invoice_waived", {
     payment_request_id: invoice.id,
@@ -135,6 +138,11 @@ export async function editInvoiceAction(input: {
   const cents = input.amountCents;
   if (!Number.isInteger(cents) || cents < 50 || cents > 99_999_999) {
     return { ok: false, error: "amount" };
+  }
+  // Firm ownership check (defense in depth, parity with relock), on top of RLS.
+  const engagement = await getEngagement(input.engagementId);
+  if (!engagement || engagement.firm_id !== firm.id) {
+    return { ok: false, error: "no_invoice" };
   }
 
   const invoice = await getLatestPaymentRequestForEngagement(input.engagementId);

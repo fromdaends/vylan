@@ -72,7 +72,7 @@ export function InvoiceOptionsDialog({
     liveInvoice ? (liveInvoice.amount_cents / 100).toFixed(2) : defaultAmount,
   );
   const [description, setDescription] = useState(liveInvoice?.description ?? "");
-  const [lock, setLock] = useState(true);
+  const [lock, setLock] = useState(false);
 
   const invoiceLocked = liveInvoice
     ? liveInvoice.locks_deliverables === true &&

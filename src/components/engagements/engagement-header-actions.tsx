@@ -125,9 +125,10 @@ export function EngagementMoreMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
-          {(connectReady ||
-            !!invoice ||
-            engagementLocksDeliverables === true) && (
+          {status !== "cancelled" &&
+            (connectReady ||
+              !!invoice ||
+              engagementLocksDeliverables === true) && (
             <InvoiceOptionsDialog
               engagementId={engagementId}
               connectReady={connectReady === true}
