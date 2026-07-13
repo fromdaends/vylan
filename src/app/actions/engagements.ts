@@ -27,6 +27,7 @@ import {
   dispatchInvoiceOnCompletion,
   cancelScheduledInvoice,
 } from "@/lib/invoices/schedule";
+import { createInvoiceForEngagement } from "@/lib/invoices/create";
 import { getFirmLimits } from "@/lib/plan-limits";
 import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
@@ -85,12 +86,20 @@ const CreateSchema = z.object({
     .max(99_999_999)
     .nullable()
     .optional(),
+  // Create the invoice immediately at engagement creation (payable right away),
+  // as opposed to the deferred on_completion / delayed automation. Mutually
+  // exclusive with a non-'off' auto mode (the builder only sends one timing).
+  invoice_create_now: z.boolean().optional().default(false),
+  // Deliverables lock + description carried onto whichever invoice is created
+  // (migration 0610).
+  invoice_locks_deliverables: z.boolean().optional().default(false),
+  invoice_description: z.string().trim().max(500).nullable().optional(),
   items: z.array(ItemSchema).min(0),
 })
-  // Automation needs an amount to bill; 'delayed' needs a number of days.
+  // Any invoice (created now OR automated) needs an amount to bill.
   .refine(
     (v) =>
-      v.invoice_auto_mode === "off" ||
+      (v.invoice_auto_mode === "off" && !v.invoice_create_now) ||
       (typeof v.invoice_amount_cents === "number" &&
         v.invoice_amount_cents >= 50),
     { message: "invoice_amount_required", path: ["invoice_amount_cents"] },
@@ -133,6 +142,9 @@ export async function createEngagementAction(payload: {
   invoice_auto_mode?: "off" | "on_completion" | "delayed";
   invoice_delay_days?: number | null;
   invoice_amount_cents?: number | null;
+  invoice_create_now?: boolean;
+  invoice_locks_deliverables?: boolean;
+  invoice_description?: string | null;
   items: TemplateItem[];
   send: boolean;
   locale: "fr" | "en";
@@ -146,6 +158,9 @@ export async function createEngagementAction(payload: {
     invoice_auto_mode: payload.invoice_auto_mode,
     invoice_delay_days: payload.invoice_delay_days,
     invoice_amount_cents: payload.invoice_amount_cents,
+    invoice_create_now: payload.invoice_create_now,
+    invoice_locks_deliverables: payload.invoice_locks_deliverables,
+    invoice_description: payload.invoice_description,
     items: payload.items,
   });
   if (!parsed.success) {
@@ -197,6 +212,10 @@ export async function createEngagementAction(payload: {
         parsed.data.invoice_auto_mode === "off"
           ? null
           : (parsed.data.invoice_amount_cents ?? null),
+      // Lock preference + description are carried onto a LATER (automated)
+      // invoice; a "create now" invoice gets them directly below.
+      invoice_locks_deliverables: parsed.data.invoice_locks_deliverables,
+      invoice_description: parsed.data.invoice_description ?? null,
       items,
     };
     const created = await createEngagementWithItems(input);
@@ -214,6 +233,34 @@ export async function createEngagementAction(payload: {
     }
   } catch {
     return { error: "create_failed" };
+  }
+
+  // Create the invoice now if the accountant chose "Now" (payable immediately).
+  // Best-effort: the engagement is already created, so a failed invoice never
+  // fails creation — the accountant can retry from the engagement page. Runs
+  // after send() so a just-sent engagement has its portal token for the pay
+  // email. The invoice carries the amount / description / lock from the builder.
+  if (
+    parsed.data.invoice_create_now &&
+    typeof parsed.data.invoice_amount_cents === "number"
+  ) {
+    try {
+      const res = await createInvoiceForEngagement({
+        engagementId,
+        amountCents: parsed.data.invoice_amount_cents,
+        description: parsed.data.invoice_description ?? undefined,
+        delivery: "both",
+        locksDeliverables: parsed.data.invoice_locks_deliverables,
+      });
+      if (!res.ok) {
+        console.warn(
+          "[createEngagement] create-now invoice skipped:",
+          res.reason,
+        );
+      }
+    } catch (e) {
+      console.error("[createEngagement] create-now invoice failed:", e);
+    }
   }
 
   revalidateEngagementPaths(engagementId);

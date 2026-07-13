@@ -145,6 +145,10 @@ export type CreateEngagementInput = {
   invoice_auto_mode?: "off" | "on_completion" | "delayed";
   invoice_delay_days?: number | null;
   invoice_amount_cents?: number | null;
+  // Deliverables lock preference + description (migration 0610), carried onto an
+  // invoice created LATER by the automation (on_completion / delayed).
+  invoice_locks_deliverables?: boolean;
+  invoice_description?: string | null;
   items: TemplateItem[];
 };
 
@@ -197,21 +201,43 @@ export async function createEngagementWithItems(
   // never depends on the new columns and creation keeps working pre-0590. When
   // they ARE included and the column is missing, the tiered retry below drops
   // them (invoice automation is simply inert until the migration lands).
-  const invoiceCols =
-    input.invoice_auto_mode && input.invoice_auto_mode !== "off"
-      ? {
-          invoice_auto_mode: input.invoice_auto_mode,
-          invoice_delay_days: input.invoice_delay_days ?? null,
-          invoice_amount_cents: input.invoice_amount_cents ?? null,
-        }
-      : {};
+  const automationOn =
+    !!input.invoice_auto_mode && input.invoice_auto_mode !== "off";
+  // 0590 automation columns and the 0610 lock/description columns are kept
+  // separate so the tiered retry can drop ONLY the newest (0610) columns without
+  // losing the automation (0590) when just 0610 hasn't been applied yet.
+  const invoiceCols590 = automationOn
+    ? {
+        invoice_auto_mode: input.invoice_auto_mode,
+        invoice_delay_days: input.invoice_delay_days ?? null,
+        invoice_amount_cents: input.invoice_amount_cents ?? null,
+      }
+    : {};
+  const invoiceCols610 = automationOn
+    ? {
+        invoice_locks_deliverables: input.invoice_locks_deliverables ?? false,
+        invoice_description: input.invoice_description ?? null,
+      }
+    : {};
   let { data: engagement, error: engErr } = await supabase
     .from("engagements")
-    .insert({ ...baseRow, ai_enabled: input.ai_enabled, ...invoiceCols })
+    .insert({
+      ...baseRow,
+      ai_enabled: input.ai_enabled,
+      ...invoiceCols590,
+      ...invoiceCols610,
+    })
     .select("*")
     .single();
-  // Retry WITHOUT the invoice columns first (keeps ai_enabled when only 0590 is
-  // missing), then without ai_enabled either (a very old env missing 0340 too).
+  // Retry tiers, dropping the newest columns first: without 0610, then without
+  // 0590 either, then without ai_enabled (a very old env missing 0340 too).
+  if (engErr && isUnknownColumnError(engErr)) {
+    ({ data: engagement, error: engErr } = await supabase
+      .from("engagements")
+      .insert({ ...baseRow, ai_enabled: input.ai_enabled, ...invoiceCols590 })
+      .select("*")
+      .single());
+  }
   if (engErr && isUnknownColumnError(engErr)) {
     ({ data: engagement, error: engErr } = await supabase
       .from("engagements")

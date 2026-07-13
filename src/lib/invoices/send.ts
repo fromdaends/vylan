@@ -52,6 +52,22 @@ export async function sendEngagementInvoice(
     .maybeSingle();
   if (!engagement) return { ok: false, reason: "no_engagement" };
 
+  // Deliverables lock preference + description (migration 0610), read best-effort
+  // so a pre-0610 environment simply gets the safe defaults (not locked / no
+  // description) instead of failing the whole send.
+  let locksDeliverables = false;
+  let invoiceDescription: string | null = null;
+  const { data: pref } = await sb
+    .from("engagements")
+    .select("invoice_locks_deliverables, invoice_description")
+    .eq("id", engagementId)
+    .maybeSingle();
+  if (pref) {
+    locksDeliverables = pref.invoice_locks_deliverables === true;
+    invoiceDescription =
+      (pref.invoice_description as string | null) ?? null;
+  }
+
   // Only invoice finished work. The completion hook calls us right after the
   // status flips to complete; the delayed worker re-checks it here at fire time
   // (the accountant may have reopened it in the meantime).
@@ -107,12 +123,14 @@ export async function sendEngagementInvoice(
     client_id: engagement.client_id,
     amount_cents: amountCents,
     currency: "cad",
-    description: null,
+    description: invoiceDescription,
     // Show it in the portal AND email the pay link — this is an automatic ask,
     // so the client should be actively notified.
     delivery: "both",
     // No human requester: this was automated.
     requested_by_user_id: null,
+    // Carry the lock preference set at engagement creation (0610).
+    locks_deliverables: locksDeliverables,
   });
   // A concurrent auto-send already created the invoice (DB unique index caught
   // it): treat as already sent, never as a failure to retry.
@@ -153,6 +171,7 @@ export async function sendEngagementInvoice(
       payment_request_id: row.id,
       auto: true,
       email_sent: emailSent,
+      locks_deliverables: locksDeliverables,
     },
   });
 

@@ -54,6 +54,10 @@ const KNOWN_ERRORS = new Set<string>([
 ]);
 
 export type InvoiceAutoMode = "off" | "on_completion" | "delayed";
+// Builder-local timing. Adds "now": create the invoice immediately at engagement
+// creation (payable right away), vs. the deferred on_completion / delayed
+// automation. "off" = no invoice.
+export type InvoiceTiming = "off" | "now" | "on_completion" | "delayed";
 
 export function EngagementBuilder({
   clients,
@@ -119,9 +123,9 @@ export function EngagementBuilder({
   // "AI Analyze" toggle — on by default. When off, no document the client
   // uploads to this engagement is sent to the AI (saves AI usage/cost).
   const [aiEnabled, setAiEnabled] = useState(true);
-  // Invoice automation (migration 0590). Pre-selected from the firm default.
+  // Invoice timing (migrations 0590 + 0610). Pre-selected from the firm default.
   // Only meaningful when Connect is ready; forced off otherwise.
-  const [invoiceMode, setInvoiceMode] = useState<InvoiceAutoMode>(
+  const [invoiceMode, setInvoiceMode] = useState<InvoiceTiming>(
     connectReady ? invoiceDefaultMode : "off",
   );
   const [invoiceDelayDays, setInvoiceDelayDays] = useState<string>(
@@ -130,6 +134,9 @@ export function EngagementBuilder({
   // Amount source: use the firm's saved service price, or a custom amount.
   const [invoiceUseDefault, setInvoiceUseDefault] = useState(true);
   const [invoiceCustomAmount, setInvoiceCustomAmount] = useState<string>("");
+  // Optional invoice description + the deliverables lock (migration 0610).
+  const [invoiceDescription, setInvoiceDescription] = useState<string>("");
+  const [invoiceLock, setInvoiceLock] = useState(false);
   const [items, setItems] = useState<TemplateItem[]>(() => {
     // If we already know the client (e.g. started from a client's page), seed
     // the checklist with only the documents that apply to their province.
@@ -157,9 +164,11 @@ export function EngagementBuilder({
     ? (servicePrices[selectedTemplate.type] ?? null)
     : null;
   // The amount to bill from the current invoice choices (shared pure helper).
+  // The helper only distinguishes "off" from any billing mode, so "now" maps to
+  // a non-off mode for the amount calculation.
   function currentInvoiceAmountCents(): number | null {
     return resolveInvoiceAmountCents({
-      mode: invoiceMode,
+      mode: invoiceMode === "off" ? "off" : "on_completion",
       useDefault: invoiceUseDefault,
       defaultCents: invoiceDefaultCents,
       customAmount: invoiceCustomAmount,
@@ -267,17 +276,25 @@ export function EngagementBuilder({
       return;
     }
 
-    // Invoice automation needs a valid amount up front (nobody's there to type
-    // one when it auto-sends). Guard client-side to match the server refine.
+    // Any invoice (created now OR automated) needs a valid amount up front.
+    // Guard client-side to match the server refine.
     const invoiceAmountCents = currentInvoiceAmountCents();
     if (invoiceMode !== "off" && invoiceAmountCents == null) {
       setError("invoice_amount_required");
       return;
     }
+    const createNow = invoiceMode === "now";
+    // Only the deferred timings persist as an automation mode; "now" creates the
+    // invoice immediately and leaves the automation off.
+    const autoMode: InvoiceAutoMode =
+      invoiceMode === "on_completion" || invoiceMode === "delayed"
+        ? invoiceMode
+        : "off";
     const invoiceDelay =
       invoiceMode === "delayed"
         ? Math.max(1, Math.floor(Number(invoiceDelayDays) || 0))
         : null;
+    const invoiceActive = invoiceMode !== "off";
 
     startTransition(async () => {
       try {
@@ -287,9 +304,14 @@ export function EngagementBuilder({
           type: selectedTemplate.type,
           due_date: dueDate || null,
           ai_enabled: aiEnabled,
-          invoice_auto_mode: invoiceMode,
+          invoice_auto_mode: autoMode,
           invoice_delay_days: invoiceDelay,
           invoice_amount_cents: invoiceAmountCents,
+          invoice_create_now: createNow,
+          invoice_locks_deliverables: invoiceActive ? invoiceLock : false,
+          invoice_description: invoiceActive
+            ? invoiceDescription.trim() || null
+            : null,
           items: cleanItems,
           send,
           locale,
@@ -429,7 +451,7 @@ export function EngagementBuilder({
             />
           </div>
 
-          {/* Invoice automation (migration 0590). Only offered when the firm can
+          {/* Invoice (migrations 0590 + 0610). Only offered when the firm can
               actually receive a payment (Stripe Connect charges enabled). */}
           {connectReady ? (
             <div className="space-y-3 rounded-lg border border-border p-3">
@@ -439,21 +461,22 @@ export function EngagementBuilder({
                     className="size-4 text-muted-foreground"
                     aria-hidden
                   />
-                  {t("invoice_auto_label")}
+                  {t("invoice_section_label")}
                 </Label>
                 <p className="text-xs text-muted-foreground">
-                  {t("invoice_auto_hint")}
+                  {t("invoice_section_hint")}
                 </p>
               </div>
               <Select
                 value={invoiceMode}
-                onValueChange={(v) => setInvoiceMode(v as InvoiceAutoMode)}
+                onValueChange={(v) => setInvoiceMode(v as InvoiceTiming)}
               >
                 <SelectTrigger className="max-w-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="off">{t("invoice_mode_off")}</SelectItem>
+                  <SelectItem value="now">{t("invoice_mode_now")}</SelectItem>
                   <SelectItem value="on_completion">
                     {t("invoice_mode_on_completion")}
                   </SelectItem>
@@ -532,6 +555,44 @@ export function EngagementBuilder({
                       />
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Optional description + the deliverables lock (migration 0610).
+                  The lock is captured here; it gates the Final documents section
+                  in a later phase. */}
+              {invoiceMode !== "off" && (
+                <div className="space-y-3 border-t border-border/60 pt-3">
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="invoice-description"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("request_payment_description")}
+                    </Label>
+                    <Textarea
+                      id="invoice-description"
+                      value={invoiceDescription}
+                      onChange={(e) => setInvoiceDescription(e.target.value)}
+                      rows={2}
+                      maxLength={500}
+                      placeholder={t("request_payment_description_ph")}
+                    />
+                  </div>
+                  <label className="flex items-start gap-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={invoiceLock}
+                      onChange={(e) => setInvoiceLock(e.target.checked)}
+                    />
+                    <span>
+                      <span className="block">{t("invoice_lock_label")}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {t("invoice_lock_hint")}
+                      </span>
+                    </span>
+                  </label>
                 </div>
               )}
             </div>
