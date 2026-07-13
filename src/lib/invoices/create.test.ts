@@ -164,6 +164,18 @@ describe("createInvoiceForEngagement", () => {
     expect(createPaymentRequest).not.toHaveBeenCalled();
   });
 
+  it("maps a unique-index race (createPaymentRequest 'duplicate') to already_invoiced", async () => {
+    // The app-layer guard passed (no live invoice seen), but a concurrent create
+    // won the DB one-invoice race → createPaymentRequest returns "duplicate".
+    createPaymentRequest.mockResolvedValue("duplicate");
+    const res = await createInvoiceForEngagement({
+      engagementId: ENG_ID,
+      amountCents: 35000,
+      delivery: "both",
+    });
+    expect(res).toEqual({ ok: false, reason: "already_invoiced" });
+  });
+
   it("defaults locks_deliverables to false when not requested", async () => {
     const res = await createInvoiceForEngagement({
       engagementId: ENG_ID,

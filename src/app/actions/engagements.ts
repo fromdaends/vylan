@@ -249,7 +249,10 @@ export async function createEngagementAction(payload: {
         engagementId,
         amountCents: parsed.data.invoice_amount_cents,
         description: parsed.data.invoice_description ?? undefined,
-        delivery: "both",
+        // A just-sent engagement has a portal + token, so email the pay link
+        // too. A draft (save-without-send) has no portal yet, so keep it
+        // portal-only rather than promising an email that can't go out.
+        delivery: payload.send ? "both" : "portal",
         locksDeliverables: parsed.data.invoice_locks_deliverables,
       });
       if (!res.ok) {

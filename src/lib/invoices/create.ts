@@ -89,6 +89,9 @@ export async function createInvoiceForEngagement(
     requested_by_user_id: user.id,
     locks_deliverables: input.locksDeliverables === true,
   });
+  // A concurrent create won the one-invoice race (DB unique index caught it):
+  // report it as already-invoiced, the same as the app-layer guard above.
+  if (row === "duplicate") return { ok: false, reason: "already_invoiced" };
   if (!row) return { ok: false, reason: "save_failed" };
 
   await logUserActivity(firm.id, engagement.id, "payment_requested", {

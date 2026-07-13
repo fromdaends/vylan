@@ -1392,7 +1392,8 @@
       "add_failed": "Impossible d'ajouter l'élément. Veuillez réessayer.",
       "min_2_chars": "Au moins 2 caractères.",
       "too_long": "Trop long.",
-      "no_documents": "Ajoutez au moins un document avant d'envoyer. Sans cela, le client n'a rien à téléverser."
+      "no_documents": "Ajoutez au moins un document avant d'envoyer. Sans cela, le client n'a rien à téléverser.",
+      "invoice_amount_required": "Entrez un montant à facturer avant de configurer la facture."
     }
   },
   "Attention": {

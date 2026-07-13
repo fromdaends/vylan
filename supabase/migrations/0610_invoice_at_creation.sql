@@ -43,3 +43,23 @@ alter table engagements
   add column if not exists invoice_locks_deliverables boolean not null default false;
 alter table engagements
   add column if not exists invoice_description text;
+
+-- One invoice per engagement (v1): at most one non-cancelled payment_request per
+-- engagement, across ALL creation paths (manual "Request payment", create-now,
+-- and the automated on_completion / delayed send). The 0590 index
+-- (payment_requests_auto_active_uniq) only constrained auto=true rows; this
+-- broadens the guarantee to the auto=false manual/create-now paths, closing a
+-- check-then-insert race that could otherwise create two live invoices for one
+-- engagement (double-billing). The app treats the resulting 23505 as
+-- "already invoiced" rather than an error. A cancelled invoice frees the slot.
+--
+-- APPLY-TIME NOTE: a UNIQUE index build FAILS if an engagement already has more
+-- than one non-cancelled invoice. Before applying, run this check:
+--   select engagement_id, count(*) from payment_requests
+--   where engagement_id is not null and status <> 'canceled'
+--   group by engagement_id having count(*) > 1;
+-- If it returns any rows, cancel the surplus invoice(s) on those engagements
+-- first (keep the paid one, or the most recent), then apply.
+create unique index if not exists payment_requests_engagement_active_uniq
+  on payment_requests (engagement_id)
+  where status <> 'canceled';

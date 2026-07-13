@@ -76,9 +76,13 @@ export type CreatePaymentRequestInput = {
   locks_deliverables?: boolean;
 };
 
+// Returns the created row, the string "duplicate" when the one-invoice-per-
+// engagement unique index (payment_requests_engagement_active_uniq, 0610)
+// rejected a concurrent create (the caller treats this as "already invoiced",
+// NOT a save failure), or null on a missing table (pre-0380) / other failure.
 export async function createPaymentRequest(
   input: CreatePaymentRequestInput,
-): Promise<PaymentRequest | null> {
+): Promise<PaymentRequest | "duplicate" | null> {
   const sb = await getServerSupabase();
   const { locks_deliverables, ...base } = input;
   const withLock =
@@ -98,6 +102,9 @@ export async function createPaymentRequest(
       .single());
   }
   if (error) {
+    // 23505 = unique_violation: a concurrent create won the one-invoice race.
+    // Benign — exactly one live invoice exists, which is the whole point.
+    if (error.code === "23505") return "duplicate";
     if (isMissingSchema(error)) {
       console.warn(
         "[payment-requests] createPaymentRequest: table missing (migration 0380 not applied yet)",

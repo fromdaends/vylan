@@ -1392,7 +1392,8 @@
       "add_failed": "Couldn't add the item. Please try again.",
       "min_2_chars": "At least 2 characters.",
       "too_long": "Too long.",
-      "no_documents": "Add at least one document before sending. Without one, there's nothing for the client to upload."
+      "no_documents": "Add at least one document before sending. Without one, there's nothing for the client to upload.",
+      "invoice_amount_required": "Enter an amount to bill before setting up the invoice."
     }
   },
   "Attention": {
