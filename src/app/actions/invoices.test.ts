@@ -6,6 +6,8 @@ const getEngagement = vi.fn();
 const setEngagementInvoiceLock = vi.fn();
 const getLatestPaymentRequestForEngagement = vi.fn();
 const setPaymentRequestOverrideUnlocked = vi.fn();
+const relockPaymentRequestDeliverables = vi.fn();
+const updatePaymentRequestAmountDescription = vi.fn();
 const cancelPaymentRequest = vi.fn();
 const logUserActivity = vi.fn();
 const revalidatePath = vi.fn();
@@ -22,6 +24,13 @@ vi.mock("@/lib/db/payment-requests", () => ({
     getLatestPaymentRequestForEngagement(id),
   setPaymentRequestOverrideUnlocked: (id: string) =>
     setPaymentRequestOverrideUnlocked(id),
+  relockPaymentRequestDeliverables: (id: string) =>
+    relockPaymentRequestDeliverables(id),
+  updatePaymentRequestAmountDescription: (
+    id: string,
+    cents: number,
+    desc: string | null,
+  ) => updatePaymentRequestAmountDescription(id, cents, desc),
   cancelPaymentRequest: (id: string) => cancelPaymentRequest(id),
 }));
 vi.mock("@/lib/db/activity", () => ({
@@ -29,7 +38,12 @@ vi.mock("@/lib/db/activity", () => ({
 }));
 vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
 
-import { unlockDeliverablesAction, waiveInvoiceAction } from "./invoices";
+import {
+  unlockDeliverablesAction,
+  relockDeliverablesAction,
+  waiveInvoiceAction,
+  editInvoiceAction,
+} from "./invoices";
 
 const FIRM_ID = "11111111-1111-1111-1111-111111111111";
 const ENG_ID = "22222222-2222-2222-2222-222222222222";
@@ -49,6 +63,8 @@ beforeEach(() => {
     status: "requested",
   });
   setPaymentRequestOverrideUnlocked.mockResolvedValue(true);
+  relockPaymentRequestDeliverables.mockResolvedValue(true);
+  updatePaymentRequestAmountDescription.mockResolvedValue(true);
   cancelPaymentRequest.mockResolvedValue(true);
   getEngagement.mockResolvedValue({
     id: ENG_ID,
@@ -138,5 +154,73 @@ describe("waiveInvoiceAction", () => {
     await waiveInvoiceAction(fd(ENG_ID));
     expect(getLatestPaymentRequestForEngagement).not.toHaveBeenCalled();
     expect(cancelPaymentRequest).not.toHaveBeenCalled();
+  });
+});
+
+describe("relockDeliverablesAction", () => {
+  it("re-locks a live invoice + re-sets the engagement preference", async () => {
+    await relockDeliverablesAction(fd(ENG_ID));
+    expect(relockPaymentRequestDeliverables).toHaveBeenCalledWith("pr1");
+    expect(setEngagementInvoiceLock).toHaveBeenCalledWith(ENG_ID, true);
+    expect(logUserActivity).toHaveBeenCalledWith(
+      FIRM_ID,
+      ENG_ID,
+      "invoice_relocked",
+      expect.anything(),
+    );
+  });
+
+  it("does not re-lock a paid invoice", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue({
+      id: "pr1",
+      status: "paid",
+    });
+    await relockDeliverablesAction(fd(ENG_ID));
+    expect(relockPaymentRequestDeliverables).not.toHaveBeenCalled();
+    expect(setEngagementInvoiceLock).not.toHaveBeenCalled();
+  });
+
+  it("re-locks via the engagement fallback when no invoice row exists", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue(null);
+    await relockDeliverablesAction(fd(ENG_ID));
+    expect(relockPaymentRequestDeliverables).not.toHaveBeenCalled();
+    expect(setEngagementInvoiceLock).toHaveBeenCalledWith(ENG_ID, true);
+  });
+});
+
+describe("editInvoiceAction", () => {
+  it("updates amount + trimmed description on a live invoice", async () => {
+    const res = await editInvoiceAction({
+      engagementId: ENG_ID,
+      amountCents: 25000,
+      description: "  2025 return  ",
+    });
+    expect(res).toEqual({ ok: true });
+    expect(updatePaymentRequestAmountDescription).toHaveBeenCalledWith(
+      "pr1",
+      25000,
+      "2025 return",
+    );
+  });
+
+  it("rejects an amount below the Stripe minimum", async () => {
+    const res = await editInvoiceAction({
+      engagementId: ENG_ID,
+      amountCents: 10,
+    });
+    expect(res).toEqual({ ok: false, error: "amount" });
+    expect(updatePaymentRequestAmountDescription).not.toHaveBeenCalled();
+  });
+
+  it("refuses when there is no live invoice (paid/none)", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue({
+      id: "pr1",
+      status: "paid",
+    });
+    const res = await editInvoiceAction({
+      engagementId: ENG_ID,
+      amountCents: 25000,
+    });
+    expect(res).toEqual({ ok: false, error: "no_invoice" });
   });
 });

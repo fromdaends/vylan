@@ -10,13 +10,17 @@ import {
   Link as LinkIcon,
   Loader2,
   MoreHorizontal,
+  Receipt,
   Trash2,
   Wallet,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDownloadAll } from "./use-download-all";
-import { RequestPaymentButton } from "./request-payment-button";
+import {
+  InvoiceOptionsDialog,
+  type InvoiceForOptions,
+} from "./invoice-options-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,7 +55,10 @@ export function EngagementMoreMenu({
   canDelete,
   clientLinkToken,
   paymentLinkUrl,
-  requestPaymentDefaultAmount,
+  connectReady,
+  invoice,
+  engagementLocksDeliverables,
+  invoiceDefaultAmount,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -63,8 +70,12 @@ export function EngagementMoreMenu({
   clientLinkToken?: string;
   // Present when a payment has been requested: enables "Copy payment link".
   paymentLinkUrl?: string;
-  // Completed + Stripe-ready engagements expose Request payment in this menu.
-  requestPaymentDefaultAmount?: string;
+  // Invoice management (create / edit / lock-unlock / waive) lives in the "..."
+  // menu now instead of the header row.
+  connectReady?: boolean;
+  invoice?: InvoiceForOptions | null;
+  engagementLocksDeliverables?: boolean;
+  invoiceDefaultAmount?: string;
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -114,14 +125,21 @@ export function EngagementMoreMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
-          {requestPaymentDefaultAmount !== undefined && (
-            <RequestPaymentButton
+          {status !== "cancelled" &&
+            (connectReady ||
+              !!invoice ||
+              engagementLocksDeliverables === true) && (
+            <InvoiceOptionsDialog
               engagementId={engagementId}
-              defaultAmount={requestPaymentDefaultAmount}
+              connectReady={connectReady === true}
+              invoice={invoice ?? null}
+              engagementLocksDeliverables={engagementLocksDeliverables === true}
+              defaultAmount={invoiceDefaultAmount ?? ""}
+              locale={locale}
               trigger={
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                  <Wallet />
-                  {t("request_payment")}
+                  <Receipt />
+                  {t("invoice_menu")}
                 </DropdownMenuItem>
               }
             />

@@ -10,9 +10,13 @@ import {
 import {
   getLatestPaymentRequestForEngagement,
   setPaymentRequestOverrideUnlocked,
+  relockPaymentRequestDeliverables,
+  updatePaymentRequestAmountDescription,
   cancelPaymentRequest,
 } from "@/lib/db/payment-requests";
 import { logUserActivity } from "@/lib/db/activity";
+
+export type InvoiceEditResult = { ok: true } | { ok: false; error: string };
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -78,10 +82,85 @@ export async function waiveInvoiceAction(formData: FormData) {
   }
   const ok = await cancelPaymentRequest(invoice.id);
   if (!ok) return;
+  // Also clear the engagement lock preference so a waived invoice fully unlocks
+  // (otherwise the fallback would keep the finals labelled "locked").
+  await setEngagementInvoiceLock(engagementId, false);
 
   await logUserActivity(firm.id, engagementId, "invoice_waived", {
     payment_request_id: invoice.id,
     amount_cents: invoice.amount_cents,
   });
   revalidatePath(`/engagements/${engagementId}`);
+}
+
+// Re-lock the deliverables after an unlock (or lock an invoice created without
+// it). Sets the invoice's lock + clears the override, and (re)sets the engagement
+// preference so the fallback locks and a later deferred invoice carries it.
+export async function relockDeliverablesAction(formData: FormData) {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return;
+  const engagementId = formData.get("engagement_id");
+  if (typeof engagementId !== "string" || !UUID_RE.test(engagementId)) return;
+
+  const engagement = await getEngagement(engagementId);
+  if (!engagement || engagement.firm_id !== firm.id) return;
+
+  const invoice = await getLatestPaymentRequestForEngagement(engagementId);
+  // A settled (paid) invoice can't be re-locked — it's paid for.
+  if (invoice && invoice.status === "paid") return;
+  const liveInvoice =
+    invoice && invoice.status !== "canceled" ? invoice : null;
+
+  if (liveInvoice) {
+    const ok = await relockPaymentRequestDeliverables(liveInvoice.id);
+    if (!ok) return;
+  }
+  await setEngagementInvoiceLock(engagementId, true);
+
+  await logUserActivity(firm.id, engagementId, "invoice_relocked", {
+    payment_request_id: liveInvoice?.id ?? null,
+  });
+  revalidatePath(`/engagements/${engagementId}`);
+}
+
+// Edit an unpaid invoice's amount + description. Returns a result so the dialog
+// can surface a validation error.
+export async function editInvoiceAction(input: {
+  engagementId: string;
+  amountCents: number;
+  description?: string;
+}): Promise<InvoiceEditResult> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "unauthenticated" };
+  if (!UUID_RE.test(input.engagementId)) {
+    return { ok: false, error: "invalid" };
+  }
+  const cents = input.amountCents;
+  if (!Number.isInteger(cents) || cents < 50 || cents > 99_999_999) {
+    return { ok: false, error: "amount" };
+  }
+  // Firm ownership check (defense in depth, parity with relock), on top of RLS.
+  const engagement = await getEngagement(input.engagementId);
+  if (!engagement || engagement.firm_id !== firm.id) {
+    return { ok: false, error: "no_invoice" };
+  }
+
+  const invoice = await getLatestPaymentRequestForEngagement(input.engagementId);
+  if (!invoice || invoice.status === "paid" || invoice.status === "canceled") {
+    return { ok: false, error: "no_invoice" };
+  }
+  const description = input.description?.trim() ? input.description.trim() : null;
+  const ok = await updatePaymentRequestAmountDescription(
+    invoice.id,
+    cents,
+    description,
+  );
+  if (!ok) return { ok: false, error: "save_failed" };
+
+  await logUserActivity(firm.id, input.engagementId, "invoice_edited", {
+    payment_request_id: invoice.id,
+    amount_cents: cents,
+  });
+  revalidatePath(`/engagements/${input.engagementId}`);
+  return { ok: true };
 }

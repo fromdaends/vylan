@@ -58,8 +58,8 @@ import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
 import { AddFinalDocumentDialog } from "@/components/engagements/add-final-document-dialog";
 import { FinalDocumentRow } from "@/components/engagements/final-document-row";
-import { InvoiceLockControls } from "@/components/engagements/invoice-lock-controls";
 import { listFinalDocumentsForEngagement } from "@/lib/db/final-documents";
+import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
@@ -106,6 +106,7 @@ import {
   Sparkles,
   FileSignature,
   ExternalLink,
+  Lock,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -185,6 +186,12 @@ export default async function EngagementDetailPage({
   );
   const paymentPrefill =
     paymentPrefillCents != null ? (paymentPrefillCents / 100).toFixed(2) : "";
+  // Whether the Final documents are locked, for the compact lock icon on the
+  // header pill (same rule the portal + download route use).
+  const deliverablesLocked = computeDeliverablesLocked({
+    invoice: latestPayment,
+    engagementLocksDeliverables: engagement.invoice_locks_deliverables === true,
+  });
 
   // Assignment (Phase 5): resolve the assignee (may be deactivated — still shown
   // for history) + the active members available as reassignment targets.
@@ -534,6 +541,9 @@ export default async function EngagementDetailPage({
               </form>
             </>
           )}
+          {/* Compact invoice status pill (a lock icon when the Final documents
+              are locked). All invoice actions now live in the "..." menu's
+              Invoice option, to keep the header calm. */}
           {latestPayment && paymentStatusLabel && (
             <Badge
               variant={
@@ -543,20 +553,15 @@ export default async function EngagementDetailPage({
                     ? "destructive"
                     : "secondary"
               }
+              className="gap-1"
             >
+              {deliverablesLocked && (
+                <Lock className="size-3" aria-hidden />
+              )}
               {paymentStatusLabel} ·{" "}
               {formatCurrency(latestPayment.amount_cents / 100, locale)}
             </Badge>
           )}
-          {/* Deliverables lock status + the accountant's manual unlock/waive
-              escape hatches (only rendered for a live invoice). */}
-          <InvoiceLockControls
-            engagementId={engagement.id}
-            invoice={latestPayment}
-            engagementLocksDeliverables={
-              engagement.invoice_locks_deliverables === true
-            }
-          />
           {isComplete && (
             <>
               <form action={reopenEngagementAction}>
@@ -594,9 +599,23 @@ export default async function EngagementDetailPage({
                   ? (portalUrl ?? undefined)
                   : undefined
               }
-              requestPaymentDefaultAmount={
-                isComplete && connectReady ? paymentPrefill : undefined
+              connectReady={connectReady}
+              invoice={
+                latestPayment
+                  ? {
+                      id: latestPayment.id,
+                      status: latestPayment.status,
+                      amount_cents: latestPayment.amount_cents,
+                      description: latestPayment.description,
+                      locks_deliverables: latestPayment.locks_deliverables,
+                      override_unlocked: latestPayment.override_unlocked,
+                    }
+                  : null
               }
+              engagementLocksDeliverables={
+                engagement.invoice_locks_deliverables === true
+              }
+              invoiceDefaultAmount={paymentPrefill}
             />
           )}
         </div>

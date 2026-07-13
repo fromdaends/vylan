@@ -170,6 +170,54 @@ export async function setPaymentRequestOverrideUnlocked(
   return (data?.length ?? 0) > 0;
 }
 
+// Accountant "re-lock": put the deliverables lock back on after an unlock (or
+// lock an invoice that was created without it). Sets locks_deliverables true and
+// clears any override. Never touches a paid/cancelled row. Returns true only when
+// a row actually changed.
+export async function relockPaymentRequestDeliverables(
+  id: string,
+): Promise<boolean> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .update({ locks_deliverables: true, override_unlocked: false })
+    .eq("id", id)
+    .neq("status", "paid")
+    .neq("status", "canceled")
+    .select("id");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] relock failed:", error);
+    }
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+// Accountant edit of an unpaid invoice's amount + description. Never edits a
+// paid/cancelled row. Returns true only when a row changed.
+export async function updatePaymentRequestAmountDescription(
+  id: string,
+  amountCents: number,
+  description: string | null,
+): Promise<boolean> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .update({ amount_cents: amountCents, description })
+    .eq("id", id)
+    .neq("status", "paid")
+    .neq("status", "canceled")
+    .select("id");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] updateAmount failed:", error);
+    }
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
 // Accountant "waive invoice": cancel the invoice (nothing owed). A cancelled
 // invoice also unlocks the deliverables (the lock only applies while owed). Never
 // overwrites a paid row (the .neq guard); returns true only when a row was

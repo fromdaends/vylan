@@ -194,8 +194,12 @@ function describe(
       return t("final_document_removed");
     case "invoice_unlocked":
       return t("invoice_unlocked");
+    case "invoice_relocked":
+      return t("invoice_relocked");
     case "invoice_waived":
       return t("invoice_waived");
+    case "invoice_edited":
+      return t("invoice_edited");
     case "ai_classified":
       // Filtered out above, but keep the branch so the switch stays
       // exhaustive against future enum additions.
