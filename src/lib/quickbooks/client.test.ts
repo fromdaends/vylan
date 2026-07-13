@@ -18,6 +18,9 @@ import {
   QuickbooksError,
   isQboTxnEntity,
   QBO_TXN_ENTITIES,
+  quickbooksCreateNameEntity,
+  quickbooksFindNameEntityByName,
+  isDuplicateNameError,
 } from "./client";
 
 // Isolate OAuth-endpoint resolution: the discovery document is exercised on its
@@ -671,6 +674,125 @@ describe("intuit_tid capture on failures", () => {
     expect(err.tid).toBe("TID-POST-7");
     // The tid must survive a downstream slice(0, 500) — the DB post_error cap.
     expect(err.message.slice(0, 500)).toContain("intuit_tid: TID-POST-7");
+  });
+});
+
+describe("quickbooksCreateNameEntity", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const ctx = { accessToken: "AT", realmId: "realm1", environment: "sandbox" as const };
+
+  it("POSTs DisplayName to /vendor and returns the created id + name", async () => {
+    const fetchMock = vi.fn(async () =>
+      mockResponse({
+        ok: true,
+        json: { Vendor: { Id: "77", DisplayName: "Northline Office & Print" } },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await quickbooksCreateNameEntity(ctx, "vendor", "Northline Office & Print");
+    expect(r).toEqual({ id: "77", name: "Northline Office & Print" });
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toContain("/v3/company/realm1/vendor");
+    expect(url).toContain("minorversion=75");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toEqual({
+      DisplayName: "Northline Office & Print",
+    });
+  });
+
+  it("targets /customer for the customer kind", async () => {
+    const fetchMock = vi.fn(async () =>
+      mockResponse({ ok: true, json: { Customer: { Id: "9", DisplayName: "Lumen" } } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await quickbooksCreateNameEntity(ctx, "customer", "Lumen");
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(url).toContain("/v3/company/realm1/customer");
+  });
+
+  it("throws write_failed with the duplicate-name fault (6240) on a 400", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        mockResponse({
+          ok: false,
+          status: 400,
+          json: {
+            Fault: {
+              Error: [
+                {
+                  Message: "Duplicate Name Exists Error",
+                  Detail: "Duplicate Name Exists Error : ... code 6240",
+                },
+              ],
+            },
+          },
+        }),
+      ),
+    );
+    const err = await quickbooksCreateNameEntity(ctx, "vendor", "Home Depot").catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(QuickbooksError);
+    expect(isDuplicateNameError(err)).toBe(true);
+  });
+});
+
+describe("quickbooksFindNameEntityByName", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const ctx = { accessToken: "AT", realmId: "realm1", environment: "sandbox" as const };
+
+  it("queries by exact DisplayName (escaping quotes) and returns the first row", async () => {
+    const fetchMock = vi.fn(async () =>
+      mockResponse({
+        ok: true,
+        json: { QueryResponse: { Vendor: [{ Id: "5", DisplayName: "O'Brien" }] } },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const r = await quickbooksFindNameEntityByName(ctx, "vendor", "O'Brien");
+    expect(r).toEqual({ id: "5", name: "O'Brien" });
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    // The single quote is backslash-escaped in the QBO query (then URL-encoded).
+    expect(decodeURIComponent(url)).toContain(
+      "WHERE DisplayName = 'O\\'Brien'",
+    );
+  });
+
+  it("returns null when nothing matches", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => mockResponse({ ok: true, json: { QueryResponse: {} } })),
+    );
+    expect(
+      await quickbooksFindNameEntityByName(ctx, "customer", "Nobody"),
+    ).toBeNull();
+  });
+});
+
+describe("isDuplicateNameError", () => {
+  it("recognizes the Duplicate Name fault and rejects everything else", () => {
+    expect(
+      isDuplicateNameError(new QuickbooksError("write_failed", "Duplicate Name Exists Error")),
+    ).toBe(true);
+    expect(
+      isDuplicateNameError(
+        new QuickbooksError("write_failed", "[intuit_tid: xy] Duplicate Name Exists Error : ..."),
+      ),
+    ).toBe(true);
+    // A NON-duplicate failure whose intuit_tid merely CONTAINS "6240" must not be
+    // misread as a duplicate (matching the fault text, not the bare code).
+    expect(
+      isDuplicateNameError(
+        new QuickbooksError("write_failed", "[intuit_tid: a6240f] Internal error (500)"),
+      ),
+    ).toBe(false);
+    expect(isDuplicateNameError(new QuickbooksError("write_failed", "some 500"))).toBe(false);
+    expect(isDuplicateNameError(new Error("Duplicate Name"))).toBe(false); // not a QuickbooksError
+    expect(isDuplicateNameError(null)).toBe(false);
   });
 });
 

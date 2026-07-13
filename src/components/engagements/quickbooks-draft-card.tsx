@@ -317,6 +317,16 @@ export async function QuickbooksDraftCard({
           disabled={!isDraft}
           sourceHint={suggestion.partySource ?? null}
           suggested={candidateOptions(suggestion.party, partyOptions)}
+          // A brand-new vendor (expense) or customer (income) can be created
+          // inline. Only when we know the kind — an unknown-direction draft has
+          // no party list to create into.
+          createKind={
+            v.partyKind === "vendor"
+              ? "vendor"
+              : v.partyKind === "customer"
+                ? "customer"
+                : null
+          }
         />
         {/* Income lines post to a product/service ITEM (QuickBooks Invoice);
             expenses post to an account (Bill/Expense). When an expense is SPLIT

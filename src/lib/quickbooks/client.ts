@@ -589,6 +589,131 @@ export async function quickbooksCreate(
   return parseEntityResult(json, entityResponseKey(entity), tid);
 }
 
+// ── Name-list entities (Vendor / Customer) ──────────────────────────────────
+// Created inline from the draft-card picker's "+ Create '<name>'" affordance when
+// a receipt names a party that isn't in the firm's QuickBooks yet. These are
+// NAME-list entities (not transactions), so they get their own tiny create/lookup
+// pair rather than going through quickbooksCreate (which is transaction-shaped).
+export type QboNameKind = "vendor" | "customer";
+const NAME_KIND_RESPONSE_KEY: Record<QboNameKind, string> = {
+  vendor: "Vendor",
+  customer: "Customer",
+};
+
+// CREATE a Vendor or Customer from just a display name. Returns the new {id, name}
+// (QuickBooks may normalize the stored DisplayName). Throws a typed QuickbooksError
+// on any failure; a duplicate name surfaces as QBO code 6240 in the message so the
+// caller can fall back to quickbooksFindNameEntityByName.
+export async function quickbooksCreateNameEntity(
+  ctx: {
+    accessToken: string;
+    realmId: string;
+    environment?: QuickbooksEnvironment;
+  },
+  kind: QboNameKind,
+  displayName: string,
+): Promise<{ id: string; name: string }> {
+  const url =
+    `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}` +
+    `/${kind}?minorversion=${QBO_MINORVERSION}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${ctx.accessToken}`,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ DisplayName: displayName }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+    });
+  } catch (e) {
+    throw new QuickbooksError(
+      "request_failed",
+      `QuickBooks create ${kind} request failed: ${(e as Error).message}`,
+    );
+  }
+  const tid = tidOf(res);
+  const json = (await res.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  if (!res.ok) {
+    // QBO returns the duplicate-name Fault (code 6240) in the 400 body; surface it
+    // so isDuplicateNameError can route to the lookup fall-back.
+    const fault = extractFault(json);
+    throw new QuickbooksError(
+      "write_failed",
+      withTid(fault ?? `QuickBooks create ${kind} failed (${res.status})`, tid),
+      res.status,
+      tid,
+    );
+  }
+  const fault = extractFault(json);
+  if (fault) {
+    throw new QuickbooksError("write_failed", withTid(fault, tid), undefined, tid);
+  }
+  const key = NAME_KIND_RESPONSE_KEY[kind];
+  const entity = (json?.[key] ?? null) as Record<string, unknown> | null;
+  const id = entity && typeof entity.Id === "string" ? entity.Id : null;
+  const name =
+    entity && typeof entity.DisplayName === "string"
+      ? entity.DisplayName
+      : displayName;
+  if (!id) {
+    throw new QuickbooksError(
+      "write_failed",
+      withTid("QuickBooks returned an unexpected response.", tid),
+      undefined,
+      tid,
+    );
+  }
+  return { id, name };
+}
+
+// Look up an existing Vendor/Customer by EXACT display name. Used as the create
+// affordance's fall-back: QuickBooks reported the name already exists (6240) but
+// our cache hadn't caught it, so find the real id and use that instead of failing.
+// Returns null when none matches.
+export async function quickbooksFindNameEntityByName(
+  ctx: {
+    accessToken: string;
+    realmId: string;
+    environment?: QuickbooksEnvironment;
+  },
+  kind: QboNameKind,
+  displayName: string,
+): Promise<{ id: string; name: string } | null> {
+  const key = NAME_KIND_RESPONSE_KEY[kind];
+  // Escape for the QBO query language: backslash-escape backslashes then quotes.
+  const escaped = displayName.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const result = await quickbooksQuery(
+    ctx.accessToken,
+    ctx.realmId,
+    `SELECT Id, DisplayName FROM ${key} WHERE DisplayName = '${escaped}'`,
+    ctx.environment,
+  );
+  const rows = (result[key] ?? []) as Array<Record<string, unknown>>;
+  const row = rows[0];
+  if (!row || typeof row.Id !== "string") return null;
+  return {
+    id: row.Id,
+    name: typeof row.DisplayName === "string" ? row.DisplayName : displayName,
+  };
+}
+
+// Whether a thrown error is QuickBooks' "Duplicate Name Exists" (code 6240) — the
+// signal to fall back to a by-name lookup instead of surfacing a hard failure.
+// Matches the fault's TEXT ("Duplicate Name Exists Error", always present on a
+// 6240) rather than the bare code "6240": the message also carries the intuit_tid
+// (a hex trace id), which could coincidentally contain "6240" and misclassify an
+// unrelated failure as a duplicate.
+export function isDuplicateNameError(e: unknown): boolean {
+  return e instanceof QuickbooksError && /duplicate name/i.test(e.message);
+}
+
 // DELETE a posted transaction (the Stage 5 undo). A QuickBooks BILL cannot be
 // voided via the API (void is only for sales transactions / payments), so the
 // undo is a delete: POST ?operation=delete with the entity Id + current

@@ -281,6 +281,41 @@ export async function replaceCachedEntity(
   if (delErr) throw delErr;
 }
 
+// Append/refresh ONE cached row WITHOUT the destructive prune replaceCachedEntity
+// does — for when the accountant creates a single entity inline (a Vendor/Customer
+// from the draft-card picker). The new row must land in the cache immediately so
+// the draft is postable (checkBillPostable requires the party to be an ACTIVE
+// cached row) and the entity shows in the picker, all without disturbing the rest
+// of the firm's cache. Service role; firm-scoped. Best-effort: a missing cache
+// table (pre-0420) is a no-op, mirroring the rest of this module.
+export async function upsertCachedEntityRow(
+  firmId: string,
+  entity: CacheEntity,
+  row: CacheRow,
+  syncedAt: string,
+): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const table = TABLE_BY_ENTITY[entity];
+  const record = {
+    firm_id: firmId,
+    qbo_id: row.id,
+    name: row.name,
+    active: row.active,
+    ...(entity === "accounts" ? { account_type: row.accountType ?? null } : {}),
+    ...(entity === "items"
+      ? {
+          item_type: row.itemType ?? null,
+          income_account_qbo_id: row.incomeAccountId ?? null,
+        }
+      : {}),
+    synced_at: syncedAt,
+  };
+  const { error } = await sb
+    .from(table)
+    .upsert(record, { onConflict: "firm_id,qbo_id" });
+  if (error && !isMissingSchema(error)) throw error;
+}
+
 // Delete ALL of a firm's cached QuickBooks reference rows (all five entity
 // tables). Used on disconnect and when the connected COMPANY changes: cached rows
 // hold the old company's internal ids, and the next sync rebuilds everything from
