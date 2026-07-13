@@ -376,7 +376,10 @@ export function AssistantPanel({
           dragging
             ? "transition-none"
             : "transition-transform duration-300 ease-out",
-          open ? "translate-x-0" : "translate-x-full pointer-events-none",
+          // display:none while closed prevents the off-canvas surface and its
+          // wide shadow from leaving a dark strip at the viewport edge. The
+          // panel remains mounted, so its chat state is still preserved.
+          open ? "translate-x-0" : "hidden pointer-events-none",
         )}
       >
         {/* Drag handle — desktop only (mobile is full-width). */}

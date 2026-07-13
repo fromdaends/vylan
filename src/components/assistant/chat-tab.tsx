@@ -585,7 +585,10 @@ function ChatView({
   return (
     <>
       {/* Body */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         {historyFailed ? (
           <div className="flex flex-col items-center gap-3 px-5 py-8">
             <p className="text-sm text-muted-foreground">
