@@ -3,10 +3,11 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 // Per-firm monthly AI-check cap. The AI document check auto-pauses for the rest
 // of the calendar month (UTC) once a firm reaches its cap, to bound token spend
 // (migration 0230). Uploads + everything else keep working; only the AI skips.
-// Default lowered 400 -> 350 (migration 0310) to tighten the monthly spend
-// ceiling. The per-firm firms.ai_monthly_cap column (read in getFirmAiUsage)
-// still overrides this; this constant is the fallback + the new-firm default.
-export const DEFAULT_AI_MONTHLY_CAP = 350;
+// Default lowered 400 -> 350 (migration 0310), then 350 -> 225 (migration 0640)
+// to tighten the monthly spend ceiling. The per-firm firms.ai_monthly_cap column
+// (read in getFirmAiUsage) still overrides this; this constant is the fallback +
+// the new-firm default.
+export const DEFAULT_AI_MONTHLY_CAP = 225;
 
 // Free-trial firms get a hard LIFETIME ceiling on paid AI checks (NOT a monthly
 // one) so an unconverted account can't burn unbounded AI — a known cost/abuse
