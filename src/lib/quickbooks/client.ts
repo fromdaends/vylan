@@ -706,8 +706,12 @@ export async function quickbooksFindNameEntityByName(
 
 // Whether a thrown error is QuickBooks' "Duplicate Name Exists" (code 6240) — the
 // signal to fall back to a by-name lookup instead of surfacing a hard failure.
+// Matches the fault's TEXT ("Duplicate Name Exists Error", always present on a
+// 6240) rather than the bare code "6240": the message also carries the intuit_tid
+// (a hex trace id), which could coincidentally contain "6240" and misclassify an
+// unrelated failure as a duplicate.
 export function isDuplicateNameError(e: unknown): boolean {
-  return e instanceof QuickbooksError && /6240|Duplicate Name/i.test(e.message);
+  return e instanceof QuickbooksError && /duplicate name/i.test(e.message);
 }
 
 // DELETE a posted transaction (the Stage 5 undo). A QuickBooks BILL cannot be

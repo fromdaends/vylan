@@ -2079,6 +2079,7 @@
     "pick_create": "Créer « {name} »",
     "pick_creating": "Création…",
     "pick_create_error": "Création impossible. Veuillez réessayer.",
+    "pick_create_duplicate": "Ce nom existe déjà dans QuickBooks — il est peut-être inactif. Réactivez-le dans QuickBooks ou utilisez un autre nom.",
     "status_draft": "Brouillon",
     "status_approved": "Approuvé",
     "status_dismissed": "Ignoré",

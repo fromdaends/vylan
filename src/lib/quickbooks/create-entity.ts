@@ -50,18 +50,29 @@ export async function createOrFindNameEntity(input: {
     if (isDuplicateNameError(e)) {
       const existing = await quickbooksFindNameEntityByName(ctx, kind, name);
       if (!existing) {
+        // QuickBooks says the name exists, but a by-name lookup (active-only)
+        // found nothing — so the collision is with a DEACTIVATED entity. Say so:
+        // reactivating it in QuickBooks is the way forward (auto-reactivating an
+        // entity the firm archived on purpose would be surprising).
         return {
           ok: false,
           reason: "duplicate",
-          detail: "That name already exists in QuickBooks.",
+          detail:
+            "That name already exists in QuickBooks but is inactive. Reactivate it there, or use a different name.",
         };
       }
       entity = existing;
     } else {
+      // Log the raw QuickBooks error (it carries the intuit_tid + fault text for
+      // support) but NEVER return it to the browser — surface a clean message.
+      console.error(
+        "[quickbooks] create name entity failed:",
+        e instanceof Error ? e.message : e,
+      );
       return {
         ok: false,
         reason: "failed",
-        detail: e instanceof Error ? e.message : "QuickBooks create failed.",
+        detail: "QuickBooks couldn't create it. Please try again.",
       };
     }
   }

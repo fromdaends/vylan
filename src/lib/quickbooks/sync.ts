@@ -62,13 +62,21 @@ export async function enqueueQuickbooksSync(firmId: string): Promise<void> {
 export async function syncQuickbooksLists(firmId: string): Promise<SyncResult> {
   await setFirmSyncState(firmId, { status: "syncing" });
 
+  // Stamp the sync at run START — BEFORE fetching the lists — so the upsert-then-
+  // prune in replaceCachedEntity (which deletes rows with synced_at < syncedAt)
+  // can't delete an entity created INLINE during this sync. Such a row is stamped
+  // `now` (> run-start) by upsertCachedEntityRow and isn't in this sync's fetched
+  // snapshot, so a syncedAt captured AFTER the fetch would wrongly prune it and
+  // leave the just-created vendor un-postable until the next sync. Genuinely-
+  // removed rows carry an older previous-sync stamp and still prune correctly.
+  const syncedAt = new Date().toISOString();
+
   const result = await readQuickbooksLists(firmId);
   if (!result.ok) {
     await setFirmSyncState(firmId, { status: "error", error: result.reason });
     return { ok: false, detail: result.reason };
   }
 
-  const syncedAt = new Date().toISOString();
   const lists = result.data;
   const failed: string[] = [];
   try {

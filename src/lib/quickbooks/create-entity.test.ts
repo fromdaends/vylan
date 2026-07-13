@@ -32,6 +32,7 @@ const NOW = "2026-07-13T15:00:00.000Z";
 beforeEach(() => {
   vi.clearAllMocks();
   mockUpsert.mockResolvedValue(undefined);
+  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 describe("normalizeEntityName", () => {

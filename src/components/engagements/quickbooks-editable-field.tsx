@@ -121,13 +121,19 @@ export function QuickbooksEditableField({
       const res = (await r.json().catch(() => null)) as {
         ok?: boolean;
         entity?: { id: string; name: string };
-        detail?: string;
+        error?: string;
       } | null;
       if (r.ok && res?.ok && res.entity) {
         setQuery("");
         await save({ id: res.entity.id, name: res.entity.name });
       } else {
-        setCreateError(res?.detail ?? t("pick_create_error"));
+        // Localize by error code (never render the server's raw detail — it can
+        // carry QuickBooks fault text + a trace id).
+        setCreateError(
+          res?.error === "duplicate"
+            ? t("pick_create_duplicate")
+            : t("pick_create_error"),
+        );
       }
     } catch {
       setCreateError(t("pick_create_error"));

@@ -774,13 +774,24 @@ describe("quickbooksFindNameEntityByName", () => {
 });
 
 describe("isDuplicateNameError", () => {
-  it("recognizes 6240 / Duplicate Name and rejects everything else", () => {
-    expect(isDuplicateNameError(new QuickbooksError("write_failed", "code 6240"))).toBe(true);
+  it("recognizes the Duplicate Name fault and rejects everything else", () => {
     expect(
       isDuplicateNameError(new QuickbooksError("write_failed", "Duplicate Name Exists Error")),
     ).toBe(true);
+    expect(
+      isDuplicateNameError(
+        new QuickbooksError("write_failed", "[intuit_tid: xy] Duplicate Name Exists Error : ..."),
+      ),
+    ).toBe(true);
+    // A NON-duplicate failure whose intuit_tid merely CONTAINS "6240" must not be
+    // misread as a duplicate (matching the fault text, not the bare code).
+    expect(
+      isDuplicateNameError(
+        new QuickbooksError("write_failed", "[intuit_tid: a6240f] Internal error (500)"),
+      ),
+    ).toBe(false);
     expect(isDuplicateNameError(new QuickbooksError("write_failed", "some 500"))).toBe(false);
-    expect(isDuplicateNameError(new Error("6240"))).toBe(false); // not a QuickbooksError
+    expect(isDuplicateNameError(new Error("Duplicate Name"))).toBe(false); // not a QuickbooksError
     expect(isDuplicateNameError(null)).toBe(false);
   });
 });
