@@ -134,7 +134,7 @@ export function GeneralChat({
     <>
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto overscroll-contain"
+        className="flex-1 overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {empty ? (
           // Big centered greeting, like other AI apps.
