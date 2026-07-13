@@ -29,8 +29,23 @@ export type PaymentRequest = {
   // True for automated invoices (migration 0590). Optional on the type so reads
   // survive the pre-migration window; defaults false for manual requests.
   auto?: boolean;
+  // Deliverables lock (migration 0610). When locks_deliverables is true and the
+  // invoice is unpaid (and not overridden), the engagement's Final documents are
+  // gated in the client portal. Optional so reads survive the pre-0610 window.
+  locks_deliverables?: boolean;
+  override_unlocked?: boolean;
   created_at: string;
 };
+
+// A write that referenced a column the current DB doesn't have yet (migration in
+// code but not applied here). PostgREST reports PGRST204; Postgres 42703. Used to
+// retry the insert WITHOUT the newest columns so payments keep working in the
+// deploy->migrate window (dev uses remote Supabase).
+function isUnknownColumnError(
+  err: { code?: string } | null,
+): boolean {
+  return err?.code === "PGRST204" || err?.code === "42703";
+}
 
 // PostgREST: PGRST205 = table not in schema cache (migration not applied),
 // PGRST204 = column missing; 42P01 / 42703 are the Postgres equivalents.
@@ -56,18 +71,40 @@ export type CreatePaymentRequestInput = {
   description: string | null;
   delivery: PaymentDelivery;
   requested_by_user_id: string | null;
+  // Deliverables lock (migration 0610). Optional so callers that don't gate
+  // Final documents omit it; the insert drops it gracefully pre-0610.
+  locks_deliverables?: boolean;
 };
 
+// Returns the created row, the string "duplicate" when the one-invoice-per-
+// engagement unique index (payment_requests_engagement_active_uniq, 0610)
+// rejected a concurrent create (the caller treats this as "already invoiced",
+// NOT a save failure), or null on a missing table (pre-0380) / other failure.
 export async function createPaymentRequest(
   input: CreatePaymentRequestInput,
-): Promise<PaymentRequest | null> {
+): Promise<PaymentRequest | "duplicate" | null> {
   const sb = await getServerSupabase();
-  const { data, error } = await sb
+  const { locks_deliverables, ...base } = input;
+  const withLock =
+    locks_deliverables != null ? { ...base, locks_deliverables } : base;
+  let { data, error } = await sb
     .from("payment_requests")
-    .insert(input)
+    .insert(withLock)
     .select("*")
     .single();
+  // Pre-0610: retry WITHOUT the lock column so the invoice still records (the
+  // lock is simply inert until the migration lands).
+  if (error && isUnknownColumnError(error) && locks_deliverables != null) {
+    ({ data, error } = await sb
+      .from("payment_requests")
+      .insert(base)
+      .select("*")
+      .single());
+  }
   if (error) {
+    // 23505 = unique_violation: a concurrent create won the one-invoice race.
+    // Benign — exactly one live invoice exists, which is the whole point.
+    if (error.code === "23505") return "duplicate";
     if (isMissingSchema(error)) {
       console.warn(
         "[payment-requests] createPaymentRequest: table missing (migration 0380 not applied yet)",
@@ -258,11 +295,24 @@ export async function createPaymentRequestSR(
   input: CreatePaymentRequestInput,
 ): Promise<PaymentRequest | "duplicate" | null> {
   const sb = getServiceRoleSupabase();
-  const { data, error } = await sb
+  const { locks_deliverables, ...base } = input;
+  const withLock =
+    locks_deliverables != null
+      ? { ...base, auto: true, locks_deliverables }
+      : { ...base, auto: true };
+  let { data, error } = await sb
     .from("payment_requests")
-    .insert({ ...input, auto: true })
+    .insert(withLock)
     .select("*")
     .single();
+  // Pre-0610: retry WITHOUT the lock column (the lock is inert until 0610 lands).
+  if (error && isUnknownColumnError(error) && locks_deliverables != null) {
+    ({ data, error } = await sb
+      .from("payment_requests")
+      .insert({ ...base, auto: true })
+      .select("*")
+      .single());
+  }
   if (error) {
     // 23505 = unique_violation: a concurrent auto-send won the race. Benign —
     // there is exactly one live auto invoice, which is the whole point.

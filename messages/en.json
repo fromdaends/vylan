@@ -1179,6 +1179,11 @@
     "invoice_auto_hint": "Automatically send the client their invoice when this engagement finishes.",
     "invoice_auto_needs_connect": "Set up payments (Stripe) in Settings to automatically invoice clients when an engagement finishes.",
     "invoice_mode_off": "Off — I'll send invoices myself",
+    "invoice_mode_now": "Now, so they can pay right away",
+    "invoice_section_label": "Invoice",
+    "invoice_section_hint": "Optionally bill your client for this engagement. You choose when to send it.",
+    "invoice_lock_label": "Lock final documents until this invoice is paid",
+    "invoice_lock_hint": "Your client can still upload and sign. Only the finished documents you send them stay locked until they pay.",
     "invoice_mode_on_completion": "When I mark it complete",
     "invoice_mode_delayed": "A set time after completion",
     "invoice_delay_prefix": "Send",
@@ -1335,6 +1340,7 @@
     "request_payment_submit": "Request payment",
     "request_payment_success": "Payment requested",
     "request_payment_error": "Could not request payment. Please try again.",
+    "request_payment_already_invoiced": "This engagement already has an invoice.",
     "request_payment_amount_invalid": "Enter an amount of at least $0.50.",
     "payment_status_requested": "Payment requested",
     "payment_status_paid": "Paid",
@@ -1386,7 +1392,8 @@
       "add_failed": "Couldn't add the item. Please try again.",
       "min_2_chars": "At least 2 characters.",
       "too_long": "Too long.",
-      "no_documents": "Add at least one document before sending. Without one, there's nothing for the client to upload."
+      "no_documents": "Add at least one document before sending. Without one, there's nothing for the client to upload.",
+      "invoice_amount_required": "Enter an amount to bill before setting up the invoice."
     }
   },
   "Attention": {

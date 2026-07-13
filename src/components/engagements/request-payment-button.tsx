@@ -49,6 +49,7 @@ export function RequestPaymentButton({
   const [amount, setAmount] = useState(defaultAmount);
   const [description, setDescription] = useState("");
   const [delivery, setDelivery] = useState<"portal" | "email" | "both">("both");
+  const [lock, setLock] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -66,6 +67,7 @@ export function RequestPaymentButton({
         amountCents: cents,
         description: description.trim() || undefined,
         delivery,
+        locksDeliverables: lock,
       });
       if (res.ok) {
         setOpen(false);
@@ -73,7 +75,11 @@ export function RequestPaymentButton({
         toast.success(t("request_payment_success"));
         router.refresh();
       } else {
-        setError(t("request_payment_error"));
+        setError(
+          res.error === "already_invoiced"
+            ? t("request_payment_already_invoiced")
+            : t("request_payment_error"),
+        );
       }
     });
   }
@@ -153,6 +159,21 @@ export function RequestPaymentButton({
               </SelectContent>
             </Select>
           </div>
+
+          <label className="flex items-start gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={lock}
+              onChange={(e) => setLock(e.target.checked)}
+            />
+            <span>
+              <span className="block">{t("invoice_lock_label")}</span>
+              <span className="block text-xs text-muted-foreground">
+                {t("invoice_lock_hint")}
+              </span>
+            </span>
+          </label>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
