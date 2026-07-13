@@ -822,20 +822,27 @@ export async function backfillMissingSuggestions(input: {
 // classify worker when a (re)classification no longer yields a transaction (the
 // document is no longer a receipt/invoice, or the read failed), so a stale draft
 // never outlives the read that produced it. Best-effort + graceful pre-migration.
+// Returns true when the row is gone (deleted, or the table doesn't exist yet so
+// there's nothing to delete) and false on a real DB error, so the delete route
+// can report a failure instead of silently claiming success. The classify worker
+// calls this fire-and-forget and ignores the return.
 export async function deleteTransactionSuggestionForFile(
   uploadedFileId: string,
-): Promise<void> {
+): Promise<boolean> {
   const sb = getServiceRoleSupabase();
   const { error } = await sb
     .from("quickbooks_transaction_suggestions")
     .delete()
     .eq("uploaded_file_id", uploadedFileId);
-  if (error && !isMissingSchema(error)) {
+  if (error) {
+    if (isMissingSchema(error)) return true; // nothing to delete
     console.error(
       "[quickbooks] deleteTransactionSuggestionForFile failed:",
       error,
     );
+    return false;
   }
+  return true;
 }
 
 // Retire every UNPOSTED draft (status 'draft' or 'approved') for a firm by

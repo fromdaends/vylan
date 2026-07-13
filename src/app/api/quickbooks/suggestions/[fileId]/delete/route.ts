@@ -17,6 +17,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import {
   getDraftForFile,
   deleteTransactionSuggestionForFile,
+  recordDraftVoided,
 } from "@/lib/db/quickbooks-suggestions";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
 import { quickbooksDelete, QuickbooksError } from "@/lib/quickbooks/client";
@@ -60,7 +61,14 @@ export async function POST(
     );
   }
 
-  // A posted draft Vylan created must be removed from QuickBooks first.
+  // NOTE (accepted narrow race): if a draft is deleted in the ~sub-second window
+  // between the post route creating the QuickBooks transaction and recording it
+  // (status is still 'approved', postedQboId still null), this can't void that
+  // fresh transaction and would remove the local row — orphaning it in
+  // QuickBooks. This requires two concurrent actions on the same draft and
+  // mirrors the existing reopen-mid-post race; the post route surfaces a
+  // "conflict — check QuickBooks" message. A full fix needs a posting marker in
+  // the post route.
   const isPosted = draft.status === "posted" && !!draft.postedQboId;
   const matched = draft.matchedQboType != null;
   if (isPosted && !matched) {
@@ -105,8 +113,29 @@ export async function POST(
     }
   }
 
-  await deleteTransactionSuggestionForFile(fileId);
+  // For a posted draft, reset the row to a clean 'approved' state (clears the
+  // posted / matched linkage) BEFORE removing it. If the row removal below fails
+  // transiently, a retry then deletes a plain local row instead of trying to
+  // re-void the already-deleted QuickBooks transaction (which would 502 forever).
+  if (draft.status === "posted") {
+    await recordDraftVoided({
+      uploadedFileId: fileId,
+      nextAttempt: draft.postAttempt + 1,
+    });
+  }
+
+  const removed = await deleteTransactionSuggestionForFile(fileId);
   revalidate(draft.engagementId);
+  if (!removed) {
+    return NextResponse.json(
+      {
+        error: "record_failed",
+        detail:
+          "The QuickBooks side was updated, but the draft couldn't be removed. Refresh and try again.",
+      },
+      { status: 500 },
+    );
+  }
 
   try {
     await logUserActivity(draft.firmId, draft.engagementId, "delete_qbo_draft", {
