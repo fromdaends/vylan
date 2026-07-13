@@ -3,7 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Check, ChevronsUpDown, Loader2, TriangleAlert } from "lucide-react";
+import {
+  Check,
+  ChevronsUpDown,
+  Loader2,
+  Sparkles,
+  TriangleAlert,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   Command,
@@ -36,6 +42,8 @@ export function QuickbooksEditableField({
   initial,
   choosePrompt,
   disabled = false,
+  sourceHint = null,
+  suggested = [],
 }: {
   fileId: string;
   field: DraftField;
@@ -48,6 +56,14 @@ export function QuickbooksEditableField({
   // When true the cell is LOCKED (read-only) — used once a draft is approved or
   // dismissed. Reopen the draft to edit it again.
   disabled?: boolean;
+  // The RAW text the AI read off the document for this field (e.g. the vendor
+  // name printed on the receipt). Shown as a hint under an UNCHOSEN (amber) cell
+  // so the accountant knows what to match without hunting through the document.
+  sourceHint?: string | null;
+  // The AI's ranked best-guess matches, surfaced as a "Suggested" group at the
+  // TOP of the picker so the likely pick is one click away instead of buried in
+  // the full alphabetical list. Already computed by the mapper (MatchField.candidates).
+  suggested?: PickOption[];
 }) {
   const t = useTranslations("Quickbooks");
   const router = useRouter();
@@ -77,6 +93,23 @@ export function QuickbooksEditableField({
   }
 
   const empty = value == null;
+
+  // The AI's guesses, minus whatever is already chosen, capped so the group stays
+  // a shortcut rather than a second full list. Deduped by id.
+  const seen = new Set<string>();
+  const suggestions = suggested
+    .filter((s) => {
+      if (s.id === value?.id || seen.has(s.id)) return false;
+      seen.add(s.id);
+      return true;
+    })
+    .slice(0, 3);
+  // Pull the suggested entries OUT of the full list below so each id renders
+  // exactly once — a suggested row and its twin in the full list would otherwise
+  // share a cmdk value (breaking selection) or force a distinguishing token that
+  // leaks into search. The suggested rows stay searchable by their own name.
+  const suggestedIds = new Set(suggestions.map((s) => s.id));
+  const restOptions = options.filter((o) => !suggestedIds.has(o.id));
 
   // Locked (approved / dismissed draft): a static, muted read-only cell — no
   // popover, no amber prompt. Reopening the draft restores the editable cell.
@@ -141,6 +174,26 @@ export function QuickbooksEditableField({
             <CommandInput placeholder={t("pick_search")} />
             <CommandList>
               <CommandEmpty>{t("pick_empty")}</CommandEmpty>
+              {suggestions.length > 0 && (
+                <CommandGroup heading={t("pick_suggested")}>
+                  {suggestions.map((o) => (
+                    <CommandItem
+                      key={`suggested-${o.id}`}
+                      // Its twin is excluded from the full list, so this value is
+                      // unique across the command; name-first keeps it searchable
+                      // without a token that would itself match the search.
+                      value={`${o.name} ${o.id}`}
+                      onSelect={() => save({ id: o.id, name: o.name })}
+                    >
+                      <Sparkles
+                        className="size-4 shrink-0 text-accent"
+                        aria-hidden="true"
+                      />
+                      <span className="truncate">{o.name}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
               <CommandGroup>
                 {value && (
                   <CommandItem
@@ -151,7 +204,7 @@ export function QuickbooksEditableField({
                     {t("pick_clear")}
                   </CommandItem>
                 )}
-                {options.map((o) => (
+                {restOptions.map((o) => (
                   <CommandItem
                     key={o.id}
                     value={`${o.name} ${o.id}`}
@@ -171,6 +224,16 @@ export function QuickbooksEditableField({
           </Command>
         </PopoverContent>
       </Popover>
+      {/* When nothing is chosen yet, remind the accountant what the document
+          actually said so they can match it without re-reading the receipt. */}
+      {empty && sourceHint && (
+        <p className="mt-1 flex min-w-0 items-baseline gap-1 text-[11px] leading-tight text-muted-foreground">
+          <span className="shrink-0">{t("pick_source_label")}</span>
+          <span className="min-w-0 truncate font-medium text-foreground/70">
+            {sourceHint}
+          </span>
+        </p>
+      )}
     </div>
   );
 }
