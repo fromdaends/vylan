@@ -144,6 +144,45 @@ export async function getLatestPaymentRequestForEngagement(
   return rows[0] ?? null;
 }
 
+// Accountant's manual "unlock without payment" (migration 0610): mark the invoice
+// as overriding the deliverables lock, so the client can download the finished
+// work even though the invoice is still unpaid. RLS-scoped (firm members only).
+export async function setPaymentRequestOverrideUnlocked(
+  id: string,
+): Promise<boolean> {
+  const sb = await getServerSupabase();
+  const { error } = await sb
+    .from("payment_requests")
+    .update({ override_unlocked: true })
+    .eq("id", id);
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] setOverrideUnlocked failed:", error);
+    }
+    return false;
+  }
+  return true;
+}
+
+// Accountant "waive invoice": cancel the invoice (nothing owed). A cancelled
+// invoice also unlocks the deliverables (the lock only applies while owed). Never
+// overwrites a paid row. RLS-scoped.
+export async function cancelPaymentRequest(id: string): Promise<boolean> {
+  const sb = await getServerSupabase();
+  const { error } = await sb
+    .from("payment_requests")
+    .update({ status: "canceled" })
+    .eq("id", id)
+    .neq("status", "paid");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] cancelPaymentRequest failed:", error);
+    }
+    return false;
+  }
+  return true;
+}
+
 // The amount (in cents) of the firm's most recent payment request — used to
 // pre-fill the dialog ("remember last amount") when there's no per-service
 // default. Returns null if the firm has never requested a payment.

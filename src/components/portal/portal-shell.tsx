@@ -235,6 +235,7 @@ export function PortalShell({
           <PortalFinalDocuments
             docs={ctx.final_documents}
             token={ctx.engagement.magic_token ?? ""}
+            locked={ctx.final_documents_locked}
           />
         )}
         {effectiveView === "hub" ? (

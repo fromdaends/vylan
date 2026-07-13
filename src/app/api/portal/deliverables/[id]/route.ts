@@ -14,8 +14,12 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { isValidTokenShape } from "@/lib/db/portal";
-import { isDeliverableDownloadAllowed } from "@/lib/portal/deliverable-access";
+import {
+  isDeliverableDownloadAllowed,
+  type DeliverableLockState,
+} from "@/lib/portal/deliverable-access";
 import { getFinalDocumentForDownloadSR } from "@/lib/db/final-documents";
+import { getLatestPaymentRequestForEngagementSR } from "@/lib/db/payment-requests";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { signedUrl } from "@/lib/storage";
 import { buildContentDisposition } from "@/lib/files/content-disposition";
@@ -68,6 +72,21 @@ export async function GET(
     .maybeSingle();
   const deliverable = await getFinalDocumentForDownloadSR(id);
 
+  // The deliverables lock: gate the download when the engagement's invoice locks
+  // the finished work and is still unpaid (and not overridden). Read the current
+  // invoice from trusted server state (never the client). Null → not locked.
+  let lock: DeliverableLockState = null;
+  if (engagement?.id) {
+    const invoice = await getLatestPaymentRequestForEngagementSR(engagement.id);
+    if (invoice) {
+      lock = {
+        locksDeliverables: invoice.locks_deliverables === true,
+        invoiceStatus: invoice.status,
+        overrideUnlocked: invoice.override_unlocked === true,
+      };
+    }
+  }
+
   if (
     !isDeliverableDownloadAllowed({
       tokenShapeValid: true,
@@ -77,8 +96,7 @@ export async function GET(
       deliverable: deliverable
         ? { engagement_id: deliverable.engagement_id }
         : null,
-      // Phase 3: no lock evaluated (downloads always allowed). Phase 4 wires the
-      // engagement's invoice in here.
+      lock,
     })
   ) {
     return notFound();

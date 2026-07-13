@@ -17,6 +17,7 @@ import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
 import { BUCKET } from "@/lib/storage";
 import { listFinalDocumentsForEngagementSR } from "@/lib/db/final-documents";
+import { isDeliverablesLocked } from "@/lib/portal/deliverable-access";
 
 const TOKEN_REGEX = /^[0-9A-Za-z]{43}$/;
 
@@ -94,6 +95,10 @@ export type PortalContext = {
     mime_type: string | null;
     size_bytes: number | null;
   }[];
+  // True when the engagement's invoice locks the final documents and is still
+  // unpaid (and not overridden). The portal then shows a polite locked state
+  // instead of the download links, and the gated download route returns 404.
+  final_documents_locked: boolean;
 };
 
 export async function loadPortalContext(
@@ -242,6 +247,23 @@ export async function loadPortalContext(
       }
     : null;
 
+  // Whether the final documents are locked (Phase 4). Read the invoice's lock
+  // fields best-effort (a separate select so a pre-0610 env just yields "not
+  // locked" instead of dropping the payment card), then apply the shared rule.
+  let finalDocumentsLocked = false;
+  if (pr) {
+    const { data: lockRow } = await sb
+      .from("payment_requests")
+      .select("locks_deliverables, override_unlocked")
+      .eq("id", pr.id as string)
+      .maybeSingle();
+    finalDocumentsLocked = isDeliverablesLocked({
+      locksDeliverables: lockRow?.locks_deliverables === true,
+      invoiceStatus: pr.status as "requested" | "paid" | "failed" | "canceled",
+      overrideUnlocked: lockRow?.override_unlocked === true,
+    });
+  }
+
   // SignWell status per signature item, for the portal signature card. Tolerant
   // of the table being absent before migration 0400 (data stays empty on error).
   const signatureStatusByItem: Record<string, SignatureStatus> = {};
@@ -277,6 +299,7 @@ export async function loadPortalContext(
     payment_request: paymentRequest,
     signature_status_by_item: signatureStatusByItem,
     final_documents: finalDocuments,
+    final_documents_locked: finalDocumentsLocked,
   };
 }
 

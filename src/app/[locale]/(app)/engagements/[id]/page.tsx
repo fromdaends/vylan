@@ -58,6 +58,7 @@ import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
 import { AddFinalDocumentDialog } from "@/components/engagements/add-final-document-dialog";
 import { FinalDocumentRow } from "@/components/engagements/final-document-row";
+import { InvoiceLockControls } from "@/components/engagements/invoice-lock-controls";
 import { listFinalDocumentsForEngagement } from "@/lib/db/final-documents";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
@@ -547,6 +548,12 @@ export default async function EngagementDetailPage({
               {formatCurrency(latestPayment.amount_cents / 100, locale)}
             </Badge>
           )}
+          {/* Deliverables lock status + the accountant's manual unlock/waive
+              escape hatches (only rendered for a live invoice). */}
+          <InvoiceLockControls
+            engagementId={engagement.id}
+            invoice={latestPayment}
+          />
           {isComplete && (
             <>
               <form action={reopenEngagementAction}>

@@ -1,15 +1,18 @@
 "use client";
 
 import { useTranslations } from "next-intl";
-import { FileText, Download, FileCheck2 } from "lucide-react";
+import { FileText, Download, FileCheck2, Lock } from "lucide-react";
 
 // The client-facing "Your completed documents" card: the finished work the
 // accountant has returned. Each file downloads through the gated
 // /api/portal/deliverables route (never an embedded signed URL), so the invoice
-// lock can gate it server-side in a later phase.
+// lock gates it server-side. When `locked` is true the finished work exists but
+// the invoice is unpaid, so the card shows a polite locked state (the "Pay now"
+// card sits directly above) instead of the download links.
 export function PortalFinalDocuments({
   docs,
   token,
+  locked,
 }: {
   docs: {
     id: string;
@@ -17,10 +20,31 @@ export function PortalFinalDocuments({
     display_name: string | null;
   }[];
   token: string;
+  locked: boolean;
 }) {
   const t = useTranslations("Portal");
   if (docs.length === 0) return null;
   const enc = encodeURIComponent(token);
+
+  if (locked) {
+    return (
+      <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <Lock className="size-5" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-semibold tracking-tight">
+              {t("final_documents_title")}
+            </h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {t("final_locked_body")}
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
