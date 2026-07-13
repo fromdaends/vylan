@@ -4,6 +4,7 @@ import {
   effectiveDate,
   draftNeedsInput,
   effectiveExpenseMode,
+  effectiveIncomeMode,
   effectiveSplit,
   effectiveLines,
 } from "./draft-resolve";
@@ -281,5 +282,44 @@ describe("effectiveExpenseMode", () => {
         taxCode: { id: "t1", name: "GST" },
       }),
     ).toBe(false);
+  });
+});
+
+describe("effectiveIncomeMode", () => {
+  it("defaults to 'invoice' when paid is unknown (no behavior change)", () => {
+    expect(
+      effectiveIncomeMode(sugg({ direction: "income", paid: null }), null),
+    ).toBe("invoice");
+  });
+  it("is 'salesreceipt' when the sale was read as paid", () => {
+    expect(
+      effectiveIncomeMode(sugg({ direction: "income", paid: true }), null),
+    ).toBe("salesreceipt");
+  });
+  it("the accountant's override wins over the AI", () => {
+    expect(
+      effectiveIncomeMode(sugg({ direction: "income", paid: true }), {
+        party: null,
+        account: null,
+        taxCode: null,
+        paid: false,
+      }),
+    ).toBe("invoice");
+    expect(
+      effectiveIncomeMode(sugg({ direction: "income", paid: false }), {
+        party: null,
+        account: null,
+        taxCode: null,
+        paid: true,
+      }),
+    ).toBe("salesreceipt");
+  });
+  it("is always 'invoice' for expense AND unknown direction", () => {
+    expect(
+      effectiveIncomeMode(sugg({ direction: "expense", paid: true }), null),
+    ).toBe("invoice");
+    expect(
+      effectiveIncomeMode(sugg({ direction: "unknown", paid: true }), null),
+    ).toBe("invoice");
   });
 });

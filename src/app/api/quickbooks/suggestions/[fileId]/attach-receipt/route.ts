@@ -13,7 +13,10 @@ import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getDraftForFile } from "@/lib/db/quickbooks-suggestions";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
-import { effectiveExpenseMode } from "@/lib/quickbooks/draft-resolve";
+import {
+  effectiveExpenseMode,
+  effectiveIncomeMode,
+} from "@/lib/quickbooks/draft-resolve";
 import { attachReceiptToPostedDraft } from "@/lib/quickbooks/post";
 import { logUserActivity } from "@/lib/db/activity";
 
@@ -89,16 +92,21 @@ export async function POST(
   // points at a transaction that was already in QuickBooks, whose type can
   // DIFFER from what this draft would have created (e.g. the draft says unpaid
   // Bill but the accountant confirmed a match to a paid Expense) — the stored
-  // matched type wins. Otherwise: income -> Invoice; a PAID expense ->
-  // Purchase; an unpaid expense -> Bill, mirroring the branch in post.ts / the
-  // void route exactly (effectiveExpenseMode).
+  // matched type wins. Otherwise: PAID income -> SalesReceipt, unpaid income ->
+  // Invoice; a PAID expense -> Purchase, an unpaid expense -> Bill, mirroring
+  // the branch in post.ts / the void route exactly (effectiveIncomeMode /
+  // effectiveExpenseMode).
   const entity =
     draft.matchedQboType === "bill" ||
     draft.matchedQboType === "purchase" ||
-    draft.matchedQboType === "invoice"
+    draft.matchedQboType === "invoice" ||
+    draft.matchedQboType === "salesreceipt"
       ? draft.matchedQboType
       : draft.suggestion?.direction === "income"
-        ? "invoice"
+        ? effectiveIncomeMode(draft.suggestion, draft.resolved) ===
+          "salesreceipt"
+          ? "salesreceipt"
+          : "invoice"
         : draft.suggestion &&
             effectiveExpenseMode(draft.suggestion, draft.resolved) ===
               "purchase"

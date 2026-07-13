@@ -219,6 +219,50 @@ const CANDIDATE: RegisterCandidate = {
   currency: null,
 };
 
+// A minimal fully-postable PAID INCOME draft (posts a SalesReceipt): customer +
+// item matched, no tax on the document, valid ISO date, paid=true.
+const INCOME_SUGGESTION = {
+  direction: "income",
+  partyKind: "customer",
+  party: {
+    match: { id: "C1", name: "Lumen Studio", active: true },
+    confidence: 0.9,
+    candidates: [],
+  },
+  account: { match: null, confidence: 0, candidates: [] },
+  item: {
+    match: { id: "I1", name: "Consulting", active: true },
+    confidence: 0.9,
+    candidates: [],
+  },
+  taxCode: { match: null, confidence: 0, candidates: [] },
+  amount: 320,
+  subtotal: null,
+  taxTotal: null,
+  date: "2026-07-02",
+  currency: "CAD",
+  paid: true,
+  partySource: "Lumen Studio",
+  overallConfidence: 0.85,
+  notes: [],
+} as never;
+
+const INCOME_DRAFT = {
+  engagementId: "e1",
+  firmId: "f1",
+  suggestion: INCOME_SUGGESTION,
+  resolved: null,
+  status: "approved",
+  postReady: true,
+  postedQboId: null,
+  postedSyncToken: null,
+  postAttempt: 0,
+  receiptAttachedAt: null,
+  attachReady: true,
+  matchedQboType: null,
+  matchReady: true,
+} as never;
+
 function primePostableDraft() {
   mockGetDraft.mockResolvedValue(DRAFT);
   mockLists.mockResolvedValue(null);
@@ -442,6 +486,62 @@ describe("postApprovedDraft — smart match-or-create", () => {
     expect(r.postedQboId).toBe("500");
     expect(mockRecordPosted).toHaveBeenCalledWith(
       expect.not.objectContaining({ matchedQboType: expect.anything() }),
+    );
+  });
+});
+
+describe("postApprovedDraft — income posts a SalesReceipt vs an Invoice", () => {
+  beforeEach(() => {
+    primePostableDraft();
+    mockGetDraft.mockResolvedValue(INCOME_DRAFT);
+    // No existing match → a clean create for both cases below.
+    mockFind.mockResolvedValue({ candidates: [], truncated: false });
+    mockClassify.mockReturnValue({ kind: "none" });
+  });
+
+  it("creates a SalesReceipt (not an Invoice) for a PAID sale and attaches to it", async () => {
+    const r = await postApprovedDraft("file-9", "user-1");
+
+    expect(r.kind).toBe("posted");
+    expect(r.postedQboId).toBe("500");
+    // The paid sale posts as a SalesReceipt, under the fileId-attempt requestid.
+    expect(mockCreate).toHaveBeenCalledWith(
+      READ_CTX,
+      "salesreceipt",
+      expect.any(Object),
+      "file-9-0",
+    );
+    // Both income registers are searched for a duplicate (Invoice + SalesReceipt).
+    expect(mockFind).toHaveBeenCalledWith(
+      READ_CTX,
+      expect.objectContaining({ entities: ["invoice", "salesreceipt"] }),
+    );
+    // The source document lands on the SalesReceipt that was just created.
+    expect(mockUpload).toHaveBeenCalledWith(
+      READ_CTX,
+      "salesreceipt",
+      "500",
+      expect.anything(),
+    );
+  });
+
+  it("posts an Invoice when the SAME sale is left UNPAID", async () => {
+    mockGetDraft.mockResolvedValue({
+      ...(INCOME_DRAFT as Record<string, unknown>),
+      suggestion: {
+        ...(INCOME_SUGGESTION as Record<string, unknown>),
+        paid: false,
+      },
+    } as never);
+
+    const r = await postApprovedDraft("file-9", "user-1");
+
+    expect(r.kind).toBe("posted");
+    expect(mockCreate).toHaveBeenCalledWith(
+      READ_CTX,
+      "invoice",
+      expect.any(Object),
+      "file-9-0",
     );
   });
 });

@@ -207,6 +207,39 @@ describe("findRegisterCandidates", () => {
     });
   });
 
+  it("reads SalesReceipt (paid income) candidates from the SalesReceipt table via CustomerRef", async () => {
+    mockQuery.mockImplementation(async (_t, _r, sql) => {
+      if (sql.includes("FROM SalesReceipt")) {
+        return {
+          SalesReceipt: [
+            purchaseRow({
+              Id: "30",
+              EntityRef: undefined,
+              CustomerRef: { value: "C9", name: "Lumen Studio" },
+            }),
+          ],
+        };
+      }
+      return {};
+    });
+
+    const r = await findRegisterCandidates(ctx, {
+      entities: ["salesreceipt"],
+      date: "2026-07-01",
+      windowDays: 5,
+      amount: 45.2,
+      excludeQboIds: new Set(),
+    });
+
+    expect(mockQuery.mock.calls[0]![2]).toContain("FROM SalesReceipt");
+    expect(r.candidates[0]).toMatchObject({
+      qboId: "30",
+      entity: "salesreceipt",
+      vendorId: "C9",
+      vendorName: "Lumen Studio",
+    });
+  });
+
   it("flags truncation when a query hits the page cap", async () => {
     const page = Array.from({ length: 1000 }, (_, i) =>
       purchaseRow({ Id: String(i), TotalAmt: 1 }),

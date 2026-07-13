@@ -17,7 +17,10 @@ import {
 } from "@/lib/db/quickbooks-suggestions";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
 import { quickbooksDelete, QuickbooksError } from "@/lib/quickbooks/client";
-import { effectiveExpenseMode } from "@/lib/quickbooks/draft-resolve";
+import {
+  effectiveExpenseMode,
+  effectiveIncomeMode,
+} from "@/lib/quickbooks/draft-resolve";
 import { logUserActivity } from "@/lib/db/activity";
 
 export const runtime = "nodejs";
@@ -80,13 +83,16 @@ export async function POST(
   // transaction, and any receipt already attached to it in QuickBooks, stays).
   const matched = draft.matchedQboType != null;
   if (!matched) {
-    // Match the entity we posted: income -> Invoice; a PAID expense ->
-    // Purchase; an unpaid expense -> Bill. Deleting via the wrong endpoint
-    // fails, so this must mirror the branch in post.ts exactly
-    // (effectiveExpenseMode).
+    // Match the entity we posted: PAID income -> SalesReceipt, unpaid income ->
+    // Invoice; a PAID expense -> Purchase, an unpaid expense -> Bill. Deleting
+    // via the wrong endpoint fails, so this must mirror the branch in post.ts
+    // exactly (effectiveIncomeMode / effectiveExpenseMode).
     const entity =
       draft.suggestion?.direction === "income"
-        ? "invoice"
+        ? effectiveIncomeMode(draft.suggestion, draft.resolved) ===
+          "salesreceipt"
+          ? "salesreceipt"
+          : "invoice"
         : draft.suggestion &&
             effectiveExpenseMode(draft.suggestion, draft.resolved) ===
               "purchase"

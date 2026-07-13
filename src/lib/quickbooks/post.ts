@@ -38,6 +38,7 @@ import {
   effectiveMapping,
   effectiveDate,
   effectiveExpenseMode,
+  effectiveIncomeMode,
   effectiveSplit,
   effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
@@ -45,6 +46,7 @@ import {
   buildBillPayload,
   checkBillPostable,
   buildInvoicePayload,
+  buildSalesReceiptPayload,
   checkInvoicePostable,
   buildPurchasePayload,
   checkPurchasePostable,
@@ -214,10 +216,13 @@ export async function postApprovedDraft(
     expenseAccount = effLines[0]!.account;
   }
 
-  // Branch: INCOME posts an Invoice (item line). An EXPENSE posts either a
-  // PURCHASE (already paid — against a bank/credit-card account) or a BILL (unpaid
-  // payable), decided by effectiveExpenseMode. All validate against CURRENT lists.
-  let entity: "bill" | "invoice" | "purchase";
+  // Branch: INCOME posts a SALESRECEIPT (already paid — income received) or an
+  // INVOICE (unpaid — the customer owes), decided by effectiveIncomeMode. An
+  // EXPENSE posts a PURCHASE (already paid — against a bank/credit-card account)
+  // or a BILL (unpaid payable), decided by effectiveExpenseMode. Both income
+  // shapes need the same fields (customer + item + amount), so they share the
+  // postability check. All validate against CURRENT lists.
+  let entity: "bill" | "invoice" | "purchase" | "salesreceipt";
   let payload: Record<string, unknown>;
   if (s.direction === "income") {
     const problems = checkInvoicePostable({
@@ -230,15 +235,21 @@ export async function postApprovedDraft(
     if (problems.length > 0 || !eff.party || !eff.item || s.amount == null) {
       return { kind: "not_postable", ...base, problems };
     }
-    entity = "invoice";
-    payload = buildInvoicePayload({
+    const incomeInput = {
       customerId: eff.party.id,
       itemId: eff.item.id,
       amount: s.amount,
       date: effDate,
       memo: "Posted from Vylan",
       tax,
-    });
+    };
+    if (effectiveIncomeMode(s, draft.resolved) === "salesreceipt") {
+      entity = "salesreceipt";
+      payload = buildSalesReceiptPayload(incomeInput);
+    } else {
+      entity = "invoice";
+      payload = buildInvoicePayload(incomeInput);
+    }
   } else if (effectiveExpenseMode(s, draft.resolved) === "purchase") {
     const problems = checkPurchasePostable({
       direction: s.direction,
@@ -324,7 +335,9 @@ export async function postApprovedDraft(
   // Expense (bank-feed accept) OR a Bill (hand-entered) regardless of which one
   // this draft would post.
   const searchEntities: QboTxnEntity[] =
-    s.direction === "income" ? ["invoice"] : ["bill", "purchase"];
+    s.direction === "income"
+      ? ["invoice", "salesreceipt"]
+      : ["bill", "purchase"];
 
   // EXPLICIT ATTACH — the accountant already answered "this IS the existing
   // transaction". This FAILS CLOSED: if we can't re-verify the pick we must NOT

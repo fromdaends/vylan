@@ -463,7 +463,7 @@ export async function recordDraftPosted(input: {
   // matched record must never silently drop the marker, because the void route
   // relies on it to UNLINK instead of deleting a transaction Vylan never
   // created.
-  matchedQboType?: "bill" | "purchase" | "invoice";
+  matchedQboType?: "bill" | "purchase" | "invoice" | "salesreceipt";
   // Smart match (0520): the realm (QuickBooks company) this was posted/matched
   // under, so listFirmPostedQboIds can scope the exclusion set to the live
   // company. Stamped on the widest tier; dropped pre-0520 (matching just stays

@@ -506,12 +506,14 @@ export type QboEntityResult = {
 };
 
 // Transaction entities we post: a Bill (unpaid expense), a Purchase (paid
-// expense), or an Invoice (income). The URL path is lowercase; the JSON response
-// wraps the object under the capitalized name (e.g. { "Invoice": { Id, SyncToken } }).
-export type QboTxnEntity = "bill" | "invoice" | "purchase";
+// expense), an Invoice (income owed), or a SalesReceipt (income already
+// received). The URL path is lowercase; the JSON response wraps the object under
+// the capitalized name (e.g. { "Invoice": { Id, SyncToken } }).
+export type QboTxnEntity = "bill" | "invoice" | "purchase" | "salesreceipt";
 function entityResponseKey(entity: QboTxnEntity): string {
   if (entity === "invoice") return "Invoice";
   if (entity === "purchase") return "Purchase";
+  if (entity === "salesreceipt") return "SalesReceipt";
   return "Bill";
 }
 

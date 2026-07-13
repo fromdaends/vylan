@@ -220,19 +220,18 @@ export type InvoiceInput = {
   tax?: TaxApplication | null;
 };
 
-// Build the minimal valid QuickBooks Invoice body for one approved income draft.
-// Income lines post to a product/service ITEM (SalesItemLineDetail), not an
-// account; the tax code (when applied) rides on the same line detail.
-export function buildInvoicePayload(
-  input: InvoiceInput,
-): Record<string, unknown> {
+// Shared body for the two income transactions (Invoice = owed, SalesReceipt =
+// already received): both post ONE product/service ITEM line
+// (SalesItemLineDetail, not an account) against a CustomerRef, with the tax code
+// on the line detail + the mandatory transaction-level TxnTaxCodeRef.
+function buildIncomeTxnBody(input: InvoiceInput): Record<string, unknown> {
   const tax = input.tax ?? null;
   const lineAmount = round2(tax ? tax.netAmount : input.amount);
   const lineDetail: Record<string, unknown> = {
     ItemRef: { value: input.itemId },
   };
   if (tax) lineDetail.TaxCodeRef = { value: tax.taxCodeId };
-  const invoice: Record<string, unknown> = {
+  const body: Record<string, unknown> = {
     CustomerRef: { value: input.customerId },
     Line: [
       {
@@ -247,14 +246,33 @@ export function buildInvoicePayload(
     // to QuickBooks. Without it an AST company (all modern QBO companies, incl.
     // Canada) returns error 6000 "encountered an error while calculating tax".
     // QBO then computes the tax from the line's TaxCodeRef.
-    invoice.TxnTaxDetail = { TxnTaxCodeRef: { value: tax.taxCodeId } };
+    body.TxnTaxDetail = { TxnTaxCodeRef: { value: tax.taxCodeId } };
     if (tax.globalTaxCalculation) {
-      invoice.GlobalTaxCalculation = tax.globalTaxCalculation;
+      body.GlobalTaxCalculation = tax.globalTaxCalculation;
     }
   }
-  if (input.date) invoice.TxnDate = input.date;
-  if (input.memo) invoice.PrivateNote = input.memo;
-  return invoice;
+  if (input.date) body.TxnDate = input.date;
+  if (input.memo) body.PrivateNote = input.memo;
+  return body;
+}
+
+// Build the minimal valid QuickBooks Invoice body for one approved (unpaid)
+// income draft — the customer still owes the money.
+export function buildInvoicePayload(
+  input: InvoiceInput,
+): Record<string, unknown> {
+  return buildIncomeTxnBody(input);
+}
+
+// Build a QuickBooks SalesReceipt body for one approved PAID income draft — the
+// money was already received. Same shape as an Invoice; we deliberately OMIT
+// DepositToAccountRef, so QuickBooks records the deposit to the company's
+// Undeposited Funds account by default (the accountant groups it into a real
+// deposit later) — no bank account is required to post, unlike a paid expense.
+export function buildSalesReceiptPayload(
+  input: InvoiceInput,
+): Record<string, unknown> {
+  return buildIncomeTxnBody(input);
 }
 
 // QuickBooks payment types we produce for a Purchase. Derived from the paid-from
