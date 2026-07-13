@@ -50,6 +50,7 @@ import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import type { LearnedMappings } from "@/lib/quickbooks/suggest";
+import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { RejectModal } from "@/components/engagements/reject-modal";
 import { ReopenFileButton } from "@/components/engagements/reopen-file-button";
@@ -275,7 +276,11 @@ export default async function EngagementDetailPage({
     vendors: (qboLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
     customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
     accounts: (qboLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
-    taxCodes: (qboLists?.taxCodes ?? []).filter((x) => x.active).map(toOpt),
+    // Exclude QuickBooks "adjustment" tax codes: they have no purchase/sales rate
+    // and QuickBooks rejects them on a transaction (tax-calc ValidationFault 6000).
+    taxCodes: (qboLists?.taxCodes ?? [])
+      .filter((x) => x.active && isSelectableTaxCode(x.name))
+      .map(toOpt),
     items: (qboLists?.items ?? []).filter((x) => x.active).map(toOpt),
     paymentAccounts: (qboLists?.accounts ?? [])
       .filter((x) => x.active && isPayFrom(x.accountType))
