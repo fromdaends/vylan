@@ -13,6 +13,7 @@ export function PortalFinalDocuments({
   docs,
   token,
   locked,
+  justReturnedPaid,
 }: {
   docs: {
     id: string;
@@ -21,12 +22,17 @@ export function PortalFinalDocuments({
   }[];
   token: string;
   locked: boolean;
+  // True right after returning from a successful Stripe checkout (?paid=1). The
+  // page reconciles the invoice to paid on this same request, so optimistically
+  // unlock the card (the gated download route will already allow the bytes).
+  justReturnedPaid: boolean;
 }) {
   const t = useTranslations("Portal");
   if (docs.length === 0) return null;
   const enc = encodeURIComponent(token);
+  const effectiveLocked = locked && !justReturnedPaid;
 
-  if (locked) {
+  if (effectiveLocked) {
     return (
       <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
         <div className="flex items-center gap-2.5">

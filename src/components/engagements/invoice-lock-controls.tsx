@@ -2,10 +2,8 @@ import { getTranslations } from "next-intl/server";
 import { Lock, Unlock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  unlockDeliverablesAction,
-  waiveInvoiceAction,
-} from "@/app/actions/invoices";
+import { unlockDeliverablesAction } from "@/app/actions/invoices";
+import { WaiveInvoiceButton } from "@/components/engagements/waive-invoice-button";
 
 // Accountant controls for a live (unpaid) invoice's deliverables lock: a lock
 // status badge plus the always-available manual escape hatches — "Unlock without
@@ -52,12 +50,7 @@ export async function InvoiceLockControls({
           </Button>
         </form>
       )}
-      <form action={waiveInvoiceAction}>
-        <input type="hidden" name="engagement_id" value={engagementId} />
-        <Button type="submit" variant="ghost" size="sm">
-          {t("lock_waive")}
-        </Button>
-      </form>
+      <WaiveInvoiceButton engagementId={engagementId} />
     </div>
   );
 }

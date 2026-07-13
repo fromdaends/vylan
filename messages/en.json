@@ -1226,6 +1226,7 @@
     "lock_badge_unlocked": "Unlocked without payment",
     "lock_unlock": "Unlock without payment",
     "lock_waive": "Waive invoice",
+    "lock_waive_confirm": "Waive this invoice? The client can no longer pay it, and you'd need to create a new one to bill again.",
     "sig_status_sent": "Sent to client",
     "sig_status_returned": "Signed copy returned",
     "sig_status_signed": "Signed",

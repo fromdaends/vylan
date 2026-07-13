@@ -46,14 +46,40 @@ export function isDeliverablesLocked(lock: DeliverableLockState): boolean {
   return lock.invoiceStatus === "requested" || lock.invoiceStatus === "failed";
 }
 
+// The EFFECTIVE lock decision used by both the download route and the portal, so
+// they can never disagree. When an invoice row exists, its state decides (above).
+// When NO invoice row exists yet — the deferred modes (on_completion / delayed)
+// create the payment_requests row late, and a create-now invoice can fail to
+// record — we fall back to the engagement's captured lock preference: nothing is
+// paid, so the finished work stays gated. This also makes the enforcement gate
+// fail CLOSED if the invoice read errors (null invoice → engagement preference).
+export function computeDeliverablesLocked(input: {
+  invoice: {
+    locks_deliverables?: boolean;
+    status: InvoiceStatus;
+    override_unlocked?: boolean;
+  } | null;
+  engagementLocksDeliverables: boolean;
+}): boolean {
+  if (input.invoice) {
+    return isDeliverablesLocked({
+      locksDeliverables: input.invoice.locks_deliverables === true,
+      invoiceStatus: input.invoice.status,
+      overrideUnlocked: input.invoice.override_unlocked === true,
+    });
+  }
+  return input.engagementLocksDeliverables === true;
+}
+
 export function isDeliverableDownloadAllowed(input: {
   tokenShapeValid: boolean;
   engagement: PortalEngagementRow;
   // The requested final-document row (carries engagement_id), or null if no row
   // matched that id.
   deliverable: { engagement_id: string } | null;
-  // The lock state, or null when not evaluated (Phase 3 → always unlocked).
-  lock?: DeliverableLockState;
+  // The effective lock decision (from computeDeliverablesLocked). Defaults to
+  // false (Phase 3 called it with no lock).
+  locked?: boolean;
   now?: Date;
 }): boolean {
   // Reuse the exact portal access check (token/engagement/ownership) — a
@@ -68,7 +94,7 @@ export function isDeliverableDownloadAllowed(input: {
   ) {
     return false;
   }
-  // Then the lock: a locked deliverable is inaccessible even to a valid token.
-  if (isDeliverablesLocked(input.lock ?? null)) return false;
+  // A locked deliverable is inaccessible even to a valid token.
+  if (input.locked === true) return false;
   return true;
 }

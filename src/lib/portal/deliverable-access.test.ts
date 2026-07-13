@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isDeliverablesLocked,
+  computeDeliverablesLocked,
   isDeliverableDownloadAllowed,
   type DeliverableLockState,
 } from "./deliverable-access";
@@ -145,33 +146,71 @@ describe("isDeliverableDownloadAllowed", () => {
     ).toBe(false);
   });
 
-  it("denies an otherwise-valid request when the deliverables are locked (unpaid)", () => {
+  it("denies an otherwise-valid request when locked is true", () => {
     expect(
       isDeliverableDownloadAllowed({
         tokenShapeValid: true,
         engagement: ENG,
         deliverable: DELIVERABLE,
-        lock: {
-          locksDeliverables: true,
-          invoiceStatus: "requested",
-          overrideUnlocked: false,
-        },
+        locked: true,
       }),
     ).toBe(false);
   });
 
-  it("allows when locked-flag set but invoice paid", () => {
+  it("allows when locked is false (or omitted)", () => {
     expect(
       isDeliverableDownloadAllowed({
         tokenShapeValid: true,
         engagement: ENG,
         deliverable: DELIVERABLE,
-        lock: {
-          locksDeliverables: true,
-          invoiceStatus: "paid",
-          overrideUnlocked: false,
-        },
+        locked: false,
       }),
     ).toBe(true);
+  });
+});
+
+describe("computeDeliverablesLocked (effective lock: invoice row or engagement fallback)", () => {
+  it("uses the invoice row when one exists (unpaid + locks → locked)", () => {
+    expect(
+      computeDeliverablesLocked({
+        invoice: {
+          locks_deliverables: true,
+          status: "requested",
+          override_unlocked: false,
+        },
+        engagementLocksDeliverables: false,
+      }),
+    ).toBe(true);
+  });
+
+  it("unlocks once the invoice row is paid (ignores engagement preference)", () => {
+    expect(
+      computeDeliverablesLocked({
+        invoice: {
+          locks_deliverables: true,
+          status: "paid",
+          override_unlocked: false,
+        },
+        engagementLocksDeliverables: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("LOCKS on the engagement fallback when no invoice row exists yet (deferred invoice)", () => {
+    expect(
+      computeDeliverablesLocked({
+        invoice: null,
+        engagementLocksDeliverables: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("unlocks when no invoice row and the engagement doesn't lock", () => {
+    expect(
+      computeDeliverablesLocked({
+        invoice: null,
+        engagementLocksDeliverables: false,
+      }),
+    ).toBe(false);
   });
 });

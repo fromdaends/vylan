@@ -17,7 +17,7 @@ import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
 import { BUCKET } from "@/lib/storage";
 import { listFinalDocumentsForEngagementSR } from "@/lib/db/final-documents";
-import { isDeliverablesLocked } from "@/lib/portal/deliverable-access";
+import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 
 const TOKEN_REGEX = /^[0-9A-Za-z]{43}$/;
 
@@ -247,22 +247,33 @@ export async function loadPortalContext(
       }
     : null;
 
-  // Whether the final documents are locked (Phase 4). Read the invoice's lock
-  // fields best-effort (a separate select so a pre-0610 env just yields "not
-  // locked" instead of dropping the payment card), then apply the shared rule.
-  let finalDocumentsLocked = false;
+  // Whether the final documents are locked (Phase 4), via the shared rule so the
+  // portal and the download route never disagree. When an invoice row exists, its
+  // lock fields decide (read best-effort so a pre-0610 env just yields "not
+  // locked" rather than dropping the payment card); when none exists yet (deferred
+  // invoice), fall back to the engagement's captured lock preference.
+  let lockRow: { locks_deliverables?: boolean; override_unlocked?: boolean } | null =
+    null;
   if (pr) {
-    const { data: lockRow } = await sb
+    const { data } = await sb
       .from("payment_requests")
       .select("locks_deliverables, override_unlocked")
       .eq("id", pr.id as string)
       .maybeSingle();
-    finalDocumentsLocked = isDeliverablesLocked({
-      locksDeliverables: lockRow?.locks_deliverables === true,
-      invoiceStatus: pr.status as "requested" | "paid" | "failed" | "canceled",
-      overrideUnlocked: lockRow?.override_unlocked === true,
-    });
+    lockRow = data;
   }
+  const finalDocumentsLocked = computeDeliverablesLocked({
+    invoice: pr
+      ? {
+          locks_deliverables: lockRow?.locks_deliverables === true,
+          status: pr.status as "requested" | "paid" | "failed" | "canceled",
+          override_unlocked: lockRow?.override_unlocked === true,
+        }
+      : null,
+    engagementLocksDeliverables:
+      (engagement as { invoice_locks_deliverables?: boolean })
+        .invoice_locks_deliverables === true,
+  });
 
   // SignWell status per signature item, for the portal signature card. Tolerant
   // of the table being absent before migration 0400 (data stays empty on error).

@@ -1226,6 +1226,7 @@
     "lock_badge_unlocked": "Déverrouillé sans paiement",
     "lock_unlock": "Déverrouiller sans paiement",
     "lock_waive": "Annuler la facture",
+    "lock_waive_confirm": "Annuler cette facture? Le client ne pourra plus la payer et vous devrez en créer une nouvelle pour facturer à nouveau.",
     "sig_status_sent": "Envoyé au client",
     "sig_status_returned": "Copie signée reçue",
     "sig_status_signed": "Signé",

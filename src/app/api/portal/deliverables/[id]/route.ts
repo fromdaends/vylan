@@ -16,7 +16,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isValidTokenShape } from "@/lib/db/portal";
 import {
   isDeliverableDownloadAllowed,
-  type DeliverableLockState,
+  computeDeliverablesLocked,
 } from "@/lib/portal/deliverable-access";
 import { getFinalDocumentForDownloadSR } from "@/lib/db/final-documents";
 import { getLatestPaymentRequestForEngagementSR } from "@/lib/db/payment-requests";
@@ -67,24 +67,25 @@ export async function GET(
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb
     .from("engagements")
-    .select("id, status, magic_expires_at")
+    .select("id, status, magic_expires_at, invoice_locks_deliverables")
     .eq("magic_token", token)
     .maybeSingle();
   const deliverable = await getFinalDocumentForDownloadSR(id);
 
-  // The deliverables lock: gate the download when the engagement's invoice locks
-  // the finished work and is still unpaid (and not overridden). Read the current
-  // invoice from trusted server state (never the client). Null → not locked.
-  let lock: DeliverableLockState = null;
+  // The deliverables lock: gate the download when the finished work is locked and
+  // unpaid. Derived from trusted server state (never the client): the current
+  // invoice row when one exists, else the engagement's captured lock preference
+  // (deferred invoices create the row late — the lock must still hold, and this
+  // makes a payment-read failure fail CLOSED rather than serve a locked file).
+  let locked = false;
   if (engagement?.id) {
     const invoice = await getLatestPaymentRequestForEngagementSR(engagement.id);
-    if (invoice) {
-      lock = {
-        locksDeliverables: invoice.locks_deliverables === true,
-        invoiceStatus: invoice.status,
-        overrideUnlocked: invoice.override_unlocked === true,
-      };
-    }
+    locked = computeDeliverablesLocked({
+      invoice,
+      engagementLocksDeliverables:
+        (engagement as { invoice_locks_deliverables?: boolean })
+          .invoice_locks_deliverables === true,
+    });
   }
 
   if (
@@ -96,7 +97,7 @@ export async function GET(
       deliverable: deliverable
         ? { engagement_id: deliverable.engagement_id }
         : null,
-      lock,
+      locked,
     })
   ) {
     return notFound();

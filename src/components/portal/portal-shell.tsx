@@ -236,6 +236,7 @@ export function PortalShell({
             docs={ctx.final_documents}
             token={ctx.engagement.magic_token ?? ""}
             locked={ctx.final_documents_locked}
+            justReturnedPaid={justReturnedPaid}
           />
         )}
         {effectiveView === "hub" ? (

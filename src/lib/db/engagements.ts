@@ -213,7 +213,15 @@ export async function createEngagementWithItems(
         invoice_amount_cents: input.invoice_amount_cents ?? null,
       }
     : {};
-  const invoiceCols610 = automationOn
+  // Persist the lock preference + description whenever the accountant set them —
+  // not only for the deferred (automation) modes but also for a "create now"
+  // invoice (auto_mode 'off'), so the deliverables-lock fallback can gate the
+  // finished work even if the create-now invoice row failed to record.
+  const wants610 =
+    automationOn ||
+    input.invoice_locks_deliverables === true ||
+    (input.invoice_description != null && input.invoice_description !== "");
+  const invoiceCols610 = wants610
     ? {
         invoice_locks_deliverables: input.invoice_locks_deliverables ?? false,
         invoice_description: input.invoice_description ?? null,
