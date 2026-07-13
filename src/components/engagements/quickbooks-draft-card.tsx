@@ -442,6 +442,17 @@ export async function QuickbooksDraftCard({
         </p>
       )}
 
+      {/* No QuickBooks tax code matches this receipt's tax(es): e.g. a Quebec
+          GST+QST receipt when the firm has no single combined code. Warn BEFORE
+          posting so the accountant adds/picks the right code instead of posting a
+          total that silently omits the tax. */}
+      {v.hasTax && suggestion.taxCode && !suggestion.taxCode.match && (
+        <p className="mt-2 flex items-start gap-1 px-3 text-[11px] text-warning">
+          <TriangleAlert className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
+          {t("tax_no_match")}
+        </p>
+      )}
+
       {/* Footer: while a draft, Refresh + Approve/Dismiss. Once approved or
           dismissed, who decided it + when, plus Reopen. */}
       <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-t border-border/40 px-3 py-2">
