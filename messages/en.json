@@ -2074,6 +2074,8 @@
     "pick_search": "Search…",
     "pick_empty": "No match.",
     "pick_clear": "Clear",
+    "pick_suggested": "Suggested",
+    "pick_source_label": "On the document:",
     "status_draft": "Draft",
     "status_approved": "Approved",
     "status_dismissed": "Dismissed",

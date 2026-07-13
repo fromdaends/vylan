@@ -145,6 +145,24 @@ export async function QuickbooksDraftCard({
   const partyOptions =
     v.partyKind === "customer" ? options.customers : options.vendors;
 
+  // The AI's ranked best-guess matches for a field, as picker options — surfaced
+  // in a "Suggested" group atop the list so the likely pick is one click away.
+  // The mapper already scored + ranked these (MatchField.candidates), but it can
+  // include INACTIVE entities (bestMatches keeps them, just ranked lower) while
+  // the picker's full list is active-only. Intersect with the active `list` so a
+  // suggestion is never an un-pickable, un-postable deactivated vendor/account,
+  // AND take the NAME from the fresh list (candidate names are a scan-time
+  // snapshot that can be stale if the entity was renamed in QuickBooks since).
+  const candidateOptions = (
+    field: { candidates: { id: string; name: string }[] } | undefined,
+    list: PickOption[],
+  ): PickOption[] => {
+    const nameById = new Map(list.map((o) => [o.id, o.name]));
+    return (field?.candidates ?? [])
+      .filter((c) => nameById.has(c.id))
+      .map((c) => ({ id: c.id, name: nameById.get(c.id)! }));
+  };
+
   // State pill in the header.
   const statusPill =
     status === "posted"
@@ -297,6 +315,8 @@ export async function QuickbooksDraftCard({
           initial={eff.party}
           choosePrompt={partyChoose}
           disabled={!isDraft}
+          sourceHint={suggestion.partySource ?? null}
+          suggested={candidateOptions(suggestion.party, partyOptions)}
         />
         {/* Income lines post to a product/service ITEM (QuickBooks Invoice);
             expenses post to an account (Bill/Expense). When an expense is SPLIT
@@ -312,6 +332,7 @@ export async function QuickbooksDraftCard({
             initial={eff.item}
             choosePrompt={t("choose_item")}
             disabled={!isDraft}
+            suggested={candidateOptions(suggestion.item, options.items)}
           />
         ) : isSplit ? null : (
           <QuickbooksEditableField
@@ -323,6 +344,7 @@ export async function QuickbooksDraftCard({
             initial={eff.account}
             choosePrompt={t("choose_account")}
             disabled={!isDraft}
+            suggested={candidateOptions(suggestion.account, options.accounts)}
           />
         )}
         {v.hasTax && (
@@ -335,6 +357,7 @@ export async function QuickbooksDraftCard({
             initial={eff.taxCode}
             choosePrompt={t("confirm_tax")}
             disabled={!isDraft}
+            suggested={candidateOptions(suggestion.taxCode, options.taxCodes)}
           />
         )}
       </div>
@@ -377,6 +400,10 @@ export async function QuickbooksDraftCard({
               initial={eff.paymentAccount}
               choosePrompt={t("choose_paid_from")}
               disabled={!isDraft}
+              suggested={candidateOptions(
+                suggestion.paymentAccount,
+                options.paymentAccounts,
+              )}
             />
           )}
         </div>

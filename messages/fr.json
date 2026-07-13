@@ -2074,6 +2074,8 @@
     "pick_search": "Rechercher…",
     "pick_empty": "Aucun résultat.",
     "pick_clear": "Effacer",
+    "pick_suggested": "Suggestions",
+    "pick_source_label": "Sur le document :",
     "status_draft": "Brouillon",
     "status_approved": "Approuvé",
     "status_dismissed": "Ignoré",
