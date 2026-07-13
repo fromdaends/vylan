@@ -370,7 +370,11 @@ export function AssistantPanel({
           } as CSSProperties
         }
         className={cn(
-          "fixed inset-y-0 right-0 z-[45] flex w-full flex-col overflow-hidden bg-black text-white outline-none",
+          // The assistant is an intentionally black surface in both app
+          // themes. Scope dark semantic color tokens to the panel so
+          // text-foreground/text-muted-foreground remain legible when the
+          // surrounding app is using light mode.
+          "dark fixed inset-y-0 right-0 z-[45] flex w-full flex-col overflow-hidden bg-black text-white outline-none",
           "sm:inset-y-2 sm:right-2 sm:w-[var(--assistant-w)] sm:rounded-2xl sm:border sm:border-white/10",
           "sm:shadow-[-18px_0_48px_-28px_rgba(0,0,0,0.75),0_18px_50px_-30px_rgba(0,0,0,0.8)]",
           dragging
