@@ -16,6 +16,7 @@ import {
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import { summarizeDrafts } from "@/lib/quickbooks/draft-summary";
+import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import {
   countQueueBuckets,
   draftQueueBucket,
@@ -182,7 +183,11 @@ export default async function QuickbooksDraftsPage({
     vendors: (qboLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
     customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
     accounts: (qboLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
-    taxCodes: (qboLists?.taxCodes ?? []).filter((x) => x.active).map(toOpt),
+    // Exclude QuickBooks "adjustment" tax codes: they have no purchase/sales rate
+    // and QuickBooks rejects them on a transaction (tax-calc ValidationFault 6000).
+    taxCodes: (qboLists?.taxCodes ?? [])
+      .filter((x) => x.active && isSelectableTaxCode(x.name))
+      .map(toOpt),
     items: (qboLists?.items ?? []).filter((x) => x.active).map(toOpt),
     paymentAccounts: (qboLists?.accounts ?? [])
       .filter((x) => x.active && isPayFrom(x.accountType))
