@@ -118,6 +118,82 @@ describe("QuickbooksEditableField — AI hints", () => {
     expect(screen.getByText("Staples")).toBeTruthy();
   });
 
+  it("offers + Create for a typed name that isn't in the list, and saves the new entity", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/api/quickbooks/entities")) {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            entity: { id: "V99", name: "Northline Office" },
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ ok: true }) }; // resolve
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderField({ initial: null, createKind: "vendor" });
+    fireEvent.click(screen.getByRole("button", { name: "Pick a vendor" }));
+    fireEvent.change(
+      screen.getByPlaceholderText(en.Quickbooks.pick_search),
+      { target: { value: "Northline Office" } },
+    );
+
+    const createBtn = await screen.findByText(/Create "Northline Office"/);
+    fireEvent.click(createBtn);
+
+    // First the create call, then the resolve (save) call.
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some((c) =>
+          String(c[0]).includes("/api/quickbooks/suggestions/f1/resolve"),
+        ),
+      ).toBe(true),
+    );
+    const createCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/api/quickbooks/entities"),
+    ) as unknown as [string, RequestInit];
+    expect(JSON.parse(createCall[1].body as string)).toEqual({
+      kind: "vendor",
+      name: "Northline Office",
+    });
+    const resolveCall = fetchMock.mock.calls.find((c) =>
+      String(c[0]).includes("/resolve"),
+    ) as unknown as [string, RequestInit];
+    expect(JSON.parse(resolveCall[1].body as string)).toEqual({
+      party: { id: "V99", name: "Northline Office" },
+    });
+  });
+
+  it("does NOT offer + Create when the field isn't creatable (createKind null)", async () => {
+    renderField({ initial: null, createKind: null });
+    fireEvent.click(screen.getByRole("button", { name: "Pick a vendor" }));
+    fireEvent.change(
+      screen.getByPlaceholderText(en.Quickbooks.pick_search),
+      { target: { value: "Brand New Vendor" } },
+    );
+    await waitFor(() =>
+      expect(screen.queryByText(/Create "Brand New Vendor"/)).toBeNull(),
+    );
+  });
+
+  it("does NOT offer + Create when the typed name already exists (case-insensitive)", async () => {
+    renderField({
+      initial: null,
+      createKind: "vendor",
+      options: [{ id: "v1", name: "Home Depot" }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Pick a vendor" }));
+    fireEvent.change(
+      screen.getByPlaceholderText(en.Quickbooks.pick_search),
+      { target: { value: "home depot" } },
+    );
+    await waitFor(() =>
+      expect(screen.queryByText(/Create "home depot"/)).toBeNull(),
+    );
+  });
+
   it("omits an already-chosen option from the Suggested group", async () => {
     renderField({
       initial: { id: "v9", name: "Northline Office" },

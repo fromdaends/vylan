@@ -7,6 +7,7 @@ import {
   Check,
   ChevronsUpDown,
   Loader2,
+  Plus,
   Sparkles,
   TriangleAlert,
 } from "lucide-react";
@@ -44,6 +45,7 @@ export function QuickbooksEditableField({
   disabled = false,
   sourceHint = null,
   suggested = [],
+  createKind = null,
 }: {
   fileId: string;
   field: DraftField;
@@ -64,12 +66,23 @@ export function QuickbooksEditableField({
   // TOP of the picker so the likely pick is one click away instead of buried in
   // the full alphabetical list. Already computed by the mapper (MatchField.candidates).
   suggested?: PickOption[];
+  // When set, the picker offers "+ Create '<typed name>'" to make a brand-new
+  // QuickBooks entity of this kind (a Vendor/Customer for the party field) when
+  // the receipt names one the firm doesn't have yet. Null (the default) = no
+  // create affordance (account/tax/item aren't creatable inline — an account
+  // needs a category type, which is a bookkeeping decision).
+  createKind?: "vendor" | "customer" | null;
 }) {
   const t = useTranslations("Quickbooks");
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState<ResolvedRef | null>(initial);
   const [pending, setPending] = useState(false);
+  // The live search text (captured from cmdk) drives the "+ Create '<name>'"
+  // affordance; `creating` guards it while the QuickBooks write is in flight.
+  const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   async function save(next: ResolvedRef | null) {
     const prev = value;
@@ -92,6 +105,37 @@ export function QuickbooksEditableField({
     }
   }
 
+  // Create a brand-new QuickBooks entity from the typed name, then select it. The
+  // entity is created + cached server-side, so the resolved pick (by id) posts
+  // cleanly; save() persists the pick + refreshes so the fresh cache shows it.
+  async function create(name: string) {
+    if (!createKind || creating) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const r = await fetch("/api/quickbooks/entities", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ kind: createKind, name }),
+      });
+      const res = (await r.json().catch(() => null)) as {
+        ok?: boolean;
+        entity?: { id: string; name: string };
+        detail?: string;
+      } | null;
+      if (r.ok && res?.ok && res.entity) {
+        setQuery("");
+        await save({ id: res.entity.id, name: res.entity.name });
+      } else {
+        setCreateError(res?.detail ?? t("pick_create_error"));
+      }
+    } catch {
+      setCreateError(t("pick_create_error"));
+    } finally {
+      setCreating(false);
+    }
+  }
+
   const empty = value == null;
 
   // The AI's guesses, minus whatever is already chosen, capped so the group stays
@@ -110,6 +154,21 @@ export function QuickbooksEditableField({
   // leaks into search. The suggested rows stay searchable by their own name.
   const suggestedIds = new Set(suggestions.map((s) => s.id));
   const restOptions = options.filter((o) => !suggestedIds.has(o.id));
+
+  // Offer "+ Create '<name>'" only when this field is creatable, something is
+  // typed, it fits QuickBooks' rules, and no existing option already has that
+  // exact name (case-insensitive) — if it exists, they should pick it, not
+  // duplicate it.
+  const typed = query.trim();
+  const nameTaken = [...options, ...suggested].some(
+    (o) => o.name.toLowerCase() === typed.toLowerCase(),
+  );
+  const canCreate =
+    createKind != null &&
+    typed.length > 0 &&
+    typed.length <= 100 &&
+    !typed.includes(":") &&
+    !nameTaken;
 
   // Locked (approved / dismissed draft): a static, muted read-only cell — no
   // popover, no amber prompt. Reopening the draft restores the editable cell.
@@ -136,7 +195,16 @@ export function QuickbooksEditableField({
       <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </div>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (!o) {
+            setQuery("");
+            setCreateError(null);
+          }
+        }}
+      >
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -171,7 +239,10 @@ export function QuickbooksEditableField({
           align="start"
         >
           <Command>
-            <CommandInput placeholder={t("pick_search")} />
+            <CommandInput
+              placeholder={t("pick_search")}
+              onValueChange={setQuery}
+            />
             <CommandList>
               <CommandEmpty>{t("pick_empty")}</CommandEmpty>
               {suggestions.length > 0 && (
@@ -222,6 +293,36 @@ export function QuickbooksEditableField({
               </CommandGroup>
             </CommandList>
           </Command>
+          {/* Create a brand-new QuickBooks entity from the typed name. Lives OUTSIDE
+              the filtered CommandList so it always shows while typing an unknown
+              name (and never gets scored away by the search). */}
+          {canCreate && (
+            <div className="border-t border-border/60 p-1">
+              <button
+                type="button"
+                disabled={creating}
+                onClick={() => create(typed)}
+                className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-foreground hover:bg-accent/10 disabled:opacity-60"
+              >
+                {creating ? (
+                  <Loader2
+                    className="size-4 shrink-0 animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Plus className="size-4 shrink-0 text-accent" aria-hidden="true" />
+                )}
+                <span className="min-w-0 truncate">
+                  {creating ? t("pick_creating") : t("pick_create", { name: typed })}
+                </span>
+              </button>
+            </div>
+          )}
+          {createError && (
+            <p className="border-t border-border/60 px-2.5 py-1.5 text-[11px] text-destructive">
+              {createError}
+            </p>
+          )}
         </PopoverContent>
       </Popover>
       {/* When nothing is chosen yet, remind the accountant what the document
