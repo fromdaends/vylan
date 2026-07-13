@@ -12,6 +12,7 @@ import { WaiveInvoiceButton } from "@/components/engagements/waive-invoice-butto
 export async function InvoiceLockControls({
   engagementId,
   invoice,
+  engagementLocksDeliverables,
 }: {
   engagementId: string;
   invoice: {
@@ -20,14 +21,38 @@ export async function InvoiceLockControls({
     locks_deliverables?: boolean;
     override_unlocked?: boolean;
   } | null;
+  // The engagement's lock preference — drives the fallback-locked state when no
+  // invoice row exists yet (deferred invoice), so the accountant always has an
+  // unlock even before an invoice exists.
+  engagementLocksDeliverables: boolean;
 }) {
   const t = await getTranslations("Engagements");
-  if (!invoice) return null;
-  const live = invoice.status === "requested" || invoice.status === "failed";
-  if (!live) return null;
+  const live =
+    !!invoice &&
+    (invoice.status === "requested" || invoice.status === "failed");
 
-  const locks = invoice.locks_deliverables === true;
-  const overridden = invoice.override_unlocked === true;
+  // No live invoice, but the finished work is fallback-locked by the engagement
+  // preference: still offer the manual unlock (override is always available).
+  if (!live) {
+    if (!engagementLocksDeliverables) return null;
+    return (
+      <div className="flex items-center gap-1.5">
+        <Badge variant="secondary" className="gap-1 font-normal">
+          <Lock className="size-3" aria-hidden />
+          {t("lock_badge_locked")}
+        </Badge>
+        <form action={unlockDeliverablesAction}>
+          <input type="hidden" name="engagement_id" value={engagementId} />
+          <Button type="submit" variant="ghost" size="sm">
+            {t("lock_unlock")}
+          </Button>
+        </form>
+      </div>
+    );
+  }
+
+  const locks = invoice!.locks_deliverables === true;
+  const overridden = invoice!.override_unlocked === true;
   const isLocked = locks && !overridden;
 
   return (

@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getCurrentUser = vi.fn();
 const getCurrentFirm = vi.fn();
+const getEngagement = vi.fn();
+const setEngagementInvoiceLock = vi.fn();
 const getLatestPaymentRequestForEngagement = vi.fn();
 const setPaymentRequestOverrideUnlocked = vi.fn();
 const cancelPaymentRequest = vi.fn();
@@ -10,6 +12,11 @@ const revalidatePath = vi.fn();
 
 vi.mock("@/lib/db/users", () => ({ getCurrentUser: () => getCurrentUser() }));
 vi.mock("@/lib/db/firms", () => ({ getCurrentFirm: () => getCurrentFirm() }));
+vi.mock("@/lib/db/engagements", () => ({
+  getEngagement: (id: string) => getEngagement(id),
+  setEngagementInvoiceLock: (id: string, v: boolean) =>
+    setEngagementInvoiceLock(id, v),
+}));
 vi.mock("@/lib/db/payment-requests", () => ({
   getLatestPaymentRequestForEngagement: (id: string) =>
     getLatestPaymentRequestForEngagement(id),
@@ -43,6 +50,12 @@ beforeEach(() => {
   });
   setPaymentRequestOverrideUnlocked.mockResolvedValue(true);
   cancelPaymentRequest.mockResolvedValue(true);
+  getEngagement.mockResolvedValue({
+    id: ENG_ID,
+    firm_id: FIRM_ID,
+    invoice_locks_deliverables: false,
+  });
+  setEngagementInvoiceLock.mockResolvedValue(true);
 });
 
 describe("unlockDeliverablesAction", () => {
@@ -68,10 +81,29 @@ describe("unlockDeliverablesAction", () => {
     expect(logUserActivity).not.toHaveBeenCalled();
   });
 
-  it("is a no-op when there is no invoice", async () => {
+  it("is a no-op when there is no invoice and the engagement doesn't lock", async () => {
     getLatestPaymentRequestForEngagement.mockResolvedValue(null);
     await unlockDeliverablesAction(fd(ENG_ID));
     expect(setPaymentRequestOverrideUnlocked).not.toHaveBeenCalled();
+    expect(setEngagementInvoiceLock).not.toHaveBeenCalled();
+  });
+
+  it("clears the engagement lock preference when finals are fallback-locked with no invoice row (override always available)", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue(null);
+    getEngagement.mockResolvedValue({
+      id: ENG_ID,
+      firm_id: FIRM_ID,
+      invoice_locks_deliverables: true,
+    });
+    await unlockDeliverablesAction(fd(ENG_ID));
+    expect(setPaymentRequestOverrideUnlocked).not.toHaveBeenCalled();
+    expect(setEngagementInvoiceLock).toHaveBeenCalledWith(ENG_ID, false);
+    expect(logUserActivity).toHaveBeenCalledWith(
+      FIRM_ID,
+      ENG_ID,
+      "invoice_unlocked",
+      expect.anything(),
+    );
   });
 
   it("ignores a missing/invalid engagement id", async () => {

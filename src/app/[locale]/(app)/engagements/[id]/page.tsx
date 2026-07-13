@@ -553,6 +553,9 @@ export default async function EngagementDetailPage({
           <InvoiceLockControls
             engagementId={engagement.id}
             invoice={latestPayment}
+            engagementLocksDeliverables={
+              engagement.invoice_locks_deliverables === true
+            }
           />
           {isComplete && (
             <>
