@@ -16,6 +16,7 @@ import type { SignatureStatus } from "@/lib/signwell/client";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
 import { BUCKET } from "@/lib/storage";
+import { listFinalDocumentsForEngagementSR } from "@/lib/db/final-documents";
 
 const TOKEN_REGEX = /^[0-9A-Za-z]{43}$/;
 
@@ -81,6 +82,18 @@ export type PortalContext = {
   // signature card: "sent"/"viewed" => the client can sign, "completed" => signed.
   // Empty before migration 0400 or when there are no signature items.
   signature_status_by_item: Record<string, SignatureStatus>;
+  // Final documents the accountant has uploaded to return to the client (the
+  // "Your completed documents" section), oldest first. Client-safe fields only;
+  // bytes are served through the gated /api/portal/deliverables route, never an
+  // embedded URL. Empty before migration 0620. A later phase adds the invoice
+  // lock, which gates the client's download of these server-side.
+  final_documents: {
+    id: string;
+    original_filename: string;
+    display_name: string | null;
+    mime_type: string | null;
+    size_bytes: number | null;
+  }[];
 };
 
 export async function loadPortalContext(
@@ -241,6 +254,17 @@ export async function loadPortalContext(
       r.status as SignatureStatus;
   }
 
+  // Final documents (accountant deliverables) for the "Your completed documents"
+  // section. Tolerant of the table being absent before migration 0620.
+  const finalDocRows = await listFinalDocumentsForEngagementSR(engagement.id);
+  const finalDocuments = finalDocRows.map((d) => ({
+    id: d.id,
+    original_filename: d.original_filename,
+    display_name: d.display_name,
+    mime_type: d.mime_type,
+    size_bytes: d.size_bytes,
+  }));
+
   return {
     engagement: engagement as Engagement,
     client: client as Client,
@@ -252,6 +276,7 @@ export async function loadPortalContext(
     accountant_email: accountantEmail,
     payment_request: paymentRequest,
     signature_status_by_item: signatureStatusByItem,
+    final_documents: finalDocuments,
   };
 }
 

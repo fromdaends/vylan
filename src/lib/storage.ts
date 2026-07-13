@@ -191,6 +191,21 @@ export function signedDocPath(parts: {
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/signed/${safeId}.pdf`;
 }
 
+// Storage path for a "final document" (migration 0620): a completed deliverable
+// the accountant uploads to return to the client. Same firm prefix as everything
+// else (so the bucket's firm-scoped RLS applies), in its own `final/` folder,
+// separate from client uploads (items/), signing docs (signing/), and signed
+// copies (signed/).
+export function finalDocPath(parts: {
+  firmId: string;
+  engagementId: string;
+  uuid: string;
+  filename: string;
+}): string {
+  const safeName = safeStorageName(parts.filename);
+  return `firms/${parts.firmId}/engagements/${parts.engagementId}/final/${parts.uuid}-${safeName}`;
+}
+
 export type BrandingKind = "firm_logo" | "user_avatar";
 
 // Storage paths for branding images. Both sit under the firm prefix so the

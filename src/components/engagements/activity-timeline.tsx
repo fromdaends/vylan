@@ -188,6 +188,10 @@ function describe(
       return t("signature_requested", { label: meta.label ?? "—" });
     case "signature_signed":
       return t("signature_signed");
+    case "final_document_uploaded":
+      return t("final_document_uploaded", { filename: meta.filename ?? "—" });
+    case "final_document_removed":
+      return t("final_document_removed");
     case "ai_classified":
       // Filtered out above, but keep the branch so the switch stays
       // exhaustive against future enum additions.

@@ -56,6 +56,9 @@ import { AssistantEngagementBridge } from "@/components/assistant/engagement-pan
 import { OpenAssistantActivityButton } from "@/components/assistant/open-assistant-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
+import { AddFinalDocumentDialog } from "@/components/engagements/add-final-document-dialog";
+import { FinalDocumentRow } from "@/components/engagements/final-document-row";
+import { listFinalDocumentsForEngagement } from "@/lib/db/final-documents";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
@@ -301,6 +304,24 @@ export default async function EngagementDetailPage({
       for (const [k, v] of fresh) signatureRequestsByItem.set(k, v);
     }
   }
+
+  // Final documents (accountant deliverables) + their pre-signed download links.
+  // The accountant download is always allowed — the invoice lock only ever gates
+  // the CLIENT's portal download, never the firm. Empty before migration 0620.
+  const finalDocs = await listFinalDocumentsForEngagement(engagement.id);
+  const finalHrefById = new Map<string, string>();
+  await Promise.all(
+    finalDocs.map(async (d) => {
+      try {
+        finalHrefById.set(
+          d.id,
+          await signedUrl(d.storage_path, 3600, d.original_filename),
+        );
+      } catch {
+        // Leave unset → the row disables its download link.
+      }
+    }),
+  );
 
   const t = await getTranslations("Engagements");
   const paymentStatusLabel = latestPayment
@@ -667,6 +688,33 @@ export default async function EngagementDetailPage({
                   signatureRequest={
                     signatureRequestsByItem.get(item.id) ?? null
                   }
+                />
+              ))}
+            </ul>
+          )
+        }
+        finalCount={finalDocs.length}
+        showFinal={isLive || isComplete || finalDocs.length > 0}
+        finalControls={
+          engagement.status !== "cancelled" ? (
+            <AddFinalDocumentDialog engagementId={engagement.id} />
+          ) : null
+        }
+        final={
+          finalDocs.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-4">
+              {t("final_empty")}
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {finalDocs.map((d) => (
+                <FinalDocumentRow
+                  key={d.id}
+                  id={d.id}
+                  engagementId={engagement.id}
+                  filename={d.display_name || d.original_filename}
+                  downloadHref={finalHrefById.get(d.id) ?? null}
+                  canEdit={engagement.status !== "cancelled"}
                 />
               ))}
             </ul>
