@@ -34,6 +34,7 @@ import {
   shouldShowSetLine,
   isMissingPageBlock,
 } from "@/components/engagements/set-summary-line";
+import { SetSummaryChatButton } from "@/components/assistant/set-summary-chat-button";
 import { EngagementPreview } from "@/components/engagements/engagement-preview/engagement-preview";
 import {
   QuickbooksDraftCard,
@@ -809,11 +810,18 @@ async function ItemRow({
           </div>
           {aiEnabled &&
             shouldShowSetLine(item.ai_set_assessment, files.length) && (
-              <SetSummaryLine
-                assessment={item.ai_set_assessment}
-                locale={locale}
-                className="mt-1.5"
-              />
+              <div className="mt-1.5 flex items-start gap-1">
+                <SetSummaryLine
+                  assessment={item.ai_set_assessment}
+                  locale={locale}
+                />
+                {/* Open the full summary in the engagement chat (accountant
+                    only — the client Preview renders SetSummaryLine alone). */}
+                <SetSummaryChatButton
+                  engagementId={item.engagement_id}
+                  itemId={item.id}
+                />
+              </div>
             )}
         </div>
         <div className="flex items-center gap-2 shrink-0">

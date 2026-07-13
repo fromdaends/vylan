@@ -2231,6 +2231,7 @@
     "select_engagement": "Choose an engagement",
     "general_chat_option": "General",
     "general_chat_option_hint": "Ask about the software",
+    "open_summary_in_chat": "Open the full summary in chat",
     "select_engagement_placeholder": "Search engagements…",
     "no_engagements": "No engagements found.",
     "loading": "Loading…",

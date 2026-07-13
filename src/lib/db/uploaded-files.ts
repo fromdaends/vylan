@@ -165,6 +165,20 @@ export async function deleteUploadedFilePermanently(fileId: string): Promise<{
     await recomputeItemStatus(sb, itemId);
   }
 
+  // Deleting a file makes any existing SET summary stale (it may describe the
+  // file that's now gone, e.g. "File 2 repeats page 1"). Clear it so the
+  // checklist stops showing an outdated summary. A summary the accountant
+  // already pushed into the engagement chat stays — that's chat history.
+  const affectedItemIds = [...itemsToRecompute].filter(
+    (id): id is string => typeof id === "string" && id.length > 0,
+  );
+  if (affectedItemIds.length > 0) {
+    await sb
+      .from("request_items")
+      .update({ ai_set_assessment: null })
+      .in("id", affectedItemIds);
+  }
+
   return {
     ok: true,
     engagementId: row.engagement_id,

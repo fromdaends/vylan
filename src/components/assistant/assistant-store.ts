@@ -33,6 +33,9 @@ export type AssistantState = {
   // The engagement the panel is scoped to (drives the Activity tab; the Chat
   // tab starts using it in Phase 2).
   selected: EngagementOption | null;
+  // Bumped to ask the Chat tab to reload its history — e.g. after a message was
+  // appended out-of-band (pushing a document-check summary into the chat).
+  chatReloadNonce: number;
 };
 
 let state: AssistantState = {
@@ -40,6 +43,7 @@ let state: AssistantState = {
   tab: "chat",
   pageEngagement: null,
   selected: null,
+  chatReloadNonce: 0,
 };
 
 const listeners = new Set<() => void>();
@@ -66,6 +70,7 @@ const SERVER_SNAPSHOT: AssistantState = {
   tab: "chat",
   pageEngagement: null,
   selected: null,
+  chatReloadNonce: 0,
 };
 
 export function getAssistantServerSnapshot(): AssistantState {
@@ -125,5 +130,11 @@ export function setPageEngagement(engagement: PageEngagement | null) {
 
 export function setSelectedEngagement(option: EngagementOption | null) {
   state = { ...state, selected: option };
+  emit();
+}
+
+// Ask the Chat tab to reload its conversation (a message was added out-of-band).
+export function reloadChat() {
+  state = { ...state, chatReloadNonce: state.chatReloadNonce + 1 };
   emit();
 }

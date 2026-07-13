@@ -122,7 +122,7 @@ function ChatView({
 }) {
   const t = useTranslations("Help");
   const ta = useTranslations("Assistant");
-  const { open, selected } = useSyncExternalStore(
+  const { open, selected, chatReloadNonce } = useSyncExternalStore(
     subscribeAssistant,
     getAssistantState,
     getAssistantServerSnapshot,
@@ -243,6 +243,20 @@ function ChatView({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadHistory(engagementId);
   }, [open, engagementId, isLoaded, historyFailed, loadHistory]);
+
+  // A message was pushed into the chat from outside the panel (e.g. "open the
+  // document-check summary in chat"): drop the loaded thread so the effect above
+  // reloads it, showing the new message even if the panel was already open.
+  const reloadNonceRef = useRef(chatReloadNonce);
+  useEffect(() => {
+    if (chatReloadNonce === reloadNonceRef.current) return;
+    reloadNonceRef.current = chatReloadNonce;
+    if (engagementIdRef.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setThread(null);
+      setHistoryFailedFor(null);
+    }
+  }, [chatReloadNonce]);
 
   // Every reopen quietly resyncs from the server: a teammate may have chatted
   // meanwhile, the limit window keeps rolling, and a "not activated yet"
