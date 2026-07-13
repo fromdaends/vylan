@@ -16,6 +16,8 @@ import {
   canonicalAttachmentName,
   quickbooksProductionKeyMissing,
   QuickbooksError,
+  isQboTxnEntity,
+  QBO_TXN_ENTITIES,
 } from "./client";
 
 // Isolate OAuth-endpoint resolution: the discovery document is exercised on its
@@ -669,5 +671,29 @@ describe("intuit_tid capture on failures", () => {
     expect(err.tid).toBe("TID-POST-7");
     // The tid must survive a downstream slice(0, 500) — the DB post_error cap.
     expect(err.message.slice(0, 500)).toContain("intuit_tid: TID-POST-7");
+  });
+});
+
+describe("isQboTxnEntity (single allowlist for the entity type)", () => {
+  it("accepts every posting entity, including salesreceipt", () => {
+    // Guards the class of bug where a per-route allowlist drifts from the type:
+    // every member of the union must pass so no valid entity is silently dropped.
+    for (const e of QBO_TXN_ENTITIES) expect(isQboTxnEntity(e)).toBe(true);
+    expect(QBO_TXN_ENTITIES).toContain("salesreceipt");
+  });
+
+  it("rejects unknown strings, wrong case, and non-strings", () => {
+    for (const bad of [
+      "SalesReceipt", // QBO response-key casing is not the entity token
+      "estimate",
+      "payment",
+      "",
+      undefined,
+      null,
+      42,
+      {},
+    ]) {
+      expect(isQboTxnEntity(bad)).toBe(false);
+    }
   });
 });

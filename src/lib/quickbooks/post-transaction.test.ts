@@ -3,6 +3,7 @@ import {
   buildBillPayload,
   checkBillPostable,
   buildInvoicePayload,
+  buildSalesReceiptPayload,
   checkInvoicePostable,
   buildPurchasePayload,
   checkPurchasePostable,
@@ -404,6 +405,35 @@ describe("buildInvoicePayload", () => {
     expect(inv.GlobalTaxCalculation).toBe("TaxExcluded");
     // Transaction-level tax code (mandatory AST intent) — else QBO errors 6000.
     expect(inv.TxnTaxDetail).toEqual({ TxnTaxCodeRef: { value: "TC5" } });
+  });
+});
+
+describe("buildSalesReceiptPayload", () => {
+  it("builds the SAME body as an Invoice (customer + item line + tax)", () => {
+    const input = {
+      customerId: "c1",
+      itemId: "i1",
+      amount: 287.5,
+      date: "2026-02-18",
+      memo: "Posted from Vylan",
+      tax: {
+        taxCodeId: "TC5",
+        netAmount: 250,
+        globalTaxCalculation: "TaxExcluded" as const,
+      },
+    };
+    expect(buildSalesReceiptPayload(input)).toEqual(buildInvoicePayload(input));
+  });
+  it("omits DepositToAccountRef, so QuickBooks uses Undeposited Funds by default", () => {
+    const sr = buildSalesReceiptPayload({
+      customerId: "c1",
+      itemId: "i1",
+      amount: 100,
+      date: null,
+    });
+    // No bank/deposit account is required — that's the whole point of the MVP.
+    expect("DepositToAccountRef" in sr).toBe(false);
+    expect(sr.CustomerRef).toEqual({ value: "c1" });
   });
 });
 

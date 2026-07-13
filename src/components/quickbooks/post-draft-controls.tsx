@@ -29,7 +29,7 @@ import { formatCurrency, formatDate, type AppLocale } from "@/lib/format";
 // needs_match_confirmation payload.
 type MatchCandidateView = {
   qboId: string;
-  entity: "bill" | "purchase" | "invoice";
+  entity: "bill" | "purchase" | "invoice" | "salesreceipt";
   txnDate: string | null;
   totalAmt: number | null;
   docNumber: string | null;
@@ -56,6 +56,7 @@ export function PostDraftControls({
   status,
   direction,
   expenseMode = "bill",
+  incomeMode = "invoice",
   postedAtLabel,
   postedByName,
   postError,
@@ -70,6 +71,10 @@ export function PostDraftControls({
   // For an expense: "purchase" (already paid) posts a QuickBooks Expense; "bill"
   // (unpaid) posts a Bill. Drives only the confirm copy. Ignored for income.
   expenseMode?: "bill" | "purchase";
+  // For income: "salesreceipt" (already paid) posts a QuickBooks Sales receipt;
+  // "invoice" (owed) posts an Invoice. Drives only the confirm copy. Ignored for
+  // expenses.
+  incomeMode?: "invoice" | "salesreceipt";
   // Pre-formatted posted date (server formats it; null when not posted).
   postedAtLabel: string | null;
   postedByName: string | null;
@@ -288,10 +293,13 @@ export function PostDraftControls({
     );
   }
 
-  // Income posts an Invoice; expense posts a Bill — the confirm copy reflects it.
+  // The confirm copy reflects what will be created: paid income -> Sales receipt,
+  // unpaid income -> Invoice; paid expense -> Expense, unpaid expense -> Bill.
   const confirmBody =
     direction === "income"
-      ? t("post_body_income")
+      ? incomeMode === "salesreceipt"
+        ? t("post_body_salesreceipt")
+        : t("post_body_income")
       : expenseMode === "purchase"
         ? t("post_body_purchase")
         : t("post_body");
@@ -302,9 +310,11 @@ export function PostDraftControls({
   const entityLabel = (e: MatchCandidateView["entity"]) =>
     e === "invoice"
       ? t("match_entity_invoice")
-      : e === "purchase"
-        ? t("match_entity_purchase")
-        : t("match_entity_bill");
+      : e === "salesreceipt"
+        ? t("match_entity_salesreceipt")
+        : e === "purchase"
+          ? t("match_entity_purchase")
+          : t("match_entity_bill");
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-2">

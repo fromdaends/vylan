@@ -130,6 +130,21 @@ export function effectiveExpenseMode(
   return paid ? "purchase" : "bill";
 }
 
+// The income-side mirror of effectiveExpenseMode: a PAID sale posts a QuickBooks
+// "SalesReceipt" (income already received), an unpaid one an "Invoice" (the
+// customer still owes). Non-income directions are never a sales receipt. Default
+// to "invoice" (today's behavior) when unknown, so income only becomes a
+// SalesReceipt once the accountant marks it paid — reuses the SAME `paid`
+// override as the expense toggle.
+export function effectiveIncomeMode(
+  suggestion: TransactionSuggestion,
+  resolved: ResolvedEntry | null,
+): "invoice" | "salesreceipt" {
+  if (suggestion.direction !== "income") return "invoice";
+  const paid = resolved?.paid ?? suggestion.paid ?? false;
+  return paid ? "salesreceipt" : "invoice";
+}
+
 // Does this draft still need the accountant's input before it could be posted?
 // Party always matters; the "mapping target" differs by direction — an INCOME
 // line needs an ITEM (Invoice lines post to an item), an expense needs an

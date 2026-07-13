@@ -506,12 +506,31 @@ export type QboEntityResult = {
 };
 
 // Transaction entities we post: a Bill (unpaid expense), a Purchase (paid
-// expense), or an Invoice (income). The URL path is lowercase; the JSON response
-// wraps the object under the capitalized name (e.g. { "Invoice": { Id, SyncToken } }).
-export type QboTxnEntity = "bill" | "invoice" | "purchase";
+// expense), an Invoice (income owed), or a SalesReceipt (income already
+// received). The URL path is lowercase; the JSON response wraps the object under
+// the capitalized name (e.g. { "Invoice": { Id, SyncToken } }).
+// The transaction entities Vylan can post/match. Kept as one const array so the
+// type, the runtime allowlist, and every parse point stay in lockstep — adding a
+// fifth entity here updates all of them (a drifted per-route allowlist that
+// silently dropped a valid entity is exactly the bug this prevents).
+export const QBO_TXN_ENTITIES = [
+  "bill",
+  "invoice",
+  "purchase",
+  "salesreceipt",
+] as const;
+export type QboTxnEntity = (typeof QBO_TXN_ENTITIES)[number];
+// Narrow untrusted input (a request body field) to a QboTxnEntity.
+export function isQboTxnEntity(x: unknown): x is QboTxnEntity {
+  return (
+    typeof x === "string" &&
+    (QBO_TXN_ENTITIES as readonly string[]).includes(x)
+  );
+}
 function entityResponseKey(entity: QboTxnEntity): string {
   if (entity === "invoice") return "Invoice";
   if (entity === "purchase") return "Purchase";
+  if (entity === "salesreceipt") return "SalesReceipt";
   return "Bill";
 }
 

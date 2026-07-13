@@ -10,6 +10,7 @@ import {
   postApprovedDraft,
   type PostMatchOverride,
 } from "@/lib/quickbooks/post";
+import { isQboTxnEntity } from "@/lib/quickbooks/client";
 import { logUserActivity } from "@/lib/db/activity";
 
 export const runtime = "nodejs";
@@ -49,11 +50,14 @@ export async function POST(
       body.attachQboId
     ) {
       // attachEntity pins the pick to the chosen transaction TYPE (Bill/Purchase/
-      // Invoice) — QBO ids are unique only per type. Optional: a stale client may
-      // omit it, and postApprovedDraft then falls back to id-only matching.
-      const e = body.attachEntity;
-      const entity =
-        e === "bill" || e === "purchase" || e === "invoice" ? e : undefined;
+      // Invoice/SalesReceipt) — QBO ids are unique only per type, so an income
+      // draft can surface both an Invoice and a SalesReceipt sharing a numeric id.
+      // Optional: a stale client may omit it, and postApprovedDraft then falls
+      // back to id-only matching. isQboTxnEntity is the single allowlist (shared
+      // with the type) so this parse can't drift when an entity is added.
+      const entity = isQboTxnEntity(body.attachEntity)
+        ? body.attachEntity
+        : undefined;
       match = { action: "attach", qboId: body.attachQboId, entity };
     }
   } catch {

@@ -65,6 +65,7 @@ const ENTITY_TABLE: Record<QboTxnEntity, string> = {
   bill: "Bill",
   purchase: "Purchase",
   invoice: "Invoice",
+  salesreceipt: "SalesReceipt",
 };
 
 // Shift an ISO YYYY-MM-DD date by whole days (UTC arithmetic — no DST edges).
@@ -80,13 +81,14 @@ function amountsEqual(a: number, b: number): boolean {
 }
 
 // The other-party reference field differs by entity: Bill -> VendorRef,
-// Purchase -> EntityRef (vendor/customer/employee), Invoice -> CustomerRef.
+// Purchase -> EntityRef (vendor/customer/employee), Invoice + SalesReceipt ->
+// CustomerRef.
 function partyRefOf(
   entity: QboTxnEntity,
   row: Record<string, unknown>,
 ): { value?: unknown; name?: unknown } | null {
   const raw =
-    entity === "invoice"
+    entity === "invoice" || entity === "salesreceipt"
       ? row.CustomerRef
       : entity === "bill"
         ? row.VendorRef

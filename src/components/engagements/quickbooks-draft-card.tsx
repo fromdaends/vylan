@@ -14,6 +14,7 @@ import {
   effectiveMapping,
   effectiveDate,
   effectiveExpenseMode,
+  effectiveIncomeMode,
   effectiveSplit,
   effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
@@ -120,6 +121,8 @@ export async function QuickbooksDraftCard({
   // Bill (unpaid) vs Purchase (paid) for an expense — drives the toggle + whether
   // the "paid from" account cell shows.
   const expenseMode = effectiveExpenseMode(suggestion, resolved);
+  // Invoice (owed) vs SalesReceipt (paid) for income — drives the income toggle.
+  const incomeMode = effectiveIncomeMode(suggestion, resolved);
   // Split-across-accounts (expense with ≥2 reconciled line items). Only offered
   // when tax-lines posting is ON — a split posts PRE-TAX per-line amounts and
   // relies on QuickBooks adding the tax, so with tax OFF a split would drop the
@@ -359,7 +362,9 @@ export async function QuickbooksDraftCard({
           <QuickbooksPaidToggle
             key={`paid-${expenseMode}`}
             fileId={fileId}
-            mode={expenseMode}
+            paid={expenseMode === "purchase"}
+            unpaidLabel={t("record_as_bill")}
+            paidLabel={t("record_as_purchase")}
             disabled={!isDraft}
           />
           {expenseMode === "purchase" && (
@@ -374,6 +379,22 @@ export async function QuickbooksDraftCard({
               disabled={!isDraft}
             />
           )}
+        </div>
+      )}
+
+      {/* INCOME: Invoice (the customer owes) vs Sales receipt (already paid). A
+          paid sale deposits to Undeposited Funds by default, so no extra account
+          is required. */}
+      {v.direction === "income" && (
+        <div className="px-3 pt-1.5">
+          <QuickbooksPaidToggle
+            key={`paid-${incomeMode}`}
+            fileId={fileId}
+            paid={incomeMode === "salesreceipt"}
+            unpaidLabel={t("record_as_invoice")}
+            paidLabel={t("record_as_salesreceipt")}
+            disabled={!isDraft}
+          />
         </div>
       )}
 
@@ -412,6 +433,7 @@ export async function QuickbooksDraftCard({
             status={status}
             direction={v.direction}
             expenseMode={expenseMode}
+            incomeMode={incomeMode}
             postedAtLabel={
               postedAt ? formatDate(postedAt, locale, "medium") : null
             }
