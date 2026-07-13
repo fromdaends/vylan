@@ -9,6 +9,7 @@ import {
   type DraftCardOptions,
 } from "@/components/engagements/quickbooks-draft-card";
 import { DraftStatusControls } from "@/components/engagements/draft-status-controls";
+import { DeleteDraftControl } from "./delete-draft-control";
 import { draftQueueBucket, type QueueBucket } from "@/lib/quickbooks/draft-queue";
 import { canApproveDraft } from "@/lib/quickbooks/draft-status";
 import { QueueRowDisclosure } from "./queue-row-disclosure";
@@ -111,11 +112,16 @@ export async function QueueRow({
         {pill.label}
       </span>
 
-      {/* Inline status controls (fast triage). */}
+      {/* Inline status controls (fast triage) + delete-from-queue. */}
       <DraftStatusControls
         fileId={row.fileId}
         status={row.status}
         canApprove={canApprove}
+      />
+      <DeleteDraftControl
+        fileId={row.fileId}
+        status={row.status}
+        isMatched={row.matchedQboType != null}
       />
     </div>
   );
