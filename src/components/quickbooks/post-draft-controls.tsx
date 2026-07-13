@@ -350,6 +350,13 @@ export function PostDraftControls({
                 <DialogTitle>{t("post_title")}</DialogTitle>
                 <DialogDescription>{confirmBody}</DialogDescription>
               </DialogHeader>
+              {/* Set expectations for the smart match: posting may CREATE a new
+                  entry, or (if it's already in QuickBooks) attach the receipt to
+                  the existing one — so a confident auto-attach is never a surprise. */}
+              <p className="-mt-1 flex items-start gap-1.5 text-[13px] leading-snug text-muted-foreground">
+                <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>{t("post_match_hint")}</span>
+              </p>
               <DialogFooter>
                 <Button
                   variant="ghost"
