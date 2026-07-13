@@ -2213,6 +2213,7 @@
     "select_engagement": "Choisir un mandat",
     "general_chat_option": "Général",
     "general_chat_option_hint": "Poser une question sur le logiciel",
+    "open_summary_in_chat": "Ouvrir le résumé complet dans le clavardage",
     "select_engagement_placeholder": "Rechercher un mandat…",
     "no_engagements": "Aucun mandat trouvé.",
     "loading": "Chargement…",
