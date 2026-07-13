@@ -1219,6 +1219,7 @@
     "final_delete": "Delete",
     "final_empty": "No final documents yet. Upload the completed work to return it to your client.",
     "final_err_file": "Choose a file to upload (up to 25 MB).",
+    "final_err_file_too_large": "That file is too large. The limit is 25 MB.",
     "final_err_file_type": "That file type isn't supported. Upload a PDF or an image.",
     "final_err_generic": "Couldn't upload. Please try again.",
     "sig_status_sent": "Sent to client",

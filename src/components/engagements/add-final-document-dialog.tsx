@@ -50,11 +50,13 @@ export function AddFinalDocumentDialog({
   }, [state, router]);
 
   const errorKey =
-    state?.error === "file" || state?.error === "file_too_large"
-      ? "final_err_file"
-      : state?.error === "file_type"
-        ? "final_err_file_type"
-        : "final_err_generic";
+    state?.error === "file_too_large"
+      ? "final_err_file_too_large"
+      : state?.error === "file"
+        ? "final_err_file"
+        : state?.error === "file_type"
+          ? "final_err_file_type"
+          : "final_err_generic";
 
   return (
     <Dialog
@@ -90,7 +92,7 @@ export function AddFinalDocumentDialog({
               type="file"
               name="file"
               required
-              accept="application/pdf,image/jpeg,image/png,image/webp"
+              accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
               className="hidden"
               onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
             />

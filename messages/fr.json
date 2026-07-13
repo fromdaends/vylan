@@ -1219,6 +1219,7 @@
     "final_delete": "Supprimer",
     "final_empty": "Aucun document final pour l'instant. Téléversez le travail terminé pour le renvoyer à votre client.",
     "final_err_file": "Choisissez un fichier à téléverser (jusqu'à 25 Mo).",
+    "final_err_file_too_large": "Ce fichier est trop volumineux. La limite est de 25 Mo.",
     "final_err_file_type": "Ce type de fichier n'est pas pris en charge. Téléversez un PDF ou une image.",
     "final_err_generic": "Impossible de téléverser. Veuillez réessayer.",
     "sig_status_sent": "Envoyé au client",

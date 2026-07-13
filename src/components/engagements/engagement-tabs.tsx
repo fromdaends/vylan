@@ -47,6 +47,16 @@ export function EngagementTabs({
     "checklist",
   );
 
+  // If the selected tab is no longer shown (e.g. the Signatures tab disappears
+  // when a signature-free engagement is marked complete, while `active` is still
+  // "signatures" after the in-place refresh), fall back to the checklist so the
+  // body is never blank.
+  const effectiveActive =
+    (active === "signatures" && !showSignatures) ||
+    (active === "final" && !showFinal)
+      ? "checklist"
+      : active;
+
   // No extra tabs apply → plain single-section checklist, no tab bar.
   if (!showSignatures && !showFinal) {
     return (
@@ -72,14 +82,14 @@ export function EngagementTabs({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
         <div className="flex items-center gap-4" role="tablist">
           <TabButton
-            active={active === "checklist"}
+            active={effectiveActive === "checklist"}
             onClick={() => setActive("checklist")}
             label={t("checklist")}
             count={checklistCount}
           />
           {showSignatures && (
             <TabButton
-              active={active === "signatures"}
+              active={effectiveActive === "signatures"}
               onClick={() => setActive("signatures")}
               label={t("signatures")}
               count={signaturesCount}
@@ -87,7 +97,7 @@ export function EngagementTabs({
           )}
           {showFinal && (
             <TabButton
-              active={active === "final"}
+              active={effectiveActive === "final"}
               onClick={() => setActive("final")}
               label={t("final_documents")}
               count={finalCount}
@@ -95,19 +105,21 @@ export function EngagementTabs({
           )}
         </div>
         <div className="flex items-center gap-2 pb-1.5">
-          {active === "checklist"
+          {effectiveActive === "checklist"
             ? checklistControls
-            : active === "signatures"
+            : effectiveActive === "signatures"
               ? signaturesControls
               : finalControls}
         </div>
       </div>
 
-      <div hidden={active !== "checklist"}>{checklist}</div>
+      <div hidden={effectiveActive !== "checklist"}>{checklist}</div>
       {showSignatures && (
-        <div hidden={active !== "signatures"}>{signatures}</div>
+        <div hidden={effectiveActive !== "signatures"}>{signatures}</div>
       )}
-      {showFinal && <div hidden={active !== "final"}>{final}</div>}
+      {showFinal && (
+        <div hidden={effectiveActive !== "final"}>{final}</div>
+      )}
     </section>
   );
 }
