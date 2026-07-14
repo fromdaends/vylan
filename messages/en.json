@@ -1209,6 +1209,7 @@
     "choose_document": "Choose a document (PDF)",
     "signatures": "Signatures",
     "signatures_empty": "No signature requests yet.",
+    "messages": "Messages",
     "final_documents": "Final documents",
     "final_upload": "Upload",
     "final_upload_title": "Upload a final document",
@@ -2216,6 +2217,23 @@
     "unlink_failed": "Couldn't unlink. Try again.",
     "post_all_needs_review": "{count, plural, one {# draft looks} other {# drafts look}} like they may already be in QuickBooks, so they weren't posted. Open each card to attach or post it.",
     "post_all_needs_review_close": "OK"
+  },
+  "ClientMessages": {
+    "thread_title": "Messages with your client",
+    "thread_with": "Messages with {name}",
+    "client_receives": "This is a direct line between you and your client — they see these messages in their portal.",
+    "empty_title": "No messages yet",
+    "empty_body": "Write a message below and {name} will see it in their portal.",
+    "empty_body_generic": "Write a message below and your client will see it in their portal.",
+    "placeholder": "Write a message to {name}…",
+    "placeholder_generic": "Write a message…",
+    "send": "Send",
+    "sending": "Sending…",
+    "send_failed": "Your message didn't send. Check your connection and try again.",
+    "chars_left": "{count} characters left",
+    "read_only_complete": "This engagement is complete, so messaging is closed. The conversation history stays visible.",
+    "read_only_cancelled": "This engagement is cancelled, so messaging is closed. The conversation history stays visible.",
+    "not_activated": "Client messaging isn't activated yet."
   },
   "Assistant": {
     "panel_title": "Vylan Assistant",

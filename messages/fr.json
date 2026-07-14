@@ -1209,6 +1209,7 @@
     "choose_document": "Choisir un document (PDF)",
     "signatures": "Signatures",
     "signatures_empty": "Aucune demande de signature pour l'instant.",
+    "messages": "Messages",
     "final_documents": "Documents finaux",
     "final_upload": "Téléverser",
     "final_upload_title": "Téléverser un document final",
@@ -2216,6 +2217,23 @@
     "unlink_failed": "Impossible de dissocier. Réessayez.",
     "post_all_needs_review": "{count, plural, one {# brouillon semble} other {# brouillons semblent}} déjà exister dans QuickBooks, ils n’ont donc pas été envoyés. Ouvrez chaque carte pour joindre ou créer la transaction.",
     "post_all_needs_review_close": "OK"
+  },
+  "ClientMessages": {
+    "thread_title": "Messages avec votre client",
+    "thread_with": "Messages avec {name}",
+    "client_receives": "C'est une ligne directe entre vous et votre client : il voit ces messages dans son portail.",
+    "empty_title": "Aucun message pour l'instant",
+    "empty_body": "Écrivez un message ci-dessous et {name} le verra dans son portail.",
+    "empty_body_generic": "Écrivez un message ci-dessous et votre client le verra dans son portail.",
+    "placeholder": "Écrire un message à {name}…",
+    "placeholder_generic": "Écrire un message…",
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "send_failed": "Votre message n'a pas été envoyé. Vérifiez votre connexion et réessayez.",
+    "chars_left": "{count} caractères restants",
+    "read_only_complete": "Ce mandat est terminé, la messagerie est donc fermée. L'historique de la conversation reste visible.",
+    "read_only_cancelled": "Ce mandat est annulé, la messagerie est donc fermée. L'historique de la conversation reste visible.",
+    "not_activated": "La messagerie client n'est pas encore activée."
   },
   "Assistant": {
     "panel_title": "Assistant Vylan",
