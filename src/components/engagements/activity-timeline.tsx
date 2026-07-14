@@ -133,6 +133,8 @@ function describe(
     }
     case "client_marked_na":
       return t("client_marked_na");
+    case "client_message_sent":
+      return t("client_message_sent");
     case "client_undid_na":
       return t("client_undid_na");
     case "approve_item":

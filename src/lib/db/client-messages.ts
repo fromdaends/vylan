@@ -73,6 +73,33 @@ export function countUnreadForFirm(
   ).length;
 }
 
+// PURE: the mirror image — how many FIRM messages the client hasn't seen.
+// Powers the "new message" hint on the portal's Messages entry.
+export function countUnreadForClient(
+  messages: Pick<ClientMessageRow, "sender" | "created_at">[],
+  clientLastReadAt: string | null,
+): number {
+  const cutoff = clientLastReadAt ? new Date(clientLastReadAt).getTime() : 0;
+  return messages.filter(
+    (m) => m.sender === "firm" && new Date(m.created_at).getTime() > cutoff,
+  ).length;
+}
+
+// The client-safe projection of a message: everything the portal needs and
+// nothing else (no internal user ids). What the portal context + the portal
+// list route both return.
+export type PortalMessage = Omit<ClientMessageRow, "sender_user_id">;
+
+export function toPortalMessage(m: ClientMessageRow): PortalMessage {
+  return {
+    id: m.id,
+    sender: m.sender,
+    sender_name: m.sender_name,
+    body: m.body,
+    created_at: m.created_at,
+  };
+}
+
 // The engagement's thread state row, or null when no thread exists yet (no
 // messages ever sent), or the sentinel pre-migration. RLS scopes to the
 // caller's firm.
@@ -195,6 +222,61 @@ export async function insertFirmMessage(
     throw res.error;
   }
   return res.data as ClientMessageRow;
+}
+
+// Insert a client-authored message. SERVICE ROLE ONLY (Phase 2): called by
+// the /api/portal/messages routes after magic-token validation — the RLS
+// insert policy deliberately refuses sender='client' from any authenticated
+// session, so this cannot run on a session client.
+export async function insertClientMessage(
+  sb: SupabaseClient,
+  row: {
+    firmId: string;
+    engagementId: string;
+    senderName: string;
+    body: string;
+  },
+): Promise<ClientMessageRow | MessagingSchemaMissing> {
+  const res = await sb
+    .from("client_messages")
+    .insert({
+      firm_id: row.firmId,
+      engagement_id: row.engagementId,
+      sender: "client",
+      sender_user_id: null,
+      sender_name: row.senderName,
+      body: row.body,
+    })
+    .select("id, sender, sender_user_id, sender_name, body, created_at")
+    .single();
+  if (res.error) {
+    if (isClientMessagingSchemaMissing(res.error)) {
+      return CLIENT_MESSAGING_SCHEMA_MISSING;
+    }
+    throw res.error;
+  }
+  return res.data as ClientMessageRow;
+}
+
+// Stamp "the client has seen the thread as of now". SERVICE ROLE ONLY (the
+// column grant excludes client_last_read_at from authenticated sessions).
+// No-op (false) when the thread doesn't exist yet — nothing to mark.
+export async function markThreadReadByClient(
+  sb: SupabaseClient,
+  engagementId: string,
+): Promise<boolean | MessagingSchemaMissing> {
+  const res = await sb
+    .from("client_message_threads")
+    .update({ client_last_read_at: new Date().toISOString() })
+    .eq("engagement_id", engagementId)
+    .select("id");
+  if (res.error) {
+    if (isClientMessagingSchemaMissing(res.error)) {
+      return CLIENT_MESSAGING_SCHEMA_MISSING;
+    }
+    throw res.error;
+  }
+  return (res.data ?? []).length > 0;
 }
 
 // Stamp "the firm has seen the thread as of now". No-op (false) when the
