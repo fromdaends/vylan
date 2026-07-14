@@ -40,6 +40,27 @@ function blocked(
   return NextResponse.json({ error: reason }, { status });
 }
 
+// The connected account can't be operated by THIS environment's Stripe key.
+// The dominant cause is a mode mismatch: a live key can't touch a test-mode
+// connected account (or vice versa), so Stripe raises account_invalid /
+// "No such account". A firm can look "ready" in our DB (connect_charges_enabled
+// was set from a status sync in the OTHER mode) yet be uncharge­able here — this
+// distinguishes that permanent, accountant-must-fix state from a transient
+// Stripe blip, so the client sees "not accepting payments" rather than "retry".
+function isAccountUnusableError(err: {
+  type?: string;
+  code?: string;
+  message?: string;
+}): boolean {
+  if (err.code === "account_invalid") return true;
+  return (
+    err.type === "StripeInvalidRequestError" &&
+    /no such account|does not exist|cannot be used to access the account/i.test(
+      err.message ?? "",
+    )
+  );
+}
+
 // POST /api/portal/checkout  Body: { token }
 //
 // Unauthenticated client endpoint. The client only sends the magic token; the
@@ -163,10 +184,21 @@ export async function POST(request: NextRequest) {
       { stripeAccount: firm.stripe_connect_account_id },
     );
   } catch (e) {
-    // Stripe rejected the session create on the connected account — e.g. a
-    // test-vs-live key mismatch, an account that can't yet accept charges, or a
-    // currency/amount problem. Log the raw error (server-only) so the exact
-    // Stripe message is recoverable from the Vercel logs.
+    const err = e as { type?: string; code?: string; message?: string };
+    // Mode mismatch / unusable account: the firm connected Stripe in a different
+    // mode than this environment runs in (classic: test-mode account, live prod
+    // key). Retrying can never fix it — the accountant must reconnect. Surface it
+    // as a distinct, non-retryable reason so the client sees the right message.
+    if (isAccountUnusableError(err)) {
+      console.error(
+        "[portal/checkout] blocked: account_unusable — connected account not operable by this Stripe key (mode mismatch?):",
+        firm.stripe_connect_account_id,
+        err.message,
+      );
+      return NextResponse.json({ error: "account_unusable" }, { status: 409 });
+    }
+    // Any other Stripe failure (transient outage, currency/amount problem). Log
+    // the raw error (server-only) so the exact message is recoverable from logs.
     console.error(
       "[portal/checkout] blocked: stripe_error — session create failed for account",
       firm.stripe_connect_account_id,

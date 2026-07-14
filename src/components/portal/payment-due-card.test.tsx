@@ -125,6 +125,14 @@ describe("PaymentDueCard", () => {
     );
   });
 
+  it("maps an unusable connected account (mode mismatch) to 'unavailable'", async () => {
+    mockCheckout(409, "account_unusable");
+    renderCard();
+    expect(await clickPayAndReadError()).toBe(
+      en.Portal.pay_error_unavailable.replace("{firm}", "Acme"),
+    );
+  });
+
   it("tells the client the invoice was already handled", async () => {
     mockCheckout(409, "no_open_request");
     renderCard();
