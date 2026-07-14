@@ -65,7 +65,6 @@ import {
   getThreadForEngagement,
   listClientMessages,
 } from "@/lib/db/client-messages";
-import { EngagementMessages } from "@/components/engagements/engagement-messages";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
@@ -343,17 +342,15 @@ export default async function EngagementDetailPage({
     }),
   );
 
-  // Client messaging (Phase 1): the human accountant<->client thread. Loads
-  // under RLS; degrades to the gated "not activated" state before migration
-  // 0650. Unread = client messages newer than the firm's read pointer.
+  // Client messaging: the thread itself now lives in the Assistant panel's
+  // "Client messages" tab (founder restructure) — the page only computes the
+  // UNREAD count and publishes it through the bridge so the panel FAB + tab
+  // can badge it. Loads under RLS; zero before migration 0650.
   const supabaseForMessages = await getServerSupabase();
   const [clientMessagesRaw, messageThreadRaw] = await Promise.all([
     listClientMessages(supabaseForMessages, engagement.id),
     getThreadForEngagement(supabaseForMessages, engagement.id),
   ]);
-  const messagingNotActivated =
-    clientMessagesRaw === CLIENT_MESSAGING_SCHEMA_MISSING ||
-    messageThreadRaw === CLIENT_MESSAGING_SCHEMA_MISSING;
   const clientMessages =
     clientMessagesRaw === CLIENT_MESSAGING_SCHEMA_MISSING
       ? []
@@ -422,6 +419,7 @@ export default async function EngagementDetailPage({
           clientName: client?.display_name ?? null,
           status: engagement.status,
           createdAt: engagement.created_at,
+          messagesUnread,
         }}
       />
       {/* Auto-refresh while the engagement is still active. Picks up new
@@ -771,33 +769,6 @@ export default async function EngagementDetailPage({
         }
         finalCount={finalDocs.length}
         showFinal={isLive || isComplete || finalDocs.length > 0}
-        messagesCount={clientMessages.length}
-        messagesUnread={messagesUnread}
-        // Live + complete engagements get the thread (complete = read-only
-        // history); drafts have no client link yet; cancelled only shows if
-        // history exists. Hidden entirely pre-migration (quiet gating).
-        showMessages={
-          !messagingNotActivated &&
-          (isLive || isComplete || clientMessages.length > 0)
-        }
-        messages={
-          <EngagementMessages
-            engagementId={engagement.id}
-            clientName={client?.display_name ?? null}
-            initialMessages={clientMessages}
-            initialClientLastReadAt={messageThread?.client_last_read_at ?? null}
-            notActivated={messagingNotActivated}
-            readOnly={!isLive}
-            readOnlyReason={
-              engagement.status === "cancelled"
-                ? "cancelled"
-                : isComplete
-                  ? "complete"
-                  : null
-            }
-            locale={locale}
-          />
-        }
         finalControls={
           engagement.status !== "cancelled" ? (
             <AddFinalDocumentDialog engagementId={engagement.id} />

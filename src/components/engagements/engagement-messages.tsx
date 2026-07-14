@@ -40,6 +40,7 @@ export function EngagementMessages({
   readOnly,
   readOnlyReason,
   locale,
+  deferInitialLoad = false,
 }: {
   engagementId: string;
   clientName: string | null;
@@ -50,11 +51,16 @@ export function EngagementMessages({
   // Migration 0650 not applied yet — show the quiet gated state.
   notActivated: boolean;
   readOnly: boolean;
-  readOnlyReason: "complete" | "cancelled" | null;
+  readOnlyReason: "complete" | "cancelled" | "draft" | null;
   locale: "fr" | "en";
+  // Panel hosting: no server-rendered messages were passed, the component
+  // fetches on first visibility — show a quiet loading state until then
+  // instead of a misleading "no messages yet".
+  deferInitialLoad?: boolean;
 }) {
   const t = useTranslations("ClientMessages");
   const [messages, setMessages] = useState<ClientMessageRow[]>(initialMessages);
+  const [loadedOnce, setLoadedOnce] = useState(!deferInitialLoad);
   const [clientLastReadAt, setClientLastReadAt] = useState<string | null>(
     initialClientLastReadAt,
   );
@@ -102,6 +108,7 @@ export function EngagementMessages({
       if (!Array.isArray(data.messages)) return;
       setMessages(data.messages);
       setClientLastReadAt(data.clientLastReadAt ?? null);
+      setLoadedOnce(true);
       // A new client message arrived while the thread is open: stamp it read
       // so the unread badge doesn't reappear on the next page load.
       const newest = newestClientAt(data.messages);
@@ -219,7 +226,11 @@ export function EngagementMessages({
         <p className="text-xs text-muted-foreground">{t("client_receives")}</p>
       </div>
 
-      {messages.length === 0 ? (
+      {messages.length === 0 && !loadedOnce ? (
+        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
+          <p className="text-sm text-muted-foreground">{t("loading")}</p>
+        </div>
+      ) : messages.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
           <p className="text-sm font-medium text-foreground">
             {t("empty_title")}
@@ -288,7 +299,9 @@ export function EngagementMessages({
         <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
           {readOnlyReason === "cancelled"
             ? t("read_only_cancelled")
-            : t("read_only_complete")}
+            : readOnlyReason === "draft"
+              ? t("read_only_draft")
+              : t("read_only_complete")}
         </p>
       ) : (
         <div className="space-y-1.5">
