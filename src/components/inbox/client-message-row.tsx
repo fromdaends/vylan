@@ -9,7 +9,6 @@
 import { useTranslations } from "next-intl";
 import { MessageSquare, Reply } from "lucide-react";
 import { formatRelative, type AppLocale } from "@/lib/format";
-import { openAssistantForEngagement } from "@/components/assistant/assistant-store";
 
 export function ClientMessageRow({
   engagement,
@@ -32,16 +31,23 @@ export function ClientMessageRow({
   const t = useTranslations(compact ? "Home" : "Notifications");
 
   function openThread() {
-    openAssistantForEngagement(
-      {
-        id: engagement.id,
-        title: engagement.title ?? "",
-        // Unknown status (e.g. a since-deleted engagement) falls back to a
-        // writable one — the server refuses writes it shouldn't take anyway.
-        status: engagement.status ?? "in_progress",
-        clientName,
-      },
-      "messages",
+    // Ask the panel to open via its window-event channel (the same one the
+    // profile menu and engagement pages use) rather than importing the store
+    // here — one proven pathway into the panel from anywhere in the app.
+    window.dispatchEvent(
+      new CustomEvent("vylan:assistant:open", {
+        detail: {
+          tab: "messages",
+          engagement: {
+            id: engagement.id,
+            title: engagement.title ?? "",
+            // Unknown status (a since-deleted engagement) falls back to a
+            // writable one — the server refuses writes it shouldn't take.
+            status: engagement.status ?? "in_progress",
+            clientName,
+          },
+        },
+      }),
     );
   }
 
