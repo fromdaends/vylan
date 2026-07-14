@@ -83,4 +83,22 @@ describe("buildReminderPlan", () => {
     expect(plan.find((step) => step.tone === "overdue")?.runAfter.toISOString())
       .toBe("2026-05-23T23:59:59.000Z");
   });
+
+  it("repeats one reminder at the configured interval", () => {
+    const settings = structuredClone(DEFAULT_REMINDER_SETTINGS);
+    settings.steps.forEach((step) => {
+      step.enabled = step.tone === "firm";
+    });
+    const followUp = settings.steps.find((step) => step.tone === "firm")!;
+    followUp.days = 4;
+    followUp.repeatCount = 3;
+
+    const plan = buildReminderPlan({ sentAt, dueDate: null, settings });
+    expect(plan.map((step) => step.occurrence)).toEqual([1, 2, 3]);
+    expect(plan.map((step) => step.runAfter.toISOString())).toEqual([
+      "2026-05-05T12:00:00.000Z",
+      "2026-05-09T12:00:00.000Z",
+      "2026-05-13T12:00:00.000Z",
+    ]);
+  });
 });

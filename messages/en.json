@@ -1195,6 +1195,11 @@
     "reminder_days_label": "Reminder delay in days",
     "reminder_days_after_send": "days after sending",
     "reminder_days_after_due": "days after the due date",
+    "reminder_repeat_prefix": "repeat",
+    "reminder_repeat_suffix": "time(s)",
+    "reminder_repeat_label": "Number of times to send this reminder",
+    "reminder_send_schedule": "Estimated send time: {dates}",
+    "reminder_send_schedule_needs_due": "Set a due date above to see the exact send date and time.",
     "reminder_subject_label": "Custom subject (optional)",
     "reminder_subject_placeholder": "Use Vylan's default subject",
     "reminder_message_label": "Custom message (optional)",
@@ -1463,7 +1468,10 @@
       "min_2_chars": "At least 2 characters.",
       "too_long": "Too long.",
       "no_documents": "Add at least one document before sending. Without one, there's nothing for the client to upload.",
-      "invoice_amount_required": "Enter an amount to bill before setting up the invoice."
+      "invoice_amount_required": "Enter an amount to bill before setting up the invoice.",
+      "invoice_attachment_too_large": "That invoice document is too large. The limit is 25 MB.",
+      "invoice_attachment_type": "Attach a PDF or image file.",
+      "invoice_attachment_upload_error": "The invoice document could not be uploaded. Please try again."
     }
   },
   "Attention": {

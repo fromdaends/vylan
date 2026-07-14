@@ -1195,6 +1195,11 @@
     "reminder_days_label": "Délai du rappel en jours",
     "reminder_days_after_send": "jours après l’envoi",
     "reminder_days_after_due": "jours après la date d’échéance",
+    "reminder_repeat_prefix": "répéter",
+    "reminder_repeat_suffix": "fois",
+    "reminder_repeat_label": "Nombre d’envois de ce rappel",
+    "reminder_send_schedule": "Heure d’envoi estimée : {dates}",
+    "reminder_send_schedule_needs_due": "Ajoutez une date d’échéance ci-dessus pour voir la date et l’heure exactes d’envoi.",
     "reminder_subject_label": "Objet personnalisé (facultatif)",
     "reminder_subject_placeholder": "Utiliser l’objet par défaut de Vylan",
     "reminder_message_label": "Message personnalisé (facultatif)",
@@ -1463,7 +1468,10 @@
       "min_2_chars": "Au moins 2 caractères.",
       "too_long": "Trop long.",
       "no_documents": "Ajoutez au moins un document avant d'envoyer. Sans cela, le client n'a rien à téléverser.",
-      "invoice_amount_required": "Entrez un montant à facturer avant de configurer la facture."
+      "invoice_amount_required": "Entrez un montant à facturer avant de configurer la facture.",
+      "invoice_attachment_too_large": "Ce document de facture est trop volumineux. La limite est de 25 Mo.",
+      "invoice_attachment_type": "Joignez un fichier PDF ou une image.",
+      "invoice_attachment_upload_error": "Impossible de téléverser le document de facture. Veuillez réessayer."
     }
   },
   "Attention": {

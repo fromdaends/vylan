@@ -24,7 +24,9 @@ import {
   Receipt,
   BellRing,
   ChevronDown,
+  Upload,
 } from "lucide-react";
+import { addDays } from "date-fns";
 import {
   ClientCombobox,
   type ComboboxClient,
@@ -55,7 +57,10 @@ type KnownErrorKey =
   | "min_2_chars"
   | "too_long"
   | "no_documents"
-  | "invoice_amount_required";
+  | "invoice_amount_required"
+  | "invoice_attachment_too_large"
+  | "invoice_attachment_type"
+  | "invoice_attachment_upload_error";
 const KNOWN_ERRORS = new Set<string>([
   "missing_client",
   "missing_template",
@@ -65,6 +70,9 @@ const KNOWN_ERRORS = new Set<string>([
   "too_long",
   "no_documents",
   "invoice_amount_required",
+  "invoice_attachment_too_large",
+  "invoice_attachment_type",
+  "invoice_attachment_upload_error",
 ]);
 
 export type InvoiceAutoMode = "off" | "on_completion" | "delayed";
@@ -140,6 +148,7 @@ export function EngagementBuilder({
   const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(
     () => structuredClone(DEFAULT_REMINDER_SETTINGS),
   );
+  const [reminderPreviewBase] = useState(() => new Date());
   const [remindersExpanded, setRemindersExpanded] = useState(false);
   // Invoice timing (migrations 0590 + 0610). Pre-selected from the firm default.
   // Only meaningful when Connect is ready; forced off otherwise.
@@ -155,6 +164,7 @@ export function EngagementBuilder({
   // Optional invoice description + the deliverables lock (migration 0610).
   const [invoiceDescription, setInvoiceDescription] = useState<string>("");
   const [invoiceLock, setInvoiceLock] = useState(false);
+  const [invoiceAttachment, setInvoiceAttachment] = useState<File | null>(null);
   const [items, setItems] = useState<TemplateItem[]>(() => {
     // If we already know the client (e.g. started from a client's page), seed
     // the checklist with only the documents that apply to their province.
@@ -267,6 +277,29 @@ export function EngagementBuilder({
     }));
   }
 
+  function reminderSchedulePreview(step: ReminderStep): string | null {
+    const anchor =
+      step.timing === "after_due"
+        ? dueDate
+          ? new Date(`${dueDate}T23:59:59Z`)
+          : null
+        : reminderPreviewBase;
+    if (!anchor) return null;
+    const formatter = new Intl.DateTimeFormat(
+      locale === "fr" ? "fr-CA" : "en-CA",
+      {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      },
+    );
+    return Array.from({ length: step.repeatCount }, (_, index) =>
+      formatter.format(addDays(anchor, step.days * (index + 1))),
+    ).join(" · ");
+  }
+
   function moveItem(idx: number, delta: -1 | 1) {
     setItems((prev) => {
       const next = [...prev];
@@ -329,25 +362,28 @@ export function EngagementBuilder({
 
     startTransition(async () => {
       try {
-        const result = await createEngagementAction({
-          client_id: clientId,
-          title: effectiveTitle.trim(),
-          type: selectedTemplate.type,
-          due_date: dueDate || null,
-          ai_enabled: aiEnabled,
-          invoice_auto_mode: autoMode,
-          invoice_delay_days: invoiceDelay,
-          invoice_amount_cents: invoiceAmountCents,
-          invoice_create_now: createNow,
-          invoice_locks_deliverables: invoiceActive ? invoiceLock : false,
-          invoice_description: invoiceActive
-            ? invoiceDescription.trim() || null
-            : null,
-          reminder_settings: reminderSettings,
-          items: cleanItems,
-          send,
-          locale,
-        });
+        const result = await createEngagementAction(
+          {
+            client_id: clientId,
+            title: effectiveTitle.trim(),
+            type: selectedTemplate.type,
+            due_date: dueDate || null,
+            ai_enabled: aiEnabled,
+            invoice_auto_mode: autoMode,
+            invoice_delay_days: invoiceDelay,
+            invoice_amount_cents: invoiceAmountCents,
+            invoice_create_now: createNow,
+            invoice_locks_deliverables: invoiceActive ? invoiceLock : false,
+            invoice_description: invoiceActive
+              ? invoiceDescription.trim() || null
+              : null,
+            reminder_settings: reminderSettings,
+            items: cleanItems,
+            send,
+            locale,
+          },
+          invoiceActive ? invoiceAttachment : null,
+        );
         // If the action redirected, this code never runs.
         if (result?.error) {
           setError(result.error);
@@ -547,7 +583,7 @@ export function EngagementBuilder({
                         key={step.tone}
                         className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3"
                       >
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-start justify-between gap-3">
                           <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
                             <input
                               type="checkbox"
@@ -560,32 +596,67 @@ export function EngagementBuilder({
                             />
                             {t(`reminder_tone_${step.tone}`)}
                           </label>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Input
-                              type="number"
-                              min={0}
-                              max={365}
-                              value={step.days}
-                              disabled={!step.enabled}
-                              onChange={(event) =>
-                                updateReminderStep(step.tone, {
-                                  days: Math.min(
-                                    365,
-                                    Math.max(
-                                      0,
-                                      Math.floor(Number(event.target.value) || 0),
+                          <div className="max-w-xl space-y-1.5 text-xs text-muted-foreground">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <Input
+                                type="number"
+                                min={1}
+                                max={365}
+                                value={step.days}
+                                disabled={!step.enabled}
+                                onChange={(event) =>
+                                  updateReminderStep(step.tone, {
+                                    days: Math.min(
+                                      365,
+                                      Math.max(
+                                        1,
+                                        Math.floor(Number(event.target.value) || 1),
+                                      ),
                                     ),
-                                  ),
-                                })
-                              }
-                              aria-label={t("reminder_days_label")}
-                              className="h-8 w-20"
-                            />
-                            <span>
-                              {step.timing === "after_due"
-                                ? t("reminder_days_after_due")
-                                : t("reminder_days_after_send")}
-                            </span>
+                                  })
+                                }
+                                aria-label={t("reminder_days_label")}
+                                className="h-8 w-20"
+                              />
+                              <span>
+                                {step.timing === "after_due"
+                                  ? t("reminder_days_after_due")
+                                  : t("reminder_days_after_send")}
+                              </span>
+                              <span className="ml-1">
+                                {t("reminder_repeat_prefix")}
+                              </span>
+                              <Input
+                                type="number"
+                                min={1}
+                                max={12}
+                                value={step.repeatCount}
+                                disabled={!step.enabled}
+                                onChange={(event) =>
+                                  updateReminderStep(step.tone, {
+                                    repeatCount: Math.min(
+                                      12,
+                                      Math.max(
+                                        1,
+                                        Math.floor(Number(event.target.value) || 1),
+                                      ),
+                                    ),
+                                  })
+                                }
+                                aria-label={t("reminder_repeat_label")}
+                                className="h-8 w-16"
+                              />
+                              <span>{t("reminder_repeat_suffix")}</span>
+                            </div>
+                            {step.enabled && (
+                              <p className="text-right text-[0.7rem] leading-relaxed text-muted-foreground/80">
+                                {reminderSchedulePreview(step)
+                                  ? t("reminder_send_schedule", {
+                                      dates: reminderSchedulePreview(step)!,
+                                    })
+                                  : t("reminder_send_schedule_needs_due")}
+                              </p>
+                            )}
                           </div>
                         </div>
 
@@ -762,6 +833,33 @@ export function EngagementBuilder({
                       maxLength={500}
                       placeholder={t("request_payment_description_ph")}
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label
+                      htmlFor="automated-invoice-attachment"
+                      className="text-xs text-muted-foreground"
+                    >
+                      {t("invoice_attachment")}
+                    </Label>
+                    <label
+                      htmlFor="automated-invoice-attachment"
+                      className="flex w-fit cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm hover:bg-muted/50"
+                    >
+                      <Upload className="size-4" aria-hidden />
+                      {invoiceAttachment?.name ?? t("invoice_attachment_choose")}
+                    </label>
+                    <input
+                      id="automated-invoice-attachment"
+                      type="file"
+                      accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
+                      className="sr-only"
+                      onChange={(event) =>
+                        setInvoiceAttachment(event.target.files?.[0] ?? null)
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t("invoice_attachment_hint")}
+                    </p>
                   </div>
                   <label className="flex items-start gap-2 text-sm cursor-pointer">
                     <input
