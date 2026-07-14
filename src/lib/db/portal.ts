@@ -18,6 +18,14 @@ import { resolveFileReason } from "@/lib/review/file-reason";
 import { BUCKET } from "@/lib/storage";
 import { listFinalDocumentsForEngagementSR } from "@/lib/db/final-documents";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
+import {
+  CLIENT_MESSAGING_SCHEMA_MISSING,
+  countUnreadForClient,
+  getThreadForEngagement,
+  listClientMessages,
+  toPortalMessage,
+  type PortalMessage,
+} from "@/lib/db/client-messages";
 
 const TOKEN_REGEX = /^[0-9A-Za-z]{43}$/;
 
@@ -99,6 +107,14 @@ export type PortalContext = {
   // unpaid (and not overridden). The portal then shows a polite locked state
   // instead of the download links, and the gated download route returns 404.
   final_documents_locked: boolean;
+  // Client messaging (Phase 2): the thread with the firm, client-safe fields
+  // only (no internal user ids). Empty + not ready before migration 0650, so
+  // the portal quietly hides the Messages entry.
+  messages: PortalMessage[];
+  // Firm messages the client hasn't seen yet — the "new message" hint on the
+  // portal's Messages entry. Cleared when the client opens the thread.
+  messages_unread: number;
+  messaging_ready: boolean;
 };
 
 export async function loadPortalContext(
@@ -287,6 +303,28 @@ export async function loadPortalContext(
       r.status as SignatureStatus;
   }
 
+  // Client messaging (Phase 2): the thread + the client's unread count.
+  // Tolerant of the tables being absent before migration 0650 (the portal
+  // then hides its Messages entry entirely).
+  let portalMessages: PortalMessage[] = [];
+  let messagesUnread = 0;
+  let messagingReady = false;
+  const [msgRows, msgThread] = await Promise.all([
+    listClientMessages(sb, engagement.id),
+    getThreadForEngagement(sb, engagement.id),
+  ]);
+  if (
+    msgRows !== CLIENT_MESSAGING_SCHEMA_MISSING &&
+    msgThread !== CLIENT_MESSAGING_SCHEMA_MISSING
+  ) {
+    messagingReady = true;
+    portalMessages = msgRows.map(toPortalMessage);
+    messagesUnread = countUnreadForClient(
+      msgRows,
+      msgThread?.client_last_read_at ?? null,
+    );
+  }
+
   // Final documents (accountant deliverables) for the "Your completed documents"
   // section. Tolerant of the table being absent before migration 0620.
   const finalDocRows = await listFinalDocumentsForEngagementSR(engagement.id);
@@ -311,6 +349,43 @@ export async function loadPortalContext(
     signature_status_by_item: signatureStatusByItem,
     final_documents: finalDocuments,
     final_documents_locked: finalDocumentsLocked,
+    messages: portalMessages,
+    messages_unread: messagesUnread,
+    messaging_ready: messagingReady,
+  };
+}
+
+// Resolve a magic token to its engagement for the MESSAGES routes. Mirrors
+// loadPortalContext's gate (shape + not cancelled + not expired) but stays
+// lightweight. Unlike findItemForToken, COMPLETE engagements are allowed
+// through — the thread stays readable after completion — so callers that
+// WRITE must additionally check `status` themselves.
+export async function findEngagementForToken(token: string): Promise<{
+  id: string;
+  firm_id: string;
+  client_id: string;
+  status: string;
+} | null> {
+  if (!isValidTokenShape(token)) return null;
+  const sb = getServiceRoleSupabase();
+  const { data: engagement } = await sb
+    .from("engagements")
+    .select("id, firm_id, client_id, status, magic_expires_at")
+    .eq("magic_token", token)
+    .maybeSingle();
+  if (!engagement) return null;
+  if (engagement.status === "cancelled") return null;
+  if (
+    engagement.magic_expires_at &&
+    new Date(engagement.magic_expires_at) < new Date()
+  ) {
+    return null;
+  }
+  return {
+    id: engagement.id as string,
+    firm_id: engagement.firm_id as string,
+    client_id: engagement.client_id as string,
+    status: engagement.status as string,
   };
 }
 
