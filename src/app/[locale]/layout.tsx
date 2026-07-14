@@ -20,10 +20,27 @@ const jetBrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
-export const metadata: Metadata = {
-  title: `${brand.name}: ${brand.tagline.fr}`,
-  description: brand.tagline.fr,
-};
+// Language-aware fallback title/description for every page that doesn't set
+// its own metadata (the whole signed-in app + the auth pages). English is the
+// default locale, so an unprefixed fresh load reads English in the browser tab;
+// a visitor who explicitly picked French (the /fr prefix) gets the French tab
+// title. Marketing pages (home, how-it-works, contact) already localize their
+// own titles via their page-level generateMetadata, so this only governs the
+// pages that previously inherited the hardcoded French tagline.
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const tagline = hasLocale(routing.locales, locale)
+    ? brand.tagline[locale]
+    : brand.tagline[routing.defaultLocale];
+  return {
+    title: `${brand.name}: ${tagline}`,
+    description: tagline,
+  };
+}
 
 // viewport-fit=cover is what makes env(safe-area-inset-*) resolve to real
 // values on notched iPhones (iOS Safari/Chrome). Without it the mobile bottom
