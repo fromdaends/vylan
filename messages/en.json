@@ -901,7 +901,9 @@
     "kind_client_paid": "Client paid",
     "kind_payment_failed": "Client payment failed",
     "kind_engagement_completed": "Engagement completed",
-    "kind_client_signed": "Client signed a document"
+    "kind_client_signed": "Client signed a document",
+    "kind_client_message": "New message from your client",
+    "reply": "Reply"
   },
   "Inbox": {
     "title": "Inbox",
@@ -926,6 +928,8 @@
     "kind_payment_failed": "Client payment failed",
     "kind_engagement_completed": "Engagement completed",
     "kind_client_signed": "Client signed a document",
+    "kind_client_message": "New message from your client",
+    "reply": "Reply",
     "search_label": "Search clients",
     "search_placeholder": "Find",
     "search_clear": "Clear search",
@@ -1940,7 +1944,7 @@
     "shortcut_settings": "Settings",
     "shortcut_help": "Show this help",
     "footer_email": "Prefer email?",
-    "ai_button": "Ask Vylan",
+    "ai_button": "Chats",
     "ai_title": "Ask Vylan",
     "ai_subtitle": "Your in-app guide. Ask anything about Vylan.",
     "ai_input_placeholder": "Ask anything about Vylan…",

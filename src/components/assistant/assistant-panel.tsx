@@ -14,6 +14,7 @@ import {
   History,
   Info,
   MessageSquare,
+  MessagesSquare,
   Settings,
   Sparkles,
   X,
@@ -327,7 +328,10 @@ export function AssistantPanel({
               aria-hidden
               className="absolute inset-0 -m-1 rounded-full bg-accent/40 blur-md opacity-0 group-hover:opacity-100 transition-opacity"
             />
-            <Sparkles className="relative size-4" aria-hidden />
+            {/* Neutral multi-bubble icon, not sparkles: the panel is now the
+                home of CLIENT messages + AI chat + activity, so the doorway
+                can't read as AI-only (founder rename). */}
+            <MessagesSquare className="relative size-4" aria-hidden />
           </span>
           <span>{tHelp("ai_button")}</span>
           {badge && (

@@ -901,7 +901,9 @@
     "kind_client_paid": "Le client a payé",
     "kind_payment_failed": "Échec du paiement du client",
     "kind_engagement_completed": "Engagement complété",
-    "kind_client_signed": "Le client a signé un document"
+    "kind_client_signed": "Le client a signé un document",
+    "kind_client_message": "Nouveau message de votre client",
+    "reply": "Répondre"
   },
   "Inbox": {
     "title": "Boîte de réception",
@@ -926,6 +928,8 @@
     "kind_payment_failed": "Échec du paiement du client",
     "kind_engagement_completed": "Engagement complété",
     "kind_client_signed": "Le client a signé un document",
+    "kind_client_message": "Nouveau message de votre client",
+    "reply": "Répondre",
     "search_label": "Rechercher des clients",
     "search_placeholder": "Rechercher",
     "search_clear": "Effacer la recherche",
@@ -1940,7 +1944,7 @@
     "shortcut_settings": "Paramètres",
     "shortcut_help": "Afficher cette aide",
     "footer_email": "Préférez-vous écrire ?",
-    "ai_button": "Demander à Vylan",
+    "ai_button": "Discussions",
     "ai_title": "Demander à Vylan",
     "ai_subtitle": "Votre guide intégré. Posez vos questions sur Vylan.",
     "ai_input_placeholder": "Posez votre question…",

@@ -15,6 +15,8 @@ import {
   ChevronRight,
   FileSignature,
   FileUp,
+  MessageSquare,
+  Reply,
   Sparkles,
   Wallet,
   type LucideIcon,
@@ -149,6 +151,14 @@ function NotificationRow({
             <span aria-hidden>·</span>
             <span>{formatRelative(n.timestamp, locale)}</span>
           </div>
+          {/* A client message gets a Reply affordance — the whole row links
+              into the panel's Client-messages tab; the chip makes it clear. */}
+          {n.kind === "client_message" && (
+            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 px-2.5 py-1 text-xs font-medium text-foreground transition-colors group-hover:border-border group-hover:bg-secondary/60">
+              <Reply className="h-3 w-3" aria-hidden />
+              {t("reply")}
+            </span>
+          )}
         </div>
         <ChevronRight
           className="h-4 w-4 text-muted-foreground/30 group-hover:text-foreground/70 transition-colors mt-2 shrink-0"
@@ -191,5 +201,7 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: CheckCircle2, tone: "bg-success/15 text-success" };
     case "client_signed":
       return { Icon: FileSignature, tone: "bg-success/15 text-success" };
+    case "client_message":
+      return { Icon: MessageSquare, tone: "bg-primary/15 text-primary" };
   }
 }
