@@ -2254,7 +2254,8 @@
     "chars_left": "{count} characters left",
     "read_only_complete": "This engagement is complete, so messaging is closed. The conversation history stays visible.",
     "read_only_cancelled": "This engagement is cancelled, so messaging is closed. The conversation history stays visible.",
-    "not_activated": "Client messaging isn't activated yet."
+    "not_activated": "Client messaging isn't activated yet.",
+    "seen": "Seen"
   },
   "Assistant": {
     "panel_title": "Vylan Assistant",

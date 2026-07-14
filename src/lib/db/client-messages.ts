@@ -279,6 +279,28 @@ export async function markThreadReadByClient(
   return (res.data ?? []).length > 0;
 }
 
+// Stamp "the client was emailed about firm messages up to `at`". SERVICE
+// ROLE ONLY (job worker). The watermark is what makes the notify job
+// idempotent: a rerun sees nothing newer than the stamp and skips.
+export async function markClientNotified(
+  sb: SupabaseClient,
+  engagementId: string,
+  at: string,
+): Promise<boolean | MessagingSchemaMissing> {
+  const res = await sb
+    .from("client_message_threads")
+    .update({ client_last_notified_at: at })
+    .eq("engagement_id", engagementId)
+    .select("id");
+  if (res.error) {
+    if (isClientMessagingSchemaMissing(res.error)) {
+      return CLIENT_MESSAGING_SCHEMA_MISSING;
+    }
+    throw res.error;
+  }
+  return (res.data ?? []).length > 0;
+}
+
 // Stamp "the firm has seen the thread as of now". No-op (false) when the
 // thread doesn't exist yet — nothing to mark. The column grant (0650)
 // whitelists firm_last_read_at only.

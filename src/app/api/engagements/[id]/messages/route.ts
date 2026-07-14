@@ -22,6 +22,7 @@ import {
   listClientMessages,
   markThreadReadByFirm,
 } from "@/lib/db/client-messages";
+import { scheduleClientMessageNotification } from "@/lib/client-messages-notify";
 
 export const runtime = "nodejs";
 
@@ -54,6 +55,9 @@ export async function GET(
   return NextResponse.json({
     messages,
     unread: countUnreadForFirm(messages, thread?.firm_last_read_at ?? null),
+    // For the accountant-side-only "Seen" indicator. The CLIENT is never
+    // shown the firm's read state (spec rule) — this only flows firm-ward.
+    clientLastReadAt: thread?.client_last_read_at ?? null,
   });
 }
 
@@ -113,11 +117,18 @@ export async function POST(
   }
 
   // Sending implies you've seen the thread — clear your own unread state so
-  // your reply doesn't leave a stale badge. Best-effort; never fails the send.
+  // your reply doesn't leave a stale badge. Then (re)start the debounced
+  // client-email timer: a burst of sends keeps pushing it back, producing
+  // ONE email. Both best-effort; never fail an already-written send.
   try {
     await markThreadReadByFirm(supabase, id);
   } catch (e) {
     console.error("[client-messages] read-stamp after send failed:", e);
+  }
+  try {
+    await scheduleClientMessageNotification(id);
+  } catch (e) {
+    console.error("[client-messages] notify scheduling failed:", e);
   }
 
   return NextResponse.json({ ok: true, message });

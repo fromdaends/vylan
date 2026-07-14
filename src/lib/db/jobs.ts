@@ -24,7 +24,15 @@ export type JobKind =
   // an engagement was marked complete. Payload: { engagementId }. The worker
   // re-validates the engagement is still complete + the firm is Connect-ready,
   // and is idempotent (skips if an invoice was already sent).
-  | "send_payment_request";
+  | "send_payment_request"
+  // Client messaging (Phase 3): ONE debounced email to the client about new
+  // firm messages. Payload: { engagement_id }. Every firm send cancels the
+  // engagement's pending job and re-enqueues 5 min out, so a burst produces
+  // one email; the worker re-checks read/notified state before sending.
+  | "notify_client_messages"
+  // The mirror: one debounced email to the assigned accountant (else firm
+  // owner) about new client replies. Payload: { engagement_id }.
+  | "notify_firm_messages";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {

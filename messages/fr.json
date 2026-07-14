@@ -2254,7 +2254,8 @@
     "chars_left": "{count} caractères restants",
     "read_only_complete": "Ce mandat est terminé, la messagerie est donc fermée. L'historique de la conversation reste visible.",
     "read_only_cancelled": "Ce mandat est annulé, la messagerie est donc fermée. L'historique de la conversation reste visible.",
-    "not_activated": "La messagerie client n'est pas encore activée."
+    "not_activated": "La messagerie client n'est pas encore activée.",
+    "seen": "Vu"
   },
   "Assistant": {
     "panel_title": "Assistant Vylan",

@@ -939,3 +939,172 @@ const COPY: Record<"fr" | "en", Record<ReminderTone, CopyVariant>> = {
     },
   },
 };
+
+// Client messaging (Phase 3): the debounced "you have a new message" email to
+// the CLIENT. Follows the reminder template (firm-branded header, brand CTA)
+// so it reads as the firm writing, not a Vylan system blast. `snippet` is the
+// latest firm message, already truncated by the caller; `url` lands directly
+// on the portal's Messages thread (?view=messages).
+export function buildClientMessageEmail(opts: {
+  clientName: string;
+  firmName: string;
+  firmLogoUrl?: string | null;
+  brandColor?: string | null;
+  senderName: string;
+  engagementTitle: string;
+  snippet: string;
+  count: number;
+  url: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  const fr = opts.locale === "fr";
+  const brand = sanitizeColor(opts.brandColor) ?? DEFAULT_BRAND;
+  const subject = fr
+    ? opts.count > 1
+      ? `${opts.count} nouveaux messages de ${opts.firmName}`
+      : `Nouveau message de ${opts.firmName}`
+    : opts.count > 1
+      ? `${opts.count} new messages from ${opts.firmName}`
+      : `New message from ${opts.firmName}`;
+  const greeting = fr
+    ? `Bonjour ${opts.clientName},`
+    : `Hi ${opts.clientName},`;
+  const intro = fr
+    ? opts.count > 1
+      ? `${opts.senderName} vous a écrit ${opts.count} messages au sujet de « ${opts.engagementTitle} ». Le plus récent :`
+      : `${opts.senderName} vous a écrit au sujet de « ${opts.engagementTitle} » :`
+    : opts.count > 1
+      ? `${opts.senderName} sent you ${opts.count} messages about "${opts.engagementTitle}". The latest:`
+      : `${opts.senderName} sent you a message about "${opts.engagementTitle}":`;
+  const cta = fr ? "Ouvrir la conversation" : "Open the conversation";
+  const linkLabel = fr
+    ? "Ou copiez ce lien dans votre navigateur :"
+    : "Or copy this link into your browser:";
+  const trust = fr
+    ? "Répondez depuis votre portail sécurisé — aucun mot de passe à créer."
+    : "Reply from your secure portal — no password needed.";
+  const header = renderHeader(opts.firmLogoUrl, opts.firmName);
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;color:#1e293b">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8fafc;padding:32px 16px">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;background-color:#ffffff;border-radius:12px;box-shadow:0 1px 3px rgba(15,23,42,0.06);overflow:hidden">
+          <tr>
+            <td style="padding:24px 28px 0 28px">
+              ${header}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 28px 0 28px">
+              <p style="margin:0 0 12px;font-size:15px;line-height:1.55;color:#1e293b">${escapeHtml(greeting)}</p>
+              <p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#1e293b">${escapeHtml(intro)}</p>
+              <div style="margin:0 0 14px;padding:12px 16px;border-left:3px solid ${brand};background-color:#f8fafc;border-radius:0 8px 8px 0">
+                <p style="margin:0;font-size:15px;line-height:1.55;color:#334155;white-space:pre-wrap">${escapeHtml(opts.snippet)}</p>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 28px 4px 28px">
+              <a href="${opts.url}" style="display:inline-block;background-color:${brand};color:#ffffff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;line-height:1">${cta}</a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:12px 28px 0 28px">
+              <p style="margin:0;font-size:12px;line-height:1.5;color:#64748b">${escapeHtml(linkLabel)}</p>
+              <p style="margin:4px 0 0;font-family:'SF Mono',ui-monospace,Menlo,Consolas,monospace;font-size:12px;line-height:1.5;color:#475569;word-break:break-all">${opts.url}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 28px 24px 28px">
+              <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#475569;border-top:1px solid #e2e8f0;padding-top:16px">${escapeHtml(trust)}</p>
+              <p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#0f172a;font-weight:500">— ${escapeHtml(opts.firmName)}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = [
+    greeting,
+    "",
+    intro,
+    "",
+    `"${opts.snippet}"`,
+    "",
+    `${cta}: ${opts.url}`,
+    "",
+    trust,
+    "",
+    `— ${opts.firmName}`,
+  ].join("\n");
+
+  return { subject, html, text };
+}
+
+// Client messaging (Phase 3): the debounced "your client replied" email to
+// the ACCOUNTANT. Internal notification — plain and compact, linking to the
+// engagement page's Messages tab.
+export function buildFirmMessageEmail(opts: {
+  accountantName: string | null;
+  clientName: string;
+  engagementTitle: string;
+  snippet: string;
+  count: number;
+  url: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  const fr = opts.locale === "fr";
+  const subject = fr
+    ? opts.count > 1
+      ? `${opts.clientName} vous a envoyé ${opts.count} messages — ${opts.engagementTitle}`
+      : `${opts.clientName} vous a envoyé un message — ${opts.engagementTitle}`
+    : opts.count > 1
+      ? `${opts.clientName} sent you ${opts.count} messages — ${opts.engagementTitle}`
+      : `${opts.clientName} sent you a message — ${opts.engagementTitle}`;
+  const greeting = fr
+    ? `Bonjour${opts.accountantName ? ` ${opts.accountantName}` : ""},`
+    : `Hi${opts.accountantName ? ` ${opts.accountantName}` : ""},`;
+  const intro = fr
+    ? opts.count > 1
+      ? `${opts.clientName} a répondu dans « ${opts.engagementTitle} » (${opts.count} nouveaux messages). Le plus récent :`
+      : `${opts.clientName} a répondu dans « ${opts.engagementTitle} » :`
+    : opts.count > 1
+      ? `${opts.clientName} replied in "${opts.engagementTitle}" (${opts.count} new messages). The latest:`
+      : `${opts.clientName} replied in "${opts.engagementTitle}":`;
+  const cta = fr ? "Ouvrir le mandat" : "Open the engagement";
+
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>${escapeHtml(greeting)}</p>
+<p>${escapeHtml(intro)}</p>
+<div style="margin:0 0 16px;padding:12px 16px;border-left:3px solid #1e293b;background-color:#f8fafc;border-radius:0 8px 8px 0">
+  <p style="margin:0;font-size:15px;line-height:1.55;color:#334155;white-space:pre-wrap">${escapeHtml(opts.snippet)}</p>
+</div>
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">${cta}</a>
+</p>
+<p style="color:#64748b;font-size:12px;margin-top:32px">Vylan</p>
+</body></html>`;
+
+  const text = [
+    greeting,
+    "",
+    intro,
+    "",
+    `"${opts.snippet}"`,
+    "",
+    `${cta}: ${opts.url}`,
+  ].join("\n");
+
+  return { subject, html, text };
+}
