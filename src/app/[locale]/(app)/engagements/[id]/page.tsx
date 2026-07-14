@@ -556,8 +556,8 @@ export default async function EngagementDetailPage({
                   reasonKey="block_send_reminder_reason"
                   variant="outline"
                   size="sm"
-                  className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-36 hover:gap-1.5 hover:px-3 focus-visible:w-36 focus-visible:gap-1.5 focus-visible:px-3"
-                  labelClassName="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-32 group-hover:opacity-100 group-focus-visible:max-w-32 group-focus-visible:opacity-100"
+                  className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-40 hover:gap-1.5 hover:px-3 focus-visible:w-40 focus-visible:gap-1.5 focus-visible:px-3"
+                  labelClassName="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-36 group-hover:opacity-100 group-focus-visible:max-w-36 group-focus-visible:opacity-100"
                 />
               ) : (
                 <form action={sendReminderAction}>
@@ -568,10 +568,10 @@ export default async function EngagementDetailPage({
                     size="sm"
                     aria-label={t("send_reminder")}
                     title={t("send_reminder")}
-                    className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-36 hover:gap-1.5 hover:px-3 focus-visible:w-36 focus-visible:gap-1.5 focus-visible:px-3"
+                    className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-40 hover:gap-1.5 hover:px-3 focus-visible:w-40 focus-visible:gap-1.5 focus-visible:px-3"
                   >
                     <Bell className="size-4" />
-                    <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-32 group-hover:opacity-100 group-focus-visible:max-w-32 group-focus-visible:opacity-100">
+                    <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-36 group-hover:opacity-100 group-focus-visible:max-w-36 group-focus-visible:opacity-100">
                       {t("send_reminder")}
                     </span>
                   </Button>
