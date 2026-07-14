@@ -14,6 +14,7 @@ import {
   softDeleteEngagement,
   restoreEngagement,
   setRemindersPaused,
+  updateEngagementReminderAutomation,
   getEngagement,
   type CreateEngagementInput,
 } from "@/lib/db/engagements";
@@ -22,6 +23,7 @@ import { logUserActivity } from "@/lib/db/activity";
 import {
   scheduleEngagementReminders,
   cancelEngagementReminders,
+  rescheduleEngagementReminders,
 } from "@/lib/reminders";
 import {
   dispatchInvoiceOnCompletion,
@@ -580,6 +582,66 @@ export async function toggleRemindersPausedAction(formData: FormData) {
     );
   }
   revalidateEngagementPaths(id);
+}
+
+export type ReminderAutomationEditResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function updateReminderAutomationAction(input: {
+  engagementId: string;
+  settings: ReminderSettings;
+  paused: boolean;
+}): Promise<ReminderAutomationEditResult> {
+  const parsedId = z.string().regex(UUID_REGEX).safeParse(input.engagementId);
+  const parsedSettings = ReminderSettingsSchema.safeParse(input.settings);
+  if (!parsedId.success || !parsedSettings.success) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const [user, firm, engagement] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    getEngagement(input.engagementId),
+  ]);
+  if (!user || !firm || !engagement || engagement.firm_id !== firm.id) {
+    return { ok: false, error: "not_found" };
+  }
+  if (engagement.status !== "sent" && engagement.status !== "in_progress") {
+    return { ok: false, error: "not_live" };
+  }
+
+  const settings = normalizeReminderSettings(parsedSettings.data);
+  try {
+    await updateEngagementReminderAutomation(
+      engagement.id,
+      settings,
+      input.paused,
+    );
+    if (input.paused) {
+      await cancelEngagementReminders(engagement.id);
+    } else if (engagement.sent_at) {
+      await rescheduleEngagementReminders({
+        engagementId: engagement.id,
+        sentAt: new Date(engagement.sent_at),
+        dueDate: engagement.due_date,
+        settings,
+      });
+    }
+    if (engagement.reminders_paused !== input.paused) {
+      await logUserActivity(
+        firm.id,
+        engagement.id,
+        input.paused ? "reminders_paused" : "reminders_resumed",
+        {},
+      );
+    }
+    revalidateEngagementPaths(engagement.id);
+    return { ok: true };
+  } catch (error) {
+    console.error("[updateReminderAutomationAction] failed:", error);
+    return { ok: false, error: "save_failed" };
+  }
 }
 
 export async function sendReminderAction(formData: FormData) {

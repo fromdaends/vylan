@@ -66,6 +66,47 @@ export async function setRemindersPaused(
   if (error) throw error;
 }
 
+export async function updateEngagementReminderAutomation(
+  id: string,
+  settings: ReminderSettings,
+  paused: boolean,
+): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ reminder_settings: settings, reminders_paused: paused })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function updateEngagementInvoiceAutomation(
+  id: string,
+  input: {
+    mode: "off" | "on_completion" | "delayed";
+    delayDays: number | null;
+    amountCents: number | null;
+    description: string | null;
+    locksDeliverables: boolean;
+  },
+): Promise<boolean> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({
+      invoice_auto_mode: input.mode,
+      invoice_delay_days: input.delayDays,
+      invoice_amount_cents: input.amountCents,
+      invoice_description: input.description,
+      invoice_locks_deliverables: input.locksDeliverables,
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("[engagements] update invoice automation failed:", error);
+    return false;
+  }
+  return true;
+}
+
 // Set (or clear) the engagement's deliverables-lock preference (migration 0610).
 // Used by the accountant's "unlock without payment" when no invoice row exists yet
 // (a deferred invoice that hasn't fired) so the fallback lock is lifted. RLS-

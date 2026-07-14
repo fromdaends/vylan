@@ -83,11 +83,20 @@ export async function scheduleEngagementReminders(opts: {
     dueDate: opts.dueDate,
     settings: opts.settings,
   });
-  for (const p of plan) {
+  await enqueueReminderPlan(opts.engagementId, plan);
+}
+
+async function enqueueReminderPlan(
+  engagementId: string,
+  plan: ReminderPlanItem[],
+  futureOnly = false,
+): Promise<void> {
+  const entries = futureOnly ? futureReminderPlan(plan) : plan;
+  for (const p of entries) {
     await enqueueJob({
       kind: "send_reminder",
       payload: {
-        engagement_id: opts.engagementId,
+        engagement_id: engagementId,
         tone: p.tone,
         occurrence: p.occurrence,
         repeat_count: p.repeatCount,
@@ -149,6 +158,32 @@ export async function rescheduleOverdueReminder(opts: {
       runAfter: repeatedRunAfter,
     });
   }
+}
+
+export function futureReminderPlan(
+  plan: ReminderPlanItem[],
+  now = new Date(),
+): ReminderPlanItem[] {
+  const nowMs = now.getTime();
+  return plan.filter((item) => item.runAfter.getTime() > nowMs);
+}
+
+// Rebuild a live engagement's cadence after an accountant edits it. Past plan
+// entries are deliberately skipped so changing settings can never replay an
+// email or SMS that was already due before the edit.
+export async function rescheduleEngagementReminders(opts: {
+  engagementId: string;
+  sentAt: Date;
+  dueDate: string | null;
+  settings: ReminderSettings;
+}): Promise<void> {
+  await cancelEngagementReminders(opts.engagementId);
+  const plan = buildReminderPlan({
+    sentAt: opts.sentAt,
+    dueDate: opts.dueDate,
+    settings: opts.settings,
+  });
+  await enqueueReminderPlan(opts.engagementId, plan, true);
 }
 
 // Job worker.
