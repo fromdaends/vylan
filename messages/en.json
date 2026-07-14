@@ -1365,7 +1365,7 @@
     "doc_type": "Document type",
     "doc_type_search": "Search documents…",
     "doc_type_empty": "No matching document.",
-    "send_reminder": "Send reminder now",
+    "send_reminder": "Send reminder",
     "pause_reminders": "Pause reminders",
     "resume_reminders": "Resume reminders",
     "reminders_paused_badge": "Reminders paused",
