@@ -50,6 +50,31 @@ export function PaymentDueCard({
 
   const amount = formatCurrency(paymentRequest.amount_cents / 100, locale);
 
+  // Turn the checkout route's reason code into a message the client can act on.
+  // The old behaviour showed one generic "try again" for every failure — which
+  // is wrong for the causes that retrying can never fix (the firm isn't set up
+  // to accept payments, the invoice is already handled, the link is dead). Any
+  // unknown/transient code (stripe_error, network) falls through to the generic
+  // retryable message.
+  function messageForError(code: string | undefined): string {
+    switch (code) {
+      case "not_accepting_payments":
+      case "stripe_not_configured":
+        return t("pay_error_unavailable", { firm: firmName });
+      case "no_open_request":
+        return t("pay_error_no_request");
+      case "not_found":
+      case "cancelled":
+      case "expired":
+      case "invalid_token":
+        return t("pay_error_link", { firm: firmName });
+      case "rate_limited":
+        return t("pay_error_busy");
+      default:
+        return t("pay_error");
+    }
+  }
+
   async function pay() {
     setLoading(true);
     setError(null);
@@ -60,13 +85,13 @@ export function PaymentDueCard({
         body: JSON.stringify({ token }),
       });
       const data = (await res.json().catch(() => null)) as
-        | { url?: string }
+        | { url?: string; error?: string }
         | null;
       if (res.ok && data?.url) {
         window.location.assign(data.url);
         return;
       }
-      setError(t("pay_error"));
+      setError(messageForError(data?.error));
     } catch {
       setError(t("pay_error"));
     }
