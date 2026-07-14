@@ -59,7 +59,6 @@ type ThemeChoice = "light" | "dark" | "system";
 type SectionId =
   | "account"
   | "security"
-  | "appearance"
   | "general"
   | "payments"
   | "integrations"
@@ -83,14 +82,13 @@ const CA_TIMEZONES: ReadonlyArray<readonly [string, string]> = [
 // ─────────────────────────────────────────────────────────────────────────────
 // Shell: a left sub-nav of categories + the selected category on the right.
 // Collapses to a horizontal scrolling tab row on narrow widths. Defaults to
-// Appearance. Server data arrives as props; everything is bilingual via the
+// Account. Server data arrives as props; everything is bilingual via the
 // existing Settings namespace.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SECTION_IDS: SectionId[] = [
   "account",
   "security",
-  "appearance",
   "general",
   "payments",
   "integrations",
@@ -163,7 +161,12 @@ export function SettingsShell({
   // The subscription summary used to live under its own "billing" tab; it now
   // lives inside the new "Payments" section. Keep old ?tab=billing bookmarks /
   // links working by aliasing them to the Payments section.
-  const aliased = initialSection === "billing" ? "payments" : initialSection;
+  const aliased =
+    initialSection === "billing"
+      ? "payments"
+      : initialSection === "appearance"
+        ? "general"
+        : initialSection;
   const requested: SectionId = SECTION_IDS.includes(aliased as SectionId)
     ? (aliased as SectionId)
     : "account";
@@ -176,7 +179,6 @@ export function SettingsShell({
   const allNav: { id: SectionId; label: string; icon: typeof Palette }[] = [
     { id: "account", label: t("nav_account"), icon: UserCog },
     { id: "security", label: t("nav_security"), icon: ShieldCheck },
-    { id: "appearance", label: t("nav_appearance"), icon: Palette },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
     { id: "payments", label: t("nav_payments"), icon: Wallet },
     { id: "integrations", label: t("nav_integrations"), icon: Plug },
@@ -231,7 +233,6 @@ export function SettingsShell({
             {isOwner && <DataPrivacySection firmName={firmName} t={t} />}
           </div>
         )}
-        {section === "appearance" && <AppearanceSection t={t} />}
         {section === "general" && (
           <GeneralSection
             currentLocale={currentLocale}
@@ -504,6 +505,7 @@ function GeneralSection({
 }) {
   return (
     <div className="space-y-10">
+      <AppearanceSection t={t} />
       {/* UI language is a per-user preference (kept for staff); the firm
           timezone is a firm-wide setting (owner-only). */}
       <LanguageSection currentLocale={currentLocale} t={t} />
