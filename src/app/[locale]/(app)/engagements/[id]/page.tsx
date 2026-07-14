@@ -52,8 +52,6 @@ import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
-import { RejectModal } from "@/components/engagements/reject-modal";
-import { ReopenFileButton } from "@/components/engagements/reopen-file-button";
 import { AssistantEngagementBridge } from "@/components/assistant/engagement-panel-bridge";
 import { OpenAssistantActivityButton } from "@/components/assistant/open-assistant-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
@@ -926,19 +924,17 @@ async function ItemRow({
               // can't be rejected — it already doesn't count. Once a document IS
               // rejected it's done: the X is replaced by an Undo (reopen) so it
               // never prompts a pointless second reject.
-              actions={
-                canEdit && !f.is_duplicate ? (
-                  f.review_status === "rejected" ? (
-                    <ReopenFileButton fileId={f.id} />
-                  ) : (
-                    <RejectModal
-                      itemId={item.id}
-                      itemLabel={f.display_name ?? f.original_filename}
-                      fileId={f.id}
-                      compact
-                    />
-                  )
-                ) : undefined
+              reviewAction={
+                canEdit && !f.is_duplicate
+                  ? f.review_status === "rejected"
+                    ? { kind: "reopen" as const, fileId: f.id }
+                    : {
+                        kind: "reject" as const,
+                        itemId: item.id,
+                        itemLabel: f.display_name ?? f.original_filename,
+                        fileId: f.id,
+                      }
+                  : undefined
               }
               // QuickBooks draft: the suggested mapping for a receipt/invoice.
               // Shown only when AI is on, a draft exists (which implies

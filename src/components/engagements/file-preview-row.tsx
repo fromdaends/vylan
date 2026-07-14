@@ -15,10 +15,13 @@ import {
   FileText,
   Loader2,
   Maximize2,
+  MoreVertical,
+  RotateCcw,
   Sparkles,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
+import { toast } from "sonner";
 import { deleteFileAction } from "@/app/actions/files";
 import { formatBytes, type AppLocale } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -31,6 +34,20 @@ import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -38,6 +55,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { RejectModal } from "@/components/engagements/reject-modal";
 
 // The document viewer pulls in react-pdf / pdf.js — browser-only and a sizeable
 // chunk — so load it lazily (ssr:false). It ships only when an accountant
@@ -125,7 +143,7 @@ export function FilePreviewRow({
   clientName,
   rejectionCount,
   hideAi = false,
-  actions,
+  reviewAction,
   footer,
 }: {
   file: UploadedFile;
@@ -144,9 +162,11 @@ export function FilePreviewRow({
   // (the badges) — otherwise the badges would sit in a
   // permanent "Analyzing…" state waiting for a verdict that never comes.
   hideAi?: boolean;
-  // Extra controls rendered at the end of the header row (e.g. the per-copy
-  // approve/reject icons for a returned signed copy).
-  actions?: ReactNode;
+  // Optional accountant review action. It lives in both the kebab and
+  // right-click menus rather than consuming permanent row space.
+  reviewAction?:
+    | { kind: "reject"; itemId: string; itemLabel: string; fileId: string }
+    | { kind: "reopen"; fileId: string };
   // Optional content rendered at the bottom of the row, inside the same <li>
   // (e.g. the QuickBooks draft card). Kept inside the li so the list markup
   // stays valid and the content reads as belonging to this file.
@@ -165,6 +185,8 @@ export function FilePreviewRow({
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [, startTransition] = useTransition();
 
   const isImage = file.mime_type.startsWith("image/");
@@ -212,6 +234,25 @@ export function FilePreviewRow({
         setDeleting(false);
       }
     });
+  }
+
+  async function reopenFile() {
+    if (reviewAction?.kind !== "reopen" || reopening) return;
+    setReopening(true);
+    try {
+      const response = await fetch(`/api/files/${reviewAction.fileId}/reopen`, {
+        method: "POST",
+      });
+      const result = (await response.json().catch(() => null)) as {
+        ok?: boolean;
+      } | null;
+      if (result?.ok) router.refresh();
+      else toast.error(t("reopen_error"));
+    } catch {
+      toast.error(t("reopen_error"));
+    } finally {
+      setReopening(false);
+    }
   }
 
   // The AI verdict, folded into the row itself (tone + a compact status chip in
@@ -290,12 +331,14 @@ export function FilePreviewRow({
   const showReasonLine = showAi && isProblemRow && !!aiDetail;
 
   return (
-    <li
-      className={cn(
-        "rounded-md border transition-colors",
-        tone ? tone.row : NEUTRAL_ROW,
-      )}
-    >
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <li
+          className={cn(
+            "rounded-md border transition-colors",
+            tone ? tone.row : NEUTRAL_ROW,
+          )}
+        >
       <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs">
         {canPreview ? (
           <button
@@ -347,42 +390,66 @@ export function FilePreviewRow({
         <span className="font-mono text-muted-foreground shrink-0">
           {formatBytes(file.size_bytes)}
         </span>
-        <a
-          href={source.openHref}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-          aria-label={t("open_new_tab")}
-          title={t("open_new_tab")}
-        >
-          <ExternalLink className="size-3.5" />
-        </a>
-        <a
-          href={source.downloadUrl}
-          download={displayName}
-          className="text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-          aria-label={t("download_file")}
-          title={t("download_file")}
-        >
-          <Download className="size-3.5" />
-        </a>
-        {actions}
-        {/* Permanent delete — last, destructive tone. Confirmed in a dialog;
-            the document is erased outright and disappears from the client
-            portal (no recycle bin, by design). */}
-        <button
-          type="button"
-          onClick={() => {
-            setDeleteFailed(false);
-            setConfirmDeleteOpen(true);
-          }}
-          className="text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
-          aria-label={t("file_delete")}
-          title={t("file_delete")}
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              className="inline-flex size-7 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none"
+              aria-label={t("more_actions")}
+              title={t("more_actions")}
+            >
+              <MoreVertical className="size-4" aria-hidden />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44 !animate-none">
+            <DropdownMenuItem asChild>
+              <a href={source.openHref} target="_blank" rel="noopener noreferrer">
+                <ExternalLink />
+                {t("open_new_tab")}
+              </a>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <a href={source.downloadUrl} download={displayName}>
+                <Download />
+                {t("download_file")}
+              </a>
+            </DropdownMenuItem>
+            {reviewAction?.kind === "reject" && (
+              <DropdownMenuItem onSelect={() => setRejectOpen(true)}>
+                <TriangleAlert />
+                {t("reject")}
+              </DropdownMenuItem>
+            )}
+            {reviewAction?.kind === "reopen" && (
+              <DropdownMenuItem disabled={reopening} onSelect={reopenFile}>
+                <RotateCcw className={cn(reopening && "animate-spin")} />
+                {t("file_undo_reject")}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() => {
+                setDeleteFailed(false);
+                setConfirmDeleteOpen(true);
+              }}
+            >
+              <Trash2 />
+              {t("file_delete")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+      {reviewAction?.kind === "reject" && (
+        <RejectModal
+          itemId={reviewAction.itemId}
+          itemLabel={reviewAction.itemLabel}
+          fileId={reviewAction.fileId}
+          open={rejectOpen}
+          onOpenChange={setRejectOpen}
+          hideTrigger
+        />
+      )}
       <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -475,6 +542,45 @@ export function FilePreviewRow({
           onClose={() => setViewerOpen(false)}
         />
       )}
-    </li>
+        </li>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-44 !animate-none">
+        <ContextMenuItem asChild>
+          <a href={source.openHref} target="_blank" rel="noopener noreferrer">
+            <ExternalLink />
+            {t("open_new_tab")}
+          </a>
+        </ContextMenuItem>
+        <ContextMenuItem asChild>
+          <a href={source.downloadUrl} download={displayName}>
+            <Download />
+            {t("download_file")}
+          </a>
+        </ContextMenuItem>
+        {reviewAction?.kind === "reject" && (
+          <ContextMenuItem onSelect={() => setRejectOpen(true)}>
+            <TriangleAlert />
+            {t("reject")}
+          </ContextMenuItem>
+        )}
+        {reviewAction?.kind === "reopen" && (
+          <ContextMenuItem disabled={reopening} onSelect={reopenFile}>
+            <RotateCcw className={cn(reopening && "animate-spin")} />
+            {t("file_undo_reject")}
+          </ContextMenuItem>
+        )}
+        <ContextMenuSeparator />
+        <ContextMenuItem
+          variant="destructive"
+          onSelect={() => {
+            setDeleteFailed(false);
+            setConfirmDeleteOpen(true);
+          }}
+        >
+          <Trash2 />
+          {t("file_delete")}
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
