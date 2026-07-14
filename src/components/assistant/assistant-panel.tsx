@@ -27,11 +27,13 @@ import {
   getAssistantServerSnapshot,
   getAssistantState,
   openAssistant,
+  openAssistantForEngagement,
   openAssistantOnPageEngagement,
   setAssistantTab,
   setSelectedEngagement,
   subscribeAssistant,
   type AssistantTab,
+  type EngagementOption,
 } from "@/components/assistant/assistant-store";
 import {
   clampPanelWidth,
@@ -144,8 +146,18 @@ export function AssistantPanel({
     }
     function onOpenAssistant(e: Event) {
       const detail = (e as CustomEvent).detail as
-        | { tab?: AssistantTab; scopeToPage?: boolean }
+        | {
+            tab?: AssistantTab;
+            scopeToPage?: boolean;
+            engagement?: EngagementOption;
+          }
         | undefined;
+      // An explicit engagement (a notification's Reply row) wins outright:
+      // open scoped to it, whatever page we're on.
+      if (detail?.engagement) {
+        openAssistantForEngagement(detail.engagement, detail?.tab ?? "chat");
+        return;
+      }
       // scopeToPage (the engagement page's Activity triggers): rescope to the
       // current page's engagement even when the panel is already open —
       // the user explicitly asked for THIS engagement.
