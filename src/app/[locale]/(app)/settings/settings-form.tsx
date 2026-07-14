@@ -49,8 +49,10 @@ import {
 } from "@/components/settings/integrations-section";
 import { PaymentsServicePrices } from "@/components/settings/payments-service-prices";
 import { PaymentsInvoiceDefaults } from "@/components/settings/payments-invoice-defaults";
+import { ReminderAutomationDefaults } from "@/components/settings/reminder-automation-defaults";
 import { PaymentsList } from "@/components/payments/payments-list";
 import type { PaymentsListRow } from "@/lib/db/payment-requests";
+import type { ReminderSettings } from "@/lib/reminder-settings";
 import { MfaSection } from "@/components/profile/mfa-section";
 // Type-only import (erased at build) — safe in this client component even though
 // usage.ts is server code. Keeps the AI-usage prop shape in sync with the source.
@@ -109,6 +111,7 @@ export function SettingsShell({
   chatConfirmActions,
   invoiceDefaultMode,
   invoiceDefaultDelayDays,
+  reminderDefaultSettings,
   aiUsage,
   isOwner,
   billingSlot,
@@ -134,6 +137,7 @@ export function SettingsShell({
   // Firm-wide default invoice automation (owner-only, migration 0590).
   invoiceDefaultMode: "off" | "on_completion" | "delayed";
   invoiceDefaultDelayDays: number | null;
+  reminderDefaultSettings: ReminderSettings | null;
   aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -282,6 +286,9 @@ export function SettingsShell({
                 {t("automation_hint")}
               </p>
             </section>
+            <ReminderAutomationDefaults
+              initialSettings={reminderDefaultSettings}
+            />
             {connect?.chargesEnabled ? (
               <PaymentsInvoiceDefaults
                 initialMode={invoiceDefaultMode}
