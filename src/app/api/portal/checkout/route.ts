@@ -15,6 +15,31 @@ import {
 
 export const runtime = "nodejs";
 
+// Blocked-checkout reason codes. Returned verbatim to the client (which maps
+// each to a specific message) AND logged server-side so the exact cause of a
+// failed "Pay now" is visible in the Vercel logs instead of a mute 4xx/5xx.
+type BlockReason =
+  | "stripe_not_configured"
+  | "invalid_token"
+  | "rate_limited"
+  | "not_found"
+  | "cancelled"
+  | "expired"
+  | "not_accepting_payments"
+  | "no_open_request"
+  | "stripe_error";
+
+// One place to emit the breadcrumb + the JSON body, so no blocked path can
+// return silently. context carries the ids that make a prod incident traceable.
+function blocked(
+  reason: BlockReason,
+  status: number,
+  context: Record<string, unknown> = {},
+): NextResponse {
+  console.warn("[portal/checkout] blocked:", reason, context);
+  return NextResponse.json({ error: reason }, { status });
+}
+
 // POST /api/portal/checkout  Body: { token }
 //
 // Unauthenticated client endpoint. The client only sends the magic token; the
@@ -24,7 +49,8 @@ export const runtime = "nodejs";
 // accountant's connected account (zero platform fee) and returns the hosted URL.
 export async function POST(request: NextRequest) {
   if (!isStripeConfigured()) {
-    return NextResponse.json({ error: "stripe_not_configured" }, { status: 503 });
+    // Platform-level: the Vylan Stripe key isn't set in this environment.
+    return blocked("stripe_not_configured", 503);
   }
 
   const body = (await request.json().catch(() => null)) as
@@ -32,7 +58,7 @@ export async function POST(request: NextRequest) {
     | null;
   const token = body?.token;
   if (typeof token !== "string" || !isValidTokenShape(token)) {
-    return NextResponse.json({ error: "invalid_token" }, { status: 400 });
+    return blocked("invalid_token", 400);
   }
 
   // Rate-limit per token AND per IP — the token is the identity, the IP catches
@@ -44,6 +70,7 @@ export async function POST(request: NextRequest) {
   ]) {
     const rl = await checkRateLimit(check);
     if (!rl.ok) {
+      console.warn("[portal/checkout] blocked: rate_limited", { key: check.key });
       const res = NextResponse.json({ error: "rate_limited" }, { status: 429 });
       if (rl.retryAfter) res.headers.set("Retry-After", String(rl.retryAfter));
       return res;
@@ -57,16 +84,19 @@ export async function POST(request: NextRequest) {
     .eq("magic_token", token)
     .maybeSingle();
   if (!engagement) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+    return blocked("not_found", 404);
   }
   if (engagement.status === "cancelled") {
-    return NextResponse.json({ error: "cancelled" }, { status: 400 });
+    return blocked("cancelled", 400, { engagementId: engagement.id });
   }
   if (
     engagement.magic_expires_at &&
     new Date(engagement.magic_expires_at) < new Date()
   ) {
-    return NextResponse.json({ error: "expired" }, { status: 400 });
+    return blocked("expired", 400, {
+      engagementId: engagement.id,
+      expiredAt: engagement.magic_expires_at,
+    });
   }
 
   const { data: firm } = await sb
@@ -79,15 +109,22 @@ export async function POST(request: NextRequest) {
     firm.connect_charges_enabled !== true ||
     !firm.stripe_connect_account_id
   ) {
-    return NextResponse.json(
-      { error: "not_accepting_payments" },
-      { status: 409 },
-    );
+    // The firm can't receive money right now. This is the single most likely
+    // cause of a live "Pay now" failure: the accountant hasn't finished Stripe
+    // Connect onboarding, disconnected, or the account's charges were disabled.
+    return blocked("not_accepting_payments", 409, {
+      firmId: engagement.firm_id,
+      hasAccount: Boolean(firm?.stripe_connect_account_id),
+      chargesEnabled: firm?.connect_charges_enabled === true,
+    });
   }
 
   const pr = await getLatestPaymentRequestForEngagementSR(engagement.id);
   if (!pr || pr.status !== "requested") {
-    return NextResponse.json({ error: "no_open_request" }, { status: 409 });
+    return blocked("no_open_request", 409, {
+      engagementId: engagement.id,
+      latestStatus: pr?.status ?? null,
+    });
   }
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
@@ -126,7 +163,15 @@ export async function POST(request: NextRequest) {
       { stripeAccount: firm.stripe_connect_account_id },
     );
   } catch (e) {
-    console.error("[portal/checkout] session create failed:", e);
+    // Stripe rejected the session create on the connected account — e.g. a
+    // test-vs-live key mismatch, an account that can't yet accept charges, or a
+    // currency/amount problem. Log the raw error (server-only) so the exact
+    // Stripe message is recoverable from the Vercel logs.
+    console.error(
+      "[portal/checkout] blocked: stripe_error — session create failed for account",
+      firm.stripe_connect_account_id,
+      e,
+    );
     return NextResponse.json({ error: "stripe_error" }, { status: 502 });
   }
 

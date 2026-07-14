@@ -1,10 +1,19 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { render, cleanup, screen } from "@testing-library/react";
+import { describe, it, expect, afterEach, vi } from "vitest";
+import {
+  render,
+  cleanup,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "../../../messages/en.json";
 import { PaymentDueCard } from "./payment-due-card";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 type PR = React.ComponentProps<typeof PaymentDueCard>["paymentRequest"];
 const BASE: PR = {
@@ -78,5 +87,67 @@ describe("PaymentDueCard", () => {
   it("renders nothing for a canceled request", () => {
     const { container } = renderCard({ status: "canceled" });
     expect(container).toBeEmptyDOMElement();
+  });
+
+  // The checkout route returns a distinct reason code per failure; the card must
+  // show a message the client can act on, not one generic "try again" for all.
+  function mockCheckout(status: number, error: string) {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: status >= 200 && status < 300,
+      json: async () => ({ error }),
+    } as Response);
+  }
+
+  async function clickPayAndReadError(): Promise<string> {
+    fireEvent.click(screen.getByRole("button", { name: new RegExp(en.Portal.pay_now) }));
+    let text = "";
+    await waitFor(() => {
+      const el = document.querySelector("p.text-destructive");
+      expect(el).toBeTruthy();
+      text = el?.textContent ?? "";
+    });
+    return text;
+  }
+
+  it("tells the client the firm can't accept payments (not retryable)", async () => {
+    mockCheckout(409, "not_accepting_payments");
+    renderCard();
+    expect(await clickPayAndReadError()).toBe(
+      en.Portal.pay_error_unavailable.replace("{firm}", "Acme"),
+    );
+  });
+
+  it("maps a missing Stripe platform config to the same 'unavailable' message", async () => {
+    mockCheckout(503, "stripe_not_configured");
+    renderCard();
+    expect(await clickPayAndReadError()).toBe(
+      en.Portal.pay_error_unavailable.replace("{firm}", "Acme"),
+    );
+  });
+
+  it("tells the client the invoice was already handled", async () => {
+    mockCheckout(409, "no_open_request");
+    renderCard();
+    expect(await clickPayAndReadError()).toBe(en.Portal.pay_error_no_request);
+  });
+
+  it("tells the client the link is dead for an expired/cancelled engagement", async () => {
+    mockCheckout(400, "expired");
+    renderCard();
+    expect(await clickPayAndReadError()).toBe(
+      en.Portal.pay_error_link.replace("{firm}", "Acme"),
+    );
+  });
+
+  it("shows a wait-and-retry message when rate limited", async () => {
+    mockCheckout(429, "rate_limited");
+    renderCard();
+    expect(await clickPayAndReadError()).toBe(en.Portal.pay_error_busy);
+  });
+
+  it("falls back to the generic retryable message on a transient Stripe error", async () => {
+    mockCheckout(502, "stripe_error");
+    renderCard();
+    expect(await clickPayAndReadError()).toBe(en.Portal.pay_error);
   });
 });
