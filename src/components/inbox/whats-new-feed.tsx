@@ -9,6 +9,8 @@ import {
   ChevronRight,
   FileSignature,
   FileUp,
+  MessageSquare,
+  Reply,
   Sparkles,
   Wallet,
   type LucideIcon,
@@ -96,6 +98,15 @@ function WhatsNewRow({
               {formatRelative(n.timestamp, locale)}
             </span>
           </div>
+          {/* A client message gets a Reply affordance — the whole row already
+              links straight into the panel's Client-messages tab, this chip
+              just makes the action explicit. A span, not a nested link. */}
+          {n.kind === "client_message" && (
+            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 px-2.5 py-1 text-xs font-medium text-foreground transition-colors group-hover:border-border group-hover:bg-secondary/60">
+              <Reply className="h-3 w-3" aria-hidden />
+              {t("reply")}
+            </span>
+          )}
         </div>
         <ChevronRight
           className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-foreground/60"
@@ -134,5 +145,7 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: CheckCircle2, tone: "bg-success/15 text-success" };
     case "client_signed":
       return { Icon: FileSignature, tone: "bg-success/15 text-success" };
+    case "client_message":
+      return { Icon: MessageSquare, tone: "bg-primary/15 text-primary" };
   }
 }

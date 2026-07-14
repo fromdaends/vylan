@@ -45,16 +45,21 @@ export type HomeNotificationKind =
   | "engagement_completed"
   // A client signed a document via embedded e-signature (the embedded flow
   // replaces the old "signed copy uploaded" upload signal).
-  | "client_signed";
+  | "client_signed"
+  // The client wrote in the engagement's message thread. Its href deep-links
+  // into the assistant panel's Client-messages tab (?panel=messages) so the
+  // feed's Reply chip lands straight in the conversation.
+  | "client_message";
 
 // Activity-log actions surfaced as notifications (a client paid, a payment
-// failed, an engagement was finished, a client signed). complete_engagement
-// maps to the engagement_completed kind below.
+// failed, an engagement was finished, a client signed, a client messaged).
+// complete_engagement maps to the engagement_completed kind below.
 const EVENT_ACTIONS = [
   "client_paid",
   "payment_failed",
   "complete_engagement",
   "signature_signed",
+  "client_message_sent",
 ] as const;
 
 export type HomeNotification = {
@@ -99,6 +104,8 @@ export function eventActionToNotificationKind(
       return "payment_failed";
     case "signature_signed":
       return "client_signed";
+    case "client_message_sent":
+      return "client_message";
     default:
       return null;
   }
@@ -174,7 +181,13 @@ export async function listHomeNotifications(
       engagement_title: a.engagement_title,
       client_display_name: a.client_display_name,
       timestamp: a.created_at,
-      href: a.engagement_id ? `/engagements/${a.engagement_id}` : "/dashboard",
+      href: a.engagement_id
+        ? // A client message deep-links into the panel's Client-messages tab
+          // (the engagement page opens it when ?panel=messages is present).
+          kind === "client_message"
+          ? `/engagements/${a.engagement_id}?panel=messages`
+          : `/engagements/${a.engagement_id}`
+        : "/dashboard",
     });
   }
 

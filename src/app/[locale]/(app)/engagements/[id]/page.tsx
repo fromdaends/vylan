@@ -53,6 +53,7 @@ import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { AssistantEngagementBridge } from "@/components/assistant/engagement-panel-bridge";
+import { OpenPanelOnLoad } from "@/components/assistant/open-panel-on-load";
 import { OpenAssistantActivityButton } from "@/components/assistant/open-assistant-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
@@ -118,12 +119,15 @@ import {
 
 export default async function EngagementDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
+  searchParams?: Promise<{ panel?: string }>;
 }) {
   const { locale: rawLocale, id } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
+  const sp = (await searchParams) ?? {};
 
   // Items / uploads all key off the URL `id` (= engagement.id), so they don't
   // need to wait for getEngagement — run the whole lot in ONE parallel batch.
@@ -422,6 +426,10 @@ export default async function EngagementDetailPage({
           messagesUnread,
         }}
       />
+      {/* ?panel=messages (the notifications Reply chip) opens the assistant
+          panel straight onto the Client-messages tab. Must render AFTER the
+          bridge so the page's engagement is already published. */}
+      {sp.panel === "messages" && <OpenPanelOnLoad tab="messages" />}
       {/* Auto-refresh while the engagement is still active. Picks up new
           client uploads + AI verdicts + activity-log entries without
           requiring the accountant to hit reload. Skipped for draft /
