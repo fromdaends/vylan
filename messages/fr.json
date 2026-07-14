@@ -119,6 +119,8 @@
     "button": "Aperçu",
     "eyebrow": "Aperçu des documents",
     "close": "Fermer",
+    "collapse_sidebar": "R\u00e9duire la barre lat\u00e9rale de l'aper\u00e7u",
+    "expand_sidebar": "Ouvrir la barre lat\u00e9rale de l'aper\u00e7u",
     "doc_count": "{count, plural, =0 {Aucun document} one {# document} other {# documents}}",
     "tab_all": "Tous",
     "tab_approved": "Semble bon",

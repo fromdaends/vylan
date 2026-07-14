@@ -13,6 +13,8 @@ import {
   FolderOpen,
   ListFilter,
   Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   X,
 } from "lucide-react";
@@ -86,6 +88,7 @@ export function PreviewOverlay({
   // drift (the route returns JSON {url}; the browser downloads from storage).
   const { downloading, downloadAll } = useDownloadAll(engagementId);
   const [view, setView] = useState<PreviewView>(initialView ?? "all");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [query, setQuery] = useState("");
   // The checklist-item filter ("all" or a specific request_item id).
   const [itemFilter, setItemFilter] = useState<string>("all");
@@ -412,14 +415,19 @@ export function PreviewOverlay({
         aria-modal="true"
         aria-label={`${t("eyebrow")} — ${engagementTitle}`}
         inert={rejectTarget != null || undefined}
-        className="relative flex h-[92vh] w-[95vw] max-w-[2100px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-background shadow-2xl outline-none"
+        className="relative grid h-[92vh] w-[95vw] max-w-[2100px] grid-cols-[auto_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border border-border/50 bg-background shadow-2xl outline-none"
       >
         {/* Header: engagement name + Download all + close */}
         <div
           inert={selectedDoc != null || undefined}
-          className="flex items-start justify-between gap-3 border-b border-border/40 px-5 py-4"
+          className={cn(
+            "col-start-1 row-start-1 flex border-r border-b border-border/40 bg-card/30 p-3",
+            sidebarOpen
+              ? "w-72 items-start justify-between gap-3"
+              : "w-14 flex-col items-center gap-1",
+          )}
         >
-          <div className="min-w-0">
+          {sidebarOpen && <div className="min-w-0">
             <div className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
               {t("eyebrow")}
             </div>
@@ -430,13 +438,29 @@ export function PreviewOverlay({
               {clientName ? `${clientName} · ` : ""}
               {t("doc_count", { count: counts.all })}
             </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {!scoped && counts.all > 0 && (
+          </div>}
+          <div className={cn("flex shrink-0", sidebarOpen ? "items-center gap-1" : "flex-col gap-1")}>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={sidebarOpen ? t("collapse_sidebar") : t("expand_sidebar")}
+              title={sidebarOpen ? t("collapse_sidebar") : t("expand_sidebar")}
+              onClick={() => setSidebarOpen((open) => !open)}
+            >
+              {sidebarOpen ? (
+                <PanelLeftClose className="size-4" />
+              ) : (
+                <PanelLeftOpen className="size-4" />
+              )}
+            </Button>
+            {sidebarOpen && !scoped && counts.all > 0 && (
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={tEng("download_all")}
+                title={tEng("download_all")}
                 disabled={downloading}
                 onClick={() => void downloadAll()}
               >
@@ -445,7 +469,6 @@ export function PreviewOverlay({
                 ) : (
                   <Download className="size-4" />
                 )}
-                {tEng("download_all")}
               </Button>
             )}
             <Button
@@ -453,6 +476,7 @@ export function PreviewOverlay({
               variant="ghost"
               size="icon-sm"
               aria-label={t("close")}
+              title={t("close")}
               onClick={onClose}
             >
               <X className="size-4" />
@@ -463,11 +487,16 @@ export function PreviewOverlay({
         {/* Tabs + search */}
         <div
           inert={selectedDoc != null || undefined}
-          className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border/40 px-5"
+          className={cn(
+            "col-start-1 row-start-2 flex flex-col border-r border-border/40 bg-card/30",
+            sidebarOpen
+              ? "w-72 justify-between overflow-y-auto p-3"
+              : "w-14 [&>*]:hidden",
+          )}
         >
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <div className="flex flex-col gap-3">
             {itemOptions.length > 1 && (
-              <>
+              <div>
                 <PreviewItemFilter
                   options={itemOptions}
                   value={itemFilter}
@@ -475,13 +504,9 @@ export function PreviewOverlay({
                   locale={locale}
                   signatureItemIds={signatureItemIds}
                 />
-                <span
-                  aria-hidden
-                  className="hidden h-5 w-px bg-border/50 sm:block"
-                />
-              </>
+              </div>
             )}
-            <div className="flex items-center gap-5">
+            <div className="space-y-1">
               <PreviewTab
                 label={t("tab_all")}
                 count={counts.all}
@@ -521,7 +546,7 @@ export function PreviewOverlay({
               />
             </div>
           </div>
-          <div className="flex items-center gap-2 py-2">
+          <div className="flex flex-col gap-2 pt-4">
             {/* Sort by page order — only offered when the group review actually
                 worked out a page order to apply. A press toggle: on = pages in
                 order, off = upload order. */}
@@ -532,14 +557,14 @@ export function PreviewOverlay({
                 aria-pressed={sortByPage}
                 title={t("sort_by_page")}
                 className={
-                  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors " +
+                  "inline-flex h-9 w-full items-center gap-2 rounded-lg border px-2.5 text-xs font-medium " +
                   (sortByPage
                     ? "border-accent/40 bg-accent/10 text-accent"
                     : "border-border/40 bg-card/40 text-muted-foreground hover:text-foreground")
                 }
               >
                 <ArrowDownUp className="size-3.5" aria-hidden />
-                <span className="hidden sm:inline">{t("sort_by_page")}</span>
+                <span>{t("sort_by_page")}</span>
               </button>
             )}
             <div className="relative">
@@ -550,7 +575,7 @@ export function PreviewOverlay({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t("search_placeholder")}
                 aria-label={t("search_placeholder")}
-                className="h-9 w-full rounded-lg border border-border/40 bg-card/40 pr-8 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-border sm:w-72"
+                className="h-9 w-full rounded-lg border border-border/40 bg-background/60 pr-8 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-border"
               />
               {query && (
                 <button
@@ -569,7 +594,7 @@ export function PreviewOverlay({
         {/* Grid */}
         <div
           inert={selectedDoc != null || undefined}
-          className="flex-1 overflow-y-auto px-5 py-5"
+          className="col-start-2 row-span-2 row-start-1 overflow-y-auto px-5 py-5"
         >
           {visible.length === 0 ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
@@ -721,13 +746,13 @@ function PreviewItemFilter({
 }) {
   const t = useTranslations("Preview");
   return (
-    <div className="relative inline-flex items-center">
+    <div className="relative flex w-full items-center">
       <ListFilter className="pointer-events-none absolute left-2 size-4 text-muted-foreground" />
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={t("filter_by_item")}
-        className="max-w-[14rem] cursor-pointer appearance-none truncate rounded-md bg-transparent py-2 pr-7 pl-8 text-sm font-medium text-foreground outline-none hover:bg-secondary/60 focus-visible:bg-secondary/40"
+        className="w-full cursor-pointer appearance-none truncate rounded-md bg-transparent py-2 pr-7 pl-8 text-sm font-medium text-foreground outline-none hover:bg-secondary/60 focus-visible:bg-secondary/40"
       >
         <option value="all">{t("filter_all_items")}</option>
         {options.map((g) => (
@@ -771,10 +796,10 @@ function PreviewTab({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "-mb-px flex cursor-pointer items-center gap-1.5 border-b-2 py-3 text-sm font-medium transition-colors",
+        "flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-2 text-sm font-medium",
         active
-          ? "border-foreground text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+          ? "bg-secondary text-foreground"
+          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
       )}
     >
       {label}
