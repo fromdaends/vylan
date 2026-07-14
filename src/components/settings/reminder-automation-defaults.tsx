@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { BellRing, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,7 @@ export function ReminderAutomationDefaults({
 }) {
   const t = useTranslations("Settings");
   const te = useTranslations("Engagements");
+  const router = useRouter();
   const [settings, setSettings] = useState<ReminderSettings>(() =>
     structuredClone(initialSettings ?? DEFAULT_REMINDER_SETTINGS),
   );
@@ -52,11 +54,17 @@ export function ReminderAutomationDefaults({
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.detail ?? payload?.error ?? `HTTP ${response.status}`);
+        throw new Error(
+          payload?.detail ?? payload?.error ?? `HTTP ${response.status}`,
+        );
       }
       setSettings(normalized);
       setHasDefault(true);
       setStatus("saved");
+      // Replace the route's pre-save RSC payload. Without this, returning to
+      // Settings through client navigation can restore the cached "no default"
+      // props and incorrectly show the create prompt again.
+      router.refresh();
     } catch (error) {
       console.error("[reminder-defaults] save failed:", error);
       setStatus("error");
@@ -77,6 +85,7 @@ export function ReminderAutomationDefaults({
       setSettings(structuredClone(DEFAULT_REMINDER_SETTINGS));
       setHasDefault(false);
       setEditing(false);
+      router.refresh();
     } catch (error) {
       console.error("[reminder-defaults] remove failed:", error);
       setStatus("error");
