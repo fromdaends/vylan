@@ -1,8 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { updateCurrentFirm } from "@/lib/db/firms";
+import { getCurrentFirm, updateCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { normalizeReminderSettings } from "@/lib/reminder-settings";
+import { withReminderDefaultFallback } from "@/lib/reminder-defaults";
 
 export const runtime = "nodejs";
 
@@ -35,10 +36,40 @@ export async function POST(request: NextRequest) {
 
   try {
     await updateCurrentFirm({ default_reminder_settings: settings });
-  } catch (error) {
-    console.error("[POST /api/firm/reminder-defaults] update failed:", error);
-    const detail = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: "update_failed", detail }, { status: 500 });
+  } catch (columnError) {
+    // Vercel previews may still point at the production database while the
+    // Supabase Git integration applies the migration to an isolated branch.
+    // Keep previews functional without touching production schema; 0671 moves
+    // this value into the dedicated column when the migration goes live.
+    console.warn(
+      "[POST /api/firm/reminder-defaults] dedicated column unavailable; using compatibility storage:",
+      columnError,
+    );
+    try {
+      const firm = await getCurrentFirm();
+      if (!firm) {
+        return NextResponse.json({ error: "firm_not_found" }, { status: 404 });
+      }
+      await updateCurrentFirm({
+        business_hours: withReminderDefaultFallback(
+          firm.business_hours,
+          settings,
+        ),
+      });
+    } catch (fallbackError) {
+      console.error(
+        "[POST /api/firm/reminder-defaults] compatibility update failed:",
+        fallbackError,
+      );
+      const detail =
+        fallbackError instanceof Error
+          ? fallbackError.message
+          : String(fallbackError);
+      return NextResponse.json(
+        { error: "update_failed", detail },
+        { status: 500 },
+      );
+    }
   }
 
   return NextResponse.json({ ok: true, settings });
@@ -53,12 +84,47 @@ export async function DELETE() {
     );
   }
 
+  const firm = await getCurrentFirm();
+  if (!firm) {
+    return NextResponse.json({ error: "firm_not_found" }, { status: 404 });
+  }
+
+  let columnRemoved = false;
   try {
     await updateCurrentFirm({ default_reminder_settings: null });
-  } catch (error) {
-    console.error("[DELETE /api/firm/reminder-defaults] update failed:", error);
-    const detail = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: "update_failed", detail }, { status: 500 });
+    columnRemoved = true;
+  } catch (columnError) {
+    console.warn(
+      "[DELETE /api/firm/reminder-defaults] dedicated column unavailable:",
+      columnError,
+    );
+  }
+
+  const hasFallback = Object.hasOwn(
+    firm.business_hours ?? {},
+    "default_reminder_settings",
+  );
+  if (hasFallback) {
+    try {
+      await updateCurrentFirm({
+        business_hours: withReminderDefaultFallback(firm.business_hours, null),
+      });
+    } catch (fallbackError) {
+      console.error(
+        "[DELETE /api/firm/reminder-defaults] compatibility update failed:",
+        fallbackError,
+      );
+      const detail =
+        fallbackError instanceof Error
+          ? fallbackError.message
+          : String(fallbackError);
+      return NextResponse.json(
+        { error: "update_failed", detail },
+        { status: 500 },
+      );
+    }
+  } else if (!columnRemoved) {
+    return NextResponse.json({ error: "update_failed" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

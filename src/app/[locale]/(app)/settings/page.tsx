@@ -20,7 +20,7 @@ import { listFirmPaymentsWithNames } from "@/lib/db/payment-requests";
 import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
-import { normalizeReminderSettings } from "@/lib/reminder-settings";
+import { getFirmReminderDefault } from "@/lib/reminder-defaults";
 
 export const dynamic = "force-dynamic";
 
@@ -175,11 +175,7 @@ export default async function SettingsPage({
         chatConfirmActions={firm.chat_confirm_actions ?? true}
         invoiceDefaultMode={firm.default_invoice_auto_mode ?? "off"}
         invoiceDefaultDelayDays={firm.default_invoice_delay_days ?? null}
-        reminderDefaultSettings={
-          firm.default_reminder_settings
-            ? normalizeReminderSettings(firm.default_reminder_settings)
-            : null
-        }
+        reminderDefaultSettings={getFirmReminderDefault(firm)}
         aiUsage={aiUsage}
         isOwner={isOwner}
         billingSlot={billingSlot}

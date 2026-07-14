@@ -50,7 +50,10 @@ export function ReminderAutomationDefaults({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ settings: normalized }),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? payload?.error ?? `HTTP ${response.status}`);
+      }
       setSettings(normalized);
       setHasDefault(true);
       setStatus("saved");
