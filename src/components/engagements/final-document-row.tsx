@@ -13,12 +13,14 @@ export function FinalDocumentRow({
   id,
   engagementId,
   filename,
+  note,
   downloadHref,
   canEdit,
 }: {
   id: string;
   engagementId: string;
   filename: string;
+  note: string | null;
   // Null if signing the URL failed; the download link is then disabled.
   downloadHref: string | null;
   canEdit: boolean;
@@ -26,9 +28,16 @@ export function FinalDocumentRow({
   const t = useTranslations("Engagements");
   return (
     <li className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-card px-3.5 py-2.5">
-      <div className="flex min-w-0 items-center gap-2.5">
+      <div className="flex min-w-0 items-start gap-2.5">
         <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="truncate text-sm font-medium">{filename}</span>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium">{filename}</div>
+          {note && (
+            <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+              {note}
+            </p>
+          )}
+        </div>
       </div>
       <div className="flex shrink-0 items-center gap-1">
         {downloadHref ? (

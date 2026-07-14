@@ -206,6 +206,19 @@ export function finalDocPath(parts: {
   return `firms/${parts.firmId}/engagements/${parts.engagementId}/final/${parts.uuid}-${safeName}`;
 }
 
+// Optional invoice PDF/image supplied when an accountant creates a payment
+// request. Kept separate from returned final documents because clients must be
+// able to read their invoice even when completed deliverables are payment-locked.
+export function invoiceAttachmentPath(parts: {
+  firmId: string;
+  engagementId: string;
+  uuid: string;
+  filename: string;
+}): string {
+  const safeName = safeStorageName(parts.filename);
+  return `firms/${parts.firmId}/engagements/${parts.engagementId}/invoices/${parts.uuid}-${safeName}`;
+}
+
 export type BrandingKind = "firm_logo" | "user_avatar";
 
 // Storage paths for branding images. Both sit under the firm prefix so the
@@ -299,6 +312,7 @@ export async function uploadObject(opts: {
   // Overwrite an existing object at this path (default false). The bulk-download
   // export reuses one path per engagement, so it upserts.
   upsert?: boolean;
+  metadata?: Record<string, string>;
 }): Promise<void> {
   const sb = getServiceRoleSupabase();
   const { error } = await sb.storage
@@ -306,8 +320,29 @@ export async function uploadObject(opts: {
     .upload(opts.path, opts.body, {
       contentType: opts.contentType,
       upsert: opts.upsert ?? false,
+      metadata: opts.metadata,
     });
   if (error) throw error;
+}
+
+// Read custom metadata for one private object without exposing its bytes. Used
+// for client-facing notes on returned documents; failures simply behave as no
+// note so an older object or temporary storage issue never hides the document.
+export async function objectMetadata(
+  path: string,
+): Promise<Record<string, unknown>> {
+  const slash = path.lastIndexOf("/");
+  if (slash < 1 || slash === path.length - 1) return {};
+  const directory = path.slice(0, slash);
+  const filename = path.slice(slash + 1);
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb.storage.from(BUCKET).list(directory, {
+    search: filename,
+    limit: 20,
+  });
+  if (error) return {};
+  const object = data.find((entry) => entry.name === filename);
+  return (object?.metadata as Record<string, unknown> | null) ?? {};
 }
 
 // `download`, when set, makes the signed URL serve the object with

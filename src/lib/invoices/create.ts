@@ -32,6 +32,13 @@ export type CreateInvoiceInput = {
   delivery: PaymentDelivery;
   // Gate the engagement's Final documents until this invoice is paid.
   locksDeliverables?: boolean;
+  attachment?: {
+    storagePath: string;
+    filename: string;
+    mimeType: string | null;
+    sizeBytes: number;
+    content: Buffer;
+  };
 };
 
 export type CreateInvoiceReason =
@@ -123,7 +130,18 @@ export async function createInvoiceForEngagement(
           url: `${appUrl}/r/${engagement.magic_token}`,
           locale,
         });
-        await sendEmail({ to: client.email, ...email });
+        await sendEmail({
+          to: client.email,
+          ...email,
+          attachments: input.attachment
+            ? [
+                {
+                  filename: input.attachment.filename,
+                  content: input.attachment.content,
+                },
+              ]
+            : undefined,
+        });
       }
     } catch (e) {
       console.error("[invoices] createInvoiceForEngagement email failed:", e);

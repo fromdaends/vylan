@@ -10,6 +10,7 @@
 // documents yet" so the UI never hard-errors.
 
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import { objectMetadata } from "@/lib/storage";
 
 export type FinalDocument = {
   id: string;
@@ -18,6 +19,7 @@ export type FinalDocument = {
   storage_path: string;
   original_filename: string;
   display_name: string | null;
+  note: string | null;
   mime_type: string | null;
   size_bytes: number | null;
   uploaded_by_user_id: string | null;
@@ -40,6 +42,23 @@ function isMissingSchema(
 const COLUMNS =
   "id, firm_id, engagement_id, storage_path, original_filename, display_name, mime_type, size_bytes, uploaded_by_user_id, created_at";
 
+function isInvoiceAttachment(path: string): boolean {
+  return path.includes("/invoices/");
+}
+
+async function withClientNotes(rows: FinalDocument[]): Promise<FinalDocument[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      const metadata = await objectMetadata(row.storage_path);
+      const value = metadata.clientNote;
+      return {
+        ...row,
+        note: typeof value === "string" && value.trim() ? value.trim() : null,
+      };
+    }),
+  );
+}
+
 // Accountant-side list (RLS-scoped). Newest first. Degrades to [] pre-0620.
 export async function listFinalDocumentsForEngagement(
   engagementId: string,
@@ -56,7 +75,10 @@ export async function listFinalDocumentsForEngagement(
     }
     return [];
   }
-  return (data as FinalDocument[]) ?? [];
+  const rows = ((data as Omit<FinalDocument, "note">[]) ?? []).filter(
+    (row) => !isInvoiceAttachment(row.storage_path),
+  ) as FinalDocument[];
+  return withClientNotes(rows);
 }
 
 export type CreateFinalDocumentInput = {
@@ -95,7 +117,7 @@ export async function createFinalDocument(
     console.error("[final-documents] create failed:", error);
     return null;
   }
-  return data as FinalDocument;
+  return { ...(data as Omit<FinalDocument, "note">), note: null };
 }
 
 // Delete one final document (RLS-scoped: only the owning firm can). Returns the
@@ -138,7 +160,39 @@ export async function listFinalDocumentsForEngagementSR(
     }
     return [];
   }
-  return (data as FinalDocument[]) ?? [];
+  const rows = ((data as Omit<FinalDocument, "note">[]) ?? []).filter(
+    (row) => !isInvoiceAttachment(row.storage_path),
+  ) as FinalDocument[];
+  return withClientNotes(rows);
+}
+
+// The newest invoice attachment for the portal payment card. Invoice objects
+// share the proven final_documents authorization/storage lifecycle but live in
+// a dedicated /invoices/ path and are excluded from the completed-work list.
+export async function getInvoiceAttachmentForEngagementSR(
+  engagementId: string,
+): Promise<FinalDocument | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("final_documents")
+    .select(COLUMNS)
+    .eq("engagement_id", engagementId)
+    .like("storage_path", "%/invoices/%")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  return { ...(data as Omit<FinalDocument, "note">), note: null };
+}
+
+export async function getInvoiceAttachmentForDownloadSR(id: string): Promise<{
+  engagement_id: string;
+  storage_path: string;
+  original_filename: string;
+  mime_type: string | null;
+} | null> {
+  const row = await getFinalDocumentForDownloadSR(id);
+  return row && isInvoiceAttachment(row.storage_path) ? row : null;
 }
 
 // One final document by id, for the portal download route. Returns just what the
