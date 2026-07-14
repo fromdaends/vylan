@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Lock, Unlock, Check } from "lucide-react";
+import { Lock, Unlock, Check, Upload } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatCurrency } from "@/lib/format";
-import { requestPaymentAction } from "@/app/actions/payments";
+import { requestPaymentWithAttachmentAction } from "@/app/actions/payments";
 import {
   unlockDeliverablesAction,
   relockDeliverablesAction,
@@ -73,6 +73,8 @@ export function InvoiceOptionsDialog({
   );
   const [description, setDescription] = useState(liveInvoice?.description ?? "");
   const [lock, setLock] = useState(false);
+  const [attachment, setAttachment] = useState<File | null>(null);
+  const attachmentRef = useRef<HTMLInputElement>(null);
 
   const invoiceLocked = liveInvoice
     ? liveInvoice.locks_deliverables === true &&
@@ -120,14 +122,15 @@ export function InvoiceOptionsDialog({
       return;
     }
     startTransition(async () => {
-      const res = await requestPaymentAction({
-        engagementId,
-        amountCents: cents,
-        description: description.trim() || undefined,
-        delivery: "both",
-        locksDeliverables: lock,
-      });
+      const formData = new FormData();
+      formData.set("engagement_id", engagementId);
+      formData.set("amount_cents", String(cents));
+      formData.set("description", description.trim());
+      formData.set("locks_deliverables", String(lock));
+      if (attachment) formData.set("attachment", attachment);
+      const res = await requestPaymentWithAttachmentAction(formData);
       if (res.ok) {
+        setAttachment(null);
         setOpen(false);
         router.refresh();
       } else {
@@ -136,7 +139,13 @@ export function InvoiceOptionsDialog({
             ? t("request_payment_already_invoiced")
             : res.error === "not_connected"
               ? t("invoice_connect_note")
-              : t("request_payment_error"),
+              : res.error === "attachment_too_large"
+                ? t("invoice_attachment_too_large")
+                : res.error === "attachment_type"
+                  ? t("invoice_attachment_type")
+                  : res.error === "attachment_upload"
+                    ? t("invoice_attachment_upload_error")
+                    : t("request_payment_error"),
         );
       }
     });
@@ -155,6 +164,7 @@ export function InvoiceOptionsDialog({
         if (!o) {
           setError(null);
           setSaved(false);
+          setAttachment(null);
         }
       }}
     >
@@ -345,6 +355,35 @@ export function InvoiceOptionsDialog({
                     maxLength={500}
                     placeholder={t("request_payment_description_ph")}
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="inv-new-attachment">
+                    {t("invoice_attachment")}
+                  </Label>
+                  <input
+                    ref={attachmentRef}
+                    id="inv-new-attachment"
+                    type="file"
+                    className="hidden"
+                    accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"
+                    onChange={(event) =>
+                      setAttachment(event.target.files?.[0] ?? null)
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start font-normal"
+                    onClick={() => attachmentRef.current?.click()}
+                  >
+                    <Upload className="size-4 shrink-0" />
+                    <span className="truncate">
+                      {attachment?.name ?? t("invoice_attachment_choose")}
+                    </span>
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    {t("invoice_attachment_hint")}
+                  </p>
                 </div>
                 <label className="flex items-start gap-2 text-sm cursor-pointer">
                   <input

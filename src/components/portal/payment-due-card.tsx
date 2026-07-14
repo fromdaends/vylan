@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, CreditCard, AlertCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  CreditCard,
+  AlertCircle,
+  FileText,
+  Download,
+} from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 
 type PaymentRequest = {
@@ -10,6 +16,9 @@ type PaymentRequest = {
   amount_cents: number;
   currency: string;
   description: string | null;
+  attachment_id?: string | null;
+  attachment_filename?: string | null;
+  attachment_mime_type?: string | null;
   status: "requested" | "paid" | "failed" | "canceled";
 };
 
@@ -80,6 +89,23 @@ export function PaymentDueCard({
             </div>
           </div>
         </div>
+        {paymentRequest.attachment_id && paymentRequest.attachment_filename && (
+          <a
+            href={`/api/portal/invoices/${paymentRequest.attachment_id}?token=${encodeURIComponent(token)}&download=1`}
+            className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-success/25 px-3.5 py-2.5 text-sm transition-colors hover:bg-success/[0.05]"
+          >
+            <span className="flex min-w-0 items-center gap-2.5">
+              <FileText className="size-4 shrink-0 text-muted-foreground" />
+              <span className="truncate font-medium">
+                {paymentRequest.attachment_filename}
+              </span>
+            </span>
+            <span className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground">
+              <Download className="size-3.5" />
+              {t("invoice_download")}
+            </span>
+          </a>
+        )}
       </section>
     );
   }
@@ -131,6 +157,23 @@ export function PaymentDueCard({
         </button>
       </div>
       {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+      {paymentRequest.attachment_id && paymentRequest.attachment_filename && (
+        <a
+          href={`/api/portal/invoices/${paymentRequest.attachment_id}?token=${encodeURIComponent(token)}&download=1`}
+          className="mt-4 flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3.5 py-2.5 text-sm transition-colors hover:bg-secondary/60"
+        >
+          <span className="flex min-w-0 items-center gap-2.5">
+            <FileText className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate font-medium">
+              {paymentRequest.attachment_filename}
+            </span>
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1.5 text-muted-foreground">
+            <Download className="size-3.5" />
+            {t("invoice_download")}
+          </span>
+        </a>
+      )}
       <p className="mt-3 text-xs text-muted-foreground">{t("pay_secured")}</p>
     </section>
   );

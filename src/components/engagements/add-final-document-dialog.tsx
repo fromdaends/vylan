@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   uploadFinalDocumentAction,
@@ -54,8 +55,10 @@ export function AddFinalDocumentDialog({
       ? "final_err_file_too_large"
       : state?.error === "file"
         ? "final_err_file"
-        : state?.error === "file_type"
+      : state?.error === "file_type"
           ? "final_err_file_type"
+          : state?.error === "note_too_long"
+            ? "final_err_note_too_long"
           : "final_err_generic";
 
   return (
@@ -107,6 +110,19 @@ export function AddFinalDocumentDialog({
                 {fileName ?? t("final_choose_document")}
               </span>
             </Button>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="final_note">{t("final_note")}</Label>
+            <Textarea
+              id="final_note"
+              name="note"
+              rows={3}
+              maxLength={1000}
+              placeholder={t("final_note_placeholder")}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t("final_note_hint")}
+            </p>
           </div>
           <DialogFooter>
             <Button

@@ -24,6 +24,8 @@ export function DemoBlockButton({
   reasonKey,
   variant = "default",
   size = "default",
+  className,
+  labelClassName,
 }: {
   label: string;
   icon?: ReactNode;
@@ -38,6 +40,8 @@ export function DemoBlockButton({
     | "link"
     | "destructive";
   size?: "default" | "sm" | "lg" | "icon";
+  className?: string;
+  labelClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const t = useTranslations("Demo");
@@ -48,10 +52,11 @@ export function DemoBlockButton({
         type="button"
         variant={variant}
         size={size}
+        className={className}
         onClick={() => setOpen(true)}
       >
         {icon}
-        {label}
+        <span className={labelClassName}>{label}</span>
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>

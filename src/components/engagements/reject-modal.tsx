@@ -25,6 +25,9 @@ export function RejectModal({
   compact = false,
   active = false,
   suggestions: customSuggestions,
+  open: controlledOpen,
+  onOpenChange,
+  hideTrigger = false,
 }: {
   itemId: string;
   itemLabel: string;
@@ -39,14 +42,25 @@ export function RejectModal({
   // Optional override for the quick-fill reason chips. Defaults to the
   // document-collection suggestions; a signature reject passes its own.
   suggestions?: string[];
+  // A controlled, triggerless mode lets file-row action menus open this same
+  // dialog from either the kebab menu or the right-click menu.
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  hideTrigger?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const open = controlledOpen ?? internalOpen;
+
+  function setOpen(next: boolean) {
+    if (controlledOpen === undefined) setInternalOpen(next);
+    onOpenChange?.(next);
+  }
 
   // STABLE URL endpoints (not Server Actions) so a deploy/version mismatch can't
   // make the click fail silently before it reaches the server — the bug where
@@ -110,28 +124,30 @@ export function RejectModal({
         if (!next) setError(null);
       }}
     >
-      <DialogTrigger asChild>
-        {compact ? (
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("reject")}
-            title={t("reject")}
-            className={
-              active
-                ? "bg-destructive text-white hover:bg-destructive/90"
-                : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            }
-          >
-            <X className="size-4" />
-          </Button>
-        ) : (
-          <Button variant="outline" size="sm">
-            <X className="size-4" />
-            {t("reject")}
-          </Button>
-        )}
-      </DialogTrigger>
+      {!hideTrigger && (
+        <DialogTrigger asChild>
+          {compact ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label={t("reject")}
+              title={t("reject")}
+              className={
+                active
+                  ? "bg-destructive text-white hover:bg-destructive/90"
+                  : "text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              }
+            >
+              <X className="size-4" />
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm">
+              <X className="size-4" />
+              {t("reject")}
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{t("reject_title")}</DialogTitle>

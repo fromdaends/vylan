@@ -52,8 +52,6 @@ import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
-import { RejectModal } from "@/components/engagements/reject-modal";
-import { ReopenFileButton } from "@/components/engagements/reopen-file-button";
 import { AssistantEngagementBridge } from "@/components/assistant/engagement-panel-bridge";
 import { OpenAssistantActivityButton } from "@/components/assistant/open-assistant-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
@@ -558,13 +556,24 @@ export default async function EngagementDetailPage({
                   reasonKey="block_send_reminder_reason"
                   variant="outline"
                   size="sm"
+                  className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-[9.75rem] hover:gap-1.5 hover:px-3 focus-visible:w-[9.75rem] focus-visible:gap-1.5 focus-visible:px-3"
+                  labelClassName="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-36 group-hover:opacity-100 group-focus-visible:max-w-36 group-focus-visible:opacity-100"
                 />
               ) : (
                 <form action={sendReminderAction}>
                   <input type="hidden" name="id" value={engagement.id} />
-                  <Button type="submit" variant="outline" size="sm">
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    aria-label={t("send_reminder")}
+                    title={t("send_reminder")}
+                    className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-[9.75rem] hover:gap-1.5 hover:px-3 focus-visible:w-[9.75rem] focus-visible:gap-1.5 focus-visible:px-3"
+                  >
                     <Bell className="size-4" />
-                    {t("send_reminder")}
+                    <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-36 group-hover:opacity-100 group-focus-visible:max-w-36 group-focus-visible:opacity-100">
+                      {t("send_reminder")}
+                    </span>
                   </Button>
                 </form>
               )}
@@ -806,6 +815,7 @@ export default async function EngagementDetailPage({
                   id={d.id}
                   engagementId={engagement.id}
                   filename={d.display_name || d.original_filename}
+                  note={d.note}
                   downloadHref={finalHrefById.get(d.id) ?? null}
                   canEdit={engagement.status !== "cancelled"}
                 />
@@ -984,19 +994,17 @@ async function ItemRow({
               // can't be rejected — it already doesn't count. Once a document IS
               // rejected it's done: the X is replaced by an Undo (reopen) so it
               // never prompts a pointless second reject.
-              actions={
-                canEdit && !f.is_duplicate ? (
-                  f.review_status === "rejected" ? (
-                    <ReopenFileButton fileId={f.id} />
-                  ) : (
-                    <RejectModal
-                      itemId={item.id}
-                      itemLabel={f.display_name ?? f.original_filename}
-                      fileId={f.id}
-                      compact
-                    />
-                  )
-                ) : undefined
+              reviewAction={
+                canEdit && !f.is_duplicate
+                  ? f.review_status === "rejected"
+                    ? { kind: "reopen" as const, fileId: f.id }
+                    : {
+                        kind: "reject" as const,
+                        itemId: item.id,
+                        itemLabel: f.display_name ?? f.original_filename,
+                        fileId: f.id,
+                      }
+                  : undefined
               }
               // QuickBooks draft: the suggested mapping for a receipt/invoice.
               // Shown only when AI is on, a draft exists (which implies
