@@ -457,16 +457,7 @@ export function PreviewOverlay({
                 <PanelLeftOpen className="size-4" />
               )}
             </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={t("close")}
-              title={t("close")}
-              onClick={onClose}
-            >
-              <X className="size-4" />
-            </Button>
+            {/* Close moved to the top-right cluster (next to Download all). */}
           </div>
 
           {/* Tabs + search */}
@@ -571,24 +562,43 @@ export function PreviewOverlay({
           </div>
         </aside>
 
-        {!scoped && counts.all > 0 && (
+        {/* Top-right action cluster: Download all (when applicable) + Close.
+            Close lives here now (was stacked in the sidebar rail) so it sits in
+            the conventional top-right corner beside Download all. Inert while a
+            document detail covers the panel — the detail has its own close. */}
+        <div
+          inert={selectedDoc != null || undefined}
+          className="absolute top-3 right-3 z-20 flex items-center gap-2"
+        >
+          {!scoped && counts.all > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 bg-background/90 shadow-sm backdrop-blur-sm"
+              disabled={downloading}
+              onClick={() => void downloadAll()}
+            >
+              {downloading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              {tEng("download_all")}
+            </Button>
+          )}
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            inert={selectedDoc != null || undefined}
-            className="absolute top-3 right-3 z-20 gap-2 bg-background/90 shadow-sm backdrop-blur-sm"
-            disabled={downloading}
-            onClick={() => void downloadAll()}
+            size="icon-sm"
+            aria-label={t("close")}
+            title={t("close")}
+            className="bg-background/90 shadow-sm backdrop-blur-sm"
+            onClick={onClose}
           >
-            {downloading ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Download className="size-4" />
-            )}
-            {tEng("download_all")}
+            <X className="size-4" />
           </Button>
-        )}
+        </div>
 
         {/* Grid */}
         <div
