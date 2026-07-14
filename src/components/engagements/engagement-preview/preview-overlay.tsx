@@ -424,7 +424,7 @@ export function PreviewOverlay({
             sidebarOpen ? "translate-x-0" : "-translate-x-[14.5rem]",
           )}
         >
-          {/* Header: engagement name + Download all + close */}
+          {/* Header: engagement name + close */}
           <div
             className="col-start-1 row-start-1 min-w-0 border-b border-border/40 p-3"
           >
@@ -457,23 +457,6 @@ export function PreviewOverlay({
                 <PanelLeftOpen className="size-4" />
               )}
             </Button>
-            {!scoped && counts.all > 0 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={tEng("download_all")}
-                title={tEng("download_all")}
-                disabled={downloading}
-                onClick={() => void downloadAll()}
-              >
-                {downloading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Download className="size-4" />
-                )}
-              </Button>
-            )}
             <Button
               type="button"
               variant="ghost"
@@ -588,11 +571,30 @@ export function PreviewOverlay({
           </div>
         </aside>
 
+        {!scoped && counts.all > 0 && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            inert={selectedDoc != null || undefined}
+            className="absolute top-3 right-3 z-20 gap-2 bg-background/90 shadow-sm backdrop-blur-sm"
+            disabled={downloading}
+            onClick={() => void downloadAll()}
+          >
+            {downloading ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Download className="size-4" />
+            )}
+            {tEng("download_all")}
+          </Button>
+        )}
+
         {/* Grid */}
         <div
           inert={selectedDoc != null || undefined}
           className={cn(
-            "absolute inset-y-0 right-0 left-14 overflow-y-auto px-5 py-5 transition-transform duration-200 ease-out motion-reduce:transition-none",
+            "absolute inset-y-0 right-0 left-14 overflow-y-auto px-5 pt-16 pb-5 transition-transform duration-200 ease-out motion-reduce:transition-none",
             sidebarOpen ? "translate-x-[14.5rem]" : "translate-x-0",
           )}
         >
