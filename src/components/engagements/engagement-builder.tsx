@@ -16,7 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, GripVertical, Sparkles, Receipt } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  GripVertical,
+  Sparkles,
+  Receipt,
+  BellRing,
+  ChevronDown,
+} from "lucide-react";
 import {
   ClientCombobox,
   type ComboboxClient,
@@ -32,6 +40,12 @@ import {
   localizedTemplateName,
   BLANK_TEMPLATE_SEED_ID,
 } from "@/lib/templates/builtin-names";
+import {
+  DEFAULT_REMINDER_SETTINGS,
+  type ReminderSettings,
+  type ReminderStep,
+  type ReminderTone,
+} from "@/lib/reminder-settings";
 
 type KnownErrorKey =
   | "missing_client"
@@ -123,6 +137,10 @@ export function EngagementBuilder({
   // "AI Analyze" toggle — on by default. When off, no document the client
   // uploads to this engagement is sent to the AI (saves AI usage/cost).
   const [aiEnabled, setAiEnabled] = useState(true);
+  const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(
+    () => structuredClone(DEFAULT_REMINDER_SETTINGS),
+  );
+  const [remindersExpanded, setRemindersExpanded] = useState(false);
   // Invoice timing (migrations 0590 + 0610). Pre-selected from the firm default.
   // Only meaningful when Connect is ready; forced off otherwise.
   const [invoiceMode, setInvoiceMode] = useState<InvoiceTiming>(
@@ -153,6 +171,7 @@ export function EngagementBuilder({
   const [pending, startTransition] = useTransition();
 
   const selectedTemplate = templates.find((tt) => tt.id === templateId);
+  const selectedClient = clients.find((client) => client.id === clientId);
   // The chosen client's province drives which document types apply. Quebec
   // clients get the RL slips; everyone else (or province not set) doesn't.
   const selectedProvince =
@@ -236,6 +255,18 @@ export function EngagementBuilder({
     setItems((prev) => prev.filter((_, i) => i !== idx));
   }
 
+  function updateReminderStep(
+    tone: ReminderTone,
+    patch: Partial<ReminderStep>,
+  ) {
+    setReminderSettings((current) => ({
+      ...current,
+      steps: current.steps.map((step) =>
+        step.tone === tone ? { ...step, ...patch } : step,
+      ),
+    }));
+  }
+
   function moveItem(idx: number, delta: -1 | 1) {
     setItems((prev) => {
       const next = [...prev];
@@ -312,6 +343,7 @@ export function EngagementBuilder({
           invoice_description: invoiceActive
             ? invoiceDescription.trim() || null
             : null,
+          reminder_settings: reminderSettings,
           items: cleanItems,
           send,
           locale,
@@ -449,6 +481,158 @@ export function EngagementBuilder({
               onCheckedChange={setAiEnabled}
               ariaLabel={t("ai_analyze_label")}
             />
+          </div>
+
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="automatic-reminders"
+                  className="flex cursor-pointer items-center gap-1.5"
+                >
+                  <BellRing
+                    className="size-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                  {t("reminder_section_label")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("reminder_section_hint")}
+                </p>
+                {selectedClient && !selectedClient.email && (
+                  <p className="text-xs font-medium text-destructive">
+                    {t("reminder_missing_email")}
+                  </p>
+                )}
+              </div>
+              <Switch
+                id="automatic-reminders"
+                checked={reminderSettings.enabled}
+                onCheckedChange={(enabled) =>
+                  setReminderSettings((current) => ({ ...current, enabled }))
+                }
+                ariaLabel={t("reminder_section_label")}
+              />
+            </div>
+
+            {reminderSettings.enabled && (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                  <p className="text-xs text-muted-foreground">
+                    {t("reminder_schedule_summary")}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setRemindersExpanded((open) => !open)}
+                    aria-expanded={remindersExpanded}
+                  >
+                    {remindersExpanded
+                      ? t("reminder_hide_customization")
+                      : t("reminder_customize")}
+                    <ChevronDown
+                      className={
+                        "size-4 transition-transform " +
+                        (remindersExpanded ? "rotate-180" : "")
+                      }
+                    />
+                  </Button>
+                </div>
+
+                {remindersExpanded && (
+                  <div className="space-y-3">
+                    {reminderSettings.steps.map((step) => (
+                      <div
+                        key={step.tone}
+                        className="space-y-3 rounded-lg border border-border/70 bg-muted/20 p-3"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={step.enabled}
+                              onChange={(event) =>
+                                updateReminderStep(step.tone, {
+                                  enabled: event.target.checked,
+                                })
+                              }
+                            />
+                            {t(`reminder_tone_${step.tone}`)}
+                          </label>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={365}
+                              value={step.days}
+                              disabled={!step.enabled}
+                              onChange={(event) =>
+                                updateReminderStep(step.tone, {
+                                  days: Math.min(
+                                    365,
+                                    Math.max(
+                                      0,
+                                      Math.floor(Number(event.target.value) || 0),
+                                    ),
+                                  ),
+                                })
+                              }
+                              aria-label={t("reminder_days_label")}
+                              className="h-8 w-20"
+                            />
+                            <span>
+                              {step.timing === "after_due"
+                                ? t("reminder_days_after_due")
+                                : t("reminder_days_after_send")}
+                            </span>
+                          </div>
+                        </div>
+
+                        {step.enabled && (
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                              <Label className="text-xs text-muted-foreground">
+                                {t("reminder_subject_label")}
+                              </Label>
+                              <Input
+                                value={step.customSubject ?? ""}
+                                maxLength={160}
+                                onChange={(event) =>
+                                  updateReminderStep(step.tone, {
+                                    customSubject: event.target.value || null,
+                                  })
+                                }
+                                placeholder={t("reminder_subject_placeholder")}
+                              />
+                            </div>
+                            <div className="space-y-1.5 sm:row-span-2">
+                              <Label className="text-xs text-muted-foreground">
+                                {t("reminder_message_label")}
+                              </Label>
+                              <Textarea
+                                value={step.customMessage ?? ""}
+                                maxLength={2000}
+                                rows={4}
+                                onChange={(event) =>
+                                  updateReminderStep(step.tone, {
+                                    customMessage: event.target.value || null,
+                                  })
+                                }
+                                placeholder={t("reminder_message_placeholder")}
+                              />
+                            </div>
+                            <p className="text-[0.7rem] leading-relaxed text-muted-foreground">
+                              {t("reminder_tokens_hint")}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Invoice (migrations 0590 + 0610). Only offered when the firm can

@@ -18,13 +18,14 @@
 import { addDays } from "date-fns";
 import { enqueueJob, cancelPendingJobs } from "@/lib/db/jobs";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
-import {
-  buildReminderEmail,
-  sendEmail,
-  type ReminderTone,
-} from "@/lib/email";
+import { buildReminderEmail, sendEmail } from "@/lib/email";
 import { buildReminderSms, sendSms } from "@/lib/sms";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
+import {
+  normalizeReminderSettings,
+  type ReminderSettings,
+  type ReminderTone,
+} from "@/lib/reminder-settings";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 void DAY_MS;
@@ -33,24 +34,32 @@ export type ReminderPlanItem = {
   tone: ReminderTone;
   runAfter: Date;
   withSms: boolean;
+  customSubject: string | null;
+  customMessage: string | null;
 };
 
 export function buildReminderPlan(opts: {
   sentAt: Date;
   dueDate: string | null;
+  settings?: ReminderSettings | null;
 }): ReminderPlanItem[] {
-  const plan: ReminderPlanItem[] = [
-    { tone: "gentle", runAfter: addDays(opts.sentAt, 3), withSms: false },
-    { tone: "firm", runAfter: addDays(opts.sentAt, 7), withSms: true },
-    { tone: "deadline", runAfter: addDays(opts.sentAt, 14), withSms: true },
-  ];
-  if (opts.dueDate) {
-    // "Day after due_date" — fire late in the day so morning-of doesn't count.
-    const due = new Date(`${opts.dueDate}T23:59:59Z`);
+  const settings = normalizeReminderSettings(opts.settings);
+  if (!settings.enabled) return [];
+
+  const plan: ReminderPlanItem[] = [];
+  for (const step of settings.steps) {
+    if (!step.enabled) continue;
+    if (step.timing === "after_due" && !opts.dueDate) continue;
+    const anchor =
+      step.timing === "after_due"
+        ? new Date(`${opts.dueDate}T23:59:59Z`)
+        : opts.sentAt;
     plan.push({
-      tone: "overdue",
-      runAfter: addDays(due, 1),
-      withSms: false,
+      tone: step.tone,
+      runAfter: addDays(anchor, step.days),
+      withSms: step.withSms,
+      customSubject: step.customSubject,
+      customMessage: step.customMessage,
     });
   }
   // Dedupe by tone (the planner keeps the earliest of each kind) and drop
@@ -71,10 +80,12 @@ export async function scheduleEngagementReminders(opts: {
   engagementId: string;
   sentAt: Date;
   dueDate: string | null;
+  settings?: ReminderSettings | null;
 }): Promise<void> {
   const plan = buildReminderPlan({
     sentAt: opts.sentAt,
     dueDate: opts.dueDate,
+    settings: opts.settings,
   });
   for (const p of plan) {
     await enqueueJob({
@@ -83,6 +94,8 @@ export async function scheduleEngagementReminders(opts: {
         engagement_id: opts.engagementId,
         tone: p.tone,
         with_sms: p.withSms,
+        custom_subject: p.customSubject,
+        custom_message: p.customMessage,
       },
       runAfter: p.runAfter,
     });
@@ -108,6 +121,7 @@ export async function cancelEngagementReminders(
 export async function rescheduleOverdueReminder(opts: {
   engagementId: string;
   dueDate: string | null;
+  settings?: ReminderSettings | null;
 }): Promise<void> {
   await cancelPendingJobs(
     "send_reminder",
@@ -116,14 +130,22 @@ export async function rescheduleOverdueReminder(opts: {
       payload.tone === "overdue",
   );
   if (!opts.dueDate) return;
-  const runAfter = addDays(new Date(`${opts.dueDate}T23:59:59Z`), 1);
+  const settings = normalizeReminderSettings(opts.settings);
+  const step = settings.steps.find((candidate) => candidate.tone === "overdue");
+  if (!settings.enabled || !step?.enabled) return;
+  const runAfter = addDays(
+    new Date(`${opts.dueDate}T23:59:59Z`),
+    step.days,
+  );
   if (runAfter.getTime() <= Date.now()) return; // already past — no-op
   await enqueueJob({
     kind: "send_reminder",
     payload: {
       engagement_id: opts.engagementId,
       tone: "overdue",
-      with_sms: false,
+      with_sms: step.withSms,
+      custom_subject: step.customSubject,
+      custom_message: step.customMessage,
     },
     runAfter,
   });
@@ -136,6 +158,10 @@ export async function processReminderJob(
   const engagementId = String(payload.engagement_id ?? "");
   const tone = (payload.tone ?? "gentle") as ReminderTone;
   const withSms = Boolean(payload.with_sms);
+  const customSubject =
+    typeof payload.custom_subject === "string" ? payload.custom_subject : null;
+  const customMessage =
+    typeof payload.custom_message === "string" ? payload.custom_message : null;
   if (!engagementId) return { skipped: "missing_engagement_id" };
 
   const sb = getServiceRoleSupabase();
@@ -197,8 +223,11 @@ export async function processReminderJob(
       dueDate: engagement.due_date,
       pendingRequiredCount: pendingRequired,
       locale: client.locale,
+      customSubject,
+      customMessage,
     });
     const res = await sendEmail({ to: client.email, subject, html, text });
+    if (!res.sent) return { skipped: `send_failed:${res.reason}` };
     emailSent = res.sent;
   }
 
@@ -218,7 +247,12 @@ export async function processReminderJob(
     engagement_id: engagement.id,
     actor_type: "system",
     action: "reminder_fired",
-    metadata: { tone, email_sent: emailSent, sms_sent: smsSent },
+    metadata: {
+      tone,
+      email_sent: emailSent,
+      sms_sent: smsSent,
+      customized: Boolean(customSubject || customMessage),
+    },
   });
 
   return { sent: { email: emailSent, sms: smsSent } };
