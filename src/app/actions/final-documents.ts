@@ -39,12 +39,15 @@ export async function uploadFinalDocumentAction(
 
   const engagementId = formData.get("engagement_id");
   const file = formData.get("file");
+  const rawNote = formData.get("note");
   if (typeof engagementId !== "string" || !UUID_RE.test(engagementId)) {
     return { error: "invalid" };
   }
   if (!(file instanceof File) || file.size === 0) return { error: "file" };
   if (file.size > MAX_BYTES) return { error: "file_too_large" };
   if (!isAllowedMime(file.type)) return { error: "file_type" };
+  const note = typeof rawNote === "string" ? rawNote.trim() : "";
+  if (note.length > 1000) return { error: "note_too_long" };
 
   // The engagement must belong to this firm (RLS-scoped read + explicit check).
   const engagement = await getEngagement(engagementId);
@@ -68,6 +71,7 @@ export async function uploadFinalDocumentAction(
       path,
       body: bytes,
       contentType: file.type || "application/octet-stream",
+      metadata: note ? { clientNote: note } : undefined,
     });
   } catch (e) {
     console.error("[final-documents] upload object failed:", e);

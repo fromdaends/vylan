@@ -63,6 +63,18 @@ describe("PaymentDueCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows the attached invoice document in the portal", () => {
+    renderCard({
+      attachment_id: "fd-invoice",
+      attachment_filename: "Invoice-2026.pdf",
+    });
+    const link = screen.getByRole("link", { name: /Invoice-2026\.pdf/ });
+    expect(link).toHaveAttribute(
+      "href",
+      "/api/portal/invoices/fd-invoice?token=tok_test&download=1",
+    );
+  });
+
   it("renders nothing for a canceled request", () => {
     const { container } = renderCard({ status: "canceled" });
     expect(container).toBeEmptyDOMElement();

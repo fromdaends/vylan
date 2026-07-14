@@ -16,6 +16,7 @@ type SendArgs = {
   // avoid a "self-send" — e.g. a notification TO hello@vylan.app should come
   // FROM notifications@vylan.app, not hello@→hello@, which Gmail spam-files.
   from?: string;
+  attachments?: { filename: string; content: Buffer }[];
 };
 
 let _client: Resend | null = null;
@@ -47,6 +48,7 @@ export async function sendEmail({
   text,
   replyTo,
   from: fromOverride,
+  attachments,
 }: SendArgs): Promise<
   { sent: true; id: string } | { sent: false; reason: string }
 > {
@@ -77,6 +79,7 @@ export async function sendEmail({
     html,
     text,
     ...(replyTo ? { replyTo } : {}),
+    ...(attachments?.length ? { attachments } : {}),
   });
   if (res.error) {
     console.error("[email] Resend error:", res.error);

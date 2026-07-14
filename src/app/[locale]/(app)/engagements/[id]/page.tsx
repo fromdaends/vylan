@@ -524,13 +524,24 @@ export default async function EngagementDetailPage({
                   reasonKey="block_send_reminder_reason"
                   variant="outline"
                   size="sm"
+                  className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-[9.75rem] hover:gap-1.5 hover:px-3 focus-visible:w-[9.75rem] focus-visible:gap-1.5 focus-visible:px-3"
+                  labelClassName="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-36 group-hover:opacity-100 group-focus-visible:max-w-36 group-focus-visible:opacity-100"
                 />
               ) : (
                 <form action={sendReminderAction}>
                   <input type="hidden" name="id" value={engagement.id} />
-                  <Button type="submit" variant="outline" size="sm">
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    aria-label={t("send_reminder")}
+                    title={t("send_reminder")}
+                    className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-[9.75rem] hover:gap-1.5 hover:px-3 focus-visible:w-[9.75rem] focus-visible:gap-1.5 focus-visible:px-3"
+                  >
                     <Bell className="size-4" />
-                    {t("send_reminder")}
+                    <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-36 group-hover:opacity-100 group-focus-visible:max-w-36 group-focus-visible:opacity-100">
+                      {t("send_reminder")}
+                    </span>
                   </Button>
                 </form>
               )}
@@ -746,6 +757,7 @@ export default async function EngagementDetailPage({
                   id={d.id}
                   engagementId={engagement.id}
                   filename={d.display_name || d.original_filename}
+                  note={d.note}
                   downloadHref={finalHrefById.get(d.id) ?? null}
                   canEdit={engagement.status !== "cancelled"}
                 />

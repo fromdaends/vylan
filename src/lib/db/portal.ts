@@ -16,7 +16,10 @@ import type { SignatureStatus } from "@/lib/signwell/client";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
 import { BUCKET } from "@/lib/storage";
-import { listFinalDocumentsForEngagementSR } from "@/lib/db/final-documents";
+import {
+  getInvoiceAttachmentForEngagementSR,
+  listFinalDocumentsForEngagementSR,
+} from "@/lib/db/final-documents";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 
 const TOKEN_REGEX = /^[0-9A-Za-z]{43}$/;
@@ -77,6 +80,9 @@ export type PortalContext = {
     amount_cents: number;
     currency: string;
     description: string | null;
+    attachment_id: string | null;
+    attachment_filename: string | null;
+    attachment_mime_type: string | null;
     status: "requested" | "paid" | "failed" | "canceled";
   } | null;
   // SignWell signing status per signature item (Phase 3). Drives the portal
@@ -92,6 +98,7 @@ export type PortalContext = {
     id: string;
     original_filename: string;
     display_name: string | null;
+    note: string | null;
     mime_type: string | null;
     size_bytes: number | null;
   }[];
@@ -237,12 +244,18 @@ export async function loadPortalContext(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  const invoiceAttachment = pr
+    ? await getInvoiceAttachmentForEngagementSR(engagement.id)
+    : null;
   const paymentRequest = pr
     ? {
         id: pr.id as string,
         amount_cents: pr.amount_cents as number,
         currency: (pr.currency as string) ?? "cad",
         description: (pr.description as string | null) ?? null,
+        attachment_id: invoiceAttachment?.id ?? null,
+        attachment_filename: invoiceAttachment?.original_filename ?? null,
+        attachment_mime_type: invoiceAttachment?.mime_type ?? null,
         status: pr.status as "requested" | "paid" | "failed" | "canceled",
       }
     : null;
@@ -294,6 +307,7 @@ export async function loadPortalContext(
     id: d.id,
     original_filename: d.original_filename,
     display_name: d.display_name,
+    note: d.note,
     mime_type: d.mime_type,
     size_bytes: d.size_bytes,
   }));

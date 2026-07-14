@@ -10,6 +10,10 @@ const getLatestPaymentRequestForEngagement = vi.fn();
 const logUserActivity = vi.fn();
 const getClient = vi.fn();
 const sendEmail = vi.fn();
+const uploadObject = vi.fn();
+const removeObjectQuiet = vi.fn();
+const createFinalDocument = vi.fn();
+const deleteFinalDocument = vi.fn();
 
 vi.mock("@/lib/db/users", () => ({ getCurrentUser: () => getCurrentUser() }));
 vi.mock("@/lib/db/firms", () => ({ getCurrentFirm: () => getCurrentFirm() }));
@@ -17,6 +21,10 @@ vi.mock("@/lib/db/engagements", () => ({
   getEngagement: (id: string) => getEngagement(id),
 }));
 vi.mock("@/lib/db/clients", () => ({ getClient: (id: string) => getClient(id) }));
+vi.mock("@/lib/db/final-documents", () => ({
+  createFinalDocument: (input: unknown) => createFinalDocument(input),
+  deleteFinalDocument: (id: string) => deleteFinalDocument(id),
+}));
 vi.mock("@/lib/db/payment-requests", () => ({
   createPaymentRequest: (input: unknown) => createPaymentRequest(input),
   getLatestPaymentRequestForEngagement: (id: string) =>
@@ -31,10 +39,19 @@ vi.mock("@/lib/email", () => ({
 }));
 vi.mock("@/lib/storage", () => ({
   getBrandingImageUrlForEmail: async () => null,
+  invoiceAttachmentPath: () => "firms/f1/engagements/e1/invoices/invoice.pdf",
+  isAllowedMime: (mime: string) => mime === "application/pdf",
+  MAX_BYTES: 25 * 1024 * 1024,
+  removeObjectQuiet: (...args: unknown[]) => removeObjectQuiet(...args),
+  truncateFilename: (name: string) => name,
+  uploadObject: (...args: unknown[]) => uploadObject(...args),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { requestPaymentAction } from "./payments";
+import {
+  requestPaymentAction,
+  requestPaymentWithAttachmentAction,
+} from "./payments";
 
 const FIRM_ID = "11111111-1111-1111-1111-111111111111";
 const ENG_ID = "22222222-2222-2222-2222-222222222222";
@@ -63,6 +80,10 @@ beforeEach(() => {
   createPaymentRequest.mockResolvedValue({ id: "pr1" });
   getLatestPaymentRequestForEngagement.mockResolvedValue(null);
   sendEmail.mockResolvedValue({ sent: true, id: "e1" });
+  uploadObject.mockResolvedValue(undefined);
+  removeObjectQuiet.mockResolvedValue(undefined);
+  createFinalDocument.mockResolvedValue({ id: "fd-invoice" });
+  deleteFinalDocument.mockResolvedValue({ storage_path: "invoice.pdf" });
 });
 
 describe("requestPaymentAction", () => {
@@ -194,6 +215,39 @@ describe("requestPaymentAction", () => {
     expect(res.ok).toBe(true);
     expect(createPaymentRequest).toHaveBeenCalledWith(
       expect.objectContaining({ locks_deliverables: true }),
+    );
+  });
+
+  it("uploads and emails an attached invoice document", async () => {
+    const formData = new FormData();
+    formData.set("engagement_id", ENG_ID);
+    formData.set("amount_cents", "35000");
+    formData.set("description", "Tax return invoice");
+    formData.set("locks_deliverables", "false");
+    formData.set(
+      "attachment",
+      new File(["invoice"], "Invoice-2026.pdf", {
+        type: "application/pdf",
+      }),
+    );
+
+    const result = await requestPaymentWithAttachmentAction(formData);
+
+    expect(result).toEqual({ ok: true, id: "pr1" });
+    expect(uploadObject).toHaveBeenCalled();
+    expect(createFinalDocument).toHaveBeenCalledWith(
+      expect.objectContaining({
+        engagement_id: ENG_ID,
+        original_filename: "Invoice-2026.pdf",
+        mime_type: "application/pdf",
+      }),
+    );
+    expect(sendEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          expect.objectContaining({ filename: "Invoice-2026.pdf" }),
+        ],
+      }),
     );
   });
 });
