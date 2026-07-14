@@ -3,6 +3,7 @@ import {
   buildEngagementInviteEmail,
   buildConfirmEmail,
   buildSignedCopyReturnedEmail,
+  buildReminderEmail,
   resolveSender,
 } from "./email";
 
@@ -107,6 +108,39 @@ describe("resolveSender", () => {
     expect(resolveSender("onboarding@resend.dev")).toBe(
       "Vylan <hello@vylan.app>",
     );
+  });
+});
+
+describe("buildReminderEmail customization", () => {
+  const base = {
+    tone: "gentle" as const,
+    clientName: "Zach",
+    firmName: "North Star Accounting",
+    engagementTitle: "T1 — 2026",
+    url: "https://vylan.app/r/test",
+    dueDate: "2026-04-30",
+    pendingRequiredCount: 3,
+    locale: "en" as const,
+  };
+
+  it("interpolates tokens in custom subjects and messages", () => {
+    const email = buildReminderEmail({
+      ...base,
+      customSubject: "{client}: {pending} items for {engagement}",
+      customMessage: "Hi {client},\n\nPlease upload the files for {firm}.",
+    });
+    expect(email.subject).toBe("Zach: 3 items for T1 — 2026");
+    expect(email.text).toContain("Please upload the files for North Star Accounting.");
+    expect(email.html).toContain("Please upload the files for North Star Accounting.");
+  });
+
+  it("escapes HTML in a custom message", () => {
+    const email = buildReminderEmail({
+      ...base,
+      customMessage: "Upload <script>alert(1)</script>",
+    });
+    expect(email.html).not.toContain("<script>");
+    expect(email.html).toContain("&lt;script&gt;");
   });
 });
 

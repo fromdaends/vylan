@@ -450,6 +450,7 @@ export async function executeAction(
             await rescheduleOverdueReminder({
               engagementId: ctx.engagementId,
               dueDate: p.to,
+              settings: engagement.reminder_settings,
             });
           } catch (e) {
             console.error("[engagement-chat] overdue reschedule failed:", e);

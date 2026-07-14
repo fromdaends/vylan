@@ -4,6 +4,7 @@
 // reach outside the engagement (or the firm) by construction.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ReminderSettings } from "@/lib/reminder-settings";
 import type { ChatFileRow } from "./search";
 
 export type ChatItemRow = {
@@ -66,6 +67,7 @@ export type ChatEngagementRow = {
   completed_at: string | null;
   created_at: string;
   reminders_paused: boolean | null;
+  reminder_settings: ReminderSettings | null;
   client_id: string;
   assigned_user_id: string | null;
 };
@@ -77,7 +79,7 @@ export async function fetchChatEngagement(
   const res = await sb
     .from("engagements")
     .select(
-      "id, title, type, status, due_date, sent_at, completed_at, created_at, reminders_paused, client_id, assigned_user_id",
+      "id, title, type, status, due_date, sent_at, completed_at, created_at, reminders_paused, reminder_settings, client_id, assigned_user_id",
     )
     .eq("id", engagementId)
     .maybeSingle();

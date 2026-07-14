@@ -39,6 +39,10 @@ import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
 import { hasActiveTeam } from "@/lib/team/mode";
+import {
+  normalizeReminderSettings,
+  type ReminderSettings,
+} from "@/lib/reminder-settings";
 
 export type CreateEngagementState = {
   ok?: boolean;
@@ -55,6 +59,32 @@ const ItemSchema = z.object({
   doc_type: z.string().min(1),
   required: z.boolean(),
 });
+
+const ReminderStepSchema = z.object({
+  tone: z.enum(["gentle", "firm", "deadline", "overdue"]),
+  enabled: z.boolean(),
+  timing: z.enum(["after_send", "after_due"]),
+  days: z.number().int().min(0).max(365),
+  withSms: z.boolean(),
+  customSubject: z.string().trim().max(160).nullable(),
+  customMessage: z.string().trim().max(2_000).nullable(),
+});
+
+const ReminderSettingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    steps: z.array(ReminderStepSchema).length(4),
+  })
+  .superRefine((settings, ctx) => {
+    const tones = new Set(settings.steps.map((step) => step.tone));
+    if (tones.size !== settings.steps.length) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["steps"],
+        message: "duplicate_reminder_tone",
+      });
+    }
+  });
 
 // Postgres accepts any 8-4-4-4-12 hex string as uuid; Zod 4's strict .uuid()
 // requires RFC 4122 version bits which our seed data doesn't honor. Use the
@@ -94,6 +124,9 @@ const CreateSchema = z.object({
   // (migration 0610).
   invoice_locks_deliverables: z.boolean().optional().default(false),
   invoice_description: z.string().trim().max(500).nullable().optional(),
+  reminder_settings: ReminderSettingsSchema.optional().transform((value) =>
+    normalizeReminderSettings(value),
+  ),
   items: z.array(ItemSchema).min(0),
 })
   // Any invoice (created now OR automated) needs an amount to bill.
@@ -145,6 +178,7 @@ export async function createEngagementAction(payload: {
   invoice_create_now?: boolean;
   invoice_locks_deliverables?: boolean;
   invoice_description?: string | null;
+  reminder_settings?: ReminderSettings;
   items: TemplateItem[];
   send: boolean;
   locale: "fr" | "en";
@@ -161,6 +195,7 @@ export async function createEngagementAction(payload: {
     invoice_create_now: payload.invoice_create_now,
     invoice_locks_deliverables: payload.invoice_locks_deliverables,
     invoice_description: payload.invoice_description,
+    reminder_settings: payload.reminder_settings,
     items: payload.items,
   });
   if (!parsed.success) {
@@ -216,6 +251,7 @@ export async function createEngagementAction(payload: {
       // invoice; a "create now" invoice gets them directly below.
       invoice_locks_deliverables: parsed.data.invoice_locks_deliverables,
       invoice_description: parsed.data.invoice_description ?? null,
+      reminder_settings: parsed.data.reminder_settings,
       items,
     };
     const created = await createEngagementWithItems(input);
@@ -228,6 +264,7 @@ export async function createEngagementAction(payload: {
           engagementId,
           sentAt: new Date(sent.sent_at),
           dueDate: sent.due_date,
+          settings: parsed.data.reminder_settings,
         });
       }
     }
@@ -296,6 +333,7 @@ export async function sendEngagementAction(formData: FormData) {
       engagementId: id,
       sentAt: new Date(sent.sent_at),
       dueDate: sent.due_date,
+      settings: normalizeReminderSettings(sent.reminder_settings),
     });
   }
   revalidateEngagementPaths(id);
