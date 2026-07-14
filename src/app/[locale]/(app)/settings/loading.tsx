@@ -1,4 +1,4 @@
-// Settings skeleton: title + appearance grid + language toggle + firm
+// Settings skeleton: title + general preferences + firm
 // pref toggle + billing card.
 
 export default function Loading() {

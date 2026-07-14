@@ -108,6 +108,19 @@ describe("SettingsShell — Account / Security & privacy / Payments", () => {
     expect(
       screen.getByRole("button", { name: en.Settings.nav_payments }),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: en.Settings.nav_appearance }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("moves appearance controls into General and preserves old deep links", () => {
+    renderShell({ initialSection: "appearance" });
+    expect(screen.getByText(en.Settings.mode_label)).toBeInTheDocument();
+    expect(screen.getByText(en.Settings.section_language)).toBeInTheDocument();
+    expect(screen.getByText(en.Settings.section_timezone)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: en.Settings.nav_general }),
+    ).toHaveAttribute("aria-current", "page");
   });
 
   it("puts email + password (and firm settings) under the Account tab", () => {
