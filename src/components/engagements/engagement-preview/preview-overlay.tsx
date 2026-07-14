@@ -415,31 +415,34 @@ export function PreviewOverlay({
         aria-modal="true"
         aria-label={`${t("eyebrow")} — ${engagementTitle}`}
         inert={rejectTarget != null || undefined}
-        className="relative grid h-[92vh] w-[95vw] max-w-[2100px] grid-cols-[auto_minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-2xl border border-border/50 bg-background shadow-2xl outline-none"
+        className="relative h-[92vh] w-[95vw] max-w-[2100px] overflow-hidden rounded-2xl border border-border/50 bg-background shadow-2xl outline-none"
       >
-        {/* Header: engagement name + Download all + close */}
-        <div
+        <aside
           inert={selectedDoc != null || undefined}
           className={cn(
-            "col-start-1 row-start-1 flex overflow-hidden border-r border-b border-border/40 bg-card/30 p-3 transition-[width] duration-200 ease-out motion-reduce:transition-none",
-            sidebarOpen
-              ? "w-72 items-start justify-between gap-3"
-              : "w-14 flex-col items-center gap-1",
+            "absolute inset-y-0 left-0 z-10 grid w-72 grid-cols-[14.5rem_3.5rem] grid-rows-[auto_minmax(0,1fr)] border-r border-border/40 bg-card shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none",
+            sidebarOpen ? "translate-x-0" : "-translate-x-[14.5rem]",
           )}
         >
-          {sidebarOpen && <div className="min-w-0">
-            <div className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
-              {t("eyebrow")}
+          {/* Header: engagement name + Download all + close */}
+          <div
+            className="col-start-1 row-start-1 min-w-0 border-b border-border/40 p-3"
+          >
+            <div className="min-w-0">
+              <div className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+                {t("eyebrow")}
+              </div>
+              <h2 className="truncate text-lg font-semibold tracking-tight">
+                {engagementTitle}
+              </h2>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {clientName ? `${clientName} · ` : ""}
+                {t("doc_count", { count: counts.all })}
+              </p>
             </div>
-            <h2 className="truncate text-lg font-semibold tracking-tight">
-              {engagementTitle}
-            </h2>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {clientName ? `${clientName} · ` : ""}
-              {t("doc_count", { count: counts.all })}
-            </p>
-          </div>}
-          <div className={cn("flex shrink-0", sidebarOpen ? "items-center gap-1" : "flex-col gap-1")}>
+          </div>
+
+          <div className="col-start-2 row-span-2 row-start-1 flex flex-col items-center gap-1 border-l border-border/40 bg-card p-2">
             <Button
               type="button"
               variant="ghost"
@@ -454,7 +457,7 @@ export function PreviewOverlay({
                 <PanelLeftOpen className="size-4" />
               )}
             </Button>
-            {sidebarOpen && !scoped && counts.all > 0 && (
+            {!scoped && counts.all > 0 && (
               <Button
                 type="button"
                 variant="ghost"
@@ -482,18 +485,11 @@ export function PreviewOverlay({
               <X className="size-4" />
             </Button>
           </div>
-        </div>
 
-        {/* Tabs + search */}
-        <div
-          inert={selectedDoc != null || undefined}
-          className={cn(
-            "col-start-1 row-start-2 flex flex-col overflow-hidden border-r border-border/40 bg-card/30 transition-[width] duration-200 ease-out motion-reduce:transition-none",
-            sidebarOpen
-              ? "w-72 justify-between overflow-y-auto p-3"
-              : "w-14 [&>*]:hidden",
-          )}
-        >
+          {/* Tabs + search */}
+          <div
+            className="col-start-1 row-start-2 flex min-h-0 flex-col justify-between overflow-y-auto bg-card/30 p-3"
+          >
           <div className="flex flex-col gap-3">
             {itemOptions.length > 1 && (
               <div>
@@ -589,12 +585,13 @@ export function PreviewOverlay({
               )}
             </div>
           </div>
-        </div>
+          </div>
+        </aside>
 
         {/* Grid */}
         <div
           inert={selectedDoc != null || undefined}
-          className="col-start-2 row-span-2 row-start-1 overflow-y-auto px-5 py-5"
+          className="absolute inset-0 overflow-y-auto py-5 pr-5 pl-[4.5rem]"
         >
           {visible.length === 0 ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
