@@ -60,6 +60,10 @@ export function PaymentDueCard({
     switch (code) {
       case "not_accepting_payments":
       case "stripe_not_configured":
+      case "account_unusable":
+        // account_unusable = the firm's connected Stripe account can't be
+        // charged in this environment (mode mismatch). Same client-facing
+        // meaning as not_accepting_payments: online payment isn't available.
         return t("pay_error_unavailable", { firm: firmName });
       case "no_open_request":
         return t("pay_error_no_request");
