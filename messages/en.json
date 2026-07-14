@@ -119,6 +119,8 @@
     "button": "Preview",
     "eyebrow": "Document preview",
     "close": "Close",
+    "collapse_sidebar": "Collapse preview sidebar",
+    "expand_sidebar": "Expand preview sidebar",
     "doc_count": "{count, plural, =0 {No documents} one {# document} other {# documents}}",
     "tab_all": "All",
     "tab_approved": "Looks good",
