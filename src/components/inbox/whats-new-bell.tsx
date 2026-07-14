@@ -51,10 +51,15 @@ export function WhatsNewBell({
         aria-label={t("whats_new")}
         className="w-[calc(100vw-2rem)] max-w-md overflow-hidden rounded-xl border-border/70 bg-popover p-0 shadow-2xl"
         // Any link inside (a feed row, View all) navigates away — close the
-        // popover right away so it doesn't linger over the route transition.
-        // Buttons too: the client-message Reply row opens the assistant panel
-        // in place, and the popover must get out of its way.
-        onClickCapture={(e) => {
+        // popover so it doesn't linger over the route transition. Buttons too:
+        // the client-message Reply row opens the assistant panel in place.
+        //
+        // BUBBLE phase, deliberately NOT onClickCapture: a capture-phase
+        // setOpen(false) unmounts the content mid-dispatch (React flushes the
+        // discrete update between phases), so the clicked row's own onClick
+        // never fired — links still navigated (native), buttons went dead.
+        // On bubble, the target's handler runs first, then this closes.
+        onClick={(e) => {
           if ((e.target as HTMLElement).closest("a,button")) setOpen(false);
         }}
       >
