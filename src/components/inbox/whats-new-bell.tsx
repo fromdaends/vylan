@@ -51,9 +51,11 @@ export function WhatsNewBell({
         aria-label={t("whats_new")}
         className="w-[calc(100vw-2rem)] max-w-md overflow-hidden rounded-xl border-border/70 bg-popover p-0 shadow-2xl"
         // Any link inside (a feed row, View all) navigates away — close the
-        // panel right away so it doesn't linger over the route transition.
+        // popover right away so it doesn't linger over the route transition.
+        // Buttons too: the client-message Reply row opens the assistant panel
+        // in place, and the popover must get out of its way.
         onClickCapture={(e) => {
-          if ((e.target as HTMLElement).closest("a")) setOpen(false);
+          if ((e.target as HTMLElement).closest("a,button")) setOpen(false);
         }}
       >
         {/* Compact header + full-width divider, matching the reference. */}

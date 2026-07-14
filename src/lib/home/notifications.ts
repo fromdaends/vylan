@@ -72,6 +72,10 @@ export type HomeNotification = {
   // Engagement title — already on the row when relevant. Optional so
   // we can rendere notifications that aren't engagement-scoped later.
   engagement_title: string | null;
+  // Engagement lifecycle status — set on client_message rows so the Reply
+  // row can open the panel's thread with the right read-only state without
+  // navigating. Absent elsewhere.
+  engagement_status?: string | null;
   client_display_name: string | null;
   // ISO timestamp. For attention-derived rows (overdue, ready_to_review)
   // we use the engagement's sent_at / due_date for a stable timestamp.
@@ -146,6 +150,10 @@ export async function listHomeNotifications(
   const assigneeByEng = new Map<string, string | null>(
     engagements.map((e) => [e.id, e.assigned_user_id]),
   );
+  // engagement.id -> status, for the client_message rows (Reply-in-place).
+  const statusByEng = new Map<string, string>(
+    engagements.map((e) => [e.id, e.status]),
+  );
   const out: HomeNotification[] = [];
 
   // 1) AI signals straight off the existing activity feed.
@@ -179,11 +187,15 @@ export async function listHomeNotifications(
       kind,
       engagement_id: a.engagement_id,
       engagement_title: a.engagement_title,
+      engagement_status: a.engagement_id
+        ? (statusByEng.get(a.engagement_id) ?? null)
+        : null,
       client_display_name: a.client_display_name,
       timestamp: a.created_at,
       href: a.engagement_id
         ? // A client message deep-links into the panel's Client-messages tab
-          // (the engagement page opens it when ?panel=messages is present).
+          // (kept as a fallback; the feed renders these rows as an in-place
+          // panel opener, no navigation).
           kind === "client_message"
           ? `/engagements/${a.engagement_id}?panel=messages`
           : `/engagements/${a.engagement_id}`
