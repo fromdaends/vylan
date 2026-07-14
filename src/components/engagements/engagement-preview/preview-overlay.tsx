@@ -421,7 +421,7 @@ export function PreviewOverlay({
         <div
           inert={selectedDoc != null || undefined}
           className={cn(
-            "col-start-1 row-start-1 flex border-r border-b border-border/40 bg-card/30 p-3",
+            "col-start-1 row-start-1 flex overflow-hidden border-r border-b border-border/40 bg-card/30 p-3 transition-[width] duration-200 ease-out motion-reduce:transition-none",
             sidebarOpen
               ? "w-72 items-start justify-between gap-3"
               : "w-14 flex-col items-center gap-1",
@@ -488,7 +488,7 @@ export function PreviewOverlay({
         <div
           inert={selectedDoc != null || undefined}
           className={cn(
-            "col-start-1 row-start-2 flex flex-col border-r border-border/40 bg-card/30",
+            "col-start-1 row-start-2 flex flex-col overflow-hidden border-r border-border/40 bg-card/30 transition-[width] duration-200 ease-out motion-reduce:transition-none",
             sidebarOpen
               ? "w-72 justify-between overflow-y-auto p-3"
               : "w-14 [&>*]:hidden",
