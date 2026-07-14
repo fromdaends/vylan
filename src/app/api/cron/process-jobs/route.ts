@@ -18,6 +18,10 @@ import { processReminderJob } from "@/lib/reminders";
 import { processClassifyJob } from "@/lib/ai/process";
 import { processSetAssessmentJob } from "@/lib/ai/set-assessment";
 import { processNotifyClientRetryJob } from "@/lib/notify-retry";
+import {
+  processNotifyClientMessagesJob,
+  processNotifyFirmMessagesJob,
+} from "@/lib/client-messages-notify";
 import { processSyncQuickbooksJob } from "@/lib/quickbooks/sync";
 import { sendEngagementInvoice } from "@/lib/invoices/send";
 import {
@@ -144,6 +148,27 @@ async function runJob(
     }
     if (job.kind === "notify_client_retry") {
       const detail = await processNotifyClientRetryJob(job.payload);
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: true, detail };
+    }
+    if (job.kind === "notify_client_messages") {
+      // Debounced messaging emails (Phase 3). Every skip is terminal-done —
+      // "already read" / "already notified" mean there's nothing to say, and
+      // a failed Resend send is retried via the queue's normal backoff.
+      const detail = await processNotifyClientMessagesJob(job.payload);
+      if (detail.skipped?.startsWith("send_failed")) {
+        await markJobFailed(job.id, detail.skipped);
+        return { id: job.id, kind: job.kind, ok: false, detail };
+      }
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: true, detail };
+    }
+    if (job.kind === "notify_firm_messages") {
+      const detail = await processNotifyFirmMessagesJob(job.payload);
+      if (detail.skipped?.startsWith("send_failed")) {
+        await markJobFailed(job.id, detail.skipped);
+        return { id: job.id, kind: job.kind, ok: false, detail };
+      }
       await markJobDone(job.id);
       return { id: job.id, kind: job.kind, ok: true, detail };
     }

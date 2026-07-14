@@ -21,6 +21,7 @@ import {
   toPortalMessage,
 } from "@/lib/db/client-messages";
 import { checkRateLimit, PORTAL_MUTATION_PER_TOKEN } from "@/lib/rate-limit";
+import { scheduleFirmMessageNotification } from "@/lib/client-messages-notify";
 
 export const runtime = "nodejs";
 
@@ -80,8 +81,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "not_ready" }, { status: 503 });
   }
 
-  // Replying implies the client has seen the thread; and log the event for
-  // the accountant's activity feed. Both best-effort — never fail the send.
+  // Replying implies the client has seen the thread; log the event for the
+  // accountant's activity feed; then (re)start the debounced accountant-email
+  // timer (one email per burst of replies). All best-effort — never fail an
+  // already-written send.
   try {
     await markThreadReadByClient(sb, engagement.id);
     await logActivity(engagement.firm_id, engagement.id, "client_message_sent", {
@@ -89,6 +92,11 @@ export async function POST(request: NextRequest) {
     });
   } catch (e) {
     console.error("[portal messages] post-send bookkeeping failed:", e);
+  }
+  try {
+    await scheduleFirmMessageNotification(engagement.id);
+  } catch (e) {
+    console.error("[portal messages] notify scheduling failed:", e);
   }
 
   return NextResponse.json({ ok: true, message: toPortalMessage(message) });

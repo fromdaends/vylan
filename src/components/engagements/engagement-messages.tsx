@@ -35,6 +35,7 @@ export function EngagementMessages({
   engagementId,
   clientName,
   initialMessages,
+  initialClientLastReadAt = null,
   notActivated,
   readOnly,
   readOnlyReason,
@@ -43,6 +44,9 @@ export function EngagementMessages({
   engagementId: string;
   clientName: string | null;
   initialMessages: ClientMessageRow[];
+  // When the CLIENT last opened the thread — powers the accountant-side-only
+  // "Seen" marker under the firm's latest message. Never shown to clients.
+  initialClientLastReadAt?: string | null;
   // Migration 0650 not applied yet — show the quiet gated state.
   notActivated: boolean;
   readOnly: boolean;
@@ -51,6 +55,9 @@ export function EngagementMessages({
 }) {
   const t = useTranslations("ClientMessages");
   const [messages, setMessages] = useState<ClientMessageRow[]>(initialMessages);
+  const [clientLastReadAt, setClientLastReadAt] = useState<string | null>(
+    initialClientLastReadAt,
+  );
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(false);
@@ -88,9 +95,13 @@ export function EngagementMessages({
     try {
       const res = await fetch(`/api/engagements/${engagementId}/messages`);
       if (!res.ok) return;
-      const data = (await res.json()) as { messages?: ClientMessageRow[] };
+      const data = (await res.json()) as {
+        messages?: ClientMessageRow[];
+        clientLastReadAt?: string | null;
+      };
       if (!Array.isArray(data.messages)) return;
       setMessages(data.messages);
+      setClientLastReadAt(data.clientLastReadAt ?? null);
       // A new client message arrived while the thread is open: stamp it read
       // so the unread badge doesn't reappear on the next page load.
       const newest = newestClientAt(data.messages);
@@ -184,6 +195,17 @@ export function EngagementMessages({
 
   const remaining = MAX_LENGTH - draft.length;
 
+  // The accountant-side "Seen" marker sits under the firm's LATEST message,
+  // and only once the client's read pointer has passed it.
+  const lastFirmMessage = [...messages]
+    .reverse()
+    .find((m) => m.sender === "firm");
+  const lastFirmSeen =
+    lastFirmMessage != null &&
+    clientLastReadAt != null &&
+    new Date(clientLastReadAt).getTime() >=
+      new Date(lastFirmMessage.created_at).getTime();
+
   return (
     <div ref={rootRef} className="space-y-3">
       {/* Human-to-human header: the client's name front and center, so this
@@ -249,6 +271,11 @@ export function EngagementMessages({
                     <time dateTime={m.created_at}>
                       {timeFormat.format(new Date(m.created_at))}
                     </time>
+                    {lastFirmSeen && m.id === lastFirmMessage?.id && (
+                      <span className="ml-1.5 font-medium text-muted-foreground/90">
+                        · {t("seen")}
+                      </span>
+                    )}
                   </p>
                 </div>
               </div>

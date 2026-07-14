@@ -785,6 +785,7 @@ export default async function EngagementDetailPage({
             engagementId={engagement.id}
             clientName={client?.display_name ?? null}
             initialMessages={clientMessages}
+            initialClientLastReadAt={messageThread?.client_last_read_at ?? null}
             notActivated={messagingNotActivated}
             readOnly={!isLive}
             readOnlyReason={

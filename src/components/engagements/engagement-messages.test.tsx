@@ -173,6 +173,26 @@ describe("EngagementMessages", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows Seen under the firm's latest message once the client read past it", () => {
+    renderMessages({
+      initialMessages: sampleMessages,
+      initialClientLastReadAt: "2026-07-01T12:00:00Z",
+    });
+    // sampleMessages: firm at 10:00, client at 11:00; read pointer 12:00 —
+    // the (only) firm message is seen.
+    expect(screen.getByText(`· ${en.ClientMessages.seen}`)).toBeInTheDocument();
+  });
+
+  it("shows no Seen marker while the client hasn't read the latest firm message", () => {
+    renderMessages({
+      initialMessages: sampleMessages,
+      initialClientLastReadAt: "2026-07-01T09:00:00Z",
+    });
+    expect(
+      screen.queryByText(`· ${en.ClientMessages.seen}`),
+    ).not.toBeInTheDocument();
+  });
+
   it("shows the quiet gated state before migration 0650", () => {
     renderMessages({ notActivated: true });
     expect(
