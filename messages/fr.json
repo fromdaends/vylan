@@ -1995,6 +1995,7 @@
     "pay_failed_title": "Paiement non complété",
     "pay_try_again": "Réessayer",
     "pay_error": "Impossible de démarrer le paiement. Veuillez réessayer.",
+    "pay_error_provider": "Nous n'avons pas pu démarrer le paiement pour le moment. Veuillez réessayer dans un instant — si le problème persiste, contactez {firm}.",
     "pay_error_unavailable": "{firm} n'est pas encore configuré pour accepter les paiements en ligne. Veuillez le contacter pour convenir d'un autre mode de paiement.",
     "pay_error_no_request": "Cette facture a déjà été traitée. Actualisez la page pour voir le statut le plus récent.",
     "pay_error_link": "Ce lien de paiement n'est plus valide. Veuillez contacter {firm}.",
