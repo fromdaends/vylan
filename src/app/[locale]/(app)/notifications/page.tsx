@@ -16,12 +16,12 @@ import {
   FileSignature,
   FileUp,
   MessageSquare,
-  Reply,
   Sparkles,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { ClientMessageRow } from "@/components/inbox/client-message-row";
 
 export const dynamic = "force-dynamic";
 
@@ -78,9 +78,26 @@ export default async function NotificationsPage({
         <NotificationsEmpty t={t} />
       ) : (
         <ol className="divide-y divide-border/60">
-          {notifications.map((n) => (
-            <NotificationRow key={n.id} n={n} locale={locale} t={t} />
-          ))}
+          {notifications.map((n) =>
+            // Client messages reply IN PLACE (open the panel's thread, no
+            // navigation); every other kind stays a plain link row.
+            n.kind === "client_message" && n.engagement_id ? (
+              <ClientMessageRow
+                key={n.id}
+                engagement={{
+                  id: n.engagement_id,
+                  title: n.engagement_title,
+                  status: n.engagement_status ?? null,
+                }}
+                clientName={n.client_display_name}
+                timestamp={n.timestamp}
+                locale={locale}
+                compact={false}
+              />
+            ) : (
+              <NotificationRow key={n.id} n={n} locale={locale} t={t} />
+            ),
+          )}
         </ol>
       )}
     </div>
@@ -151,14 +168,6 @@ function NotificationRow({
             <span aria-hidden>·</span>
             <span>{formatRelative(n.timestamp, locale)}</span>
           </div>
-          {/* A client message gets a Reply affordance — the whole row links
-              into the panel's Client-messages tab; the chip makes it clear. */}
-          {n.kind === "client_message" && (
-            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 px-2.5 py-1 text-xs font-medium text-foreground transition-colors group-hover:border-border group-hover:bg-secondary/60">
-              <Reply className="h-3 w-3" aria-hidden />
-              {t("reply")}
-            </span>
-          )}
         </div>
         <ChevronRight
           className="h-4 w-4 text-muted-foreground/30 group-hover:text-foreground/70 transition-colors mt-2 shrink-0"

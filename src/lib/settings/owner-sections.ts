@@ -15,6 +15,7 @@ export type SettingsSectionId =
   | "appearance"
   | "general"
   | "payments"
+  | "automation"
   | "integrations"
   | "documents"
   | "assistant";
@@ -28,6 +29,9 @@ export const OWNER_ONLY_SETTINGS_SECTIONS: readonly SettingsSectionId[] = [
   // Whether the AI may act without a human confirming is a firm-wide safety
   // policy — owner-only, like document handling.
   "assistant",
+  // Firm-wide automations (invoice automation default, more to come) change
+  // what the product does on its own — owner-only, like payments.
+  "automation",
 ];
 
 export function isOwnerOnlySettingsSection(id: string): boolean {

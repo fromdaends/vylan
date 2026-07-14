@@ -16,9 +16,10 @@ const ALL: SettingsSectionId[] = [
 ];
 
 describe("isOwnerOnlySettingsSection", () => {
-  it("payments + documents are owner-only", () => {
+  it("payments + documents + automation are owner-only", () => {
     expect(isOwnerOnlySettingsSection("payments")).toBe(true);
     expect(isOwnerOnlySettingsSection("documents")).toBe(true);
+    expect(isOwnerOnlySettingsSection("automation")).toBe(true);
   });
   it("account / security / appearance / general are not", () => {
     for (const id of ["account", "security", "appearance", "general"]) {

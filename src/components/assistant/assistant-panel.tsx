@@ -450,7 +450,7 @@ export function AssistantPanel({
           </button>
           {/* Gear → the assistant's settings (replaces the kebab, founder). */}
           <Link
-            href="/settings"
+            href="/settings?tab=assistant"
             aria-label={t("settings_label")}
             className="shrink-0 inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
           >

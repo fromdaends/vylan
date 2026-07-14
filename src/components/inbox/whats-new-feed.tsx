@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { formatRelative, type AppLocale } from "@/lib/format";
 import type { HomeNotification } from "@/lib/home/notifications";
+import { ClientMessageRow } from "@/components/inbox/client-message-row";
 import {
   AlertTriangle,
   CheckCheck,
@@ -10,7 +11,6 @@ import {
   FileSignature,
   FileUp,
   MessageSquare,
-  Reply,
   Sparkles,
   Wallet,
   type LucideIcon,
@@ -42,9 +42,27 @@ export async function WhatsNewFeed({
 
   return (
     <ol className="divide-y divide-border/50">
-      {notifications.map((n) => (
-        <WhatsNewRow key={n.id} n={n} locale={locale} t={t} />
-      ))}
+      {notifications.map((n) =>
+        // A client message replies IN PLACE (opens the panel's thread, no
+        // navigation) — its row is a client component; everything else stays
+        // a plain server-rendered link row.
+        n.kind === "client_message" && n.engagement_id ? (
+          <ClientMessageRow
+            key={n.id}
+            engagement={{
+              id: n.engagement_id,
+              title: n.engagement_title,
+              status: n.engagement_status ?? null,
+            }}
+            clientName={n.client_display_name}
+            timestamp={n.timestamp}
+            locale={locale}
+            compact
+          />
+        ) : (
+          <WhatsNewRow key={n.id} n={n} locale={locale} t={t} />
+        ),
+      )}
     </ol>
   );
 }
@@ -98,15 +116,6 @@ function WhatsNewRow({
               {formatRelative(n.timestamp, locale)}
             </span>
           </div>
-          {/* A client message gets a Reply affordance — the whole row already
-              links straight into the panel's Client-messages tab, this chip
-              just makes the action explicit. A span, not a nested link. */}
-          {n.kind === "client_message" && (
-            <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-border/70 px-2.5 py-1 text-xs font-medium text-foreground transition-colors group-hover:border-border group-hover:bg-secondary/60">
-              <Reply className="h-3 w-3" aria-hidden />
-              {t("reply")}
-            </span>
-          )}
         </div>
         <ChevronRight
           className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-foreground/60"
