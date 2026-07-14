@@ -11,20 +11,15 @@ import {
 import { useTranslations } from "next-intl";
 import { motion } from "framer-motion";
 import {
-  Check,
   History,
   Info,
   MessageSquare,
-  MoreHorizontal,
+  Settings,
   Sparkles,
   X,
+  type LucideIcon,
 } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Link } from "@/i18n/navigation";
 import { cn } from "@/lib/cn";
 import {
   closeAssistant,
@@ -52,6 +47,7 @@ import {
 import { EngagementSelector } from "@/components/assistant/engagement-selector";
 import { ChatTab } from "@/components/assistant/chat-tab";
 import { ActivityTab } from "@/components/assistant/activity-tab";
+import { ClientMessagesTab } from "@/components/assistant/client-messages-tab";
 import { AssistantInfo } from "@/components/assistant/assistant-info";
 
 // The Vylan Assistant panel — the evolution of the old "Ask Vylan" help
@@ -101,7 +97,9 @@ export function AssistantPanel({
       frame = requestAnimationFrame(() => {
         const fresh = isFreshEngagement(pe.status, pe.createdAt, Date.now());
         const seen = readSeenEngagements(userId).includes(pe.id);
-        setBadge(fresh && !seen);
+        // Unread client messages also light the dot — the Messages surface
+        // now lives inside this panel, so the FAB is its doorway.
+        setBadge((fresh && !seen) || (pe.messagesUnread ?? 0) > 0);
       });
     }
     return () => {
@@ -423,9 +421,10 @@ export function AssistantPanel({
           />
         </div>
 
-        {/* Header: engagement selector (subtle) + view menu + close. No brand
-            chip, no divider line — kept minimal so the panel reads clean. */}
-        <header className="flex items-center gap-1 border-b border-white/[0.06] bg-[#11110f] px-3 py-2.5">
+        {/* Header: engagement selector (subtle) + info + settings + close.
+            The old kebab view-menu is gone (founder) — views are the tab
+            strip right below. */}
+        <header className="flex items-center gap-1 bg-[#11110f] px-3 pt-2.5 pb-1">
           <EngagementSelector
             value={selected}
             onChange={setSelectedEngagement}
@@ -445,47 +444,14 @@ export function AssistantPanel({
           >
             <Info className="size-4" aria-hidden />
           </button>
-          {/* Chat / Activity live behind a kebab menu instead of a tab bar,
-              so the header stays quiet. The active view carries a check. */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="shrink-0 inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-                aria-label={t("switch_view")}
-              >
-                <MoreHorizontal className="size-4" aria-hidden />
-              </button>
-            </DropdownMenuTrigger>
-            {/* !animate-none: drop the zoom/fade pop on open+close so the menu
-                just appears — calmer than the default. Scoped here, not on the
-                shared component. Items override the default blue focus fill
-                with a quiet neutral highlight. */}
-            <DropdownMenuContent align="end" className="w-44 !animate-none">
-              <DropdownMenuItem
-                className="focus:bg-secondary focus:text-foreground"
-                onSelect={() => {
-                  setAssistantTab("chat");
-                  setInfoOpen(false);
-                }}
-              >
-                <MessageSquare />
-                {t("tab_chat")}
-                {tab === "chat" && <Check className="ml-auto size-4" />}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="focus:bg-secondary focus:text-foreground"
-                onSelect={() => {
-                  setAssistantTab("activity");
-                  setInfoOpen(false);
-                }}
-              >
-                <History />
-                {t("tab_activity")}
-                {tab === "activity" && <Check className="ml-auto size-4" />}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Gear → the assistant's settings (replaces the kebab, founder). */}
+          <Link
+            href="/settings"
+            aria-label={t("settings_label")}
+            className="shrink-0 inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+          >
+            <Settings className="size-4" aria-hidden />
+          </Link>
           <button
             type="button"
             onClick={closeAssistant}
@@ -496,6 +462,49 @@ export function AssistantPanel({
           </button>
         </header>
 
+        {/* Browser-style connected tabs (founder): rounded tops, the active
+            tab shares the content's background so it visually merges with
+            the view below — Chrome-like, no hard edges. The human client
+            thread and the AI chat are separate, clearly-labeled views. */}
+        <div
+          role="tablist"
+          aria-label={t("switch_view")}
+          className="flex items-end gap-1 bg-[#11110f] px-2.5 pt-1"
+        >
+          <PanelTab
+            active={tab === "messages" && !infoOpen}
+            onClick={() => {
+              setAssistantTab("messages");
+              setInfoOpen(false);
+            }}
+            icon={MessageSquare}
+            label={t("tab_client_messages")}
+            badge={
+              selected && pageEngagement?.id === selected.id
+                ? (pageEngagement?.messagesUnread ?? 0)
+                : 0
+            }
+          />
+          <PanelTab
+            active={tab === "chat" && !infoOpen}
+            onClick={() => {
+              setAssistantTab("chat");
+              setInfoOpen(false);
+            }}
+            icon={Sparkles}
+            label={t("tab_ai_chat")}
+          />
+          <PanelTab
+            active={tab === "activity" && !infoOpen}
+            onClick={() => {
+              setAssistantTab("activity");
+              setInfoOpen(false);
+            }}
+            icon={History}
+            label={t("tab_activity")}
+          />
+        </div>
+
         {/* Content region. Chat + Activity both stay mounted (visibility
             toggled, not unmounted) so chat history and the activity feed
             survive a view switch — same guarantee the old forceMount tabs
@@ -503,6 +512,14 @@ export function AssistantPanel({
             (the header stays visible above it). */}
         <div className="relative flex-1 min-h-0">
           <div className="absolute inset-0 flex flex-col">
+            <div
+              className={cn(
+                "flex-1 min-h-0 overflow-y-auto overscroll-contain",
+                tab !== "messages" && "hidden",
+              )}
+            >
+              <ClientMessagesTab engagement={selected} locale={locale} />
+            </div>
             <div
               className={cn(
                 "flex-1 min-h-0 flex flex-col",
@@ -530,5 +547,45 @@ export function AssistantPanel({
         </div>
       </aside>
     </>
+  );
+}
+
+// One rounded browser-style tab. The active tab's background matches the
+// content region (bg-black) so tab and view read as one connected surface.
+function PanelTab({
+  active,
+  onClick,
+  icon: Icon,
+  label,
+  badge = 0,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: LucideIcon;
+  label: string;
+  // Unread count pill (client messages only).
+  badge?: number;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "inline-flex cursor-pointer items-center gap-1.5 rounded-t-xl px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active
+          ? "bg-black text-foreground"
+          : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+      )}
+    >
+      <Icon className="size-3.5" aria-hidden />
+      {label}
+      {badge > 0 && (
+        <span className="inline-flex min-w-[1.125rem] items-center justify-center rounded-full bg-accent px-1 py-0.5 text-[10px] font-semibold leading-none text-accent-foreground">
+          {badge}
+        </span>
+      )}
+    </button>
   );
 }

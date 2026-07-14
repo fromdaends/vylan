@@ -17,52 +17,35 @@ export function EngagementTabs({
   checklistCount,
   signaturesCount,
   finalCount,
-  messagesCount = 0,
-  messagesUnread = 0,
   showSignatures,
   showFinal,
-  showMessages = false,
   checklistControls,
   signaturesControls,
   finalControls,
   checklist,
   signatures,
   final,
-  messages = null,
 }: {
   checklistCount: number;
   signaturesCount: number;
   finalCount: number;
-  messagesCount?: number;
-  // Client messages the firm hasn't seen yet — renders the badge on the
-  // Messages tab. Cleared locally the moment the tab is opened (the tab
-  // content stamps the server-side read pointer itself).
-  messagesUnread?: number;
   // False only when signatures don't apply (not live AND none exist): then it's
   // a plain checklist with no tab bar, matching the old single-section layout.
   showSignatures: boolean;
   // Whether the Final documents tab applies (finals exist OR the engagement is
   // live/complete, i.e. there's work to deliver).
   showFinal: boolean;
-  // Whether the client Messages tab applies (live/complete engagements, or
-  // history exists). Drafts have no client link yet, so no thread.
-  showMessages?: boolean;
   checklistControls: ReactNode;
   signaturesControls: ReactNode;
   finalControls: ReactNode;
   checklist: ReactNode;
   signatures: ReactNode;
   final: ReactNode;
-  messages?: ReactNode;
 }) {
   const t = useTranslations("Engagements");
-  const [active, setActive] = useState<
-    "checklist" | "signatures" | "final" | "messages"
-  >("checklist");
-  // Opening Messages clears its badge for this page-view; the server read
-  // pointer (stamped by the tab content) keeps it cleared on later loads.
-  const [messagesSeen, setMessagesSeen] = useState(false);
-  const unreadShown = messagesSeen ? 0 : messagesUnread;
+  const [active, setActive] = useState<"checklist" | "signatures" | "final">(
+    "checklist",
+  );
 
   // If the selected tab is no longer shown (e.g. the Signatures tab disappears
   // when a signature-free engagement is marked complete, while `active` is still
@@ -70,13 +53,12 @@ export function EngagementTabs({
   // body is never blank.
   const effectiveActive =
     (active === "signatures" && !showSignatures) ||
-    (active === "final" && !showFinal) ||
-    (active === "messages" && !showMessages)
+    (active === "final" && !showFinal)
       ? "checklist"
       : active;
 
   // No extra tabs apply → plain single-section checklist, no tab bar.
-  if (!showSignatures && !showFinal && !showMessages) {
+  if (!showSignatures && !showFinal) {
     return (
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border">
@@ -121,27 +103,13 @@ export function EngagementTabs({
               count={finalCount}
             />
           )}
-          {showMessages && (
-            <TabButton
-              active={effectiveActive === "messages"}
-              onClick={() => {
-                setActive("messages");
-                setMessagesSeen(true);
-              }}
-              label={t("messages")}
-              count={messagesCount}
-              unread={unreadShown}
-            />
-          )}
         </div>
         <div className="flex items-center gap-2 pb-1.5">
           {effectiveActive === "checklist"
             ? checklistControls
             : effectiveActive === "signatures"
               ? signaturesControls
-              : effectiveActive === "final"
-                ? finalControls
-                : null}
+              : finalControls}
         </div>
       </div>
 
@@ -152,9 +120,6 @@ export function EngagementTabs({
       {showFinal && (
         <div hidden={effectiveActive !== "final"}>{final}</div>
       )}
-      {showMessages && (
-        <div hidden={effectiveActive !== "messages"}>{messages}</div>
-      )}
     </section>
   );
 }
@@ -164,14 +129,11 @@ function TabButton({
   onClick,
   label,
   count,
-  unread = 0,
 }: {
   active: boolean;
   onClick: () => void;
   label: string;
   count: number;
-  // Unseen-item count; > 0 renders the small filled badge after the label.
-  unread?: number;
 }) {
   return (
     <button
@@ -196,11 +158,6 @@ function TabButton({
       >
         ({count})
       </span>
-      {unread > 0 && (
-        <span className="ml-1.5 inline-flex min-w-[1.125rem] items-center justify-center rounded-full bg-primary px-1 py-0.5 align-middle text-[10px] font-semibold leading-none text-primary-foreground">
-          {unread}
-        </span>
-      )}
     </button>
   );
 }

@@ -5,7 +5,7 @@
 // preference in app-shell.tsx — no context provider, no prop drilling across
 // the layout boundary.
 
-export type AssistantTab = "chat" | "activity";
+export type AssistantTab = "messages" | "chat" | "activity";
 
 // What an engagement page publishes about itself while mounted. The panel
 // uses it to preselect the engagement and to decide the FAB badge.
@@ -15,6 +15,9 @@ export type PageEngagement = {
   clientName: string | null;
   status: string;
   createdAt: string;
+  // Client messages the firm hasn't read yet (server-computed by the page).
+  // Badges the FAB and the panel's Client-messages tab.
+  messagesUnread?: number;
 };
 
 // An engagement as selectable in the panel's picker (also the payload shape

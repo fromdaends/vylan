@@ -15,10 +15,18 @@ export function AssistantEngagementBridge({
 }: {
   engagement: PageEngagement;
 }) {
-  const { id, title, clientName, status, createdAt } = engagement;
+  const { id, title, clientName, status, createdAt, messagesUnread } =
+    engagement;
   useEffect(() => {
-    setPageEngagement({ id, title, clientName, status, createdAt });
+    setPageEngagement({
+      id,
+      title,
+      clientName,
+      status,
+      createdAt,
+      messagesUnread,
+    });
     return () => setPageEngagement(null);
-  }, [id, title, clientName, status, createdAt]);
+  }, [id, title, clientName, status, createdAt, messagesUnread]);
   return null;
 }

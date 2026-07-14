@@ -18,15 +18,23 @@ export function AssistantInfo({ onClose }: { onClose: () => void }) {
     t("info_ask_3"),
     t("info_ask_4"),
   ];
+  // Kept in lockstep with the REAL action list (ACTION_TYPES in
+  // src/lib/engagement-chat/action-schemas.ts): approve/reject a document,
+  // send a reminder, add/edit/remove checklist items, change due date /
+  // assignee. info_do_4 ("validation rules") and info_do_6 ("quote setup")
+  // described abilities the assistant never shipped — dropped (founder).
   const actions = [
     t("info_do_1"),
     t("info_do_2"),
     t("info_do_3"),
-    t("info_do_4"),
     t("info_do_5"),
-    t("info_do_6"),
   ];
-  const limits = [t("info_limits_1"), t("info_limits_2"), t("info_limits_3")];
+  const limits = [
+    t("info_limits_1"),
+    t("info_limits_2"),
+    t("info_limits_3"),
+    t("info_limits_4"),
+  ];
 
   return (
     <motion.div
