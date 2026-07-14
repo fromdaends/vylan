@@ -11,6 +11,11 @@ type Props = {
   // Pre-built mailto subject + body, already localized by the caller.
   subject: string;
   body: string;
+  // False when the portal shows the Messages entry (Phase 2): the thread IS
+  // the way to reach the accountant, so the footer drops its email picker
+  // entirely — two side-by-side contact channels read as clutter (founder).
+  // The email fallback stays for portals without messaging.
+  showHelp?: boolean;
 };
 
 // Portal footer "Message your accountant" line.
@@ -23,7 +28,7 @@ type Props = {
 //   - "Email app" → mailto: for clients that do have a desktop mail client.
 // The visible address + Copy button stay as a universal fallback for any
 // other provider (Yahoo, Proton, a work domain, …).
-export function PortalFooter({ email, subject, body }: Props) {
+export function PortalFooter({ email, subject, body, showHelp = true }: Props) {
   const t = useTranslations("Portal");
   const [copied, setCopied] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -55,7 +60,7 @@ export function PortalFooter({ email, subject, body }: Props) {
 
   return (
     <footer className="border-t border-border/60 pt-8 text-center text-sm text-muted-foreground">
-      {email && links ? (
+      {!showHelp ? null : email && links ? (
         <div className="flex flex-col items-center gap-2.5">
           <p className="text-foreground">{t("help_intro")}</p>
           <div className="relative inline-block">

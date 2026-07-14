@@ -398,6 +398,9 @@ export function PortalShell({
           email={ctx.accountant_email}
           subject={helpSubject}
           body={helpBody}
+          // The Messages thread replaces the footer email picker as the way
+          // to reach the accountant — never both at once (founder).
+          showHelp={!showMessagesEntry}
         />
       </main>
     </div>
