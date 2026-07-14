@@ -70,6 +70,24 @@ describe("PortalFooter", () => {
     expect(mailtoHref).toContain(`body=${eBody}`);
   });
 
+  it("hides the whole help block (button, email, copy) when the portal has a Messages entry", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <PortalFooter
+          email="alex@cabinet.ca"
+          subject="s"
+          body="b"
+          showHelp={false}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByText("alex@cabinet.ca")).not.toBeInTheDocument();
+    expect(screen.queryByText(en.Portal.help_intro)).not.toBeInTheDocument();
+    // The footer itself stays (Powered by Vylan).
+    expect(screen.getByText(en.Portal.powered_by)).toBeInTheDocument();
+  });
+
   it("falls back to a plain instruction (no links, no buttons) when no email is on file", () => {
     renderFooter({ email: null, subject: "x", body: "y" });
 
