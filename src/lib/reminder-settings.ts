@@ -7,6 +7,7 @@ export type ReminderStep = {
   enabled: boolean;
   timing: ReminderTiming;
   days: number;
+  repeatCount: number;
   withSms: boolean;
   customSubject: string | null;
   customMessage: string | null;
@@ -25,6 +26,7 @@ export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
       enabled: true,
       timing: "after_send",
       days: 3,
+      repeatCount: 1,
       withSms: false,
       customSubject: null,
       customMessage: null,
@@ -34,6 +36,7 @@ export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
       enabled: true,
       timing: "after_send",
       days: 7,
+      repeatCount: 1,
       withSms: true,
       customSubject: null,
       customMessage: null,
@@ -43,6 +46,7 @@ export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
       enabled: true,
       timing: "after_send",
       days: 14,
+      repeatCount: 1,
       withSms: true,
       customSubject: null,
       customMessage: null,
@@ -52,6 +56,7 @@ export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
       enabled: true,
       timing: "after_due",
       days: 1,
+      repeatCount: 1,
       withSms: false,
       customSubject: null,
       customMessage: null,
@@ -98,13 +103,17 @@ export function normalizeReminderSettings(
     steps: DEFAULT_REMINDER_SETTINGS.steps.map((fallback) => {
       const step = byTone.get(fallback.tone);
       const days = Number(step?.days);
+      const repeatCount = Number(step?.repeatCount);
       return {
         ...fallback,
         enabled:
           typeof step?.enabled === "boolean" ? step.enabled : fallback.enabled,
         days: Number.isFinite(days)
-          ? Math.min(365, Math.max(0, Math.floor(days)))
+          ? Math.min(365, Math.max(1, Math.floor(days)))
           : fallback.days,
+        repeatCount: Number.isFinite(repeatCount)
+          ? Math.min(12, Math.max(1, Math.floor(repeatCount)))
+          : fallback.repeatCount,
         customSubject: optionalText(step?.customSubject, 160),
         customMessage: optionalText(step?.customMessage, 2_000),
       };

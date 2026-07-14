@@ -1,24 +1,13 @@
 "use server";
 
 import { z } from "zod";
-import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
 import { createInvoiceForEngagement } from "@/lib/invoices/create";
-import { getCurrentFirm } from "@/lib/db/firms";
-import { getCurrentUser } from "@/lib/db/users";
-import { getEngagement } from "@/lib/db/engagements";
 import {
-  createFinalDocument,
-  deleteFinalDocument,
-} from "@/lib/db/final-documents";
-import {
-  invoiceAttachmentPath,
-  isAllowedMime,
-  MAX_BYTES,
-  removeObjectQuiet,
-  truncateFilename,
-  uploadObject,
-} from "@/lib/storage";
+  removeStoredInvoiceAttachment,
+  storeInvoiceAttachment,
+  type StoredInvoiceAttachment,
+} from "@/lib/invoices/attachment";
 
 export type RequestPaymentInput = {
   engagementId: string;
@@ -86,68 +75,14 @@ async function createPaymentRequestWithOptionalAttachment(
     return { ok: false, error: parsed.error.issues[0]?.message ?? "invalid" };
   }
 
-  let attachment:
-    | {
-        storagePath: string;
-        filename: string;
-        mimeType: string | null;
-        sizeBytes: number;
-        content: Buffer;
-        documentId: string;
-      }
-    | undefined;
+  let attachment: StoredInvoiceAttachment | undefined;
   if (attachmentFile) {
-    if (attachmentFile.size > MAX_BYTES) {
-      return { ok: false, error: "attachment_too_large" };
-    }
-    if (!isAllowedMime(attachmentFile.type)) {
-      return { ok: false, error: "attachment_type" };
-    }
-    const [firm, user] = await Promise.all([getCurrentFirm(), getCurrentUser()]);
-    const engagement = await getEngagement(parsed.data.engagementId);
-    if (!firm || !user || !engagement || engagement.firm_id !== firm.id) {
-      return { ok: false, error: "not_found" };
-    }
-    const filename = truncateFilename(attachmentFile.name || "invoice.pdf");
-    const storagePath = invoiceAttachmentPath({
-      firmId: firm.id,
-      engagementId: engagement.id,
-      uuid: nanoid(12),
-      filename,
-    });
-    const content = Buffer.from(await attachmentFile.arrayBuffer());
-    try {
-      await uploadObject({
-        path: storagePath,
-        body: content,
-        contentType: attachmentFile.type || "application/octet-stream",
-      });
-    } catch (error) {
-      console.error("[payments] invoice attachment upload failed:", error);
-      return { ok: false, error: "attachment_upload" };
-    }
-    const document = await createFinalDocument({
-      firm_id: firm.id,
-      engagement_id: engagement.id,
-      storage_path: storagePath,
-      original_filename: filename,
-      display_name: filename,
-      mime_type: attachmentFile.type || null,
-      size_bytes: attachmentFile.size,
-      uploaded_by_user_id: user.id,
-    });
-    if (!document) {
-      await removeObjectQuiet(storagePath);
-      return { ok: false, error: "attachment_upload" };
-    }
-    attachment = {
-      storagePath,
-      filename,
-      mimeType: attachmentFile.type || null,
-      sizeBytes: attachmentFile.size,
-      content,
-      documentId: document.id,
-    };
+    const stored = await storeInvoiceAttachment(
+      parsed.data.engagementId,
+      attachmentFile,
+    );
+    if (!stored.ok) return { ok: false, error: stored.error };
+    attachment = stored.attachment;
   }
 
   const res = await createInvoiceForEngagement({
@@ -160,8 +95,7 @@ async function createPaymentRequestWithOptionalAttachment(
   });
   if (!res.ok) {
     if (attachment) {
-      await deleteFinalDocument(attachment.documentId);
-      await removeObjectQuiet(attachment.storagePath);
+      await removeStoredInvoiceAttachment(attachment);
     }
     // Map the helper's reason to a stable error string the dialog translates.
     const error =

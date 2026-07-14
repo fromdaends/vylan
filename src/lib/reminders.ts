@@ -32,6 +32,8 @@ void DAY_MS;
 
 export type ReminderPlanItem = {
   tone: ReminderTone;
+  occurrence: number;
+  repeatCount: number;
   runAfter: Date;
   withSms: boolean;
   customSubject: string | null;
@@ -54,26 +56,20 @@ export function buildReminderPlan(opts: {
       step.timing === "after_due"
         ? new Date(`${opts.dueDate}T23:59:59Z`)
         : opts.sentAt;
-    plan.push({
-      tone: step.tone,
-      runAfter: addDays(anchor, step.days),
-      withSms: step.withSms,
-      customSubject: step.customSubject,
-      customMessage: step.customMessage,
-    });
+    for (let occurrence = 1; occurrence <= step.repeatCount; occurrence++) {
+      plan.push({
+        tone: step.tone,
+        occurrence,
+        repeatCount: step.repeatCount,
+        runAfter: addDays(anchor, step.days * occurrence),
+        withSms: step.withSms,
+        customSubject: step.customSubject,
+        customMessage: step.customMessage,
+      });
+    }
   }
-  // Dedupe by tone (the planner keeps the earliest of each kind) and drop
-  // anything in the past — those are no-ops anyway.
-  const seen = new Set<ReminderTone>();
-  const out: ReminderPlanItem[] = [];
-  for (const p of plan.sort(
-    (a, b) => a.runAfter.getTime() - b.runAfter.getTime(),
-  )) {
-    if (seen.has(p.tone)) continue;
-    seen.add(p.tone);
-    out.push(p);
-  }
-  return out;
+  // Keep chronological ordering when one reminder type has several occurrences.
+  return plan.sort((a, b) => a.runAfter.getTime() - b.runAfter.getTime());
 }
 
 export async function scheduleEngagementReminders(opts: {
@@ -93,6 +89,8 @@ export async function scheduleEngagementReminders(opts: {
       payload: {
         engagement_id: opts.engagementId,
         tone: p.tone,
+        occurrence: p.occurrence,
+        repeat_count: p.repeatCount,
         with_sms: p.withSms,
         custom_subject: p.customSubject,
         custom_message: p.customMessage,
@@ -133,22 +131,24 @@ export async function rescheduleOverdueReminder(opts: {
   const settings = normalizeReminderSettings(opts.settings);
   const step = settings.steps.find((candidate) => candidate.tone === "overdue");
   if (!settings.enabled || !step?.enabled) return;
-  const runAfter = addDays(
-    new Date(`${opts.dueDate}T23:59:59Z`),
-    step.days,
-  );
-  if (runAfter.getTime() <= Date.now()) return; // already past — no-op
-  await enqueueJob({
-    kind: "send_reminder",
-    payload: {
-      engagement_id: opts.engagementId,
-      tone: "overdue",
-      with_sms: step.withSms,
-      custom_subject: step.customSubject,
-      custom_message: step.customMessage,
-    },
-    runAfter,
-  });
+  const anchor = new Date(`${opts.dueDate}T23:59:59Z`);
+  for (let occurrence = 1; occurrence <= step.repeatCount; occurrence++) {
+    const repeatedRunAfter = addDays(anchor, step.days * occurrence);
+    if (repeatedRunAfter.getTime() <= Date.now()) continue;
+    await enqueueJob({
+      kind: "send_reminder",
+      payload: {
+        engagement_id: opts.engagementId,
+        tone: "overdue",
+        occurrence,
+        repeat_count: step.repeatCount,
+        with_sms: step.withSms,
+        custom_subject: step.customSubject,
+        custom_message: step.customMessage,
+      },
+      runAfter: repeatedRunAfter,
+    });
+  }
 }
 
 // Job worker.
@@ -158,6 +158,8 @@ export async function processReminderJob(
   const engagementId = String(payload.engagement_id ?? "");
   const tone = (payload.tone ?? "gentle") as ReminderTone;
   const withSms = Boolean(payload.with_sms);
+  const occurrence = Math.max(1, Number(payload.occurrence) || 1);
+  const repeatCount = Math.max(1, Number(payload.repeat_count) || 1);
   const customSubject =
     typeof payload.custom_subject === "string" ? payload.custom_subject : null;
   const customMessage =
@@ -249,6 +251,8 @@ export async function processReminderJob(
     action: "reminder_fired",
     metadata: {
       tone,
+      occurrence,
+      repeat_count: repeatCount,
       email_sent: emailSent,
       sms_sent: smsSent,
       customized: Boolean(customSubject || customMessage),

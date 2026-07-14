@@ -28,6 +28,12 @@ import {
   cancelScheduledInvoice,
 } from "@/lib/invoices/schedule";
 import { createInvoiceForEngagement } from "@/lib/invoices/create";
+import {
+  removeStoredInvoiceAttachment,
+  storeInvoiceAttachment,
+  validateInvoiceAttachment,
+  type StoredInvoiceAttachment,
+} from "@/lib/invoices/attachment";
 import { getFirmLimits } from "@/lib/plan-limits";
 import type { TemplateItem, DocType } from "@/lib/db/templates";
 import { getClient } from "@/lib/db/clients";
@@ -64,7 +70,8 @@ const ReminderStepSchema = z.object({
   tone: z.enum(["gentle", "firm", "deadline", "overdue"]),
   enabled: z.boolean(),
   timing: z.enum(["after_send", "after_due"]),
-  days: z.number().int().min(0).max(365),
+  days: z.number().int().min(1).max(365),
+  repeatCount: z.number().int().min(1).max(12),
   withSms: z.boolean(),
   customSubject: z.string().trim().max(160).nullable(),
   customMessage: z.string().trim().max(2_000).nullable(),
@@ -166,23 +173,26 @@ function revalidateEngagementPaths(id: string | undefined) {
   revalidatePath("/engagements");
 }
 
-export async function createEngagementAction(payload: {
-  client_id: string;
-  title: string;
-  type: "t1" | "t2" | "bookkeeping" | "custom";
-  due_date: string | null;
-  ai_enabled?: boolean;
-  invoice_auto_mode?: "off" | "on_completion" | "delayed";
-  invoice_delay_days?: number | null;
-  invoice_amount_cents?: number | null;
-  invoice_create_now?: boolean;
-  invoice_locks_deliverables?: boolean;
-  invoice_description?: string | null;
-  reminder_settings?: ReminderSettings;
-  items: TemplateItem[];
-  send: boolean;
-  locale: "fr" | "en";
-}): Promise<CreateEngagementState> {
+export async function createEngagementAction(
+  payload: {
+    client_id: string;
+    title: string;
+    type: "t1" | "t2" | "bookkeeping" | "custom";
+    due_date: string | null;
+    ai_enabled?: boolean;
+    invoice_auto_mode?: "off" | "on_completion" | "delayed";
+    invoice_delay_days?: number | null;
+    invoice_amount_cents?: number | null;
+    invoice_create_now?: boolean;
+    invoice_locks_deliverables?: boolean;
+    invoice_description?: string | null;
+    reminder_settings?: ReminderSettings;
+    items: TemplateItem[];
+    send: boolean;
+    locale: "fr" | "en";
+  },
+  invoiceAttachment?: File | null,
+): Promise<CreateEngagementState> {
   const parsed = CreateSchema.safeParse({
     client_id: payload.client_id,
     title: payload.title,
@@ -200,6 +210,12 @@ export async function createEngagementAction(payload: {
   });
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFromZod(parsed.error) };
+  }
+  if (invoiceAttachment && invoiceAttachment.size > 0) {
+    const validation = validateInvoiceAttachment(invoiceAttachment);
+    if (!validation.ok) {
+      return { error: `invoice_${validation.error}` };
+    }
   }
 
   // Plan limit check — only blocks the *initial send*, not the draft.
@@ -219,6 +235,7 @@ export async function createEngagementAction(payload: {
   }
 
   let engagementId: string;
+  let storedInvoiceAttachment: StoredInvoiceAttachment | undefined;
   try {
     // The Zod schema validated items as untyped doc_type strings; widen back.
     const items: TemplateItem[] = parsed.data.items.map((i) => ({
@@ -256,6 +273,24 @@ export async function createEngagementAction(payload: {
     };
     const created = await createEngagementWithItems(input);
     engagementId = created.id;
+    if (invoiceAttachment && invoiceAttachment.size > 0) {
+      const stored = await storeInvoiceAttachment(
+        engagementId,
+        invoiceAttachment,
+      );
+      if (!stored.ok) {
+        return {
+          error:
+            stored.error === "not_found"
+              ? "create_failed"
+              : stored.error === "attachment_upload"
+                ? "invoice_attachment_upload_error"
+                : `invoice_${stored.error}`,
+          engagementId,
+        };
+      }
+      storedInvoiceAttachment = stored.attachment;
+    }
     if (payload.send) {
       const sent = await sendEngagement(engagementId);
       await deliverInviteEmail(engagementId);
@@ -291,14 +326,22 @@ export async function createEngagementAction(payload: {
         // portal-only rather than promising an email that can't go out.
         delivery: payload.send ? "both" : "portal",
         locksDeliverables: parsed.data.invoice_locks_deliverables,
+        attachment: storedInvoiceAttachment,
       });
       if (!res.ok) {
+        if (storedInvoiceAttachment) {
+          await removeStoredInvoiceAttachment(storedInvoiceAttachment);
+          storedInvoiceAttachment = undefined;
+        }
         console.warn(
           "[createEngagement] create-now invoice skipped:",
           res.reason,
         );
       }
     } catch (e) {
+      if (storedInvoiceAttachment) {
+        await removeStoredInvoiceAttachment(storedInvoiceAttachment);
+      }
       console.error("[createEngagement] create-now invoice failed:", e);
     }
   }
