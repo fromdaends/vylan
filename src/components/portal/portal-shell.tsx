@@ -8,6 +8,8 @@ import {
   PenLine,
   FileText,
   ChevronLeft,
+  ChevronRight,
+  MessageSquare,
 } from "lucide-react";
 import type { PortalContext } from "@/lib/db/portal";
 import { ItemCard } from "./item-card";
@@ -21,6 +23,7 @@ import {
   summarizeDocuments,
 } from "@/lib/portal/group-summary";
 import { PortalFooter } from "./portal-footer";
+import { PortalMessages } from "./portal-messages";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 
 // Which screen the portal is showing. When the engagement has BOTH signatures
@@ -34,18 +37,40 @@ export function PortalShell({
   locale,
   firmLogoUrl,
   justReturnedPaid = false,
+  initialMessagesOpen = false,
 }: {
   ctx: PortalContext;
   locale: "fr" | "en";
   firmLogoUrl: string | null;
   // true right after returning from a successful Stripe checkout (?paid=1).
   justReturnedPaid?: boolean;
+  // true when the client arrived via a "you have a new message" email link
+  // (?view=messages) — lands them straight in the thread.
+  initialMessagesOpen?: boolean;
 }) {
   const t = useTranslations("Portal");
   const [items, setItems] = useState(ctx.items);
   const [uploads, setUploads] = useState(ctx.uploaded_count_by_item);
   const [filesByItem, setFilesByItem] = useState(ctx.files_by_item);
   const [view, setView] = useState<PortalView>("hub");
+  // Messages (Phase 2) is an overlay view on TOP of whatever the portal
+  // shows (hub or single list), so it works in every portal variant. It
+  // only exists once migration 0650 is live (messaging_ready).
+  const messagingReady = ctx.messaging_ready === true;
+  const messagesReadOnly = ctx.engagement.status === "complete";
+  // A read-only portal with no history has nothing to show — no entry.
+  const showMessagesEntry =
+    messagingReady && (!messagesReadOnly || ctx.messages.length > 0);
+  const [messagesOpen, setMessagesOpen] = useState(
+    initialMessagesOpen && messagingReady,
+  );
+  // The "new message" hint; cleared locally the moment the thread opens
+  // (opening also stamps the server-side read pointer).
+  const [messagesUnread, setMessagesUnread] = useState(ctx.messages_unread);
+  function openMessages() {
+    setMessagesOpen(true);
+    setMessagesUnread(0);
+  }
 
   // Split into the signature group ("To sign") and the document group.
   const { collection: collectionItems, signatures: signatureItems } =
@@ -115,6 +140,19 @@ export function PortalShell({
       onSelect: () => setView("documents"),
     },
   ];
+  if (showMessagesEntry) {
+    hubCards.push({
+      key: "messages",
+      icon: MessageSquare,
+      title: t("messages_section_title"),
+      line:
+        messagesUnread > 0
+          ? t("card_messages_new", { count: messagesUnread })
+          : t("card_messages_line", { firm: ctx.firm.name }),
+      tone: messagesUnread > 0 ? "accent" : "muted",
+      onSelect: openMessages,
+    });
+  }
 
   const brand = ctx.firm.brand_color;
 
@@ -222,6 +260,30 @@ export function PortalShell({
       </header>
 
       <main className="animate-in-up mx-auto w-full max-w-2xl flex-1 space-y-8 px-4 py-8 sm:px-6 sm:py-10">
+        {messagesOpen ? (
+          <>
+            <BackBar
+              title={t("messages_section_title")}
+              onBack={() => setMessagesOpen(false)}
+            />
+            <PortalMessages
+              token={ctx.engagement.magic_token ?? ""}
+              firmName={ctx.firm.name}
+              initialMessages={ctx.messages}
+              readOnly={messagesReadOnly}
+              locale={locale}
+              onGoToDocuments={
+                hasDocuments
+                  ? () => {
+                      setMessagesOpen(false);
+                      setView("documents");
+                    }
+                  : null
+              }
+            />
+          </>
+        ) : (
+          <>
         {ctx.payment_request && (
           <PaymentDueCard
             token={ctx.engagement.magic_token ?? ""}
@@ -320,6 +382,18 @@ export function PortalShell({
           </>
         )}
 
+        {/* Messages entry for portals WITHOUT the hub (single-group portals
+            go straight to their list, so they need their own doorway). */}
+        {!showHub && showMessagesEntry && (
+          <MessagesEntryCard
+            unread={messagesUnread}
+            firmName={ctx.firm.name}
+            onOpen={openMessages}
+          />
+        )}
+          </>
+        )}
+
         <PortalFooter
           email={ctx.accountant_email}
           subject={helpSubject}
@@ -328,6 +402,60 @@ export function PortalShell({
       </main>
     </div>
   );
+}
+
+// Compact doorway into the Messages thread for portals that don't show the
+// hub (single-group portals go straight to their list). Mirrors the hub
+// card's tone: quiet by default, accented when there's something new.
+function MessagesEntryCard({
+  unread,
+  firmName,
+  onOpen,
+}: {
+  unread: number;
+  firmName: string;
+  onOpen: () => void;
+}) {
+  const t = useTranslations("Portal");
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full cursor-pointer items-center gap-3.5 rounded-2xl border border-border/60 bg-card p-4 text-left shadow-sm transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <span
+        className={cnEntryIcon(unread > 0)}
+        aria-hidden
+      >
+        <MessageSquare className="size-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-semibold tracking-tight text-foreground">
+          {t("messages_section_title")}
+        </span>
+        <span className="mt-0.5 block truncate text-sm text-muted-foreground">
+          {unread > 0
+            ? t("card_messages_new", { count: unread })
+            : t("card_messages_line", { firm: firmName })}
+        </span>
+      </span>
+      {unread > 0 && (
+        <span className="inline-flex min-w-[1.375rem] shrink-0 items-center justify-center rounded-full bg-primary px-1.5 py-0.5 text-xs font-semibold leading-none text-primary-foreground">
+          {unread}
+        </span>
+      )}
+      <ChevronRight
+        className="size-4 shrink-0 text-muted-foreground"
+        aria-hidden
+      />
+    </button>
+  );
+}
+
+function cnEntryIcon(active: boolean): string {
+  return active
+    ? "flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary"
+    : "flex size-10 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground";
 }
 
 // The greeting block shown on the hub and on a single-group portal: a warm

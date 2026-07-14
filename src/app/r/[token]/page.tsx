@@ -27,7 +27,7 @@ export default async function PortalPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ lang?: string; paid?: string }>;
+  searchParams: Promise<{ lang?: string; paid?: string; view?: string }>;
 }) {
   const { token } = await params;
   const sp = await searchParams;
@@ -79,6 +79,9 @@ export default async function PortalPage({
               locale={locale}
               firmLogoUrl={firmLogoUrl}
               justReturnedPaid={sp.paid === "1"}
+              // "You have a new message" email links land straight in the
+              // thread (Phase 3 sends them with ?view=messages).
+              initialMessagesOpen={sp.view === "messages"}
             />
           </NextIntlClientProvider>
         </ThemeProvider>
