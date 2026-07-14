@@ -420,14 +420,14 @@ export function PreviewOverlay({
         <aside
           inert={selectedDoc != null || undefined}
           className={cn(
-            "absolute inset-y-0 left-0 z-10 grid w-72 grid-cols-[14.5rem_3.5rem] grid-rows-[auto_minmax(0,1fr)] border-r border-border/40 bg-card shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none",
-            sidebarOpen ? "translate-x-0" : "-translate-x-[14.5rem]",
+            "absolute inset-y-0 left-0 z-10 flex w-[14.5rem] flex-col border-r border-border/40 bg-card shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full",
           )}
         >
-          {/* Header: engagement name + close */}
-          <div
-            className="col-start-1 row-start-1 min-w-0 border-b border-border/40 p-3"
-          >
+          {/* Header: engagement name + the collapse toggle. No full-height rail
+              anymore — when collapsed, a small floating button (below) is the
+              re-open handle. */}
+          <div className="flex items-start justify-between gap-2 border-b border-border/40 p-3">
             <div className="min-w-0">
               <div className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
                 {t("eyebrow")}
@@ -440,29 +440,22 @@ export function PreviewOverlay({
                 {t("doc_count", { count: counts.all })}
               </p>
             </div>
-          </div>
-
-          <div className="col-start-2 row-span-2 row-start-1 flex flex-col items-center gap-1 border-l border-border/40 bg-card p-2">
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-label={sidebarOpen ? t("collapse_sidebar") : t("expand_sidebar")}
-              title={sidebarOpen ? t("collapse_sidebar") : t("expand_sidebar")}
-              onClick={() => setSidebarOpen((open) => !open)}
+              aria-label={t("collapse_sidebar")}
+              title={t("collapse_sidebar")}
+              onClick={() => setSidebarOpen(false)}
+              className="-mr-1 shrink-0"
             >
-              {sidebarOpen ? (
-                <PanelLeftClose className="size-4" />
-              ) : (
-                <PanelLeftOpen className="size-4" />
-              )}
+              <PanelLeftClose className="size-4" />
             </Button>
-            {/* Close moved to the top-right cluster (next to Download all). */}
           </div>
 
           {/* Tabs + search */}
           <div
-            className="col-start-1 row-start-2 flex min-h-0 flex-col justify-between overflow-y-auto bg-card/30 p-3"
+            className="flex min-h-0 flex-1 flex-col justify-between overflow-y-auto bg-card/30 p-3"
           >
           <div className="flex flex-col gap-3">
             {itemOptions.length > 1 && (
@@ -562,6 +555,24 @@ export function PreviewOverlay({
           </div>
         </aside>
 
+        {/* Re-open handle: a single small floating button at top-left, shown
+            only while the sidebar is collapsed (replaces the old full-height
+            rail). Expands the sidebar back. */}
+        {!sidebarOpen && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            inert={selectedDoc != null || undefined}
+            aria-label={t("expand_sidebar")}
+            title={t("expand_sidebar")}
+            onClick={() => setSidebarOpen(true)}
+            className="absolute top-3 left-3 z-20 bg-background/90 shadow-sm backdrop-blur-sm"
+          >
+            <PanelLeftOpen className="size-4" />
+          </Button>
+        )}
+
         {/* Top-right action cluster: Download all (when applicable) + Close.
             Close lives here now (was stacked in the sidebar rail) so it sits in
             the conventional top-right corner beside Download all. Inert while a
@@ -604,7 +615,7 @@ export function PreviewOverlay({
         <div
           inert={selectedDoc != null || undefined}
           className={cn(
-            "absolute inset-y-0 right-0 left-14 overflow-y-auto px-5 pt-16 pb-5 transition-transform duration-200 ease-out motion-reduce:transition-none",
+            "absolute inset-y-0 right-0 left-0 overflow-y-auto px-5 pt-16 pb-5 transition-transform duration-200 ease-out motion-reduce:transition-none",
             sidebarOpen ? "translate-x-[14.5rem]" : "translate-x-0",
           )}
         >
