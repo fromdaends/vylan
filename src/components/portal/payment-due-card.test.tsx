@@ -145,8 +145,16 @@ describe("PaymentDueCard", () => {
     expect(await clickPayAndReadError()).toBe(en.Portal.pay_error_busy);
   });
 
-  it("falls back to the generic retryable message on a transient Stripe error", async () => {
+  it("shows a distinct provider message (retry + contact firm) on a Stripe error", async () => {
     mockCheckout(502, "stripe_error");
+    renderCard();
+    expect(await clickPayAndReadError()).toBe(
+      en.Portal.pay_error_provider.replace("{firm}", "Acme"),
+    );
+  });
+
+  it("falls back to the generic retryable message on an unknown/network error", async () => {
+    mockCheckout(500, "something_unexpected");
     renderCard();
     expect(await clickPayAndReadError()).toBe(en.Portal.pay_error);
   });

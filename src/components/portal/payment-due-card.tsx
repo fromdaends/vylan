@@ -70,6 +70,11 @@ export function PaymentDueCard({
         return t("pay_error_link", { firm: firmName });
       case "rate_limited":
         return t("pay_error_busy");
+      case "stripe_error":
+        // Stripe rejected the request (transient outage, or a persistent setup
+        // issue like a test-vs-live account mismatch). Retry covers the former;
+        // "contact {firm}" covers the latter — the client can't fix it alone.
+        return t("pay_error_provider", { firm: firmName });
       default:
         return t("pay_error");
     }
