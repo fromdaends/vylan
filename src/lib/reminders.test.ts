@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildReminderPlan } from "./reminders";
+import { buildReminderPlan, futureReminderPlan } from "./reminders";
 import { DEFAULT_REMINDER_SETTINGS } from "./reminder-settings";
 
 describe("buildReminderPlan", () => {
@@ -100,5 +100,23 @@ describe("buildReminderPlan", () => {
       "2026-05-09T12:00:00.000Z",
       "2026-05-13T12:00:00.000Z",
     ]);
+  });
+});
+
+describe("futureReminderPlan", () => {
+  it("keeps only reminders that have not become due yet", () => {
+    const settings = structuredClone(DEFAULT_REMINDER_SETTINGS);
+    const plan = buildReminderPlan({
+      sentAt: new Date("2026-05-01T12:00:00Z"),
+      dueDate: null,
+      settings,
+    });
+
+    const future = futureReminderPlan(
+      plan,
+      new Date("2026-05-08T12:00:00Z"),
+    );
+
+    expect(future.map((item) => item.tone)).toEqual(["deadline"]);
   });
 });

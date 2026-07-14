@@ -4,6 +4,7 @@ const getCurrentUser = vi.fn();
 const getCurrentFirm = vi.fn();
 const getEngagement = vi.fn();
 const setEngagementInvoiceLock = vi.fn();
+const updateEngagementInvoiceAutomation = vi.fn();
 const getLatestPaymentRequestForEngagement = vi.fn();
 const setPaymentRequestOverrideUnlocked = vi.fn();
 const relockPaymentRequestDeliverables = vi.fn();
@@ -11,6 +12,8 @@ const updatePaymentRequestAmountDescription = vi.fn();
 const cancelPaymentRequest = vi.fn();
 const logUserActivity = vi.fn();
 const revalidatePath = vi.fn();
+const cancelScheduledInvoice = vi.fn();
+const dispatchInvoiceOnCompletion = vi.fn();
 
 vi.mock("@/lib/db/users", () => ({ getCurrentUser: () => getCurrentUser() }));
 vi.mock("@/lib/db/firms", () => ({ getCurrentFirm: () => getCurrentFirm() }));
@@ -18,6 +21,8 @@ vi.mock("@/lib/db/engagements", () => ({
   getEngagement: (id: string) => getEngagement(id),
   setEngagementInvoiceLock: (id: string, v: boolean) =>
     setEngagementInvoiceLock(id, v),
+  updateEngagementInvoiceAutomation: (...args: unknown[]) =>
+    updateEngagementInvoiceAutomation(...args),
 }));
 vi.mock("@/lib/db/payment-requests", () => ({
   getLatestPaymentRequestForEngagement: (id: string) =>
@@ -36,6 +41,12 @@ vi.mock("@/lib/db/payment-requests", () => ({
 vi.mock("@/lib/db/activity", () => ({
   logUserActivity: (...args: unknown[]) => logUserActivity(...args),
 }));
+vi.mock("@/lib/invoices/schedule", () => ({
+  cancelScheduledInvoice: (...args: unknown[]) =>
+    cancelScheduledInvoice(...args),
+  dispatchInvoiceOnCompletion: (...args: unknown[]) =>
+    dispatchInvoiceOnCompletion(...args),
+}));
 vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
 
 import {
@@ -43,6 +54,7 @@ import {
   relockDeliverablesAction,
   waiveInvoiceAction,
   editInvoiceAction,
+  updateInvoiceAutomationAction,
 } from "./invoices";
 
 const FIRM_ID = "11111111-1111-1111-1111-111111111111";
@@ -72,6 +84,9 @@ beforeEach(() => {
     invoice_locks_deliverables: false,
   });
   setEngagementInvoiceLock.mockResolvedValue(true);
+  updateEngagementInvoiceAutomation.mockResolvedValue(true);
+  cancelScheduledInvoice.mockResolvedValue(1);
+  dispatchInvoiceOnCompletion.mockResolvedValue(undefined);
 });
 
 describe("unlockDeliverablesAction", () => {
@@ -222,5 +237,58 @@ describe("editInvoiceAction", () => {
       amountCents: 25000,
     });
     expect(res).toEqual({ ok: false, error: "no_invoice" });
+  });
+});
+
+describe("updateInvoiceAutomationAction", () => {
+  function automationForm(mode: "off" | "on_completion" | "delayed") {
+    const form = fd(ENG_ID);
+    form.set("mode", mode);
+    form.set("delay_days", "5");
+    form.set("amount_cents", "25000");
+    form.set("description", "  2026 return  ");
+    form.set("locks_deliverables", "true");
+    return form;
+  }
+
+  it("saves and reschedules automation on a completed engagement", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue(null);
+    getEngagement.mockResolvedValue({
+      id: ENG_ID,
+      firm_id: FIRM_ID,
+      status: "complete",
+      completed_at: "2026-07-10T14:00:00.000Z",
+    });
+
+    const result = await updateInvoiceAutomationAction(
+      automationForm("delayed"),
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(updateEngagementInvoiceAutomation).toHaveBeenCalledWith(ENG_ID, {
+      mode: "delayed",
+      delayDays: 5,
+      amountCents: 25000,
+      description: "2026 return",
+      locksDeliverables: true,
+    });
+    expect(cancelScheduledInvoice).toHaveBeenCalledWith(ENG_ID);
+    expect(dispatchInvoiceOnCompletion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: ENG_ID,
+        invoice_auto_mode: "delayed",
+        invoice_delay_days: 5,
+      }),
+    );
+  });
+
+  it("does not change automation after an invoice exists", async () => {
+    const result = await updateInvoiceAutomationAction(
+      automationForm("on_completion"),
+    );
+
+    expect(result).toEqual({ ok: false, error: "already_invoiced" });
+    expect(updateEngagementInvoiceAutomation).not.toHaveBeenCalled();
+    expect(cancelScheduledInvoice).not.toHaveBeenCalled();
   });
 });

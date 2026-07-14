@@ -2,9 +2,11 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { listClients } from "@/lib/db/clients";
 import { listTemplates } from "@/lib/db/templates";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 import { EngagementBuilder } from "@/components/engagements/engagement-builder";
 import { assertLocale } from "@/lib/locale";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { getFirmReminderDefault } from "@/lib/reminder-defaults";
 
 export default async function NewEngagementPage({
   params,
@@ -18,10 +20,11 @@ export default async function NewEngagementPage({
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  const [clients, templates, firm] = await Promise.all([
+  const [clients, templates, firm, user] = await Promise.all([
     listClients({ includeArchived: false }),
     listTemplates(),
     getCurrentFirm(),
+    getCurrentUser(),
   ]);
 
   const t = await getTranslations("Engagements");
@@ -62,6 +65,8 @@ export default async function NewEngagementPage({
         connectReady={firm?.connect_charges_enabled === true}
         invoiceDefaultMode={firm?.default_invoice_auto_mode ?? "off"}
         invoiceDefaultDelayDays={firm?.default_invoice_delay_days ?? null}
+        reminderDefaultSettings={getFirmReminderDefault(firm)}
+        canManageReminderDefaults={user?.role === "owner"}
       />
     </div>
   );

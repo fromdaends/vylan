@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { getServerSupabase } from "@/lib/supabase/server";
+import type { ReminderSettings } from "@/lib/reminder-settings";
 
 export type Firm = {
   id: string;
@@ -72,6 +73,9 @@ export type Firm = {
   // to 'off'.
   default_invoice_auto_mode?: "off" | "on_completion" | "delayed";
   default_invoice_delay_days?: number | null;
+  // Optional firm preset copied into new engagements (migration 0670). NULL
+  // means the owner has not created a default reminder schedule yet.
+  default_reminder_settings?: ReminderSettings | null;
   // Per-firm monthly AI-check cap (migration 0230). Service-role-only — not in
   // the updateCurrentFirm whitelist. May be undefined at runtime until 0230 is
   // applied; getFirmAiUsage defaults it to 400.
@@ -123,6 +127,7 @@ export async function updateCurrentFirm(
       | "include_quebec_forms"
       | "default_invoice_auto_mode"
       | "default_invoice_delay_days"
+      | "default_reminder_settings"
       | "service_prices"
       | "logo_url"
     >
