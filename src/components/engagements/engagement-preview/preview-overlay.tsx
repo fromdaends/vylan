@@ -591,7 +591,10 @@ export function PreviewOverlay({
         {/* Grid */}
         <div
           inert={selectedDoc != null || undefined}
-          className="absolute inset-0 overflow-y-auto py-5 pr-5 pl-[4.5rem]"
+          className={cn(
+            "absolute inset-y-0 right-0 left-14 overflow-y-auto px-5 py-5 transition-transform duration-200 ease-out motion-reduce:transition-none",
+            sidebarOpen ? "translate-x-[14.5rem]" : "translate-x-0",
+          )}
         >
           {visible.length === 0 ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
