@@ -94,6 +94,7 @@ import {
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { engagementToView } from "@/lib/navigation/active-nav";
 import { viewHref, viewLabelKey } from "@/lib/engagements/views";
+import { normalizeReminderSettings } from "@/lib/reminder-settings";
 import {
   computeAttention,
   isReadyToReview,
@@ -631,17 +632,20 @@ export default async function EngagementDetailPage({
               Assistant panel's Activity tab (the panel absorbed the old
               slide-out feed). */}
           {isDraft && <OpenAssistantActivityButton />}
-          {/* The "..." menu holds the occasional actions — Activity, Copy client
-              / payment link, Pause/Resume reminders, Download all, Cancel,
-              Delete — so only primary buttons + the payment pill stay in the
-              row. Delete keeps its confirmation + 30-day recovery. Drafts keep
-              their own inline Send + Delete-draft buttons and never get it. */}
+          {/* The "..." menu holds reminder and invoice settings, copy links,
+              downloads, cancellation, and deletion so only primary buttons +
+              the payment pill stay in the row. Delete keeps its confirmation +
+              30-day recovery. Drafts keep their own inline Send + Delete-draft
+              buttons and never get it. */}
           {!isDraft && (
             <EngagementMoreMenu
               engagementId={engagement.id}
               locale={locale}
               status={isLive ? "live" : isComplete ? "complete" : "cancelled"}
               remindersPaused={engagement.reminders_paused}
+              reminderSettings={normalizeReminderSettings(
+                engagement.reminder_settings,
+              )}
               hasUploads={uploads.length > 0}
               canDelete={canDelete}
               clientLinkToken={
@@ -669,6 +673,14 @@ export default async function EngagementDetailPage({
                 engagement.invoice_locks_deliverables === true
               }
               invoiceDefaultAmount={paymentPrefill}
+              invoiceAutomation={{
+                mode: engagement.invoice_auto_mode ?? "off",
+                delayDays: engagement.invoice_delay_days ?? null,
+                amountCents: engagement.invoice_amount_cents ?? null,
+                description: engagement.invoice_description ?? null,
+                locksDeliverables:
+                  engagement.invoice_locks_deliverables === true,
+              }}
             />
           )}
         </div>

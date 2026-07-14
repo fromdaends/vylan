@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,6 +93,8 @@ export function EngagementBuilder({
   connectReady = false,
   invoiceDefaultMode = "off",
   invoiceDefaultDelayDays = null,
+  reminderDefaultSettings = null,
+  canManageReminderDefaults = false,
 }: {
   clients: ComboboxClient[];
   templates: Template[];
@@ -113,6 +116,10 @@ export function EngagementBuilder({
   // Firm-wide default invoice automation (migration 0590) — pre-selects here.
   invoiceDefaultMode?: InvoiceAutoMode;
   invoiceDefaultDelayDays?: number | null;
+  // Optional firm preset (migration 0670). It is copied into this engagement,
+  // so customizing this form never mutates the saved firm default.
+  reminderDefaultSettings?: ReminderSettings | null;
+  canManageReminderDefaults?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
@@ -146,8 +153,12 @@ export function EngagementBuilder({
   // uploads to this engagement is sent to the AI (saves AI usage/cost).
   const [aiEnabled, setAiEnabled] = useState(true);
   const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(
-    () => structuredClone(DEFAULT_REMINDER_SETTINGS),
+    () =>
+      structuredClone(reminderDefaultSettings ?? DEFAULT_REMINDER_SETTINGS),
   );
+  const [reminderPreset, setReminderPreset] = useState<
+    "firm" | "vylan" | "custom"
+  >(() => (reminderDefaultSettings ? "firm" : "vylan"));
   const [reminderPreviewBase] = useState(() => new Date());
   const [remindersExpanded, setRemindersExpanded] = useState(false);
   // Invoice timing (migrations 0590 + 0610). Pre-selected from the firm default.
@@ -269,11 +280,25 @@ export function EngagementBuilder({
     tone: ReminderTone,
     patch: Partial<ReminderStep>,
   ) {
+    setReminderPreset("custom");
     setReminderSettings((current) => ({
       ...current,
       steps: current.steps.map((step) =>
         step.tone === tone ? { ...step, ...patch } : step,
       ),
+    }));
+  }
+
+  function applyReminderPreset(value: "firm" | "vylan" | "custom") {
+    if (value === "custom") return;
+    setReminderPreset(value);
+    setReminderSettings((current) => ({
+      ...structuredClone(
+        value === "firm" && reminderDefaultSettings
+          ? reminderDefaultSettings
+          : DEFAULT_REMINDER_SETTINGS,
+      ),
+      enabled: current.enabled,
     }));
   }
 
@@ -553,6 +578,49 @@ export function EngagementBuilder({
 
             {reminderSettings.enabled && (
               <>
+                {reminderDefaultSettings ? (
+                  <div className="grid gap-1.5 border-t border-border/60 pt-3 sm:grid-cols-[10rem_1fr] sm:items-center">
+                    <Label htmlFor="reminder-preset" className="text-xs text-muted-foreground">
+                      {t("reminder_preset_label")}
+                    </Label>
+                    <Select
+                      value={reminderPreset}
+                      onValueChange={(value) =>
+                        applyReminderPreset(
+                          value as "firm" | "vylan" | "custom",
+                        )
+                      }
+                    >
+                      <SelectTrigger id="reminder-preset" className="max-w-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="firm">
+                          {t("reminder_preset_firm")}
+                        </SelectItem>
+                        <SelectItem value="vylan">
+                          {t("reminder_preset_vylan")}
+                        </SelectItem>
+                        {reminderPreset === "custom" && (
+                          <SelectItem value="custom">
+                            {t("reminder_preset_custom")}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : canManageReminderDefaults ? (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
+                    <p className="text-xs text-muted-foreground">
+                      {t("reminder_no_default_hint")}
+                    </p>
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <Link href="/settings?tab=automation">
+                        {t("reminder_create_default")}
+                      </Link>
+                    </Button>
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3">
                   <p className="text-xs text-muted-foreground">
                     {t("reminder_schedule_summary")}

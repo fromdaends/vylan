@@ -6,6 +6,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import {
   getEngagement,
   setEngagementInvoiceLock,
+  updateEngagementInvoiceAutomation,
 } from "@/lib/db/engagements";
 import {
   getLatestPaymentRequestForEngagement,
@@ -15,8 +16,30 @@ import {
   cancelPaymentRequest,
 } from "@/lib/db/payment-requests";
 import { logUserActivity } from "@/lib/db/activity";
+import {
+  cancelScheduledInvoice,
+  dispatchInvoiceOnCompletion,
+} from "@/lib/invoices/schedule";
+import {
+  removeStoredInvoiceAttachment,
+  storeInvoiceAttachment,
+  type StoredInvoiceAttachment,
+} from "@/lib/invoices/attachment";
 
 export type InvoiceEditResult = { ok: true } | { ok: false; error: string };
+export type InvoiceAutomationEditResult =
+  | { ok: true }
+  | {
+      ok: false;
+      error:
+        | "invalid"
+        | "not_found"
+        | "already_invoiced"
+        | "save_failed"
+        | "attachment_too_large"
+        | "attachment_type"
+        | "attachment_upload";
+    };
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -162,5 +185,106 @@ export async function editInvoiceAction(input: {
     amount_cents: cents,
   });
   revalidatePath(`/engagements/${input.engagementId}`);
+  return { ok: true };
+}
+
+// Edit automation after engagement creation. The same dialog still supports a
+// manual invoice; this action only changes what should happen at completion.
+// Completed engagements are re-dispatched after the pending job is cancelled,
+// and the invoice sender's idempotency guard prevents duplicate billing.
+export async function updateInvoiceAutomationAction(
+  formData: FormData,
+): Promise<InvoiceAutomationEditResult> {
+  const engagementId = formData.get("engagement_id");
+  const mode = formData.get("mode");
+  if (
+    typeof engagementId !== "string" ||
+    !UUID_RE.test(engagementId) ||
+    (mode !== "off" && mode !== "on_completion" && mode !== "delayed")
+  ) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const delayDays =
+    mode === "delayed" ? Math.floor(Number(formData.get("delay_days"))) : null;
+  const amountCents =
+    mode === "off" ? null : Math.floor(Number(formData.get("amount_cents")));
+  if (
+    (mode === "delayed" &&
+      (!Number.isFinite(delayDays) || delayDays! < 1 || delayDays! > 365)) ||
+    (mode !== "off" &&
+      (!Number.isFinite(amountCents) ||
+        amountCents! < 50 ||
+        amountCents! > 99_999_999))
+  ) {
+    return { ok: false, error: "invalid" };
+  }
+
+  const [user, firm, engagement, invoice] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    getEngagement(engagementId),
+    getLatestPaymentRequestForEngagement(engagementId),
+  ]);
+  if (!user || !firm || !engagement || engagement.firm_id !== firm.id) {
+    return { ok: false, error: "not_found" };
+  }
+  if (invoice && invoice.status !== "canceled") {
+    return { ok: false, error: "already_invoiced" };
+  }
+
+  const descriptionValue = formData.get("description");
+  const description =
+    typeof descriptionValue === "string" && descriptionValue.trim()
+      ? descriptionValue.trim().slice(0, 500)
+      : null;
+  const locksDeliverables = formData.get("locks_deliverables") === "true";
+  const attachmentValue = formData.get("attachment");
+  const attachment =
+    mode !== "off" && attachmentValue instanceof File && attachmentValue.size > 0
+      ? attachmentValue
+      : null;
+  let storedAttachment: StoredInvoiceAttachment | undefined;
+
+  if (attachment) {
+    const stored = await storeInvoiceAttachment(engagementId, attachment);
+    if (!stored.ok) return { ok: false, error: stored.error };
+    storedAttachment = stored.attachment;
+  }
+
+  const saved = await updateEngagementInvoiceAutomation(engagementId, {
+    mode,
+    delayDays,
+    amountCents,
+    description,
+    locksDeliverables,
+  });
+  if (!saved) {
+    if (storedAttachment) await removeStoredInvoiceAttachment(storedAttachment);
+    return { ok: false, error: "save_failed" };
+  }
+
+  try {
+    await cancelScheduledInvoice(engagementId);
+    if (engagement.status === "complete" && mode !== "off") {
+      await dispatchInvoiceOnCompletion({
+        ...engagement,
+        invoice_auto_mode: mode,
+        invoice_delay_days: delayDays,
+      });
+    }
+  } catch (error) {
+    // The preference is already saved. Keep the UI successful and let the
+    // completion/retry paths remain best-effort, matching completion itself.
+    console.error("[updateInvoiceAutomationAction] dispatch failed:", error);
+  }
+
+  await logUserActivity(firm.id, engagementId, "invoice_automation_updated", {
+    mode,
+    delay_days: delayDays,
+    amount_cents: amountCents,
+    attachment: Boolean(storedAttachment),
+  });
+  revalidatePath(`/engagements/${engagementId}`);
   return { ok: true };
 }
