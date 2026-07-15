@@ -20,7 +20,22 @@
     "preparing": "Preparing…",
     "download_empty": "There are no documents to download here yet.",
     "download_failed": "Couldn't prepare the download. Please try again.",
-    "download_too_large": "This client's archive is too large to download all at once. Download it one engagement at a time instead."
+    "download_too_large": "This client's archive is too large to download all at once. Download it one engagement at a time instead.",
+    "search_placeholder": "Search documents…",
+    "search_label": "Search documents",
+    "sort_label": "Sort",
+    "sort_newest": "Newest first",
+    "sort_oldest": "Oldest first",
+    "sort_name_az": "Name (A to Z)",
+    "sort_name_za": "Name (Z to A)",
+    "filter_label": "Filter by type",
+    "filter_all": "All",
+    "filter_checklist": "Checklist",
+    "filter_signed": "Signed",
+    "filter_final": "Final",
+    "expand_all": "Expand all",
+    "collapse_all": "Collapse all",
+    "no_results": "No documents match your search."
   },
   "InviteAccept": {
     "join_title": "Join {firm}",

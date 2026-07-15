@@ -20,7 +20,22 @@
     "preparing": "Préparation…",
     "download_empty": "Aucun document à télécharger ici pour l'instant.",
     "download_failed": "Impossible de préparer le téléchargement. Veuillez réessayer.",
-    "download_too_large": "Les archives de ce client sont trop volumineuses pour un téléchargement en une seule fois. Téléchargez-les un engagement à la fois."
+    "download_too_large": "Les archives de ce client sont trop volumineuses pour un téléchargement en une seule fois. Téléchargez-les un engagement à la fois.",
+    "search_placeholder": "Rechercher des documents…",
+    "search_label": "Rechercher des documents",
+    "sort_label": "Trier",
+    "sort_newest": "Plus récent d'abord",
+    "sort_oldest": "Plus ancien d'abord",
+    "sort_name_az": "Nom (A à Z)",
+    "sort_name_za": "Nom (Z à A)",
+    "filter_label": "Filtrer par type",
+    "filter_all": "Tous",
+    "filter_checklist": "Liste",
+    "filter_signed": "Signés",
+    "filter_final": "Finaux",
+    "expand_all": "Tout développer",
+    "collapse_all": "Tout réduire",
+    "no_results": "Aucun document ne correspond à votre recherche."
   },
   "InviteAccept": {
     "join_title": "Rejoindre {firm}",
