@@ -56,14 +56,18 @@ export async function POST() {
     }
     const saved = await setFirmConnectAccountId(firm.id, accountId);
     if (!saved.ok) {
-      // Pre-migration (0370 not applied yet) or a DB error. Surface a clean
-      // status so the UI can tell the founder to apply the migration rather
-      // than throwing a 500. We do NOT proceed to the account link, because we
-      // couldn't store the account id and would orphan it.
-      return NextResponse.json(
-        { error: saved.reason },
-        { status: saved.reason === "migration_pending" ? 503 : 500 },
-      );
+      // Pre-migration (0370 not applied yet), a would-clobber-live refusal (a
+      // test-mode env tried to overwrite a live connection), or a DB error.
+      // Surface a clean status so the UI can explain rather than throwing a 500.
+      // We do NOT proceed to the account link, because we couldn't store the
+      // account id and would orphan it.
+      const status =
+        saved.reason === "migration_pending"
+          ? 503
+          : saved.reason === "would_clobber_live"
+            ? 409
+            : 500;
+      return NextResponse.json({ error: saved.reason }, { status });
     }
   }
 

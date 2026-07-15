@@ -26,6 +26,10 @@ export type Firm = {
   connect_payouts_enabled: boolean;
   connect_details_submitted: boolean;
   connect_onboarded_at: string | null;
+  // Which Stripe MODE the connected account belongs to ('test' | 'live'), so the
+  // app never treats a test-mode connection as live-payment-ready and vice versa
+  // (migration 0680). Null = unknown (connected before 0680, or pre-migration).
+  stripe_connect_mode?: "test" | "live" | null;
   // Per-service default payment prices in cents, keyed by engagement type
   // (t1 / t2 / bookkeeping / custom) — migration 0380. Pre-fills the
   // Request-payment dialog. Owner-editable (IS in updateCurrentFirm's

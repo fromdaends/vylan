@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { stripe, isStripeConfigured } from "@/lib/stripe";
+import { stripe, isStripeConfigured, stripeKeyMode } from "@/lib/stripe";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isValidTokenShape } from "@/lib/db/portal";
 import {
@@ -27,6 +27,7 @@ type BlockReason =
   | "expired"
   | "not_accepting_payments"
   | "no_open_request"
+  | "account_unusable"
   | "stripe_error";
 
 // One place to emit the breadcrumb + the JSON body, so no blocked path can
@@ -120,11 +121,33 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const { data: firm } = await sb
+  // Read the connect fields incl. the mode. Pre-0680 the mode column is absent —
+  // retry without it so checkout never hard-fails on the missing column.
+  const connectCols =
+    "id, stripe_connect_account_id, connect_charges_enabled";
+  let firmRes = await sb
     .from("firms")
-    .select("id, stripe_connect_account_id, connect_charges_enabled")
+    .select(`${connectCols}, stripe_connect_mode`)
     .eq("id", engagement.firm_id)
     .maybeSingle();
+  if (
+    firmRes.error &&
+    (firmRes.error.code === "PGRST204" || firmRes.error.code === "42703")
+  ) {
+    firmRes = await sb
+      .from("firms")
+      .select(connectCols)
+      .eq("id", engagement.firm_id)
+      .maybeSingle();
+  }
+  const firm = firmRes.data as
+    | {
+        id: string;
+        stripe_connect_account_id: string | null;
+        connect_charges_enabled: boolean;
+        stripe_connect_mode?: "test" | "live" | null;
+      }
+    | null;
   if (
     !firm ||
     firm.connect_charges_enabled !== true ||
@@ -137,6 +160,21 @@ export async function POST(request: NextRequest) {
       firmId: engagement.firm_id,
       hasAccount: Boolean(firm?.stripe_connect_account_id),
       chargesEnabled: firm?.connect_charges_enabled === true,
+    });
+  }
+
+  // Mode guard: the connection is stamped with a Stripe mode that doesn't match
+  // this environment's key (e.g. a test-mode account on the live site). A cross-
+  // mode charge is impossible, so reject cheaply here with a clear reason rather
+  // than letting Stripe throw account_invalid below. Only enforced when the mode
+  // is known — legacy null-mode rows fall through to the Stripe call, which the
+  // catch classifies as account_unusable anyway.
+  const envMode = stripeKeyMode();
+  if (firm.stripe_connect_mode && envMode && firm.stripe_connect_mode !== envMode) {
+    return blocked("account_unusable", 409, {
+      firmId: firm.id,
+      connectionMode: firm.stripe_connect_mode,
+      envMode,
     });
   }
 
