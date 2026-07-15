@@ -14,7 +14,12 @@
     "status_pending": "En attente",
     "status_rejected": "Refusé",
     "status_signed": "Signé",
-    "status_final": "Livrable"
+    "status_final": "Livrable",
+    "download": "Télécharger",
+    "download_everything": "Tout télécharger (ZIP)",
+    "preparing": "Préparation…",
+    "download_empty": "Aucun document à télécharger ici pour l'instant.",
+    "download_failed": "Impossible de préparer le téléchargement. Veuillez réessayer."
   },
   "InviteAccept": {
     "join_title": "Rejoindre {firm}",

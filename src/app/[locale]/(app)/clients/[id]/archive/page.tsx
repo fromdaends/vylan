@@ -6,6 +6,7 @@ import {
   PenLine,
   FileCheck2,
   FolderOpen,
+  Download,
   type LucideIcon,
 } from "lucide-react";
 import { getClientArchive, type ArchiveCategoryKey, type ArchiveFile } from "@/lib/db/client-archive";
@@ -13,7 +14,9 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate, formatBytes, type AppLocale } from "@/lib/format";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { ArchiveEngagementSection } from "@/components/clients/client-archive/engagement-section";
+import { ArchiveDownloadZipButton } from "@/components/clients/client-archive/download-zip-button";
 import { cn } from "@/lib/cn";
 
 // The archive reads live document data, so never serve a stale snapshot after a
@@ -92,6 +95,15 @@ export default async function ClientArchivePage({
               // Open the most recent engagement; collapse the rest so a long
               // history reads as a calm list of headers.
               defaultOpen={index === 0}
+              headerAction={
+                <ArchiveDownloadZipButton
+                  endpoint={`/api/clients/${archive.client.id}/archive/engagement/${eng.id}`}
+                  label={t("download")}
+                  preparingLabel={t("preparing")}
+                  emptyLabel={t("download_empty")}
+                  failedLabel={t("download_failed")}
+                />
+              }
             >
               {eng.categories.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
@@ -114,7 +126,13 @@ export default async function ClientArchivePage({
                         </div>
                         <ul className="space-y-0.5">
                           {group.files.map((file) => (
-                            <FileRow key={`${file.category}-${file.id}`} file={file} locale={locale} t={t} />
+                            <FileRow
+                              key={`${file.category}-${file.id}`}
+                              file={file}
+                              clientId={archive.client.id}
+                              locale={locale}
+                              t={t}
+                            />
                           ))}
                         </ul>
                       </section>
@@ -132,10 +150,12 @@ export default async function ClientArchivePage({
 
 function FileRow({
   file,
+  clientId,
   locale,
   t,
 }: {
   file: ArchiveFile;
+  clientId: string;
   locale: AppLocale;
   t: (key: string) => string;
 }) {
@@ -152,19 +172,30 @@ function FileRow({
           <div className="text-xs text-muted-foreground">{dateLine}</div>
         </div>
       </div>
-      {chip && (
-        <Badge
-          variant="outline"
-          className={cn(
-            "shrink-0 text-[11px]",
-            chip.tone === "danger"
-              ? "border-destructive/40 text-destructive"
-              : "text-muted-foreground",
-          )}
-        >
-          {chip.label}
-        </Badge>
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        {chip && (
+          <Badge
+            variant="outline"
+            className={cn(
+              "text-[11px]",
+              chip.tone === "danger"
+                ? "border-destructive/40 text-destructive"
+                : "text-muted-foreground",
+            )}
+          >
+            {chip.label}
+          </Badge>
+        )}
+        {/* The route streams the bytes with an attachment disposition, so a
+            plain anchor downloads without navigating the page away. */}
+        <Button asChild variant="ghost" size="icon-sm" aria-label={t("download")}>
+          <a
+            href={`/api/clients/${clientId}/archive/file/${file.category}/${file.id}?download=1`}
+          >
+            <Download className="size-4" />
+          </a>
+        </Button>
+      </div>
     </li>
   );
 }

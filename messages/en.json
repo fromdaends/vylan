@@ -14,7 +14,12 @@
     "status_pending": "Pending",
     "status_rejected": "Rejected",
     "status_signed": "Signed",
-    "status_final": "Deliverable"
+    "status_final": "Deliverable",
+    "download": "Download",
+    "download_everything": "Download everything (ZIP)",
+    "preparing": "Preparing…",
+    "download_empty": "There are no documents to download here yet.",
+    "download_failed": "Couldn't prepare the download. Please try again."
   },
   "InviteAccept": {
     "join_title": "Join {firm}",
