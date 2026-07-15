@@ -124,6 +124,10 @@ async function runJob(
   try {
     if (job.kind === "send_reminder") {
       const detail = await processReminderJob(job.payload);
+      if (detail.skipped?.startsWith("send_failed")) {
+        await markJobFailed(job.id, detail.skipped);
+        return { id: job.id, kind: job.kind, ok: false, detail };
+      }
       await markJobDone(job.id);
       return { id: job.id, kind: job.kind, ok: true, detail };
     }

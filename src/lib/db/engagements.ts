@@ -2,6 +2,7 @@ import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
 import type { EngagementType, TemplateItem } from "./templates";
+import type { ReminderSettings } from "@/lib/reminder-settings";
 
 export type EngagementStatus =
   | "draft"
@@ -24,6 +25,7 @@ export type Engagement = {
   magic_expires_at: string | null;
   assigned_user_id: string | null;
   reminders_paused: boolean;
+  reminder_settings?: ReminderSettings;
   // Per-engagement AI toggle (migration 0340). When false, no document uploaded
   // to this engagement is sent to the AI. Defaults true. Optional on the type so
   // reads survive the pre-migration window (column absent → undefined → treated
@@ -62,6 +64,47 @@ export async function setRemindersPaused(
     .update({ reminders_paused: paused })
     .eq("id", id);
   if (error) throw error;
+}
+
+export async function updateEngagementReminderAutomation(
+  id: string,
+  settings: ReminderSettings,
+  paused: boolean,
+): Promise<void> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({ reminder_settings: settings, reminders_paused: paused })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function updateEngagementInvoiceAutomation(
+  id: string,
+  input: {
+    mode: "off" | "on_completion" | "delayed";
+    delayDays: number | null;
+    amountCents: number | null;
+    description: string | null;
+    locksDeliverables: boolean;
+  },
+): Promise<boolean> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("engagements")
+    .update({
+      invoice_auto_mode: input.mode,
+      invoice_delay_days: input.delayDays,
+      invoice_amount_cents: input.amountCents,
+      invoice_description: input.description,
+      invoice_locks_deliverables: input.locksDeliverables,
+    })
+    .eq("id", id);
+  if (error) {
+    console.error("[engagements] update invoice automation failed:", error);
+    return false;
+  }
+  return true;
 }
 
 // Set (or clear) the engagement's deliverables-lock preference (migration 0610).
@@ -174,6 +217,7 @@ export type CreateEngagementInput = {
   // invoice created LATER by the automation (on_completion / delayed).
   invoice_locks_deliverables?: boolean;
   invoice_description?: string | null;
+  reminder_settings: ReminderSettings;
   items: TemplateItem[];
 };
 
@@ -252,6 +296,9 @@ export async function createEngagementWithItems(
         invoice_description: input.invoice_description ?? null,
       }
     : {};
+  const reminderCols660 = {
+    reminder_settings: input.reminder_settings,
+  };
   let { data: engagement, error: engErr } = await supabase
     .from("engagements")
     .insert({
@@ -259,11 +306,24 @@ export async function createEngagementWithItems(
       ai_enabled: input.ai_enabled,
       ...invoiceCols590,
       ...invoiceCols610,
+      ...reminderCols660,
     })
     .select("*")
     .single();
-  // Retry tiers, dropping the newest columns first: without 0610, then without
-  // 0590 either, then without ai_enabled (a very old env missing 0340 too).
+  // Retry tiers, dropping the newest columns first: without 0660, then 0610,
+  // then 0590, then ai_enabled (a very old env missing 0340 too).
+  if (engErr && isUnknownColumnError(engErr)) {
+    ({ data: engagement, error: engErr } = await supabase
+      .from("engagements")
+      .insert({
+        ...baseRow,
+        ai_enabled: input.ai_enabled,
+        ...invoiceCols590,
+        ...invoiceCols610,
+      })
+      .select("*")
+      .single());
+  }
   if (engErr && isUnknownColumnError(engErr)) {
     ({ data: engagement, error: engErr } = await supabase
       .from("engagements")

@@ -47,12 +47,13 @@ function row(over: Partial<WorklistRow> & Pick<WorklistRow, "id">): WorklistRow 
   };
 }
 
-// The pure "ball is entirely in the client's court" predicate.
+// "Live AND the client still owes at least one document" — the intuitive
+// "how many clients still owe me files" predicate.
 describe("isWaitingOnClient", () => {
-  const waiting = row({ id: "w", status: "sent" });
+  const owing = row({ id: "w", status: "sent" }); // owes both items by default
 
-  it("true for a live engagement where the client owes a doc and nothing awaits the accountant", () => {
-    expect(isWaitingOnClient(waiting)).toBe(true);
+  it("true for a live engagement where the client still owes a document", () => {
+    expect(isWaitingOnClient(owing)).toBe(true);
     expect(
       isWaitingOnClient(
         row({ id: "w2", status: "in_progress", itemsDone: 1, itemsTotal: 3 }),
@@ -63,9 +64,7 @@ describe("isWaitingOnClient", () => {
   it("true for an optional-only checklist the client hasn't acted on (engine denominator fallback)", () => {
     // Custom checklists default every item to optional. The engine's
     // itemsTotal/itemsDone fall back to ALL items when none are required, so
-    // an untouched all-optional engagement still counts as waiting — the same
-    // engagement Needs attention chases via due_soon/stale. Regression test
-    // for the review finding that a required-items-only rule read 0 here.
+    // an untouched all-optional engagement still counts as waiting.
     expect(
       isWaitingOnClient(
         row({ id: "opt", status: "sent", itemsDone: 0, itemsTotal: 4 }),
@@ -73,43 +72,38 @@ describe("isWaitingOnClient", () => {
     ).toBe(true);
   });
 
-  it("false when an item-level submission (or AI bounce) awaits a decision", () => {
+  it("STILL true when the client owes docs even while the accountant also has work to do", () => {
+    // The founder is waiting on the client for the OTHER documents regardless
+    // of parallel accountant tasks (a submission to review, flagged/
+    // auto-rejected files, a signed copy to confirm). An auto-rejected file is
+    // itself the client's turn to re-upload, so none of these zero it out.
+    // Regression: the old rule read 0 here even when the client clearly owed
+    // documents.
+    expect(isWaitingOnClient({ ...owing, itemsReadyToReview: 1 })).toBe(true);
+    expect(isWaitingOnClient({ ...owing, flaggedFilesCount: 2 })).toBe(true);
     expect(
-      isWaitingOnClient({ ...waiting, itemsReadyToReview: 1 }),
-    ).toBe(false);
-  });
-
-  it("false when a file-level upload sits undecided (e.g. a pending duplicate sibling)", () => {
-    expect(
-      isWaitingOnClient({ ...waiting, waitingSince: "2026-06-01T00:00:00Z" }),
-    ).toBe(false);
-  });
-
-  it("false when flagged files await the accountant's call", () => {
-    expect(isWaitingOnClient({ ...waiting, flaggedFilesCount: 2 })).toBe(false);
-  });
-
-  it("false when a returned signed copy awaits confirmation", () => {
-    expect(isWaitingOnClient({ ...waiting, signedCopiesToConfirm: 1 })).toBe(
-      false,
+      isWaitingOnClient({ ...owing, waitingSince: "2026-06-01T00:00:00Z" }),
+    ).toBe(true);
+    expect(isWaitingOnClient({ ...owing, signedCopiesToConfirm: 1 })).toBe(
+      true,
     );
   });
 
-  it("false when the client owes nothing (everything done / parked awaiting Mark complete)", () => {
+  it("false when the client owes nothing (everything submitted/approved/na)", () => {
     expect(
-      isWaitingOnClient({ ...waiting, itemsDone: 2, itemsTotal: 2 }),
+      isWaitingOnClient({ ...owing, itemsDone: 2, itemsTotal: 2 }),
     ).toBe(false);
   });
 
   it("false when the engagement requests no documents at all", () => {
     expect(
-      isWaitingOnClient({ ...waiting, itemsDone: 0, itemsTotal: 0 }),
+      isWaitingOnClient({ ...owing, itemsDone: 0, itemsTotal: 0 }),
     ).toBe(false);
   });
 
   it("false for drafts and terminal statuses (not live)", () => {
     for (const status of ["draft", "complete", "cancelled"] as const) {
-      expect(isWaitingOnClient({ ...waiting, status })).toBe(false);
+      expect(isWaitingOnClient({ ...owing, status })).toBe(false);
     }
   });
 });

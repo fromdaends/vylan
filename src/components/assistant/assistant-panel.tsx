@@ -14,6 +14,7 @@ import {
   History,
   Info,
   MessageSquare,
+  MessagesSquare,
   Settings,
   Sparkles,
   X,
@@ -26,11 +27,13 @@ import {
   getAssistantServerSnapshot,
   getAssistantState,
   openAssistant,
+  openAssistantForEngagement,
   openAssistantOnPageEngagement,
   setAssistantTab,
   setSelectedEngagement,
   subscribeAssistant,
   type AssistantTab,
+  type EngagementOption,
 } from "@/components/assistant/assistant-store";
 import {
   clampPanelWidth,
@@ -143,8 +146,18 @@ export function AssistantPanel({
     }
     function onOpenAssistant(e: Event) {
       const detail = (e as CustomEvent).detail as
-        | { tab?: AssistantTab; scopeToPage?: boolean }
+        | {
+            tab?: AssistantTab;
+            scopeToPage?: boolean;
+            engagement?: EngagementOption;
+          }
         | undefined;
+      // An explicit engagement (a notification's Reply row) wins outright:
+      // open scoped to it, whatever page we're on.
+      if (detail?.engagement) {
+        openAssistantForEngagement(detail.engagement, detail?.tab ?? "chat");
+        return;
+      }
       // scopeToPage (the engagement page's Activity triggers): rescope to the
       // current page's engagement even when the panel is already open —
       // the user explicitly asked for THIS engagement.
@@ -327,7 +340,10 @@ export function AssistantPanel({
               aria-hidden
               className="absolute inset-0 -m-1 rounded-full bg-accent/40 blur-md opacity-0 group-hover:opacity-100 transition-opacity"
             />
-            <Sparkles className="relative size-4" aria-hidden />
+            {/* Neutral multi-bubble icon, not sparkles: the panel is now the
+                home of CLIENT messages + AI chat + activity, so the doorway
+                can't read as AI-only (founder rename). */}
+            <MessagesSquare className="relative size-4" aria-hidden />
           </span>
           <span>{tHelp("ai_button")}</span>
           {badge && (
@@ -446,7 +462,7 @@ export function AssistantPanel({
           </button>
           {/* Gear → the assistant's settings (replaces the kebab, founder). */}
           <Link
-            href="/settings"
+            href="/settings?tab=assistant"
             aria-label={t("settings_label")}
             className="shrink-0 inline-flex items-center justify-center size-8 rounded-full text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
           >
@@ -514,7 +530,7 @@ export function AssistantPanel({
           <div className="absolute inset-0 flex flex-col">
             <div
               className={cn(
-                "flex-1 min-h-0 overflow-y-auto overscroll-contain",
+                "flex min-h-0 flex-1 flex-col",
                 tab !== "messages" && "hidden",
               )}
             >

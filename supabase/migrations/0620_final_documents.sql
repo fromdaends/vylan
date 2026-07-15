@@ -38,6 +38,9 @@ create index if not exists final_documents_engagement_idx
 
 alter table final_documents enable row level security;
 
+-- The production project can contain this policy from an earlier partial run.
+-- Recreate it idempotently so replaying the migration never blocks later ones.
+drop policy if exists final_documents_all on final_documents;
 create policy final_documents_all on final_documents for all
   using (firm_id = public.current_firm_id())
   with check (firm_id = public.current_firm_id());

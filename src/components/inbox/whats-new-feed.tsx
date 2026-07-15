@@ -2,6 +2,7 @@ import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { formatRelative, type AppLocale } from "@/lib/format";
 import type { HomeNotification } from "@/lib/home/notifications";
+import { ClientMessageRow } from "@/components/inbox/client-message-row";
 import {
   AlertTriangle,
   CheckCheck,
@@ -9,6 +10,7 @@ import {
   ChevronRight,
   FileSignature,
   FileUp,
+  MessageSquare,
   Sparkles,
   Wallet,
   type LucideIcon,
@@ -40,9 +42,27 @@ export async function WhatsNewFeed({
 
   return (
     <ol className="divide-y divide-border/50">
-      {notifications.map((n) => (
-        <WhatsNewRow key={n.id} n={n} locale={locale} t={t} />
-      ))}
+      {notifications.map((n) =>
+        // A client message replies IN PLACE (opens the panel's thread, no
+        // navigation) — its row is a client component; everything else stays
+        // a plain server-rendered link row.
+        n.kind === "client_message" && n.engagement_id ? (
+          <ClientMessageRow
+            key={n.id}
+            engagement={{
+              id: n.engagement_id,
+              title: n.engagement_title,
+              status: n.engagement_status ?? null,
+            }}
+            clientName={n.client_display_name}
+            timestamp={n.timestamp}
+            locale={locale}
+            compact
+          />
+        ) : (
+          <WhatsNewRow key={n.id} n={n} locale={locale} t={t} />
+        ),
+      )}
     </ol>
   );
 }
@@ -134,5 +154,7 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: CheckCircle2, tone: "bg-success/15 text-success" };
     case "client_signed":
       return { Icon: FileSignature, tone: "bg-success/15 text-success" };
+    case "client_message":
+      return { Icon: MessageSquare, tone: "bg-primary/15 text-primary" };
   }
 }

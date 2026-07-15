@@ -485,20 +485,25 @@ clearly readable. Mark it unusable if ANY of the following are true:
   logo IS content that belongs there. When unsure whether a black area covers a
   real value or is just the header design, look for a value/label that is now
   missing where one is clearly expected — only then flag it.
-- partial_capture: the WHOLE page is not in frame. Flag this whenever any
-  printed part of the page is sliced off at the edge of the photo so the page is
-  not shown in full — a cut-off header, logo, marginal/marketing text, a sliced
-  column or row, or an amount out of frame. The test is simple: do you see the
-  page's full border with a clear margin on ALL FOUR sides? If the printed
-  content runs off the edge of the photo on any side (it is clearly truncated,
-  not just surrounded by blank paper), flag partial_capture and ask for a retake
-  that shows the entire page — EVEN IF the financial figures you can see look
-  complete. Do NOT excuse a big crop because "the important numbers are visible";
-  the firm wants the full document. The ONLY crops that stay USABLE are a clean
-  blank paper margin, or SOLELY the small page-number footer line (e.g.
-  "page 2 of 4") being cut — a missing page NUMBER is not missing content, and
-  where the page belongs is judged elsewhere. This is about this single photo,
-  NOT about whether other pages exist.
+- partial_capture: the document's SUBSTANTIVE content is sliced off at the edge
+  of the photo. Flag this whenever a real value or a line of content runs off the
+  frame — an amount, an account/transit/reference number, a name, a date, a
+  balance, a sliced column or row of a statement/ledger, or a block of line items
+  truncated at an edge. The accountant needs the document's full SUBSTANCE in
+  frame, so a crop that eats into the transactions, the totals, the
+  account/holder details, or any figure is unusable — ask for a retake.
+  But do NOT flag a crop that only loses NON-substantive edges. A cut-off
+  DECORATIVE TOP is fine as long as the real content is all there: the
+  bank/issuer logo, a coloured or dark HEADER BANNER carrying a product name (for
+  example the black "Day-to-Day Banking" banner across the top of a Scotiabank
+  statement), marketing/promotional blurbs, other marginal page furniture, a
+  clean blank-paper margin, and the small page-number footer line (e.g.
+  "page 2 of 4") may all be clipped WITHOUT penalty. The test: is any actual
+  VALUE, field, or line of the document's content truncated? If yes, flag it. If
+  the only thing off the edge is a logo, a banner, or a marketing margin and
+  every figure and detail is fully visible, leave it USABLE — do NOT reject a
+  statement just because its letterhead is cropped. This is about this single
+  photo, NOT about whether other pages exist.
 - glare_or_shadow: reflections, bright spots, or shadows obscure
   important content
 - wrong_document_type: the document clearly CANNOT satisfy what the

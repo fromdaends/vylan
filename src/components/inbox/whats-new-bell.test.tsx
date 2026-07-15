@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, fireEvent, cleanup, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { ReactNode } from "react";
@@ -54,5 +54,24 @@ describe("WhatsNewBell", () => {
 
     fireEvent.click(screen.getByText("row link"));
     expect(screen.queryByText("row link")).toBeNull();
+  });
+
+  it("lets a feed row BUTTON run its own onClick before closing (the Reply-row regression)", () => {
+    // The old capture-phase close unmounted the row mid-dispatch, so a row
+    // button's handler never ran: the popover closed and nothing else
+    // happened. Bubble-phase close must let the row act first, THEN close.
+    const onRowClick = vi.fn();
+    renderBell(
+      1,
+      <button type="button" onClick={onRowClick}>
+        reply row
+      </button>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /recent update/i }));
+    fireEvent.click(screen.getByText("reply row"));
+
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("reply row")).toBeNull();
   });
 });

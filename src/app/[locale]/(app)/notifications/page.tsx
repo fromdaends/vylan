@@ -15,11 +15,13 @@ import {
   ChevronRight,
   FileSignature,
   FileUp,
+  MessageSquare,
   Sparkles,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { ClientMessageRow } from "@/components/inbox/client-message-row";
 
 export const dynamic = "force-dynamic";
 
@@ -76,9 +78,26 @@ export default async function NotificationsPage({
         <NotificationsEmpty t={t} />
       ) : (
         <ol className="divide-y divide-border/60">
-          {notifications.map((n) => (
-            <NotificationRow key={n.id} n={n} locale={locale} t={t} />
-          ))}
+          {notifications.map((n) =>
+            // Client messages reply IN PLACE (open the panel's thread, no
+            // navigation); every other kind stays a plain link row.
+            n.kind === "client_message" && n.engagement_id ? (
+              <ClientMessageRow
+                key={n.id}
+                engagement={{
+                  id: n.engagement_id,
+                  title: n.engagement_title,
+                  status: n.engagement_status ?? null,
+                }}
+                clientName={n.client_display_name}
+                timestamp={n.timestamp}
+                locale={locale}
+                compact={false}
+              />
+            ) : (
+              <NotificationRow key={n.id} n={n} locale={locale} t={t} />
+            ),
+          )}
         </ol>
       )}
     </div>
@@ -191,5 +210,7 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: CheckCircle2, tone: "bg-success/15 text-success" };
     case "client_signed":
       return { Icon: FileSignature, tone: "bg-success/15 text-success" };
+    case "client_message":
+      return { Icon: MessageSquare, tone: "bg-primary/15 text-primary" };
   }
 }

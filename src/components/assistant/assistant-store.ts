@@ -116,6 +116,16 @@ export function openAssistantOnPageEngagement(tab?: AssistantTab) {
   emit();
 }
 
+// Open scoped to an EXPLICIT engagement (e.g. a notification's Reply chip),
+// regardless of what page we're on or what the panel had selected.
+export function openAssistantForEngagement(
+  option: EngagementOption,
+  tab?: AssistantTab,
+) {
+  state = { ...state, open: true, tab: tab ?? state.tab, selected: option };
+  emit();
+}
+
 export function closeAssistant() {
   state = { ...state, open: false };
   emit();

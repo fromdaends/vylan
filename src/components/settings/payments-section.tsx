@@ -26,6 +26,8 @@ export function PaymentsConnectSection({ connect }: { connect: ConnectStatus }) 
   const t = useTranslations("Settings");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   const connected = connect.chargesEnabled;
   const incomplete = Boolean(connect.accountId) && !connected;
@@ -57,6 +59,67 @@ export function PaymentsConnectSection({ connect }: { connect: ConnectStatus }) 
     setLoading(false);
   }
 
+  async function disconnect() {
+    setDisconnecting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/billing/connect/disconnect", {
+        method: "POST",
+      });
+      if (res.ok) {
+        // Reload so the server re-reads the now-cleared connect status.
+        window.location.reload();
+        return;
+      }
+      setError(t("connect_disconnect_error"));
+    } catch {
+      setError(t("connect_disconnect_error"));
+    }
+    setDisconnecting(false);
+    setConfirmingDisconnect(false);
+  }
+
+  // Shown whenever a connection exists (connected OR half-finished), so a stuck
+  // or wrong connection can always be cleared from inside Vylan.
+  const disconnectControl = connect.accountId ? (
+    <div className="pt-1">
+      {confirmingDisconnect ? (
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="text-muted-foreground">
+            {t("connect_disconnect_confirm")}
+          </span>
+          <button
+            type="button"
+            onClick={disconnect}
+            disabled={disconnecting}
+            className="font-medium text-destructive hover:underline disabled:opacity-50"
+          >
+            {disconnecting ? "…" : t("connect_disconnect_yes")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmingDisconnect(false)}
+            disabled={disconnecting}
+            className="text-muted-foreground hover:text-foreground disabled:opacity-50"
+          >
+            {t("connect_disconnect_cancel")}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            setConfirmingDisconnect(true);
+          }}
+          className="text-xs font-medium text-muted-foreground hover:text-destructive hover:underline"
+        >
+          {t("connect_disconnect")}
+        </button>
+      )}
+    </div>
+  ) : null;
+
   return (
     <section>
       <h2 className="text-sm font-semibold">{t("connect_title")}</h2>
@@ -86,6 +149,8 @@ export function PaymentsConnectSection({ connect }: { connect: ConnectStatus }) 
                 {t("connect_manage")}
                 <ExternalLink className="h-3 w-3" />
               </a>
+              {disconnectControl}
+              {error && <p className="text-xs text-destructive">{error}</p>}
             </div>
           </div>
         </div>
@@ -130,6 +195,7 @@ export function PaymentsConnectSection({ connect }: { connect: ConnectStatus }) 
                 )}
               </div>
               {error && <p className="text-xs text-destructive">{error}</p>}
+              {disconnectControl}
             </div>
           </div>
         </div>

@@ -43,26 +43,24 @@ export function ClientMessagesTab({
     engagement.status === "sent" || engagement.status === "in_progress";
 
   return (
-    <div className="px-4 py-4">
-      <EngagementMessages
-        key={engagement.id}
-        engagementId={engagement.id}
-        clientName={engagement.clientName}
-        initialMessages={[]}
-        deferInitialLoad
-        notActivated={false}
-        readOnly={!isLive}
-        readOnlyReason={
-          engagement.status === "cancelled"
-            ? "cancelled"
-            : engagement.status === "complete"
-              ? "complete"
-              : engagement.status === "draft"
-                ? "draft"
-                : null
-        }
-        locale={locale}
-      />
-    </div>
+    <EngagementMessages
+      key={engagement.id}
+      engagementId={engagement.id}
+      clientName={engagement.clientName}
+      initialMessages={[]}
+      deferInitialLoad
+      notActivated={false}
+      readOnly={!isLive}
+      readOnlyReason={
+        engagement.status === "cancelled"
+          ? "cancelled"
+          : engagement.status === "complete"
+            ? "complete"
+            : engagement.status === "draft"
+              ? "draft"
+              : null
+      }
+      locale={locale}
+    />
   );
 }

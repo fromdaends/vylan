@@ -21,7 +21,8 @@ import {
   getLatestPaymentRequestForEngagementSR,
 } from "@/lib/db/payment-requests";
 import { buildPaymentRequestEmail, sendEmail } from "@/lib/email";
-import { getBrandingImageUrlForEmail } from "@/lib/storage";
+import { downloadObject, getBrandingImageUrlForEmail } from "@/lib/storage";
+import { getInvoiceAttachmentForEngagementSR } from "@/lib/db/final-documents";
 import { formatCurrency } from "@/lib/format";
 
 export type InvoiceSendReason =
@@ -153,7 +154,31 @@ export async function sendEngagementInvoice(
         url: `${appUrl}/r/${engagement.magic_token}`,
         locale,
       });
-      const res = await sendEmail({ to: client.email, ...email });
+      let attachments:
+        | Array<{ filename: string; content: Buffer }>
+        | undefined;
+      const invoiceDocument = await getInvoiceAttachmentForEngagementSR(
+        engagement.id,
+      );
+      if (invoiceDocument) {
+        try {
+          attachments = [
+            {
+              filename: invoiceDocument.original_filename,
+              content: await downloadObject(invoiceDocument.storage_path),
+            },
+          ];
+        } catch (error) {
+          // The invoice itself is still actionable through the portal. A stale
+          // object must not suppress the payment email entirely.
+          console.error("[invoices] auto-invoice attachment failed:", error);
+        }
+      }
+      const res = await sendEmail({
+        to: client.email,
+        ...email,
+        attachments,
+      });
       emailSent = res.sent;
     } catch (e) {
       console.error("[invoices] auto-invoice email failed:", e);

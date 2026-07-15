@@ -71,6 +71,7 @@ function renderShell(
         chatConfirmActions={true}
         invoiceDefaultMode="off"
         invoiceDefaultDelayDays={null}
+        reminderDefaultSettings={null}
         aiUsage={{
           used: 0,
           cap: 400,
@@ -121,6 +122,18 @@ describe("SettingsShell — Account / Security & privacy / Payments", () => {
     expect(
       screen.getByRole("button", { name: en.Settings.nav_general }),
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("offers creation of a firm reminder preset under Automation", () => {
+    renderShell({ initialSection: "automation" });
+    expect(
+      screen.getByText(en.Settings.reminder_defaults_title),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: en.Settings.reminder_defaults_create,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("puts email + password (and firm settings) under the Account tab", () => {

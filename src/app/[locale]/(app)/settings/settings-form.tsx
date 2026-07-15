@@ -21,6 +21,7 @@ import {
   UserCog,
   Users,
   Bot,
+  Zap,
 } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
@@ -48,8 +49,10 @@ import {
 } from "@/components/settings/integrations-section";
 import { PaymentsServicePrices } from "@/components/settings/payments-service-prices";
 import { PaymentsInvoiceDefaults } from "@/components/settings/payments-invoice-defaults";
+import { ReminderAutomationDefaults } from "@/components/settings/reminder-automation-defaults";
 import { PaymentsList } from "@/components/payments/payments-list";
 import type { PaymentsListRow } from "@/lib/db/payment-requests";
+import type { ReminderSettings } from "@/lib/reminder-settings";
 import { MfaSection } from "@/components/profile/mfa-section";
 // Type-only import (erased at build) — safe in this client component even though
 // usage.ts is server code. Keeps the AI-usage prop shape in sync with the source.
@@ -61,6 +64,7 @@ type SectionId =
   | "security"
   | "general"
   | "payments"
+  | "automation"
   | "integrations"
   | "documents"
   | "assistant";
@@ -91,6 +95,7 @@ const SECTION_IDS: SectionId[] = [
   "security",
   "general",
   "payments",
+  "automation",
   "integrations",
   "documents",
   "assistant",
@@ -106,6 +111,7 @@ export function SettingsShell({
   chatConfirmActions,
   invoiceDefaultMode,
   invoiceDefaultDelayDays,
+  reminderDefaultSettings,
   aiUsage,
   isOwner,
   billingSlot,
@@ -131,6 +137,7 @@ export function SettingsShell({
   // Firm-wide default invoice automation (owner-only, migration 0590).
   invoiceDefaultMode: "off" | "on_completion" | "delayed";
   invoiceDefaultDelayDays: number | null;
+  reminderDefaultSettings: ReminderSettings | null;
   aiUsage: AiUsage;
   isOwner: boolean;
   // Subscription card, rendered on the server (it's an async component) and
@@ -181,6 +188,7 @@ export function SettingsShell({
     { id: "security", label: t("nav_security"), icon: ShieldCheck },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
     { id: "payments", label: t("nav_payments"), icon: Wallet },
+    { id: "automation", label: t("nav_automation"), icon: Zap },
     { id: "integrations", label: t("nav_integrations"), icon: Plug },
     { id: "documents", label: t("nav_documents"), icon: FileText },
     { id: "assistant", label: t("nav_assistant"), icon: Bot },
@@ -249,14 +257,6 @@ export function SettingsShell({
             {servicePrices && (
               <PaymentsServicePrices prices={servicePrices} />
             )}
-            {/* Firm-wide default invoice automation — only useful once the firm
-                can actually receive a payment. */}
-            {connect?.chargesEnabled && (
-              <PaymentsInvoiceDefaults
-                initialMode={invoiceDefaultMode}
-                initialDelayDays={invoiceDefaultDelayDays}
-              />
-            )}
             {paymentsList && paymentsList.length > 0 && (
               <section>
                 <h2 className="text-sm font-semibold">
@@ -271,6 +271,34 @@ export function SettingsShell({
               </section>
             )}
             {billingSlot}
+          </div>
+        )}
+        {section === "automation" && isOwner && (
+          // Everything that runs WITHOUT the accountant doing it by hand
+          // lives here (founder) — for now the invoice automation default
+          // (moved out of Payments); more automations join over time.
+          <div className="space-y-12">
+            <section>
+              <h2 className="text-sm font-semibold">
+                {t("automation_title")}
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("automation_hint")}
+              </p>
+            </section>
+            <ReminderAutomationDefaults
+              initialSettings={reminderDefaultSettings}
+            />
+            {connect?.chargesEnabled ? (
+              <PaymentsInvoiceDefaults
+                initialMode={invoiceDefaultMode}
+                initialDelayDays={invoiceDefaultDelayDays}
+              />
+            ) : (
+              <p className="max-w-xl text-sm text-muted-foreground">
+                {t("automation_needs_connect")}
+              </p>
+            )}
           </div>
         )}
         {section === "integrations" && quickbooks && (

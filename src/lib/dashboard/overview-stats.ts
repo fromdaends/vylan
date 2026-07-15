@@ -7,12 +7,17 @@ import { selectActive } from "@/lib/dashboard/worklist-select";
 // strip can never disagree with the surfaces it links to:
 //   * active        — same selectActive rule as the /engagements "Active" view.
 //   * readyToReview — same readyToReview flag as the sidebar badge + Ready view.
-//   * waitingOnClients — live engagements where NOTHING awaits the accountant
-//     (no undecided submission at either the item or file level, no flagged
-//     uploads, no signed copies to confirm) AND the client still owes at least
-//     one document (required items when the checklist has any; ALL items on
-//     optional-only checklists, mirroring the engine's own denominator
-//     fallback). The "ball is entirely in the client's court" set.
+//   * waitingOnClients — live engagements where the client still owes at least
+//     one document. itemsDone counts submitted/approved/na (the client's part
+//     is provided or excused), so itemsTotal − itemsDone is exactly the
+//     pending+rejected set the client must still send OR re-send (an
+//     AI-auto-rejected file is the client's turn to re-upload, not the
+//     accountant's — the old rule wrongly treated it as accountant work and
+//     read 0). Deliberately does NOT also require "nothing awaits the
+//     accountant": an engagement can have a file for you to review AND still
+//     owe other documents, and it's still one you're waiting on the client for.
+//     itemsTotal/itemsDone use the engine's denominator — required items, or
+//     ALL items on optional-only checklists.
 //   * dueSoon — live engagements whose due date falls within the next 7 days.
 //     A calendar fact, deliberately NOT the chase chip's rule (the chip also
 //     requires <80% completion; the stat counts every approaching deadline).
@@ -33,29 +38,13 @@ function isLive(r: WorklistRow): boolean {
 }
 
 export function isWaitingOnClient(r: WorklistRow): boolean {
-  return (
-    isLive(r) &&
-    // Nothing awaits the accountant: no submitted/AI-bounced item…
-    r.itemsReadyToReview === 0 &&
-    // …no file-level undecided upload (catches e.g. a pending duplicate
-    // sibling on an already-decided item)…
-    r.waitingSince === null &&
-    // …no flagged uploads, no returned signed copies.
-    r.flaggedFilesCount === 0 &&
-    r.signedCopiesToConfirm === 0 &&
-    // And the client still owes at least one document. itemsTotal/itemsDone
-    // come from the engine's own denominator — required items, FALLING BACK to
-    // all items when the checklist has no required ones (custom checklists
-    // default every item to optional; without the fallback those engagements
-    // would read "waiting on clients: 0" while Needs attention chases them).
-    // Under the itemsReadyToReview === 0 guard above, total − done is exactly
-    // the engine's "blocked on the client" count (pending + rejected; the
-    // AI-bounced case the engine excludes from blocked can't occur here, since
-    // a bounce counts in itemsReadyToReview). Also excludes the "all approved,
-    // awaiting Mark complete" parked state (done === total) and engagements
-    // that request nothing (total === 0).
-    r.itemsTotal - r.itemsDone > 0
-  );
+  // Live AND the client still owes at least one document. itemsDone counts
+  // submitted/approved/na, so itemsTotal − itemsDone is the pending+rejected
+  // set the client must still provide (or re-provide — an auto-rejected file
+  // that bounced back to them is their turn, not yours). This also correctly
+  // excludes the "everything submitted, awaiting Mark complete" parked state
+  // (done === total) and engagements that request nothing (total === 0).
+  return isLive(r) && r.itemsTotal - r.itemsDone > 0;
 }
 
 export function isDueSoon(r: WorklistRow): boolean {

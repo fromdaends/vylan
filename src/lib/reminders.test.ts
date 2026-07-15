@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildReminderPlan } from "./reminders";
+import { buildReminderPlan, futureReminderPlan } from "./reminders";
+import { DEFAULT_REMINDER_SETTINGS } from "./reminder-settings";
 
 describe("buildReminderPlan", () => {
   const sentAt = new Date("2026-05-01T12:00:00Z");
@@ -41,5 +42,81 @@ describe("buildReminderPlan", () => {
         plan[i - 1].runAfter.getTime(),
       );
     }
+  });
+
+  it("returns no jobs when automatic reminders are disabled", () => {
+    const plan = buildReminderPlan({
+      sentAt,
+      dueDate: "2026-05-30",
+      settings: { ...DEFAULT_REMINDER_SETTINGS, enabled: false },
+    });
+    expect(plan).toEqual([]);
+  });
+
+  it("uses customized timing and email copy", () => {
+    const settings = structuredClone(DEFAULT_REMINDER_SETTINGS);
+    settings.steps[0] = {
+      ...settings.steps[0],
+      days: 5,
+      customSubject: "Documents for {engagement}",
+      customMessage: "Hi {client}",
+    };
+    settings.steps[1].enabled = false;
+
+    const plan = buildReminderPlan({ sentAt, dueDate: null, settings });
+    expect(plan.map((step) => step.tone)).toEqual(["gentle", "deadline"]);
+    expect(plan[0].runAfter.toISOString()).toBe("2026-05-06T12:00:00.000Z");
+    expect(plan[0].customSubject).toBe("Documents for {engagement}");
+    expect(plan[0].customMessage).toBe("Hi {client}");
+  });
+
+  it("uses the customized due-date offset for overdue reminders", () => {
+    const settings = structuredClone(DEFAULT_REMINDER_SETTINGS);
+    const overdue = settings.steps.find((step) => step.tone === "overdue")!;
+    overdue.days = 3;
+
+    const plan = buildReminderPlan({
+      sentAt,
+      dueDate: "2026-05-20",
+      settings,
+    });
+    expect(plan.find((step) => step.tone === "overdue")?.runAfter.toISOString())
+      .toBe("2026-05-23T23:59:59.000Z");
+  });
+
+  it("repeats one reminder at the configured interval", () => {
+    const settings = structuredClone(DEFAULT_REMINDER_SETTINGS);
+    settings.steps.forEach((step) => {
+      step.enabled = step.tone === "firm";
+    });
+    const followUp = settings.steps.find((step) => step.tone === "firm")!;
+    followUp.days = 4;
+    followUp.repeatCount = 3;
+
+    const plan = buildReminderPlan({ sentAt, dueDate: null, settings });
+    expect(plan.map((step) => step.occurrence)).toEqual([1, 2, 3]);
+    expect(plan.map((step) => step.runAfter.toISOString())).toEqual([
+      "2026-05-05T12:00:00.000Z",
+      "2026-05-09T12:00:00.000Z",
+      "2026-05-13T12:00:00.000Z",
+    ]);
+  });
+});
+
+describe("futureReminderPlan", () => {
+  it("keeps only reminders that have not become due yet", () => {
+    const settings = structuredClone(DEFAULT_REMINDER_SETTINGS);
+    const plan = buildReminderPlan({
+      sentAt: new Date("2026-05-01T12:00:00Z"),
+      dueDate: null,
+      settings,
+    });
+
+    const future = futureReminderPlan(
+      plan,
+      new Date("2026-05-08T12:00:00Z"),
+    );
+
+    expect(future.map((item) => item.tone)).toEqual(["deadline"]);
   });
 });

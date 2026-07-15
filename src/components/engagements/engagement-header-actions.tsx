@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Bell,
-  BellOff,
   Check,
   Download,
   Link as LinkIcon,
@@ -19,8 +18,11 @@ import { Button } from "@/components/ui/button";
 import { useDownloadAll } from "./use-download-all";
 import {
   InvoiceOptionsDialog,
+  type EngagementInvoiceAutomation,
   type InvoiceForOptions,
 } from "./invoice-options-dialog";
+import { ReminderAutomationDialog } from "./reminder-automation-dialog";
+import type { ReminderSettings } from "@/lib/reminder-settings";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,7 +42,6 @@ import {
 import {
   cancelEngagementAction,
   deleteEngagementAction,
-  toggleRemindersPausedAction,
 } from "@/app/actions/engagements";
 
 // The "..." overflow menu for an engagement's occasional actions: copying
@@ -51,6 +52,7 @@ export function EngagementMoreMenu({
   locale,
   status,
   remindersPaused,
+  reminderSettings,
   hasUploads,
   canDelete,
   clientLinkToken,
@@ -59,11 +61,13 @@ export function EngagementMoreMenu({
   invoice,
   engagementLocksDeliverables,
   invoiceDefaultAmount,
+  invoiceAutomation,
 }: {
   engagementId: string;
   locale: "fr" | "en";
   status: "live" | "complete" | "cancelled";
   remindersPaused: boolean;
+  reminderSettings: ReminderSettings;
   hasUploads: boolean;
   canDelete: boolean;
   // Live engagements only: enables "Copy client link" (origin-aware portal URL).
@@ -76,6 +80,7 @@ export function EngagementMoreMenu({
   invoice?: InvoiceForOptions | null;
   engagementLocksDeliverables?: boolean;
   invoiceDefaultAmount?: string;
+  invoiceAutomation: EngagementInvoiceAutomation;
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -95,14 +100,6 @@ export function EngagementMoreMenu({
   // can't drift (the route returns JSON {url}; the browser downloads).
   const { downloading, downloadAll } = useDownloadAll(engagementId);
   const isLive = status === "live";
-
-  const togglePause = () => {
-    const f = new FormData();
-    f.set("id", engagementId);
-    // toggleRemindersPausedAction reads "paused": "1" pauses, "0" resumes.
-    f.set("paused", remindersPaused ? "0" : "1");
-    void toggleRemindersPausedAction(f);
-  };
 
   const cancel = () => {
     const f = new FormData();
@@ -125,6 +122,19 @@ export function EngagementMoreMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
+          {isLive && (
+            <ReminderAutomationDialog
+              engagementId={engagementId}
+              initialSettings={reminderSettings}
+              initiallyPaused={remindersPaused}
+              trigger={
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                  <Bell />
+                  {t("reminder_menu")}
+                </DropdownMenuItem>
+              }
+            />
+          )}
           {status !== "cancelled" &&
             (connectReady ||
               !!invoice ||
@@ -136,6 +146,8 @@ export function EngagementMoreMenu({
               engagementLocksDeliverables={engagementLocksDeliverables === true}
               defaultAmount={invoiceDefaultAmount ?? ""}
               locale={locale}
+              engagementStatus={status}
+              automation={invoiceAutomation}
               trigger={
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                   <Receipt />
@@ -177,12 +189,6 @@ export function EngagementMoreMenu({
           )}
 
           {(isLive || hasUploads) && <DropdownMenuSeparator />}
-          {isLive && (
-            <DropdownMenuItem onSelect={togglePause}>
-              {remindersPaused ? <Bell /> : <BellOff />}
-              {remindersPaused ? t("resume_reminders") : t("pause_reminders")}
-            </DropdownMenuItem>
-          )}
           {hasUploads && (
             <DropdownMenuItem
               // Keep the menu from closing-and-cancelling: run the blob

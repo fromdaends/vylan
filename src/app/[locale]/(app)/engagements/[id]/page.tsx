@@ -53,6 +53,7 @@ import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { AssistantEngagementBridge } from "@/components/assistant/engagement-panel-bridge";
+import { OpenPanelOnLoad } from "@/components/assistant/open-panel-on-load";
 import { OpenAssistantActivityButton } from "@/components/assistant/open-assistant-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
@@ -93,6 +94,7 @@ import {
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
 import { engagementToView } from "@/lib/navigation/active-nav";
 import { viewHref, viewLabelKey } from "@/lib/engagements/views";
+import { normalizeReminderSettings } from "@/lib/reminder-settings";
 import {
   computeAttention,
   isReadyToReview,
@@ -107,7 +109,7 @@ import {
   Trash2,
   CheckCircle2,
   RotateCcw,
-  Bell,
+  BellRing,
   BellOff,
   Download,
   Sparkles,
@@ -118,12 +120,15 @@ import {
 
 export default async function EngagementDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
+  searchParams?: Promise<{ panel?: string }>;
 }) {
   const { locale: rawLocale, id } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
+  const sp = (await searchParams) ?? {};
 
   // Items / uploads all key off the URL `id` (= engagement.id), so they don't
   // need to wait for getEngagement — run the whole lot in ONE parallel batch.
@@ -422,6 +427,10 @@ export default async function EngagementDetailPage({
           messagesUnread,
         }}
       />
+      {/* ?panel=messages (the notifications Reply chip) opens the assistant
+          panel straight onto the Client-messages tab. Must render AFTER the
+          bridge so the page's engagement is already published. */}
+      {sp.panel === "messages" && <OpenPanelOnLoad tab="messages" />}
       {/* Auto-refresh while the engagement is still active. Picks up new
           client uploads + AI verdicts + activity-log entries without
           requiring the accountant to hit reload. Skipped for draft /
@@ -550,7 +559,7 @@ export default async function EngagementDetailPage({
               {trialLocked ? (
                 <DemoBlockButton
                   label={t("send_reminder")}
-                  icon={<Bell className="size-4" />}
+                  icon={<BellRing className="size-4" />}
                   reasonKey="block_send_reminder_reason"
                   variant="outline"
                   size="sm"
@@ -568,7 +577,7 @@ export default async function EngagementDetailPage({
                     title={t("send_reminder")}
                     className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-40 hover:gap-1.5 hover:px-3 focus-visible:w-40 focus-visible:gap-1.5 focus-visible:px-3"
                   >
-                    <Bell className="size-4" />
+                    <BellRing className="size-4" />
                     <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-36 group-hover:opacity-100 group-focus-visible:max-w-36 group-focus-visible:opacity-100">
                       {t("send_reminder")}
                     </span>
@@ -623,17 +632,20 @@ export default async function EngagementDetailPage({
               Assistant panel's Activity tab (the panel absorbed the old
               slide-out feed). */}
           {isDraft && <OpenAssistantActivityButton />}
-          {/* The "..." menu holds the occasional actions — Activity, Copy client
-              / payment link, Pause/Resume reminders, Download all, Cancel,
-              Delete — so only primary buttons + the payment pill stay in the
-              row. Delete keeps its confirmation + 30-day recovery. Drafts keep
-              their own inline Send + Delete-draft buttons and never get it. */}
+          {/* The "..." menu holds reminder and invoice settings, copy links,
+              downloads, cancellation, and deletion so only primary buttons +
+              the payment pill stay in the row. Delete keeps its confirmation +
+              30-day recovery. Drafts keep their own inline Send + Delete-draft
+              buttons and never get it. */}
           {!isDraft && (
             <EngagementMoreMenu
               engagementId={engagement.id}
               locale={locale}
               status={isLive ? "live" : isComplete ? "complete" : "cancelled"}
               remindersPaused={engagement.reminders_paused}
+              reminderSettings={normalizeReminderSettings(
+                engagement.reminder_settings,
+              )}
               hasUploads={uploads.length > 0}
               canDelete={canDelete}
               clientLinkToken={
@@ -661,6 +673,14 @@ export default async function EngagementDetailPage({
                 engagement.invoice_locks_deliverables === true
               }
               invoiceDefaultAmount={paymentPrefill}
+              invoiceAutomation={{
+                mode: engagement.invoice_auto_mode ?? "off",
+                delayDays: engagement.invoice_delay_days ?? null,
+                amountCents: engagement.invoice_amount_cents ?? null,
+                description: engagement.invoice_description ?? null,
+                locksDeliverables:
+                  engagement.invoice_locks_deliverables === true,
+              }}
             />
           )}
         </div>

@@ -13,6 +13,8 @@ import {
   FolderOpen,
   ListFilter,
   Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   X,
 } from "lucide-react";
@@ -86,6 +88,7 @@ export function PreviewOverlay({
   // drift (the route returns JSON {url}; the browser downloads from storage).
   const { downloading, downloadAll } = useDownloadAll(engagementId);
   const [view, setView] = useState<PreviewView>(initialView ?? "all");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [query, setQuery] = useState("");
   // The checklist-item filter ("all" or a specific request_item id).
   const [itemFilter, setItemFilter] = useState<string>("all");
@@ -412,62 +415,51 @@ export function PreviewOverlay({
         aria-modal="true"
         aria-label={`${t("eyebrow")} — ${engagementTitle}`}
         inert={rejectTarget != null || undefined}
-        className="relative flex h-[92vh] w-[95vw] max-w-[2100px] flex-col overflow-hidden rounded-2xl border border-border/50 bg-background shadow-2xl outline-none"
+        className="relative h-[92vh] w-[95vw] max-w-[2100px] overflow-hidden rounded-2xl border border-border/50 bg-background shadow-2xl outline-none"
       >
-        {/* Header: engagement name + Download all + close */}
-        <div
+        <aside
           inert={selectedDoc != null || undefined}
-          className="flex items-start justify-between gap-3 border-b border-border/40 px-5 py-4"
+          className={cn(
+            "absolute inset-y-0 left-0 z-10 flex w-[14.5rem] flex-col border-r border-border/40 bg-card shadow-xl transition-transform duration-200 ease-out motion-reduce:transition-none",
+            sidebarOpen ? "translate-x-0" : "-translate-x-full",
+          )}
         >
-          <div className="min-w-0">
-            <div className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
-              {t("eyebrow")}
+          {/* Header: engagement name + the collapse toggle. No full-height rail
+              anymore — when collapsed, a small floating button (below) is the
+              re-open handle. */}
+          <div className="flex items-start justify-between gap-2 border-b border-border/40 p-3">
+            <div className="min-w-0">
+              <div className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+                {t("eyebrow")}
+              </div>
+              <h2 className="truncate text-lg font-semibold tracking-tight">
+                {engagementTitle}
+              </h2>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                {clientName ? `${clientName} · ` : ""}
+                {t("doc_count", { count: counts.all })}
+              </p>
             </div>
-            <h2 className="truncate text-lg font-semibold tracking-tight">
-              {engagementTitle}
-            </h2>
-            <p className="mt-0.5 truncate text-xs text-muted-foreground">
-              {clientName ? `${clientName} · ` : ""}
-              {t("doc_count", { count: counts.all })}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {!scoped && counts.all > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={downloading}
-                onClick={() => void downloadAll()}
-              >
-                {downloading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <Download className="size-4" />
-                )}
-                {tEng("download_all")}
-              </Button>
-            )}
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              aria-label={t("close")}
-              onClick={onClose}
+              aria-label={t("collapse_sidebar")}
+              title={t("collapse_sidebar")}
+              onClick={() => setSidebarOpen(false)}
+              className="-mr-1 shrink-0"
             >
-              <X className="size-4" />
+              <PanelLeftClose className="size-4" />
             </Button>
           </div>
-        </div>
 
-        {/* Tabs + search */}
-        <div
-          inert={selectedDoc != null || undefined}
-          className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1 border-b border-border/40 px-5"
-        >
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {/* Tabs + search */}
+          <div
+            className="flex min-h-0 flex-1 flex-col justify-between overflow-y-auto bg-card/30 p-3"
+          >
+          <div className="flex flex-col gap-3">
             {itemOptions.length > 1 && (
-              <>
+              <div>
                 <PreviewItemFilter
                   options={itemOptions}
                   value={itemFilter}
@@ -475,13 +467,9 @@ export function PreviewOverlay({
                   locale={locale}
                   signatureItemIds={signatureItemIds}
                 />
-                <span
-                  aria-hidden
-                  className="hidden h-5 w-px bg-border/50 sm:block"
-                />
-              </>
+              </div>
             )}
-            <div className="flex items-center gap-5">
+            <div className="space-y-1">
               <PreviewTab
                 label={t("tab_all")}
                 count={counts.all}
@@ -521,7 +509,7 @@ export function PreviewOverlay({
               />
             </div>
           </div>
-          <div className="flex items-center gap-2 py-2">
+          <div className="flex flex-col gap-2 pt-4">
             {/* Sort by page order — only offered when the group review actually
                 worked out a page order to apply. A press toggle: on = pages in
                 order, off = upload order. */}
@@ -532,14 +520,14 @@ export function PreviewOverlay({
                 aria-pressed={sortByPage}
                 title={t("sort_by_page")}
                 className={
-                  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors " +
+                  "inline-flex h-9 w-full items-center gap-2 rounded-lg border px-2.5 text-xs font-medium " +
                   (sortByPage
                     ? "border-accent/40 bg-accent/10 text-accent"
                     : "border-border/40 bg-card/40 text-muted-foreground hover:text-foreground")
                 }
               >
                 <ArrowDownUp className="size-3.5" aria-hidden />
-                <span className="hidden sm:inline">{t("sort_by_page")}</span>
+                <span>{t("sort_by_page")}</span>
               </button>
             )}
             <div className="relative">
@@ -550,7 +538,7 @@ export function PreviewOverlay({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t("search_placeholder")}
                 aria-label={t("search_placeholder")}
-                className="h-9 w-full rounded-lg border border-border/40 bg-card/40 pr-8 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-border sm:w-72"
+                className="h-9 w-full rounded-lg border border-border/40 bg-background/60 pr-8 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-border"
               />
               {query && (
                 <button
@@ -564,12 +552,72 @@ export function PreviewOverlay({
               )}
             </div>
           </div>
+          </div>
+        </aside>
+
+        {/* Re-open handle: a single small floating button at top-left, shown
+            only while the sidebar is collapsed (replaces the old full-height
+            rail). Expands the sidebar back. */}
+        {!sidebarOpen && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            inert={selectedDoc != null || undefined}
+            aria-label={t("expand_sidebar")}
+            title={t("expand_sidebar")}
+            onClick={() => setSidebarOpen(true)}
+            className="absolute top-3 left-3 z-20 bg-background/90 shadow-sm backdrop-blur-sm"
+          >
+            <PanelLeftOpen className="size-4" />
+          </Button>
+        )}
+
+        {/* Top-right action cluster: Download all (when applicable) + Close.
+            Close lives here now (was stacked in the sidebar rail) so it sits in
+            the conventional top-right corner beside Download all. Inert while a
+            document detail covers the panel — the detail has its own close. */}
+        <div
+          inert={selectedDoc != null || undefined}
+          className="absolute top-3 right-3 z-20 flex items-center gap-2"
+        >
+          {!scoped && counts.all > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2 bg-background/90 shadow-sm backdrop-blur-sm"
+              disabled={downloading}
+              onClick={() => void downloadAll()}
+            >
+              {downloading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Download className="size-4" />
+              )}
+              {tEng("download_all")}
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label={t("close")}
+            title={t("close")}
+            className="bg-background/90 shadow-sm backdrop-blur-sm"
+            onClick={onClose}
+          >
+            <X className="size-4" />
+          </Button>
         </div>
 
         {/* Grid */}
         <div
           inert={selectedDoc != null || undefined}
-          className="flex-1 overflow-y-auto px-5 py-5"
+          className={cn(
+            "absolute inset-y-0 right-0 left-0 overflow-y-auto px-5 pt-16 pb-5 transition-transform duration-200 ease-out motion-reduce:transition-none",
+            sidebarOpen ? "translate-x-[14.5rem]" : "translate-x-0",
+          )}
         >
           {visible.length === 0 ? (
             <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
@@ -721,13 +769,13 @@ function PreviewItemFilter({
 }) {
   const t = useTranslations("Preview");
   return (
-    <div className="relative inline-flex items-center">
+    <div className="relative flex w-full items-center">
       <ListFilter className="pointer-events-none absolute left-2 size-4 text-muted-foreground" />
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         aria-label={t("filter_by_item")}
-        className="max-w-[14rem] cursor-pointer appearance-none truncate rounded-md bg-transparent py-2 pr-7 pl-8 text-sm font-medium text-foreground outline-none hover:bg-secondary/60 focus-visible:bg-secondary/40"
+        className="w-full cursor-pointer appearance-none truncate rounded-md bg-transparent py-2 pr-7 pl-8 text-sm font-medium text-foreground outline-none hover:bg-secondary/60 focus-visible:bg-secondary/40"
       >
         <option value="all">{t("filter_all_items")}</option>
         {options.map((g) => (
@@ -771,10 +819,10 @@ function PreviewTab({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "-mb-px flex cursor-pointer items-center gap-1.5 border-b-2 py-3 text-sm font-medium transition-colors",
+        "flex w-full cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-2 text-sm font-medium",
         active
-          ? "border-foreground text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+          ? "bg-secondary text-foreground"
+          : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
       )}
     >
       {label}

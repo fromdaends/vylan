@@ -3,6 +3,7 @@
 
 import { Resend } from "resend";
 import { redactEmail } from "@/lib/redact";
+import type { ReminderTone } from "@/lib/reminder-settings";
 
 type SendArgs = {
   to: string;
@@ -596,8 +597,6 @@ The ${opts.firmName} team`;
   return { subject, html, text };
 }
 
-export type ReminderTone = "gentle" | "firm" | "deadline" | "overdue";
-
 // Default CTA / footer slate when the firm has no brand color set.
 const DEFAULT_BRAND = "#1e293b";
 
@@ -612,11 +611,25 @@ export function buildReminderEmail(opts: {
   dueDate: string | null;
   pendingRequiredCount: number;
   locale: "fr" | "en";
+  customSubject?: string | null;
+  customMessage?: string | null;
 }): { subject: string; html: string; text: string } {
   const copy = COPY[opts.locale][opts.tone];
   const brand = sanitizeColor(opts.brandColor) ?? DEFAULT_BRAND;
-  const subject = copy.subject(opts);
-  const lines = copy.lines(opts);
+  const subject = opts.customSubject?.trim()
+    ? interpolateReminderText(opts.customSubject, opts)
+    : copy.subject(opts);
+  const customMessage = opts.customMessage?.trim()
+    ? interpolateReminderText(opts.customMessage, opts)
+    : null;
+  const lines = customMessage
+    ? {
+        html: customMessage
+          .split(/\n{2,}/)
+          .map((line) => escapeHtml(line).replace(/\n/g, "<br />")),
+        text: [customMessage],
+      }
+    : copy.lines(opts);
   const greeting = copy.greeting(opts);
 
   const cta =
@@ -711,6 +724,23 @@ export function buildReminderEmail(opts: {
   ].join("\n");
 
   return { subject, html, text };
+}
+
+function interpolateReminderText(
+  template: string,
+  opts: Parameters<typeof buildReminderEmail>[0],
+): string {
+  const tokens: Record<string, string> = {
+    client: opts.clientName,
+    engagement: opts.engagementTitle,
+    firm: opts.firmName,
+    pending: String(opts.pendingRequiredCount),
+    due_date: opts.dueDate ?? "",
+  };
+  return template.replace(
+    /\{(client|engagement|firm|pending|due_date)\}/g,
+    (_, key: string) => tokens[key] ?? "",
+  );
 }
 
 // Reject anything that isn't a 3- or 6-digit hex colour. Falls back to
