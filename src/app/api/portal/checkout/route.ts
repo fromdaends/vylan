@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Read the connect fields incl. the mode. Pre-0660 the mode column is absent —
+  // Read the connect fields incl. the mode. Pre-0680 the mode column is absent —
   // retry without it so checkout never hard-fails on the missing column.
   const connectCols =
     "id, stripe_connect_account_id, connect_charges_enabled";

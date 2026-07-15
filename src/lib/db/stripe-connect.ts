@@ -74,7 +74,7 @@ export async function setFirmConnectAccountId(
     .from("firms")
     .update({ stripe_connect_account_id: accountId, stripe_connect_mode: mode })
     .eq("id", firmId);
-  // Pre-0660: retry WITHOUT the mode column so onboarding still works (the mode
+  // Pre-0680: retry WITHOUT the mode column so onboarding still works (the mode
   // is simply unrecorded until the migration lands).
   if (error && isMissingColumn(error)) {
     const retry = await sb
@@ -109,7 +109,7 @@ export async function findFirmByConnectAccountId(
     .select(`${base}, stripe_connect_mode`)
     .eq("stripe_connect_account_id", accountId)
     .maybeSingle();
-  // Pre-0660: the mode column doesn't exist yet — retry without it so the webhook
+  // Pre-0680: the mode column doesn't exist yet — retry without it so the webhook
   // still resolves the firm (mode defaults to null / unknown).
   if (error && isMissingColumn(error)) {
     ({ data, error } = await sb
@@ -126,7 +126,7 @@ export async function findFirmByConnectAccountId(
   }
   if (!data) return null;
   const row = data as FirmConnectRow;
-  // Fallback select (pre-0660) omits the column — default it to null at runtime.
+  // Fallback select (pre-0680) omits the column — default it to null at runtime.
   return { ...row, stripe_connect_mode: row.stripe_connect_mode ?? null };
 }
 
@@ -168,7 +168,7 @@ export async function applyConnectAccountStatus(
     updates.connect_onboarded_at = new Date().toISOString();
   }
   let { error } = await sb.from("firms").update(updates).eq("id", firm.id);
-  // Pre-0660: retry WITHOUT the mode column so status syncs keep working.
+  // Pre-0680: retry WITHOUT the mode column so status syncs keep working.
   if (error && isMissingColumn(error)) {
     const { stripe_connect_mode: _drop, ...withoutMode } = updates;
     void _drop;
@@ -196,7 +196,7 @@ export async function clearFirmConnectAccount(firmId: string): Promise<void> {
     .from("firms")
     .update({ ...reset, stripe_connect_mode: null })
     .eq("id", firmId);
-  // Pre-0660: retry without the mode column.
+  // Pre-0680: retry without the mode column.
   if (error && isMissingColumn(error)) {
     ({ error } = await sb.from("firms").update(reset).eq("id", firmId));
   }
