@@ -19,7 +19,8 @@
     "download_everything": "Tout télécharger (ZIP)",
     "preparing": "Préparation…",
     "download_empty": "Aucun document à télécharger ici pour l'instant.",
-    "download_failed": "Impossible de préparer le téléchargement. Veuillez réessayer."
+    "download_failed": "Impossible de préparer le téléchargement. Veuillez réessayer.",
+    "download_too_large": "Les archives de ce client sont trop volumineuses pour un téléchargement en une seule fois. Téléchargez-les un engagement à la fois."
   },
   "InviteAccept": {
     "join_title": "Rejoindre {firm}",

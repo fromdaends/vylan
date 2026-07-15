@@ -15,7 +15,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { signedUrl, uploadObject } from "@/lib/storage";
-import { zipToBytes, asciiFilePart, type ZipEntry } from "@/lib/zip";
+import { zipToBytes, type ZipEntry } from "@/lib/zip";
 import { collectEngagementArchive } from "@/lib/archive/download";
 import { logUserActivity } from "@/lib/db/activity";
 
@@ -53,9 +53,7 @@ export async function GET(
     return NextResponse.json({ error: "no_files" }, { status: 404 });
   }
 
-  const archiveName = `${asciiFilePart(bundle.engagementTitle)} - ${asciiFilePart(
-    bundle.clientName,
-  )}.zip`;
+  const archiveName = bundle.archiveName;
 
   await logUserActivity(firm.id, engagementId, "bulk_download", {
     file_count: bundle.files.length,
