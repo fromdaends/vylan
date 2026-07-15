@@ -17,6 +17,7 @@ export function ArchiveDownloadZipButton({
   preparingLabel,
   emptyLabel,
   failedLabel,
+  tooLargeLabel,
   variant = "outline",
   size = "sm",
   className,
@@ -26,6 +27,9 @@ export function ArchiveDownloadZipButton({
   preparingLabel: string;
   emptyLabel: string;
   failedLabel: string;
+  // Shown when the archive is too large to build in one file (413). Only the
+  // whole-client button can hit this; the per-engagement one never caps.
+  tooLargeLabel?: string;
   variant?: "outline" | "secondary" | "default" | "ghost";
   size?: "sm" | "default" | "icon-sm";
   className?: string;
@@ -38,7 +42,12 @@ export function ArchiveDownloadZipButton({
     try {
       const res = await fetch(endpoint);
       if (!res.ok) {
-        toast.error(res.status === 404 ? emptyLabel : failedLabel);
+        if (res.status === 413) {
+          // A long-lived, actionable message (steer to per-engagement ZIPs).
+          toast.error(tooLargeLabel ?? failedLabel, { duration: 8000 });
+        } else {
+          toast.error(res.status === 404 ? emptyLabel : failedLabel);
+        }
         return;
       }
       const data = (await res.json().catch(() => null)) as { url?: string } | null;

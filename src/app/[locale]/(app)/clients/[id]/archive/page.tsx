@@ -65,19 +65,32 @@ export default async function ClientArchivePage({
         ]}
       />
 
-      <header className="space-y-1">
-        <div className="flex items-center gap-2">
-          <FileText className="size-5 text-muted-foreground" />
-          <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <FileText className="size-5 text-muted-foreground" />
+            <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
+          </div>
+          <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
+          <p className="pt-1 text-sm text-foreground">
+            <span className="font-medium">{archive.client.displayName}</span>
+            <span className="text-muted-foreground">
+              {" · "}
+              {t("total_files", { count: archive.totalFiles })}
+            </span>
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">{t("subtitle")}</p>
-        <p className="pt-1 text-sm text-foreground">
-          <span className="font-medium">{archive.client.displayName}</span>
-          <span className="text-muted-foreground">
-            {" · "}
-            {t("total_files", { count: archive.totalFiles })}
-          </span>
-        </p>
+        {archive.totalFiles > 0 && (
+          <ArchiveDownloadZipButton
+            endpoint={`/api/clients/${archive.client.id}/archive`}
+            label={t("download_everything")}
+            preparingLabel={t("preparing")}
+            emptyLabel={t("download_empty")}
+            failedLabel={t("download_failed")}
+            tooLargeLabel={t("download_too_large")}
+            variant="default"
+          />
+        )}
       </header>
 
       {archive.engagements.length === 0 || archive.totalFiles === 0 ? (
