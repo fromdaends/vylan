@@ -26,7 +26,7 @@ import {
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
-import { Plus } from "lucide-react";
+import { Plus, FileText } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 
 export default async function ClientDetailPage({
@@ -108,6 +108,12 @@ export default async function ClientDetailPage({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Link href={`/clients/${client.id}/archive`}>
+            <Button variant="outline" size="sm">
+              <FileText className="size-4" />
+              {t("document_archive")}
+            </Button>
+          </Link>
           <ClientFormDialog mode="edit" locale={locale} client={client} />
           {client.archived_at ? (
             <form action={restoreClientAction}>

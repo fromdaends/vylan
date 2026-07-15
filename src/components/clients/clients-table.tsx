@@ -453,6 +453,11 @@ function RowActions({
             </DropdownMenuItem>
           }
         />
+        <DropdownMenuItem asChild>
+          <Link href={`/clients/${client.id}/archive`}>
+            {t("document_archive")}
+          </Link>
+        </DropdownMenuItem>
         {client.archived_at ? (
           <form action={restoreClientAction}>
             <input type="hidden" name="id" value={client.id} />

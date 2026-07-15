@@ -1,4 +1,21 @@
 {
+  "Archive": {
+    "title": "Document archive",
+    "subtitle": "Every file this client has sent or received, across all their engagements.",
+    "empty": "No documents yet. Files appear here as soon as this client uploads a document or you send a deliverable.",
+    "empty_engagement": "No files in this engagement yet.",
+    "archived": "Archived",
+    "cat_checklist": "Checklist documents",
+    "cat_signed": "Signed documents",
+    "cat_final": "Final documents",
+    "file_count": "{count, plural, =0 {No files} one {# file} other {# files}}",
+    "total_files": "{count, plural, =0 {No documents} one {# document} other {# documents}}",
+    "status_approved": "Approved",
+    "status_pending": "Pending",
+    "status_rejected": "Rejected",
+    "status_signed": "Signed",
+    "status_final": "Deliverable"
+  },
   "InviteAccept": {
     "join_title": "Join {firm}",
     "invited_by": "{inviter} invited you to join {firm} on Vylan.",
@@ -1071,6 +1088,7 @@
   "Clients": {
     "import_commit_failed": "Couldn't import the clients. Please try again.",
     "title": "Clients",
+    "document_archive": "Document archive",
     "count": "{count, plural, =0 {No clients} one {# client} other {# clients}}",
     "add_client": "Add client",
     "edit_client": "Edit client",
