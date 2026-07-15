@@ -530,7 +530,7 @@ export function AssistantPanel({
           <div className="absolute inset-0 flex flex-col">
             <div
               className={cn(
-                "flex-1 min-h-0 overflow-y-auto overscroll-contain",
+                "flex min-h-0 flex-1 flex-col",
                 tab !== "messages" && "hidden",
               )}
             >
