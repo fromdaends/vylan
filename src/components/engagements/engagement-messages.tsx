@@ -194,7 +194,7 @@ export function EngagementMessages({
 
   if (notActivated) {
     return (
-      <div className="py-4 text-sm text-muted-foreground">
+      <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
         {t("not_activated")}
       </div>
     );
@@ -213,40 +213,52 @@ export function EngagementMessages({
     new Date(clientLastReadAt).getTime() >=
       new Date(lastFirmMessage.created_at).getTime();
 
+  const placeholder = clientName
+    ? t("placeholder", { name: clientName })
+    : t("placeholder_generic");
+
+  // Full-height chat: a slim human banner up top, the thread filling every
+  // pixel of space (no bordered box, no dead area), and the composer docked
+  // at the bottom — an actual messaging surface, not a widget in a card. The
+  // human cues (banner "goes to your client", avatars + names on every
+  // bubble, "Seen") keep it unmistakable from the AI chat next door.
   return (
-    <div ref={rootRef} className="space-y-3">
-      {/* Human-to-human header: the client's name front and center, so this
-          surface can never be mistaken for the AI assistant. */}
-      <div className="space-y-0.5">
-        <h3 className="text-sm font-semibold text-foreground">
+    <div ref={rootRef} className="flex h-full min-h-0 flex-col">
+      {/* Slim banner — the standing reminder that this is the CLIENT, not the
+          AI. This is the surface's identity line. */}
+      <div className="shrink-0 border-b border-white/10 px-4 py-2.5">
+        <p className="text-[13px] font-semibold leading-tight text-foreground">
           {clientName
             ? t("thread_with", { name: clientName })
             : t("thread_title")}
-        </h3>
-        <p className="text-xs text-muted-foreground">{t("client_receives")}</p>
+        </p>
+        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+          {t("client_receives")}
+        </p>
       </div>
 
-      {messages.length === 0 && !loadedOnce ? (
-        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
-          <p className="text-sm text-muted-foreground">{t("loading")}</p>
-        </div>
-      ) : messages.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center">
-          <p className="text-sm font-medium text-foreground">
-            {t("empty_title")}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {clientName
-              ? t("empty_body", { name: clientName })
-              : t("empty_body_generic")}
-          </p>
-        </div>
-      ) : (
-        <div
-          ref={listRef}
-          className="max-h-[28rem] space-y-3 overflow-y-auto rounded-lg border border-border bg-card p-3"
-        >
-          {messages.map((m) => {
+      {/* The conversation — fills all remaining height and scrolls on its own. */}
+      <div
+        ref={listRef}
+        className="flex-1 min-h-0 space-y-3 overflow-y-auto px-4 py-4 [scrollbar-width:thin]"
+      >
+        {messages.length === 0 && !loadedOnce ? (
+          <div className="flex h-full items-center justify-center">
+            <p className="text-sm text-muted-foreground">{t("loading")}</p>
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center gap-1 px-6 text-center">
+            <p className="text-sm font-medium text-foreground">
+              {t("empty_title")}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {clientName
+                ? t("empty_body", { name: clientName })
+                : t("empty_body_generic")}
+            </p>
+          </div>
+        ) : (
+          messages.map((m) => {
             const mine = m.sender === "firm";
             return (
               <div
@@ -291,20 +303,23 @@ export function EngagementMessages({
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
 
+      {/* Docked composer (or the read-only note on a closed engagement). */}
       {readOnly ? (
-        <p className="rounded-lg bg-muted px-3 py-2 text-sm text-muted-foreground">
-          {readOnlyReason === "cancelled"
-            ? t("read_only_cancelled")
-            : readOnlyReason === "draft"
-              ? t("read_only_draft")
-              : t("read_only_complete")}
-        </p>
+        <div className="shrink-0 border-t border-white/10 px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            {readOnlyReason === "cancelled"
+              ? t("read_only_cancelled")
+              : readOnlyReason === "draft"
+                ? t("read_only_draft")
+                : t("read_only_complete")}
+          </p>
+        </div>
       ) : (
-        <div className="space-y-1.5">
+        <div className="shrink-0 border-t border-white/10 px-4 pt-3 pb-4">
           <div className="flex items-end gap-2">
             <Textarea
               value={draft}
@@ -312,30 +327,22 @@ export function EngagementMessages({
                 setDraft(e.target.value.slice(0, MAX_LENGTH));
                 setSendError(false);
               }}
-              placeholder={
-                clientName
-                  ? t("placeholder", { name: clientName })
-                  : t("placeholder_generic")
-              }
-              rows={2}
-              className="min-h-[3.25rem] flex-1 resize-y"
-              aria-label={
-                clientName
-                  ? t("placeholder", { name: clientName })
-                  : t("placeholder_generic")
-              }
+              placeholder={placeholder}
+              rows={1}
+              className="max-h-[140px] min-h-[44px] flex-1 resize-none rounded-2xl"
+              aria-label={placeholder}
             />
             <Button
               type="button"
               onClick={handleSend}
               disabled={sending || draft.trim().length === 0}
-              className="shrink-0"
+              className="shrink-0 rounded-full"
             >
               <Send className="size-4" aria-hidden />
               {sending ? t("sending") : t("send")}
             </Button>
           </div>
-          <div className="flex items-center justify-between gap-2">
+          <div className="mt-1.5 flex items-center justify-between gap-2 px-1">
             <p
               className={cn(
                 "text-xs text-destructive",
