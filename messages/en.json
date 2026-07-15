@@ -16,7 +16,7 @@
     "status_signed": "Signed",
     "status_final": "Deliverable",
     "download": "Download",
-    "download_everything": "Download everything (ZIP)",
+    "download_everything": "Download",
     "preparing": "Preparing…",
     "download_empty": "There are no documents to download here yet.",
     "download_failed": "Couldn't prepare the download. Please try again.",
@@ -1094,7 +1094,7 @@
   "Clients": {
     "import_commit_failed": "Couldn't import the clients. Please try again.",
     "title": "Clients",
-    "document_archive": "Document archive",
+    "document_archive": "Documents",
     "count": "{count, plural, =0 {No clients} one {# client} other {# clients}}",
     "add_client": "Add client",
     "edit_client": "Edit client",

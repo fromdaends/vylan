@@ -16,7 +16,7 @@
     "status_signed": "Signé",
     "status_final": "Livrable",
     "download": "Télécharger",
-    "download_everything": "Tout télécharger (ZIP)",
+    "download_everything": "Télécharger",
     "preparing": "Préparation…",
     "download_empty": "Aucun document à télécharger ici pour l'instant.",
     "download_failed": "Impossible de préparer le téléchargement. Veuillez réessayer.",
@@ -1094,7 +1094,7 @@
   "Clients": {
     "import_commit_failed": "Impossible d'importer les clients. Veuillez réessayer.",
     "title": "Clients",
-    "document_archive": "Archives de documents",
+    "document_archive": "Documents",
     "count": "{count, plural, =0 {Aucun client} one {# client} other {# clients}}",
     "add_client": "Ajouter un client",
     "edit_client": "Modifier le client",
