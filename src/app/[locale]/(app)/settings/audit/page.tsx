@@ -202,6 +202,20 @@ function AuditRow({
       </li>
     );
   }
+  // Firm-wide rows not tied to an engagement (e.g. client_reassigned) link to
+  // the client instead, when one was resolved from metadata.
+  if (entry.client_id) {
+    return (
+      <li>
+        <Link
+          href={`/clients/${entry.client_id}`}
+          className="block hover:bg-secondary/40 transition-colors"
+        >
+          {body}
+        </Link>
+      </li>
+    );
+  }
   return <li>{body}</li>;
 }
 
