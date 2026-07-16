@@ -63,6 +63,22 @@
   --icon-cyan: oklch(0.56 0.13 215);
   --icon-rose: oklch(0.58 0.2 14);
 
+  /* Engagement workflow stages. Their own token set rather than reusing the
+     icon hues: these six carry MEANING (a stage chip's colour is how the
+     accountant reads position at a glance), so they need to be tunable per
+     stage without moving a nav icon, and they need one more hue than the icon
+     set has. Same per-theme discipline — deeper in light, brighter on
+     near-black — so a chip's 15% tint reads on both.
+     review (amber, hue ~78) and payment (orange, hue ~42) are the pair most at
+     risk of blurring together on adjacent rows, so they're held ~36 hue apart
+     and given different chroma rather than being near-neighbours. */
+  --stage-collecting: oklch(0.55 0.18 255);   /* blue */
+  --stage-review: oklch(0.65 0.15 78);        /* amber */
+  --stage-preparation: oklch(0.52 0.21 295);  /* violet */
+  --stage-signature: oklch(0.56 0.13 215);    /* cyan */
+  --stage-payment: oklch(0.62 0.18 42);       /* orange */
+  --stage-completed: oklch(0.55 0.15 162);    /* green */
+
   --radius: 0.625rem;
 }
 
@@ -115,6 +131,14 @@
   --icon-amber: oklch(0.82 0.15 80);
   --icon-cyan: oklch(0.77 0.13 205);
   --icon-rose: oklch(0.72 0.19 12);
+
+  /* Stage hues, lifted for the near-black surface (see the light block). */
+  --stage-collecting: oklch(0.70 0.17 252);   /* blue */
+  --stage-review: oklch(0.82 0.14 85);        /* amber */
+  --stage-preparation: oklch(0.71 0.2 295);   /* violet */
+  --stage-signature: oklch(0.77 0.13 205);    /* cyan */
+  --stage-payment: oklch(0.76 0.17 48);       /* orange */
+  --stage-completed: oklch(0.75 0.16 162);    /* green */
 }
 
 @theme inline {
@@ -161,6 +185,13 @@
   --color-icon-amber: var(--icon-amber);
   --color-icon-cyan: var(--icon-cyan);
   --color-icon-rose: var(--icon-rose);
+
+  --color-stage-collecting: var(--stage-collecting);
+  --color-stage-review: var(--stage-review);
+  --color-stage-preparation: var(--stage-preparation);
+  --color-stage-signature: var(--stage-signature);
+  --color-stage-payment: var(--stage-payment);
+  --color-stage-completed: var(--stage-completed);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

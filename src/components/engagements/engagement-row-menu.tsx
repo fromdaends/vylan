@@ -8,6 +8,7 @@ import {
   Archive,
   ArchiveRestore,
   ExternalLink,
+  Milestone,
   RotateCcw,
   Trash2,
   type LucideIcon,
@@ -32,17 +33,38 @@ import {
   rowMenuItemKeys,
   type EngagementLifecycleState,
 } from "@/lib/engagements/lifecycle";
+import {
+  ENGAGEMENT_STAGES,
+  STAGE_BG_CLASS,
+  stageLabelKey,
+  type EngagementStage,
+} from "@/lib/engagements/stage";
+import { useStageOverride } from "./use-stage-override";
 
 // Re-exported from the pure lifecycle module so the worklist row imports the
 // state type from one place; the menu's option logic lives there too.
 export type { EngagementLifecycleState };
 
+export type RowMenuSubItem = {
+  key: string;
+  label: string;
+  // Tailwind background class for the leading colour dot (stage hues).
+  dotClass?: string;
+  checked?: boolean;
+  onSelect: () => void;
+};
+
 export type RowMenuItem = {
   key: string;
   label: string;
   icon: LucideIcon;
-  onSelect: () => void;
+  // Absent on a submenu item — the parent only opens the child list.
+  onSelect?: () => void;
   variant?: "default" | "destructive";
+  // When present the item is a SUBMENU (the Stage picker). Both renderers —
+  // the "..." dropdown and the right-click context menu — branch on this, so
+  // the two surfaces stay identical without either knowing what a stage is.
+  submenu?: RowMenuSubItem[];
 };
 
 function idForm(id: string): FormData {
@@ -65,16 +87,22 @@ export function useEngagementRowMenu(args: {
   title: string;
   state: EngagementLifecycleState;
   canDelete: boolean;
+  // The engagement's current workflow stage, when it has one. Drives the Stage
+  // submenu; absent (a draft / cancelled engagement, or before migration 0690)
+  // means no stage item is offered — there's no workflow position to change.
+  stage?: EngagementStage | null;
   // When provided (the worklist table), a lifecycle action removes the row
   // from the list instantly and runs the server action itself; the menu just
   // shows the undo toast right away. Without it (e.g. the Needs-attention
   // rows), the menu fires the action and toasts on completion as before.
   runOptimistic?: (id: string, action: () => Promise<unknown>) => void;
 }): { items: RowMenuItem[]; dialog: ReactNode } {
-  const { engagementId, title, state, canDelete, runOptimistic } = args;
+  const { engagementId, title, state, canDelete, stage, runOptimistic } = args;
   const t = useTranslations("Engagements");
+  const tStage = useTranslations("Stage");
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const { setStage } = useStageOverride(engagementId);
 
   // Optimistic path: drop the row now + toast now, the server catches up.
   // Fallback path: fire the action, then toast on completion.
@@ -143,6 +171,29 @@ export function useEngagementRowMenu(args: {
     onSelect: () => setConfirmOpen(true),
   };
 
+  // The Stage picker. Every stage is offered, not just the ones this engagement
+  // structurally has: it's an OVERRIDE, so parking an engagement somewhere its
+  // contents don't justify is the point — and the next automatic event
+  // re-resolves it from reality anyway. (The header stepper, which has the full
+  // facts, does hide inapplicable stages; that's a progress display, not a
+  // control.)
+  const stageItem: RowMenuItem | null = stage
+    ? {
+        key: "stage",
+        label: tStage("change"),
+        icon: Milestone,
+        submenu: ENGAGEMENT_STAGES.map((s) => ({
+          key: s,
+          label: tStage(stageLabelKey(s)),
+          dotClass: STAGE_BG_CLASS[s],
+          checked: s === stage,
+          onSelect: () => {
+            if (s !== stage) setStage(s);
+          },
+        })),
+      }
+    : null;
+
   const byKey: Record<string, RowMenuItem> = {
     open,
     archive,
@@ -153,6 +204,11 @@ export function useEngagementRowMenu(args: {
   const items: RowMenuItem[] = rowMenuItemKeys(state, canDelete).map(
     (k) => byKey[k],
   );
+  // Spliced in after Open rather than added to rowMenuItemKeys: that module is
+  // about LIFECYCLE (archive / delete / restore), and a stage is a different
+  // axis entirely. Keeping it out of there leaves the tested lifecycle rules
+  // untouched by a concern they don't own.
+  if (stageItem) items.splice(1, 0, stageItem);
 
   const confirmDelete = () => {
     setConfirmOpen(false);

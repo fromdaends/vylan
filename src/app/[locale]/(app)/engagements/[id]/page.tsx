@@ -101,6 +101,12 @@ import {
   deriveEngagementStatus,
 } from "@/lib/attention";
 import { engagementStatusPillClass } from "@/lib/engagements/status-pill";
+import {
+  applicableStages,
+  parseStageHistory,
+  stageEnteredAt,
+} from "@/lib/engagements/stage";
+import { StageStepper } from "@/components/engagements/stage-stepper";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { SetEngagementDetailView } from "@/components/app/active-nav-context";
@@ -398,6 +404,29 @@ export default async function EngagementDetailPage({
   const derivedStatus = deriveEngagementStatus(engagement.status, attention);
   const view = engagementToView(engagement, { readyToReview });
 
+  // Workflow stage (migration 0690). The stage itself is READ, never resolved
+  // here — the event handlers keep it fresh (lib/engagements/stage-sync), so the
+  // page just renders what's stored. undefined pre-migration, or null for a
+  // draft / cancelled engagement, in which case the header keeps its status pill
+  // and no stepper renders.
+  const stage = engagement.stage ?? null;
+  // Which nodes the stepper draws: the skip logic. An engagement with no
+  // signature items never shows Awaiting signature; one with no live invoice
+  // never shows Awaiting payment. A cancelled (waived) invoice doesn't count —
+  // nothing is owed, so that stage will never be reached. `stage` is passed so a
+  // manual override to a stage this engagement has no structural claim to still
+  // draws the node it's standing on.
+  const stepperStages = applicableStages(
+    {
+      hasSignatureItems: items.some((i) => i.kind === "signature"),
+      hasInvoice: latestPayment != null && latestPayment.status !== "canceled",
+    },
+    stage,
+  );
+  // When each stage was entered, for the stepper's hover tooltips. Sparse: an
+  // engagement backfilled by 0690 only knows its current stage.
+  const stageEntered = stageEnteredAt(parseStageHistory(engagement.stage_history));
+
   // Client portal URL — used by the "Copy payment link" button when a payment is
   // requested. (The client-link copy in the header 3-dots menu builds its own
   // origin-aware URL from the magic token.)
@@ -458,12 +487,19 @@ export default async function EngagementDetailPage({
             {engagement.title}
           </h1>
           <div className="flex items-center gap-2 mt-2.5 text-sm flex-wrap">
-            <Badge
-              variant={statusVariant(derivedStatus)}
-              className={engagementStatusPillClass(derivedStatus)}
-            >
-              {tStatus(derivedStatus)}
-            </Badge>
+            {/* No workflow position (a draft or cancelled engagement, or an
+                environment where migration 0690 hasn't been applied) → the
+                status pill stays exactly as before. A live engagement's
+                position is shown by the stepper below instead: it says
+                everything this pill did and more. */}
+            {!stage && (
+              <Badge
+                variant={statusVariant(derivedStatus)}
+                className={engagementStatusPillClass(derivedStatus)}
+              >
+                {tStatus(derivedStatus)}
+              </Badge>
+            )}
             {client && (
               <Link
                 href={`/clients/${client.id}`}
@@ -499,6 +535,21 @@ export default async function EngagementDetailPage({
               </Badge>
             )}
           </div>
+          {/* Workflow stage. Its own row rather than inline above: six nodes
+              need horizontal room, and crowding them against the client link +
+              due date would squeeze both. No card around it — thin line, open
+              layout, per the house style. */}
+          {stage && (
+            <div className="mt-3">
+              <StageStepper
+                engagementId={engagement.id}
+                stages={stepperStages}
+                current={stage}
+                enteredAt={stageEntered}
+                locale={locale}
+              />
+            </div>
+          )}
           {/* Assigned to — accountability control (reassign to any active member). */}
           {teamEnabled && (
             <div className="mt-3">

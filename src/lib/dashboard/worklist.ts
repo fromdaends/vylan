@@ -178,6 +178,11 @@ export const loadEngagementWorklist = cache(
         archivedAt: e.archived_at,
         deletedAt: e.deleted_at,
         paymentStatus: paymentByEng.get(e.id)?.status ?? null,
+        // Workflow stage (0690). Read straight off the row — it's kept fresh by
+        // the event handlers (see lib/engagements/stage-sync), so no per-row
+        // resolution work happens here. undefined pre-migration → the Status
+        // column falls back to the derived status pill.
+        stage: e.stage ?? null,
       } satisfies WorklistRow;
     });
   },
