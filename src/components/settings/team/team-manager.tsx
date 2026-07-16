@@ -82,6 +82,8 @@ function useErrorMessage() {
         return t("error_seat_limit", { cap: cap ?? 0 });
       case "email_exists":
         return t("error_email_exists");
+      case "already_member":
+        return t("error_already_member");
       case "already_invited":
         return t("error_already_invited");
       case "invalid_email":

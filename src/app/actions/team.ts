@@ -36,6 +36,7 @@ import {
   parseInviteEmail,
   parseAcceptInput,
   resolveInviteAccess,
+  canSwitchFromCurrentFirm,
 } from "@/lib/team/invites";
 
 // The team list (built in Phase 6) lives here; revalidating it keeps the
@@ -65,14 +66,16 @@ export type CreateInviteResult =
         | "invalid_email"
         | "seat_limit"
         | "email_exists"
+        | "already_member"
         | "already_invited"
         | "insert_failed";
       cap?: number;
     };
 
-// Owner-only. Validate email -> seat check -> "not already a Vylan user" ->
+// Owner-only. Validate email -> seat check -> "not already in THIS firm" ->
 // no duplicate live invite -> mint token, store its hash, insert -> email ->
-// log. The raw token is emailed once and never persisted.
+// log. The raw token is emailed once and never persisted. An email that belongs
+// to an account in ANOTHER firm is allowed — they "switch over" on accept.
 export async function createInvite(
   formData: FormData,
 ): Promise<CreateInviteResult> {
@@ -101,14 +104,20 @@ export async function createInvite(
 
   const admin = getServiceRoleSupabase();
 
-  // Cannot invite an email already tied to ANY Vylan account (email is globally
-  // unique on users; citext makes this case-insensitive).
+  // An email tied to an account in ANOTHER firm is allowed — accepting the
+  // invite "switches" that account into this firm (handled by
+  // switchFirmViaInvite). The only block is an email already in THIS firm
+  // (active or deactivated): that's a roster action (reactivate), not a new
+  // invite. Email is globally unique on users; citext makes this match
+  // case-insensitive.
   const { data: existingUser } = await admin
     .from("users")
-    .select("id")
+    .select("id, firm_id")
     .eq("email", email)
     .maybeSingle();
-  if (existingUser) return { ok: false, error: "email_exists" };
+  if (existingUser && existingUser.firm_id === firm.id) {
+    return { ok: false, error: "already_member" };
+  }
 
   // Don't stack duplicate live invites for the same firm + email — each would
   // consume a seat. The owner should resend/revoke the existing one instead.
@@ -427,6 +436,143 @@ export async function acceptInvite(
     console.error("[team] acceptInvite sign-in failed:", signInErr.message);
     redirect(localPath(locale, "/login"));
   }
+  redirect(localPath(locale, "/dashboard"));
+}
+
+// --- Switch-over flow (existing account joins via invite) --------------------
+
+export type SwitchFirmState = {
+  // Maps to InviteAccept.errors.* in the UI.
+  error?:
+    | "not_found"
+    | "expired"
+    | "accepted"
+    | "revoked"
+    | "seat_full"
+    | "bad_password"
+    | "wrong_account"
+    | "already_member"
+    | "owns_team"
+    | "switch_failed"
+    | "rate_limited"
+    | "invalid";
+} | null;
+
+// An EXISTING Vylan account accepts an invite by "switching over": they prove
+// identity with their password, then their account MOVES into the invite's firm
+// as staff. Their old firm's data stays behind (they lose access to it) — the
+// single-firm model means one account = one firm. Guarded so an owner can't
+// strand a team by switching. On success this never returns — it redirects.
+export async function switchFirmViaInvite(
+  _prev: SwitchFirmState,
+  formData: FormData,
+): Promise<SwitchFirmState> {
+  const ip = await clientIp();
+  const rl = await checkRateLimit({
+    key: `invite-switch:ip:${ip}`,
+    ...SIGNUP_LIMIT,
+  });
+  if (!rl.ok) return { error: "rate_limited" };
+
+  const token = String(formData.get("token") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const locale = localeFrom(formData.get("locale"), "fr");
+  if (!token || !password) return { error: "invalid" };
+
+  const admin = getServiceRoleSupabase();
+
+  // Look up by token hash; re-run the same access decision the page used.
+  const { data: invite } = await admin
+    .from("firm_invites")
+    .select("id, firm_id, email, accepted_at, revoked_at, expires_at")
+    .eq("token_hash", hashInviteToken(token))
+    .maybeSingle();
+  const usage = invite ? await getFirmSeatUsage(invite.firm_id) : null;
+  const access = resolveInviteAccess(
+    invite ?? null,
+    usage ? hasRoomForMember(usage) : false,
+  );
+  if (access !== "ok" || !invite) {
+    return { error: access === "ok" ? "not_found" : access };
+  }
+
+  // This flow is only for an email that ALREADY has an account.
+  const { data: existing } = await admin
+    .from("users")
+    .select("id, firm_id, role")
+    .eq("email", invite.email)
+    .maybeSingle();
+  if (!existing) return { error: "wrong_account" };
+  if (existing.firm_id === invite.firm_id) return { error: "already_member" };
+
+  // Verify identity by signing in as the invited email — this also sets the
+  // session we redirect with.
+  const supabase = await getServerSupabase();
+  const { data: signIn, error: signInErr } =
+    await supabase.auth.signInWithPassword({
+      email: invite.email as string,
+      password,
+    });
+  if (signInErr || !signIn.user) return { error: "bad_password" };
+  // The credentials must belong to the invited account (belt-and-suspenders).
+  if (signIn.user.id !== existing.id) return { error: "wrong_account" };
+
+  // Guardrail: an owner may only leave if no one is stranded in the old firm.
+  const nowIso = new Date().toISOString();
+  const [otherMembers, livePending] = await Promise.all([
+    admin
+      .from("users")
+      .select("id", { count: "exact", head: true })
+      .eq("firm_id", existing.firm_id)
+      .is("deactivated_at", null)
+      .neq("id", existing.id),
+    admin
+      .from("firm_invites")
+      .select("id", { count: "exact", head: true })
+      .eq("firm_id", existing.firm_id)
+      .is("accepted_at", null)
+      .is("revoked_at", null)
+      .gt("expires_at", nowIso),
+  ]);
+  const guard = canSwitchFromCurrentFirm({
+    role: existing.role,
+    otherActiveMembers: otherMembers.count ?? 0,
+    pendingInvites: livePending.count ?? 0,
+  });
+  if (!guard.ok) return { error: guard.reason };
+
+  const oldFirmId = existing.firm_id;
+  // Move the account into the invite's firm as staff.
+  const { error: moveErr } = await admin
+    .from("users")
+    .update({ firm_id: invite.firm_id, role: "staff" })
+    .eq("id", existing.id);
+  if (moveErr) {
+    console.error("[team] switchFirmViaInvite move failed:", moveErr.message);
+    return { error: "switch_failed" };
+  }
+
+  // Mark the invite accepted (guarded against a double-accept).
+  await admin
+    .from("firm_invites")
+    .update({
+      accepted_at: new Date().toISOString(),
+      accepted_by_user_id: existing.id,
+    })
+    .eq("id", invite.id)
+    .is("accepted_at", null);
+
+  // Log the join in the NEW firm via the service role (RLS scoping is mid-flip).
+  await admin.from("activity_log").insert({
+    firm_id: invite.firm_id,
+    engagement_id: null,
+    actor_type: "user",
+    actor_id: existing.id,
+    action: "invite_accepted",
+    metadata: { invite_id: invite.id, switched_from_firm_id: oldFirmId },
+  });
+
+  revalidatePath("/", "layout");
   redirect(localPath(locale, "/dashboard"));
 }
 
