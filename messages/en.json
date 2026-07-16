@@ -1786,7 +1786,15 @@
     "stepper_label": "Engagement stage",
     "set_error": "Could not change the stage. Try again.",
     "changed_toast": "Stage set to {stage}",
-    "preparation_started_toast": "Preparation started"
+    "preparation_started_toast": "Preparation started",
+    "filter_label": "Filter by stage",
+    "filter_all": "All",
+    "filter_chip": "{label} ({count})",
+    "filter_cleared": "Showing all stages",
+    "sort_by_stage": "Sort by stage",
+    "sort_stage_asc": "Sorted by stage, earliest first",
+    "sort_stage_desc": "Sorted by stage, furthest along first",
+    "empty_for_stage": "No active engagements at this stage."
   },
   "Pricing": {
     "title": "Simple, flat pricing",

@@ -1786,7 +1786,15 @@
     "stepper_label": "Étape du mandat",
     "set_error": "Impossible de changer l'étape. Réessayez.",
     "changed_toast": "Étape définie à « {stage} »",
-    "preparation_started_toast": "Préparation commencée"
+    "preparation_started_toast": "Préparation commencée",
+    "filter_label": "Filtrer par étape",
+    "filter_all": "Toutes",
+    "filter_chip": "{label} ({count})",
+    "filter_cleared": "Toutes les étapes affichées",
+    "sort_by_stage": "Trier par étape",
+    "sort_stage_asc": "Trié par étape, du début à la fin",
+    "sort_stage_desc": "Trié par étape, les plus avancés d'abord",
+    "empty_for_stage": "Aucun mandat actif à cette étape."
   },
   "Pricing": {
     "title": "Tarification simple et claire",

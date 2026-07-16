@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Check,
   Clock,
   FileWarning,
@@ -57,6 +60,7 @@ import {
   READY_PILL_CLASS,
 } from "@/lib/engagements/status-pill";
 import type { EngagementStage } from "@/lib/engagements/stage";
+import type { StageSortDir } from "@/lib/engagements/stage-filter";
 import { StageChip } from "@/components/engagements/stage-chip";
 
 export type EngagementStatus =
@@ -304,6 +308,8 @@ export function WorklistTable({
   countdownFor,
   growNameColumn = false,
   teamEnabled = true,
+  statusSort = null,
+  onStatusSortToggle,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -312,6 +318,13 @@ export function WorklistTable({
   // Optional per-row caption (e.g. the Recently Deleted "deleted in N days"
   // countdown). Returns null for rows that shouldn't show one.
   countdownFor?: (row: WorklistRow) => string | null;
+  // Stage sorting, opt-in. Passing onStatusSortToggle is what makes the Status
+  // header a control at all — without it the header is the plain label every
+  // other caller (the Overview, the other sub-pages) has always rendered. This
+  // component never sorts: the caller owns the order of `rows` (as it already
+  // does for recency), and these props only draw the current state.
+  statusSort?: StageSortDir | null;
+  onStatusSortToggle?: () => void;
   // On the WIDE Overview (>=1800px viewport) only, let the Engagement (name)
   // column absorb the extra horizontal space so the other columns stay at their
   // natural widths instead of drifting apart. Below 1800px — and on any table
@@ -323,6 +336,7 @@ export function WorklistTable({
   const tStatus = useTranslations("Status");
   const tAttention = useTranslations("Attention");
   const tEng = useTranslations("Engagements");
+  const tStage = useTranslations("Stage");
 
   // Optimistic removal: archiving / deleting a row drops it from the list
   // instantly. `removedIds` is a client-only overlay — once the server action
@@ -386,7 +400,45 @@ export function WorklistTable({
             <TableHead className="hidden px-4 md:table-cell">
               {t("wl_col_progress")}
             </TableHead>
-            <TableHead className="px-4">{t("wl_col_status")}</TableHead>
+            {/* Sortable ONLY where a caller opts in by passing the toggle (the
+                Active engagements view). Everywhere else — the Overview, and
+                every other All-Engagements sub-page — the header stays the
+                plain label it has always been. */}
+            <TableHead
+              className="px-4"
+              aria-sort={
+                !onStatusSortToggle
+                  ? undefined
+                  : statusSort === "asc"
+                    ? "ascending"
+                    : statusSort === "desc"
+                      ? "descending"
+                      : "none"
+              }
+            >
+              {onStatusSortToggle ? (
+                <button
+                  type="button"
+                  onClick={onStatusSortToggle}
+                  // Communicates the CURRENT state to assistive tech, which is
+                  // what aria-sort is for; the visible arrow does the same job
+                  // for everyone else.
+                  aria-label={tStage("sort_by_stage")}
+                  className="-mx-1 inline-flex items-center gap-1 rounded px-1 py-0.5 font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {t("wl_col_status")}
+                  {statusSort === "asc" ? (
+                    <ArrowUp className="size-3.5" aria-hidden />
+                  ) : statusSort === "desc" ? (
+                    <ArrowDown className="size-3.5" aria-hidden />
+                  ) : (
+                    <ArrowUpDown className="size-3.5 opacity-40" aria-hidden />
+                  )}
+                </button>
+              ) : (
+                t("wl_col_status")
+              )}
+            </TableHead>
             <TableHead className="w-10 px-2">
               <span className="sr-only">{tEng("menu_actions")}</span>
             </TableHead>
