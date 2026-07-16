@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Search, Users } from "lucide-react";
-import { Link, usePathname } from "@/i18n/navigation";
+// useSearchParams is locale-agnostic, so it comes from next/navigation — but the
+// ROUTER must be the i18n one. usePathname (i18n) returns a locale-STRIPPED path
+// ("/engagements"), and feeding that to next/navigation's router navigates to the
+// literal path, which under localePrefix:"as-needed" IS the default locale — so a
+// French accountant clicking a filter chip gets thrown back into English. The
+// i18n router re-applies the current locale prefix.
+import { useSearchParams } from "next/navigation";
+import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -23,6 +30,20 @@ import {
   viewLabelKey,
   type EngagementView,
 } from "@/lib/engagements/views";
+import type { EngagementStage } from "@/lib/engagements/stage";
+import {
+  DIR_PARAM,
+  SORT_PARAM,
+  SORT_STAGE,
+  STAGE_PARAM,
+  countByStage,
+  filterRowsByStage,
+  nextStageSort,
+  parseStageFilter,
+  parseStageSort,
+  sortRowsByStage,
+} from "@/lib/engagements/stage-filter";
+import { StageFilterChips } from "./stage-filter-chips";
 import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
 
@@ -50,8 +71,55 @@ export function EngagementsView({
 }) {
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
+  const tStage = useTranslations("Stage");
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [, startUrlTransition] = useTransition();
   const [query, setQuery] = useState("");
+
+  // Stage filter + stage sort live in the URL, not in component state, so a
+  // filtered view can be bookmarked and shared, and so it survives opening an
+  // engagement and coming back (the browser restores the query string). Only
+  // the Active view offers them — an engagement's stage is a property of live
+  // work, so filtering the Drafts or Cancelled lists by it would be noise.
+  const stageFilteringOn = view === "active";
+  const stageFilter = stageFilteringOn
+    ? parseStageFilter(searchParams?.get(STAGE_PARAM))
+    : null;
+  const stageSort = stageFilteringOn
+    ? parseStageSort(searchParams?.get(SORT_PARAM), searchParams?.get(DIR_PARAM))
+    : null;
+
+  // Write the query string. Mirrors the app's existing URL-filter pattern
+  // (clients-toolbar): replace, not push, so the Back button leaves the page
+  // rather than stepping back through every chip the accountant tried — and so
+  // the URL captured when they open an engagement is the filtered one.
+  function setParams(next: Record<string, string | null>) {
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    for (const [key, value] of Object.entries(next)) {
+      if (value === null || value === "") params.delete(key);
+      else params.set(key, value);
+    }
+    const qs = params.toString();
+    startUrlTransition(() => {
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    });
+  }
+
+  const selectStage = (stage: EngagementStage | null) =>
+    setParams({ [STAGE_PARAM]: stage });
+
+  const toggleStageSort = () => {
+    const next = nextStageSort(stageSort);
+    setParams({
+      [SORT_PARAM]: next ? SORT_STAGE : null,
+      // Drop the direction with the sort key — a lone ?dir= means nothing and
+      // parseStageSort ignores it anyway, so leaving it would be litter in a
+      // URL people are meant to share.
+      [DIR_PARAM]: next,
+    });
+  };
   // My/All engagements — mirrors the clients owner filter. Defaults to the
   // accountant's OWN work ("mine") when they're assigned at least one in this
   // view, else "all" so the list is never mysteriously empty. The choice is
@@ -86,7 +154,11 @@ export function EngagementsView({
   };
 
   const q = query.trim().toLowerCase();
-  const visible = useMemo(() => {
+
+  // Everything EXCEPT the stage filter: search + the my/all scope. This is what
+  // the chip counts are computed from, so each count is exactly what clicking
+  // that chip would reveal — and picking one chip doesn't zero all the others.
+  const beforeStageFilter = useMemo(() => {
     let base =
       q !== ""
         ? rows.filter(
@@ -98,8 +170,23 @@ export function EngagementsView({
     if (teamEnabled && scope === "mine") {
       base = selectAssignedTo(base, currentUserId);
     }
-    return [...base].sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
+    return base;
   }, [rows, q, scope, currentUserId, teamEnabled]);
+
+  const stageCounts = useMemo(
+    () => countByStage(beforeStageFilter),
+    [beforeStageFilter],
+  );
+
+  const visible = useMemo(() => {
+    const filtered = filterRowsByStage(beforeStageFilter, stageFilter);
+    // Stage sort when asked for, otherwise the table's long-standing default:
+    // newest first. sortRowsByStage breaks its own ties by recency too, so the
+    // two orders agree inside a stage instead of scrambling.
+    return stageSort
+      ? sortRowsByStage(filtered, stageSort)
+      : [...filtered].sort((a, b) => b.recencyAt.localeCompare(a.recencyAt));
+  }, [beforeStageFilter, stageFilter, stageSort]);
 
   const badgeFor = (v: EngagementView): number | null => {
     if (v === "ready" && badges.ready > 0) return badges.ready;
@@ -200,13 +287,36 @@ export function EngagementsView({
         </div>
       </div>
 
+      {/* Stage filter — Active only. Sits between the search and the table, on
+          its own line with no container: the chips ARE the affordance. */}
+      {stageFilteringOn && (
+        <StageFilterChips
+          counts={stageCounts}
+          selected={stageFilter}
+          onSelect={selectStage}
+        />
+      )}
+
       <WorklistTable
         rows={visible}
         locale={locale}
-        emptyText={q !== "" ? tDash("wl_empty_search") : t(`view_${view}_empty`)}
+        emptyText={
+          q !== ""
+            ? tDash("wl_empty_search")
+            : // A stage filter hiding everything is a DIFFERENT empty than "you
+              // have no active engagements" — say which, or the accountant is
+              // left wondering where their work went.
+              stageFilter
+              ? tStage("empty_for_stage")
+              : t(`view_${view}_empty`)
+        }
         canDelete={canDelete}
         growNameColumn
         teamEnabled={teamEnabled}
+        // Opt in to the sortable Status header. Only this view passes these, so
+        // every other table (the Overview included) keeps its plain header.
+        statusSort={stageFilteringOn ? stageSort : null}
+        onStatusSortToggle={stageFilteringOn ? toggleStageSort : undefined}
         countdownFor={
           view === "deleted"
             ? (r) =>

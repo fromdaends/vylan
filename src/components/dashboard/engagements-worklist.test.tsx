@@ -8,7 +8,11 @@ import {
   cleanup,
 } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { EngagementsWorklist, type WorklistRow } from "./engagements-worklist";
+import {
+  EngagementsWorklist,
+  WorklistTable,
+  type WorklistRow,
+} from "./engagements-worklist";
 import en from "../../../messages/en.json";
 
 // Stub the locale-aware <Link> (needs next/navigation, absent under vitest)
@@ -431,5 +435,62 @@ describe("status column — workflow stage", () => {
     expect(
       screen.queryByRole("menuitem", { name: en.Stage.change }),
     ).not.toBeInTheDocument();
+  });
+});
+
+// The Status header is a CONTROL only where a caller opts in. The Overview and
+// every other sub-page must keep the plain label they've always had.
+describe("status column — sortable header (opt-in)", () => {
+  function renderTable(props: Record<string, unknown> = {}) {
+    const { container } = render(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <WorklistTable
+          rows={[row({ id: "s1", title: "Stage Row", stage: "in_review" })]}
+          locale="en"
+          emptyText="none"
+          {...props}
+        />
+      </NextIntlClientProvider>,
+    );
+    return within(container);
+  }
+
+  it("renders a plain header when no toggle is passed (the Overview)", () => {
+    const q = renderTable();
+    expect(
+      q.queryByRole("button", { name: en.Stage.sort_by_stage }),
+    ).not.toBeInTheDocument();
+    // No sort semantics announced either — there is nothing to sort by.
+    expect(q.getByText(en.Dashboard.wl_col_status).closest("th"))
+      .not.toHaveAttribute("aria-sort");
+  });
+
+  it("becomes a button when a toggle IS passed (the Active view)", () => {
+    const onStatusSortToggle = vi.fn();
+    const q = renderTable({ onStatusSortToggle });
+    const btn = q.getByRole("button", { name: en.Stage.sort_by_stage });
+    fireEvent.click(btn);
+    expect(onStatusSortToggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("announces the current sort to assistive tech", () => {
+    const onStatusSortToggle = vi.fn();
+    expect(
+      renderTable({ onStatusSortToggle, statusSort: null })
+        .getByRole("button", { name: en.Stage.sort_by_stage })
+        .closest("th"),
+    ).toHaveAttribute("aria-sort", "none");
+    cleanup();
+    expect(
+      renderTable({ onStatusSortToggle, statusSort: "asc" })
+        .getByRole("button", { name: en.Stage.sort_by_stage })
+        .closest("th"),
+    ).toHaveAttribute("aria-sort", "ascending");
+    cleanup();
+    expect(
+      renderTable({ onStatusSortToggle, statusSort: "desc" })
+        .getByRole("button", { name: en.Stage.sort_by_stage })
+        .closest("th"),
+    ).toHaveAttribute("aria-sort", "descending");
   });
 });
