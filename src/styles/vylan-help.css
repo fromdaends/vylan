@@ -40,8 +40,8 @@
   --vyh-tint: #f5f7fc;
   --vyh-chip: #eaeffb;
 
-  /* The arc height where blue meets white. One number, used twice. */
-  --vyh-curve: 88px;
+  /* Depth of the arc at its centre, where blue meets white. */
+  --vyh-curve: 96px;
 }
 
 /* ---------- Hero ---------- */
@@ -49,12 +49,13 @@
 .vyh-hero {
   position: relative;
   z-index: 5;
-  /* Top clears the fixed .vy-brand (top: 24px, 28px type). */
-  padding: 148px 24px 78px;
+  /* Top clears the fixed .vy-brand (top: 24px, 28px type). Bottom is modest
+     because the arc below adds its own depth to the blue. */
+  padding: 148px 24px 52px;
   text-align: center;
 }
 .vyh-hero-compact {
-  padding: 132px 24px 60px;
+  padding: 132px 24px 40px;
 }
 
 .vyh-title {
@@ -252,25 +253,33 @@
   z-index: 4;
   background: var(--vyh-sheet);
   color: var(--vyh-ink);
-  padding: 66px 24px 96px;
-  /* Room for the arc that overlays the top edge. */
-  margin-top: var(--vyh-curve);
+  /* Top padding clears the arc, which is painted OVER this sheet. */
+  padding: calc(var(--vyh-curve) + 44px) 24px 96px;
 }
 
-/* The blue arc. Sits ON the sheet's top edge and bleeds past both sides so
-   the ellipse never shows its ends, at any width. */
+/* The blue arc: a half-ellipse painted ON TOP of the white sheet's leading
+   edge, so the hero appears to sag down into the white.
+
+   It MUST overlay the white. An earlier version sat in a margin ABOVE the
+   sheet — but the page itself is blue (see .vy-root), so that was a blue arc
+   on a blue background: present in the DOM, correct in every computed style,
+   and utterly invisible. The blue/white boundary stayed a straight line.
+   Only white can show this shape, so only white can be behind it.
+
+   The -3% bleed pushes the ellipse's zero-height ends off-screen, so the arc
+   is ~1/3 depth at the window edges and full depth at the centre instead of
+   pinching to a hard point in the corners. Being a percentage, that ratio
+   holds at every width. */
 .vyh-sheet::before {
   content: "";
   position: absolute;
-  left: -6%;
-  right: -6%;
-  bottom: 100%;
+  left: -3%;
+  right: -3%;
+  top: 0;
   height: var(--vyh-curve);
   background: var(--vy-blue);
   border-radius: 0 0 50% 50% / 0 0 100% 100%;
-  /* Kills the hairline seam some browsers render between the arc and the
-     sheet at fractional device pixel ratios. */
-  transform: translateY(1px);
+  pointer-events: none;
 }
 
 .vyh-wrap {
@@ -698,14 +707,18 @@
 /* ---------- Narrow ---------- */
 
 @media (max-width: 640px) {
+  /* A 96px sag reads as a slump on a narrow screen. Shallower here. */
+  .vy-help {
+    --vyh-curve: 54px;
+  }
   .vyh-hero {
-    padding: 124px 18px 62px;
+    padding: 124px 18px 40px;
   }
   .vyh-hero-compact {
-    padding: 112px 18px 48px;
+    padding: 112px 18px 30px;
   }
   .vyh-sheet {
-    padding: 48px 18px 72px;
+    padding: calc(var(--vyh-curve) + 34px) 18px 72px;
   }
   .vyh-search-bubble {
     height: 58px;
