@@ -18,12 +18,21 @@ export function canLeaveTeam(input: {
   return { ok: true };
 }
 
-// Assignment UI is useful only when there is another active teammate to
-// assign work to. Requiring both the explicit team switch and two active
-// members makes solo accounts robust against stale/incorrect database flags.
+// Team UI — the sidebar's team section, engagement assignment, and the "Mine"
+// filters — follows the firm's EXPLICIT team switch (firm.team_enabled).
+//
+// The old rule ALSO required a second active member. That made a firm that
+// turned team mode ON but hadn't had an invite accepted yet see nothing change
+// — "I created a team and none of it shows up". The switch is the opt-in: once
+// it's on, the team surfaces appear (you can already assign work to yourself
+// and it's ready for teammates), and turning it back off hides them again. A
+// firm that is genuinely one-person can still Leave team — canLeaveTeam gates
+// that on being a real solo team (no other members, no pending invites).
 export function hasActiveTeam(input: {
   teamEnabled: boolean;
+  // Kept for call-site compatibility; no longer part of the decision (the
+  // explicit switch is the source of truth).
   activeMemberCount: number;
 }): boolean {
-  return input.teamEnabled && input.activeMemberCount > 1;
+  return input.teamEnabled;
 }

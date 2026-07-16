@@ -22,18 +22,24 @@ describe("canLeaveTeam", () => {
 });
 
 describe("hasActiveTeam", () => {
-  it("never treats a solo account as an active team", () => {
+  it("follows the explicit team switch — on even for a solo team-enabled firm", () => {
+    // Turning team mode ON surfaces the team UI immediately, before a second
+    // member joins. (The old rule hid everything until activeMemberCount > 1,
+    // which read as "I created a team and none of it shows".)
     expect(hasActiveTeam({ teamEnabled: true, activeMemberCount: 1 })).toBe(
-      false,
-    );
-  });
-
-  it("requires the explicit team switch as well as multiple members", () => {
-    expect(hasActiveTeam({ teamEnabled: false, activeMemberCount: 2 })).toBe(
-      false,
+      true,
     );
     expect(hasActiveTeam({ teamEnabled: true, activeMemberCount: 2 })).toBe(
       true,
+    );
+  });
+
+  it("is off whenever the switch is off, regardless of member count", () => {
+    expect(hasActiveTeam({ teamEnabled: false, activeMemberCount: 1 })).toBe(
+      false,
+    );
+    expect(hasActiveTeam({ teamEnabled: false, activeMemberCount: 2 })).toBe(
+      false,
     );
   });
 });
