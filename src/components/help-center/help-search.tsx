@@ -54,12 +54,6 @@ export function HelpSearch({
 
   const showPanel = open && query.trim().length > 0;
 
-  // Reset the cursor whenever the result set changes, or it points at a row
-  // that's no longer there.
-  useEffect(() => {
-    setCursor(-1);
-  }, [query]);
-
   // Click-away and Escape both close.
   useEffect(() => {
     if (!showPanel) return;
@@ -122,6 +116,11 @@ export function HelpSearch({
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);
+            // Retyping invalidates the highlight: the row under it is a
+            // different article now. Reset here rather than in an effect
+            // keyed on `query` — this is the only place query changes, and
+            // the effect version cascades an extra render per keystroke.
+            setCursor(-1);
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}

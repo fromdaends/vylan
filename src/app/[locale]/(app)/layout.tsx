@@ -159,6 +159,7 @@ export default async function AppLayout({
         logout: tAuth("logout"),
         profile: tProfile("menu_profile"),
         help: tProfile("menu_help"),
+        helpCenter: tProfile("menu_help_center"),
       }}
     >
       {children}
