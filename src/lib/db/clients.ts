@@ -236,3 +236,39 @@ export async function restoreClient(id: string): Promise<void> {
     .eq("id", id);
   if (error) throw error;
 }
+
+// A client can be reassigned only to an ACTIVE member of the SAME firm. Pure so
+// the server action can validate the target it just loaded without another DB
+// round-trip (and so the rule is unit-testable). Mirrors the engagement
+// reassignment guard in reassignEngagementAction.
+export function canReceiveClientAssignment(
+  target: { firm_id: string; deactivated_at: string | null } | null | undefined,
+  firmId: string,
+): boolean {
+  return !!target && target.firm_id === firmId && !target.deactivated_at;
+}
+
+// Reassign a client's OWNER (accountability) to another firm member. Scoped to
+// firmId so a client from another firm can never be touched even if a bad id is
+// passed. assigned_user_id is migration-gated (0210): if the column isn't
+// present yet the write surfaces as "unavailable" rather than a 500 — matching
+// the progressive-degrade convention used by createClient/updateClient. Like
+// engagement assignment, this is accountability only; clients stay firm-visible.
+export async function reassignClient(
+  clientId: string,
+  assigneeId: string,
+  firmId: string,
+): Promise<{ ok: boolean; error?: "update_failed" | "unavailable" }> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("clients")
+    .update({ assigned_user_id: assigneeId })
+    .eq("id", clientId)
+    .eq("firm_id", firmId);
+  if (error) {
+    if (isMissingColumn(error)) return { ok: false, error: "unavailable" };
+    console.error("[clients] reassign failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+  return { ok: true };
+}

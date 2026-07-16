@@ -9,6 +9,9 @@ import {
   engagementStatusVariant,
 } from "@/lib/engagements/status-pill";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { hasActiveTeam } from "@/lib/team/mode";
+import { ClientAssignee } from "@/components/clients/client-assignee";
 import {
   getLatestPaymentStatusByEngagementIds,
   listFirmPaymentsWithNames,
@@ -55,6 +58,19 @@ export default async function ClientDetailPage({
   // (webhook-independent) so Paid shows even if the webhook never delivered, then
   // read the now-correct statuses for display. Bounded to one client's payments.
   const firm = await getCurrentFirm();
+  // Team roster for the owner picker. Include deactivated members so a
+  // former owner's name still renders (with a "please reassign" nudge);
+  // only ACTIVE members are valid reassignment targets.
+  const firmUsers = await listFirmUsers();
+  const teamEnabled = hasActiveTeam({
+    teamEnabled: firm?.team_enabled === true,
+    activeMemberCount: firmUsers.filter((u) => !u.deactivated_at).length,
+  });
+  const owner =
+    firmUsers.find((u) => u.id === client.assigned_user_id) ?? null;
+  const assignableMembers = firmUsers
+    .filter((u) => !u.deactivated_at)
+    .map((u) => ({ id: u.id, name: userDisplayLabel(u) }));
   const connectedAccountId = firm?.stripe_connect_account_id ?? null;
   if (connectedAccountId) {
     const pending = await listFirmPaymentsWithNames({ clientId: id });
@@ -106,6 +122,17 @@ export default async function ClientDetailPage({
               {client.locale.toUpperCase()}
             </span>
           </div>
+          {teamEnabled && (
+            <div className="mt-3">
+              <ClientAssignee
+                clientId={client.id}
+                assigneeId={client.assigned_user_id}
+                assigneeName={owner ? userDisplayLabel(owner) : null}
+                assigneeDeactivated={!!owner?.deactivated_at}
+                members={assignableMembers}
+              />
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/clients/${client.id}/archive`}>
