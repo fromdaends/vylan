@@ -30,6 +30,15 @@
    ===================================================================== */
 
 .vy-help {
+  /* Column layout so the white sheet can absorb the leftover height (see
+     .vyh-sheet). .vy-root already supplies min-height:100vh; without this the
+     sheet is only as tall as its content and a short page reads as a thin
+     white band between two blue slabs, which is the opposite of a help
+     center. The menu's brand + overlay are position:fixed, so they're out of
+     flow and unaffected. */
+  display: flex;
+  flex-direction: column;
+
   /* Ink + surfaces for the white sheet. The blue side inherits from .vy-root. */
   --vyh-ink: #0d1730;
   --vyh-ink-soft: #4a5570;
@@ -254,7 +263,11 @@
   background: var(--vyh-sheet);
   color: var(--vyh-ink);
   /* Top padding clears the arc, which is painted OVER this sheet. */
-  padding: calc(var(--vyh-curve) + 44px) 24px 96px;
+  padding: calc(var(--vyh-curve) + 52px) 24px 120px;
+  /* Take every pixel the hero and footer don't need, so white is the page and
+     the blue is a band at each end. `0 auto` (not `1`) keeps the basis at the
+     content's own height, so a long article is never squashed. */
+  flex: 1 0 auto;
 }
 
 /* The blue arc: a half-ellipse painted ON TOP of the white sheet's leading
