@@ -23,6 +23,7 @@ import {
 import { buildPaymentRequestEmail, sendEmail } from "@/lib/email";
 import { downloadObject, getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getInvoiceAttachmentForEngagementSR } from "@/lib/db/final-documents";
+import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
 import { formatCurrency } from "@/lib/format";
 
 export type InvoiceSendReason =
@@ -199,6 +200,14 @@ export async function sendEngagementInvoice(
       locks_deliverables: locksDeliverables,
     },
   });
+
+  // The automated invoice is now owed. This is the hook for BOTH deferred modes
+  // — "invoice on completion" (dispatched the moment the engagement completes)
+  // and the delayed cron worker N days later. It's what settles a just-completed
+  // engagement onto awaiting_payment instead of leaving it reading "completed"
+  // while the client still owes: this runs INSIDE the completion flow, so the
+  // stage lands correctly in one pass rather than waiting for the next event.
+  await syncEngagementStageSR(engagement.id);
 
   return { ok: true, paymentRequestId: row.id, emailSent };
 }

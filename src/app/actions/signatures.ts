@@ -22,6 +22,7 @@ import {
   type SignatureStatus,
 } from "@/lib/signwell/client";
 import { createSignatureRequest } from "@/lib/db/signature-requests";
+import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { sendEmail, buildSignatureRequestEmail } from "@/lib/email";
 import type { ItemActionState } from "@/app/actions/items";
 
@@ -203,6 +204,12 @@ export async function addSignatureItemAction(
   } catch (e) {
     console.error("[addSignatureItemAction] email failed:", e);
   }
+
+  // A signature is now out with the client — the "first signature request sent"
+  // transition. The resolver decides whether that actually moves the stage: a
+  // request that failed to reach SignWell (status 'error') is the FIRM's problem,
+  // not a wait on the client, so it doesn't count as outstanding.
+  await syncEngagementStage(sb, engagementId);
 
   revalidatePath(`/engagements/${engagementId}`);
   revalidatePath("/dashboard");

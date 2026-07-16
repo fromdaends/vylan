@@ -6,6 +6,13 @@
 // is the single source of truth — it no-ops if the row is already completed, so
 // concurrent webhook + reconcile can't double-log. A duplicate PDF upload just
 // upserts the same object, which is harmless.
+//
+// STAGE: the "all signature requests completed" transition needs no hook here.
+// Both paths below end in setItemStatus, which re-resolves the engagement's
+// stage — and both call it AFTER the signature row is marked completed, so the
+// resolver sees the true signing state. Keep that ordering if this is refactored:
+// syncing before the completion write would read a stale 'sent' and leave the
+// engagement parked at awaiting_signature until the next event.
 
 import { getCompletedPdf } from "@/lib/signwell/client";
 import { signedDocPath, uploadObject } from "@/lib/storage";
