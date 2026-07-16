@@ -10,10 +10,6 @@ import {
   type LandingShellStrings,
 } from "@/components/vylan-landing/landing-shell";
 import { LeadForm } from "@/components/vylan-landing/lead-form";
-import {
-  WorkflowAutomation,
-  type WorkflowAutomationStrings,
-} from "@/components/vylan-landing/workflow-automation";
 import { VylanFooter } from "@/components/vylan-landing/vylan-footer";
 import "@/styles/vylan-landing.css";
 
@@ -69,41 +65,6 @@ export default async function Home({
     follow: t("follow"),
   };
 
-  // The five stage names come from the PRODUCT's own namespace, not from a
-  // marketing copy of them: the design took them verbatim from the app, and a
-  // landing page that promises stages the product doesn't have is the kind of
-  // drift nobody notices until a demo. Rename a stage and this follows.
-  // "Paid" is the demo's own resting state (the product calls it Completed —
-  // here the money is the point), so it's the one label that lives in Vylan.
-  const tStage = await getTranslations("Stage");
-  const workflowStrings: WorkflowAutomationStrings = {
-    eyebrow: t("wa_eyebrow"),
-    title: t("wa_title"),
-    body: t("wa_body"),
-    panelLabel: t("wa_panel_label"),
-    play: t("wa_play"),
-    playing: t("wa_playing"),
-    replay: t("wa_replay"),
-    all: t("wa_all"),
-    moved: t("wa_moved"),
-    empty: t("wa_empty"),
-    foot: t("wa_foot"),
-    stageLabels: [
-      tStage("stage_collecting"),
-      tStage("stage_in_review"),
-      tStage("stage_in_preparation"),
-      tStage("stage_awaiting_signature"),
-      tStage("stage_awaiting_payment"),
-      t("wa_paid"),
-    ],
-    rows: [
-      { name: t("wa_row1_name"), sub: t("wa_row1_sub") },
-      { name: t("wa_row2_name"), sub: t("wa_row2_sub") },
-      { name: t("wa_row3_name"), sub: t("wa_row3_sub") },
-      { name: t("wa_row4_name"), sub: t("wa_row4_sub") },
-    ],
-  };
-
   const footer = {
     brand: t("brand_word"),
     howItWorks: t("footer_how_it_works"),
@@ -117,12 +78,6 @@ export default async function Home({
   return (
     <main className={`vy-root ${schibsted.variable}`}>
       <LandingShell s={shellStrings} />
-
-      {/* WORKFLOW AUTOMATION — a playable miniature of the engagement-stage
-          board. Sits between the hero and the form on purpose: it's the one
-          thing on this page that SHOWS the product instead of describing it, so
-          it should land before the ask, not after it. */}
-      <WorkflowAutomation s={workflowStrings} />
 
       {/* FORM — the 3-phase demo-lead flow (see LeadForm) */}
       <section className="vy-form-section" id="vy-get-access">

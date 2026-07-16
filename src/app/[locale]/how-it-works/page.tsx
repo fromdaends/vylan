@@ -29,6 +29,9 @@ export default async function HowItWorksPage({
 
   const t = await getTranslations("VylanHowItWorks");
   const tv = await getTranslations("Vylan");
+  // The product's own stage names, read straight from the app's namespace so
+  // the demo below can't drift from what a client actually sees.
+  const tStage = await getTranslations("Stage");
 
   const strings = {
     heroEyebrow: t("hero_eyebrow"),
@@ -52,6 +55,39 @@ export default async function HowItWorksPage({
       { kicker: t("step3_kicker"), title: t("step3_title"), body: t("step3_body") },
       { kicker: t("step4_kicker"), title: t("step4_title"), body: t("step4_body") },
     ],
+    // The playable stage-board demo. Its five stage names come from the
+    // PRODUCT's own namespace, not a marketing copy of them: the design took
+    // them verbatim from the app, and a page that promises stages the product
+    // doesn't have is the kind of drift nobody notices until a demo. Rename a
+    // stage and this follows. "Paid" is the demo's own resting state (the
+    // product calls it Completed — here the money is the point).
+    workflow: {
+      eyebrow: t("wa_eyebrow"),
+      title: t("wa_title"),
+      body: t("wa_body"),
+      panelLabel: t("wa_panel_label"),
+      play: t("wa_play"),
+      playing: t("wa_playing"),
+      replay: t("wa_replay"),
+      all: t("wa_all"),
+      moved: t("wa_moved"),
+      empty: t("wa_empty"),
+      foot: t("wa_foot"),
+      stageLabels: [
+        tStage("stage_collecting"),
+        tStage("stage_in_review"),
+        tStage("stage_in_preparation"),
+        tStage("stage_awaiting_signature"),
+        tStage("stage_awaiting_payment"),
+        t("wa_paid"),
+      ],
+      rows: [
+        { name: t("wa_row1_name"), sub: t("wa_row1_sub") },
+        { name: t("wa_row2_name"), sub: t("wa_row2_sub") },
+        { name: t("wa_row3_name"), sub: t("wa_row3_sub") },
+        { name: t("wa_row4_name"), sub: t("wa_row4_sub") },
+      ],
+    },
     payEyebrow: t("pay_eyebrow"),
     payTitlePre: t("pay_title_pre"),
     payTitleWord: t("pay_title_word"),

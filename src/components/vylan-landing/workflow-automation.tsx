@@ -2,14 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-// The landing page's "Workflow automation" section — a live, playable miniature
-// of the engagement-stage board.
+// The "Workflow automation" section of the What we do / how it works page — a
+// live, playable miniature of the engagement-stage board.
 //
-// Imported from the "Vylan What We Do" design (Claude Design project ef1c4ddf).
-// That file is the source for the /how-it-works page, and this was the one
-// section in it that had never been built; the founder wanted it on the LANDING
-// page rather than how-it-works, so it lives here rather than in
-// how-it-works-shell.
+// Imported from the "Vylan What We Do" design (Claude Design project ef1c4ddf),
+// which is the source for this whole page; this was the one section in it that
+// had never been built. It sits where the design puts it: after the four-step
+// walkthrough, before the payment pipeline.
 //
 // It is a DEMO, not the product: fixed sample engagements, no data, no network.
 // It exists to make one claim tangible — that an engagement moves through its
@@ -17,13 +16,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // seconds of watching.
 //
 // COLOURS come from the design, not from the app's --stage-* tokens, on purpose.
-// The product's "Collecting documents" blue (#46a2ff) is nearly the landing
-// page's own background (#1050ed) and would vanish; the design re-picks each hue
-// for this surface. The LABELS, by contrast, are the app's real Stage strings —
-// the designer copied them verbatim from the product, so the section reads them
-// from that namespace and follows a rename automatically.
+// The product's "Collecting documents" blue (#46a2ff) is nearly this page's own
+// background (#1050ed) and would vanish; the design re-picks each hue for a blue
+// surface. The LABELS, by contrast, are the app's real Stage strings — the
+// designer copied them verbatim from the product, so the page reads them from
+// that namespace and follows a rename automatically.
+//
+// Reveal-on-scroll is the PAGE's own: [data-reveal] + the observer in
+// how-it-works-shell, which walks its whole subtree and already honours
+// prefers-reduced-motion. This component only marks the blocks; it deliberately
+// brings no observer of its own.
 
-// Marketing palette, tuned for the blue landing background.
+// Marketing palette, tuned for the blue page background.
 const STAGE_COLORS = [
   "#74D0FF", // collecting
   "#FFD98E", // in review
@@ -80,7 +84,6 @@ const SCRIPT_END = 6200;
 type Sim = "idle" | "running" | "done";
 
 export function WorkflowAutomation({ s }: { s: WorkflowAutomationStrings }) {
-  const rootRef = useRef<HTMLElement>(null);
   const timers = useRef<number[]>([]);
   const [filter, setFilter] = useState(-1);
   const [rows, setRows] = useState<Row[]>(INITIAL);
@@ -90,40 +93,6 @@ export function WorkflowAutomation({ s }: { s: WorkflowAutomationStrings }) {
   const clearTimers = useCallback(() => {
     timers.current.forEach((t) => window.clearTimeout(t));
     timers.current = [];
-  }, []);
-
-  // Reveal-on-scroll. Self-contained rather than reusing the how-it-works
-  // observer: that one is CSS-gated on `.vy-wwd.wwd-js`, a scope the landing
-  // page doesn't have, so its rules would never match here.
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const reveals = Array.from(
-      root.querySelectorAll<HTMLElement>("[data-wa-reveal]"),
-    );
-    const reduce =
-      typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    // Reduced motion: show the finished state at once, no transitions.
-    if (reduce) {
-      reveals.forEach((el) => el.classList.add("wa-in"));
-      return;
-    }
-    root.classList.add("wa-js");
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (!e.isIntersecting) return;
-          const el = e.target as HTMLElement;
-          const d = parseInt(el.getAttribute("data-wa-reveal") || "0", 10);
-          window.setTimeout(() => el.classList.add("wa-in"), d);
-          io.unobserve(el);
-        });
-      },
-      { threshold: 0.14, rootMargin: "0px 0px -6% 0px" },
-    );
-    reveals.forEach((el) => io.observe(el));
-    return () => io.disconnect();
   }, []);
 
   // Never leave a timer pointing at an unmounted component.
@@ -170,19 +139,19 @@ export function WorkflowAutomation({ s }: { s: WorkflowAutomationStrings }) {
     i < 0 ? rows.length : rows.filter((r) => r.stage === i).length;
 
   return (
-    <section ref={rootRef} className="wa" aria-labelledby="wa-title">
-      <div className="wa-head" data-wa-reveal="0">
-        <div className="wa-eyebrow">{s.eyebrow}</div>
-        <h2 className="wa-h2" id="wa-title">
+    <section className="wwd-section wwd-wf" aria-labelledby="wwd-wf-title">
+      <div className="wwd-wf-head" data-reveal>
+        <div className="wwd-eyebrow wwd-eyebrow-violet">{s.eyebrow}</div>
+        <h2 className="wwd-h2" id="wwd-wf-title">
           {s.title}
         </h2>
-        <p className="wa-body">{s.body}</p>
+        <p className="wwd-wf-body">{s.body}</p>
       </div>
 
-      <div className="wa-panel" data-wa-reveal="140">
-        <div className="wa-panel-top">
-          <div className="wa-panel-label">{s.panelLabel}</div>
-          <button type="button" className="wa-play" onClick={run}>
+      <div className="wwd-wf-panel" data-reveal data-reveal-delay="140">
+        <div className="wwd-wf-top">
+          <div className="wwd-wf-label">{s.panelLabel}</div>
+          <button type="button" className="wwd-wf-play" onClick={run}>
             <svg width="11" height="12" viewBox="0 0 12 12" aria-hidden>
               <path d="M2 1.2v9.6l8.4-4.8z" fill="currentColor" />
             </svg>
@@ -193,84 +162,96 @@ export function WorkflowAutomation({ s }: { s: WorkflowAutomationStrings }) {
         {/* Filter chips. The product's own board offers exactly these five (a
             finished engagement leaves the active list), so the demo can't imply
             a filter that doesn't exist. */}
-        <div className="wa-chips" role="group" aria-label={s.eyebrow}>
+        <div className="wwd-wf-chips" role="group" aria-label={s.eyebrow}>
           <button
             type="button"
-            className="wa-chip"
+            className="wwd-wf-chip"
             aria-pressed={filter === -1}
             onClick={() => setFilter(-1)}
           >
             {s.all}
-            {/* NBSP, per the design: the count is part of the label, so it must
-                never wrap away from it on a narrow screen. */}
-            <span className="wa-chip-n">{"\u00a0"}({countAt(-1)})</span>
+            {/* NBSP: the count belongs to the label and must never wrap away
+                from it. */}
+            <span className="wwd-wf-n">{"\u00a0"}({countAt(-1)})</span>
           </button>
           {Array.from({ length: FILTERABLE_COUNT }, (_, i) => (
             <button
               key={i}
               type="button"
-              className="wa-chip"
+              className="wwd-wf-chip"
               aria-pressed={filter === i}
               onClick={() => setFilter(filter === i ? -1 : i)}
-              style={{ ["--wa-c" as string]: STAGE_COLORS[i] }}
+              style={{ ["--wwd-c" as string]: STAGE_COLORS[i] }}
             >
-              <span className="wa-chip-dot" aria-hidden />
+              <span className="wwd-wf-dot" aria-hidden />
               {s.stageLabels[i]}
-              <span className="wa-chip-n">{"\u00a0"}({countAt(i)})</span>
+              <span className="wwd-wf-n">{"\u00a0"}({countAt(i)})</span>
             </button>
           ))}
         </div>
 
-        <div className="wa-rows">
+        <div className="wwd-wf-rows">
           {visible.map((r) => {
             const idx = rows.findIndex((x) => x.id === r.id);
             const meta = s.rows[idx] ?? s.rows[0];
             const color = STAGE_COLORS[Math.min(r.stage, PAID)];
             return (
-              <div className="wa-row" key={r.id} style={{ ["--wa-c" as string]: color }}>
-                <div className="wa-row-main">
-                  <div className="wa-row-titleline">
-                    <span className="wa-row-name">{meta.name}</span>
+              <div
+                className="wwd-wf-row"
+                key={r.id}
+                style={{ ["--wwd-c" as string]: color }}
+              >
+                <div className="wwd-wf-main">
+                  <div className="wwd-wf-titleline">
+                    <span className="wwd-wf-name">{meta.name}</span>
                     {moved === r.id && (
-                      <span className="wa-moved">
-                        <span className="wa-moved-dot" aria-hidden />
+                      <span className="wwd-wf-moved">
+                        <span className="wwd-wf-moved-dot" aria-hidden />
                         {s.moved}
                       </span>
                     )}
                   </div>
-                  <div className="wa-row-sub">{meta.sub}</div>
+                  <div className="wwd-wf-sub">{meta.sub}</div>
                 </div>
 
                 {/* The pipeline itself: one dot per stage, filled behind, hollow
-                    ahead. This is the claim the section is making, drawn. */}
-                <div className="wa-track" aria-hidden>
+                    ahead. This is the claim the section makes, drawn. */}
+                <div className="wwd-wf-track" aria-hidden>
                   {Array.from({ length: FILTERABLE_COUNT }, (_, i) => {
                     const done = r.stage > i || r.stage >= PAID;
                     const current = r.stage === i;
                     return (
-                      <span className="wa-node" key={i}>
+                      <span className="wwd-wf-node" key={i}>
                         <span
                           className={
-                            "wa-dot" +
-                            (current ? " wa-dot-on" : done ? " wa-dot-done" : "")
+                            "wwd-wf-tdot" +
+                            (current
+                              ? " wwd-wf-tdot-on"
+                              : done
+                                ? " wwd-wf-tdot-done"
+                                : "")
                           }
-                          style={{ ["--wa-c" as string]: STAGE_COLORS[i] }}
+                          style={{ ["--wwd-c" as string]: STAGE_COLORS[i] }}
                         />
-                        {i < FILTERABLE_COUNT - 1 && <span className="wa-link" />}
+                        {i < FILTERABLE_COUNT - 1 && (
+                          <span className="wwd-wf-link" />
+                        )}
                       </span>
                     );
                   })}
                 </div>
 
-                <span className="wa-pill">{s.stageLabels[Math.min(r.stage, PAID)]}</span>
+                <span className="wwd-wf-pill">
+                  {s.stageLabels[Math.min(r.stage, PAID)]}
+                </span>
               </div>
             );
           })}
-          {visible.length === 0 && <div className="wa-empty">{s.empty}</div>}
+          {visible.length === 0 && <div className="wwd-wf-empty">{s.empty}</div>}
         </div>
       </div>
 
-      <p className="wa-foot" data-wa-reveal="200">
+      <p className="wwd-wf-foot" data-reveal data-reveal-delay="200">
         {s.foot}
       </p>
     </section>
