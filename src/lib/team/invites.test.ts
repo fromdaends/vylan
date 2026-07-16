@@ -9,6 +9,7 @@ import {
   INVITE_TTL_DAYS,
   resolveInviteAccess,
   parseAcceptInput,
+  canSwitchFromCurrentFirm,
 } from "./invites";
 import { buildTeamInviteEmail } from "@/lib/email";
 
@@ -235,5 +236,47 @@ describe("parseAcceptInput", () => {
     });
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.data.locale).toBe("fr");
+  });
+});
+
+describe("canSwitchFromCurrentFirm", () => {
+  it("lets a staff member switch regardless of their firm's size", () => {
+    expect(
+      canSwitchFromCurrentFirm({
+        role: "staff",
+        otherActiveMembers: 5,
+        pendingInvites: 3,
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it("lets a solo owner (no others, no invites) switch", () => {
+    expect(
+      canSwitchFromCurrentFirm({
+        role: "owner",
+        otherActiveMembers: 0,
+        pendingInvites: 0,
+      }),
+    ).toEqual({ ok: true });
+  });
+
+  it("blocks an owner who still has active members", () => {
+    expect(
+      canSwitchFromCurrentFirm({
+        role: "owner",
+        otherActiveMembers: 1,
+        pendingInvites: 0,
+      }),
+    ).toEqual({ ok: false, reason: "owns_team" });
+  });
+
+  it("blocks an owner who still has a pending invite", () => {
+    expect(
+      canSwitchFromCurrentFirm({
+        role: "owner",
+        otherActiveMembers: 0,
+        pendingInvites: 1,
+      }),
+    ).toEqual({ ok: false, reason: "owns_team" });
   });
 });

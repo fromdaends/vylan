@@ -11,7 +11,12 @@ import "@/styles/vylan-landing.css";
 import { useActionState } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { acceptInvite, type AcceptInviteState } from "@/app/actions/team";
+import {
+  acceptInvite,
+  switchFirmViaInvite,
+  type AcceptInviteState,
+  type SwitchFirmState,
+} from "@/app/actions/team";
 import { schibsted } from "@/components/vylan-landing/fonts";
 import { brand } from "@/lib/brand";
 import { ArrowRight, ShieldAlert } from "lucide-react";
@@ -166,12 +171,103 @@ export function InviteAcceptForm({
   );
 }
 
+// Existing-account "switch over" card: the invited email already has a Vylan
+// account, so instead of creating one we verify their password and MOVE their
+// account into this firm. Shown with a clear warning that they'll leave their
+// current firm (and lose access to its data) — the single-firm model.
+export function InviteSwitchForm({
+  firmName,
+  inviterName,
+  inviteEmail,
+  currentFirmName,
+  locale,
+  token,
+}: {
+  firmName: string;
+  inviterName: string;
+  inviteEmail: string;
+  currentFirmName: string;
+  locale: "fr" | "en";
+  token: string;
+}) {
+  const t = useTranslations("InviteAccept");
+  const tc = useTranslations("Common");
+  const [state, formAction, pending] = useActionState<
+    SwitchFirmState,
+    FormData
+  >(switchFirmViaInvite, null);
+
+  return (
+    <Shell>
+      <h2>{t("switch_title", { firm: firmName })}</h2>
+      <p className="vy-form-sub">
+        {inviterName
+          ? t("invited_by", { inviter: inviterName, firm: firmName })
+          : t("invited_by_generic", { firm: firmName })}
+      </p>
+
+      <div className="vy-fields">
+        {state?.error && (
+          <div className="vy-form-err" role="alert">
+            {t(`errors.${state.error}` as const)}
+          </div>
+        )}
+
+        <div className="rounded-xl border border-white/20 bg-white/10 px-4 py-3 text-sm leading-relaxed text-white/85">
+          {t("switch_warning", {
+            email: inviteEmail,
+            old: currentFirmName || t("your_firm"),
+            firm: firmName,
+          })}
+        </div>
+
+        <form action={formAction} className="mt-3.5 flex flex-col gap-3.5">
+          <input type="hidden" name="token" value={token} />
+          <input type="hidden" name="locale" value={locale} />
+
+          <input
+            className={
+              "vy-field" + (state?.error === "bad_password" ? " vy-invalid" : "")
+            }
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            placeholder={t("password_current_label")}
+            aria-label={t("password_current_label")}
+            required
+          />
+
+          <button
+            type="submit"
+            disabled={pending}
+            className="vy-submit mt-1 inline-flex w-full items-center justify-center gap-2"
+          >
+            {pending ? tc("loading") : t("switch_submit", { firm: firmName })}
+            {!pending && <ArrowRight className="h-4 w-4" />}
+          </button>
+        </form>
+      </div>
+
+      <p className="mt-6 text-center text-xs leading-relaxed text-white/55">
+        {t("switch_footer")}
+      </p>
+    </Shell>
+  );
+}
+
 export function InviteErrorView({
   reason,
   firmName,
   inviterName,
 }: {
-  reason: "not_found" | "expired" | "accepted" | "revoked" | "seat_full";
+  reason:
+    | "not_found"
+    | "expired"
+    | "accepted"
+    | "revoked"
+    | "seat_full"
+    | "already_member"
+    | "owns_team";
   firmName: string;
   inviterName: string;
 }) {

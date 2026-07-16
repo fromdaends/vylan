@@ -109,6 +109,24 @@ export const acceptInviteSchema = z
 
 export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
 
+// Whether an EXISTING Vylan account may leave its current firm to switch into
+// another (via a teammate invite that "switches them over"). Staff can always
+// leave — their old firm keeps its owner. An owner may only leave if nobody is
+// stranded: no other active members AND no live invitations in the old firm.
+// Otherwise switching would orphan a team, so it's blocked (they must transfer
+// ownership or remove the others first). Pure so it's unit-testable.
+export function canSwitchFromCurrentFirm(input: {
+  role: "owner" | "staff";
+  otherActiveMembers: number;
+  pendingInvites: number;
+}): { ok: true } | { ok: false; reason: "owns_team" } {
+  if (input.role !== "owner") return { ok: true };
+  if (input.otherActiveMembers > 0 || input.pendingInvites > 0) {
+    return { ok: false, reason: "owns_team" };
+  }
+  return { ok: true };
+}
+
 export function parseAcceptInput(
   raw: Record<string, unknown>,
 ):
