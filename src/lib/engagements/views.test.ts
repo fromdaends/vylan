@@ -65,7 +65,7 @@ describe("scopeForView", () => {
   it("maps archived / deleted to their own scopes, everything else to active", () => {
     expect(scopeForView("archived")).toBe("archived");
     expect(scopeForView("deleted")).toBe("deleted");
-    for (const v of ["active", "ready", "drafts", "completed", "cancelled"] as const) {
+    for (const v of ["active", "ready", "drafts", "completed"] as const) {
       expect(scopeForView(v)).toBe("active");
     }
   });
@@ -91,10 +91,13 @@ describe("selectView (active scope)", () => {
       "done",
     ]);
   });
-  it("cancelled = cancelled only", () => {
-    expect(selectView("cancelled", activeRows).map((r) => r.id)).toEqual([
-      "killed",
-    ]);
+  // There is no Cancelled view any more (cancelling isn't reachable from the
+  // UI, so the tab could only ever be empty). The 'killed' row must therefore
+  // not leak into a view it doesn't belong to — it simply has no tab.
+  it("a cancelled engagement appears in NO active-scope view", () => {
+    for (const v of ["active", "ready", "drafts", "completed"] as const) {
+      expect(selectView(v, activeRows).map((r) => r.id)).not.toContain("killed");
+    }
   });
 });
 
@@ -135,7 +138,6 @@ describe("ENGAGEMENT_VIEWS", () => {
       "drafts",
       "completed",
       "archived",
-      "cancelled",
       "deleted",
     ]);
   });

@@ -33,18 +33,21 @@ export type EngagementForView = {
 // page can tell the sidebar which sub-item to highlight. Reuses the SAME
 // lifecycle predicates the list pages use (no duplicated filtering logic).
 // Priority, most specific first (per the nav-consistency spec):
-//   Recently deleted > Archived > Cancelled > Ready to review > Completed >
-//   Drafts > Active
+//   Recently deleted > Archived > Ready to review > Completed > Drafts > Active
 // `readyToReview` is supplied by the caller (computed via the same
 // isReadyToReview(computeAttention(...)) the worklist uses) because it depends
 // on request-item state, not on the engagement row alone.
+//
+// A 'cancelled' engagement has no view of its own (see lib/engagements/views.ts)
+// and so has no sub-item to light up. It falls through to "active" — a legacy
+// cancelled row is reachable only through the command palette, and highlighting
+// the section root is a better answer there than highlighting nothing.
 export function engagementToView(
   e: EngagementForView,
   opts: { readyToReview: boolean },
 ): EngagementView {
   if (isDeletedEngagement(e)) return "deleted";
   if (isArchivedEngagement(e)) return "archived";
-  if (e.status === "cancelled") return "cancelled";
   if (opts.readyToReview) return "ready";
   if (e.status === "complete") return "completed";
   if (e.status === "draft") return "drafts";

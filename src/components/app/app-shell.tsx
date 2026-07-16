@@ -44,7 +44,6 @@ import {
   UserCircle,
   Users,
   Users2,
-  XCircle,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { SidebarSearch, openCommandPalette } from "@/components/app/sidebar-search";
@@ -99,7 +98,6 @@ const ENGAGEMENT_SUBNAV: {
   { view: "drafts", icon: PencilLine },
   { view: "completed", icon: ClipboardList },
   { view: "archived", icon: Archive },
-  { view: "cancelled", icon: XCircle },
   { view: "deleted", icon: Trash2 },
 ];
 
