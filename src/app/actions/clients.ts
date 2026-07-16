@@ -9,7 +9,14 @@ import {
   archiveClient,
   restoreClient,
   bulkCreateClients,
+  reassignClient,
+  canReceiveClientAssignment,
 } from "@/lib/db/clients";
+import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
+import { getCurrentFirm } from "@/lib/db/firms";
+import { hasActiveTeam } from "@/lib/team/mode";
+import { getServerSupabase } from "@/lib/supabase/server";
+import { logUserActivity } from "@/lib/db/activity";
 import { getPathname } from "@/i18n/navigation";
 
 export type ClientFormState = {
@@ -119,6 +126,54 @@ export async function updateClientAction(
   } catch {
     return { error: "update_failed" };
   }
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// Reassign a client's owner to another ACTIVE firm member. Any firm member may
+// reassign — accountability, NOT access control (clients stay firm-visible),
+// mirroring engagement reassignment. Logs `client_reassigned` (engagement_id
+// null; client_id in metadata) so it shows up in the /settings/audit trail.
+export async function reassignClientAction(
+  clientId: string,
+  assigneeId: string,
+): Promise<{
+  ok: boolean;
+  error?: "no_session" | "invalid_assignee" | "update_failed";
+}> {
+  const [user, firm, activeMembers] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    listActiveFirmUsers(),
+  ]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+  if (
+    !hasActiveTeam({
+      teamEnabled: firm.team_enabled === true,
+      activeMemberCount: activeMembers.length,
+    })
+  ) {
+    return { ok: false, error: "invalid_assignee" };
+  }
+
+  const sb = await getServerSupabase();
+  // Target must be an ACTIVE member of the SAME firm.
+  const { data: target } = await sb
+    .from("users")
+    .select("id, firm_id, deactivated_at")
+    .eq("id", assigneeId)
+    .maybeSingle();
+  if (!canReceiveClientAssignment(target, firm.id)) {
+    return { ok: false, error: "invalid_assignee" };
+  }
+
+  const res = await reassignClient(clientId, assigneeId, firm.id);
+  if (!res.ok) return { ok: false, error: "update_failed" };
+
+  await logUserActivity(firm.id, null, "client_reassigned", {
+    client_id: clientId,
+    to_user_id: assigneeId,
+  });
   revalidatePath("/", "layout");
   return { ok: true };
 }

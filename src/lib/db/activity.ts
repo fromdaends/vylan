@@ -99,12 +99,23 @@ export async function listActivityForFirm(filters: {
           .in("id", engagementIds)
       ).data ?? []
     : [];
+  // Client ids to resolve: from each row's engagement, PLUS from metadata for
+  // firm-wide rows not tied to an engagement (e.g. client_reassigned carries
+  // metadata.client_id). Union both so those rows still show the client name +
+  // link even though they have no engagement_id.
+  const metadataClientIds = entries
+    .filter((e) => e.engagement_id == null)
+    .map((e) =>
+      typeof e.metadata?.client_id === "string" ? e.metadata.client_id : null,
+    )
+    .filter((id): id is string => id != null);
   const clientIds = Array.from(
-    new Set(
-      engagementRows
+    new Set([
+      ...engagementRows
         .map((r) => r.client_id as string | null)
         .filter((id): id is string => id != null),
-    ),
+      ...metadataClientIds,
+    ]),
   );
   const clientRows = clientIds.length
     ? (
@@ -155,9 +166,37 @@ export async function listActivityForFirm(filters: {
     ]),
   );
 
-  const enriched: FirmActivityEntry[] = entries.map((e) => {
+  return enrichActivityEntries(entries, engById, clientById, userById);
+}
+
+// Pure join: resolve each activity row's engagement title, client, and actor
+// name from pre-fetched lookup maps. Engagement-scoped rows resolve their client
+// via the engagement; firm-wide rows with no engagement (e.g. client_reassigned)
+// resolve the client directly from metadata.client_id. Extracted from
+// listActivityForFirm so the join logic is unit-testable without a database.
+export function enrichActivityEntries(
+  entries: ActivityEntry[],
+  engById: Map<
+    string,
+    { id: string; title: string; client_id: string }
+  >,
+  clientById: Map<string, { id: string; display_name: string }>,
+  userById: Map<
+    string,
+    {
+      id: string;
+      name: string | null;
+      display_name: string | null;
+      email: string;
+    }
+  >,
+): FirmActivityEntry[] {
+  return entries.map((e) => {
     const eng = e.engagement_id ? engById.get(e.engagement_id) : undefined;
-    const client = eng?.client_id ? clientById.get(eng.client_id) : undefined;
+    const metaClientId =
+      typeof e.metadata?.client_id === "string" ? e.metadata.client_id : null;
+    const clientId = eng?.client_id ?? metaClientId;
+    const client = clientId ? clientById.get(clientId) : undefined;
     const actor =
       e.actor_type === "user" && e.actor_id
         ? userById.get(e.actor_id)
@@ -170,13 +209,11 @@ export async function listActivityForFirm(filters: {
     return {
       ...e,
       engagement_title: eng?.title ?? null,
-      client_id: client?.id ?? null,
+      client_id: client?.id ?? clientId ?? null,
       client_display_name: client?.display_name ?? null,
       actor_name: actorName,
     };
   });
-
-  return enriched;
 }
 
 export async function logUserActivity(
