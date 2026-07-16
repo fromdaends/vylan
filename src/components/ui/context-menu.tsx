@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { ContextMenu as ContextMenuPrimitive } from "radix-ui"
+import { ChevronRightIcon } from "lucide-react"
 
 import { cn } from "@/lib/cn"
 
@@ -117,6 +118,56 @@ function ContextMenuShortcut({
   )
 }
 
+// Submenu parts, mirroring the dropdown-menu equivalents 1:1 (same radix
+// primitive family, same classes) so a menu built once renders identically
+// whether it was opened from a "..." button or a right-click. Added for the
+// engagement row menu's Stage picker, which both surfaces share.
+function ContextMenuSub({
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.Sub>) {
+  return <ContextMenuPrimitive.Sub data-slot="context-menu-sub" {...props} />
+}
+
+function ContextMenuSubTrigger({
+  className,
+  inset,
+  children,
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.SubTrigger> & {
+  inset?: boolean
+}) {
+  return (
+    <ContextMenuPrimitive.SubTrigger
+      data-slot="context-menu-sub-trigger"
+      data-inset={inset}
+      className={cn(
+        "flex cursor-default items-center gap-2 rounded-none px-2 py-1.5 text-sm outline-hidden select-none focus:bg-muted focus:text-foreground data-[inset]:pl-8 data-[state=open]:bg-muted data-[state=open]:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+        className
+      )}
+      {...props}
+    >
+      {children}
+      <ChevronRightIcon className="ml-auto size-4" />
+    </ContextMenuPrimitive.SubTrigger>
+  )
+}
+
+function ContextMenuSubContent({
+  className,
+  ...props
+}: React.ComponentProps<typeof ContextMenuPrimitive.SubContent>) {
+  return (
+    <ContextMenuPrimitive.SubContent
+      data-slot="context-menu-sub-content"
+      className={cn(
+        "z-50 min-w-[8rem] overflow-hidden rounded-sm border bg-popover p-1 text-popover-foreground shadow-sm outline-hidden focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
 export {
   ContextMenu,
   ContextMenuTrigger,
@@ -126,4 +177,7 @@ export {
   ContextMenuLabel,
   ContextMenuSeparator,
   ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubTrigger,
+  ContextMenuSubContent,
 }

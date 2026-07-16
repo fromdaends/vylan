@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
-import { AlertTriangle, Clock, FileWarning, MoreHorizontal, Search } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  FileWarning,
+  MoreHorizontal,
+  Search,
+} from "lucide-react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/payments/payment-badge";
@@ -27,12 +34,18 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -43,6 +56,8 @@ import {
   engagementStatusVariant,
   READY_PILL_CLASS,
 } from "@/lib/engagements/status-pill";
+import type { EngagementStage } from "@/lib/engagements/stage";
+import { StageChip } from "@/components/engagements/stage-chip";
 
 export type EngagementStatus =
   | "draft"
@@ -99,6 +114,12 @@ export type WorklistRow = {
   // was ever requested (payment is optional). Drives the Paid / Unpaid / Failed
   // chip. Optional so callers that don't load payments stay valid.
   paymentStatus?: PaymentRequestStatus | null;
+  // Workflow stage (migration 0690) — WHERE this engagement is in the firm's
+  // process. Replaces the generic derivedStatus pill in the Status column for
+  // live engagements. null/undefined when the engagement has no workflow
+  // position (a draft or a cancelled one) OR when 0690 isn't applied yet; the
+  // Status column then falls back to the derivedStatus pill exactly as before.
+  stage?: EngagementStage | null;
 };
 
 const FILTERS = ["recent", "mine", "complete"] as const;
@@ -480,6 +501,11 @@ function WorklistRowView({
     title: row.title,
     state: lifecycleState,
     canDelete,
+    // Adds the Stage submenu — only for a row that HAS a workflow position.
+    // (Needs-attention rows deliberately don't pass this: that list is an
+    // action queue, not an engagement manager, and its menu renders no
+    // submenus.)
+    stage: row.stage,
     runOptimistic: onOptimisticRemoval,
   });
 
@@ -605,16 +631,34 @@ function WorklistRowView({
               )}
             </TableCell>
 
+            {/* Status column. A live engagement shows its workflow STAGE —
+                real position ("In review", "Awaiting signature") instead of the
+                generic "In progress" every live row used to read.
+
+                The stage supersedes the derived "Ready to review" pill here too,
+                not just "In progress": the two say overlapping things, and
+                keeping the green pill would win on almost every row whose stage
+                is in_review, so the stage system would never be visible. Ready
+                to review is unchanged everywhere it actually drives work — the
+                sidebar bucket, its count badge, and the Inbox queue.
+
+                Everything else (draft / complete / cancelled, or any row before
+                migration 0690 lands) keeps the status pill: those have no
+                workflow position to show. */}
             <TableCell className="px-4 py-3 align-top">
-              <Badge
-                variant={engagementStatusVariant(row.derivedStatus)}
-                className={cn(
-                  "font-normal",
-                  row.derivedStatus === "ready_to_review" && READY_PILL_CLASS,
-                )}
-              >
-                {statusLabel}
-              </Badge>
+              {row.stage ? (
+                <StageChip stage={row.stage} />
+              ) : (
+                <Badge
+                  variant={engagementStatusVariant(row.derivedStatus)}
+                  className={cn(
+                    "font-normal",
+                    row.derivedStatus === "ready_to_review" && READY_PILL_CLASS,
+                  )}
+                >
+                  {statusLabel}
+                </Badge>
+              )}
             </TableCell>
 
             {/* Actions menu. Left-clicking the "..." opens the menu; right-
@@ -634,6 +678,39 @@ function WorklistRowView({
                 <DropdownMenuContent align="end" className="w-44">
                   {items.map((it) => {
                     const Icon = it.icon;
+                    // A submenu item (the Stage picker) opens a child list
+                    // instead of acting on click.
+                    if (it.submenu) {
+                      return (
+                        <DropdownMenuSub key={it.key}>
+                          <DropdownMenuSubTrigger>
+                            <Icon />
+                            {it.label}
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-52">
+                            {it.submenu.map((sub) => (
+                              <DropdownMenuItem
+                                key={sub.key}
+                                onSelect={sub.onSelect}
+                                className="gap-2"
+                              >
+                                <span
+                                  aria-hidden
+                                  className={cn(
+                                    "size-2 shrink-0 rounded-full",
+                                    sub.dotClass,
+                                  )}
+                                />
+                                <span className="flex-1">{sub.label}</span>
+                                {sub.checked && (
+                                  <Check className="size-3.5 shrink-0 text-muted-foreground" />
+                                )}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      );
+                    }
                     return (
                       <DropdownMenuItem
                         key={it.key}
@@ -653,6 +730,37 @@ function WorklistRowView({
         <ContextMenuContent className="w-44">
           {items.map((it) => {
             const Icon = it.icon;
+            if (it.submenu) {
+              return (
+                <ContextMenuSub key={it.key}>
+                  <ContextMenuSubTrigger>
+                    <Icon />
+                    {it.label}
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-52">
+                    {it.submenu.map((sub) => (
+                      <ContextMenuItem
+                        key={sub.key}
+                        onSelect={sub.onSelect}
+                        className="gap-2"
+                      >
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "size-2 shrink-0 rounded-full",
+                            sub.dotClass,
+                          )}
+                        />
+                        <span className="flex-1">{sub.label}</span>
+                        {sub.checked && (
+                          <Check className="size-3.5 shrink-0 text-muted-foreground" />
+                        )}
+                      </ContextMenuItem>
+                    ))}
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
+              );
+            }
             return (
               <ContextMenuItem
                 key={it.key}

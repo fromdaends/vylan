@@ -1769,6 +1769,23 @@
     "overdue": "Overdue",
     "ready_to_review": "Ready to review"
   },
+  "Stage": {
+    "stage_collecting": "Collecting documents",
+    "stage_in_review": "In review",
+    "stage_in_preparation": "In preparation",
+    "stage_awaiting_signature": "Awaiting signature",
+    "stage_awaiting_payment": "Awaiting payment",
+    "stage_completed": "Completed",
+    "label": "Stage",
+    "change": "Change stage",
+    "current": "Current stage",
+    "start_preparation": "Start preparation",
+    "entered": "Entered {date}",
+    "stepper_label": "Engagement stage",
+    "set_error": "Could not change the stage. Try again.",
+    "changed_toast": "Stage set to {stage}",
+    "preparation_started_toast": "Preparation started"
+  },
   "Pricing": {
     "title": "Simple, flat pricing",
     "subtitle": "Pick the plan that fits your firm. No annual commit. Try out a demo before you buy.",
@@ -2207,7 +2224,13 @@
       "undo_failed": "Couldn't undo.",
       "heic_too_large": "This photo is over 10 MB. Retake it or choose a smaller copy.",
       "rate_limited": "Too many attempts. Please wait a minute and try again."
-    }
+    },
+    "stage_title": "Where things stand",
+    "stage_collecting": "We're waiting for your documents",
+    "stage_in_review": "Your accountant is reviewing your documents",
+    "stage_in_preparation": "Your accountant is working on your file",
+    "stage_awaiting_signature": "Waiting for your signature",
+    "stage_completed": "Your file is complete"
   },
   "Quickbooks": {
     "draft_title": "QuickBooks draft",

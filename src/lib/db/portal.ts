@@ -16,6 +16,7 @@ import type { SignatureStatus } from "@/lib/signwell/client";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
+import type { EngagementStage } from "@/lib/engagements/stage";
 import { BUCKET } from "@/lib/storage";
 import {
   getInvoiceAttachmentForEngagementSR,
@@ -115,6 +116,13 @@ export type PortalContext = {
   // unpaid (and not overridden). The portal then shows a polite locked state
   // instead of the download links, and the gated download route returns 404.
   final_documents_locked: boolean;
+  // Workflow stage (migration 0690), for the portal's read-only "where things
+  // stand" line. null when the engagement has no position or 0690 isn't applied
+  // — the portal then simply omits the line. The client NEVER sees the firm's
+  // internal stage names: portalStageLabelKey maps this to client-facing wording,
+  // and awaiting_payment deliberately has no line of its own (the invoice card
+  // already makes that ask).
+  stage: EngagementStage | null;
   // Client messaging (Phase 2): the thread with the firm, client-safe fields
   // only (no internal user ids). Empty + not ready before migration 0650, so
   // the portal quietly hides the Messages entry.
@@ -364,6 +372,9 @@ export async function loadPortalContext(
     signature_status_by_item: signatureStatusByItem,
     final_documents: finalDocuments,
     final_documents_locked: finalDocumentsLocked,
+    // Read straight off the engagement row — the firm's event handlers keep it
+    // fresh. undefined pre-0690 → null → the portal omits the line entirely.
+    stage: (engagement as { stage?: EngagementStage | null }).stage ?? null,
     messages: portalMessages,
     messages_unread: messagesUnread,
     messaging_ready: messagingReady,

@@ -12,6 +12,12 @@ import {
   MessageSquare,
 } from "lucide-react";
 import type { PortalContext } from "@/lib/db/portal";
+import {
+  STAGE_BG_CLASS,
+  portalStageLabelKey,
+  type EngagementStage,
+} from "@/lib/engagements/stage";
+import { cn } from "@/lib/cn";
 import { ItemCard } from "./item-card";
 import { SignatureItemCard } from "./signature-item-card";
 import { PaymentDueCard } from "./payment-due-card";
@@ -306,6 +312,7 @@ export function PortalShell({
             <GreetingSection
               clientName={ctx.client.display_name}
               firmName={ctx.firm.name}
+              stage={ctx.stage}
             />
             <PortalHub cards={hubCards} />
           </>
@@ -320,6 +327,7 @@ export function PortalShell({
               <GreetingSection
                 clientName={ctx.client.display_name}
                 firmName={ctx.firm.name}
+                stage={ctx.stage}
               />
             )}
             <section className="animate-in-stagger space-y-3">
@@ -347,6 +355,7 @@ export function PortalShell({
               <GreetingSection
                 clientName={ctx.client.display_name}
                 firmName={ctx.firm.name}
+                stage={ctx.stage}
               />
             )}
             {docTotal > 0 && (
@@ -462,13 +471,16 @@ function cnEntryIcon(active: boolean): string {
 }
 
 // The greeting block shown on the hub and on a single-group portal: a warm
-// hello, one line of context, and a quiet trust note.
+// hello, one line of context, a read-only "where things stand" line, and a quiet
+// trust note.
 function GreetingSection({
   clientName,
   firmName,
+  stage,
 }: {
   clientName: string;
   firmName: string;
+  stage: EngagementStage | null;
 }) {
   const t = useTranslations("Portal");
   return (
@@ -479,11 +491,37 @@ function GreetingSection({
       <p className="max-w-prose text-[15px] leading-relaxed text-muted-foreground">
         {t("subhead", { firm: firmName })}
       </p>
+      {/* Where things stand. Read-only and deliberately plain — a dot and a
+          sentence, no stepper, no stage names, no controls. The client gets the
+          one fact that matters ("is anything waiting on me?"); the firm's
+          six-stage machinery stays on the firm's side of the wall.
+          Omitted entirely when there's no stage (a portal opened before
+          migration 0690 lands), rather than showing an empty row. */}
+      {stage && <PortalStageLine stage={stage} />}
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <ShieldCheck className="size-3.5 shrink-0" aria-hidden />
         {t("trust", { firm: firmName })}
       </p>
     </section>
+  );
+}
+
+function PortalStageLine({ stage }: { stage: EngagementStage }) {
+  const t = useTranslations("Portal");
+  return (
+    <p className="flex items-center gap-2 pt-0.5 text-sm font-medium text-foreground">
+      <span
+        aria-hidden
+        className={cn(
+          "size-1.5 shrink-0 rounded-full",
+          STAGE_BG_CLASS[stage],
+          // A finished file gets a steady dot; anything still in flight gets a
+          // gentle pulse, so an at-a-glance look says "moving" vs "done".
+          stage !== "completed" && "animate-pulse",
+        )}
+      />
+      {t(portalStageLabelKey(stage))}
+    </p>
   );
 }
 

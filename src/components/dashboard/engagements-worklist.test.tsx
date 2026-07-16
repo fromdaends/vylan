@@ -338,3 +338,98 @@ describe("EngagementsWorklist", () => {
     expect(push).not.toHaveBeenCalled();
   });
 });
+
+// The Status column's whole job changed: a live engagement now reads its
+// workflow STAGE instead of the generic "In progress" every live row shared.
+describe("status column — workflow stage", () => {
+  const stageRow = (over: Partial<WorklistRow> = {}) =>
+    row({ id: "s1", title: "Stage Row", ...over });
+
+  function statusCellOf(q: ReturnType<typeof renderWorklist>) {
+    const tr = q.getByRole("link", { name: /Stage Row/i }).closest("tr")!;
+    // Status is the last cell before the actions column.
+    const cells = within(tr as HTMLElement).getAllByRole("cell");
+    return cells[cells.length - 2];
+  }
+
+  it("shows the stage chip instead of the In progress pill", () => {
+    const q = renderWorklist([stageRow({ stage: "in_preparation" })]);
+    const cell = statusCellOf(q);
+    expect(cell).toHaveTextContent(en.Stage.stage_in_preparation);
+    expect(cell).not.toHaveTextContent(en.Status.in_progress);
+  });
+
+  it("the stage supersedes the green Ready to review pill too", () => {
+    // Both would otherwise apply to this row. If the ready pill won, the stage
+    // system would be invisible on nearly every row whose stage is in_review —
+    // so the stage has to take the column outright.
+    const q = renderWorklist([
+      stageRow({ stage: "in_review", readyToReview: true }),
+    ]);
+    const cell = statusCellOf(q);
+    expect(cell).toHaveTextContent(en.Stage.stage_in_review);
+    expect(cell).not.toHaveTextContent(en.Status.ready_to_review);
+  });
+
+  it("falls back to the status pill when there is no stage (draft)", () => {
+    const q = renderWorklist([
+      stageRow({ status: "draft", derivedStatus: "draft", stage: null }),
+    ]);
+    expect(statusCellOf(q)).toHaveTextContent(en.Status.draft);
+  });
+
+  it("falls back to the status pill when the stage column is absent (pre-migration)", () => {
+    // stage undefined = migration 0690 not applied in this environment. The
+    // table must read exactly as it did before the feature existed.
+    const q = renderWorklist([stageRow({})]);
+    expect(statusCellOf(q)).toHaveTextContent(en.Status.in_progress);
+  });
+
+  it("renders each stage with its own label", () => {
+    const stages = [
+      ["collecting", en.Stage.stage_collecting],
+      ["in_review", en.Stage.stage_in_review],
+      ["in_preparation", en.Stage.stage_in_preparation],
+      ["awaiting_signature", en.Stage.stage_awaiting_signature],
+      ["awaiting_payment", en.Stage.stage_awaiting_payment],
+      ["completed", en.Stage.stage_completed],
+    ] as const;
+    for (const [stage, label] of stages) {
+      const q = renderWorklist([
+        stageRow({ stage, status: "in_progress", derivedStatus: "in_progress" }),
+      ]);
+      expect(statusCellOf(q)).toHaveTextContent(label);
+      cleanup();
+    }
+  });
+
+  // Radix opens its menu on pointer-down, not click (matches the archive test).
+  function openRowMenu(q: ReturnType<typeof renderWorklist>) {
+    const tr = q.getByRole("link", { name: /Stage Row/i }).closest("tr")!;
+    fireEvent.pointerDown(
+      within(tr as HTMLElement).getByRole("button", {
+        name: en.Engagements.menu_actions,
+      }),
+      { button: 0, ctrlKey: false },
+    );
+  }
+
+  it("offers the stage picker in the row menu", async () => {
+    const q = renderWorklist([stageRow({ stage: "in_review" })]);
+    openRowMenu(q);
+    // Portaled to the body, so query globally.
+    expect(
+      await screen.findByRole("menuitem", { name: en.Stage.change }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no stage picker on a row with no stage", async () => {
+    const q = renderWorklist([stageRow({ stage: null })]);
+    openRowMenu(q);
+    // Archive proves the menu opened; the stage item is simply absent.
+    await screen.findByRole("menuitem", { name: en.Engagements.menu_archive });
+    expect(
+      screen.queryByRole("menuitem", { name: en.Stage.change }),
+    ).not.toBeInTheDocument();
+  });
+});

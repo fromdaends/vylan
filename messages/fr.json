@@ -1769,6 +1769,23 @@
     "overdue": "En retard",
     "ready_to_review": "À réviser"
   },
+  "Stage": {
+    "stage_collecting": "Collecte de documents",
+    "stage_in_review": "En vérification",
+    "stage_in_preparation": "En préparation",
+    "stage_awaiting_signature": "En attente de signature",
+    "stage_awaiting_payment": "En attente de paiement",
+    "stage_completed": "Terminé",
+    "label": "Étape",
+    "change": "Changer l'étape",
+    "current": "Étape actuelle",
+    "start_preparation": "Commencer la préparation",
+    "entered": "Atteinte le {date}",
+    "stepper_label": "Étape du mandat",
+    "set_error": "Impossible de changer l'étape. Réessayez.",
+    "changed_toast": "Étape définie à « {stage} »",
+    "preparation_started_toast": "Préparation commencée"
+  },
   "Pricing": {
     "title": "Tarification simple et claire",
     "subtitle": "Choisissez le forfait qui convient à votre cabinet. Aucun engagement annuel. Essayez la démo avant d'acheter.",
@@ -2207,7 +2224,13 @@
       "undo_failed": "Impossible d’annuler.",
       "heic_too_large": "Cette photo dépasse 10 Mo. Reprenez la photo ou choisissez une copie plus légère.",
       "rate_limited": "Trop de tentatives. Attendez une minute puis réessayez."
-    }
+    },
+    "stage_title": "Où en sommes-nous",
+    "stage_collecting": "Nous attendons vos documents",
+    "stage_in_review": "Votre comptable vérifie vos documents",
+    "stage_in_preparation": "Votre comptable travaille sur votre dossier",
+    "stage_awaiting_signature": "En attente de votre signature",
+    "stage_completed": "Votre dossier est terminé"
   },
   "Quickbooks": {
     "draft_title": "Brouillon QuickBooks",

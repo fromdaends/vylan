@@ -243,8 +243,13 @@ export function resolveStage(f: StageFacts): EngagementStage | null {
 // `current` is always included even when the facts say it wouldn't apply: a
 // manual override can park an engagement at a stage it doesn't structurally
 // have, and the stepper must still be able to draw the node it's standing on.
+//
+// Takes only the two facts it actually reads (a full StageFacts satisfies it),
+// so a caller that just wants to draw a stepper doesn't have to assemble the
+// whole fact set — the engagement detail page already knows its items and its
+// invoice, and that's all this needs.
 export function applicableStages(
-  f: StageFacts,
+  f: Pick<StageFacts, "hasSignatureItems" | "hasInvoice">,
   current?: EngagementStage | null,
 ): EngagementStage[] {
   return ENGAGEMENT_STAGES.filter((s) => {
@@ -298,9 +303,18 @@ export function stageLabelKey(stage: EngagementStage): string {
 }
 
 // i18n key for the client-facing wording shown in the portal, under "Portal".
-// Deliberately different copy: the client shouldn't read internal process names.
+// Deliberately different copy: the client shouldn't read the firm's internal
+// process names ("In preparation"), they should read what it means for them
+// ("Your accountant is working on your file").
+//
+// awaiting_payment has NO client-facing line of its own, by design: the portal's
+// invoice card already makes the ask, and repeating "we're waiting for your
+// money" as a status line would be both redundant and cold. From the client's
+// side the honest reading of that stage is that their file is still in the
+// firm's hands, so it borrows the in_preparation wording.
 export function portalStageLabelKey(stage: EngagementStage): string {
-  return `stage_${stage}`;
+  const key = stage === "awaiting_payment" ? "in_preparation" : stage;
+  return `stage_${key}`;
 }
 
 // Chip tint per stage. Follows the existing chip convention (subtle background
