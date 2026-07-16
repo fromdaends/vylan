@@ -12,7 +12,6 @@ import {
   Receipt,
   Trash2,
   Wallet,
-  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useDownloadAll } from "./use-download-all";
@@ -39,14 +38,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  cancelEngagementAction,
-  deleteEngagementAction,
-} from "@/app/actions/engagements";
+import { deleteEngagementAction } from "@/app/actions/engagements";
 
 // The "..." overflow menu for an engagement's occasional actions: copying
-// links, reminder controls, downloads, cancellation, and deletion. Activity
-// remains available in the Assistant and is intentionally absent here.
+// links, reminder controls, downloads, and deletion. Activity remains
+// available in the Assistant and is intentionally absent here. (Cancel was
+// dropped — Delete covers removing an engagement.)
 export function EngagementMoreMenu({
   engagementId,
   locale,
@@ -100,12 +97,6 @@ export function EngagementMoreMenu({
   // can't drift (the route returns JSON {url}; the browser downloads).
   const { downloading, downloadAll } = useDownloadAll(engagementId);
   const isLive = status === "live";
-
-  const cancel = () => {
-    const f = new FormData();
-    f.set("id", engagementId);
-    void cancelEngagementAction(f);
-  };
 
   return (
     <>
@@ -188,7 +179,7 @@ export function EngagementMoreMenu({
             </DropdownMenuItem>
           )}
 
-          {(isLive || hasUploads) && <DropdownMenuSeparator />}
+          {hasUploads && <DropdownMenuSeparator />}
           {hasUploads && (
             <DropdownMenuItem
               // Keep the menu from closing-and-cancelling: run the blob
@@ -201,12 +192,6 @@ export function EngagementMoreMenu({
             >
               {downloading ? <Loader2 className="animate-spin" /> : <Download />}
               {t("download_all")}
-            </DropdownMenuItem>
-          )}
-          {isLive && (
-            <DropdownMenuItem onSelect={cancel}>
-              <X />
-              {t("cancel")}
             </DropdownMenuItem>
           )}
           {canDelete && (
