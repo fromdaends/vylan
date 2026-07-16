@@ -6,13 +6,19 @@ import type { EngagementScope } from "@/lib/db/engagements";
 // Kept as pure config + a pure selector so the routing, the sidebar, and the
 // tests all agree on the same definitions.
 
+// There is deliberately no "cancelled" view. Cancelling an engagement stopped
+// being reachable from the UI when the Cancel item was dropped from the
+// engagement menu (Delete already covers removing one), so the tab could only
+// ever be empty. The 'cancelled' STATUS still exists in the database and is
+// still honoured everywhere it matters (the portal refuses a cancelled
+// engagement, the detail page renders read-only), and any legacy cancelled row
+// is still findable through the command palette — it just has no tab of its own.
 export type EngagementView =
   | "active"
   | "ready"
   | "drafts"
   | "completed"
   | "archived"
-  | "cancelled"
   | "deleted";
 
 export const ENGAGEMENT_VIEWS: EngagementView[] = [
@@ -21,7 +27,6 @@ export const ENGAGEMENT_VIEWS: EngagementView[] = [
   "drafts",
   "completed",
   "archived",
-  "cancelled",
   "deleted",
 ];
 
@@ -63,7 +68,6 @@ export function viewEmptyKey(view: EngagementView): string {
 //   drafts    → draft only
 //   completed → complete
 //   archived  → whatever the archived scope returned (status-agnostic)
-//   cancelled → cancelled
 //   deleted   → whatever the deleted scope returned (status-agnostic)
 export function selectView(
   view: EngagementView,
@@ -83,8 +87,6 @@ export function selectView(
       return rows.filter((r) => r.status === "draft");
     case "completed":
       return rows.filter((r) => r.status === "complete");
-    case "cancelled":
-      return rows.filter((r) => r.status === "cancelled");
     case "archived":
     case "deleted":
       // Scope already constrained these; show them all (any status).
