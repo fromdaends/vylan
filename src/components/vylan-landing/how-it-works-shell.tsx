@@ -18,6 +18,10 @@
 // reduced (or JS off) every word is shown immediately, fully legible.
 
 import { useEffect, useRef } from "react";
+import {
+  WorkflowAutomation,
+  type WorkflowAutomationStrings,
+} from "./workflow-automation";
 
 type HowItWorksStrings = {
   heroEyebrow: string;
@@ -31,6 +35,9 @@ type HowItWorksStrings = {
   stepsEyebrow: string;
   stepsTitle: string;
   steps: { kicker: string; title: string; body: string }[];
+  // The playable stage-board demo. Nested rather than flattened: it's a whole
+  // section's worth of strings, and it owns its own component.
+  workflow: WorkflowAutomationStrings;
   payEyebrow: string;
   payTitlePre: string;
   payTitleWord: string;
@@ -302,6 +309,12 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
           ))}
         </div>
       </section>
+
+      {/* ---------- WORKFLOW AUTOMATION ----------
+          Where the design puts it: straight after the four-step walkthrough
+          (which explains what happens) and before the payment pipeline — this
+          is the section that SHOWS it happening. */}
+      <WorkflowAutomation s={s.workflow} />
 
       {/* ---------- PAYMENT PIPELINE ---------- */}
       <section className="wwd-section wwd-pay">
