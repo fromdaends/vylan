@@ -78,9 +78,23 @@ with facts as (
       select count(*) from request_items i
       where i.engagement_id = e.id and i.kind = 'collection' and i.required
     ) as required_total,
+    -- required_done / blocked below apply the SAME fallback rule
+    -- checklistFacts() uses in the live resolver: count required items when any
+    -- exist, else fall back to counting ALL collection items (an
+    -- all-optional/Custom-template checklist still has to have SOMETHING count
+    -- as "the client's part", or it reads permanently ready-to-review /
+    -- never-blocked no matter what the client actually sent).
+    --
+    -- Computed as (required-item count) when required_total > 0, else
+    -- (all-collection-item count) — mirrored in both required_done and blocked
+    -- so the two stay on the same denominator, exactly like checklistFacts.
     (
       select count(*) from request_items i
-      where i.engagement_id = e.id and i.kind = 'collection' and i.required
+      where i.engagement_id = e.id and i.kind = 'collection'
+        and (i.required or not exists (
+          select 1 from request_items i2
+          where i2.engagement_id = e.id and i2.kind = 'collection' and i2.required
+        ))
         and i.status in ('approved', 'na')
     ) as required_done,
     -- Blocked = the client still owes something usable. An item that is
@@ -89,7 +103,11 @@ with facts as (
     -- computeAttention's itemsRequiredBlocked.
     (
       select count(*) from request_items i
-      where i.engagement_id = e.id and i.kind = 'collection' and i.required
+      where i.engagement_id = e.id and i.kind = 'collection'
+        and (i.required or not exists (
+          select 1 from request_items i2
+          where i2.engagement_id = e.id and i2.kind = 'collection' and i2.required
+        ))
         and (
           (i.status = 'pending' and i.rejection_reason is null)
           or i.status = 'rejected'
@@ -141,18 +159,27 @@ resolved as (
           and not f.has_pending_sig
           then 'completed'
         -- 2. Awaiting payment: invoice owed, signing done or never needed.
+        --    "Everything approved" reads over the SAME fallback denominator as
+        --    required_done/blocked above: required items when any exist, else
+        --    every collection item. Without the required_total=0 branch here,
+        --    an all-optional checklist could never satisfy this test at all —
+        --    required_done already falls back to counting all items, but
+        --    comparing it against the literal required_total (still 0) would
+        --    always read false.
         when f.has_unpaid_invoice
           and not f.has_pending_sig
           and (
             f.status = 'complete' or f.has_final_doc or f.has_any_sig
             or (f.required_total > 0 and f.required_done = f.required_total)
+            or (f.required_total = 0 and f.items_total > 0 and f.required_done = f.items_total)
           )
           then 'awaiting_payment'
         -- 3. Awaiting signature.
         when f.has_pending_sig then 'awaiting_signature'
-        -- 4. In preparation.
+        -- 4. In preparation. Same fallback as arm 2.
         when f.status = 'complete' or f.has_final_doc or f.has_any_sig
           or (f.required_total > 0 and f.required_done = f.required_total)
+          or (f.required_total = 0 and f.items_total > 0 and f.required_done = f.items_total)
           then 'in_preparation'
         -- 5. In review: everything the client owed is in, nothing blocked.
         when f.items_total > 0 and f.blocked = 0 then 'in_review'
