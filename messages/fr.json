@@ -1788,7 +1788,7 @@
     "changed_toast": "Étape définie à « {stage} »",
     "preparation_started_toast": "Préparation commencée",
     "filter_label": "Filtrer par étape",
-    "filter_all": "Toutes",
+    "filter_all": "Toutes les étapes",
     "filter_chip": "{label} ({count})",
     "filter_cleared": "Toutes les étapes affichées",
     "sort_by_stage": "Trier par étape",

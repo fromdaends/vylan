@@ -43,7 +43,7 @@ import {
   parseStageSort,
   sortRowsByStage,
 } from "@/lib/engagements/stage-filter";
-import { StageFilterChips } from "./stage-filter-chips";
+import { StageFilterSelect } from "./stage-filter-select";
 import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
 
@@ -93,7 +93,7 @@ export function EngagementsView({
 
   // Write the query string. Mirrors the app's existing URL-filter pattern
   // (clients-toolbar): replace, not push, so the Back button leaves the page
-  // rather than stepping back through every chip the accountant tried — and so
+  // rather than stepping back through every filter the accountant tried — and so
   // the URL captured when they open an engagement is the filtered one.
   function setParams(next: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams?.toString() ?? "");
@@ -156,8 +156,8 @@ export function EngagementsView({
   const q = query.trim().toLowerCase();
 
   // Everything EXCEPT the stage filter: search + the my/all scope. This is what
-  // the chip counts are computed from, so each count is exactly what clicking
-  // that chip would reveal — and picking one chip doesn't zero all the others.
+  // the per-stage counts are computed from, so each count is exactly what
+  // choosing that stage would reveal — and picking one doesn't zero the others.
   const beforeStageFilter = useMemo(() => {
     let base =
       q !== ""
@@ -255,25 +255,38 @@ export function EngagementsView({
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {teamEnabled && (
-          <Select
-            value={scope}
-            onValueChange={(v) => chooseScope(v as "mine" | "all")}
-          >
-            <SelectTrigger
-              size="sm"
-              className="w-[13rem] self-start"
-              aria-label={t("scope_label")}
+        {/* The pickers travel together, so the toolbar stays one line instead of
+            spending a whole row on filters. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {teamEnabled && (
+            <Select
+              value={scope}
+              onValueChange={(v) => chooseScope(v as "mine" | "all")}
             >
-              <Users className="h-3.5 w-3.5 text-muted-foreground" />
-              <SelectValue placeholder={t("scope_label")} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("scope_all")}</SelectItem>
-              <SelectItem value="mine">{t("scope_mine")}</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
+              <SelectTrigger
+                size="sm"
+                className="w-[13rem] self-start"
+                aria-label={t("scope_label")}
+              >
+                <Users className="h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue placeholder={t("scope_label")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t("scope_all")}</SelectItem>
+                <SelectItem value="mine">{t("scope_mine")}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          {/* Stage filter — Active only. An engagement's stage is a property of
+              live work, so filtering Drafts or Cancelled by it would be noise. */}
+          {stageFilteringOn && (
+            <StageFilterSelect
+              counts={stageCounts}
+              selected={stageFilter}
+              onSelect={selectStage}
+            />
+          )}
+        </div>
         <div className="relative sm:w-72">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -286,16 +299,6 @@ export function EngagementsView({
           />
         </div>
       </div>
-
-      {/* Stage filter — Active only. Sits between the search and the table, on
-          its own line with no container: the chips ARE the affordance. */}
-      {stageFilteringOn && (
-        <StageFilterChips
-          counts={stageCounts}
-          selected={stageFilter}
-          onSelect={selectStage}
-        />
-      )}
 
       <WorklistTable
         rows={visible}

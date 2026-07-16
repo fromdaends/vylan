@@ -1788,7 +1788,7 @@
     "changed_toast": "Stage set to {stage}",
     "preparation_started_toast": "Preparation started",
     "filter_label": "Filter by stage",
-    "filter_all": "All",
+    "filter_all": "All stages",
     "filter_chip": "{label} ({count})",
     "filter_cleared": "Showing all stages",
     "sort_by_stage": "Sort by stage",
