@@ -60,13 +60,17 @@ describe("engagementToView", () => {
     ).toBe("completed");
   });
 
-  it("classifies a cancelled engagement as Cancelled", () => {
+  // Cancelled has no sub-item to light up any more (see lib/engagements/views.ts
+  // — cancelling isn't reachable from the UI, so the tab went). A legacy
+  // cancelled engagement, reachable only via the command palette, falls through
+  // to the section root rather than highlighting nothing.
+  it("falls a cancelled engagement through to Active — it has no view of its own", () => {
     expect(
       engagementToView(
         { ...base, status: "cancelled" },
         { readyToReview: false },
       ),
-    ).toBe("cancelled");
+    ).toBe("active");
   });
 
   it("classifies an archived engagement as Archived regardless of status", () => {
@@ -92,13 +96,13 @@ describe("engagementToView", () => {
   });
 
   it("honours the priority order on overlapping states", () => {
-    // Cancelled beats Ready.
+    // Ready now wins over a cancelled status, which no longer classifies.
     expect(
       engagementToView(
         { ...base, status: "cancelled" },
         { readyToReview: true },
       ),
-    ).toBe("cancelled");
+    ).toBe("ready");
     // Deleted beats everything.
     expect(
       engagementToView(

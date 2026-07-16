@@ -144,7 +144,6 @@ export default async function AppLayout({
           drafts: tEng("view_drafts_label"),
           completed: tEng("view_completed_label"),
           archived: tEng("view_archived_label"),
-          cancelled: tEng("view_cancelled_label"),
           deleted: tEng("view_deleted_label"),
         },
         // `nav_billing` translation key kept for the Settings page's
