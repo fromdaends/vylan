@@ -30,6 +30,7 @@ import {
   FileText,
   Folder,
   HelpCircle,
+  BookOpen,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -70,6 +71,9 @@ type Labels = {
   logout: string;
   profile: string;
   help: string;
+  // The PUBLIC help center at /help. Distinct from `help` above, which opens
+  // the in-app "Ask Vylan" assistant panel — the two sit side by side.
+  helpCenter: string;
   sectionMain: string;
   sectionAccount: string;
   toggleMenu: string;
@@ -548,6 +552,20 @@ function MobileAccountMenu({
             </span>
             <span className="flex-1 text-left">{labels.help}</span>
           </button>
+          {/* The public help center. New tab (founder spec) so a user reading
+              a guide doesn't lose the screen they were stuck on. */}
+          <a
+            href="/help"
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={onItemClick}
+            className="w-full flex items-center gap-3 rounded-2xl px-3 py-3.5 text-sm font-medium text-foreground hover:bg-secondary/60 active:bg-secondary transition-colors"
+          >
+            <span className="inline-flex size-9 items-center justify-center rounded-xl bg-accent/10 text-accent shrink-0">
+              <BookOpen className="size-4" aria-hidden />
+            </span>
+            <span className="flex-1 text-left">{labels.helpCenter}</span>
+          </a>
         </div>
       </div>
 
@@ -889,6 +907,21 @@ function SidebarBody({
             >
               <HelpCircle className="h-4 w-4" />
               {labels.help}
+            </DropdownMenuItem>
+            {/* The public help center, beside the assistant rather than
+                instead of it. New tab (founder spec). asChild so the item
+                renders as a real anchor — middle-click and "open in new
+                window" have to work on something that IS a link. */}
+            <DropdownMenuItem asChild className="cursor-pointer">
+              <a
+                href="/help"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2"
+              >
+                <BookOpen className="h-4 w-4" />
+                {labels.helpCenter}
+              </a>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <form ref={logoutFormRef} action={logoutAction}>

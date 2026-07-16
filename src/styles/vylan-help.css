@@ -1,0 +1,746 @@
+/* =====================================================================
+   Vylan public help center (/help).
+   Loaded alongside vylan-landing.css, never instead of it.
+
+   THE STRUCTURE, AND WHY:
+   The page root is `vy-root vy-help`. `vy-root` (vylan-landing.css) already
+   supplies the brand tokens, the Schibsted face, box-sizing, ::selection, and
+   the blue page background. Taking it wholesale means VylanMenu and
+   VylanFooter — both of which style white-on-blue with hard-coded #fff —
+   keep working here with ZERO overrides. A white page would have made the
+   fixed brand and every footer link invisible.
+
+   So the page stays blue and the WHITE BODY is a sheet laid on top of it
+   (.vyh-sheet), with a blue ellipse arcing down over its top edge
+   (.vyh-sheet::before) to make the hero read as curving into the white. That
+   is the Intercom/Zendesk shape, and it comes free of any fight with the
+   shared chrome.
+
+   Colours: --vy-blue and --vy-ink come from .vy-root. Nothing here invents a
+   brand shade. The greys below are help-center-local (the marketing site had
+   no white-background surface before this page) and are declared once in the
+   token block, not sprinkled through the file.
+
+   Single theme, light-first, by founder decision (2026-07-16): the marketing
+   site has no dark mode anywhere and hard-codes its colours by design. See
+   the note at the top of vylan-landing.css.
+
+   Every class is namespaced `vyh-` so it can't collide with `vy-` (landing),
+   `wwd-` (how it works), or Tailwind.
+   ===================================================================== */
+
+.vy-help {
+  /* Column layout so the white sheet can absorb the leftover height (see
+     .vyh-sheet). .vy-root already supplies min-height:100vh; without this the
+     sheet is only as tall as its content and a short page reads as a thin
+     white band between two blue slabs, which is the opposite of a help
+     center. The menu's brand + overlay are position:fixed, so they're out of
+     flow and unaffected. */
+  display: flex;
+  flex-direction: column;
+
+  /* Ink + surfaces for the white sheet. The blue side inherits from .vy-root. */
+  --vyh-ink: #0d1730;
+  --vyh-ink-soft: #4a5570;
+  --vyh-muted: #6b7488;
+  --vyh-line: #e5e9f2;
+  --vyh-line-soft: #eef1f7;
+  --vyh-sheet: #ffffff;
+  --vyh-tint: #f5f7fc;
+  --vyh-chip: #eaeffb;
+
+  /* Depth of the arc at its centre, where blue meets white. */
+  --vyh-curve: 96px;
+}
+
+/* ---------- Hero ---------- */
+
+.vyh-hero {
+  position: relative;
+  z-index: 5;
+  /* Top clears the fixed .vy-brand (top: 24px, 28px type). Bottom is modest
+     because the arc below adds its own depth to the blue. */
+  padding: 148px 24px 52px;
+  text-align: center;
+}
+.vyh-hero-compact {
+  padding: 132px 24px 40px;
+}
+
+.vyh-title {
+  margin: 0 auto;
+  max-width: 16ch;
+  font-size: clamp(34px, 5.2vw, 58px);
+  font-weight: 600;
+  letter-spacing: -0.05em;
+  line-height: 1.04;
+}
+.vyh-hero-compact .vyh-title {
+  font-size: clamp(27px, 3.4vw, 38px);
+  max-width: 26ch;
+}
+
+.vyh-sub {
+  margin: 16px auto 0;
+  max-width: 52ch;
+  font-size: 16px;
+  line-height: 1.55;
+  opacity: 0.82;
+}
+
+/* ---------- Search ---------- */
+
+.vyh-search {
+  position: relative;
+  z-index: 20;
+  margin: 34px auto 0;
+  width: min(660px, 100%);
+  text-align: left;
+}
+.vyh-hero-compact .vyh-search {
+  margin-top: 24px;
+  width: min(560px, 100%);
+}
+
+/* The white bubble. The centrepiece of the page, so it gets real elevation
+   off the blue rather than a hairline. */
+.vyh-search-bubble {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border-radius: 999px;
+  padding: 0 8px 0 22px;
+  height: 66px;
+  box-shadow:
+    0 1px 2px rgba(6, 22, 71, 0.16),
+    0 12px 30px -6px rgba(6, 22, 71, 0.3),
+    0 30px 60px -14px rgba(6, 22, 71, 0.24);
+  transition:
+    box-shadow 220ms var(--vy-ease),
+    transform 220ms var(--vy-ease);
+}
+.vyh-hero-compact .vyh-search-bubble {
+  height: 56px;
+  padding-left: 18px;
+}
+.vyh-search:focus-within .vyh-search-bubble {
+  transform: translateY(-1px);
+  box-shadow:
+    0 1px 2px rgba(6, 22, 71, 0.18),
+    0 16px 36px -6px rgba(6, 22, 71, 0.34),
+    0 36px 70px -14px rgba(6, 22, 71, 0.28);
+}
+
+.vyh-search-icon {
+  flex: none;
+  width: 21px;
+  height: 21px;
+  color: var(--vyh-muted);
+}
+.vyh-hero-compact .vyh-search-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.vyh-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  color: var(--vyh-ink);
+}
+.vyh-search-input::placeholder {
+  color: var(--vyh-muted);
+  opacity: 1;
+}
+.vyh-hero-compact .vyh-search-input {
+  font-size: 15px;
+}
+
+.vyh-search-clear {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--vyh-muted);
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  font-family: inherit;
+  transition: background 140ms var(--vy-ease);
+}
+.vyh-search-clear:hover {
+  background: var(--vyh-tint);
+  color: var(--vyh-ink);
+}
+.vyh-hero-compact .vyh-search-clear {
+  width: 42px;
+  height: 42px;
+}
+
+/* Results drop out of the bubble as one card. */
+.vyh-results {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 10px);
+  background: #fff;
+  border-radius: 20px;
+  padding: 8px;
+  box-shadow:
+    0 1px 2px rgba(6, 22, 71, 0.16),
+    0 18px 44px -8px rgba(6, 22, 71, 0.34),
+    0 40px 80px -18px rgba(6, 22, 71, 0.26);
+  max-height: min(58vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.vyh-result {
+  display: block;
+  padding: 13px 15px;
+  border-radius: 13px;
+  text-decoration: none;
+  color: inherit;
+}
+.vyh-result:hover,
+.vyh-result:focus-visible,
+.vyh-result[data-active="true"] {
+  background: var(--vyh-tint);
+  outline: none;
+}
+.vyh-result-cat {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vy-blue);
+}
+.vyh-result-title {
+  margin-top: 3px;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.017em;
+  color: var(--vyh-ink);
+}
+.vyh-result-sum {
+  margin-top: 3px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--vyh-ink-soft);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.vyh-empty {
+  padding: 22px 16px;
+  text-align: center;
+  color: var(--vyh-ink-soft);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.vyh-empty a {
+  color: var(--vy-blue);
+  font-weight: 600;
+}
+
+/* ---------- The white sheet ---------- */
+
+.vyh-sheet {
+  position: relative;
+  z-index: 4;
+  background: var(--vyh-sheet);
+  color: var(--vyh-ink);
+  /* Top padding clears the arc, which is painted OVER this sheet. */
+  padding: calc(var(--vyh-curve) + 52px) 24px 120px;
+  /* Take every pixel the hero and footer don't need, so white is the page and
+     the blue is a band at each end. `0 auto` (not `1`) keeps the basis at the
+     content's own height, so a long article is never squashed. */
+  flex: 1 0 auto;
+}
+
+/* The blue arc: a half-ellipse painted ON TOP of the white sheet's leading
+   edge, so the hero appears to sag down into the white.
+
+   It MUST overlay the white. An earlier version sat in a margin ABOVE the
+   sheet — but the page itself is blue (see .vy-root), so that was a blue arc
+   on a blue background: present in the DOM, correct in every computed style,
+   and utterly invisible. The blue/white boundary stayed a straight line.
+   Only white can show this shape, so only white can be behind it.
+
+   The -3% bleed pushes the ellipse's zero-height ends off-screen, so the arc
+   is ~1/3 depth at the window edges and full depth at the centre instead of
+   pinching to a hard point in the corners. Being a percentage, that ratio
+   holds at every width. */
+.vyh-sheet::before {
+  content: "";
+  position: absolute;
+  left: -3%;
+  right: -3%;
+  top: 0;
+  height: var(--vyh-curve);
+  background: var(--vy-blue);
+  border-radius: 0 0 50% 50% / 0 0 100% 100%;
+  pointer-events: none;
+}
+
+.vyh-wrap {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.vyh-wrap-narrow {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+/* ---------- Category grid ---------- */
+
+.vyh-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+}
+
+.vyh-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 26px 24px 22px;
+  border: 1px solid var(--vyh-line);
+  border-radius: 18px;
+  background: #fff;
+  text-decoration: none;
+  color: inherit;
+  transition:
+    border-color 180ms var(--vy-ease),
+    box-shadow 180ms var(--vy-ease),
+    transform 180ms var(--vy-ease);
+}
+.vyh-card:hover {
+  transform: translateY(-2px);
+  border-color: #cfd9f2;
+  box-shadow: 0 10px 30px -10px rgba(16, 80, 237, 0.28);
+}
+.vyh-card-title {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+}
+.vyh-card-desc {
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--vyh-ink-soft);
+}
+.vyh-card-count {
+  margin-top: auto;
+  padding-top: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--vy-blue);
+}
+
+/* ---------- Article list (category page) ---------- */
+
+.vyh-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--vyh-line-soft);
+}
+.vyh-list-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 21px 4px;
+  border-bottom: 1px solid var(--vyh-line-soft);
+  text-decoration: none;
+  color: inherit;
+  transition: padding-left 180ms var(--vy-ease);
+}
+.vyh-list-item:hover {
+  padding-left: 10px;
+}
+.vyh-list-title {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}
+.vyh-list-sum {
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--vyh-ink-soft);
+  max-width: 68ch;
+}
+.vyh-list-arrow {
+  flex: none;
+  color: var(--vy-blue);
+  opacity: 0;
+  transform: translateX(-4px);
+  transition:
+    opacity 180ms var(--vy-ease),
+    transform 180ms var(--vy-ease);
+}
+.vyh-list-item:hover .vyh-list-arrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ---------- Breadcrumb ---------- */
+
+.vyh-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  margin-bottom: 26px;
+  color: var(--vyh-muted);
+  flex-wrap: wrap;
+}
+.vyh-crumbs a {
+  color: var(--vyh-ink-soft);
+  text-decoration: none;
+  font-weight: 500;
+}
+.vyh-crumbs a:hover {
+  color: var(--vy-blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.vyh-crumb-sep {
+  opacity: 0.5;
+}
+
+/* ---------- Article ---------- */
+
+.vyh-article-head {
+  padding-bottom: 26px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--vyh-line-soft);
+}
+.vyh-article-title {
+  font-size: clamp(28px, 3.6vw, 40px);
+  font-weight: 600;
+  letter-spacing: -0.042em;
+  line-height: 1.1;
+  margin: 0;
+}
+.vyh-article-sum {
+  margin: 14px 0 0;
+  font-size: 17.5px;
+  line-height: 1.6;
+  color: var(--vyh-ink-soft);
+  max-width: 62ch;
+}
+
+.vyh-prose {
+  font-size: 16.5px;
+  line-height: 1.72;
+  color: var(--vyh-ink);
+  max-width: 66ch;
+}
+.vyh-prose > * + * {
+  margin-top: 20px;
+}
+.vyh-prose h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  line-height: 1.28;
+  margin-top: 42px;
+  /* Anchored headings shouldn't land flush under the fixed brand. */
+  scroll-margin-top: 96px;
+}
+.vyh-prose ol,
+.vyh-prose ul {
+  padding-left: 0;
+  list-style: none;
+  counter-reset: vyh-step;
+}
+.vyh-prose li {
+  position: relative;
+  padding-left: 34px;
+}
+.vyh-prose li + li {
+  margin-top: 11px;
+}
+.vyh-prose ol > li::before {
+  counter-increment: vyh-step;
+  content: counter(vyh-step);
+  position: absolute;
+  left: 0;
+  top: 2px;
+  display: grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border-radius: 999px;
+  background: var(--vy-blue);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.vyh-prose ul > li::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: #b9c4de;
+}
+
+/* A label to hunt for on screen. Scannable without shouting. */
+.vyh-ui {
+  display: inline;
+  background: var(--vyh-chip);
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 0.92em;
+  font-weight: 600;
+  letter-spacing: -0.008em;
+  color: #1b3fa8;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.vyh-prose a {
+  color: var(--vy-blue);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: rgba(16, 80, 237, 0.32);
+  transition: text-decoration-color 160ms var(--vy-ease);
+}
+.vyh-prose a:hover {
+  text-decoration-color: currentColor;
+}
+.vyh-prose strong {
+  font-weight: 600;
+}
+
+/* Callouts */
+.vyh-note,
+.vyh-warn {
+  border-radius: 13px;
+  padding: 16px 18px;
+  font-size: 15.5px;
+  line-height: 1.62;
+  border-left: 3px solid;
+}
+.vyh-note {
+  background: var(--vyh-tint);
+  border-left-color: var(--vy-blue);
+}
+.vyh-warn {
+  background: #fff8ec;
+  border-left-color: #d98a08;
+}
+.vyh-note > :first-child,
+.vyh-warn > :first-child {
+  margin-top: 0;
+}
+
+/* ---------- In this article ---------- */
+
+.vyh-toc {
+  margin: 30px 0 40px;
+  padding: 18px 20px;
+  border: 1px solid var(--vyh-line);
+  border-radius: 14px;
+  background: var(--vyh-tint);
+}
+.vyh-toc-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--vyh-muted);
+  margin-bottom: 10px;
+}
+.vyh-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.vyh-toc a {
+  font-size: 14.5px;
+  color: var(--vyh-ink-soft);
+  text-decoration: none;
+}
+.vyh-toc a:hover {
+  color: var(--vy-blue);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------- Section heads ---------- */
+
+.vyh-eyebrow {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--vy-blue);
+  margin-bottom: 10px;
+}
+.vyh-h2 {
+  font-size: clamp(23px, 2.6vw, 29px);
+  font-weight: 600;
+  letter-spacing: -0.036em;
+  margin: 0 0 24px;
+}
+
+/* ---------- Still stuck ---------- */
+
+.vyh-stuck {
+  margin-top: 62px;
+  padding: 30px 28px;
+  border: 1px solid var(--vyh-line);
+  border-radius: 18px;
+  background: var(--vyh-tint);
+  text-align: center;
+}
+.vyh-stuck-title {
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.026em;
+}
+.vyh-stuck-body {
+  margin-top: 7px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--vyh-ink-soft);
+}
+.vyh-stuck-actions {
+  margin-top: 18px;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.vyh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: var(--vy-blue);
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 160ms var(--vy-ease);
+}
+.vyh-btn:hover {
+  background: var(--vy-blue-deep);
+}
+.vyh-btn-ghost {
+  background: none;
+  color: var(--vy-blue);
+  border: 1px solid #cfd9f2;
+}
+.vyh-btn-ghost:hover {
+  background: var(--vyh-tint);
+}
+
+/* ---------- Prev / next ---------- */
+
+.vyh-pager {
+  margin-top: 48px;
+  padding-top: 26px;
+  border-top: 1px solid var(--vyh-line-soft);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.vyh-pager a {
+  max-width: 46%;
+  text-decoration: none;
+  color: inherit;
+}
+.vyh-pager-dir {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--vyh-muted);
+}
+.vyh-pager-title {
+  margin-top: 4px;
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--vy-blue);
+}
+.vyh-pager-next {
+  margin-left: auto;
+  text-align: right;
+}
+
+/* ---------- Motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .vyh-card,
+  .vyh-list-item,
+  .vyh-list-arrow,
+  .vyh-search-bubble {
+    transition: none;
+  }
+  .vyh-card:hover {
+    transform: none;
+  }
+  .vyh-list-item:hover {
+    padding-left: 4px;
+  }
+  .vyh-search:focus-within .vyh-search-bubble {
+    transform: none;
+  }
+}
+
+/* ---------- Narrow ---------- */
+
+@media (max-width: 640px) {
+  /* A 96px sag reads as a slump on a narrow screen. Shallower here. */
+  .vy-help {
+    --vyh-curve: 54px;
+  }
+  .vyh-hero {
+    padding: 124px 18px 40px;
+  }
+  .vyh-hero-compact {
+    padding: 112px 18px 30px;
+  }
+  .vyh-sheet {
+    padding: calc(var(--vyh-curve) + 34px) 18px 72px;
+  }
+  .vyh-search-bubble {
+    height: 58px;
+    padding-left: 18px;
+  }
+  .vyh-pager a {
+    max-width: 100%;
+  }
+  .vyh-pager-next {
+    text-align: left;
+  }
+}

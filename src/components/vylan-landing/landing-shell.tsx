@@ -26,6 +26,7 @@ export type LandingShellStrings = {
   navBookDemo: string;
   navLogin: string;
   navContact: string;
+  navHelp?: string;
   follow: string;
 };
 
@@ -53,7 +54,15 @@ function scrollToForm() {
     ?.scrollIntoView({ behavior: "smooth" });
 }
 
-export function LandingShell({ s }: { s: LandingShellStrings }) {
+export function LandingShell({
+  s,
+  helpHref,
+}: {
+  s: LandingShellStrings;
+  // Resolved, locale-prefixed /help URL, passed straight through to the menu.
+  // Optional so the shell still renders if a caller hasn't wired it.
+  helpHref?: string;
+}) {
   const heroRef = useRef<HTMLElement>(null);
   const reelRef = useRef<HTMLSpanElement>(null);
   const reelMaskRef = useRef<HTMLSpanElement>(null);
@@ -301,7 +310,7 @@ export function LandingShell({ s }: { s: LandingShellStrings }) {
       <BirdVideo />
 
       {/* brand + slide-down menu (shared with the manifesto page) */}
-      <VylanMenu s={s} />
+      <VylanMenu s={s} helpHref={helpHref} />
 
       {/* HERO */}
       <section className="vy-hero" ref={heroRef}>

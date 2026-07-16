@@ -85,6 +85,39 @@ html:has(.vy-wwd) {
   display: block;
   transform: translateY(0.015em);
 }
+
+/* Scroll-away brand. Opt-in per page via VylanMenu's `hideBrandOnScroll`, so
+   nothing that doesn't pass it changes: the class is only ever applied there.
+   Used by the help center, where the brand opening ON HOVER means a pointer
+   drifting across the top of a long article drops the menu over what you're
+   reading.
+   `pointer-events: none` is the actual fix — opacity alone still hovers.
+   `visibility` is deferred by its own 0s-delay-at-the-end transition so the
+   fade can finish, then takes the button out of the tab order too; a control
+   you can't see shouldn't be the next thing Tab lands on. */
+.vy-brand {
+  transition:
+    opacity 220ms var(--vy-ease),
+    transform 220ms var(--vy-ease),
+    visibility 0s 0s;
+}
+.vy-brand-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  /* Keeps the -50% centring; only adds the lift. */
+  transform: translateX(-50%) translateY(-10px);
+  transition:
+    opacity 220ms var(--vy-ease),
+    transform 220ms var(--vy-ease),
+    visibility 0s 220ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vy-brand,
+  .vy-brand-hidden {
+    transition: none;
+  }
+}
 /* Manifesto: the lone "back" link sits top-right; the centred brand is the
    shared VylanMenu, which positions itself. */
 .vy-manifesto .vy-topbar {

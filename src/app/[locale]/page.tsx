@@ -62,6 +62,7 @@ export default async function Home({
     navBookDemo: t("nav_book_demo"),
     navLogin: t("nav_login"),
     navContact: t("nav_contact"),
+    navHelp: t("nav_help"),
     follow: t("follow"),
   };
 
@@ -71,13 +72,18 @@ export default async function Home({
     bookDemo: t("footer_book_demo"),
     contact: t("footer_contact"),
     login: t("footer_login"),
+    help: t("footer_help"),
     copyright: t("footer_copyright"),
     location: t("contact_location_value"),
   };
 
+  // The help center opens in a new tab (founder spec), so it needs a real
+  // resolved URL rather than a client-side route push.
+  const helpHref = getPathname({ locale, href: "/help" });
+
   return (
     <main className={`vy-root ${schibsted.variable}`}>
-      <LandingShell s={shellStrings} />
+      <LandingShell s={shellStrings} helpHref={helpHref} />
 
       {/* FORM — the 3-phase demo-lead flow (see LeadForm) */}
       <section className="vy-form-section" id="vy-get-access">
@@ -95,7 +101,7 @@ export default async function Home({
 
       {/* FOOTER (Contact now lives on its own /contact page; the footer keeps
           the details in a small faint line) */}
-      <VylanFooter s={footer} />
+      <VylanFooter s={footer} helpHref={helpHref} />
     </main>
   );
 }

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
+import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { Mail, Phone, MapPin } from "lucide-react";
 import { schibsted } from "@/components/vylan-landing/fonts";
@@ -45,6 +46,10 @@ export default async function ContactPage({
 
   // Same menu strings the landing + manifesto build (all in the Vylan
   // namespace), so the shared VylanMenu shows identical options everywhere.
+  // Resolved, locale-prefixed /help URL. The help center opens in a new
+  // tab (founder spec), so it needs a real href rather than a route push.
+  const helpHref = getPathname({ locale, href: "/help" });
+
   const menu = {
     brand: t("brand_word"),
     logoAlt: t("logo_alt"),
@@ -58,6 +63,7 @@ export default async function ContactPage({
     navBookDemo: t("nav_book_demo"),
     navLogin: t("nav_login"),
     navContact: t("nav_contact"),
+    navHelp: t("nav_help"),
     follow: t("follow"),
   };
 
@@ -67,6 +73,7 @@ export default async function ContactPage({
     bookDemo: t("footer_book_demo"),
     contact: t("footer_contact"),
     login: t("footer_login"),
+    help: t("footer_help"),
     copyright: t("footer_copyright"),
     location: t("contact_location_value"),
   };
@@ -76,7 +83,7 @@ export default async function ContactPage({
       <BirdVideo />
 
       {/* centred brand + shared slide-down menu (opens on hover) */}
-      <VylanMenu s={menu} />
+      <VylanMenu s={menu} helpHref={helpHref} />
 
       {/* back to the landing — kept top-right */}
       <div className="vy-topbar">
@@ -135,7 +142,7 @@ export default async function ContactPage({
         <LeadForm />
       </section>
 
-      <VylanFooter s={footer} />
+      <VylanFooter s={footer} helpHref={helpHref} />
     </div>
   );
 }

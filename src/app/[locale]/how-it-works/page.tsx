@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { setRequestLocale, getTranslations } from "next-intl/server";
+import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
 import { schibsted } from "@/components/vylan-landing/fonts";
 import { VylanMenu } from "@/components/vylan-landing/vylan-menu";
@@ -26,6 +27,10 @@ export default async function HowItWorksPage({
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
+
+  // Resolved, locale-prefixed /help URL. The help center opens in a new
+  // tab (founder spec), so it needs a real href rather than a route push.
+  const helpHref = getPathname({ locale, href: "/help" });
 
   const t = await getTranslations("VylanHowItWorks");
   const tv = await getTranslations("Vylan");
@@ -129,6 +134,7 @@ export default async function HowItWorksPage({
     navBookDemo: tv("nav_book_demo"),
     navLogin: tv("nav_login"),
     navContact: tv("nav_contact"),
+    navHelp: tv("nav_help"),
     follow: tv("follow"),
   };
 
@@ -138,6 +144,7 @@ export default async function HowItWorksPage({
     bookDemo: tv("footer_book_demo"),
     contact: tv("footer_contact"),
     login: tv("footer_login"),
+    help: tv("footer_help"),
     copyright: tv("footer_copyright"),
     location: tv("contact_location_value"),
   };
@@ -145,7 +152,7 @@ export default async function HowItWorksPage({
   return (
     <div className={`vy-wwd ${schibsted.variable}`}>
       {/* centred brand + shared slide-down menu (opens on hover) */}
-      <VylanMenu s={menu} />
+      <VylanMenu s={menu} helpHref={helpHref} />
 
       <HowItWorksShell s={strings} />
 
@@ -155,7 +162,7 @@ export default async function HowItWorksPage({
         <LeadForm />
       </section>
 
-      <VylanFooter s={footer} />
+      <VylanFooter s={footer} helpHref={helpHref} />
     </div>
   );
 }
