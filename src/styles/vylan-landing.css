@@ -1799,3 +1799,275 @@ a.vy-contact-card:hover {
   max-width: 760px;
   text-wrap: balance;
 }
+
+/* ============================================================
+   WORKFLOW AUTOMATION (landing) — a playable miniature of the
+   engagement-stage board. Imported from the "Vylan What We Do"
+   design; the one section of it that had never been built.
+
+   Hues arrive per-element as --wa-c (set inline from the
+   component's marketing palette) so one rule covers every stage:
+   the product's own --stage-* tokens are tuned for near-black and
+   its "collecting" blue would disappear into this page's blue.
+   ============================================================ */
+.wa {
+  position: relative;
+  z-index: 1;
+  padding: 90px 7vw 100px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.wa-head {
+  max-width: 820px;
+}
+.wa-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: rgba(182, 156, 255, 0.9);
+}
+.wa-h2 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+  font-size: clamp(30px, 4.6vw, 58px);
+  margin-top: 18px;
+  text-wrap: balance;
+}
+.wa-body {
+  margin-top: 22px;
+  max-width: 600px;
+  font-size: clamp(18px, 1.6vw, 22px);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.84);
+  font-weight: 500;
+}
+
+/* Reveal on scroll. Gated on .wa-js, which the component adds only when motion
+   is welcome — so with reduced motion (or before hydration) everything is
+   simply visible instead of stuck at opacity 0. */
+.wa.wa-js [data-wa-reveal] {
+  opacity: 0;
+  transform: translateY(26px);
+  transition: opacity 0.9s var(--vy-ease), transform 0.9s var(--vy-ease);
+}
+.wa.wa-js [data-wa-reveal].wa-in {
+  opacity: 1;
+  transform: none;
+}
+
+.wa-panel {
+  margin-top: 52px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(6px);
+  padding: 26px clamp(18px, 3vw, 32px);
+  overflow: hidden;
+}
+.wa-panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.wa-panel-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+.wa-play {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  padding: 9px 18px;
+  cursor: pointer;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  transition: background 0.3s ease;
+}
+.wa-play:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.wa-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+.wa-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 6px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.85);
+}
+.wa-chip[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.92);
+  /* The page's real blue, not the design file's — the chip reads as a hole
+     punched through to the background, so it has to be the same blue. */
+  color: var(--vy-blue);
+}
+.wa-chip-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--wa-c);
+}
+.wa-chip-n {
+  color: rgba(255, 255, 255, 0.5);
+}
+.wa-chip[aria-pressed="true"] .wa-chip-n {
+  color: color-mix(in srgb, var(--vy-blue) 55%, transparent);
+}
+
+.wa-rows {
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
+}
+.wa-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: clamp(14px, 3vw, 30px);
+  align-items: center;
+  padding: 18px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+.wa-row-main {
+  min-width: 0;
+}
+.wa-row-titleline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.wa-row-name {
+  font-weight: 600;
+  font-size: 16px;
+}
+.wa-row-sub {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+  margin-top: 3px;
+}
+.wa-moved {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--wa-c);
+}
+.wa-moved-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--wa-c);
+  animation: wa-pulse 1.8s ease-in-out infinite;
+}
+@keyframes wa-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(255, 255, 255, 0);
+  }
+}
+
+.wa-track {
+  display: flex;
+  align-items: center;
+}
+.wa-node {
+  display: flex;
+  align-items: center;
+}
+.wa-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  transition: background 0.45s ease, opacity 0.45s ease, border-color 0.45s ease;
+}
+.wa-dot-on {
+  background: var(--wa-c);
+  border-color: transparent;
+}
+.wa-dot-done {
+  background: var(--wa-c);
+  border-color: transparent;
+  opacity: 0.55;
+}
+.wa-link {
+  flex: none;
+  width: 22px;
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.wa-pill {
+  justify-self: end;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: background 0.45s ease, border-color 0.45s ease, color 0.45s ease;
+  background: color-mix(in srgb, var(--wa-c) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--wa-c) 45%, transparent);
+  color: var(--wa-c);
+}
+.wa-empty {
+  padding: 36px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: center;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.55);
+}
+.wa-foot {
+  margin-top: 34px;
+  max-width: 620px;
+  font-size: clamp(16px, 1.5vw, 19px);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.76);
+  font-weight: 500;
+}
+
+/* Narrow screens: the dot track is the first thing to go. It's the prettiest
+   part but the pill says the same thing in words, and three columns don't fit a
+   phone without crushing the engagement name. */
+@media (max-width: 720px) {
+  .wa-row {
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+  }
+  .wa-track {
+    display: none;
+  }
+}
