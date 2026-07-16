@@ -631,6 +631,12 @@ function SidebarBody({
   onToggleCollapse?: () => void;
 }) {
   const tHome = useTranslations("Home");
+  // Desktop account-menu logout submits via this ref. A plain submit button
+  // nested inside a Radix DropdownMenuItem has its click swallowed by the
+  // menu's own selection handling, so the form never posts (the "logout does
+  // nothing" bug). Firing requestSubmit() from the item's onSelect posts it
+  // reliably — same onSelect pattern the Help item above uses.
+  const logoutFormRef = useRef<HTMLFormElement>(null);
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
       {/* Brand row */}
@@ -887,15 +893,16 @@ function SidebarBody({
               {labels.help}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <form action={logoutAction}>
-              <DropdownMenuItem asChild>
-                <button
-                  type="submit"
-                  className="w-full flex items-center gap-2 text-destructive focus:text-destructive cursor-pointer"
-                >
-                  <LogOut className="h-4 w-4" />
-                  {labels.logout}
-                </button>
+            <form ref={logoutFormRef} action={logoutAction}>
+              <DropdownMenuItem
+                className="flex items-center gap-2 text-destructive focus:text-destructive cursor-pointer"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  logoutFormRef.current?.requestSubmit();
+                }}
+              >
+                <LogOut className="h-4 w-4" />
+                {labels.logout}
               </DropdownMenuItem>
             </form>
           </DropdownMenuContent>
