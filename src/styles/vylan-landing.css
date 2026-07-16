@@ -1941,14 +1941,21 @@ a.vy-contact-card:hover {
   color: color-mix(in srgb, var(--vy-blue) 55%, transparent);
 }
 
+/* The rows share ONE set of columns via subgrid, rather than each row being its
+   own grid as in the design file. Independent grids size their columns per row,
+   so a wide pill ("Collecting documents") and a narrow one ("In review") pushed
+   each row's dot track to a different x — measured at 310/389/330/334px, a 79px
+   wander that reads as sloppy on the one element whose whole job is to look like
+   a tidy pipeline. Sharing the tracks pins every dot into a column. */
 .wa-rows {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
   margin-top: 14px;
 }
 .wa-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   gap: clamp(14px, 3vw, 30px);
   align-items: center;
   padding: 18px 0;
@@ -2043,6 +2050,9 @@ a.vy-contact-card:hover {
   color: var(--wa-c);
 }
 .wa-empty {
+  /* A sentence, not a cell — it spans the row's whole column set instead of
+     being squeezed into the first one (.wa-rows is a grid, so it would be). */
+  grid-column: 1 / -1;
   padding: 36px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.12);
   text-align: center;
@@ -2063,8 +2073,12 @@ a.vy-contact-card:hover {
    part but the pill says the same thing in words, and three columns don't fit a
    phone without crushing the engagement name. */
 @media (max-width: 720px) {
-  .wa-row {
+  /* The column set lives on the parent now, so the phone layout changes there;
+     the rows just keep inheriting it. */
+  .wa-rows {
     grid-template-columns: 1fr auto;
+  }
+  .wa-row {
     gap: 12px;
   }
   .wa-track {
