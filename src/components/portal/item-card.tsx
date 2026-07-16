@@ -437,17 +437,23 @@ export function ItemCard({
   // repeats them. `bannerMsg` still drives WHEN the banner (and `hasIssue`)
   // shows. The upload route clears `item.rejection_reason` on every new upload,
   // so it never goes stale across attempts.
+  //
+  // Every "we still need something from you" message below is superseded once
+  // the review has settled (see isReviewSettled). Computed first so it can
+  // silence BOTH the rejection banner and the missing-page ask.
+  const settled = isReviewSettled(item.status);
   const reasonSet =
     item.rejection_reason != null && item.rejection_reason.trim() !== "";
-  const bannerMsg =
-    aiRejection ??
-    (!reasonSet
-      ? null
-      : rejection
-        ? locale === "fr"
-          ? rejection.fr
-          : rejection.en
-        : item.rejection_reason!.trim());
+  const bannerMsg = settled
+    ? null
+    : (aiRejection ??
+      (!reasonSet
+        ? null
+        : rejection
+          ? locale === "fr"
+            ? rejection.fr
+            : rejection.en
+          : item.rejection_reason!.trim()));
   const hasIssue = item.status === "rejected" || bannerMsg !== null;
   // The single client-facing state shown on this card — drives the icon, the
   // badge, and the tint. Approval-based, never upload-based.
@@ -457,9 +463,14 @@ export function ItemCard({
   // auto-asking the client AND the group review concluded a specific page is
   // missing — otherwise the accountant handles it and the client sees nothing.
   // The sentence is the model's plain-language ask, already client-facing.
+  // Silenced once the review has settled: the accountant approving the file
+  // anyway IS the answer to the ask, so repeating it would contradict the
+  // "Approved / All set" the same card is showing.
   const setAssessment = item.ai_set_assessment;
   const missingPageAsk =
-    autoRequestMissingPages && setAssessment?.outcome === "incomplete"
+    !settled &&
+    autoRequestMissingPages &&
+    setAssessment?.outcome === "incomplete"
       ? (locale === "fr"
           ? setAssessment.client_request_fr || setAssessment.client_request_en
           : setAssessment.client_request_en || setAssessment.client_request_fr
@@ -765,6 +776,27 @@ function ErrorLine({ error }: { error: string }) {
         : error
       : error;
   return <p className="text-xs text-destructive mt-2">{message}</p>;
+}
+
+// Has a human's explicit decision settled this line, so that every AI-authored
+// "we need something from you" message on it is now superseded?
+//
+// deriveItemStatus (lib/review/rollup.ts) already encodes exactly this
+// precedence for the STATUS: its approved-file arm and the caller's 'na'
+// preservation both sit ABOVE the set-assessment arm, so an approved/'na' item
+// is by definition no longer waiting on the client. The portal has to MIRROR
+// that when it renders, or the card contradicts itself — the real case is the
+// accountant legitimately overriding an AI missing-page verdict ("I don't need
+// page 4") and approving, which left the client reading "Approved", "All set,
+// thank you!" and "Page 4 of 4 is missing, could you please upload it?" at the
+// same time.
+//
+// Only these two arms are mirrored, deliberately: they are the ones that
+// OUTRANK the ask. A 'submitted' item whose ask a newer upload already answered
+// is handled upstream instead — the set assessment re-runs on the new files and
+// overwrites its own verdict. Pure + exported for tests.
+export function isReviewSettled(status: RequestItemStatus): boolean {
+  return status === "approved" || status === "na";
 }
 
 // The single client-facing state shown on a card. Approval-based (section 6):
