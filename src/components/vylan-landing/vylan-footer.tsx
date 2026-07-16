@@ -23,18 +23,36 @@ export type VylanFooterStrings = {
   bookDemo: string;
   contact: string;
   login: string;
+  help?: string;
   copyright: string;
   location: string;
 };
 
-export function VylanFooter({ s }: { s: VylanFooterStrings }) {
+export function VylanFooter({
+  s,
+  bookDemoHref,
+  helpHref,
+}: {
+  s: VylanFooterStrings;
+  // See the same prop on VylanMenu. Pages that render the lead form leave this
+  // off and keep the in-page anchor; the help center doesn't render the form,
+  // so it passes a resolved URL to the landing page's copy of it.
+  bookDemoHref?: string;
+  // Absolute, locale-prefixed /help URL. Opens in a new tab (founder spec).
+  helpHref?: string;
+}) {
   return (
     <footer className="vy-footer">
       <div className="vy-fbrand">{s.brand}</div>
       <div className="vy-links">
         <Link href="/how-it-works">{s.howItWorks}</Link>
-        <a href="#vy-get-access">{s.bookDemo}</a>
+        <a href={bookDemoHref ?? "#vy-get-access"}>{s.bookDemo}</a>
         <Link href="/contact">{s.contact}</Link>
+        {helpHref && s.help ? (
+          <a href={helpHref} target="_blank" rel="noopener noreferrer">
+            {s.help}
+          </a>
+        ) : null}
         <Link href="/login">{s.login}</Link>
       </div>
       <div className="vy-cr">{s.copyright}</div>

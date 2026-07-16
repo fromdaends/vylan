@@ -23,6 +23,7 @@ export type VylanMenuStrings = {
   navBookDemo: string;
   navLogin: string;
   navContact: string;
+  navHelp?: string;
   follow: string;
 };
 
@@ -30,7 +31,23 @@ function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 }
 
-export function VylanMenu({ s }: { s: VylanMenuStrings }) {
+export function VylanMenu({
+  s,
+  bookDemoHref,
+  helpHref,
+}: {
+  s: VylanMenuStrings;
+  // Pages that render the lead form themselves (landing, how-it-works,
+  // contact) leave this off and keep the in-page smooth scroll. The help
+  // center does NOT render the form — a 100vh demo pitch under every article
+  // is not a help center — so it passes a fully-resolved, locale-prefixed URL
+  // to the landing page's form instead. Without this the item would scroll to
+  // an element that isn't on the page, i.e. do nothing.
+  bookDemoHref?: string;
+  // Absolute, locale-prefixed /help URL. Opens in a new tab (founder spec).
+  // Omitted on pages built before the help center existed.
+  helpHref?: string;
+}) {
   const [open, setOpen] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
@@ -137,12 +154,28 @@ export function VylanMenu({ s }: { s: VylanMenuStrings }) {
             <Link href="/how-it-works" onClick={closeNow}>
               {s.navHowItWorks} <span className="vy-arr">→</span>
             </Link>
-            <a href="#vy-get-access" onClick={closeAndJump}>
-              {s.navBookDemo} <span className="vy-arr">→</span>
-            </a>
+            {bookDemoHref ? (
+              <a href={bookDemoHref} onClick={closeNow}>
+                {s.navBookDemo} <span className="vy-arr">→</span>
+              </a>
+            ) : (
+              <a href="#vy-get-access" onClick={closeAndJump}>
+                {s.navBookDemo} <span className="vy-arr">→</span>
+              </a>
+            )}
             <Link href="/contact" onClick={closeNow}>
               {s.navContact} <span className="vy-arr">→</span>
             </Link>
+            {helpHref && s.navHelp ? (
+              <a
+                href={helpHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={closeNow}
+              >
+                {s.navHelp} <span className="vy-arr">→</span>
+              </a>
+            ) : null}
             <Link href="/login" onClick={closeNow}>
               {s.navLogin} <span className="vy-arr">→</span>
             </Link>
