@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
 import type { PortalFile } from "@/lib/db/portal";
+import type { SetAssessment } from "@/lib/ai/set-assessment";
 import { PortalImageLightbox } from "./portal-image-lightbox";
 
 // Shape returned by /api/portal/upload-status once the background classifier
@@ -68,6 +69,38 @@ export function pollIntervalFor(elapsedMs: number): number | null {
     if (elapsedMs < phase.untilMs) return phase.intervalMs;
   }
   return null;
+}
+
+// Should the client be asked for the missing page?
+//
+// Three conditions, and the LAST one is the subtle one: a human decision
+// supersedes the AI's ask. The set assessment is a snapshot the classifier wrote
+// when the files landed; it is never rewritten when the accountant later
+// approves the item anyway (the legitimate "I don't need page 4" override) or
+// when the client marks it N/A. Reading `outcome === "incomplete"` alone
+// therefore keeps printing "please upload page 4" next to "Approved — all set,
+// thank you!", telling the client two opposite things at once.
+//
+// deriveItemStatus already encodes this precedence for the STATUS — its
+// approved-file arm sits ABOVE the missing-page arm (src/lib/review/rollup.ts) —
+// so this is the portal's rendering finally mirroring the rule the data layer
+// has always applied. Same reason isMissingPageBlock gates on status for the
+// accountant's side (src/components/engagements/set-summary-line.tsx).
+//
+// Deliberately NOT gated on 'rejected': an item rejected for a DIFFERENT reason
+// can still be genuinely missing a page, and the client needs both asks.
+export function shouldAskForMissingPage(input: {
+  // The firm's "auto-request missing pages" setting. Off => the accountant
+  // handles it and the client sees nothing.
+  autoRequestMissingPages: boolean;
+  status: RequestItemStatus;
+  assessment: SetAssessment | null | undefined;
+}): boolean {
+  if (!input.autoRequestMissingPages) return false;
+  if (input.assessment?.outcome !== "incomplete") return false;
+  // Settled by a person — the ask is stale, whatever the classifier concluded.
+  if (input.status === "approved" || input.status === "na") return false;
+  return true;
 }
 
 export function ItemCard({
@@ -458,13 +491,16 @@ export function ItemCard({
   // missing — otherwise the accountant handles it and the client sees nothing.
   // The sentence is the model's plain-language ask, already client-facing.
   const setAssessment = item.ai_set_assessment;
-  const missingPageAsk =
-    autoRequestMissingPages && setAssessment?.outcome === "incomplete"
-      ? (locale === "fr"
-          ? setAssessment.client_request_fr || setAssessment.client_request_en
-          : setAssessment.client_request_en || setAssessment.client_request_fr
-        ).trim() || null
-      : null;
+  const missingPageAsk = shouldAskForMissingPage({
+    autoRequestMissingPages,
+    status: item.status,
+    assessment: setAssessment,
+  })
+    ? (locale === "fr"
+        ? setAssessment!.client_request_fr || setAssessment!.client_request_en
+        : setAssessment!.client_request_en || setAssessment!.client_request_fr
+      ).trim() || null
+    : null;
 
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
