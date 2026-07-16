@@ -10,6 +10,8 @@ import {
   deleteFinalDocument,
 } from "@/lib/db/final-documents";
 import { logUserActivity } from "@/lib/db/activity";
+import { syncEngagementStage } from "@/lib/engagements/stage-sync";
+import { getServerSupabase } from "@/lib/supabase/server";
 import {
   uploadObject,
   removeObjectQuiet,
@@ -99,6 +101,12 @@ export async function uploadFinalDocumentAction(
     filename: originalFilename,
   });
 
+  // The finished work now exists. Whether that counts as RELEASED — and so
+  // completes the engagement — is the resolver's call: an unpaid invoice that
+  // locks deliverables means the client still can't reach this file, so the
+  // stage stays at awaiting_payment until they pay.
+  await syncEngagementStage(await getServerSupabase(), engagementId);
+
   revalidatePath(`/engagements/${engagementId}`);
   return { ok: true };
 }
@@ -122,6 +130,12 @@ export async function deleteFinalDocumentAction(formData: FormData) {
     await logUserActivity(firm.id, engagementId, "final_document_removed", {
       final_document_id: id,
     });
+    // Pulling the last deliverable back un-releases the work, so an engagement
+    // that had reached "completed" on the strength of it returns to
+    // in_preparation. (The lifecycle stays Completed — a stage moving backwards
+    // never un-completes an engagement the accountant finished; only the
+    // explicit Reopen does that.)
+    await syncEngagementStage(await getServerSupabase(), engagementId);
     revalidatePath(`/engagements/${engagementId}`);
   }
 }

@@ -17,6 +17,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { deriveItemStatus, type FileReview } from "@/lib/review/rollup";
 import { autoApproveDraftForFile } from "@/lib/db/quickbooks-suggestions";
+import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 
 type FileRow = FileReview & {
   rejection_reason: string | null;
@@ -39,7 +40,7 @@ export async function recomputeItemStatus(
 ): Promise<void> {
   const { data: item } = await sb
     .from("request_items")
-    .select("status, ai_set_assessment")
+    .select("status, rejection_reason, engagement_id, ai_set_assessment")
     .eq("id", itemId)
     .maybeSingle();
   if (!item) return;
@@ -96,6 +97,27 @@ export async function recomputeItemStatus(
       approved_at: approvedAt,
     })
     .eq("id", itemId);
+
+  // The engagement's workflow stage is derived from its checklist, so re-resolve
+  // it whenever this roll-up actually moved something. Because this function is
+  // the SINGLE writer of request_items.status for the accountant-review path,
+  // this one call covers every checklist-driven transition in the stage spec —
+  // client uploads, AI auto-reject, duplicate handling, set-assessment verdicts,
+  // per-file and item-level approve/reject/reopen, and file deletion — without a
+  // hook in any of them.
+  //
+  // Skipped when nothing changed, which is the common case (a second upload on
+  // an already-submitted item). Bounced-ness is part of the comparison, not just
+  // status: an item can stay 'pending' while its rejection_reason clears, and
+  // that flips it from AI-bounced (not blocking) to genuinely blocked — which
+  // the resolver reads. Best-effort: a stage is a display convenience and must
+  // never fail the review write that just landed.
+  const wasBounced = item.status === "pending" && item.rejection_reason !== null;
+  const isBounced = status === "pending" && rejectionReason !== null;
+  const engagementId = (item as { engagement_id?: string }).engagement_id;
+  if (engagementId && (status !== item.status || isBounced !== wasBounced)) {
+    await syncEngagementStage(sb, engagementId);
+  }
 }
 
 // Most-recently-reviewed row (by reviewed_at, falling back to upload time).

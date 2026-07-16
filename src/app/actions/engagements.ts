@@ -43,6 +43,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
+import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
@@ -381,6 +382,10 @@ export async function sendEngagementAction(formData: FormData) {
       settings: normalizeReminderSettings(sent.reminder_settings),
     });
   }
+  // The engagement now has a workflow position — normally "collecting", though
+  // the resolver decides (a signature-only engagement lands elsewhere). This is
+  // the transition from no stage (draft) to a real one.
+  await syncEngagementStage(await getServerSupabase(), id);
   revalidateEngagementPaths(id);
 }
 
@@ -422,6 +427,9 @@ export async function cancelEngagementAction(formData: FormData) {
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "cancel_engagement", {});
   }
+  // A cancelled engagement has no workflow position — the resolver returns null
+  // and the stage column clears, so its chip falls back to "Cancelled".
+  await syncEngagementStage(await getServerSupabase(), id);
   revalidateEngagementPaths(id);
 }
 
@@ -442,6 +450,12 @@ export async function completeEngagementAction(formData: FormData) {
       console.error("[completeEngagementAction] invoice dispatch failed:", e);
     }
   }
+  // AFTER the invoice dispatch, so the resolver sees any invoice it just raised:
+  // "invoice on completion" makes the work owed, and the stage settles honestly
+  // on awaiting_payment rather than completed. (The reverse rule — stage
+  // completed => lifecycle Completed — lives in stage-sync and can't re-fire
+  // here: the status is already 'complete'.)
+  await syncEngagementStage(await getServerSupabase(), id);
   revalidateEngagementPaths(id);
 }
 
@@ -459,6 +473,9 @@ export async function reopenEngagementAction(formData: FormData) {
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "reopen_engagement", {});
   }
+  // Back to live: the stage re-resolves from wherever the work actually stands
+  // (usually in_preparation — the deliverables and approvals are still there).
+  await syncEngagementStage(await getServerSupabase(), id);
   revalidateEngagementPaths(id);
 }
 

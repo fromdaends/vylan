@@ -16,6 +16,8 @@ import {
   cancelPaymentRequest,
 } from "@/lib/db/payment-requests";
 import { logUserActivity } from "@/lib/db/activity";
+import { syncEngagementStage } from "@/lib/engagements/stage-sync";
+import { getServerSupabase } from "@/lib/supabase/server";
 import {
   cancelScheduledInvoice,
   dispatchInvoiceOnCompletion,
@@ -44,6 +46,16 @@ export type InvoiceAutomationEditResult =
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Every action in this file changes something the stage resolver reads: whether
+// an invoice is owed, and whether the deliverables lock is holding the finished
+// work back from the client. Both feed "final documents released", so unlocking
+// a paid-by-cheque engagement can complete it outright, and re-locking pulls it
+// back to awaiting_payment. Re-resolve after each, then revalidate.
+async function syncStageAndRevalidate(engagementId: string): Promise<void> {
+  await syncEngagementStage(await getServerSupabase(), engagementId);
+  revalidatePath(`/engagements/${engagementId}`);
+}
+
 // The accountant's manual "unlock without payment": the client can download the
 // Final documents even though the invoice is still unpaid (comped, paid by
 // cheque, etc.). The invoice stays open/owed; only the deliverables lock is
@@ -67,7 +79,7 @@ export async function unlockDeliverablesAction(formData: FormData) {
     await logUserActivity(firm.id, engagementId, "invoice_unlocked", {
       payment_request_id: liveInvoice.id,
     });
-    revalidatePath(`/engagements/${engagementId}`);
+    await syncStageAndRevalidate(engagementId);
     return;
   }
 
@@ -88,7 +100,7 @@ export async function unlockDeliverablesAction(formData: FormData) {
   await logUserActivity(firm.id, engagementId, "invoice_unlocked", {
     via: "engagement_preference",
   });
-  revalidatePath(`/engagements/${engagementId}`);
+  await syncStageAndRevalidate(engagementId);
 }
 
 // The accountant "waive invoice": cancel the invoice entirely (nothing owed).
@@ -113,7 +125,7 @@ export async function waiveInvoiceAction(formData: FormData) {
     payment_request_id: invoice.id,
     amount_cents: invoice.amount_cents,
   });
-  revalidatePath(`/engagements/${engagementId}`);
+  await syncStageAndRevalidate(engagementId);
 }
 
 // Re-lock the deliverables after an unlock (or lock an invoice created without
@@ -143,7 +155,7 @@ export async function relockDeliverablesAction(formData: FormData) {
   await logUserActivity(firm.id, engagementId, "invoice_relocked", {
     payment_request_id: liveInvoice?.id ?? null,
   });
-  revalidatePath(`/engagements/${engagementId}`);
+  await syncStageAndRevalidate(engagementId);
 }
 
 // Edit an unpaid invoice's amount + description. Returns a result so the dialog

@@ -32,6 +32,15 @@ vi.mock("@/lib/email", () => ({
 vi.mock("@/lib/storage", () => ({
   getBrandingImageUrlForEmail: async () => null,
 }));
+// Creating an invoice re-resolves the engagement's stage. The resolver's rules
+// are covered by src/lib/engagements/stage.test.ts; stub it here so this stays a
+// test of invoice creation.
+vi.mock("@/lib/engagements/stage-sync", () => ({
+  syncEngagementStage: async () => null,
+}));
+vi.mock("@/lib/supabase/server", () => ({
+  getServerSupabase: async () => ({}),
+}));
 
 import { createInvoiceForEngagement } from "./create";
 

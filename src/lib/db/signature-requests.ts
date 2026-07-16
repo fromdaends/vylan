@@ -8,6 +8,7 @@
 // hard-errors — same pattern as payment-requests.ts.
 
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
+import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import type { SignatureStatus } from "@/lib/signwell/client";
 
 export type SignatureRequest = {
@@ -211,7 +212,7 @@ export async function updateSignatureStatusSR(
   const sb = getServiceRoleSupabase();
   const { data: cur } = await sb
     .from("signature_requests")
-    .select("status")
+    .select("status, engagement_id")
     .eq("id", id)
     .maybeSingle();
   if (!cur) return;
@@ -224,4 +225,13 @@ export async function updateSignatureStatusSR(
       last_event_time: opts.eventTime ?? null,
     })
     .eq("id", id);
+
+  // Signature events that AREN'T a completion still move the workflow: a
+  // declined / canceled / expired request is no longer out with the client, so
+  // the engagement must not sit at "Awaiting signature" waiting for a signature
+  // that will never come. (A completion doesn't come through here — it goes
+  // through finalizeSignatureCompletion, whose setItemStatus call re-resolves
+  // the stage after the row is marked completed.)
+  const engagementId = (cur as { engagement_id?: string }).engagement_id;
+  if (engagementId) await syncEngagementStage(sb, engagementId);
 }

@@ -1,6 +1,7 @@
 import { customAlphabet } from "nanoid";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { DELETED_RETENTION_DAYS } from "@/lib/engagements/lifecycle";
+import type { EngagementStage } from "@/lib/engagements/stage";
 import type { EngagementType, TemplateItem } from "./templates";
 import type { ReminderSettings } from "@/lib/reminder-settings";
 
@@ -45,6 +46,28 @@ export type Engagement = {
   // invoice row exists.
   invoice_locks_deliverables?: boolean;
   invoice_description?: string | null;
+  // Workflow stage (migration 0690). WHERE the engagement is in the firm's
+  // process — a third axis, orthogonal to `status` (lifecycle) and to
+  // archived_at / deleted_at (the shelf). NULL = no workflow position (a draft
+  // hasn't been sent; a cancelled engagement was abandoned), and every reader
+  // then falls back to the status pill.
+  //
+  // NOT authoritative: src/lib/engagements/stage.ts resolves the stage from the
+  // engagement's real contents and stage-sync.ts caches the answer here on every
+  // relevant event, so a stale value self-heals on the next one. Never compute a
+  // stage FROM this column.
+  //
+  // All optional on the type so reads survive the pre-migration window (column
+  // absent → undefined → treated as "no stage" everywhere).
+  stage?: EngagementStage | null;
+  stage_updated_at?: string | null;
+  // Append-only audit log: [{ stage, at, triggered_by }] where triggered_by is
+  // "auto" or a user id. Typed as unknown — parseStageHistory validates it.
+  stage_history?: unknown;
+  // The "Start preparation" latch — the one transition with no other trace in
+  // the data. Everything else the resolver derives from what the engagement
+  // contains.
+  preparation_started_at?: string | null;
   created_at: string;
   // Lifecycle (migration 0139). archive = hidden from active views, reversible
   // anytime; soft-delete = 30-day recoverable window before the purge cron.

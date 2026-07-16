@@ -21,6 +21,8 @@ import {
   type PaymentDelivery,
 } from "@/lib/db/payment-requests";
 import { logUserActivity } from "@/lib/db/activity";
+import { syncEngagementStage } from "@/lib/engagements/stage-sync";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { buildPaymentRequestEmail, sendEmail } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
 import { formatCurrency } from "@/lib/format";
@@ -107,6 +109,17 @@ export async function createInvoiceForEngagement(
     payment_request_id: row.id,
     locks_deliverables: input.locksDeliverables === true,
   });
+
+  // The engagement now has money owed against it. Hooked HERE rather than in the
+  // two callers because this is the one accountant-driven create path (the
+  // "Request payment" button and the New engagement page's "create it now" both
+  // land here); the deferred automation has its own hook in ./send.
+  //
+  // This rarely moves the stage on its own — the resolver gates awaiting_payment
+  // on preparation being reached, so an invoice raised at engagement CREATION
+  // (0610) can't jump a brand-new engagement past collecting. It matters when the
+  // work is already done and only the bill was missing.
+  await syncEngagementStage(await getServerSupabase(), engagement.id);
 
   // Email the pay link when the accountant chose email / both AND the engagement
   // has been sent (a draft has no magic_token / portal yet). Best-effort: an

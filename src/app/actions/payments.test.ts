@@ -47,6 +47,16 @@ vi.mock("@/lib/storage", () => ({
   uploadObject: (...args: unknown[]) => uploadObject(...args),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+// Creating an invoice re-resolves the engagement's stage (in the shared
+// createInvoiceForEngagement path). The resolver's rules are covered by
+// src/lib/engagements/stage.test.ts; stub it here so this stays a test of the
+// payment actions.
+vi.mock("@/lib/engagements/stage-sync", () => ({
+  syncEngagementStage: async () => null,
+}));
+vi.mock("@/lib/supabase/server", () => ({
+  getServerSupabase: async () => ({}),
+}));
 
 import {
   requestPaymentAction,

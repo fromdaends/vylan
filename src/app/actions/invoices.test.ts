@@ -14,6 +14,10 @@ const logUserActivity = vi.fn();
 const revalidatePath = vi.fn();
 const cancelScheduledInvoice = vi.fn();
 const dispatchInvoiceOnCompletion = vi.fn();
+// Every action here changes what the stage resolver reads (owed / locked), so
+// each one re-resolves the stage. That's covered by stage.test.ts against the
+// pure resolver; here it's stubbed so these stay tests of the invoice actions.
+const syncEngagementStage = vi.fn();
 
 vi.mock("@/lib/db/users", () => ({ getCurrentUser: () => getCurrentUser() }));
 vi.mock("@/lib/db/firms", () => ({ getCurrentFirm: () => getCurrentFirm() }));
@@ -40,6 +44,12 @@ vi.mock("@/lib/db/payment-requests", () => ({
 }));
 vi.mock("@/lib/db/activity", () => ({
   logUserActivity: (...args: unknown[]) => logUserActivity(...args),
+}));
+vi.mock("@/lib/engagements/stage-sync", () => ({
+  syncEngagementStage: (...args: unknown[]) => syncEngagementStage(...args),
+}));
+vi.mock("@/lib/supabase/server", () => ({
+  getServerSupabase: async () => ({}),
 }));
 vi.mock("@/lib/invoices/schedule", () => ({
   cancelScheduledInvoice: (...args: unknown[]) =>

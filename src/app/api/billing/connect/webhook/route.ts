@@ -11,6 +11,7 @@ import {
   markPaymentRequestFailedSR,
 } from "@/lib/db/payment-requests";
 import { logServiceRoleActivity } from "@/lib/db/activity";
+import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -125,6 +126,13 @@ async function handlePaymentSucceeded(session: Stripe.Checkout.Session) {
       currency: result.currency,
       payment_request_id: prId,
     });
+    // Payment lands: the engagement leaves awaiting_payment. It becomes
+    // "completed" only if the finished work is actually out with the client —
+    // otherwise it settles back on in_preparation until the deliverables are
+    // released, exactly as the spec requires. Paying also lifts the deliverables
+    // lock, so a locked-and-now-paid engagement reads completed in one step.
+    // (engagement_id is nullable — a payment need not belong to an engagement.)
+    if (result.engagementId) await syncEngagementStageSR(result.engagementId);
   }
 }
 
@@ -136,5 +144,9 @@ async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
     await logServiceRoleActivity(result.firmId, result.engagementId, "payment_failed", {
       payment_request_id: prId,
     });
+    // A failed invoice is still owed, so this rarely moves the stage — but it
+    // can re-apply the deliverables lock a moment of optimism had lifted, which
+    // pulls a "completed" engagement back to awaiting_payment. Honest.
+    if (result.engagementId) await syncEngagementStageSR(result.engagementId);
   }
 }

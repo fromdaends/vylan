@@ -15,6 +15,7 @@ import type { RequestItem, RequestItemStatus } from "./request-items";
 import type { SignatureStatus } from "@/lib/signwell/client";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
 import { resolveFileReason } from "@/lib/review/file-reason";
+import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { BUCKET } from "@/lib/storage";
 import {
   getInvoiceAttachmentForEngagementSR,
@@ -501,6 +502,32 @@ export async function setItemStatus(
   if (engagementId) q = q.eq("engagement_id", engagementId);
   const { error } = await q;
   if (error) throw error;
+
+  // Re-resolve the engagement's workflow stage. This is the OTHER writer of
+  // request_items.status besides recomputeItemStatus (which covers the whole
+  // accountant-review path), so together the two cover every checklist change:
+  // this one handles the client's "not applicable" / undo, and the signature
+  // completion that finalizeSignatureCompletion routes through here.
+  //
+  // Needs the engagement id; every caller passes it except where it's optional,
+  // in which case we look it up rather than skip (a missed sync would leave a
+  // stale chip). Best-effort — never fail the status write that just landed.
+  const targetEngagementId = engagementId ?? (await lookupEngagementId(sb, itemId));
+  if (targetEngagementId) {
+    await syncEngagementStage(sb, targetEngagementId);
+  }
+}
+
+async function lookupEngagementId(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  itemId: string,
+): Promise<string | null> {
+  const { data } = await sb
+    .from("request_items")
+    .select("engagement_id")
+    .eq("id", itemId)
+    .maybeSingle();
+  return (data?.engagement_id as string | undefined) ?? null;
 }
 
 export async function markEngagementInProgress(

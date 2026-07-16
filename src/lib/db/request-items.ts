@@ -1,5 +1,6 @@
 import { getServerSupabase } from "@/lib/supabase/server";
 import { setAllFilesReviewForItem } from "./file-review";
+import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import type { DocType } from "./templates";
 import type { SetAssessment } from "@/lib/ai/set-assessment";
 
@@ -134,6 +135,13 @@ export async function addItemToEngagement(
     .select("*")
     .single();
   if (error) throw error;
+
+  // A new checklist line changes the denominator the stage reads: adding a
+  // document to an engagement that had reached in_review pulls it back to
+  // collecting, because the client now owes something again. Hooked in the db
+  // layer so both entry points are covered — the legacy addItemAction and the
+  // POST /api/engagements/[id]/items route the dialog actually uses.
+  await syncEngagementStage(supabase, input.engagement_id);
   return data as RequestItem;
 }
 
@@ -150,6 +158,12 @@ export type NewSignatureItemInput = {
 // returns a signed copy. Mirrors addItemToEngagement but marks kind='signature'
 // and stores where the blank document lives. doc_type is the neutral 'other'
 // (the column is NOT NULL and a signature isn't an AI-classified document type).
+//
+// No stage sync here, unlike addItemToEngagement above: its only caller
+// (addSignatureItemAction) creates the signature_requests row immediately after
+// and syncs once at the end. Syncing here would run before that row exists, read
+// "no signature out", and be corrected a moment later — two round-trips to reach
+// the same answer.
 export async function addSignatureItemToEngagement(
   input: NewSignatureItemInput,
 ): Promise<RequestItem> {
@@ -201,15 +215,31 @@ export async function updateRequestItem(
   patch: RequestItemPatch,
 ): Promise<void> {
   const supabase = await getServerSupabase();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("request_items")
     .update(patch)
-    .eq("id", itemId);
+    .eq("id", itemId)
+    .select("engagement_id")
+    .maybeSingle();
   if (error) throw error;
+  // `required` is part of this patch, and it decides whether the item counts
+  // toward the stage's checklist denominator at all — flipping the last
+  // outstanding item to optional can move an engagement from collecting to
+  // in_review on its own.
+  if (data?.engagement_id) {
+    await syncEngagementStage(supabase, data.engagement_id as string);
+  }
 }
 
 export async function removeItem(itemId: string): Promise<void> {
   const supabase = await getServerSupabase();
+  // Read the parent before the row is gone — the stage sync needs it, and after
+  // the delete there's nothing left to look it up from.
+  const { data: item } = await supabase
+    .from("request_items")
+    .select("engagement_id")
+    .eq("id", itemId)
+    .maybeSingle();
   // ON DELETE CASCADE on uploaded_files handles file rows; storage objects
   // are orphaned but that's acceptable for MVP (cleanup job later).
   const { error } = await supabase
@@ -217,4 +247,9 @@ export async function removeItem(itemId: string): Promise<void> {
     .delete()
     .eq("id", itemId);
   if (error) throw error;
+  // Removing the one item the client hadn't delivered unblocks the checklist,
+  // so the engagement legitimately moves on.
+  if (item?.engagement_id) {
+    await syncEngagementStage(supabase, item.engagement_id as string);
+  }
 }

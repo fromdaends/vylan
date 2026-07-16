@@ -20,6 +20,25 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type AttentionReason = "overdue" | "due_soon" | "stale";
 
+// The slice of a request_item the "is this AI-bounced?" rule reads. Structural,
+// so a full RequestItem satisfies it — and so callers outside this module (the
+// stage resolver) can apply the same rule without importing the whole row type.
+export type AttentionItem = Pick<RequestItem, "status" | "rejection_reason">;
+
+// An item that's status="pending" with a rejection_reason set was bounced by the
+// AI — the client uploaded something, the classifier flagged it, and it was
+// reopened. The accountant should still be able to see it (and override) from
+// the "Ready to review" tile; otherwise the engagement disappears from the
+// dashboard the moment the AI says "nope" even though the firm might want to
+// weigh in. True pending (waiting on the client to upload anything at all) is
+// status="pending" with rejection_reason still null.
+//
+// Exported because the stage resolver needs the identical rule: an AI-bounced
+// item must not read as "the client still owes us this" in either place, or the
+// stage chip and the progress bar would tell different stories about one row.
+export const isAiBounced = (i: AttentionItem): boolean =>
+  i.status === "pending" && i.rejection_reason !== null;
+
 export type AttentionResult = {
   reasons: AttentionReason[];
   daysOverdue: number | null;
@@ -85,16 +104,6 @@ export function computeAttention(opts: {
   const completionPct =
     itemsTotal === 0 ? 1 : Math.min(1, itemsDone / itemsTotal);
 
-  // An item that's status="pending" with a rejection_reason set was
-  // bounced by the AI — the client uploaded something, the classifier
-  // flagged it, and it was reopened. The accountant should still be
-  // able to see it (and override) from the "Ready to review" tile;
-  // otherwise the engagement disappears from the dashboard the moment
-  // the AI says "nope" even though the firm might want to weigh in.
-  // True pending (waiting on the client to upload anything at all) is
-  // status="pending" with rejection_reason still null.
-  const isAiBounced = (i: RequestItem) =>
-    i.status === "pending" && i.rejection_reason !== null;
   const itemsPendingRequired = requiredItems.filter(
     (i) => i.status === "pending" && !isAiBounced(i),
   ).length;
