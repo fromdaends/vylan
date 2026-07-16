@@ -31,10 +31,16 @@ function scrollToId(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 }
 
+// How far you scroll before the brand gets out of the way. Roughly "you have
+// started reading" — past its own 24px offset and its 28px type, with room to
+// spare so a nudge of the wheel doesn't flicker it.
+const BRAND_HIDE_AFTER_PX = 90;
+
 export function VylanMenu({
   s,
   bookDemoHref,
   helpHref,
+  hideBrandOnScroll = false,
 }: {
   s: VylanMenuStrings;
   // Pages that render the lead form themselves (landing, how-it-works,
@@ -47,8 +53,19 @@ export function VylanMenu({
   // Absolute, locale-prefixed /help URL. Opens in a new tab (founder spec).
   // Omitted on pages built before the help center existed.
   helpHref?: string;
+  // Fade the brand out once the reader has scrolled in.
+  //
+  // The brand OPENS ON HOVER and is position:fixed at the top centre. That's
+  // right on the landing, where the whole page is the menu's stage. It's wrong
+  // on a long reading page: the pointer drifts across the top of the screen
+  // and the menu drops open over the paragraph you were reading, unasked.
+  //
+  // Off by default, so landing / how-it-works / contact / manifesto keep the
+  // behaviour they have today. Only the help center opts in.
+  hideBrandOnScroll?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [brandHidden, setBrandHidden] = useState(false);
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pathname = usePathname();
 
@@ -84,6 +101,23 @@ export function VylanMenu({
     };
   }, []);
 
+  // Brand fades away once you've scrolled in (opt-in, see hideBrandOnScroll).
+  useEffect(() => {
+    if (!hideBrandOnScroll) return;
+    const onScroll = () => {
+      const past = window.scrollY > BRAND_HIDE_AFTER_PX;
+      setBrandHidden(past);
+      // An open menu whose trigger just faded out is a menu you can't
+      // reasonably dismiss by leaving it. Close it with the brand.
+      if (past) setOpen(false);
+    };
+    // Run once: a reload restores scroll position, and the brand shouldn't
+    // flash in at whatever height the browser drops you back at.
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [hideBrandOnScroll]);
+
   // Close, then jump to the lead form (used by the "for firms" / "book a demo"
   // items). A stable handler reference — not built during render — so it never
   // reads the timer ref in the render path.
@@ -95,7 +129,7 @@ export function VylanMenu({
   return (
     <>
       <button
-        className="vy-brand"
+        className={"vy-brand" + (brandHidden ? " vy-brand-hidden" : "")}
         type="button"
         aria-label={s.menuLabel}
         aria-haspopup="true"

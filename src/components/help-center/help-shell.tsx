@@ -86,8 +86,10 @@ export async function HelpShell({
   return (
     <div className={`vy-root vy-help ${schibsted.variable}`}>
       {/* No helpHref/navHelp here: we're already on the help center. The
-          landing, how-it-works, and contact pages pass those in. */}
-      <VylanMenu s={menu} bookDemoHref={bookDemoHref} />
+          landing, how-it-works, and contact pages pass those in.
+          hideBrandOnScroll: this is a reading surface, and the brand opens on
+          hover — see the prop's note in VylanMenu. */}
+      <VylanMenu s={menu} bookDemoHref={bookDemoHref} hideBrandOnScroll />
 
       <header className={`vyh-hero${compact ? " vyh-hero-compact" : ""}`}>
         <h1 className="vyh-title">{title}</h1>
