@@ -8,6 +8,7 @@ import {
   steps,
   list,
   note,
+  warn,
 } from "../types";
 
 export const meta: HelpCategoryMeta = {
@@ -56,7 +57,7 @@ const whatIsVylan: HelpArticle = {
 
     h("It works in English and French"),
     p(
-      "The whole product is bilingual, including the emails and text messages your clients receive. You choose your own language in your settings, and each client is contacted in theirs. The two are independent, so you can work in English while your client hears from Vylan in French.",
+      "The whole product is bilingual, including the emails your clients receive. You choose your own language in your settings, and each client is contacted in theirs. The two are independent, so you can work in English while your client hears from Vylan in French.",
     ),
 
     h("Where your data lives"),
@@ -150,7 +151,66 @@ const yourFirstEngagement: HelpArticle = {
   ],
 };
 
+const demoModeAndGoingLive: HelpArticle = {
+  title: "Demo mode and going live",
+  summary:
+    "A new firm starts in demo mode, where nothing is emailed to your clients. Switching to live mode is one button, and it is the one that turns the chasing on.",
+  keywords: [
+    "demo",
+    "demo mode",
+    "live",
+    "go live",
+    "switch to live",
+    "paused",
+    "emails not sending",
+    "reminders not sending",
+    "trial",
+    "test",
+  ],
+  body: [
+    p(
+      "Vylan starts you in demo mode on purpose. You can build engagements, invite yourself, click everything, and get it wrong, without a single email reaching a real client.",
+    ),
+
+    h("What demo mode stops"),
+    p("Vylan tells you plainly at the top of your settings:"),
+    p(ui("You're in demo mode. Emails to clients are paused.")),
+    p(
+      "That is the important part, and it catches people out. While your firm is a demo, the automatic reminders do not send. Everything else looks like it is working, because it is: the schedule is built, the engagement is live, the stage moves. The emails just do not go out.",
+    ),
+    warn(
+      "If you have sent a real engagement to a real client and they have heard nothing, this is the first thing to check. It is the single most common reason Vylan looks broken when it is not.",
+    ),
+
+    h("Going live"),
+    steps(
+      ["Open your settings."],
+      ["Find the demo banner at the top."],
+      ["Click ", ui("Switch to live mode"), "."],
+    ),
+    p(
+      "The banner disappears, real emails start sending, and anything that was paused resumes on the next run, within about fifteen minutes. Vylan tells you what it picked back up: it names how many engagements had their reminders resumed.",
+    ),
+    note(
+      "Only the firm owner can switch to live mode. If you are a member and the banner will not budge, that is why. See ",
+      link("/help/team/owners-and-members", "owners and members"),
+      ".",
+    ),
+
+    h("It is a one-way door, in the good sense"),
+    p(
+      "Live is the normal state. There is no reason to go back, and Vylan will tell you if you try, because your firm is already live.",
+    ),
+    note(
+      "Next: ",
+      link("/help/getting-started/your-first-engagement", "your first engagement"),
+      ".",
+    ),
+  ],
+};
+
 export const articles = {
   "what-is-vylan": whatIsVylan,
   "your-first-engagement": yourFirstEngagement,
+  "demo-mode-and-going-live": demoModeAndGoingLive,
 };

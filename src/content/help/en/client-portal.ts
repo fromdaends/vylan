@@ -30,8 +30,8 @@ const howYourClientGetsTheirLink: HelpArticle = {
     "sign in",
     "access",
     "portal",
-    "sms",
-    "text message",
+    "reminder",
+    "follow up",
   ],
   body: [
     p(
@@ -62,9 +62,9 @@ const howYourClientGetsTheirLink: HelpArticle = {
       "Clients lose emails. It is the most ordinary thing in the world. You can resend the link from the engagement, and Vylan's automatic reminders each contain the link again, so a client who ignored the first email gets another route back in without having to ask you.",
     ),
     note(
-      "Reminders go out on their own schedule, by email and by text message where you have a mobile number on file. See ",
-      link("/help/getting-started/your-first-engagement", "your first engagement"),
-      " for how sending works.",
+      "Reminders go out by email on their own schedule until the documents are in. See ",
+      link("/help/reminders/how-reminders-work", "how automatic reminders work"),
+      ".",
     ),
 
     h("Your branding, not ours"),

@@ -30,8 +30,8 @@ const howYourClientGetsTheirLink: HelpArticle = {
     "acces",
     "accès",
     "portail",
-    "texto",
-    "sms",
+    "relance",
+    "suivi",
   ],
   body: [
     p(
@@ -62,7 +62,7 @@ const howYourClientGetsTheirLink: HelpArticle = {
       "Les clients perdent des courriels. C'est la chose la plus ordinaire du monde. Vous pouvez renvoyer le lien depuis l'engagement, et chaque relance automatique de Vylan contient à nouveau le lien : un client qui a ignoré le premier courriel a donc un autre chemin de retour sans avoir à vous le demander.",
     ),
     note(
-      "Les relances partent selon leur propre calendrier, par courriel et par texto lorsque vous avez un numéro de cellulaire au dossier. Voyez ",
+      "Les relances partent par courriel, selon leur propre calendrier, tant que les documents ne sont pas entrés. Voyez ",
       link("/help/getting-started/your-first-engagement", "votre premier engagement"),
       " pour le fonctionnement de l'envoi.",
     ),

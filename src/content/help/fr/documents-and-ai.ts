@@ -92,6 +92,9 @@ const howVylanChecksDocuments: HelpArticle = {
       ui("L'IA s'est trompée : approuver"),
       ".",
     ),
+    p(
+      "La lecture elle-même est faite par GPT-5.4 d'OpenAI, choisi pour une raison précise : il regarde le document de votre client en pleine résolution. Les modèles moins chers réduisent l'image avant de la voir, et c'est exactement comme ça qu'un gribouillis sur les chiffres de transit d'un chèque annulé passe pour « conforme ». Le détail qu'il doit attraper est petit, alors on ne le laisse pas plisser les yeux.",
+    ),
 
     h("Renvoyer automatiquement les mauvais téléversements"),
     p(
@@ -112,7 +115,26 @@ const howVylanChecksDocuments: HelpArticle = {
       ", vise le cas précis où un client envoie une copie exacte de ce qu'il a déjà téléversé pour cet engagement. Activé, le doublon est renvoyé automatiquement. Désactivé, il est signalé pour vous.",
     ),
     note(
-      "Les deux interrupteurs sont désactivés au départ. Vylan ne renvoie rien à votre client automatiquement tant que vous ne les avez pas activés. Les activer va plus vite, et vos clients corrigent leurs erreurs pendant qu'ils ont encore le document en main. Les laisser désactivés veut dire que rien n'atteint votre client sans passer devant vos yeux.",
+      "Ces interrupteurs sont désactivés au départ. Vylan ne renvoie rien à votre client automatiquement tant que vous ne les avez pas activés. Les activer va plus vite, et vos clients corrigent leurs erreurs pendant qu'ils ont encore le document en main. Les laisser désactivés veut dire que rien n'atteint votre client sans passer devant vos yeux.",
+    ),
+
+    h("Relancer une page manquante"),
+    p(
+      "Un troisième interrupteur, ",
+      ui("Demander automatiquement les pages manquantes"),
+      ", traite le cas précis et très fréquent du client qui photographie trois pages d'un document qui en compte quatre. Activé, Vylan lui demande lui-même la page manquante. Désactivé, c'est signalé pour votre révision.",
+    ),
+    note(
+      "Celui-là a une limite sensée, et elle vaut la peine d'être connue : si Vylan n'est pas sûr de quelle page manque, ça vous revient toujours, jamais au client. Il ne devinera pas devant votre client.",
+    ),
+
+    h("Les feuillets du Québec"),
+    p(
+      ui("Inclure les formulaires fiscaux du Québec"),
+      " est activé par défaut, et la plupart des cabinets devraient le laisser tranquille. Désactivez-le seulement si votre cabinet travaille entièrement hors du Québec : les feuillets propres au Québec, le RL-1, le RL-3 et compagnie, disparaissent alors de toutes les listes de clients.",
+    ),
+    p(
+      "Laissé activé, c'est plus fin qu'il n'y paraît. Ces feuillets tombent quand même automatiquement pour tout client dont la province est réglée hors du Québec : un cabinet qui sert les deux côtés d'une frontière n'a pas à y penser.",
     ),
 
     h("Il y a une limite mensuelle"),

@@ -8,6 +8,7 @@ import {
   steps,
   list,
   note,
+  warn,
 } from "../types";
 
 export const meta: HelpCategoryMeta = {
@@ -67,7 +68,7 @@ const whatIsVylan: HelpArticle = {
 
     h("En français et en anglais"),
     p(
-      "Tout le produit est bilingue, y compris les courriels et les textos que vos clients reçoivent. Vous choisissez votre langue dans vos réglages, et chaque client est contacté dans la sienne. Les deux sont indépendantes : vous pouvez travailler en anglais pendant que votre client reçoit tout en français.",
+      "Tout le produit est bilingue, y compris les courriels que vos clients reçoivent. Vous choisissez votre langue dans vos réglages, et chaque client est contacté dans la sienne. Les deux sont indépendantes : vous pouvez travailler en anglais pendant que votre client reçoit tout en français.",
     ),
 
     h("Où vos données sont hébergées"),
@@ -162,7 +163,66 @@ const yourFirstEngagement: HelpArticle = {
   ],
 };
 
+const demoModeAndGoingLive: HelpArticle = {
+  title: "Le mode démo et le passage en mode actif",
+  summary:
+    "Un nouveau cabinet démarre en mode démo, où rien n'est envoyé par courriel à vos clients. Passer en mode actif tient à un bouton, et c'est celui qui met les relances en marche.",
+  keywords: [
+    "demo",
+    "démo",
+    "mode demo",
+    "actif",
+    "passer en mode actif",
+    "en pause",
+    "courriels ne partent pas",
+    "rappels ne partent pas",
+    "essai",
+    "test",
+  ],
+  body: [
+    p(
+      "Vylan vous démarre en mode démo, exprès. Vous pouvez bâtir des engagements, vous inviter vous-même, tout cliquer et vous tromper, sans qu'un seul courriel atteigne un vrai client.",
+    ),
+
+    h("Ce que le mode démo arrête"),
+    p("Vylan vous le dit clairement en haut de vos réglages :"),
+    p(ui("Vous êtes en mode démo. Les courriels aux clients sont en pause.")),
+    p(
+      "C'est la partie importante, et elle prend les gens par surprise. Tant que votre cabinet est en démo, les rappels automatiques ne partent pas. Tout le reste a l'air de fonctionner, parce que c'est le cas : le calendrier est bâti, l'engagement est actif, l'étape avance. Ce sont seulement les courriels qui ne sortent pas.",
+    ),
+    warn(
+      "Si vous avez envoyé un vrai engagement à un vrai client et qu'il n'a rien reçu, c'est la première chose à vérifier. C'est de loin la raison la plus fréquente pour laquelle Vylan a l'air brisé alors qu'il ne l'est pas.",
+    ),
+
+    h("Passer en mode actif"),
+    steps(
+      ["Ouvrez vos réglages."],
+      ["Trouvez la bannière de démo en haut."],
+      ["Cliquez sur ", ui("Passer en mode actif"), "."],
+    ),
+    p(
+      "La bannière disparaît, les vrais courriels commencent à partir, et ce qui était en pause reprend au prochain passage, dans un quart d'heure environ. Vylan vous dit ce qu'il a relancé : il nomme le nombre d'engagements dont les rappels ont repris.",
+    ),
+    note(
+      "Seul l'administrateur du cabinet peut passer en mode actif. Si vous êtes membre et que la bannière ne bouge pas, c'est pour ça. Voyez ",
+      link("/help/team/owners-and-members", "administrateurs et membres"),
+      ".",
+    ),
+
+    h("Une porte à sens unique, dans le bon sens"),
+    p(
+      "Le mode actif est l'état normal. Il n'y a aucune raison de revenir en arrière, et Vylan vous le dira si vous essayez, parce que votre cabinet est déjà actif.",
+    ),
+    note(
+      "Ensuite : ",
+      link("/help/getting-started/your-first-engagement", "votre premier engagement"),
+      ".",
+    ),
+  ],
+};
+
 export const articles = {
   "what-is-vylan": whatIsVylan,
   "your-first-engagement": yourFirstEngagement,
+  "demo-mode-and-going-live": demoModeAndGoingLive,
 };

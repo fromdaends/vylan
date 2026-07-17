@@ -10,11 +10,14 @@ import {
   headingId,
 } from "@/components/help-center/article-body";
 import { getArticle, getCategory } from "@/content/help/registry";
-import { allArticlePaths } from "@/content/help/registry";
+import { articlePathsFor } from "@/content/help/registry";
 
 export function generateStaticParams() {
+  // Per-locale: French only prerenders what's actually translated. Anything
+  // else still resolves at request time and 404s, which is correct — it isn't
+  // linked from anywhere in French.
   return routing.locales.flatMap((locale) =>
-    allArticlePaths().map(({ category, article }) => ({
+    articlePathsFor(locale).map(({ category, article }) => ({
       locale,
       category,
       article,

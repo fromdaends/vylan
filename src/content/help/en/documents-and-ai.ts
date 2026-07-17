@@ -83,6 +83,9 @@ const howVylanChecksDocuments: HelpArticle = {
       ui("AI was wrong, approve"),
       ".",
     ),
+    p(
+      "The reading itself is done by OpenAI's GPT-5.4, chosen for one specific reason: it looks at your client's document at full resolution. Cheaper models shrink an image before they see it, which is exactly how a scribble over the transit digits on a void cheque sails through as \"looks good\". The detail you need it to catch is small, so it does not get to squint.",
+    ),
 
     h("Sending bad uploads back automatically"),
     p(
@@ -103,7 +106,26 @@ const howVylanChecksDocuments: HelpArticle = {
       ", for the specific case of a client sending an exact copy of something they already uploaded for that engagement. On, it bounces automatically. Off, it gets flagged for you.",
     ),
     note(
-      "Both toggles start off. Vylan does not send anything back to your client automatically unless you turn them on. Switching them on is faster, and means clients fix mistakes while they are still sitting there with the document in hand. Leaving them off means nothing reaches your client without passing your eyes first.",
+      "These start off. Vylan does not send anything back to your client automatically unless you turn them on. Switching them on is faster, and means clients fix mistakes while they are still sitting there with the document in hand. Leaving them off means nothing reaches your client without passing your eyes first.",
+    ),
+
+    h("Chasing a missing page"),
+    p(
+      "A third toggle, ",
+      ui("Auto-ask for missing pages"),
+      ", handles the specific and very common case of a client photographing three pages of a four-page document. On, Vylan asks them for the missing page itself. Off, it is flagged for your review instead.",
+    ),
+    note(
+      "There is a sensible limit built into this one, and it is worth knowing: if Vylan is not sure which page is missing, it always comes to you, never the client. It will not guess at your client.",
+    ),
+
+    h("Quebec slips"),
+    p(
+      ui("Include Quebec tax forms"),
+      " is on by default, and most firms should leave it alone. Turn it off only if your firm works entirely outside Quebec: the Quebec-only slips, the RL-1, the RL-3 and so on, then disappear from every client checklist.",
+    ),
+    p(
+      "Left on, it is smarter than it sounds. Those slips still drop off automatically for any client whose province is set outside Quebec, so a firm serving both sides of a border does not have to think about it.",
     ),
 
     h("There is a monthly limit"),

@@ -7,15 +7,16 @@ import { routing } from "@/i18n/routing";
 import { HelpShell, StillStuck } from "@/components/help-center/help-shell";
 import {
   getCategory,
+  getCategories,
   isCategorySlug,
 } from "@/content/help/registry";
-import { CATEGORY_SLUGS } from "@/content/help/manifest";
 
 // Fully static: the content is compiled in, so there is nothing to fetch and
-// no reason to render these per request.
+// no reason to render these per request. Per-locale, so French doesn't
+// prerender a category with nothing translated in it yet.
 export function generateStaticParams() {
   return routing.locales.flatMap((locale) =>
-    CATEGORY_SLUGS.map((category) => ({ locale, category })),
+    getCategories(locale).map((c) => ({ locale, category: c.slug })),
   );
 }
 
@@ -53,6 +54,9 @@ export default async function HelpCategoryPage({
 
   if (!isCategorySlug(category)) notFound();
   const c = getCategory(locale, category);
+  // Nothing translated in this locale yet: 404 rather than render a category
+  // page with an empty list. Nothing links here in that locale anyway.
+  if (c.articles.length === 0) notFound();
   const t = await getTranslations("HelpCenter");
 
   return (
