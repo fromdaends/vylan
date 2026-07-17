@@ -238,6 +238,7 @@ export function TeamManager({
               key={m.id}
               member={m}
               canManage={canManage && !m.isSelf && m.role !== "owner"}
+              canViewProfile={canManage}
             />
           ))}
         </div>
@@ -433,9 +434,12 @@ function TrialTeamLock() {
 function MemberRow({
   member,
   canManage,
+  canViewProfile,
 }: {
   member: ActiveMember;
   canManage: boolean;
+  // Owners can open a teammate's profile (their engagements/clients/activity).
+  canViewProfile: boolean;
 }) {
   const t = useTranslations("Team");
   const errorMessage = useErrorMessage();
@@ -461,7 +465,16 @@ function MemberRow({
       <AvatarInitials src={member.avatarUrl} name={member.name} size={36} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate text-sm font-medium">{member.name}</span>
+          {canViewProfile ? (
+            <Link
+              href={`/settings/team/${member.id}`}
+              className="truncate text-sm font-medium hover:underline"
+            >
+              {member.name}
+            </Link>
+          ) : (
+            <span className="truncate text-sm font-medium">{member.name}</span>
+          )}
           <Badge
             variant={member.role === "owner" ? "default" : "secondary"}
             className="shrink-0 font-normal"
