@@ -2366,7 +2366,11 @@
     "reason_statement": "Statements list many transactions, not one entry.",
     "reason_not_transaction": "Not a receipt or invoice.",
     "download_cta": "Download CSV",
-    "download_soon": "The download arrives in the next update."
+    "download_soon": "The download arrives in the next update.",
+    "download_preparing": "Preparing your file…",
+    "download_error": "Couldn't create the file. Please try again.",
+    "download_none": "Those documents couldn't be read, so there's nothing to export yet.",
+    "download_partial": "Exported {exported} of {total} documents. The rest couldn't be read."
   },
   "Quickbooks": {
     "draft_title": "QuickBooks draft",
