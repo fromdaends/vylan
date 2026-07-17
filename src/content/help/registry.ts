@@ -30,7 +30,58 @@ export type LocaleContent = {
   };
 };
 
-const CONTENT: Record<AppLocale, LocaleContent> = { en: EN, fr: FR };
+// PHASE 2 ONLY — French is allowed to lag while English is being drafted.
+//
+// The founder reviews the English before it gets translated, so there is a
+// window where a slug exists in EN and not yet in FR. Rather than block that
+// with the compiler, FR is typed Partial and every read below SKIPS what isn't
+// translated: the French site simply doesn't list or link an article it can't
+// show. It is never a 404 and never English text under a French heading.
+//
+// PHASE 3 FLIPS THIS BACK. When the translations land, change FR's type in
+// src/content/help/fr/index.ts from PartialLocaleContent to LocaleContent and
+// the compiler goes back to proving parity forever. The parity test in
+// registry.test.ts is the interim guard and will start failing the moment a
+// French article is dropped after that.
+//
+// Phases 2 and 3 ship on ONE branch for this reason — /help is already public,
+// and prod must never serve a French help center with six articles in it.
+// Both levels are optional: a whole category may not be translated yet, and a
+// translated category may be missing some of its articles.
+export type PartialLocaleContent = Partial<{
+  [C in CategorySlug]: {
+    meta: HelpCategoryMeta;
+    articles: Partial<{ [A in ArticleSlugOf<C>]: HelpArticle }>;
+  };
+}>;
+
+const CONTENT: Record<AppLocale, LocaleContent | PartialLocaleContent> = {
+  en: EN,
+  fr: FR,
+};
+
+type CategoryEntry = {
+  meta: HelpCategoryMeta;
+  articles: Record<string, HelpArticle | undefined>;
+};
+
+// The category as this locale has it, or null if it isn't translated yet.
+function entryOf(
+  locale: AppLocale,
+  category: CategorySlug,
+): CategoryEntry | null {
+  return (CONTENT[locale][category] as CategoryEntry | undefined) ?? null;
+}
+
+// The slugs actually available in a locale, in manifest order. English is
+// always complete; French is whatever has been translated so far.
+function availableSlugs(locale: AppLocale, category: CategorySlug): string[] {
+  const entry = entryOf(locale, category);
+  if (!entry) return [];
+  return (HELP_STRUCTURE[category] as readonly string[]).filter(
+    (slug) => entry.articles[slug],
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Lookups
@@ -54,23 +105,29 @@ export function isCategorySlug(value: string): value is CategorySlug {
   return (CATEGORY_SLUGS as string[]).includes(value);
 }
 
-// Categories in manifest order, which is display order.
+// Categories in manifest order, which is display order. A category with
+// nothing translated yet is dropped rather than shown as an empty card that
+// leads to an empty page.
 export function getCategories(locale: AppLocale): ResolvedCategory[] {
-  return CATEGORY_SLUGS.map((slug) => getCategory(locale, slug));
+  return CATEGORY_SLUGS.map((slug) => getCategory(locale, slug)).filter(
+    (c) => c.articles.length > 0,
+  );
 }
 
 export function getCategory(
   locale: AppLocale,
   slug: CategorySlug,
 ): ResolvedCategory {
-  const entry = CONTENT[locale][slug];
-  const articles = (HELP_STRUCTURE[slug] as readonly string[]).map(
-    (articleSlug) => ({
-      slug: articleSlug,
-      article: (entry.articles as Record<string, HelpArticle>)[articleSlug]!,
-    }),
-  );
-  return { slug, meta: entry.meta, articles };
+  const entry = entryOf(locale, slug);
+  // Untranslated: fall back to the English meta so a caller always has a title
+  // to render. It never reaches a reader — getCategories drops empty
+  // categories and the category page 404s on them.
+  const meta = entry?.meta ?? (EN[slug].meta as HelpCategoryMeta);
+  const articles = availableSlugs(locale, slug).map((articleSlug) => ({
+    slug: articleSlug,
+    article: entry!.articles[articleSlug]!,
+  }));
+  return { slug, meta, articles };
 }
 
 export function getArticle(
@@ -79,8 +136,9 @@ export function getArticle(
   articleSlug: string,
 ): ResolvedArticle | null {
   if (!isCategorySlug(categorySlug)) return null;
-  const entry = CONTENT[locale][categorySlug];
-  const article = (entry.articles as Record<string, HelpArticle>)[articleSlug];
+  const entry = entryOf(locale, categorySlug);
+  if (!entry) return null;
+  const article = entry.articles[articleSlug];
   if (!article) return null;
   return {
     categorySlug,
@@ -91,13 +149,37 @@ export function getArticle(
   };
 }
 
-// Every (category, article) pair. Drives generateStaticParams and the sitemap.
+// The category titles a locale can actually show. Used by the search index.
+function categoryTitleOf(locale: AppLocale, category: CategorySlug): string {
+  return entryOf(locale, category)?.meta.title ?? EN[category].meta.title;
+}
+
+// Every (category, article) pair in the manifest. Drives the sitemap, which
+// is English-first and lists what the help center is meant to contain.
 export function allArticlePaths(): { category: CategorySlug; article: string }[] {
   return CATEGORY_SLUGS.flatMap((category) =>
     (HELP_STRUCTURE[category] as readonly string[]).map((article) => ({
       category,
       article,
     })),
+  );
+}
+
+// The paths that actually render in a given locale. generateStaticParams uses
+// this so French doesn't prerender pages for articles it can't show yet.
+export function articlePathsFor(
+  locale: AppLocale,
+): { category: CategorySlug; article: string }[] {
+  return CATEGORY_SLUGS.flatMap((category) =>
+    availableSlugs(locale, category).map((article) => ({ category, article })),
+  );
+}
+
+// Which English articles have no French twin yet. Phase 3's job is to empty
+// this; the parity test reports it.
+export function untranslated(): { category: CategorySlug; article: string }[] {
+  return allArticlePaths().filter(
+    ({ category, article }) => !getArticle("fr", category, article),
   );
 }
 
@@ -119,18 +201,20 @@ export type SearchRecord = {
 
 export function buildSearchIndex(locale: AppLocale): SearchRecord[] {
   return CATEGORY_SLUGS.flatMap((categorySlug) => {
-    const entry = CONTENT[locale][categorySlug];
-    return (HELP_STRUCTURE[categorySlug] as readonly string[]).map((slug) => {
-      const article = (entry.articles as Record<string, HelpArticle>)[slug]!;
+    const entry = entryOf(locale, categorySlug);
+    if (!entry) return [];
+    const categoryTitle = categoryTitleOf(locale, categorySlug);
+    // Only what this locale can actually open. Finding a result that leads
+    // nowhere is worse than not finding it.
+    return availableSlugs(locale, categorySlug).map((slug) => {
+      const article = entry.articles[slug]!;
       return {
         category: categorySlug,
-        categoryTitle: entry.meta.title,
+        categoryTitle,
         slug,
         title: article.title,
         summary: article.summary,
-        haystack: normalizeText(
-          `${entry.meta.title} ${articleText(article)}`,
-        ),
+        haystack: normalizeText(`${categoryTitle} ${articleText(article)}`),
       };
     });
   });

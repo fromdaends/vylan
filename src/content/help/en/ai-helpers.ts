@@ -1,0 +1,115 @@
+import {
+  type HelpArticle,
+  type HelpCategoryMeta,
+  p,
+  h,
+  ui,
+  link,
+  list,
+  note,
+  warn,
+} from "../types";
+
+export const meta: HelpCategoryMeta = {
+  title: "AI helpers",
+  description:
+    "The two assistants inside the app: one that answers questions about Vylan, and one that knows a specific engagement.",
+};
+
+const askVylan: HelpArticle = {
+  title: "Ask Vylan",
+  summary:
+    "An assistant inside the app that answers questions about how Vylan works, so you do not have to leave what you are doing.",
+  keywords: [
+    "ask",
+    "assistant",
+    "help",
+    "chat",
+    "ai",
+    "question",
+    "guide",
+    "support",
+  ],
+  body: [
+    p(
+      "Ask Vylan is the help panel inside the app. It answers questions about the product: how to send an engagement, what a setting does, where something lives.",
+    ),
+
+    h("Using it"),
+    p(
+      "Open it from the ",
+      ui("Help"),
+      " item in your account menu, and ask in your own words, in English or French.",
+    ),
+
+    h("What it is for"),
+    p(
+      "Questions about Vylan. It is not a tax adviser and it will tell you so: it can describe what a T1135 is, but not whether you need one. That line is deliberate.",
+    ),
+
+    h("It can be wrong"),
+    warn(
+      "It is an AI, and it says so itself in the panel. For anything that matters, and especially for anything about your account or your billing, email hello@vylan.app and get an answer from a person.",
+    ),
+
+    h("This help center, or the assistant?"),
+    p(
+      "The assistant is faster for a quick question while you are mid-task. This help center goes deeper, is written by a person, gets checked, and does not guess. If the two ever disagree, believe this one and tell us.",
+    ),
+    note(
+      "Found a bug or want to argue for a feature? The same panel sends feedback straight to the founders.",
+    ),
+  ],
+};
+
+const theEngagementAssistant: HelpArticle = {
+  title: "The engagement assistant",
+  summary:
+    "A chat attached to one engagement, that can actually see it. It answers from that job's real data, and asks before it does anything.",
+  keywords: [
+    "assistant",
+    "chat",
+    "engagement",
+    "ai",
+    "actions",
+    "confirm",
+    "limit",
+    "ask",
+  ],
+  body: [
+    p(
+      "Different from ",
+      link("/help/ai-helpers/ask-vylan", "Ask Vylan"),
+      ", which knows the product. This one knows the engagement you have open.",
+    ),
+
+    h("What it can tell you"),
+    p(
+      "It reads that engagement's actual data, so it answers about this job rather than in general:",
+    ),
+    list(
+      ["What is still outstanding."],
+      ["What the client has sent, and when."],
+      ["What the document check made of a file."],
+      ["Where the job has got to."],
+    ),
+
+    h("It asks before it acts"),
+    p(
+      "It can do things, not just talk. But every action it proposes is shown to you as something to confirm or cancel first. Nothing happens to your client or your engagement because a chat decided it should.",
+    ),
+    warn(
+      "Confirming is you doing it, not the assistant doing it. Read what it is proposing before you tap confirm, the same as you would read an email before sending it.",
+    ),
+
+    h("There is a limit"),
+    p(
+      "Each person gets a set number of messages in a rolling window. Confirming or cancelling an action does not count against it, only asking does. If you hit the limit, wait a bit. Everything else in Vylan carries on working.",
+    ),
+  ],
+};
+
+export const articles = {
+  "ask-vylan": askVylan,
+  "the-engagement-assistant": theEngagementAssistant,
+};

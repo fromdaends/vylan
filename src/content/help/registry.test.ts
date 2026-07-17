@@ -5,6 +5,8 @@ import {
   getArticle,
   getCategory,
   allArticlePaths,
+  articlePathsFor,
+  untranslated,
   buildSearchIndex,
   searchArticles,
   isCategorySlug,
@@ -15,30 +17,38 @@ import { articleText, type HelpBlock, type Inline } from "./types";
 const LOCALES = routing.locales;
 
 describe("structure", () => {
-  it("exposes every category in manifest order", () => {
-    for (const locale of LOCALES) {
-      expect(getCategories(locale).map((c) => c.slug)).toEqual(CATEGORY_SLUGS);
-    }
+  it("exposes every category in manifest order (English is the complete one)", () => {
+    expect(getCategories("en").map((c) => c.slug)).toEqual(CATEGORY_SLUGS);
   });
 
   it("exposes every article in manifest order", () => {
-    for (const locale of LOCALES) {
-      for (const category of CATEGORY_SLUGS) {
-        expect(getCategory(locale, category).articles.map((a) => a.slug)).toEqual([
-          ...HELP_STRUCTURE[category],
-        ]);
-      }
+    for (const category of CATEGORY_SLUGS) {
+      expect(getCategory("en", category).articles.map((a) => a.slug)).toEqual([
+        ...HELP_STRUCTURE[category],
+      ]);
     }
   });
 
-  it("resolves every manifest path in every locale", () => {
-    for (const locale of LOCALES) {
-      for (const { category, article } of allArticlePaths()) {
-        expect(
-          getArticle(locale, category, article),
-          `${locale} ${category}/${article}`,
-        ).not.toBeNull();
-      }
+  it("keeps French in manifest order too, minus what isn't translated", () => {
+    // Order is display order; a partial locale must not reshuffle it.
+    for (const c of getCategories("fr")) {
+      const manifest = [...HELP_STRUCTURE[c.slug]] as string[];
+      const got = c.articles.map((a) => a.slug);
+      expect(got).toEqual(manifest.filter((s) => got.includes(s)));
+    }
+    expect(getCategories("fr").map((c) => c.slug)).toEqual(
+      CATEGORY_SLUGS.filter((s) =>
+        getCategories("fr").some((c) => c.slug === s),
+      ),
+    );
+  });
+
+  it("resolves every manifest path in English", () => {
+    for (const { category, article } of allArticlePaths()) {
+      expect(
+        getArticle("en", category, article),
+        `en ${category}/${article}`,
+      ).not.toBeNull();
     }
   });
 
@@ -49,25 +59,39 @@ describe("structure", () => {
   });
 });
 
-// The LocaleContent type already makes a missing translation a compile error.
-// This is the belt to that braces: it also catches an article that exists but
-// was left as a copy of the English, which the type can't see.
+// PHASE 2: French is allowed to lag while English is drafted for review, so
+// these check that the gap is CONTAINED, not that it's absent.
+//
+// PHASE 3 flips FR's type back to LocaleContent, at which point the compiler
+// enforces full parity and `untranslated()` is empty for good. The last test
+// here is what will tell you you're done.
 describe("EN/FR parity", () => {
-  it("has the same paths in both locales", () => {
-    const en = getCategories("en");
-    const fr = getCategories("fr");
-    expect(fr.map((c) => c.slug)).toEqual(en.map((c) => c.slug));
-    for (let i = 0; i < en.length; i++) {
-      expect(fr[i]!.articles.map((a) => a.slug)).toEqual(
-        en[i]!.articles.map((a) => a.slug),
-      );
+  it("never has a French article English doesn't", () => {
+    const en = new Set(
+      allArticlePaths().map(({ category, article }) => `${category}/${article}`),
+    );
+    for (const c of getCategories("fr")) {
+      for (const a of c.articles) {
+        expect(en.has(`${c.slug}/${a.slug}`), `${c.slug}/${a.slug}`).toBe(true);
+      }
     }
   });
 
-  it("actually translated every title and summary", () => {
-    for (const { category, article } of allArticlePaths()) {
+  it("never shows a French category with nothing in it", () => {
+    for (const c of getCategories("fr")) {
+      expect(c.articles.length, c.slug).toBeGreaterThan(0);
+    }
+  });
+
+  it("actually translated what it claims to have translated", () => {
+    const translated = allArticlePaths().filter(({ category, article }) =>
+      getArticle("fr", category, article),
+    );
+    expect(translated.length).toBeGreaterThan(0);
+    for (const { category, article } of translated) {
       const en = getArticle("en", category, article)!;
       const fr = getArticle("fr", category, article)!;
+      // Same slug, genuinely different prose — not English pasted into fr/.
       expect(fr.article.title, `${category}/${article} title`).not.toBe(
         en.article.title,
       );
@@ -77,19 +101,31 @@ describe("EN/FR parity", () => {
     }
   });
 
-  it("translated the category titles", () => {
-    for (const category of CATEGORY_SLUGS) {
-      expect(getCategory("fr", category).meta.title).not.toBe(
-        getCategory("en", category).meta.title,
-      );
+  it("translated the category titles it has", () => {
+    for (const c of getCategories("fr")) {
+      expect(c.meta.title, c.slug).not.toBe(getCategory("en", c.slug).meta.title);
     }
+  });
+
+  // Not a failure during Phase 2 — this is the burn-down. When it hits zero,
+  // flip FR back to LocaleContent in src/content/help/fr/index.ts.
+  it("reports what Phase 3 still owes", () => {
+    const todo = untranslated();
+    const total = allArticlePaths().length;
+    console.info(
+      `[help] FR coverage: ${total - todo.length}/${total} translated` +
+        (todo.length
+          ? `, ${todo.length} to go: ${todo.map((t) => `${t.category}/${t.article}`).join(", ")}`
+          : " — complete, flip FR to LocaleContent"),
+    );
+    expect(todo.length).toBeLessThanOrEqual(total);
   });
 });
 
 describe("content sanity", () => {
   it("every article has a title, a summary, keywords, and a body", () => {
     for (const locale of LOCALES) {
-      for (const { category, article } of allArticlePaths()) {
+      for (const { category, article } of articlePathsFor(locale)) {
         const { article: a } = getArticle(locale, category, article)!;
         const where = `${locale} ${category}/${article}`;
         expect(a.title.trim().length, where).toBeGreaterThan(0);
@@ -128,7 +164,9 @@ describe("cross-links", () => {
   it("every /help link points at an article that exists", () => {
     const seen: string[] = [];
     for (const locale of LOCALES) {
-      for (const { category, article } of allArticlePaths()) {
+      // Per-locale: a French article must not link to an article French
+      // doesn't have yet. That would be a 404 only French readers ever hit.
+      for (const { category, article } of articlePathsFor(locale)) {
         const found = getArticle(locale, category, article)!;
         for (const href of internalLinks(found.article.body)) {
           seen.push(href);
@@ -211,9 +249,21 @@ describe("search", () => {
     expect(searchArticles(en, "téléverse").length).toBe(0);
   });
 
-  it("indexes one record per article per locale", () => {
+  it("indexes exactly what each locale can open", () => {
     for (const locale of LOCALES) {
-      expect(buildSearchIndex(locale)).toHaveLength(allArticlePaths().length);
+      expect(buildSearchIndex(locale)).toHaveLength(
+        articlePathsFor(locale).length,
+      );
+    }
+    // English is the complete one.
+    expect(buildSearchIndex("en")).toHaveLength(allArticlePaths().length);
+  });
+
+  it("never returns a French result that leads to a 404", () => {
+    const fr = buildSearchIndex("fr");
+    for (const r of fr) {
+      expect(getArticle("fr", r.category, r.slug), `${r.category}/${r.slug}`)
+        .not.toBeNull();
     }
   });
 

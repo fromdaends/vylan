@@ -67,7 +67,7 @@ const whatIsVylan: HelpArticle = {
 
     h("En français et en anglais"),
     p(
-      "Tout le produit est bilingue, y compris les courriels et les textos que vos clients reçoivent. Vous choisissez votre langue dans vos réglages, et chaque client est contacté dans la sienne. Les deux sont indépendantes : vous pouvez travailler en anglais pendant que votre client reçoit tout en français.",
+      "Tout le produit est bilingue, y compris les courriels que vos clients reçoivent. Vous choisissez votre langue dans vos réglages, et chaque client est contacté dans la sienne. Les deux sont indépendantes : vous pouvez travailler en anglais pendant que votre client reçoit tout en français.",
     ),
 
     h("Où vos données sont hébergées"),

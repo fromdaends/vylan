@@ -56,7 +56,7 @@ const whatIsVylan: HelpArticle = {
 
     h("It works in English and French"),
     p(
-      "The whole product is bilingual, including the emails and text messages your clients receive. You choose your own language in your settings, and each client is contacted in theirs. The two are independent, so you can work in English while your client hears from Vylan in French.",
+      "The whole product is bilingual, including the emails your clients receive. You choose your own language in your settings, and each client is contacted in theirs. The two are independent, so you can work in English while your client hears from Vylan in French.",
     ),
 
     h("Where your data lives"),
