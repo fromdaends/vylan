@@ -85,6 +85,7 @@ function renderShell(
         quickbooks={null}
         servicePrices={null}
         paymentsList={null}
+        currentUserId="u-test"
         firmName="Acme"
         firm={FIRM}
         firmLogoUrl={null}

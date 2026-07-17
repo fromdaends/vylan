@@ -119,6 +119,7 @@ export function SettingsShell({
   quickbooks,
   servicePrices,
   paymentsList,
+  currentUserId,
   firmName,
   firm,
   firmLogoUrl,
@@ -155,6 +156,9 @@ export function SettingsShell({
   servicePrices: Record<string, number> | null;
   // Firm-wide recent payments for the Payments section list. Null for non-owners.
   paymentsList: PaymentsListRow[] | null;
+  // The viewing owner's id, so the payments list can hide "sent by you" and only
+  // tag a teammate's invoices.
+  currentUserId: string;
   firmName: string;
   firm: FirmInfo;
   firmLogoUrl: string | null;
@@ -266,7 +270,10 @@ export function SettingsShell({
                   {t("payments_history_hint")}
                 </p>
                 <div className="mt-4 max-w-xl">
-                  <PaymentsList rows={paymentsList} />
+                  <PaymentsList
+                    rows={paymentsList}
+                    currentUserId={currentUserId}
+                  />
                 </div>
               </section>
             )}

@@ -15,12 +15,14 @@ const ROW: PaymentsListRow = {
   createdAt: "2026-06-19T00:00:00.000Z",
   clientName: "Tyler Jette",
   engagementTitle: "2025 return",
+  requestedByUserId: null,
+  requestedByName: null,
 };
 
-function renderList(rows: PaymentsListRow[]) {
+function renderList(rows: PaymentsListRow[], currentUserId?: string) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
-      <PaymentsList rows={rows} />
+      <PaymentsList rows={rows} currentUserId={currentUserId} />
     </NextIntlClientProvider>,
   );
 }
@@ -38,5 +40,26 @@ describe("PaymentsList", () => {
     expect(
       screen.getByText(en.Engagements.payments_list_empty),
     ).toBeInTheDocument();
+  });
+
+  it("tags an invoice sent by a teammate (not the viewer)", () => {
+    renderList(
+      [{ ...ROW, requestedByUserId: "u-marie", requestedByName: "Marie" }],
+      "u-me",
+    );
+    expect(screen.getByText(/Sent by Marie/)).toBeInTheDocument();
+  });
+
+  it("does NOT tag an invoice the viewer sent themselves", () => {
+    renderList(
+      [{ ...ROW, requestedByUserId: "u-me", requestedByName: "Me" }],
+      "u-me",
+    );
+    expect(screen.queryByText(/Sent by/)).not.toBeInTheDocument();
+  });
+
+  it("does NOT tag when there is no requester name", () => {
+    renderList([{ ...ROW, requestedByUserId: null, requestedByName: null }], "u-me");
+    expect(screen.queryByText(/Sent by/)).not.toBeInTheDocument();
   });
 });

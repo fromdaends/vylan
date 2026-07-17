@@ -183,6 +183,7 @@ export default async function SettingsPage({
         quickbooks={quickbooks}
         servicePrices={servicePrices}
         paymentsList={paymentsList}
+        currentUserId={user.id}
         firmName={firm.name}
         firm={{
           name: firm.name,
