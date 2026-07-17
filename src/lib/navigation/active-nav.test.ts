@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isNavItemActive,
+  isIntegrationsSectionActive,
   engagementToView,
   isEngagementViewActive,
   type EngagementForView,
@@ -27,6 +28,24 @@ describe("isNavItemActive", () => {
   it("does not match an unrelated route that only shares a prefix", () => {
     expect(isNavItemActive("/engagements-archive", "/engagements")).toBe(false);
     expect(isNavItemActive("/clients", "/dashboard")).toBe(false);
+  });
+});
+
+describe("isIntegrationsSectionActive", () => {
+  it("lights on the Integrations hub index and its Sage sub-route", () => {
+    expect(isIntegrationsSectionActive("/integrations")).toBe(true);
+    expect(isIntegrationsSectionActive("/integrations/sage")).toBe(true);
+  });
+
+  it("also lights on the pre-existing QuickBooks surface", () => {
+    expect(isIntegrationsSectionActive("/quickbooks/drafts")).toBe(true);
+  });
+
+  it("stays off on unrelated routes", () => {
+    expect(isIntegrationsSectionActive("/engagements")).toBe(false);
+    expect(isIntegrationsSectionActive("/dashboard")).toBe(false);
+    // shares a prefix but isn't the section
+    expect(isIntegrationsSectionActive("/integrations-old")).toBe(false);
   });
 });
 

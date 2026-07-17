@@ -53,7 +53,10 @@ import { viewHref, type EngagementView } from "@/lib/engagements/views";
 import {
   isNavItemActive,
   isEngagementViewActive,
+  isIntegrationsSectionActive,
 } from "@/lib/navigation/active-nav";
+import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
+import { SageLogo } from "@/components/integrations/sage-logo";
 import {
   ActiveNavProvider,
   useActiveEngagementView,
@@ -66,6 +69,7 @@ type Labels = {
   engagementsToggle: string;
   templates: string;
   integrations: string;
+  integrationsToggle: string;
   settings: string;
   firm: string;
   logout: string;
@@ -103,6 +107,35 @@ const ENGAGEMENT_SUBNAV: {
   { view: "completed", icon: ClipboardList },
   { view: "archived", icon: Archive },
   { view: "deleted", icon: Trash2 },
+];
+
+// The Integrations sub-items, in nav order. Each carries its product's OFFICIAL
+// brand logo (not a line icon) — a deliberate, small departure so the marks read
+// as the real tools. Brand NAMES are not localized. QuickBooks is the existing
+// live surface (/quickbooks/drafts); Sage 50 is the new file-export page. The
+// `root` is what the sidebar highlights against (QuickBooks lives under a
+// different URL root than the hub index).
+const INTEGRATION_SUBNAV: {
+  key: string;
+  name: string;
+  href: string;
+  root: string;
+  Logo: typeof QuickbooksLogo;
+}[] = [
+  {
+    key: "quickbooks",
+    name: "QuickBooks",
+    href: "/quickbooks/drafts",
+    root: "/quickbooks",
+    Logo: QuickbooksLogo,
+  },
+  {
+    key: "sage",
+    name: "Sage 50",
+    href: "/integrations/sage",
+    root: "/integrations/sage",
+    Logo: SageLogo,
+  },
 ];
 
 type NavItemDef = {
@@ -223,22 +256,14 @@ export function AppShell({
     },
   ];
 
-  // Integrations hub (QuickBooks today; more software later). Rendered after the
-  // Engagements section in the sidebar. Currently lands on the QuickBooks drafts
-  // queue, the only integration surface so far. Shown to OWNERS at all times so
-  // they can discover + connect it (they land on the page's connect prompt when
-  // nothing is linked yet); staff only see it once an integration is connected,
-  // since they can't connect and the queue is empty/irrelevant to them until it
-  // is. Connect/disconnect stay owner-only in Settings -> Integrations.
-  const integrationsNav: NavItemDef | null =
-    quickbooksConnected || isOwner
-      ? {
-          href: "/quickbooks/drafts",
-          label: labels.integrations,
-          icon: Plug,
-          color: "text-icon-purple",
-        }
-      : null;
+  // Integrations hub — now an EXPANDABLE section (like Engagements) whose parent
+  // links to the /integrations index and whose sub-items are QuickBooks and
+  // Sage 50. Shown to OWNERS at all times so they can discover it (QuickBooks
+  // lands on its connect prompt when nothing is linked; Sage is a file export
+  // that needs no connection), and to staff once QuickBooks is connected — the
+  // same visibility rule as before, just applied to the whole hub. Connect /
+  // disconnect for QuickBooks still live in Settings -> Integrations.
+  const showIntegrations = quickbooksConnected || isOwner;
 
   // Firm + Settings used to live in a sidebar "ACCOUNT" section; they
   // now live in the avatar dropdown menu (and the mobile sheet's
@@ -263,7 +288,7 @@ export function AppShell({
       >
         <SidebarBody
           primaryNav={primaryNav}
-          integrationsNav={integrationsNav}
+          showIntegrations={showIntegrations}
           labels={labels}
           engagementBadges={engagementBadges}
           brandColor={brandColor}
@@ -619,7 +644,7 @@ function MobileMenuItem({
 
 function SidebarBody({
   primaryNav,
-  integrationsNav,
+  showIntegrations,
   labels,
   engagementBadges,
   brandColor,
@@ -633,7 +658,7 @@ function SidebarBody({
   onToggleCollapse,
 }: {
   primaryNav: NavItemDef[];
-  integrationsNav: NavItemDef | null;
+  showIntegrations: boolean;
   labels: Labels;
   engagementBadges: EngagementBadgeCounts;
   brandColor: string;
@@ -766,15 +791,11 @@ function SidebarBody({
             badges={engagementBadges}
             collapsed={collapsed}
           />
-          {/* Integrations hub — only when an integration is connected. */}
-          {integrationsNav && (
-            <NavLink
-              href={integrationsNav.href}
-              icon={integrationsNav.icon}
-              label={integrationsNav.label}
-              collapsed={collapsed}
-              color={integrationsNav.color}
-            />
+          {/* Integrations hub — an expandable section mirroring Engagements:
+              the label links to the /integrations index, the chevron reveals the
+              QuickBooks + Sage 50 sub-items with their brand logos. */}
+          {showIntegrations && (
+            <IntegrationsNav labels={labels} collapsed={collapsed} />
           )}
         </NavSection>
       </nav>
@@ -1000,6 +1021,125 @@ function NavLink({
         {!collapsed && <span className="truncate">{label}</span>}
       </span>
     </Link>
+  );
+}
+
+// Expandable "Integrations" sidebar section. Built on the SAME pattern as
+// EngagementsNav below: the parent row's label links to the hub index
+// (/integrations) while a separate caret toggles the sub-item list; it
+// auto-expands whenever you're anywhere in the section (the hub, the Sage page,
+// or the pre-existing QuickBooks surface). Collapsed to icons, it degrades to a
+// single icon link to the index. The sub-items carry each product's brand logo.
+function IntegrationsNav({
+  labels,
+  collapsed,
+}: {
+  labels: Labels;
+  collapsed: boolean;
+}) {
+  const pathname = usePathname();
+  const onIntegrations = isIntegrationsSectionActive(pathname);
+  const [open, setOpen] = useState(onIntegrations);
+  // Re-expand if navigation lands in the section (e.g. via search or a card).
+  const lastOnRef = useRef(onIntegrations);
+  useEffect(() => {
+    if (onIntegrations && !lastOnRef.current) setOpen(true);
+    lastOnRef.current = onIntegrations;
+  }, [onIntegrations]);
+
+  // Collapsed rail: a single icon link to the hub index (no room for the
+  // accordion, which needs labels the rail hides).
+  if (collapsed) {
+    return (
+      <Link
+        href="/integrations"
+        title={labels.integrations}
+        aria-label={labels.integrations}
+      >
+        <span
+          className={cn(
+            "flex h-10 w-full items-center justify-center rounded-lg text-sm font-medium transition-colors",
+            onIntegrations
+              ? "bg-secondary text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
+              : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
+          )}
+        >
+          <Plug className="size-4 shrink-0 text-icon-purple" aria-hidden />
+        </span>
+      </Link>
+    );
+  }
+
+  return (
+    <div>
+      {/* Parent row: the label links to the index; the caret toggles the list. */}
+      <div
+        className={cn(
+          "flex items-center rounded-lg text-sm font-medium transition-colors",
+          onIntegrations
+            ? "text-foreground"
+            : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <Link
+          href="/integrations"
+          className={cn(
+            "flex flex-1 items-center gap-2.5 rounded-lg px-3 py-2 hover:bg-secondary/60",
+            pathname === "/integrations" &&
+              "bg-secondary shadow-[inset_0_1px_0_0_var(--color-border)]",
+          )}
+        >
+          <Plug className="size-4 shrink-0 text-icon-purple" aria-hidden />
+          <span className="truncate">{labels.integrations}</span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={labels.integrationsToggle}
+          className="mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform duration-200",
+              open ? "rotate-0" : "-rotate-90",
+            )}
+            aria-hidden
+          />
+        </button>
+      </div>
+
+      {/* Sub-items — smooth grid-rows expand, matching Engagements. */}
+      <div
+        className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+        style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <div className="mt-0.5 space-y-0.5 border-l border-border/50 pl-3 ml-4">
+            {INTEGRATION_SUBNAV.map(({ key, name, href, root, Logo }) => {
+              const active = isNavItemActive(pathname, root);
+              return (
+                <Link
+                  key={key}
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                    active
+                      ? "bg-secondary text-foreground font-medium"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+                  )}
+                >
+                  {/* Brand marks keep their real color in both themes. */}
+                  <Logo className="size-4 shrink-0" aria-hidden />
+                  <span className="flex-1 truncate">{name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
