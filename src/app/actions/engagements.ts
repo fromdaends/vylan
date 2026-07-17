@@ -49,6 +49,8 @@ import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getPathname } from "@/i18n/navigation";
 import { hasActiveTeam } from "@/lib/team/mode";
+import { enqueueJob, cancelPendingJobs } from "@/lib/db/jobs";
+import { ASSIGNMENT_EMAIL_DELAY_MS } from "@/lib/team/assignment-notify";
 import {
   normalizeReminderSettings,
   type ReminderSettings,
@@ -584,6 +586,34 @@ export async function reassignEngagementAction(
     to_user_id: assigneeId,
     ...(handoffNote ? { note: handoffNote } : {}),
   });
+
+  // Schedule the delayed catch-up EMAIL — only when SOMEONE ELSE assigned the
+  // work (never self-assignment). Supersede any pending catch-up for this
+  // engagement (a re-reassignment changes who should be emailed). Best-effort:
+  // never fail the reassignment on a queue hiccup. The in-app notification is
+  // instant + independent of this.
+  if (user.id !== assigneeId) {
+    try {
+      await cancelPendingJobs(
+        "notify_assignment",
+        (p) => p.engagement_id === engagementId,
+      );
+      await enqueueJob({
+        kind: "notify_assignment",
+        payload: {
+          engagement_id: engagementId,
+          assignee_id: assigneeId,
+          assigned_by: user.id,
+          assigned_at: new Date().toISOString(),
+          ...(handoffNote ? { note: handoffNote } : {}),
+        },
+        runAfter: new Date(Date.now() + ASSIGNMENT_EMAIL_DELAY_MS),
+      });
+    } catch (e) {
+      console.error("[engagements] assignment email enqueue failed:", e);
+    }
+  }
+
   revalidateEngagementPaths(engagementId);
   return { ok: true };
 }

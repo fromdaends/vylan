@@ -22,6 +22,7 @@ import {
   processNotifyClientMessagesJob,
   processNotifyFirmMessagesJob,
 } from "@/lib/client-messages-notify";
+import { processNotifyAssignmentJob } from "@/lib/team/assignment-notify";
 import { processSyncQuickbooksJob } from "@/lib/quickbooks/sync";
 import { sendEngagementInvoice } from "@/lib/invoices/send";
 import {
@@ -170,6 +171,18 @@ async function runJob(
     if (job.kind === "notify_firm_messages") {
       const detail = await processNotifyFirmMessagesJob(job.payload);
       if (detail.skipped?.startsWith("send_failed")) {
+        await markJobFailed(job.id, detail.skipped);
+        return { id: job.id, kind: job.kind, ok: false, detail };
+      }
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: true, detail };
+    }
+    if (job.kind === "notify_assignment") {
+      // Delayed "assigned to you" catch-up email. Every skip is terminal-done
+      // (still-active / reassigned-away / no-recipient mean there's nothing to
+      // send); only a failed Resend send retries via the queue's backoff.
+      const detail = await processNotifyAssignmentJob(job.payload);
+      if (detail.skipped === "send_failed") {
         await markJobFailed(job.id, detail.skipped);
         return { id: job.id, kind: job.kind, ok: false, detail };
       }
