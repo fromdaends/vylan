@@ -2341,7 +2341,14 @@
     "sage_badge": "Export de fichier",
     "sage_action": "Exporter",
     "sage_detail_explainer": "Sage 50 fonctionne sur votre ordinateur, il n'y a donc pas de connexion en direct. Vylan lit et code les documents de vos clients, puis vous remet un fichier prêt à importer.",
-    "sage_ph_soon": "L'export est en préparation. Bientôt, vous choisirez un engagement ici et téléchargerez un fichier prêt pour Sage."
+    "sage_how_label": "Comment ça marche",
+    "sage_step1_title": "Les clients téléversent",
+    "sage_step1_desc": "Les reçus et factures arrivent par chaque mandat.",
+    "sage_step2_title": "Vylan les lit et les code",
+    "sage_step2_desc": "Chaque document devient une écriture prête à vérifier.",
+    "sage_step3_title": "Vous exportez et importez",
+    "sage_step3_desc": "Téléchargez le fichier et importez-le dans Sage 50.",
+    "sage_ph_soon": "Le sélecteur d'export arrive bientôt. Vous choisirez un engagement ici et téléchargerez un fichier prêt pour Sage."
   },
   "Quickbooks": {
     "draft_title": "Brouillon QuickBooks",
