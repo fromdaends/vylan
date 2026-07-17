@@ -178,7 +178,6 @@ export function EngagementsView({
     } catch {
       saved = null;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved === "mine" || saved === "all") setScope(saved);
   }, [currentUserId, teamEnabled, scopeFromUrl]);
   const chooseScope = (s: string) => {
