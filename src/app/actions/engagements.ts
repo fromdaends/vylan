@@ -43,6 +43,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
+import { normalizeHandoffNote } from "@/lib/engagements/handoff-note";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
@@ -534,6 +535,7 @@ export async function restoreEngagementAction(formData: FormData) {
 export async function reassignEngagementAction(
   engagementId: string,
   assigneeId: string,
+  note?: string,
 ): Promise<{
   ok: boolean;
   error?: "no_session" | "invalid_assignee" | "update_failed";
@@ -577,8 +579,10 @@ export async function reassignEngagementAction(
     return { ok: false, error: "update_failed" };
   }
 
+  const handoffNote = normalizeHandoffNote(note);
   await logUserActivity(firm.id, engagementId, "engagement_reassigned", {
     to_user_id: assigneeId,
+    ...(handoffNote ? { note: handoffNote } : {}),
   });
   revalidateEngagementPaths(engagementId);
   return { ok: true };

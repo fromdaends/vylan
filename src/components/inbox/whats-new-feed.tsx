@@ -117,6 +117,12 @@ function WhatsNewRow({
               {formatRelative(n.timestamp, locale)}
             </span>
           </div>
+          {/* Handoff note the assigner left (engagement_assigned rows only). */}
+          {n.note && (
+            <div className="mt-1 line-clamp-2 text-xs italic text-muted-foreground/90">
+              &ldquo;{n.note}&rdquo;
+            </div>
+          )}
         </div>
         <ChevronRight
           className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-foreground/60"
