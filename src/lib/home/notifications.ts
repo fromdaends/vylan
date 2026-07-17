@@ -49,7 +49,11 @@ export type HomeNotificationKind =
   // The client wrote in the engagement's message thread. Its href deep-links
   // into the assistant panel's Client-messages tab (?panel=messages) so the
   // feed's Reply chip lands straight in the conversation.
-  | "client_message";
+  | "client_message"
+  // A teammate assigned an engagement TO the viewer. Unlike every other kind
+  // (which are firm-events anyone relevant sees), this is personally targeted:
+  // it only appears for the person the work landed on.
+  | "engagement_assigned";
 
 // Activity-log actions surfaced as notifications (a client paid, a payment
 // failed, an engagement was finished, a client signed, a client messaged).
@@ -83,7 +87,26 @@ export type HomeNotification = {
   // Destination when the user clicks. Always a relative path inside
   // the app, no external links.
   href: string;
+  // Optional handoff note the assigner left (engagement_assigned rows only).
+  note?: string | null;
 };
+
+// Whether an `engagement_reassigned` activity should notify the CURRENT viewer
+// as the new assignee: the work was assigned TO them, BY someone else, and
+// they're STILL the current assignee (not since reassigned away — a stale row
+// shouldn't ping). PURE + exported for tests.
+export function shouldNotifyAssignee(input: {
+  toUserId: string | null;
+  actorId: string | null;
+  currentAssigneeId: string | null;
+  viewerId: string;
+}): boolean {
+  return (
+    input.toUserId === input.viewerId &&
+    input.actorId !== input.viewerId &&
+    input.currentAssigneeId === input.viewerId
+  );
+}
 
 // TODO(notifications-table): when we ship a real notifications/inbox
 // schema (read-state, dismiss, per-user etc.), replace the body of
@@ -155,6 +178,46 @@ export async function listHomeNotifications(
     engagements.map((e) => [e.id, e.status]),
   );
   const out: HomeNotification[] = [];
+
+  // 0) "Assigned to you" — personally targeted, so only fetched + emitted when
+  // we know who's viewing. Sourced from engagement_reassigned activity, which
+  // already records who assigned it, to whom, and an optional handoff note.
+  if (viewer) {
+    const reassigns = await listFirmActivityByActions(
+      ["engagement_reassigned"],
+      40,
+      recentSinceISO,
+    );
+    for (const a of reassigns) {
+      const meta = (a.metadata ?? {}) as {
+        to_user_id?: unknown;
+        note?: unknown;
+      };
+      const toUserId =
+        typeof meta.to_user_id === "string" ? meta.to_user_id : null;
+      if (
+        !a.engagement_id ||
+        !shouldNotifyAssignee({
+          toUserId,
+          actorId: a.actor_id,
+          currentAssigneeId: assigneeByEng.get(a.engagement_id) ?? null,
+          viewerId: viewer.userId,
+        })
+      ) {
+        continue;
+      }
+      out.push({
+        id: a.id,
+        kind: "engagement_assigned",
+        engagement_id: a.engagement_id,
+        engagement_title: a.engagement_title,
+        client_display_name: a.client_display_name,
+        note: typeof meta.note === "string" ? meta.note.trim() || null : null,
+        timestamp: a.created_at,
+        href: `/engagements/${a.engagement_id}`,
+      });
+    }
+  }
 
   // 1) AI signals straight off the existing activity feed.
   for (const a of aiActivity) {

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   filterNotificationsForViewer,
   eventActionToNotificationKind,
+  shouldNotifyAssignee,
   type HomeNotification,
 } from "./notifications";
 
@@ -101,5 +102,38 @@ describe("filterNotificationsForViewer", () => {
         isOwner: false,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("shouldNotifyAssignee", () => {
+  const base = {
+    toUserId: "u-me",
+    actorId: "u-boss",
+    currentAssigneeId: "u-me",
+    viewerId: "u-me",
+  };
+
+  it("notifies when someone else assigned it to me and I'm still the assignee", () => {
+    expect(shouldNotifyAssignee(base)).toBe(true);
+  });
+
+  it("does not notify when I assigned it to myself", () => {
+    expect(shouldNotifyAssignee({ ...base, actorId: "u-me" })).toBe(false);
+  });
+
+  it("does not notify when it was assigned to someone else", () => {
+    expect(
+      shouldNotifyAssignee({ ...base, toUserId: "u-marie" }),
+    ).toBe(false);
+  });
+
+  it("does not notify on a stale row (since reassigned away from me)", () => {
+    expect(
+      shouldNotifyAssignee({ ...base, currentAssigneeId: "u-marie" }),
+    ).toBe(false);
+  });
+
+  it("does not notify when there was no target user", () => {
+    expect(shouldNotifyAssignee({ ...base, toUserId: null })).toBe(false);
   });
 });

@@ -1009,6 +1009,7 @@
     "kind_engagement_completed": "Engagement complété",
     "kind_client_signed": "Le client a signé un document",
     "kind_client_message": "Nouveau message de votre client",
+    "kind_engagement_assigned": "Un engagement vous a été assigné",
     "reply": "Répondre"
   },
   "Inbox": {
@@ -1035,6 +1036,7 @@
     "kind_engagement_completed": "Engagement complété",
     "kind_client_signed": "Le client a signé un document",
     "kind_client_message": "Nouveau message de votre client",
+    "kind_engagement_assigned": "Un engagement vous a été assigné",
     "reply": "Répondre",
     "search_label": "Rechercher des clients",
     "search_placeholder": "Rechercher",
