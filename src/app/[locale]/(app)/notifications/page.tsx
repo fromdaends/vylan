@@ -169,6 +169,12 @@ function NotificationRow({
             <span aria-hidden>·</span>
             <span>{formatRelative(n.timestamp, locale)}</span>
           </div>
+          {/* Handoff note the assigner left (engagement_assigned rows only). */}
+          {n.note && (
+            <div className="mt-1 text-xs italic text-muted-foreground/90 line-clamp-2">
+              &ldquo;{n.note}&rdquo;
+            </div>
+          )}
         </div>
         <ChevronRight
           className="h-4 w-4 text-muted-foreground/30 group-hover:text-foreground/70 transition-colors mt-2 shrink-0"

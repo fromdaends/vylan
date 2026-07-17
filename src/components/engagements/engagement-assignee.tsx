@@ -11,13 +11,25 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { reassignEngagementAction } from "@/app/actions/engagements";
+import { HANDOFF_NOTE_MAX } from "@/lib/engagements/handoff-note";
 
 // "Assigned to / Assigné à" control on the engagement detail. Shows who's
 // accountable (avatar + name) and lets any firm member reassign to any ACTIVE
-// member. If the current assignee was deactivated, a "please reassign" banner
-// nudges the team (notifications for the engagement route to the owner until
-// it's reassigned). Accountability only — visibility stays firm-wide.
+// member. Reassigning opens a small confirm dialog with an optional HANDOFF NOTE
+// ("vehicle log still missing…") — the note reaches the new assignee in their
+// "assigned to you" notification. Accountability only — visibility stays
+// firm-wide.
 export function EngagementAssignee({
   engagementId,
   assigneeId,
@@ -32,17 +44,37 @@ export function EngagementAssignee({
   members: { id: string; name: string }[];
 }) {
   const t = useTranslations("Engagements");
+  const tc = useTranslations("Common");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  // Optimistic label so the new assignee shows immediately on click.
+  // Optimistic label so the new assignee shows immediately on confirm.
   const [optimisticName, setOptimisticName] = useState<string | null>(null);
   const displayName = optimisticName ?? assigneeName;
+  // The member picked in the dropdown, awaiting confirm + an optional note.
+  const [target, setTarget] = useState<{ id: string; name: string } | null>(
+    null,
+  );
+  const [note, setNote] = useState("");
 
-  function reassign(memberId: string, memberName: string) {
+  function pick(memberId: string, memberName: string) {
     if (memberId === assigneeId) return;
+    setNote("");
+    setTarget({ id: memberId, name: memberName });
+  }
+
+  function confirmAssign() {
+    if (!target) return;
+    const memberName = target.name;
+    const memberId = target.id;
+    const noteToSend = note.trim();
     setOptimisticName(memberName);
+    setTarget(null);
     startTransition(async () => {
-      const res = await reassignEngagementAction(engagementId, memberId);
+      const res = await reassignEngagementAction(
+        engagementId,
+        memberId,
+        noteToSend || undefined,
+      );
       if (res.ok) {
         router.refresh();
       } else {
@@ -88,7 +120,7 @@ export function EngagementAssignee({
             {members.map((m) => (
               <DropdownMenuItem
                 key={m.id}
-                onSelect={() => reassign(m.id, m.name)}
+                onSelect={() => pick(m.id, m.name)}
                 className="gap-2"
               >
                 <AvatarInitials name={m.name} size={20} />
@@ -108,6 +140,51 @@ export function EngagementAssignee({
           {t("assignee_deactivated")}
         </div>
       )}
+
+      <Dialog
+        open={target !== null}
+        onOpenChange={(open) => {
+          if (!open) setTarget(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {t("assign_dialog_title", { name: target?.name ?? "" })}
+            </DialogTitle>
+            <DialogDescription>{t("assign_dialog_hint")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <label
+              htmlFor="handoff-note"
+              className="text-sm font-medium text-foreground"
+            >
+              {t("assign_note_label")}
+            </label>
+            <Textarea
+              id="handoff-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={HANDOFF_NOTE_MAX}
+              rows={3}
+              placeholder={t("assign_note_placeholder")}
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTarget(null)}
+            >
+              {tc("cancel")}
+            </Button>
+            <Button type="button" onClick={confirmAssign}>
+              {t("assign_confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
