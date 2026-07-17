@@ -114,8 +114,8 @@ const howVylanChecksDocuments: HelpArticle = {
       ui("Rejeter automatiquement les doublons"),
       ", vise le cas précis où un client envoie une copie exacte de ce qu'il a déjà téléversé pour cet engagement. Activé, le doublon est renvoyé automatiquement. Désactivé, il est signalé pour vous.",
     ),
-    note(
-      "Ces interrupteurs sont désactivés au départ. Vylan ne renvoie rien à votre client automatiquement tant que vous ne les avez pas activés. Les activer va plus vite, et vos clients corrigent leurs erreurs pendant qu'ils ont encore le document en main. Les laisser désactivés veut dire que rien n'atteint votre client sans passer devant vos yeux.",
+    warn(
+      "Ces deux interrupteurs sont ACTIVÉS à la création de votre cabinet. C'est voulu : les clients corrigent leurs erreurs le plus vite pendant qu'ils ont encore le document en main. Mais ça veut dire que Vylan renvoie déjà les mauvais téléversements à vos clients en votre nom, sans vous demander d'abord. Si vous préférez tout voir avant votre client, désactivez-les.",
     ),
 
     h("Relancer une page manquante"),
@@ -123,6 +123,9 @@ const howVylanChecksDocuments: HelpArticle = {
       "Un troisième interrupteur, ",
       ui("Demander automatiquement les pages manquantes"),
       ", traite le cas précis et très fréquent du client qui photographie trois pages d'un document qui en compte quatre. Activé, Vylan lui demande lui-même la page manquante. Désactivé, c'est signalé pour votre révision.",
+    ),
+    p(
+      "Contrairement aux deux autres, celui-ci est désactivé au départ. Activez-le si vous le voulez.",
     ),
     note(
       "Celui-là a une limite sensée, et elle vaut la peine d'être connue : si Vylan n'est pas sûr de quelle page manque, ça vous revient toujours, jamais au client. Il ne devinera pas devant votre client.",

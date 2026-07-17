@@ -105,8 +105,8 @@ const howVylanChecksDocuments: HelpArticle = {
       ui("Auto-reject duplicates"),
       ", for the specific case of a client sending an exact copy of something they already uploaded for that engagement. On, it bounces automatically. Off, it gets flagged for you.",
     ),
-    note(
-      "These start off. Vylan does not send anything back to your client automatically unless you turn them on. Switching them on is faster, and means clients fix mistakes while they are still sitting there with the document in hand. Leaving them off means nothing reaches your client without passing your eyes first.",
+    warn(
+      "Both of these are ON when your firm is created. That is deliberate: clients fix mistakes fastest while they are still sitting there with the document in hand. But it does mean Vylan is already sending bad uploads back to your clients on your behalf, without asking you first. If you would rather see everything before your client does, turn them off.",
     ),
 
     h("Chasing a missing page"),
@@ -115,6 +115,7 @@ const howVylanChecksDocuments: HelpArticle = {
       ui("Auto-ask for missing pages"),
       ", handles the specific and very common case of a client photographing three pages of a four-page document. On, Vylan asks them for the missing page itself. Off, it is flagged for your review instead.",
     ),
+    p("Unlike the other two, this one starts off. Turn it on if you want it."),
     note(
       "There is a sensible limit built into this one, and it is worth knowing: if Vylan is not sure which page is missing, it always comes to you, never the client. It will not guess at your client.",
     ),
