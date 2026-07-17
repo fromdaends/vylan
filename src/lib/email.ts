@@ -507,6 +507,71 @@ The Vylan team`;
   return { subject, html, text };
 }
 
+// Internal teammate email — a delayed catch-up sent by the job queue when an
+// engagement was assigned to someone who hasn't been back in the app since. This
+// is an INTERNAL notification (to a firm member, not a client), so it's plain
+// Vylan-branded, no firm logo. Includes the optional handoff note.
+export function buildTeamAssignmentEmail(opts: {
+  assignerName: string;
+  firmName: string;
+  engagementTitle: string;
+  note: string | null;
+  url: string;
+  locale: "fr" | "en";
+}): { subject: string; html: string; text: string } {
+  const assigner = escapeHtml(opts.assignerName);
+  const firm = escapeHtml(opts.firmName);
+  const title = escapeHtml(opts.engagementTitle);
+  const note = opts.note ? escapeHtml(opts.note) : null;
+  if (opts.locale === "fr") {
+    const subject = `${opts.assignerName} vous a assigné un engagement`;
+    const noteBlock = note
+      ? `<p style="margin:16px 0;padding:12px 14px;background:#f1f5f9;border-radius:8px;color:#334155"><strong>Note :</strong> ${note}</p>`
+      : "";
+    const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Bonjour,</p>
+<p><strong>${assigner}</strong> vous a assigné <strong>${title}</strong> chez ${firm} sur Vylan.</p>
+${noteBlock}
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Ouvrir l'engagement</a>
+</p>
+<p style="color:#64748b;font-size:13px">Vous recevez ce courriel parce que vous n'êtes pas revenu(e) dans Vylan depuis. Vous pouvez aussi le voir dans vos notifications.</p>
+<p style="margin-top:32px">L'équipe Vylan</p>
+</body></html>`;
+    const text = `Bonjour,
+
+${opts.assignerName} vous a assigné « ${opts.engagementTitle} » chez ${opts.firmName} sur Vylan.
+${note ? `\nNote : ${opts.note}\n` : ""}
+Ouvrir l'engagement : ${opts.url}
+
+L'équipe Vylan`;
+    return { subject, html, text };
+  }
+
+  const subject = `${opts.assignerName} assigned you an engagement`;
+  const noteBlock = note
+    ? `<p style="margin:16px 0;padding:12px 14px;background:#f1f5f9;border-radius:8px;color:#334155"><strong>Note:</strong> ${note}</p>`
+    : "";
+  const html = `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b">
+<p>Hi,</p>
+<p><strong>${assigner}</strong> assigned you <strong>${title}</strong> at ${firm} on Vylan.</p>
+${noteBlock}
+<p style="margin:24px 0">
+  <a href="${opts.url}" style="display:inline-block;background:#1e293b;color:#fafaf9;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:500">Open engagement</a>
+</p>
+<p style="color:#64748b;font-size:13px">You're getting this because you haven't been back in Vylan since. It's also waiting in your notifications.</p>
+<p style="margin-top:32px">The Vylan team</p>
+</body></html>`;
+  const text = `Hi,
+
+${opts.assignerName} assigned you "${opts.engagementTitle}" at ${opts.firmName} on Vylan.
+${note ? `\nNote: ${opts.note}\n` : ""}
+Open engagement: ${opts.url}
+
+The Vylan team`;
+  return { subject, html, text };
+}
+
 // Client retry email — sent when the AI auto-rejects an upload. The
 // wording is intentionally friendly and SPECIFIC: the client should
 // feel the firm noticed a problem (not a robot). Phrasing here is

@@ -32,7 +32,13 @@ export type JobKind =
   | "notify_client_messages"
   // The mirror: one debounced email to the assigned accountant (else firm
   // owner) about new client replies. Payload: { engagement_id }.
-  | "notify_firm_messages";
+  | "notify_firm_messages"
+  // Delayed catch-up email to a teammate who was assigned an engagement but
+  // hasn't been back in the app since. Payload: { engagement_id, assignee_id,
+  // assigned_by, assigned_at, note? }. Enqueued ~2h out on reassign; superseded
+  // if the engagement is reassigned again; the worker re-checks "still assigned
+  // + still hasn't been active" before sending, so it's a no-op if they showed up.
+  | "notify_assignment";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {
