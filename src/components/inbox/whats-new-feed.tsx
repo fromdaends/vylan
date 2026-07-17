@@ -12,6 +12,7 @@ import {
   FileUp,
   MessageSquare,
   Sparkles,
+  UserRoundCheck,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -156,5 +157,7 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: FileSignature, tone: "bg-success/15 text-success" };
     case "client_message":
       return { Icon: MessageSquare, tone: "bg-primary/15 text-primary" };
+    case "engagement_assigned":
+      return { Icon: UserRoundCheck, tone: "bg-primary/15 text-primary" };
   }
 }
