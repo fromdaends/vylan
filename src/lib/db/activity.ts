@@ -46,6 +46,9 @@ export type FirmActivityEntry = ActivityEntry & {
 export async function listActivityForFirm(filters: {
   clientId?: string | null;
   action?: string | null;
+  // Only this user's actions (actor_type 'user'). Powers the teammate profile's
+  // "recent activity" feed.
+  actorId?: string | null;
   limit?: number;
 } = {}): Promise<FirmActivityEntry[]> {
   const supabase = await getServerSupabase();
@@ -76,6 +79,9 @@ export async function listActivityForFirm(filters: {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (filters.action) query = query.eq("action", filters.action);
+  if (filters.actorId) {
+    query = query.eq("actor_type", "user").eq("actor_id", filters.actorId);
+  }
   if (scopedEngagementIds) {
     query = query.in("engagement_id", scopedEngagementIds);
   }
