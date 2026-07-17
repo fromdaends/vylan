@@ -16,6 +16,7 @@ import {
   Building2,
   Users,
   LogOut,
+  ListChecks,
 } from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
@@ -475,6 +476,17 @@ function MemberRow({
           {member.email}
         </div>
       </div>
+
+      {/* Jump to this person's engagements (the "view a teammate's work" lens).
+          Available for every active member, including yourself. */}
+      <Link
+        href={`/engagements?assignee=${member.id}`}
+        title={t("view_engagements")}
+        aria-label={t("view_engagements")}
+        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <ListChecks className="size-4" />
+      </Link>
 
       {canManage && (
         <DropdownMenu>

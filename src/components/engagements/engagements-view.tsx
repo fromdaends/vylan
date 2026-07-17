@@ -16,6 +16,7 @@ import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -60,6 +61,7 @@ export function EngagementsView({
   currentUserId,
   badges,
   teamEnabled,
+  members,
 }: {
   view: EngagementView;
   rows: WorklistRow[];
@@ -68,6 +70,9 @@ export function EngagementsView({
   currentUserId: string | null;
   badges: { ready: number; deleted: number };
   teamEnabled: boolean;
+  // Active firm members, for the "view a teammate's work" scope options. Empty
+  // for a solo firm (the scope picker is hidden then anyway).
+  members: { id: string; name: string }[];
 }) {
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
@@ -120,19 +125,53 @@ export function EngagementsView({
       [DIR_PARAM]: next,
     });
   };
-  // My/All engagements — mirrors the clients owner filter. Defaults to the
-  // accountant's OWN work ("mine") when they're assigned at least one in this
-  // view, else "all" so the list is never mysteriously empty. The choice is
-  // then remembered per user (localStorage), which overrides this default.
+  // Scope filter — All / Mine / a specific teammate ("view Marie's work").
+  // "Mine" and "All" are the personal default, remembered per user in
+  // localStorage. A specific teammate is a TRANSIENT lens: it lives in the URL
+  // (?assignee=<id>) so it's shareable and survives opening an engagement and
+  // coming back (mirroring the stage filter) — but it never becomes the sticky
+  // default. selectAssignedTo already accepts any user id, so the filter itself
+  // generalizes for free.
+  const ASSIGNEE_PARAM = "assignee";
+  const memberIds = useMemo(() => new Set(members.map((m) => m.id)), [members]);
+  // Teammates other than the viewer (the viewer is covered by "Mine").
+  const otherMembers = useMemo(
+    () => members.filter((m) => m.id !== currentUserId),
+    [members, currentUserId],
+  );
+
+  // Resolve a valid scope from ?assignee=, or null if absent/unknown. "all" and
+  // the current user map to the named values; any other known member id is that
+  // teammate's lens. A stale id (member left) is ignored so the view never
+  // filters to nobody.
+  const urlAssignee = searchParams?.get(ASSIGNEE_PARAM) ?? null;
+  const scopeFromUrl: string | null =
+    urlAssignee == null
+      ? null
+      : urlAssignee === "all"
+        ? "all"
+        : urlAssignee === currentUserId
+          ? "mine"
+          : memberIds.has(urlAssignee)
+            ? urlAssignee
+            : null;
+
   const ownsAny =
     teamEnabled &&
     !!currentUserId &&
     rows.some((r) => r.assigneeUserId === currentUserId);
-  const [scope, setScope] = useState<"mine" | "all">(
-    teamEnabled && ownsAny ? "mine" : "all",
+  const [scope, setScope] = useState<string>(
+    scopeFromUrl ?? (teamEnabled && ownsAny ? "mine" : "all"),
   );
   useEffect(() => {
     if (!currentUserId || !teamEnabled) return;
+    // A ?assignee= deep-link always wins (e.g. "view Marie's work" from the team
+    // page) so the viewer's own remembered Mine/All can't clobber it.
+    if (scopeFromUrl) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setScope(scopeFromUrl);
+      return;
+    }
     let saved: string | null = null;
     try {
       saved = localStorage.getItem(`vylan:eng-scope:${currentUserId}`);
@@ -141,16 +180,20 @@ export function EngagementsView({
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved === "mine" || saved === "all") setScope(saved);
-  }, [currentUserId, teamEnabled]);
-  const chooseScope = (s: "mine" | "all") => {
+  }, [currentUserId, teamEnabled, scopeFromUrl]);
+  const chooseScope = (s: string) => {
     setScope(s);
-    if (currentUserId) {
+    // Persist ONLY the personal Mine/All default; a teammate lens is transient.
+    if (currentUserId && (s === "mine" || s === "all")) {
       try {
         localStorage.setItem(`vylan:eng-scope:${currentUserId}`, s);
       } catch {
         /* ignore */
       }
     }
+    // Reflect a teammate lens in the URL; clear it for Mine/All so the URL stays
+    // clean and the next visit's default governs.
+    setParams({ [ASSIGNEE_PARAM]: s === "mine" || s === "all" ? null : s });
   };
 
   const q = query.trim().toLowerCase();
@@ -167,8 +210,12 @@ export function EngagementsView({
               r.clientName.toLowerCase().includes(q),
           )
         : rows;
-    if (teamEnabled && scope === "mine") {
-      base = selectAssignedTo(base, currentUserId);
+    // Resolve the scope to an assignee id: "all" -> no filter, "mine" -> me, any
+    // other value -> that teammate. selectAssignedTo handles any id.
+    const scopedUserId =
+      scope === "all" ? null : scope === "mine" ? currentUserId : scope;
+    if (teamEnabled && scopedUserId) {
+      base = selectAssignedTo(base, scopedUserId);
     }
     return base;
   }, [rows, q, scope, currentUserId, teamEnabled]);
@@ -259,10 +306,7 @@ export function EngagementsView({
             spending a whole row on filters. */}
         <div className="flex flex-wrap items-center gap-2">
           {teamEnabled && (
-            <Select
-              value={scope}
-              onValueChange={(v) => chooseScope(v as "mine" | "all")}
-            >
+            <Select value={scope} onValueChange={chooseScope}>
               <SelectTrigger
                 size="sm"
                 className="w-[13rem] self-start"
@@ -274,6 +318,12 @@ export function EngagementsView({
               <SelectContent>
                 <SelectItem value="all">{t("scope_all")}</SelectItem>
                 <SelectItem value="mine">{t("scope_mine")}</SelectItem>
+                {otherMembers.length > 0 && <SelectSeparator />}
+                {otherMembers.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           )}
