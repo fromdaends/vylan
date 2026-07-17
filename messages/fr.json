@@ -1146,6 +1146,7 @@
     "nav_templates": "Modèles",
     "nav_quickbooks": "QuickBooks",
     "nav_integrations": "Intégrations",
+    "nav_integrations_toggle": "Afficher les intégrations",
     "nav_billing": "Facturation",
     "nav_settings": "Paramètres",
     "settings_title": "Paramètres du cabinet",
@@ -2325,6 +2326,22 @@
     "stage_in_preparation": "Votre comptable travaille sur votre dossier",
     "stage_awaiting_signature": "En attente de votre signature",
     "stage_completed": "Votre dossier est terminé"
+  },
+  "Integrations": {
+    "index_title": "Intégrations",
+    "index_subtitle": "Connectez vos outils, ou exportez des fichiers prêts à importer vous-même.",
+    "quickbooks_name": "QuickBooks",
+    "quickbooks_desc": "Transformez les reçus en brouillons QuickBooks.",
+    "state_connected": "Connecté",
+    "state_not_connected": "Non connecté",
+    "action_open": "Ouvrir",
+    "action_connect": "Connecter",
+    "sage_name": "Sage 50",
+    "sage_desc": "Exportez les écritures codées pour Sage 50.",
+    "sage_badge": "Export de fichier",
+    "sage_action": "Exporter",
+    "sage_detail_explainer": "Sage 50 fonctionne sur votre ordinateur, il n'y a donc pas de connexion en direct. Vylan lit et code les documents de vos clients, puis vous remet un fichier prêt à importer.",
+    "sage_ph_soon": "L'export est en préparation. Bientôt, vous choisirez un engagement ici et téléchargerez un fichier prêt pour Sage."
   },
   "Quickbooks": {
     "draft_title": "Brouillon QuickBooks",

@@ -21,6 +21,19 @@ export function isNavItemActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
+// The Integrations section spans TWO URL roots: the hub index (/integrations,
+// which also holds the Sage export at /integrations/sage) and the pre-existing
+// QuickBooks surface (/quickbooks/drafts). The sidebar's expandable Integrations
+// parent lights up (and stays expanded) on either, so the rule lives here rather
+// than being re-derived in the component. QuickBooks and Sage are independent
+// features; this only unifies the NAV highlight, nothing else.
+export function isIntegrationsSectionActive(pathname: string): boolean {
+  return (
+    isNavItemActive(pathname, "/integrations") ||
+    isNavItemActive(pathname, "/quickbooks")
+  );
+}
+
 // The lifecycle + status fields needed to classify a single engagement. A full
 // Engagement row satisfies this structurally, so callers can pass one directly.
 export type EngagementForView = {

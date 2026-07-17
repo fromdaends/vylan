@@ -1139,6 +1139,7 @@
     "nav_templates": "Templates",
     "nav_quickbooks": "QuickBooks",
     "nav_integrations": "Integrations",
+    "nav_integrations_toggle": "Toggle integrations",
     "nav_billing": "Billing",
     "nav_settings": "Settings",
     "nav_firm": "Firm",
@@ -2325,6 +2326,22 @@
     "stage_in_preparation": "Your accountant is working on your file",
     "stage_awaiting_signature": "Waiting for your signature",
     "stage_completed": "Your file is complete"
+  },
+  "Integrations": {
+    "index_title": "Integrations",
+    "index_subtitle": "Connect your tools, or export clean files to import yourself.",
+    "quickbooks_name": "QuickBooks",
+    "quickbooks_desc": "Turn receipts into QuickBooks drafts.",
+    "state_connected": "Connected",
+    "state_not_connected": "Not connected",
+    "action_open": "Open",
+    "action_connect": "Connect",
+    "sage_name": "Sage 50",
+    "sage_desc": "Export coded entries for Sage 50.",
+    "sage_badge": "File export",
+    "sage_action": "Export",
+    "sage_detail_explainer": "Sage 50 runs on your computer, so there's no live connection. Vylan reads and codes your clients' documents, then gives you a clean file to import.",
+    "sage_ph_soon": "The export is coming together. Soon you'll pick an engagement here and download a Sage-ready file."
   },
   "Quickbooks": {
     "draft_title": "QuickBooks draft",
