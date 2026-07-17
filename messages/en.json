@@ -2341,7 +2341,14 @@
     "sage_badge": "File export",
     "sage_action": "Export",
     "sage_detail_explainer": "Sage 50 runs on your computer, so there's no live connection. Vylan reads and codes your clients' documents, then gives you a clean file to import.",
-    "sage_ph_soon": "The export is coming together. Soon you'll pick an engagement here and download a Sage-ready file."
+    "sage_how_label": "How it works",
+    "sage_step1_title": "Clients upload",
+    "sage_step1_desc": "Receipts and invoices arrive through each engagement.",
+    "sage_step2_title": "Vylan reads and codes them",
+    "sage_step2_desc": "Each document becomes a ready-to-review entry.",
+    "sage_step3_title": "You export and import",
+    "sage_step3_desc": "Download the file and import it into Sage 50.",
+    "sage_ph_soon": "The export picker is coming next. Soon you'll choose an engagement here and download a Sage-ready file."
   },
   "Quickbooks": {
     "draft_title": "QuickBooks draft",
