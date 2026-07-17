@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { enrichActivityEntries, type ActivityEntry } from "./activity";
+import {
+  enrichActivityEntries,
+  summarizeContributors,
+  type ActivityEntry,
+} from "./activity";
 
 function entry(
   partial: Partial<ActivityEntry> & { id: string; action: string },
@@ -121,5 +125,38 @@ describe("enrichActivityEntries", () => {
     expect(row.client_id).toBeNull();
     expect(row.client_display_name).toBeNull();
     expect(row.engagement_title).toBeNull();
+  });
+});
+
+describe("summarizeContributors", () => {
+  const row = (
+    actor_id: string | null,
+    created_at: string,
+    actor_type = "user",
+  ) => ({ actor_type, actor_id, created_at });
+
+  it("collapses to distinct users, newest-first, with counts", () => {
+    const out = summarizeContributors([
+      row("u-a", "2026-07-03T00:00:00Z"),
+      row("u-b", "2026-07-02T00:00:00Z"),
+      row("u-a", "2026-07-01T00:00:00Z"),
+    ]);
+    expect(out.map((c) => c.userId)).toEqual(["u-a", "u-b"]);
+    expect(out[0]).toMatchObject({ userId: "u-a", lastAt: "2026-07-03T00:00:00Z", count: 2 });
+    expect(out[1]).toMatchObject({ userId: "u-b", count: 1 });
+  });
+
+  it("ignores client + system rows and null actors", () => {
+    const out = summarizeContributors([
+      row("u-a", "2026-07-03T00:00:00Z"),
+      row(null, "2026-07-02T00:00:00Z", "client"),
+      row("u-x", "2026-07-02T00:00:00Z", "system"),
+      row(null, "2026-07-01T00:00:00Z", "user"),
+    ]);
+    expect(out.map((c) => c.userId)).toEqual(["u-a"]);
+  });
+
+  it("returns empty for no user activity", () => {
+    expect(summarizeContributors([])).toEqual([]);
   });
 });

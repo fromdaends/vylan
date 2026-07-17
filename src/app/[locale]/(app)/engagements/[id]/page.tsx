@@ -70,6 +70,8 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
+import { EngagementContributors } from "@/components/engagements/engagement-contributors";
+import { listEngagementContributors } from "@/lib/db/activity";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -389,6 +391,20 @@ export default async function EngagementDetailPage({
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
 
+  // "Worked on by" — the distinct teammates who've acted on this engagement.
+  // Team-mode only (a solo firm is always just the owner). Names resolve from
+  // the already-loaded firmUsers map; a title tooltip shows when they last acted.
+  const contributors = teamEnabled
+    ? await listEngagementContributors(engagement.id)
+    : [];
+  const contributorDisplay = contributors.map((c) => ({
+    userId: c.userId,
+    name: reviewerNameById.get(c.userId) ?? t("contributor_unknown"),
+    title: t("worked_last", {
+      date: formatDate(c.lastAt, locale, "medium"),
+    }),
+  }));
+
   // Which All-Engagements sub-page this engagement belongs to — drives both the
   // sidebar highlight (via SetEngagementDetailView) and the breadcrumb. Derived
   // the same way the list pages categorize engagements (lifecycle predicates +
@@ -559,6 +575,14 @@ export default async function EngagementDetailPage({
                 assigneeName={assignee ? userDisplayLabel(assignee) : null}
                 assigneeDeactivated={!!assignee?.deactivated_at}
                 members={activeMembers}
+              />
+            </div>
+          )}
+          {teamEnabled && contributorDisplay.length > 0 && (
+            <div className="mt-3">
+              <EngagementContributors
+                label={t("worked_on_by")}
+                contributors={contributorDisplay}
               />
             </div>
           )}
