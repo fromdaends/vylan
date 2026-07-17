@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
@@ -10,6 +11,33 @@ import { ThemeProvider } from "@/components/theme/theme-provider";
 import { getBrandingImageUrl } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
+
+// KEEP CLIENT PORTALS OUT OF SEARCH ENGINES.
+//
+// This page is one client's tax documents, reachable by anyone holding the
+// link — that's the whole design, and it's why the link is private. But
+// "private" only held as long as nobody crawled it, and until now nothing
+// told a crawler to stay away: no robots meta, no robots.txt.
+//
+// Leaving it out of the sitemap was never enough. That only stops US
+// advertising the URL. A crawler finds it the ways URLs always leak: a client
+// pastes it into a forum asking for help, a browser extension phones the URL
+// home, someone forwards the email into a mailing list that's archived on the
+// public web. Any one of those and a client's T4s are in a search index.
+//
+// noindex is the right tool, and robots.txt is NOT — a Disallow would stop
+// crawlers FETCHING the page, which means they'd never read this directive,
+// and the bare URL could still surface. So: crawlable, emphatically
+// not indexable. See src/app/robots.ts, which deliberately does not
+// disallow /r/ for exactly this reason.
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: { index: false, follow: false, noimageindex: true },
+  },
+};
 
 const inter = Inter({
   variable: "--font-inter",
