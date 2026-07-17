@@ -79,6 +79,11 @@ export function SageExportFlow({
       <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
         {t("flow_label")}
       </p>
+      {/* Scope, stated plainly so a bookkeeper knows exactly what the file is:
+          entries from receipts/invoices, NOT every line of a statement. */}
+      <p className="mt-2 max-w-md px-1 text-xs leading-relaxed text-muted-foreground">
+        {t("flow_scope_note")}
+      </p>
 
       {engagements.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">

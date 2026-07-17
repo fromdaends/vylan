@@ -2350,6 +2350,7 @@
     "sage_step3_desc": "Download the file and import it into Sage 50.",
     "sage_ph_soon": "The export picker is coming next. Soon you'll choose an engagement here and download a Sage-ready file.",
     "flow_label": "Export an engagement",
+    "flow_scope_note": "One row per receipt or sales invoice, ready to import into Sage. It does not export every line of a bank statement. Statements, slips and reports stay in the engagement.",
     "flow_pick_label": "Choose an engagement",
     "flow_pick_trigger": "Select an engagement",
     "flow_pick_placeholder": "Search engagements…",
