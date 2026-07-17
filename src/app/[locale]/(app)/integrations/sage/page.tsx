@@ -3,6 +3,14 @@ import { assertLocale } from "@/lib/locale";
 import { Link } from "@/i18n/navigation";
 import { ArrowLeft, UploadCloud, Sparkles, Download } from "lucide-react";
 import { SageLogo } from "@/components/integrations/sage-logo";
+import { getServerSupabase } from "@/lib/supabase/server";
+import {
+  SageExportFlow,
+  type SageEngagementOption,
+} from "@/components/integrations/sage-export-flow";
+
+// Real-time: the engagement picker should reflect engagements as they exist now.
+export const dynamic = "force-dynamic";
 
 // Sage 50 detail page. Mirrors the QuickBooks page's structure/quality so it
 // feels native: brand hero, an honest explainer (Sage is desktop software, so
@@ -19,6 +27,35 @@ export default async function SageIntegrationPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
   const t = await getTranslations("Integrations");
+
+  // The firm's active engagements for the picker. RLS-scoped (authenticated
+  // client), so a firm only ever sees its own. Client name rides along for the
+  // picker's second line.
+  const supabase = await getServerSupabase();
+  const { data: engRows } = await supabase
+    .from("engagements")
+    .select("id, title, clients!inner(display_name)")
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .order("created_at", { ascending: false });
+  type EngRow = {
+    id: string;
+    title: string | null;
+    clients:
+      | { display_name: string | null }
+      | { display_name: string | null }[]
+      | null;
+  };
+  const engagements: SageEngagementOption[] = ((engRows ?? []) as EngRow[]).map(
+    (r) => {
+      const client = Array.isArray(r.clients) ? r.clients[0] : r.clients;
+      return {
+        id: r.id,
+        title: r.title ?? "Untitled",
+        clientName: client?.display_name ?? "",
+      };
+    },
+  );
 
   // Three steps mirroring the QuickBooks connect page (same icon-tile pattern
   // and hues); step 3 swaps in a Download icon since Sage is export-and-import.
@@ -98,10 +135,9 @@ export default async function SageIntegrationPage({
         </ol>
       </div>
 
-      {/* Quiet note: the export picker itself lands in the next phase. */}
-      <p className="mt-10 text-center text-xs text-muted-foreground/70">
-        {t("sage_ph_soon")}
-      </p>
+      {/* Export flow: pick an engagement, preview what will/won't export. The
+          download itself is wired in the next phase. */}
+      <SageExportFlow engagements={engagements} />
     </div>
   );
 }
