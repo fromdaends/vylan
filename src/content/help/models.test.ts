@@ -112,11 +112,23 @@ describe("published model ids match the code", () => {
 describe("which provider runs the document check", () => {
   it("defaults to Anthropic, NOT OpenAI, when the env var is unset", () => {
     vi.stubEnv("AI_CLASSIFIER_PROVIDER", "");
-    // This is the trap. The help center says the check runs on GPT-5.4, which
-    // is only true when AI_CLASSIFIER_PROVIDER=openai is set in the deployed
-    // environment. The code's own default is Anthropic. If that variable is
-    // ever removed from Production, the article becomes false and no test can
-    // catch it from here — prod env is not readable from a test run.
+    // THE TRAP, and it is a live one. The help center says the check runs on
+    // GPT-5.4. That is only true while AI_CLASSIFIER_PROVIDER=openai is set in
+    // the deployed environment — the code's own default, asserted here, is
+    // Anthropic.
+    //
+    // CONFIRMED SET IN PRODUCTION (founder, 2026-07-16) by two independent
+    // signals: the OpenAI dashboard shows real spend on gpt-5.4-2026-03-05
+    // (~334K input tokens), and the in-app counter showed "11 of 225 used this
+    // month" over the same window. Eleven full-resolution document checks at
+    // roughly 30K tokens each is exactly that burst.
+    //
+    // Nothing records the provider per check (no column on ai_classification,
+    // ai_confidence, ai_extracted_fields, or ai_usage_monthly), and prod env
+    // is not readable from a test run. So if that variable is ever dropped,
+    // the document check silently falls back to Claude Sonnet, the article
+    // silently becomes false, and NOTHING here will catch it. The only tell
+    // would be OpenAI spend going to zero while documents are still flowing.
     expect(getProvider()).toBe("anthropic");
   });
 
