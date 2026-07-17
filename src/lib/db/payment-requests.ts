@@ -307,6 +307,11 @@ export type PaymentsListRow = {
   createdAt: string;
   clientName: string | null;
   engagementTitle: string | null;
+  // Who sent the invoice (team attribution). null for auto-invoices / pre-0380
+  // rows with no requester. The name is resolved for display; the id lets the UI
+  // hide "sent by you" so only a teammate's sends are labelled.
+  requestedByUserId: string | null;
+  requestedByName: string | null;
 };
 
 // Recent payments (RLS-scoped to the firm) for the Payments settings list and
@@ -321,7 +326,7 @@ export async function listFirmPaymentsWithNames(
   let query = sb
     .from("payment_requests")
     .select(
-      "id, engagement_id, client_id, amount_cents, currency, status, created_at",
+      "id, engagement_id, client_id, amount_cents, currency, status, created_at, requested_by_user_id",
     );
   if (clientId) query = query.eq("client_id", clientId);
   const { data: prs, error } = await query
@@ -340,8 +345,12 @@ export async function listFirmPaymentsWithNames(
   const cliIds = [
     ...new Set(rows.map((r) => r.client_id).filter(Boolean)),
   ] as string[];
+  const userIds = [
+    ...new Set(rows.map((r) => r.requested_by_user_id).filter(Boolean)),
+  ] as string[];
   const engTitle = new Map<string, string>();
   const cliName = new Map<string, string>();
+  const userName = new Map<string, string>();
   if (engIds.length) {
     const { data } = await sb
       .from("engagements")
@@ -357,6 +366,22 @@ export async function listFirmPaymentsWithNames(
     for (const c of data ?? [])
       cliName.set(c.id as string, c.display_name as string);
   }
+  if (userIds.length) {
+    // RLS scopes users to the firm, so this only resolves firm members. Name
+    // preference mirrors userDisplayLabel: display_name > name > email.
+    const { data } = await sb
+      .from("users")
+      .select("id, name, display_name, email")
+      .in("id", userIds);
+    for (const u of data ?? []) {
+      const label =
+        (u.display_name as string | null)?.trim() ||
+        (u.name as string | null)?.trim() ||
+        (u.email as string | null) ||
+        null;
+      if (label) userName.set(u.id as string, label);
+    }
+  }
   return rows.map((r) => ({
     id: r.id as string,
     status: r.status as PaymentRequestStatus,
@@ -366,6 +391,10 @@ export async function listFirmPaymentsWithNames(
     clientName: r.client_id ? (cliName.get(r.client_id) ?? null) : null,
     engagementTitle: r.engagement_id
       ? (engTitle.get(r.engagement_id) ?? null)
+      : null,
+    requestedByUserId: (r.requested_by_user_id as string | null) ?? null,
+    requestedByName: r.requested_by_user_id
+      ? (userName.get(r.requested_by_user_id) ?? null)
       : null,
   }));
 }

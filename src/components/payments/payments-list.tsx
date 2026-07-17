@@ -11,9 +11,14 @@ import type { PaymentsListRow } from "@/lib/db/payment-requests";
 export function PaymentsList({
   rows,
   showClient = true,
+  currentUserId,
 }: {
   rows: PaymentsListRow[];
   showClient?: boolean;
+  // When set, an invoice sent by SOMEONE ELSE shows a "Sent by {name}" tag, so a
+  // firm sees which teammate billed a client. Own sends (and solo firms) show
+  // nothing. Omit it to never show attribution.
+  currentUserId?: string;
 }) {
   const t = useTranslations("Engagements");
   const locale = (useLocale() === "fr" ? "fr" : "en") as AppLocale;
@@ -26,7 +31,12 @@ export function PaymentsList({
 
   return (
     <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/50">
-      {rows.map((r) => (
+      {rows.map((r) => {
+        const senderLabel =
+          r.requestedByName && r.requestedByUserId !== currentUserId
+            ? r.requestedByName
+            : null;
+        return (
         <li
           key={r.id}
           className="flex items-center justify-between gap-3 px-4 py-3"
@@ -38,6 +48,9 @@ export function PaymentsList({
             <div className="truncate text-xs text-muted-foreground">
               {showClient && r.clientName ? `${r.clientName} · ` : ""}
               {formatDate(r.createdAt, locale, "medium")}
+              {senderLabel
+                ? ` · ${t("payments_sent_by", { name: senderLabel })}`
+                : ""}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
@@ -47,7 +60,8 @@ export function PaymentsList({
             <PaymentBadge status={r.status} />
           </div>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

@@ -9,7 +9,7 @@ import {
   engagementStatusVariant,
 } from "@/lib/engagements/status-pill";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
 import {
@@ -61,7 +61,10 @@ export default async function ClientDetailPage({
   // Team roster for the owner picker. Include deactivated members so a
   // former owner's name still renders (with a "please reassign" nudge);
   // only ACTIVE members are valid reassignment targets.
-  const firmUsers = await listFirmUsers();
+  const [firmUsers, me] = await Promise.all([
+    listFirmUsers(),
+    getCurrentUser(),
+  ]);
   const teamEnabled = hasActiveTeam({
     teamEnabled: firm?.team_enabled === true,
     activeMemberCount: firmUsers.filter((u) => !u.deactivated_at).length,
@@ -245,7 +248,11 @@ export default async function ClientDetailPage({
           <h2 className="text-base font-semibold tracking-tight text-foreground">
             {tEng("payments_history")}
           </h2>
-          <PaymentsList rows={clientPayments} showClient={false} />
+          <PaymentsList
+            rows={clientPayments}
+            showClient={false}
+            currentUserId={me?.id}
+          />
         </div>
       )}
     </div>
