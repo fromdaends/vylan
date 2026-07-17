@@ -1552,6 +1552,7 @@
     "pay_badge_failed": "Failed",
     "copy_payment_link": "Copy payment link",
     "payments_list_empty": "No payments yet.",
+    "payments_sent_by": "Sent by {name}",
     "payments_history": "Payments",
     "more_actions": "More actions",
     "open_new_tab": "Open in new tab",
