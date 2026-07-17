@@ -101,9 +101,16 @@ describe("EN/FR parity", () => {
     }
   });
 
-  it("translated the category titles it has", () => {
+  it("translated the category descriptions", () => {
+    // The DESCRIPTION, not the title. Some titles are legitimately identical
+    // in both languages: "Clients" and "Engagements" are French words too, and
+    // "QuickBooks" is a product name. A description is a full sentence, so an
+    // identical one means English was pasted into fr/ — which is what this is
+    // actually looking for.
     for (const c of getCategories("fr")) {
-      expect(c.meta.title, c.slug).not.toBe(getCategory("en", c.slug).meta.title);
+      expect(c.meta.description, c.slug).not.toBe(
+        getCategory("en", c.slug).meta.description,
+      );
     }
   });
 
