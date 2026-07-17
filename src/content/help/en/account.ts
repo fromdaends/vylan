@@ -253,8 +253,175 @@ const theAuditLog: HelpArticle = {
   ],
 };
 
+const everySetting: HelpArticle = {
+  title: "Every setting, explained",
+  summary:
+    "A map of all eleven sections in your settings, what lives in each, and which ones change what your clients experience.",
+  keywords: [
+    "settings",
+    "options",
+    "preferences",
+    "map",
+    "where is",
+    "find setting",
+    "configuration",
+    "toggles",
+    "automation",
+    "documents",
+  ],
+  body: [
+    p(
+      "Settings is one page with a list down the side. Here is the whole thing, so you can stop hunting.",
+    ),
+
+    h("Account"),
+    p(
+      "You: your name, your picture, how you sign in. See ",
+      link("/help/account/your-profile", "your profile"),
+      ".",
+    ),
+
+    h("Security & privacy"),
+    p(
+      "Two-factor login and your recovery codes. The single most valuable ten minutes in this list. See ",
+      link("/help/account/two-factor-login", "two-factor login"),
+      ".",
+    ),
+
+    h("Appearance"),
+    p(
+      "Light, dark, or follow your system. Yours alone, it changes nothing for your clients.",
+    ),
+
+    h("General"),
+    p(
+      "Your language and your timezone. Your language is independent of your clients' — see ",
+      link("/help/account/language-and-theme", "language, theme, and timezone"),
+      ".",
+    ),
+
+    h("Billing"),
+    p("Your subscription to Vylan."),
+
+    h("Payments"),
+    p("How you charge your clients. Two things live here:"),
+    list(
+      [
+        ui("Get paid by clients"),
+        ": connect Stripe. Takes about five minutes, and Stripe handles the checkout, your identity check, and your payouts. See ",
+        link("/help/payments-and-invoices/connecting-stripe", "connecting Stripe"),
+        ".",
+      ],
+      [
+        ui("Default prices"),
+        ": a price per service, which pre-fills the request-payment box. You can still change it every time you ask.",
+      ],
+    ),
+
+    h("Automation"),
+    p(
+      "Vylan describes this section as everything it does on its own, without you clicking. Three things:",
+    ),
+    list(
+      [
+        ui("Default automatic reminders"),
+        ": the chasing schedule new engagements start with. See ",
+        link("/help/reminders/changing-reminders", "changing the reminders"),
+        ".",
+      ],
+      [
+        ui("Invoice automation default"),
+        ": whether invoices go out by themselves. See ",
+        link("/help/payments-and-invoices/invoice-automation", "invoice automation"),
+        ".",
+      ],
+      [
+        ui("Send confirmation cards"),
+        ": whether the engagement assistant asks before it acts. See ",
+        link("/help/ai-helpers/the-engagement-assistant", "the engagement assistant"),
+        ".",
+      ],
+    ),
+
+    h("Integrations"),
+    p(
+      "QuickBooks: connect, disconnect, and the chart of accounts Vylan reads. See ",
+      link("/help/quickbooks/connecting-quickbooks", "connecting QuickBooks"),
+      ".",
+    ),
+
+    h("Documents"),
+    p(
+      "How Vylan handles what your clients send. This is the section that changes what your clients actually experience, so it is worth reading properly:",
+    ),
+    list(
+      [
+        ui("AI document checks"),
+        ": your usage this month, whether checks are ",
+        ui("Active"),
+        " or ",
+        ui("Paused"),
+        ", and when it resets.",
+      ],
+      [ui("Auto-reject invalid uploads"), ": bounce unusable files automatically."],
+      [ui("Auto-reject duplicates"), ": bounce exact copies automatically."],
+      [
+        ui("Auto-ask for missing pages"),
+        ": chase a missing page from a multi-page document automatically.",
+      ],
+      [
+        ui("Include Quebec tax forms"),
+        ": on by default. Off hides the Quebec-only slips from every checklist.",
+      ],
+    ),
+    p(
+      "All of that is covered in ",
+      link(
+        "/help/documents-and-ai/how-vylan-checks-documents",
+        "how Vylan checks each document",
+      ),
+      ".",
+    ),
+
+    h("AI Assistant"),
+    p(
+      "The in-app assistants. See ",
+      link("/help/ai-helpers/ask-vylan", "Ask Vylan"),
+      ".",
+    ),
+
+    h("Data & privacy"),
+    p(
+      "Vylan's line here is short: your data is yours, export everything as a ZIP, any time.",
+    ),
+    list(
+      [
+        ui("Export all firm data"),
+        ": clients, engagements, files, and the activity log, in one ZIP. See ",
+        link("/help/account/downloading-your-data", "downloading all your data"),
+        ".",
+      ],
+      [
+        ui("Delete my firm"),
+        ": emails support, and everything is wiped within 24 hours.",
+      ],
+    ),
+    warn(
+      "Deleting your firm is not a soft delete and there is no 30-day window like there is for an engagement. Export your data first. Once it is wiped, it is gone.",
+    ),
+
+    h("Team"),
+    p(
+      "Appears once team mode is on. See ",
+      link("/help/team/turning-on-team-mode", "turning on team mode"),
+      ".",
+    ),
+  ],
+};
+
 export const articles = {
   "your-profile": yourProfile,
+  "every-setting": everySetting,
   "two-factor-login": twoFactorLogin,
   "firm-branding": firmBranding,
   "language-and-theme": languageAndTheme,

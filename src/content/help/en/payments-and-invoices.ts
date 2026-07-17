@@ -300,10 +300,80 @@ const sendingFinalDocuments: HelpArticle = {
   ],
 };
 
+const invoiceAutomation: HelpArticle = {
+  title: "Invoice automation",
+  summary:
+    "Vylan can send the invoice itself when you finish a job, immediately or after a delay you choose. Or not at all, which is the default.",
+  keywords: [
+    "automation",
+    "automatic",
+    "invoice",
+    "auto invoice",
+    "on completion",
+    "delay",
+    "days after",
+    "default",
+    "billing",
+  ],
+  body: [
+    p(
+      "Finishing a job and then remembering to bill for it are two different tasks, and the second one is the one that slips. Vylan can do it for you.",
+    ),
+
+    h("The three choices"),
+    p(
+      "In your automation settings, ",
+      ui("Invoice automation default"),
+      " has three options:",
+    ),
+    list(
+      [
+        ui("Off — send invoices myself"),
+        ": nothing automatic. You send each one. This is the default.",
+      ],
+      [
+        ui("Send when I mark an engagement complete"),
+        ": the invoice goes out the moment you close the job.",
+      ],
+      [
+        ui("Send a set time after completion"),
+        ": the same, but after a number of days you choose.",
+      ],
+    ),
+
+    h("Why you might want the delay"),
+    p(
+      "Marking a job complete and being ready to bill for it are not always the same afternoon. A short delay gives you a window to notice you forgot something, without you having to remember to invoice at the end of it.",
+    ),
+
+    h("It is a default, not a rule"),
+    p(
+      "This setting decides what new engagements start with. Every engagement can still be changed on its own, so the one client you handle differently stays handled differently.",
+    ),
+
+    h("Stripe first"),
+    note(
+      "Invoice automation needs your Stripe account connected before it can do anything. If it is not, Vylan says so and points you at ",
+      ui("Get paid by clients"),
+      " in your payment settings. See ",
+      link("/help/payments-and-invoices/connecting-stripe", "connecting Stripe"),
+      ".",
+    ),
+
+    h("Default prices"),
+    p(
+      "Alongside it, ",
+      ui("Default prices"),
+      " lets you set a price per service, which pre-fills the request-payment box so you are not typing the same number every week. You can always change it when you ask.",
+    ),
+  ],
+};
+
 export const articles = {
   "connecting-stripe": connectingStripe,
   "creating-an-invoice": creatingAnInvoice,
   "how-your-client-pays": howYourClientPays,
+  "invoice-automation": invoiceAutomation,
   "the-invoice-lock": theInvoiceLock,
   "sending-final-documents": sendingFinalDocuments,
 };

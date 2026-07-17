@@ -13,6 +13,9 @@ import {
 } from "./registry";
 import { HELP_STRUCTURE, CATEGORY_SLUGS } from "./manifest";
 import { articleText, type HelpBlock, type Inline } from "./types";
+import type { AppLocale } from "@/i18n/routing";
+import enMessages from "../../../messages/en.json";
+import frMessages from "../../../messages/fr.json";
 
 const LOCALES = routing.locales;
 
@@ -166,6 +169,73 @@ function internalLinks(body: HelpBlock[]): string[] {
   }
   return out;
 }
+
+// Every ui() chip claims to be a label the reader will find on screen. This
+// proves it. The founder caught a French article quoting "Envoyer des cartes
+// de confirmation" when the app says "Afficher les cartes de confirmation" —
+// an article that sends someone hunting for a button that isn't there is
+// worse than no article, and that shouldn't depend on me being careful.
+//
+// Strings that legitimately aren't in messages/*.json:
+//   * Built-in template names — seeded in SQL (migrations 0005/0170), not i18n.
+//   * Sample data invented for the articles ("Lavoie CPA", "Marie").
+//   * Rendered plural/interpolated examples ("3 files uploaded", "2 of 6 seats").
+//   * The About placeholders.
+const NOT_FROM_I18N =
+  /^(Lavoie CPA|Marie|PLACEHOLDER|TEXTE PROVISOIRE|c|Empty|Vide|Logo)$|^(T1|T2) —|Monthly bookkeeping|Tenue de livres|Self-employed|Travailleur autonome|Rental income|Revenus de location|GST\/QST|TPS\/TVQ|Trust return|fiducie|Final return|Déclaration finale|New client onboarding|Accueil —|^(Hi|Bonjour) Marie|Lavoie CPA|files uploaded|fichiers téléversés|seats used|utilisateurs|This is your 2023|C'est votre T4|Sign page 3|Signez la page 3|Your December bank statement|Votre relevé bancaire|Office supplies|Fournitures de bureau/;
+
+function uiLabelsOf(body: HelpBlock[]): string[] {
+  const out: string[] = [];
+  const walk = (nodes: Inline[]) => {
+    for (const n of nodes) {
+      if (typeof n !== "string" && n.t === "ui") out.push(n.text);
+    }
+  };
+  for (const block of body) {
+    if (block.kind === "p" || block.kind === "note" || block.kind === "warn") {
+      walk(block.text);
+    } else if (block.kind === "steps" || block.kind === "list") {
+      block.items.forEach(walk);
+    }
+  }
+  return out;
+}
+
+function allStrings(obj: unknown, into = new Set<string>()): Set<string> {
+  if (typeof obj === "string") into.add(obj.trim());
+  else if (obj && typeof obj === "object") {
+    for (const v of Object.values(obj)) allStrings(v, into);
+  }
+  return into;
+}
+
+describe("ui() labels are real", () => {
+  const MESSAGES: Record<AppLocale, Set<string>> = {
+    en: allStrings(enMessages),
+    fr: allStrings(frMessages),
+  };
+
+  it.each(LOCALES)("every %s ui() chip exists in that locale's messages", (locale) => {
+    const misses: string[] = [];
+    let checked = 0;
+    for (const { category, article } of articlePathsFor(locale)) {
+      const found = getArticle(locale, category, article)!;
+      for (const label of uiLabelsOf(found.article.body)) {
+        if (NOT_FROM_I18N.test(label)) continue;
+        checked++;
+        const hit = [...MESSAGES[locale]].some(
+          (v) =>
+            v === label ||
+            v.includes(label) ||
+            label.includes(v.replace(/\{[^}]+\}/g, "").trim()),
+        );
+        if (!hit) misses.push(`${category}/${article}: "${label}"`);
+      }
+    }
+    expect(checked).toBeGreaterThan(50);
+    expect(misses, `labels not found in messages/${locale}.json`).toEqual([]);
+  });
+});
 
 describe("cross-links", () => {
   it("every /help link points at an article that exists", () => {

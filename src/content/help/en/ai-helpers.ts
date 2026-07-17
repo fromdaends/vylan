@@ -94,17 +94,28 @@ const theEngagementAssistant: HelpArticle = {
       ["Where the job has got to."],
     ),
 
-    h("It asks before it acts"),
+    h("It asks before it acts, unless you tell it not to"),
     p(
-      "It can do things, not just talk. But every action it proposes is shown to you as something to confirm or cancel first. Nothing happens to your client or your engagement because a chat decided it should.",
+      "It can do things, not just talk: approve a document, send a reminder, change a due date. By default it shows you a Confirm card first and nothing happens until you press it.",
+    ),
+    p(
+      "That is a setting, not a law. ",
+      ui("Send confirmation cards"),
+      " lives in your automation settings, and turning it off means the assistant carries those actions out on its own, without asking.",
     ),
     warn(
-      "Confirming is you doing it, not the assistant doing it. Read what it is proposing before you tap confirm, the same as you would read an email before sending it.",
+      "Think hard before you turn confirmation off. With it on, confirming is you doing it, not the assistant, and you should read what it proposes the way you would read an email before sending it. With it off, the assistant acts on your firm and your clients by itself.",
+    ),
+    note(
+      "One thing always asks, either way: deleting a checklist item. That permanently removes the files attached to it, so Vylan will not do it on a chat's say-so no matter how your settings are set.",
     ),
 
     h("There is a limit"),
     p(
       "Each person gets a set number of messages in a rolling window. Confirming or cancelling an action does not count against it, only asking does. If you hit the limit, wait a bit. Everything else in Vylan carries on working.",
+    ),
+    note(
+      "It runs on Anthropic's Claude Haiku 4.5. The cheap, fast tier is deliberate: this assistant does not have to know anything, because every answer is looked up from your engagement's real data rather than recalled. Speed is the useful quality when you are mid-task.",
     ),
   ],
 };

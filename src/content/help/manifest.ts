@@ -21,7 +21,11 @@
 // visibly unfinished pending the founders' own copy (see ./en/about.ts).
 
 export const HELP_STRUCTURE = {
-  "getting-started": ["what-is-vylan", "your-first-engagement"],
+  "getting-started": [
+    "what-is-vylan",
+    "demo-mode-and-going-live",
+    "your-first-engagement",
+  ],
   clients: ["adding-clients", "importing-clients", "the-client-archive"],
   engagements: [
     "templates",
@@ -38,6 +42,7 @@ export const HELP_STRUCTURE = {
     "connecting-stripe",
     "creating-an-invoice",
     "how-your-client-pays",
+    "invoice-automation",
     "the-invoice-lock",
     "sending-final-documents",
   ],
@@ -57,6 +62,7 @@ export const HELP_STRUCTURE = {
   ],
   account: [
     "your-profile",
+    "every-setting",
     "two-factor-login",
     "firm-branding",
     "language-and-theme",

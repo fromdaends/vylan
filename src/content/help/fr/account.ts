@@ -262,8 +262,184 @@ const theAuditLog: HelpArticle = {
   ],
 };
 
+const everySetting: HelpArticle = {
+  title: "Tous les réglages, expliqués",
+  summary:
+    "Une carte des onze sections de vos réglages, ce que chacune contient, et lesquelles changent ce que vos clients vivent.",
+  keywords: [
+    "reglages",
+    "réglages",
+    "parametres",
+    "paramètres",
+    "options",
+    "preferences",
+    "préférences",
+    "carte",
+    "ou est",
+    "où est",
+    "trouver",
+    "automatisation",
+    "documents",
+  ],
+  body: [
+    p(
+      "Les réglages, c'est une page avec une liste sur le côté. Voici le tout, pour que vous cessiez de chercher.",
+    ),
+
+    h("Compte"),
+    p(
+      "Vous : votre nom, votre photo, comment vous vous connectez. Voyez ",
+      link("/help/account/your-profile", "votre profil"),
+      ".",
+    ),
+
+    h("Sécurité et confidentialité"),
+    p(
+      "La double authentification et vos codes de secours. Les dix minutes les plus rentables de cette liste. Voyez ",
+      link("/help/account/two-factor-login", "la connexion à deux facteurs"),
+      ".",
+    ),
+
+    h("Apparence"),
+    p(
+      "Clair, sombre, ou suivre votre système. À vous seul : ça ne change rien pour vos clients.",
+    ),
+
+    h("Général"),
+    p(
+      "Votre langue et votre fuseau horaire. Votre langue est indépendante de celle de vos clients. Voyez ",
+      link("/help/account/language-and-theme", "langue, thème et fuseau horaire"),
+      ".",
+    ),
+
+    h("Facturation"),
+    p("Votre abonnement à Vylan."),
+
+    h("Paiements"),
+    p("Comment vous facturez vos clients. Deux choses ici :"),
+    list(
+      [
+        ui("Recevez les paiements de vos clients"),
+        " : connecter Stripe. Environ cinq minutes, et Stripe s'occupe du paiement sécurisé, de votre vérification d'identité et de vos versements. Voyez ",
+        link("/help/payments-and-invoices/connecting-stripe", "connecter Stripe"),
+        ".",
+      ],
+      [
+        ui("Prix par défaut"),
+        " : un prix par service, qui préremplit la fenêtre de demande de paiement. Vous pouvez encore le changer à chaque demande.",
+      ],
+    ),
+
+    h("Automatisation"),
+    p(
+      "Vylan décrit cette section comme tout ce qu'il fait par lui-même, sans que vous cliquiez. Trois choses :",
+    ),
+    list(
+      [
+        ui("Rappels automatiques par défaut"),
+        " : le calendrier de relances avec lequel les nouveaux engagements démarrent. Voyez ",
+        link("/help/reminders/changing-reminders", "changer les rappels"),
+        ".",
+      ],
+      [
+        ui("Facturation automatique par défaut"),
+        " : si les factures partent toutes seules. Voyez ",
+        link("/help/payments-and-invoices/invoice-automation", "la facturation automatique"),
+        ".",
+      ],
+      [
+        ui("Afficher les cartes de confirmation"),
+        " : si l'assistant d'engagement demande avant d'agir. Voyez ",
+        link("/help/ai-helpers/the-engagement-assistant", "l'assistant d'engagement"),
+        ".",
+      ],
+    ),
+
+    h("Intégrations"),
+    p(
+      "QuickBooks : connecter, déconnecter, et le plan comptable que Vylan lit. Voyez ",
+      link("/help/quickbooks/connecting-quickbooks", "connecter QuickBooks"),
+      ".",
+    ),
+
+    h("Documents"),
+    p(
+      "Comment Vylan traite ce que vos clients envoient. C'est la section qui change ce que vos clients vivent vraiment, alors elle mérite une vraie lecture :",
+    ),
+    list(
+      [
+        ui("Vérifications IA des documents"),
+        " : votre utilisation du mois, si les vérifications sont ",
+        ui("Actif"),
+        " ou ",
+        ui("En pause"),
+        ", et la date de réinitialisation.",
+      ],
+      [
+        ui("Rejet automatique des téléversements invalides"),
+        " : renvoyer les fichiers inutilisables automatiquement.",
+      ],
+      [
+        ui("Rejeter automatiquement les doublons"),
+        " : renvoyer les copies exactes automatiquement.",
+      ],
+      [
+        ui("Demander automatiquement les pages manquantes"),
+        " : relancer une page manquante d'un document à plusieurs pages, automatiquement.",
+      ],
+      [
+        ui("Inclure les formulaires fiscaux du Québec"),
+        " : activé par défaut. Désactivé, les feuillets propres au Québec disparaissent de toutes les listes.",
+      ],
+    ),
+    p(
+      "Tout ça est couvert dans ",
+      link(
+        "/help/documents-and-ai/how-vylan-checks-documents",
+        "comment Vylan vérifie chaque document",
+      ),
+      ".",
+    ),
+
+    h("Assistant IA"),
+    p(
+      "Les assistants dans l'application. Voyez ",
+      link("/help/ai-helpers/ask-vylan", "Demander à Vylan"),
+      ".",
+    ),
+
+    h("Données et confidentialité"),
+    p(
+      "La ligne de Vylan ici est courte : vos données sont à vous, exportez tout en ZIP, quand vous voulez.",
+    ),
+    list(
+      [
+        ui("Exporter toutes les données du cabinet"),
+        " : clients, engagements, fichiers et journal d'activité, en une archive ZIP. Voyez ",
+        link("/help/account/downloading-your-data", "télécharger toutes vos données"),
+        ".",
+      ],
+      [
+        ui("Supprimer mon cabinet"),
+        " : envoie un courriel au support, et tout est effacé dans les 24 heures.",
+      ],
+    ),
+    warn(
+      "Supprimer votre cabinet n'est pas une suppression douce, et il n'y a pas de fenêtre de 30 jours comme pour un engagement. Exportez vos données d'abord. Une fois effacé, c'est parti.",
+    ),
+
+    h("Équipe"),
+    p(
+      "Apparaît une fois le mode équipe activé. Voyez ",
+      link("/help/team/turning-on-team-mode", "activer le mode équipe"),
+      ".",
+    ),
+  ],
+};
+
 export const articles = {
   "your-profile": yourProfile,
+  "every-setting": everySetting,
   "two-factor-login": twoFactorLogin,
   "firm-branding": firmBranding,
   "language-and-theme": languageAndTheme,

@@ -30,7 +30,7 @@ export const meta: HelpCategoryMeta = {
 const whereYourDataLives: HelpArticle = {
   title: "Où vivent vos données",
   summary:
-    "Vos données sont hébergées au Canada, sur une infrastructure conforme SOC 2.",
+    "Vos données sont hébergées au Canada, sur une infrastructure conforme SOC 2 Type II.",
   keywords: [
     "donnees",
     "données",
@@ -40,6 +40,9 @@ const whereYourDataLives: HelpArticle = {
     "serveur",
     "emplacement",
     "soc 2",
+    "soc 2 type ii",
+    "type 2",
+    "supabase",
     "securite",
     "stockage",
   ],
@@ -55,7 +58,12 @@ const whereYourDataLives: HelpArticle = {
     ),
 
     h("L'infrastructure"),
-    p("Vylan est bâti sur une infrastructure conforme SOC 2."),
+    p(
+      "Vylan est bâti sur une infrastructure conforme SOC 2 Type II. Votre base de données et les fichiers téléversés par vos clients vivent sur Supabase, dans une région canadienne.",
+    ),
+    note(
+      "Type II est la nuance à connaître si le vérificateur d'un client la demande. Un rapport de Type I dit que les contrôles étaient bien conçus un jour donné. Le Type II dit qu'ils ont été testés et qu'ils ont tenu sur une période.",
+    ),
 
     h("Les récupérer"),
     p(
@@ -150,7 +158,7 @@ const privacyAndLaw25: HelpArticle = {
 
     h("Conçu pour ça"),
     p(
-      "Vylan est conçu pour les cabinets comptables canadiens qui traitent des renseignements personnels, y compris sous la Loi 25 du Québec. Vos données sont hébergées au Canada, sur une infrastructure conforme SOC 2.",
+      "Vylan est conçu pour les cabinets comptables canadiens qui traitent des renseignements personnels, y compris sous la Loi 25 du Québec. Vos données sont hébergées au Canada, sur une infrastructure conforme SOC 2 Type II.",
     ),
 
     h("Ce qui aide concrètement"),

@@ -93,17 +93,28 @@ const theEngagementAssistant: HelpArticle = {
       ["Où le mandat est rendu."],
     ),
 
-    h("Il demande avant d'agir"),
+    h("Il demande avant d'agir, sauf si vous lui dites de ne pas le faire"),
     p(
-      "Il peut faire des choses, pas seulement en parler. Mais chaque action qu'il propose vous est présentée à confirmer ou à annuler d'abord. Rien n'arrive à votre client ou à votre engagement parce qu'un clavardage a décidé que ça devrait.",
+      "Il peut faire des choses, pas seulement en parler : approuver un document, envoyer un rappel, changer une date d'échéance. Par défaut, il vous montre d'abord une carte de confirmation et rien ne se produit tant que vous ne l'avez pas pressée.",
+    ),
+    p(
+      "C'est un réglage, pas une loi. ",
+      ui("Afficher les cartes de confirmation"),
+      " se trouve dans vos réglages d'automatisation, et le désactiver veut dire que l'assistant exécute ces actions tout seul, sans demander.",
     ),
     warn(
-      "Confirmer, c'est vous qui le faites, pas l'assistant. Lisez ce qu'il propose avant de confirmer, comme vous liriez un courriel avant de l'envoyer.",
+      "Réfléchissez bien avant de désactiver la confirmation. Activée, confirmer c'est vous qui le faites, pas l'assistant, et vous devriez lire ce qu'il propose comme vous liriez un courriel avant de l'envoyer. Désactivée, l'assistant agit sur votre cabinet et vos clients par lui-même.",
+    ),
+    note(
+      "Une chose demande toujours, peu importe le réglage : supprimer une ligne de la liste. Ça retire définitivement les fichiers qui y sont attachés, alors Vylan ne le fera pas sur la parole d'un clavardage.",
     ),
 
     h("Il y a une limite"),
     p(
       "Chaque personne a un nombre de messages donné sur une période glissante. Confirmer ou annuler une action ne compte pas, seules les questions comptent. Si vous atteignez la limite, attendez un peu. Tout le reste de Vylan continue de fonctionner.",
+    ),
+    note(
+      "Il tourne sur Claude Haiku 4.5 d'Anthropic. Le palier rapide et économique est voulu : cet assistant n'a rien à savoir par cœur, parce que chaque réponse est cherchée dans les vraies données de votre engagement plutôt que rappelée de mémoire. La vitesse est la qualité utile quand vous êtes en plein travail.",
     ),
   ],
 };

@@ -31,7 +31,7 @@ export const meta: HelpCategoryMeta = {
 const whereYourDataLives: HelpArticle = {
   title: "Where your data lives",
   summary:
-    "Your data is hosted in Canada, on SOC 2 compliant infrastructure.",
+    "Your data is hosted in Canada, on SOC 2 Type II compliant infrastructure.",
   keywords: [
     "data",
     "canada",
@@ -40,6 +40,9 @@ const whereYourDataLives: HelpArticle = {
     "location",
     "residency",
     "soc 2",
+    "soc 2 type ii",
+    "type 2",
+    "supabase",
     "secure",
     "storage",
     "where",
@@ -56,7 +59,12 @@ const whereYourDataLives: HelpArticle = {
     ),
 
     h("The infrastructure"),
-    p("Vylan is built on SOC 2 compliant infrastructure."),
+    p(
+      "Vylan is built on SOC 2 Type II compliant infrastructure. Your database and your clients' uploaded files live on Supabase, in a Canadian region.",
+    ),
+    note(
+      "Type II is the distinction worth knowing if a client's own auditor asks. A Type I report says the controls were designed properly on one day. Type II says they were tested and held over a period of time.",
+    ),
 
     h("Getting it back"),
     p(
@@ -149,7 +157,7 @@ const privacyAndLaw25: HelpArticle = {
 
     h("Built for it"),
     p(
-      "Vylan is built for Canadian accounting firms handling personal information, including under Quebec's Law 25. Your data is hosted in Canada, on SOC 2 compliant infrastructure.",
+      "Vylan is built for Canadian accounting firms handling personal information, including under Quebec's Law 25. Your data is hosted in Canada, on SOC 2 Type II compliant infrastructure.",
     ),
 
     h("What helps in practice"),

@@ -306,10 +306,82 @@ const sendingFinalDocuments: HelpArticle = {
   ],
 };
 
+const invoiceAutomation: HelpArticle = {
+  title: "La facturation automatique",
+  summary:
+    "Vylan peut envoyer la facture lui-même quand vous terminez un mandat, tout de suite ou après un délai que vous choisissez. Ou pas du tout, ce qui est le réglage par défaut.",
+  keywords: [
+    "automatisation",
+    "automatique",
+    "facture",
+    "facturation",
+    "a la fin",
+    "à la fin",
+    "delai",
+    "délai",
+    "jours apres",
+    "defaut",
+    "défaut",
+  ],
+  body: [
+    p(
+      "Terminer un mandat et penser à le facturer sont deux tâches différentes, et c'est la deuxième qui glisse entre les mailles. Vylan peut la faire pour vous.",
+    ),
+
+    h("Les trois choix"),
+    p(
+      "Dans vos réglages d'automatisation, ",
+      ui("Facturation automatique par défaut"),
+      " offre trois options :",
+    ),
+    list(
+      [
+        ui("Désactivée — j'envoie les factures moi-même"),
+        " : rien d'automatique. Vous envoyez chacune. C'est le réglage par défaut.",
+      ],
+      [
+        ui("Envoyer quand je marque un mandat terminé"),
+        " : la facture part au moment où vous fermez le mandat.",
+      ],
+      [
+        ui("Envoyer un délai après la fin"),
+        " : pareil, mais après un nombre de jours que vous choisissez.",
+      ],
+    ),
+
+    h("Pourquoi le délai est utile"),
+    p(
+      "Marquer un mandat terminé et être prêt à le facturer ne tombent pas toujours le même après-midi. Un court délai vous laisse une fenêtre pour remarquer que vous avez oublié quelque chose, sans que vous ayez à penser à facturer au bout.",
+    ),
+
+    h("C'est un défaut, pas une règle"),
+    p(
+      "Ce réglage décide de ce avec quoi les nouveaux engagements démarrent. Chaque engagement peut encore être changé à part, alors le client que vous traitez différemment reste traité différemment.",
+    ),
+
+    h("Stripe d'abord"),
+    note(
+      "La facturation automatique a besoin de votre compte Stripe connecté avant de pouvoir faire quoi que ce soit. Si ce n'est pas le cas, Vylan le dit et vous pointe vers ",
+      ui("Recevez les paiements de vos clients"),
+      " dans vos réglages de paiement. Voyez ",
+      link("/help/payments-and-invoices/connecting-stripe", "connecter Stripe"),
+      ".",
+    ),
+
+    h("Les prix par défaut"),
+    p(
+      "À côté, ",
+      ui("Prix par défaut"),
+      " vous laisse fixer un prix par service, ce qui préremplit la fenêtre de demande de paiement : vous ne tapez pas le même montant chaque semaine. Vous pouvez toujours le changer au moment de la demande.",
+    ),
+  ],
+};
+
 export const articles = {
   "connecting-stripe": connectingStripe,
   "creating-an-invoice": creatingAnInvoice,
   "how-your-client-pays": howYourClientPays,
+  "invoice-automation": invoiceAutomation,
   "the-invoice-lock": theInvoiceLock,
   "sending-final-documents": sendingFinalDocuments,
 };
