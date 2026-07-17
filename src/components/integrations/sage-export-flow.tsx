@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import {
   Check,
   ChevronsUpDown,
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
+import { sageCsvFilename } from "@/lib/integrations/sage-csv";
 import {
   Command,
   CommandEmpty,
@@ -46,6 +47,7 @@ export function SageExportFlow({
   engagements: SageEngagementOption[];
 }) {
   const t = useTranslations("Integrations");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [preview, setPreview] = useState<SagePreview | null>(null);
@@ -155,8 +157,109 @@ export function SageExportFlow({
         <p className="mt-6 text-sm text-destructive">{t("preview_error")}</p>
       )}
       {preview && !pending && (
-        <PreviewView preview={preview} reasonText={reasonText} t={t} />
+        <>
+          <PreviewView preview={preview} reasonText={reasonText} t={t} />
+          {preview.includedCount > 0 && selected && (
+            <DownloadSection
+              engagementId={selected.id}
+              clientName={selected.clientName}
+              engagementTitle={selected.title}
+              includedCount={preview.includedCount}
+              locale={locale}
+              t={t}
+            />
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+// The download itself. Posts to the export route (which reads any un-read
+// receipts on demand, then returns the CSV), turns the response into a file the
+// browser saves, and honestly reports if fewer rows came back than previewed.
+function DownloadSection({
+  engagementId,
+  clientName,
+  engagementTitle,
+  includedCount,
+  locale,
+  t,
+}: {
+  engagementId: string;
+  clientName: string;
+  engagementTitle: string;
+  includedCount: number;
+  locale: string;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const [status, setStatus] = useState<null | "error" | "none">(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const download = async () => {
+    setDownloading(true);
+    setStatus(null);
+    setNote(null);
+    try {
+      const res = await fetch("/api/integrations/sage/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ engagementId, locale }),
+      });
+      if (res.status === 422) {
+        setStatus("none");
+        return;
+      }
+      if (!res.ok) {
+        setStatus("error");
+        return;
+      }
+      const rows = Number(res.headers.get("X-Sage-Rows") ?? "0");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = sageCsvFilename(
+        clientName,
+        engagementTitle,
+        new Date().toISOString(),
+      );
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      if (rows < includedCount) {
+        setNote(t("download_partial", { exported: rows, total: includedCount }));
+      }
+    } catch {
+      setStatus("error");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 max-w-md">
+      <Button
+        type="button"
+        onClick={download}
+        disabled={downloading}
+        aria-busy={downloading}
+        className="gap-2"
+      >
+        <Download className="size-4" />
+        {downloading ? t("download_preparing") : t("download_cta")}
+      </Button>
+      {status === "error" && (
+        <p className="mt-1.5 text-xs text-destructive">{t("download_error")}</p>
+      )}
+      {status === "none" && (
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          {t("download_none")}
+        </p>
+      )}
+      {note && <p className="mt-1.5 text-xs text-muted-foreground">{note}</p>}
     </div>
   );
 }
@@ -254,17 +357,6 @@ function PreviewView({
           )}
         </div>
       )}
-
-      {/* Download — wired in Phase 4 (needs the per-firm reading turned on). */}
-      <div className="pt-1">
-        <Button type="button" disabled className="gap-2">
-          <Download className="size-4" />
-          {t("download_cta")}
-        </Button>
-        <p className="mt-1.5 text-xs text-muted-foreground/70">
-          {t("download_soon")}
-        </p>
-      </div>
     </div>
   );
 }

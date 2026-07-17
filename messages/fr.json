@@ -2366,7 +2366,11 @@
     "reason_statement": "Les relevés listent plusieurs transactions, pas une seule écriture.",
     "reason_not_transaction": "Ni un reçu ni une facture.",
     "download_cta": "Télécharger le CSV",
-    "download_soon": "Le téléchargement arrive dans la prochaine mise à jour."
+    "download_soon": "Le téléchargement arrive dans la prochaine mise à jour.",
+    "download_preparing": "Préparation de votre fichier…",
+    "download_error": "Impossible de créer le fichier. Veuillez réessayer.",
+    "download_none": "Ces documents n'ont pas pu être lus, il n'y a donc rien à exporter pour l'instant.",
+    "download_partial": "{exported} document(s) sur {total} exportés. Les autres n'ont pas pu être lus."
   },
   "Quickbooks": {
     "draft_title": "Brouillon QuickBooks",
