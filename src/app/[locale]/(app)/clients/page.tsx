@@ -12,9 +12,8 @@ import { Link } from "@/i18n/navigation";
 import { ClientsListView } from "@/components/clients/clients-list-view";
 import { SORT_OPTIONS, type SortKey } from "@/components/clients/sort";
 import {
-  OWNER_FILTERS,
   filterClientsByOwner,
-  type OwnerFilter,
+  isBuiltinOwnerFilter,
   type ClientOwner,
 } from "@/components/clients/owner";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
@@ -62,13 +61,9 @@ export default async function ClientsPage({
     ? (sp.sort as SortKey)
     : "recent";
   const activeOnly = sp.active === "1";
-  // An explicit ?owner choice (from the toolbar) always wins; null = use the
-  // default computed below once we know who the caller owns.
-  const explicitOwner: OwnerFilter | null = OWNER_FILTERS.includes(
-    sp.owner as OwnerFilter,
-  )
-    ? (sp.owner as OwnerFilter)
-    : null;
+  // An explicit ?owner choice (toolbar, or a "view a teammate's clients"
+  // deep-link) always wins; validated against real members below once loaded.
+  const rawOwner = (sp.owner ?? "").trim();
 
   const [clientsRaw, engagements, firm, currentUser, members, signals] =
     await Promise.all([
@@ -103,7 +98,17 @@ export default async function ClientsPage({
   const ownsAnyClient = clientsRaw.some(
     (c) => c.assigned_user_id === currentUserId,
   );
-  const ownerFilter: OwnerFilter = teamEnabled
+  // Valid owner-filter values: the two built-ins ("all"/"mine") + any active
+  // member id. An unknown ?owner= (e.g. a since-removed member) falls back to
+  // the default rather than filtering to nobody.
+  const activeMemberIds = new Set(
+    members.filter((m) => !m.deactivated_at).map((m) => m.id),
+  );
+  const explicitOwner =
+    rawOwner && (isBuiltinOwnerFilter(rawOwner) || activeMemberIds.has(rawOwner))
+      ? rawOwner
+      : null;
+  const ownerFilter: string = teamEnabled
     ? (explicitOwner ?? (currentUserId && ownsAnyClient ? "mine" : "all"))
     : "all";
 
@@ -120,6 +125,11 @@ export default async function ClientsPage({
       avatarUrl: memberAvatars[i],
     };
   });
+  // Active teammates (excluding the viewer — "Mine" covers them) for the owner
+  // filter's per-person options.
+  const teammates = members
+    .filter((m) => !m.deactivated_at && m.id !== currentUserId)
+    .map((m) => ({ id: m.id, name: userDisplayLabel(m) }));
 
   // Group engagement counts by client_id (for the summary badge in the
   // row's "Engagements" column) AND group the full engagement rows by
@@ -261,6 +271,7 @@ export default async function ClientsPage({
         sort={sort}
         activeOnly={activeOnly}
         teamEnabled={teamEnabled}
+        members={teammates}
       />
     </div>
   );

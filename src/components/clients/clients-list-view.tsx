@@ -10,7 +10,7 @@ import {
 } from "./clients-table";
 import type { Client } from "@/lib/db/clients";
 import type { SortKey } from "./sort";
-import type { OwnerFilter, ClientOwner } from "./owner";
+import type { ClientOwner } from "./owner";
 import type { AppLocale } from "@/lib/format";
 
 // Holds the in-memory search state shared between the toolbar's
@@ -34,19 +34,23 @@ export function ClientsListView({
   sort,
   activeOnly,
   teamEnabled,
+  members,
 }: {
   clients: Client[];
   summaries: Record<string, ClientEngagementSummary>;
   engagementsByClient: Record<string, ClientEngagementRow[]>;
   owners: Record<string, ClientOwner>;
   currentUserId: string;
-  ownerFilter: OwnerFilter;
+  // "all" | "mine" | a specific member id.
+  ownerFilter: string;
   locale: AppLocale;
   type: "all" | "individual" | "business";
   includeArchived: boolean;
   sort: SortKey;
   activeOnly: boolean;
   teamEnabled: boolean;
+  // Teammates (excluding the viewer) for the owner filter's per-person options.
+  members: { id: string; name: string }[];
 }) {
   const t = useTranslations("Clients");
   const [query, setQuery] = useState("");
@@ -73,6 +77,7 @@ export function ClientsListView({
         activeOnly={activeOnly}
         ownerFilter={ownerFilter}
         teamEnabled={teamEnabled}
+        members={members}
       />
       {filtered.length === 0 && clients.length > 0 ? (
         // Live-filter empty state: the firm has clients but none
