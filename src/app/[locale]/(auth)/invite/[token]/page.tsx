@@ -5,6 +5,7 @@
 // resolveInviteAccess whether to show the create-account form or a calm error
 // card. acceptInvite re-validates all of this on submit (defence in depth).
 
+import type { Metadata } from "next";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import {
   hashInviteToken,
@@ -17,6 +18,19 @@ import {
   InviteSwitchForm,
   InviteErrorView,
 } from "./invite-client";
+
+// Same reasoning as the client portal (src/app/r/[token]/page.tsx): a private
+// token URL that names a real firm and a real person who invited you. Nothing
+// here belongs in a search index, and the invite email is exactly the kind of
+// thing that gets forwarded into an archived mailing list.
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+    googleBot: { index: false, follow: false, noimageindex: true },
+  },
+};
 
 export const dynamic = "force-dynamic";
 
