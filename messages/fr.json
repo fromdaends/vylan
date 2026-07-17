@@ -2350,6 +2350,7 @@
     "sage_step3_desc": "Téléchargez le fichier et importez-le dans Sage 50.",
     "sage_ph_soon": "Le sélecteur d'export arrive bientôt. Vous choisirez un engagement ici et téléchargerez un fichier prêt pour Sage.",
     "flow_label": "Exporter un engagement",
+    "flow_scope_note": "Une ligne par reçu ou facture de vente, prête à importer dans Sage. Il n'exporte pas chaque ligne d'un relevé bancaire. Les relevés, feuillets et rapports restent dans le mandat.",
     "flow_pick_label": "Choisissez un engagement",
     "flow_pick_trigger": "Sélectionner un engagement",
     "flow_pick_placeholder": "Rechercher des engagements…",
