@@ -28,6 +28,50 @@ export async function listActivityForEngagement(
   return (data ?? []) as ActivityEntry[];
 }
 
+export type EngagementContributor = {
+  userId: string;
+  lastAt: string;
+  count: number;
+};
+
+// Reduce activity rows to the distinct USER teammates who've acted on an
+// engagement ("who touched this file"), newest-activity-first, with each one's
+// most recent action time + how many actions. Client + system rows are ignored.
+// PURE + exported for tests. Assumes rows are newest-first (as the query
+// returns), so the first row seen per user is their latest.
+export function summarizeContributors(
+  rows: {
+    actor_type: string;
+    actor_id: string | null;
+    created_at: string;
+  }[],
+): EngagementContributor[] {
+  const byUser = new Map<string, EngagementContributor>();
+  for (const r of rows) {
+    if (r.actor_type !== "user" || !r.actor_id) continue;
+    const existing = byUser.get(r.actor_id);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      byUser.set(r.actor_id, {
+        userId: r.actor_id,
+        lastAt: r.created_at,
+        count: 1,
+      });
+    }
+  }
+  return [...byUser.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+}
+
+// The distinct teammates who've worked on an engagement, for the "worked on by"
+// header strip. RLS-scoped to the firm via listActivityForEngagement.
+export async function listEngagementContributors(
+  engagementId: string,
+): Promise<EngagementContributor[]> {
+  const rows = await listActivityForEngagement(engagementId, 300);
+  return summarizeContributors(rows);
+}
+
 export type FirmActivityEntry = ActivityEntry & {
   engagement_title: string | null;
   client_id: string | null;
