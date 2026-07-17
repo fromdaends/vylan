@@ -16,6 +16,11 @@ export function SageLogo({
   return (
     <svg
       viewBox="0 0 24 24"
+      // Intrinsic size so the SVG never falls back to the 300x150 replaced-element
+      // default (which would overflow its tile) if a sizing class isn't applied.
+      // A width/height utility class still overrides these via CSS.
+      width="24"
+      height="24"
       xmlns="http://www.w3.org/2000/svg"
       fill="#00D639"
       role="img"
