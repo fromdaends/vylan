@@ -120,7 +120,14 @@ export function EngagementAssignee({
             {members.map((m) => (
               <DropdownMenuItem
                 key={m.id}
-                onSelect={() => pick(m.id, m.name)}
+                // preventDefault keeps the menu from closing as the dialog
+                // opens — otherwise the menu's and dialog's overlays fight over
+                // <body> pointer-events and can leave the WHOLE page unclickable
+                // (Radix dropdown→dialog handoff). Same guard team-manager uses.
+                onSelect={(e) => {
+                  e.preventDefault();
+                  pick(m.id, m.name);
+                }}
                 className="gap-2"
               >
                 <AvatarInitials name={m.name} size={20} />
