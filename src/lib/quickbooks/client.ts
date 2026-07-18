@@ -226,6 +226,82 @@ function isTransientStatus(status: number): boolean {
   return status === 429 || status >= 500;
 }
 
+// Data + write calls (query / create / delete / upload) get the SAME transient
+// retry the token endpoint already has: a network error/timeout, a 429 (rate
+// limit), or a 5xx is retried with a short exponential backoff. This matters most
+// on the WRITE path — before this, a single 429 mid "Post all approved" failed
+// that draft outright with no back-off. Creates carry an idempotent `requestid`
+// so a retried POST can never double-post; queries/reads are naturally
+// idempotent. A permanent 4xx (400/401/404) is returned immediately, never
+// retried (retrying can't succeed and only hammers Intuit).
+const QBO_RETRY_MAX_ATTEMPTS = 3;
+const QBO_RETRY_BASE_MS = 300;
+// Cap on how long we'll honor a server-sent Retry-After. QuickBooks can advise a
+// long pause; a serverless function has a bounded budget (maxDuration 60s) and a
+// bulk run posts sequentially, so we clamp the wait rather than risk exhausting
+// the whole request on one throttled call.
+const QBO_MAX_RETRY_AFTER_MS = 5_000;
+
+// Parse a Retry-After header (delta-seconds OR an HTTP date) to milliseconds,
+// clamped to [0, QBO_MAX_RETRY_AFTER_MS]. Returns null when absent/unparseable so
+// the caller falls back to exponential backoff. Exported for unit tests.
+export function retryAfterMs(res: Response): number | null {
+  const raw = res.headers?.get?.("retry-after");
+  if (!raw) return null;
+  const secs = Number(raw.trim());
+  if (Number.isFinite(secs)) {
+    return Math.min(Math.max(secs, 0) * 1000, QBO_MAX_RETRY_AFTER_MS);
+  }
+  const when = Date.parse(raw);
+  if (!Number.isNaN(when)) {
+    return Math.min(Math.max(when - Date.now(), 0), QBO_MAX_RETRY_AFTER_MS);
+  }
+  return null;
+}
+
+// Run a QBO data/write fetch with transient retry (see the note above). The
+// caller passes a thunk that performs ONE fetch attempt (building a fresh
+// AbortSignal.timeout each time) and a short `label` used only in the error
+// message. Returns the final Response for the caller to interpret exactly as
+// before (success, or a permanent non-2xx it maps to a typed error); throws
+// QuickbooksError("request_failed") only after every attempt hit a network
+// error/timeout. On a transient HTTP status it honors a Retry-After header,
+// otherwise backs off exponentially.
+async function fetchQboWithRetry(
+  attemptFetch: () => Promise<Response>,
+  label: string,
+): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= QBO_RETRY_MAX_ATTEMPTS; attempt++) {
+    let res: Response;
+    try {
+      res = await attemptFetch();
+    } catch (e) {
+      lastError = e;
+      if (attempt < QBO_RETRY_MAX_ATTEMPTS) {
+        await delay(QBO_RETRY_BASE_MS * 2 ** (attempt - 1));
+        continue;
+      }
+      throw new QuickbooksError(
+        "request_failed",
+        `QuickBooks ${label} request failed after ${QBO_RETRY_MAX_ATTEMPTS} attempts: ${(e as Error).message}`,
+      );
+    }
+    if (isTransientStatus(res.status) && attempt < QBO_RETRY_MAX_ATTEMPTS) {
+      await delay(retryAfterMs(res) ?? QBO_RETRY_BASE_MS * 2 ** (attempt - 1));
+      continue;
+    }
+    return res;
+  }
+  // Unreachable: the loop always returns or throws. Kept for exhaustiveness.
+  throw new QuickbooksError(
+    "request_failed",
+    lastError instanceof Error
+      ? lastError.message
+      : `QuickBooks ${label} request failed`,
+  );
+}
+
 // POST a form body to Intuit's token endpoint (resolved from the discovery
 // document) with automatic retry on TRANSIENT failures — a network error/timeout,
 // a 429, or a 5xx — using a short exponential backoff. Returns the final Response
@@ -462,23 +538,19 @@ export async function quickbooksQuery(
   const url =
     `${quickbooksApiBaseUrl(environment)}/v3/company/${encodeURIComponent(realmId)}` +
     `/query?query=${encodeURIComponent(query)}&minorversion=${QBO_MINORVERSION}`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
-    });
-  } catch (e) {
-    throw new QuickbooksError(
-      "request_failed",
-      `QuickBooks query request failed: ${(e as Error).message}`,
-    );
-  }
+  const res = await fetchQboWithRetry(
+    () =>
+      fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+      }),
+    "query",
+  );
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     const tid = tidOf(res);
@@ -553,25 +625,21 @@ export async function quickbooksCreate(
   const url =
     `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}` +
     `/${entity}?minorversion=${QBO_MINORVERSION}&requestid=${encodeURIComponent(requestId)}`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${ctx.accessToken}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-      cache: "no-store",
-      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
-    });
-  } catch (e) {
-    throw new QuickbooksError(
-      "request_failed",
-      `QuickBooks create request failed: ${(e as Error).message}`,
-    );
-  }
+  const res = await fetchQboWithRetry(
+    () =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        cache: "no-store",
+        signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+      }),
+    "create",
+  );
   const tid = tidOf(res);
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -616,25 +684,21 @@ export async function quickbooksCreateNameEntity(
   const url =
     `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}` +
     `/${kind}?minorversion=${QBO_MINORVERSION}`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${ctx.accessToken}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ DisplayName: displayName }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
-    });
-  } catch (e) {
-    throw new QuickbooksError(
-      "request_failed",
-      `QuickBooks create ${kind} request failed: ${(e as Error).message}`,
-    );
-  }
+  const res = await fetchQboWithRetry(
+    () =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ DisplayName: displayName }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+      }),
+    `create ${kind}`,
+  );
   const tid = tidOf(res);
   const json = (await res.json().catch(() => null)) as Record<
     string,
@@ -732,25 +796,21 @@ export async function quickbooksDelete(
   const url =
     `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}` +
     `/${entity}?operation=delete&minorversion=${QBO_MINORVERSION}`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${ctx.accessToken}`,
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ Id: id, SyncToken: syncToken }),
-      cache: "no-store",
-      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
-    });
-  } catch (e) {
-    throw new QuickbooksError(
-      "request_failed",
-      `QuickBooks delete request failed: ${(e as Error).message}`,
-    );
-  }
+  const res = await fetchQboWithRetry(
+    () =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ Id: id, SyncToken: syncToken }),
+        cache: "no-store",
+        signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+      }),
+    "delete",
+  );
   const tid = tidOf(res);
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -869,38 +929,39 @@ export async function quickbooksUploadAttachment(
     ContentType: mime,
     Category: "Receipt",
   };
-  const form = new FormData();
-  form.append(
-    "file_metadata_01",
-    new Blob([JSON.stringify(metadata)], { type: "application/json" }),
-    "attachment.json",
-  );
-  form.append(
-    "file_content_01",
-    new Blob([new Uint8Array(file.bytes)], { type: mime }),
-    fileName,
-  );
   const url =
     `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}/upload`;
-  let res: Response;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      // No Content-Type header — fetch derives the multipart boundary from `form`.
-      headers: {
-        Authorization: `Bearer ${ctx.accessToken}`,
-        Accept: "application/json",
-      },
-      body: form,
-      cache: "no-store",
-      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
-    });
-  } catch (e) {
-    throw new QuickbooksError(
-      "request_failed",
-      `QuickBooks attachment request failed: ${(e as Error).message}`,
+  // Build the multipart body FRESH per attempt: fetchQboWithRetry may retry a
+  // transient failure, and a FormData body's stream can only be consumed once.
+  const buildForm = (): FormData => {
+    const form = new FormData();
+    form.append(
+      "file_metadata_01",
+      new Blob([JSON.stringify(metadata)], { type: "application/json" }),
+      "attachment.json",
     );
-  }
+    form.append(
+      "file_content_01",
+      new Blob([new Uint8Array(file.bytes)], { type: mime }),
+      fileName,
+    );
+    return form;
+  };
+  const res = await fetchQboWithRetry(
+    () =>
+      fetch(url, {
+        method: "POST",
+        // No Content-Type header — fetch derives the multipart boundary from `form`.
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          Accept: "application/json",
+        },
+        body: buildForm(),
+        cache: "no-store",
+        signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+      }),
+    "attachment",
+  );
   const tid = tidOf(res);
   const json = (await res.json().catch(() => null)) as {
     AttachableResponse?: Array<{ Attachable?: unknown; Fault?: unknown }>;

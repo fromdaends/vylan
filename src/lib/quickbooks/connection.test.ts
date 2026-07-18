@@ -16,6 +16,7 @@ vi.mock("@/lib/quickbooks/client", async (importActual) => {
 import {
   getValidAccessToken,
   getQuickbooksConnectionHealth,
+  refreshAccessTokenAfter401,
 } from "./connection";
 import {
   getFirmQuickbooksConnectionWithTokens,
@@ -177,5 +178,40 @@ describe("getQuickbooksConnectionHealth", () => {
     mockRefresh.mockResolvedValue(FRESH_TOKENS);
     mockUpdate.mockResolvedValue({ outcome: "error" });
     expect(await getQuickbooksConnectionHealth("f1")).toBe("ok");
+  });
+});
+
+// Used by the post path when a create returned 401 despite a fresh-by-our-clock
+// token: force a refresh to tell a spurious 401 (refresh ok) from a revoked
+// grant (invalid_grant → the accountant must reconnect).
+describe("refreshAccessTokenAfter401", () => {
+  it("forces a refresh even when the stored token still looks fresh", async () => {
+    mockRead.mockResolvedValue(okRead(conn({ accessTokenExpiresAt: FRESH })));
+    mockRefresh.mockResolvedValue(FRESH_TOKENS);
+    mockUpdate.mockResolvedValue({ outcome: "updated" });
+    const r = await refreshAccessTokenAfter401("f1");
+    // getValidAccessToken would have trusted the fresh token; this must refresh.
+    expect(mockRefresh).toHaveBeenCalled();
+    expect(r).toEqual({ token: "AT2", dead: false });
+  });
+
+  it("reports dead when the forced refresh is rejected (invalid_grant)", async () => {
+    mockRead.mockResolvedValue(okRead(conn({ accessTokenExpiresAt: FRESH })));
+    mockRefresh.mockRejectedValue(new QuickbooksError("invalid_grant", "dead"));
+    expect(await refreshAccessTokenAfter401("f1")).toEqual({
+      token: null,
+      dead: true,
+    });
+  });
+
+  it("reports NOT dead on a transient refresh failure (5xx) — no false reconnect", async () => {
+    mockRead.mockResolvedValue(okRead(conn({ accessTokenExpiresAt: FRESH })));
+    mockRefresh.mockRejectedValue(
+      new QuickbooksError("token_refresh_failed", "503 upstream", 503),
+    );
+    expect(await refreshAccessTokenAfter401("f1")).toEqual({
+      token: null,
+      dead: false,
+    });
   });
 });

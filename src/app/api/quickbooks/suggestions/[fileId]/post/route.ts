@@ -167,6 +167,13 @@ export async function POST(
         { error: "not_connected", detail: "QuickBooks isn't connected." },
         { status: 409 },
       );
+    case "reconnect_required":
+      // The QuickBooks connection was revoked mid-post. Not a post error — the
+      // owner must reconnect. The card surfaces this as a reconnect prompt.
+      return NextResponse.json(
+        { error: "reconnect_required", detail: r.detail },
+        { status: 409 },
+      );
     case "post_failed":
       return NextResponse.json(
         { error: "post_failed", detail: r.detail },

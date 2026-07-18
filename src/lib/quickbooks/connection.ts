@@ -25,6 +25,7 @@ type TokenAcquisition = { token: string | null; dead: boolean };
 
 async function acquireValidAccessToken(
   firmId: string,
+  opts?: { force?: boolean },
 ): Promise<TokenAcquisition> {
   const read = await readFirmQuickbooksConnection(firmId);
   // A transient DB/network failure reading the row is NOT a dead connection —
@@ -35,7 +36,11 @@ async function acquireValidAccessToken(
   if (read.kind === "absent") return { token: null, dead: true };
   const conn = read.conn;
 
-  if (!isAccessTokenStale(conn.accessTokenExpiresAt, Date.now())) {
+  // `force` skips the staleness short-circuit: used after a data call returned
+  // 401 even though our clock said the access token was still fresh (the customer
+  // likely revoked access on Intuit's side), so we must refresh to find out
+  // whether the grant is truly dead rather than trust the cached token.
+  if (!opts?.force && !isAccessTokenStale(conn.accessTokenExpiresAt, Date.now())) {
     return { token: conn.accessToken, dead: false };
   }
 
@@ -84,6 +89,21 @@ export async function getValidAccessToken(
   firmId: string,
 ): Promise<string | null> {
   return (await acquireValidAccessToken(firmId)).token;
+}
+
+// Force a token refresh after a data/write call returned 401 despite our clock
+// saying the access token was still fresh (typically the customer revoked
+// Vylan's access inside QuickBooks). Returns `dead: true` when the refresh is
+// itself rejected (invalid_grant) — the connection needs a reconnect — or a
+// fresh token when it was only a spurious 401. Never throws.
+export async function refreshAccessTokenAfter401(
+  firmId: string,
+): Promise<TokenAcquisition> {
+  try {
+    return await acquireValidAccessToken(firmId, { force: true });
+  } catch {
+    return { token: null, dead: false };
+  }
 }
 
 // Health of an EXISTING connection, for surfacing a "reconnect QuickBooks"
