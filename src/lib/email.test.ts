@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  personalSignOff,
   buildEngagementInviteEmail,
   buildConfirmEmail,
   buildSignedCopyReturnedEmail,
@@ -245,5 +246,48 @@ describe("buildSignedCopyReturnedEmail", () => {
       expect(blob).not.toContain("juridiquement");
       expect(blob).not.toContain("certifié");
     }
+  });
+});
+
+describe("personalSignOff", () => {
+  it("puts the accountant's name in front of the firm when present", () => {
+    expect(personalSignOff("Marie Tremblay", "Cabinet Tremblay")).toBe(
+      "Marie Tremblay, Cabinet Tremblay",
+    );
+  });
+
+  it("falls back to the firm alone when there's no accountant", () => {
+    expect(personalSignOff(null, "Cabinet Tremblay")).toBe("Cabinet Tremblay");
+    expect(personalSignOff(undefined, "Cabinet Tremblay")).toBe("Cabinet Tremblay");
+    expect(personalSignOff("   ", "Cabinet Tremblay")).toBe("Cabinet Tremblay");
+  });
+
+  it("trims the accountant name", () => {
+    expect(personalSignOff("  Marie  ", "Firm")).toBe("Marie, Firm");
+  });
+});
+
+describe("buildReminderEmail personal sign-off", () => {
+  const base = {
+    tone: "gentle" as const,
+    clientName: "Client",
+    firmName: "Cabinet Tremblay",
+    engagementTitle: "2025 T1",
+    url: "https://vylan.app/r/tok",
+    dueDate: null,
+    pendingRequiredCount: 2,
+    locale: "en" as const,
+  };
+
+  it("signs off with the accountant when provided", () => {
+    const { html, text } = buildReminderEmail({ ...base, accountantName: "Marie" });
+    expect(html).toContain("— Marie, Cabinet Tremblay");
+    expect(text).toContain("— Marie, Cabinet Tremblay");
+  });
+
+  it("signs off with the firm alone otherwise", () => {
+    const { html, text } = buildReminderEmail(base);
+    expect(html).toContain("— Cabinet Tremblay");
+    expect(text).toContain("— Cabinet Tremblay");
   });
 });
