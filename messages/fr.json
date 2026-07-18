@@ -124,6 +124,8 @@
     "profile_clients_title": "Clients",
     "profile_activity_title": "Activité récente",
     "profile_view_all": "Tout voir",
+    "profile_reassign": "Réassigner",
+    "profile_reassign_to": "Réassigner à",
     "profile_no_engagements": "{name} n'a aucun engagement actif pour le moment.",
     "profile_no_clients": "{name} n'a encore aucun client.",
     "profile_no_activity": "Aucune activité récente pour {name}.",
