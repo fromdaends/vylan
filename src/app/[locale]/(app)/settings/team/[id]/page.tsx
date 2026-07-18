@@ -18,7 +18,6 @@ import {
 } from "@/components/settings/audit-actions";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
-import { EngagementReassignMenu } from "@/components/engagements/engagement-reassign-menu";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -133,16 +132,7 @@ export default async function TeamMemberProfilePage({
           emptyText={t("profile_no_engagements", { name })}
           growNameColumn
           teamEnabled={false}
-          rowAction={
-            reassignTargets.length > 0
-              ? (row) => (
-                  <EngagementReassignMenu
-                    engagementId={row.id}
-                    members={reassignTargets}
-                  />
-                )
-              : undefined
-          }
+          reassignMembers={reassignTargets}
         />
       </section>
 

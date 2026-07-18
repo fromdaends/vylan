@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { EngagementReassignMenu } from "@/components/engagements/engagement-reassign-menu";
 import {
   AlertTriangle,
   ArrowDown,
@@ -310,7 +311,7 @@ export function WorklistTable({
   teamEnabled = true,
   statusSort = null,
   onStatusSortToggle,
-  rowAction,
+  reassignMembers,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -332,10 +333,12 @@ export function WorklistTable({
   // that doesn't pass this — the layout is unchanged.
   growNameColumn?: boolean;
   teamEnabled?: boolean;
-  // Opt-in trailing control per row (e.g. the teammate profile's "reassign this
-  // engagement" menu). When omitted — every other caller — no extra column is
-  // rendered, so the Overview + engagement sub-pages are untouched.
-  rowAction?: (row: WorklistRow) => ReactNode;
+  // Opt-in per-row "reassign this engagement" menu (the teammate profile passes
+  // the list of teammates to hand work to). A plain SERIALIZABLE array — the menu
+  // itself is built inside this client component per row, so no function crosses
+  // the server→client boundary. When omitted — every other caller — no extra
+  // column is rendered, so the Overview + engagement sub-pages are untouched.
+  reassignMembers?: { id: string; name: string }[];
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -444,7 +447,9 @@ export function WorklistTable({
                 t("wl_col_status")
               )}
             </TableHead>
-            {rowAction && <TableHead className="w-10 px-2" />}
+            {reassignMembers && reassignMembers.length > 0 && (
+              <TableHead className="w-10 px-2" />
+            )}
             <TableHead className="w-10 px-2">
               <span className="sr-only">{tEng("menu_actions")}</span>
             </TableHead>
@@ -456,8 +461,7 @@ export function WorklistTable({
               key={r.id}
               row={r}
               locale={locale}
-              hasRowAction={!!rowAction}
-              rowActionNode={rowAction ? rowAction(r) : null}
+              reassignMembers={reassignMembers}
               onOptimisticRemoval={removeRow}
               statusLabel={tStatus(r.derivedStatus)}
               overdueText={
@@ -513,8 +517,7 @@ function WorklistRowView({
   countdownText,
   onOptimisticRemoval,
   teamEnabled,
-  hasRowAction,
-  rowActionNode,
+  reassignMembers,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -529,8 +532,7 @@ function WorklistRowView({
   countdownText: string | null;
   onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
   teamEnabled: boolean;
-  hasRowAction: boolean;
-  rowActionNode?: ReactNode;
+  reassignMembers?: { id: string; name: string }[];
 }) {
   const tEng = useTranslations("Engagements");
   const router = useRouter();
@@ -725,11 +727,15 @@ function WorklistRowView({
               )}
             </TableCell>
 
-            {/* Opt-in trailing control (e.g. the teammate profile's reassign
-                menu). Only rendered when the caller passes rowAction. */}
-            {hasRowAction && (
+            {/* Opt-in reassign menu (the teammate profile passes the teammates
+                to hand work to). Built here inside the client component so no
+                function crosses the server→client boundary. */}
+            {reassignMembers && reassignMembers.length > 0 && (
               <TableCell className="px-2 py-3 align-top">
-                {rowActionNode}
+                <EngagementReassignMenu
+                  engagementId={row.id}
+                  members={reassignMembers}
+                />
               </TableCell>
             )}
 
