@@ -50,7 +50,11 @@ export default async function NotificationsPage({
   const viewer = user
     ? { userId: user.id, isOwner: user.role === "owner" }
     : undefined;
-  const notifications = await listHomeNotifications(50, viewer);
+  // Never let the feed's aggregation crash the page — degrade to empty on error.
+  const notifications = await listHomeNotifications(50, viewer).catch((e) => {
+    console.error("[notifications] aggregation failed:", e);
+    return [];
+  });
   const t = await getTranslations("Notifications");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
