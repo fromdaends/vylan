@@ -665,6 +665,18 @@ The ${opts.firmName} team`;
 // Default CTA / footer slate when the firm has no brand color set.
 const DEFAULT_BRAND = "#1e293b";
 
+// Email sign-off name: an assigned accountant's name in front of the firm
+// ("Marie, Cabinet Tremblay") so a client email reads like it's from their
+// actual accountant, not a faceless system — while keeping the firm identity.
+// Blank/absent name falls back to the firm alone. Pure + exported for tests.
+export function personalSignOff(
+  accountantName: string | null | undefined,
+  firmName: string,
+): string {
+  const name = accountantName?.trim();
+  return name ? `${name}, ${firmName}` : firmName;
+}
+
 export function buildReminderEmail(opts: {
   tone: ReminderTone;
   clientName: string;
@@ -678,7 +690,10 @@ export function buildReminderEmail(opts: {
   locale: "fr" | "en";
   customSubject?: string | null;
   customMessage?: string | null;
+  // Assigned accountant's name for a personal sign-off; null = firm sign-off.
+  accountantName?: string | null;
 }): { subject: string; html: string; text: string } {
+  const signOff = personalSignOff(opts.accountantName, opts.firmName);
   const copy = COPY[opts.locale][opts.tone];
   const brand = sanitizeColor(opts.brandColor) ?? DEFAULT_BRAND;
   const subject = opts.customSubject?.trim()
@@ -766,7 +781,7 @@ export function buildReminderEmail(opts: {
           <tr>
             <td style="padding:24px 28px 24px 28px;border-top:1px solid #e2e8f0;margin-top:24px">
               <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#475569">${escapeHtml(replyHint)}</p>
-              <p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#0f172a;font-weight:500">— ${escapeHtml(opts.firmName)}</p>
+              <p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#0f172a;font-weight:500">— ${escapeHtml(signOff)}</p>
             </td>
           </tr>
         </table>
@@ -785,7 +800,7 @@ export function buildReminderEmail(opts: {
     "",
     replyHint,
     "",
-    `— ${opts.firmName}`,
+    `— ${signOff}`,
   ].join("\n");
 
   return { subject, html, text };

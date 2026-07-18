@@ -241,6 +241,24 @@ export async function processReminderJob(
     .single();
   if (!client || !firm) return { skipped: "client_or_firm_missing" };
 
+  // Personal sign-off: if the engagement has an ACTIVE assigned accountant, the
+  // reminder signs off with their name ("— Marie, [Firm]") so the client hears
+  // from their actual accountant. Falls back to the firm sign-off otherwise.
+  let accountantName: string | null = null;
+  if (engagement.assigned_user_id) {
+    const { data: acct } = await sb
+      .from("users")
+      .select("name, display_name, deactivated_at")
+      .eq("id", engagement.assigned_user_id)
+      .maybeSingle();
+    if (acct && !acct.deactivated_at) {
+      accountantName =
+        (acct.display_name as string | null)?.trim() ||
+        (acct.name as string | null)?.trim() ||
+        null;
+    }
+  }
+
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const url = `${appUrl}/r/${engagement.magic_token}`;
   const firmLogoUrl = await getBrandingImageUrlForEmail(firm.logo_url);
@@ -262,6 +280,7 @@ export async function processReminderJob(
       locale: client.locale,
       customSubject,
       customMessage,
+      accountantName,
     });
     const res = await sendEmail({ to: client.email, subject, html, text });
     if (!res.sent) return { skipped: `send_failed:${res.reason}` };
