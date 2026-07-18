@@ -18,6 +18,7 @@ import {
 } from "@/components/settings/audit-actions";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
+import { EngagementReassignMenu } from "@/components/engagements/engagement-reassign-menu";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -58,6 +59,11 @@ export default async function TeamMemberProfilePage({
     getBrandingImageUrl(member.avatar_path),
   ]);
   const engagements = selectAssignedTo(worklist, id);
+  // Reassignment targets for the per-row "move it" control: active teammates
+  // other than the person whose profile this is.
+  const reassignTargets = members
+    .filter((m) => !m.deactivated_at && m.id !== id)
+    .map((m) => ({ id: m.id, name: userDisplayLabel(m) }));
   // filterClientsByOwner treats a non-"all"/"mine" value as a member id; the
   // third arg (current user) is unused for a member-id filter.
   const clients = filterClientsByOwner(clientsRaw, id, "");
@@ -127,6 +133,16 @@ export default async function TeamMemberProfilePage({
           emptyText={t("profile_no_engagements", { name })}
           growNameColumn
           teamEnabled={false}
+          rowAction={
+            reassignTargets.length > 0
+              ? (row) => (
+                  <EngagementReassignMenu
+                    engagementId={row.id}
+                    members={reassignTargets}
+                  />
+                )
+              : undefined
+          }
         />
       </section>
 

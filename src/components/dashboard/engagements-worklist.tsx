@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import {
   AlertTriangle,
@@ -310,6 +310,7 @@ export function WorklistTable({
   teamEnabled = true,
   statusSort = null,
   onStatusSortToggle,
+  rowAction,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -331,6 +332,10 @@ export function WorklistTable({
   // that doesn't pass this — the layout is unchanged.
   growNameColumn?: boolean;
   teamEnabled?: boolean;
+  // Opt-in trailing control per row (e.g. the teammate profile's "reassign this
+  // engagement" menu). When omitted — every other caller — no extra column is
+  // rendered, so the Overview + engagement sub-pages are untouched.
+  rowAction?: (row: WorklistRow) => ReactNode;
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -439,6 +444,7 @@ export function WorklistTable({
                 t("wl_col_status")
               )}
             </TableHead>
+            {rowAction && <TableHead className="w-10 px-2" />}
             <TableHead className="w-10 px-2">
               <span className="sr-only">{tEng("menu_actions")}</span>
             </TableHead>
@@ -450,6 +456,8 @@ export function WorklistTable({
               key={r.id}
               row={r}
               locale={locale}
+              hasRowAction={!!rowAction}
+              rowActionNode={rowAction ? rowAction(r) : null}
               onOptimisticRemoval={removeRow}
               statusLabel={tStatus(r.derivedStatus)}
               overdueText={
@@ -505,6 +513,8 @@ function WorklistRowView({
   countdownText,
   onOptimisticRemoval,
   teamEnabled,
+  hasRowAction,
+  rowActionNode,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -519,6 +529,8 @@ function WorklistRowView({
   countdownText: string | null;
   onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
   teamEnabled: boolean;
+  hasRowAction: boolean;
+  rowActionNode?: ReactNode;
 }) {
   const tEng = useTranslations("Engagements");
   const router = useRouter();
@@ -712,6 +724,14 @@ function WorklistRowView({
                 </Badge>
               )}
             </TableCell>
+
+            {/* Opt-in trailing control (e.g. the teammate profile's reassign
+                menu). Only rendered when the caller passes rowAction. */}
+            {hasRowAction && (
+              <TableCell className="px-2 py-3 align-top">
+                {rowActionNode}
+              </TableCell>
+            )}
 
             {/* Actions menu. Left-clicking the "..." opens the menu; right-
                 clicking anywhere on the row opens the same menu via the
