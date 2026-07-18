@@ -21,6 +21,7 @@ import {
 } from "@/lib/quickbooks/register-match";
 import {
   getQuickbooksReadContext,
+  refreshAccessTokenAfter401,
   type QuickbooksReadContext,
 } from "@/lib/quickbooks/connection";
 import {
@@ -76,6 +77,10 @@ export type PostOutcomeKind =
   | "not_approved"
   | "not_postable"
   | "not_connected"
+  // The connection was rejected mid-post (401 even though our clock said the
+  // access token was fresh — the customer revoked Vylan's access in QuickBooks,
+  // confirmed by a forced refresh failing). The owner must reconnect.
+  | "reconnect_required"
   | "post_failed"
   | "conflict"
   | "record_failed";
@@ -486,6 +491,27 @@ export async function postApprovedDraft(
   } catch (e) {
     const detail =
       e instanceof QuickbooksError ? e.message : (e as Error).message;
+    // A 401 means our access token was rejected even though our clock said it was
+    // still fresh — usually the customer revoked Vylan's access inside QuickBooks.
+    // Force a refresh to confirm: if the refresh is itself rejected the grant is
+    // dead → return a clear "reconnect" outcome instead of a raw error. If the
+    // refresh succeeds it was a spurious 401 (the token is now refreshed, so the
+    // next attempt uses a good one) → fall through to the normal retriable
+    // failure. Nothing was created either way, so there is no double-post risk.
+    if (e instanceof QuickbooksError && e.status === 401) {
+      const reAuth = await refreshAccessTokenAfter401(draft.firmId);
+      if (reAuth.dead) {
+        console.error(
+          "[quickbooks] post blocked — connection revoked, reconnect required",
+        );
+        return {
+          kind: "reconnect_required",
+          ...base,
+          detail:
+            "Your QuickBooks connection was disconnected. Please reconnect QuickBooks and try again.",
+        };
+      }
+    }
     // Log to the server too (like the read/refresh paths do). `detail` carries the
     // intuit_tid at its front, so it reaches our logs even if the DB post_error
     // write below fails — and the post/write failure is exactly the case you'd

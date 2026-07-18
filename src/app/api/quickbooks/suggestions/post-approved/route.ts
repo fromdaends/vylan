@@ -98,6 +98,12 @@ export async function POST(request: NextRequest) {
       continue;
     }
     if (out.engagementId) engagementIds.add(out.engagementId);
+    if (out.kind === "reconnect_required") {
+      // The connection was revoked — every remaining draft would 401 too. Stop
+      // the batch and report; the card/queue prompt the owner to reconnect.
+      failed++;
+      break;
+    }
     if (
       out.kind === "posted" ||
       out.kind === "already_posted" ||

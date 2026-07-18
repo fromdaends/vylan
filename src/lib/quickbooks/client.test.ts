@@ -21,6 +21,7 @@ import {
   quickbooksCreateNameEntity,
   quickbooksFindNameEntityByName,
   isDuplicateNameError,
+  retryAfterMs,
 } from "./client";
 
 // Isolate OAuth-endpoint resolution: the discovery document is exercised on its
@@ -231,6 +232,7 @@ function mockResponse(opts: {
   json?: unknown;
   text?: string;
   tid?: string; // value returned for the intuit_tid response header
+  retryAfter?: string; // value returned for the retry-after response header
 }) {
   return {
     ok: opts.ok,
@@ -238,8 +240,12 @@ function mockResponse(opts: {
     json: async () => opts.json,
     text: async () => opts.text ?? "",
     headers: {
-      get: (name: string) =>
-        name.toLowerCase() === "intuit_tid" ? (opts.tid ?? null) : null,
+      get: (name: string) => {
+        const n = name.toLowerCase();
+        if (n === "intuit_tid") return opts.tid ?? null;
+        if (n === "retry-after") return opts.retryAfter ?? null;
+        return null;
+      },
     },
   } as unknown as Response;
 }
@@ -817,5 +823,109 @@ describe("isQboTxnEntity (single allowlist for the entity type)", () => {
     ]) {
       expect(isQboTxnEntity(bad)).toBe(false);
     }
+  });
+});
+
+describe("retryAfterMs", () => {
+  it("parses delta-seconds to milliseconds", () => {
+    expect(retryAfterMs(mockResponse({ ok: false, retryAfter: "2" }))).toBe(2000);
+    expect(retryAfterMs(mockResponse({ ok: false, retryAfter: "0" }))).toBe(0);
+  });
+  it("clamps a long Retry-After to the 5s cap", () => {
+    expect(retryAfterMs(mockResponse({ ok: false, retryAfter: "3600" }))).toBe(
+      5000,
+    );
+  });
+  it("returns null when the header is absent or unparseable", () => {
+    expect(retryAfterMs(mockResponse({ ok: false }))).toBeNull();
+    expect(retryAfterMs(mockResponse({ ok: false, retryAfter: "soon" }))).toBeNull();
+  });
+  it("treats a past HTTP-date as 0 (don't wait)", () => {
+    const past = new Date(Date.now() - 10_000).toUTCString();
+    expect(retryAfterMs(mockResponse({ ok: false, retryAfter: past }))).toBe(0);
+  });
+});
+
+// The write path (create/delete/upload) and the register-match query previously
+// had NO transient retry — a single 429 mid "Post all approved" failed the draft
+// outright. These verify the shared fetchQboWithRetry now covers them, WITHOUT
+// re-sending on a permanent 4xx and keeping the idempotency key stable.
+describe("write + query transient retry", () => {
+  const ctx = {
+    accessToken: "at",
+    realmId: "r1",
+    environment: "sandbox" as const,
+  };
+  beforeEach(() => {
+    process.env.QBO_CLIENT_ID = "cid";
+    process.env.QBO_CLIENT_SECRET = "csecret";
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("retries a 429 on create then succeeds, reusing the same requestid", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockResponse({ ok: false, status: 429, text: "slow down" }),
+      )
+      .mockResolvedValueOnce(
+        mockResponse({ ok: true, json: { Bill: { Id: "42", SyncToken: "0" } } }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const promise = quickbooksCreate(ctx, "bill", { foo: 1 }, "file-0");
+    await vi.runAllTimersAsync();
+    await expect(promise).resolves.toMatchObject({ id: "42" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Same idempotency key across the retry so QuickBooks can't double-post.
+    for (const call of fetchMock.mock.calls) {
+      expect((call as unknown as [string])[0]).toContain("requestid=file-0");
+    }
+  });
+
+  it("retries a 5xx on query then succeeds", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        mockResponse({ ok: false, status: 503, text: "unavailable" }),
+      )
+      .mockResolvedValueOnce(
+        mockResponse({ ok: true, json: { QueryResponse: { Account: [] } } }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const promise = quickbooksQuery("at", "r1", "SELECT * FROM Account", "sandbox");
+    await vi.runAllTimersAsync();
+    await expect(promise).resolves.toEqual({ Account: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does NOT retry a permanent 400 on create (fails fast)", async () => {
+    const fetchMock = vi.fn(async () =>
+      mockResponse({ ok: false, status: 400, text: "bad request" }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      quickbooksCreate(ctx, "bill", { foo: 1 }, "file-0"),
+    ).rejects.toMatchObject({ code: "write_failed", status: 400 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries create network errors, then throws request_failed", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const promise = quickbooksCreate(ctx, "bill", { foo: 1 }, "file-0");
+    const assertion = expect(promise).rejects.toMatchObject({
+      code: "request_failed",
+    });
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

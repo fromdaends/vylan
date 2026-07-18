@@ -98,6 +98,14 @@ export function PostDraftControls({
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  // The SPECIFIC reason the last action failed (the server's readable detail, or
+  // a mapped postability problem), shown instead of the generic "try again" so
+  // the accountant sees e.g. "that account is no longer active" at the click,
+  // without a page refresh. null → fall back to the generic per-context message.
+  const [failMessage, setFailMessage] = useState<string | null>(null);
+  // True when the failure was a revoked QuickBooks connection — the message gets
+  // a "Reconnect QuickBooks" link instead of a plain retry.
+  const [reconnect, setReconnect] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [attachError, setAttachError] = useState<string | null>(null);
   // Non-null while the dialog is showing the "already in QuickBooks?" choice;
@@ -106,8 +114,28 @@ export function PostDraftControls({
     MatchCandidateView[] | null
   >(null);
 
+  // Map a server postability-problem code to a readable message so a failed post
+  // says WHY at the click (the audit's "Account 'X' no longer exists" ask). Any
+  // code yields a message (unmapped ones get a clear generic); null only when
+  // there's no code, so the caller falls back to the generic per-context text.
+  function problemMessage(problems?: string[]): string | null {
+    const code = problems?.[0];
+    if (!code) return null;
+    const keyed: Record<string, string> = {
+      account_inactive: "post_problem_account_inactive",
+      vendor_inactive: "post_problem_vendor_inactive",
+      customer_inactive: "post_problem_customer_inactive",
+      item_inactive: "post_problem_item_inactive",
+      payment_account_inactive: "post_problem_payment_account_inactive",
+      missing_date: "post_problem_missing_date",
+    };
+    return t(keyed[code] ?? "post_problem_generic");
+  }
+
   async function run(path: "post" | "void", body?: Record<string, unknown>) {
     setFailed(false);
+    setFailMessage(null);
+    setReconnect(false);
     setPending(true);
     try {
       const r = await fetch(`/api/quickbooks/suggestions/${fileId}/${path}`, {
@@ -118,6 +146,8 @@ export function PostDraftControls({
       const res = (await r.json().catch(() => null)) as {
         ok?: boolean;
         error?: string;
+        detail?: string;
+        problems?: string[];
         candidates?: MatchCandidateView[];
       } | null;
       if (r.ok && res?.ok) {
@@ -128,8 +158,18 @@ export function PostDraftControls({
         // Not a failure: the server wants the accountant to decide. Swap the
         // dialog to the candidate list (kept open).
         setMatchCandidates(res.candidates ?? []);
-      } else {
+      } else if (res?.error === "reconnect_required") {
+        // The connection was revoked mid-post — prompt to reconnect (not retry),
+        // and refresh so the page's reconnect banner can appear too.
         setFailed(true);
+        setReconnect(true);
+        setFailMessage(res.detail ?? t("post_reconnect"));
+        router.refresh();
+      } else {
+        // Surface the SPECIFIC reason at the click: the server's detail, else a
+        // mapped postability problem, else the generic per-context fallback.
+        setFailed(true);
+        setFailMessage(res?.detail ?? problemMessage(res?.problems));
       }
     } catch {
       setFailed(true);
@@ -198,7 +238,8 @@ export function PostDraftControls({
             {(failed || postError) && (
               <span role="alert" className="text-[11px] text-warning">
                 {failed
-                  ? t(matchedExisting ? "unlink_failed" : "undo_failed")
+                  ? (failMessage ??
+                    t(matchedExisting ? "unlink_failed" : "undo_failed"))
                   : postError}
               </span>
             )}
@@ -321,10 +362,18 @@ export function PostDraftControls({
       {(failed || postError) && (
         <span
           role="alert"
-          className="inline-flex items-center gap-1 text-[11px] text-warning"
+          className="inline-flex flex-wrap items-center gap-1 text-[11px] text-warning"
         >
           <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
-          {failed ? t("post_failed") : postError}
+          {failed ? (failMessage ?? t("post_failed")) : postError}
+          {reconnect && (
+            <a
+              href={`/${locale}/settings?tab=integrations`}
+              className="font-medium underline underline-offset-2"
+            >
+              {t("post_reconnect_cta")}
+            </a>
+          )}
         </span>
       )}
       <Dialog
@@ -334,6 +383,8 @@ export function PostDraftControls({
           if (!o) {
             setMatchCandidates(null);
             setFailed(false);
+            setFailMessage(null);
+            setReconnect(false);
           }
         }}
       >
@@ -357,6 +408,26 @@ export function PostDraftControls({
                 <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 <span>{t("post_match_hint")}</span>
               </p>
+              {failed && (
+                <p
+                  role="alert"
+                  className="flex flex-wrap items-center gap-1 text-[13px] text-warning"
+                >
+                  <TriangleAlert
+                    className="h-3.5 w-3.5 shrink-0"
+                    aria-hidden="true"
+                  />
+                  {failMessage ?? t("post_failed")}
+                  {reconnect && (
+                    <a
+                      href={`/${locale}/settings?tab=integrations`}
+                      className="font-medium underline underline-offset-2"
+                    >
+                      {t("post_reconnect_cta")}
+                    </a>
+                  )}
+                </p>
+              )}
               <DialogFooter>
                 <Button
                   variant="ghost"
@@ -445,7 +516,7 @@ export function PostDraftControls({
               )}
               {failed && (
                 <p role="alert" className="text-sm text-warning">
-                  {t("post_failed")}
+                  {failMessage ?? t("post_failed")}
                 </p>
               )}
               <DialogFooter>

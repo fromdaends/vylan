@@ -13,6 +13,7 @@ vi.mock("@/lib/db/quickbooks-suggestions", () => ({
 }));
 vi.mock("@/lib/quickbooks/connection", () => ({
   getQuickbooksReadContext: vi.fn(),
+  refreshAccessTokenAfter401: vi.fn(),
 }));
 vi.mock("@/lib/db/quickbooks-cache", () => ({
   readCachedQuickbooksLists: vi.fn(),
@@ -22,9 +23,11 @@ vi.mock("@/lib/storage", () => ({ downloadObject: vi.fn() }));
 vi.mock("@/lib/quickbooks/client", () => {
   class QuickbooksError extends Error {
     code: string;
-    constructor(code: string, message: string) {
+    status?: number;
+    constructor(code: string, message: string, status?: number) {
       super(message);
       this.code = code;
+      this.status = status;
     }
   }
   return {
@@ -44,11 +47,15 @@ import { attachReceiptToPostedDraft, postApprovedDraft } from "./post";
 import {
   getDraftForFile,
   recordDraftPosted,
+  recordDraftPostError,
   recordDraftTaxNote,
   recordReceiptAttached,
   listFirmPostedQboIds,
 } from "@/lib/db/quickbooks-suggestions";
-import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
+import {
+  getQuickbooksReadContext,
+  refreshAccessTokenAfter401,
+} from "@/lib/quickbooks/connection";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import {
   findRegisterCandidates,
@@ -76,6 +83,8 @@ const mockLists = vi.mocked(readCachedQuickbooksLists);
 const mockFind = vi.mocked(findRegisterCandidates);
 const mockClassify = vi.mocked(classifyRegisterMatch);
 const mockCreate = vi.mocked(quickbooksCreate);
+const mockRecordPostError = vi.mocked(recordDraftPostError);
+const mockReAuth = vi.mocked(refreshAccessTokenAfter401);
 
 // Minimal read context — it's passed straight through to the (mocked) upload, so
 // the shape doesn't matter beyond being an object.
@@ -543,5 +552,54 @@ describe("postApprovedDraft — income posts a SalesReceipt vs an Invoice", () =
       expect.any(Object),
       "file-9-0",
     );
+  });
+});
+
+// A 401 mid-post means the access token was rejected despite our clock saying it
+// was still fresh — usually the customer revoked Vylan's access in QuickBooks. We
+// force a refresh to tell a dead grant (→ reconnect prompt) from a spurious 401.
+describe("postApprovedDraft — connection revoked mid-post (401)", () => {
+  beforeEach(() => {
+    primePostableDraft();
+    // No register match — fall through to the create.
+    mockFind.mockResolvedValue({ candidates: [], truncated: false });
+    mockClassify.mockReturnValue({ kind: "none" });
+  });
+
+  it("returns reconnect_required when a 401 + forced refresh confirms a dead grant", async () => {
+    mockCreate.mockRejectedValue(
+      new QuickbooksError("write_failed", "401 unauthorized", 401),
+    );
+    mockReAuth.mockResolvedValue({ token: null, dead: true });
+
+    const r = await postApprovedDraft("file-1", "user-1");
+
+    expect(r.kind).toBe("reconnect_required");
+    expect(mockReAuth).toHaveBeenCalledWith("f1");
+    // A connection problem is NOT recorded as a post error on the draft.
+    expect(mockRecordPostError).not.toHaveBeenCalled();
+  });
+
+  it("falls through to a retriable post_failed on a spurious 401 (refresh succeeded)", async () => {
+    mockCreate.mockRejectedValue(
+      new QuickbooksError("write_failed", "401 blip", 401),
+    );
+    mockReAuth.mockResolvedValue({ token: "new-at", dead: false });
+
+    const r = await postApprovedDraft("file-1", "user-1");
+
+    expect(r.kind).toBe("post_failed");
+    expect(mockRecordPostError).toHaveBeenCalled();
+  });
+
+  it("does not force a refresh for a non-401 failure (e.g. a tax fault)", async () => {
+    mockCreate.mockRejectedValue(
+      new QuickbooksError("write_failed", "6000 tax error", 400),
+    );
+
+    const r = await postApprovedDraft("file-1", "user-1");
+
+    expect(r.kind).toBe("post_failed");
+    expect(mockReAuth).not.toHaveBeenCalled();
   });
 });
