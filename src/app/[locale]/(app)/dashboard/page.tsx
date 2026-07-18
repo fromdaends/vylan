@@ -50,7 +50,12 @@ export default async function DashboardPage({
       listTemplates(),
       // The compact bell panel owns scrolling, so supply every recent event
       // instead of truncating the feed behind a separate "View all" route.
-      listHomeNotifications(1000, viewer),
+      // The feed is a nice-to-have glance — never let it crash the whole
+      // Overview. On any failure it degrades to empty (and logs for follow-up).
+      listHomeNotifications(1000, viewer).catch((e) => {
+        console.error("[dashboard] home notifications failed:", e);
+        return [];
+      }),
     ]);
   const teamEnabled = hasActiveTeam({
     teamEnabled: firm?.team_enabled === true,
