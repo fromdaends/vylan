@@ -49,11 +49,16 @@ describe("syncQuickbooksLists", () => {
     mockRead.mockResolvedValue({ ok: false, reason: "not_connected" });
     const r = await syncQuickbooksLists("f1");
     expect(r).toEqual({ ok: false, detail: "not_connected" });
-    expect(mockSetState).toHaveBeenCalledWith("f1", { status: "syncing" });
-    expect(mockSetState).toHaveBeenLastCalledWith("f1", {
-      status: "error",
-      error: "not_connected",
-    });
+    expect(mockSetState).toHaveBeenCalledWith(
+      "f1",
+      { status: "syncing" },
+      undefined,
+    );
+    expect(mockSetState).toHaveBeenLastCalledWith(
+      "f1",
+      { status: "error", error: "not_connected" },
+      undefined,
+    );
     expect(mockReplace).not.toHaveBeenCalled();
   });
 
@@ -67,10 +72,29 @@ describe("syncQuickbooksLists", () => {
       "accounts",
       FULL.data.accounts,
       expect.any(String),
+      undefined,
     );
     const last = mockSetState.mock.calls.at(-1)?.[1];
     expect(last?.status).toBe("ok");
     expect(last?.lastSyncedAt).toEqual(expect.any(String));
+  });
+
+  it("scopes the sync to a client when given a clientId", async () => {
+    mockRead.mockResolvedValue(FULL);
+    await syncQuickbooksLists("f1", "c1");
+    expect(mockRead).toHaveBeenCalledWith("f1", "c1");
+    expect(mockReplace).toHaveBeenCalledWith(
+      "f1",
+      "accounts",
+      FULL.data.accounts,
+      expect.any(String),
+      "c1",
+    );
+    expect(mockSetState).toHaveBeenCalledWith(
+      "f1",
+      { status: "syncing" },
+      "c1",
+    );
   });
 
   it("leaves a failed (null) list untouched and records a partial error", async () => {
@@ -125,10 +149,27 @@ describe("enqueueQuickbooksSync", () => {
     expect(matcher({ firmId: "f2" })).toBe(false);
     expect(mockEnqueue).toHaveBeenCalledWith({
       kind: "sync_quickbooks",
-      payload: { firmId: "f1" },
+      payload: { firmId: "f1", clientId: null },
       runAfter: expect.any(Date),
     });
-    expect(mockSetState).toHaveBeenCalledWith("f1", { status: "syncing" });
+    expect(mockSetState).toHaveBeenCalledWith(
+      "f1",
+      { status: "syncing" },
+      undefined,
+    );
+  });
+  it("scopes the enqueued job + dedup to the client when given a clientId", async () => {
+    await enqueueQuickbooksSync("f1", "c1");
+    expect(mockEnqueue).toHaveBeenCalledWith({
+      kind: "sync_quickbooks",
+      payload: { firmId: "f1", clientId: "c1" },
+      runAfter: expect.any(Date),
+    });
+    const matcher = mockCancel.mock.calls[0][1];
+    expect(matcher({ firmId: "f1", clientId: "c1" })).toBe(true);
+    expect(matcher({ firmId: "f1", clientId: "c2" })).toBe(false);
+    // A client sync must NOT cancel a firm-level (clientId null) pending job.
+    expect(matcher({ firmId: "f1" })).toBe(false);
   });
   it("never throws if the queue errors", async () => {
     mockEnqueue.mockRejectedValueOnce(new Error("queue down"));
