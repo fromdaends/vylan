@@ -864,6 +864,7 @@
     "qbo_connect_step5": "On approval, Vylan creates the entry in QuickBooks, attaches the receipt to it, and checks your books first so it never posts a duplicate.",
     "qbo_connect_cta": "Connect QuickBooks",
     "qbo_connect_client_cta": "Connect a client's QuickBooks",
+    "qbo_connect_per_client_note": "QuickBooks connects per client. Open a client's page and click Connect QuickBooks to link their books.",
     "qbo_nomatch": "We connected your QuickBooks, but couldn't match it to a client by name. Name a client to exactly match the company, then connect again.",
     "qbo_nomatch_company": "We connected to “{company}”, but no client is named exactly that. Rename a client to match it, then connect again.",
     "qbo_connected_title": "Connected to QuickBooks",

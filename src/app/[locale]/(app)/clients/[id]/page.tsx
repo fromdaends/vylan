@@ -221,11 +221,12 @@ export default async function ClientDetailPage({
         </dl>
       </div>
 
-      {/* QuickBooks shows ONLY once THIS client is linked — connecting happens
-          centrally in Settings → Integrations and auto-links by name, so there's
-          no connect card cluttering the pages of clients (or firms) that don't
-          use QuickBooks. */}
-      {clientQuickbooks.connected && (
+      {/* QuickBooks lives on the client's own page: an OWNER can connect this
+          client here (the client is known from context — no name-matching), and
+          once connected everyone sees the status. Hidden for staff on a
+          not-yet-connected client, so it never clutters pages/firms not using it. */}
+      {(clientQuickbooks.connected ||
+        (isOwner && clientQuickbooks.configured)) && (
         <div className="space-y-3">
           <h2 className="text-base font-semibold tracking-tight text-foreground">
             {t("qbo_section_title")}

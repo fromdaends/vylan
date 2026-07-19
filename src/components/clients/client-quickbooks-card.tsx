@@ -2,18 +2,20 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { Plug, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 
-// Per-client QuickBooks STATUS card, shown on the client detail page ONLY when
-// this client is connected (the page gates on status.connected). Connecting
-// happens centrally in Settings → Integrations and auto-links to the client by
-// name — so there is NO "Connect" invitation here; this card only shows the
-// already-connected states:
-//   - Connected (green): company name + sandbox/production badge, owner can disconnect.
-//   - Needs reconnect (amber): the connection went dead — owner can reconnect (which
-//     re-authorizes THIS client's company, carrying the clientId) or disconnect.
-// A non-owner sees the status but no actions.
+// Per-client QuickBooks card on the client detail page. Connecting happens RIGHT
+// HERE, on the client's own page, so the client is known from context — no
+// name-matching, no "which client?" picker. States:
+//   - Not connected + owner: a small "Connect QuickBooks" button (connects THIS
+//     client — the connect route carries this clientId).
+//   - Connected: green "Connected to {company}" + owner disconnect.
+//   - Needs reconnect: amber, owner can reconnect (re-auth this client) or disconnect.
+//   - Not connected + non-owner: nothing (the page hides the section for staff).
+// The page gates the whole section on `connected || (isOwner && configured)`, so
+// this component is only mounted when there's something to show.
 export type ClientQuickbooksStatus = {
   configured: boolean;
   connected: boolean;
@@ -52,9 +54,10 @@ export function ClientQuickbooksCard({
             ? t("qbo_encryption_required")
             : null;
 
-  // Reconnect re-authorizes THIS client's QuickBooks — carry the clientId so the
-  // callback relinks it explicitly (no name-match needed).
-  async function reconnect() {
+  // Start OAuth for THIS client (used by both the first Connect and Reconnect).
+  // The client id goes to the connect route, which puts it in an httpOnly cookie;
+  // the callback links the connection to this client — no name-matching needed.
+  async function startConnect() {
     setLoading(true);
     setError(null);
     try {
@@ -70,7 +73,13 @@ export function ClientQuickbooksCard({
         window.location.assign(data.url);
         return;
       }
-      setError(t("qbo_connect_error"));
+      setError(
+        data?.error === "quickbooks_not_configured"
+          ? t("qbo_unavailable")
+          : data?.error === "quickbooks_encryption_required"
+            ? t("qbo_encryption_required")
+            : t("qbo_connect_error"),
+      );
     } catch {
       setError(t("qbo_connect_error"));
     }
@@ -159,7 +168,7 @@ export function ClientQuickbooksCard({
                 <div className="pt-1">
                   <Button
                     size="sm"
-                    onClick={reconnect}
+                    onClick={startConnect}
                     disabled={loading}
                     aria-busy={loading}
                   >
@@ -220,6 +229,41 @@ export function ClientQuickbooksCard({
     );
   }
 
-  // Not connected → nothing (the page gates on connected; connecting is central).
+  // Not connected + owner: a small invitation to connect THIS client's QuickBooks.
+  // (The page only renders this section for owners when not connected, so staff
+  // never see it — but guard anyway.)
+  if (isOwner) {
+    return (
+      <div className="rounded-lg border border-border/50 p-4">
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#2CA01C]/10">
+            <QuickbooksLogo className="h-5 w-5" />
+          </span>
+          <div className="space-y-2">
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              {t("qbo_connect_hint", { client: clientName })}
+            </p>
+            <Button
+              size="sm"
+              onClick={startConnect}
+              disabled={loading}
+              aria-busy={loading}
+              className="gap-1.5"
+            >
+              <Plug className="h-4 w-4" />
+              {loading ? "…" : t("qbo_connect_cta")}
+            </Button>
+            {(error || callbackError) && (
+              <p role="alert" className="text-xs text-destructive">
+                {error ?? callbackError}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Not connected + non-owner → nothing.
   return null;
 }

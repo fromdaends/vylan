@@ -36,20 +36,10 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{
-    tab?: string;
-    connect?: string;
-    qbo?: string;
-    qbo_company?: string;
-  }>;
+  searchParams: Promise<{ tab?: string; connect?: string; qbo?: string }>;
 }) {
   const { locale: rawLocale } = await params;
-  const {
-    tab,
-    connect: connectParam,
-    qbo: qboParam,
-    qbo_company: qboCompany,
-  } = await searchParams;
+  const { tab, connect: connectParam, qbo: qboParam } = await searchParams;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -128,16 +118,7 @@ export default async function SettingsPage({
   // section. Reads the firm's connection (RLS-scoped; the tokens are not even
   // selectable) and defaults gracefully to "not connected" before migration 0410
   // is applied. The ?qbo=<status> flag is set by the OAuth callback.
-  const qboCallbackAllowed = [
-    "done",
-    "denied",
-    "error",
-    "setup",
-    "enc",
-    // The per-client auto-link couldn't match the connected company to a client
-    // by name — the UI prompts the owner to name a client to match, then reconnect.
-    "nomatch",
-  ] as const;
+  const qboCallbackAllowed = ["done", "denied", "error", "setup", "enc"] as const;
   const qboCallbackStatus = qboCallbackAllowed.includes(
     qboParam as (typeof qboCallbackAllowed)[number],
   )
@@ -162,10 +143,6 @@ export default async function SettingsPage({
     realmId: qboConnection?.realmId ?? null,
     environment: qboConnection?.environment ?? quickbooksEnvironment(),
     callbackStatus: qboCallbackStatus,
-    // The company name from a no-match auto-link, so the Integrations card can
-    // name it in the "which client is this?" prompt.
-    nomatchCompany:
-      qboCallbackStatus === "nomatch" ? (qboCompany ?? null) : null,
   };
 
   // Per-service default prices for the Payments settings editor (owner-only).

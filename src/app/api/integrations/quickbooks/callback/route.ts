@@ -17,8 +17,6 @@ import {
 } from "@/lib/db/quickbooks";
 import { purgeFirmQuickbooksCache } from "@/lib/db/quickbooks-cache";
 import { purgeFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
-import { listClients } from "@/lib/db/clients";
-import { matchClientByCompanyName } from "@/lib/quickbooks/client-link";
 import { enqueueQuickbooksSync } from "@/lib/quickbooks/sync";
 import { QBO_STATE_COOKIE, QBO_CLIENT_COOKIE } from "../connect/route";
 
@@ -28,9 +26,10 @@ export const runtime = "nodejs";
 //
 // Where Intuit returns the accountant after they approve. Verifies the
 // anti-forgery state, trades the code for tokens, reads the company name (one
-// identity-only call), stores the connection per firm (service role), then sends
-// the browser back to Settings -> Integrations with a status flag. Stage 1:
-// connection only — no financial data, no transactions, no documents.
+// identity-only call), and stores the connection for THE CLIENT the connect flow
+// was started from. The client id rides in an httpOnly cookie set by the connect
+// route — connecting always happens from a client's page, so the client is known
+// from context (no name-matching, no "which client?" guessing).
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -39,7 +38,7 @@ export async function GET(request: Request) {
   const denied = url.searchParams.get("error"); // e.g. access_denied
 
   // Resolve the user + locale up front so every redirect lands on the right
-  // localized Settings page. (The session cookie rides along on this callback.)
+  // localized page. (The session cookie rides along on this callback.)
   const sb = await getServerSupabase();
   const { data: auth } = await sb.auth.getUser();
   const me = auth.user ? await getCurrentUser() : null;
@@ -47,27 +46,19 @@ export async function GET(request: Request) {
 
   const cookieStore = await cookies();
   const expectedState = cookieStore.get(QBO_STATE_COOKIE)?.value ?? null;
-  // Which client this connect is for (per-client QuickBooks), or null for the
-  // legacy firm-level connect. Set in an httpOnly cookie by the connect route.
+  // Which client this connect is for — set in an httpOnly cookie by the connect
+  // route when the owner clicked "Connect QuickBooks" on that client's page.
   const clientId = cookieStore.get(QBO_CLIENT_COOKIE)?.value || null;
 
-  // Redirect home, burning the one-time cookies. `target` is the client the
-  // connection resolved to: a real id → that client's page; null → Settings ->
-  // Integrations (used for errors and the "couldn't match a client" prompt).
-  // Defaults to the connect cookie's clientId (set on early-error exits before we
-  // know the resolved client). `company` surfaces the connected company name on
-  // the no-match prompt so the owner knows which company to link.
-  function back(
-    qbo: string,
-    opts?: { clientId?: string | null; company?: string },
-  ) {
-    const target = opts && "clientId" in opts ? opts.clientId : clientId;
-    const dest = target
-      ? new URL(`/${locale}/clients/${target}`, url.origin)
+  // Redirect back to the client's page (where connecting happens) with a status
+  // flag, burning the one-time cookies. Falls back to Settings only when there is
+  // no client id (shouldn't happen for a normal connect).
+  function back(qbo: string) {
+    const dest = clientId
+      ? new URL(`/${locale}/clients/${clientId}`, url.origin)
       : new URL(`/${locale}/settings`, url.origin);
-    if (!target) dest.searchParams.set("tab", "integrations");
+    if (!clientId) dest.searchParams.set("tab", "integrations");
     dest.searchParams.set("qbo", qbo);
-    if (opts?.company) dest.searchParams.set("qbo_company", opts.company);
     const res = NextResponse.redirect(dest);
     // Always burn the one-time cookies.
     res.cookies.set(QBO_STATE_COOKIE, "", { path: "/", maxAge: 0 });
@@ -84,6 +75,8 @@ export async function GET(request: Request) {
 
   // Must be an authenticated owner of a firm to store the connection.
   if (!auth.user || me?.role !== "owner") return back("error");
+  // Connecting is always for a specific client (started from that client's page).
+  if (!clientId) return back("error");
   const firm = await getCurrentFirm();
   if (!firm) return back("error");
 
@@ -97,36 +90,15 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Remember which company this client was connected to BEFORE the upsert, so we
+    // can detect a company change (realm/environment) and purge the old data.
+    const previous = await getFirmQuickbooksRealm(firm.id, clientId);
+
     const tokens = await exchangeCodeForTokens(code);
     // One identity-only read for the friendly company name + country (best-effort;
     // the connection is valid regardless). Country drives the non-US tax field.
     const profile = await fetchCompanyProfile(tokens.accessToken, realmId);
 
-    // Resolve WHICH client this connection belongs to. An explicit clientId from
-    // the connect cookie (the manual "link this client" fallback) wins; otherwise
-    // AUTO-LINK by matching the QuickBooks company name to a Vylan client's name
-    // (the founder's rule — so the accountant never picks the client by hand).
-    let resolvedClientId = clientId;
-    if (!resolvedClientId) {
-      const clients = await listClients();
-      const match = matchClientByCompanyName(
-        profile.name,
-        clients.map((c) => ({ id: c.id, name: c.display_name })),
-      );
-      resolvedClientId = match?.id ?? null;
-    }
-    // No explicit client and no unambiguous name match: we can't link it. Send the
-    // owner back to Settings to pick the client, carrying the company name so the
-    // UI can prompt "which client is '[company]'?". Nothing is stored — there's no
-    // client to tie it to; the owner links it explicitly (which reconnects with a
-    // chosen client). This is the only time linking isn't automatic.
-    if (!resolvedClientId) {
-      return back("nomatch", { clientId: null, company: profile.name ?? "" });
-    }
-
-    // Detect a company change (different realm/env) for THIS client so we can purge
-    // the old company's cached lists + learned mappings before storing the new one.
-    const previous = await getFirmQuickbooksRealm(firm.id, resolvedClientId);
     const environment = quickbooksEnvironment();
     const saved = await upsertFirmQuickbooksConnection(
       firm.id,
@@ -141,38 +113,33 @@ export async function GET(request: Request) {
         environment,
         connectedBy: auth.user.id,
       },
-      resolvedClientId,
+      clientId,
     );
     if (!saved.ok) {
-      // Pre-migration (0710 not applied) or a DB error. Route the FAILURE to
-      // Settings (clientId: null), NOT the client page — the client page only
-      // renders the QuickBooks card when that client is connected, so a failure
-      // there would show nothing at all. Settings → Integrations surfaces the
-      // "finish setup" / error message regardless of connection state.
-      return back(saved.reason === "migration_pending" ? "setup" : "error", {
-        clientId: null,
-      });
+      // Pre-migration (0710 not applied) or a DB error. Back to the client page
+      // with a "finish setup" / error flag — the card shows it on the connect
+      // button (the owner sees the section since they're not-yet-connected).
+      return back(saved.reason === "migration_pending" ? "setup" : "error");
     }
     // The connected COMPANY changed for this client (different realm, or sandbox
     // <-> production). Cached lists + learned mappings hold the OLD company's
     // internal ids, so purge THIS client's (never another client's). Best-effort:
-    // a failure here must not undo the connect. Per-client list sync + posting land
-    // in Phase 3b, so nothing is enqueued here yet.
+    // a failure here must not undo the connect.
     if (
       previous &&
       (previous.realmId !== realmId || previous.environment !== environment)
     ) {
       console.warn(
-        `[quickbooks/callback] connected company changed for client ${resolvedClientId} (realm ${previous.realmId} -> ${realmId}); purging that client's cached lists + learned mappings`,
+        `[quickbooks/callback] connected company changed for client ${clientId} (realm ${previous.realmId} -> ${realmId}); purging that client's cached lists + learned mappings`,
       );
-      await purgeFirmQuickbooksCache(firm.id, resolvedClientId);
-      await purgeFirmLearnedMappings(firm.id, resolvedClientId);
+      await purgeFirmQuickbooksCache(firm.id, clientId);
+      await purgeFirmLearnedMappings(firm.id, clientId);
     }
     // Kick off THIS client's first cache sync in the background (best-effort) so
     // its reference lists (accounts/vendors/customers/tax codes/items) populate,
     // ready for posting. Per-client since Phase 3b.
-    await enqueueQuickbooksSync(firm.id, resolvedClientId);
-    return back("done", { clientId: resolvedClientId });
+    await enqueueQuickbooksSync(firm.id, clientId);
+    return back("done");
   } catch (e) {
     if (e instanceof QuickbooksError) {
       console.error("[quickbooks/callback]", e.code, e.message);
