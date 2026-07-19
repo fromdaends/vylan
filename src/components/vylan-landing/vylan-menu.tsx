@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
+import { SocialLinks } from "./social-links";
 
 export type VylanMenuStrings = {
   brand: string;
@@ -226,9 +227,11 @@ export function VylanMenu({
           </nav>
           <div className="vy-menu-follow">
             {s.follow}
-            <span className="vy-soc">in</span>
-            <span className="vy-soc">𝕏</span>
-            <span className="vy-soc">◎</span>
+            {/* Real profiles now, not decorative glyphs. Only the two that
+                exist (LinkedIn, Instagram) — X is gone until there's a handle.
+                display:contents on the wrapper lets the icon chips sit directly
+                in this flex row, keeping the 14px gap. */}
+            <SocialLinks className="vy-menu-socials" linkClassName="vy-soc" />
           </div>
         </div>
       </div>

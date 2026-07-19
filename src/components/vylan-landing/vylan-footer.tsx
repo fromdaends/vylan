@@ -20,6 +20,7 @@ import { brand } from "@/lib/brand";
 import { getCategory } from "@/content/help/registry";
 import type { AppLocale } from "@/i18n/routing";
 import { FooterLangSwitch, FooterDemoLink } from "./vylan-footer-client";
+import { SocialLinks } from "./social-links";
 import "@/styles/vylan-footer.css";
 
 // The two business lines. E.164 in the tel: href, human-friendly in the label.
@@ -70,6 +71,7 @@ export async function VylanFooter({
             <div className="vyf-wordmark">{t("brand_word")}</div>
             <div className="vyf-basedin">{tf("based_in")}</div>
             <FooterLangSwitch label={t("footer_language")} />
+            <SocialLinks className="vyf-social" linkClassName="vyf-social-link" />
           </div>
 
           <nav className="vyf-col" aria-label={t("footer_col_product")}>

@@ -688,7 +688,6 @@ a.vy-contact-card:hover {
   inset: 0;
   z-index: 100;
   background: rgba(18, 38, 201, 0.55);
-  backdrop-filter: blur(10px);
   display: grid;
   place-items: start center;
   padding-top: 18px;
@@ -696,9 +695,16 @@ a.vy-contact-card:hover {
   pointer-events: none;
   transition: opacity 0.35s var(--vy-ease);
 }
+/* backdrop-filter ONLY when the menu is open. Chromium renders backdrop-filter
+   even at opacity:0, and while that's invisible over the uniformly-blue page,
+   it blurs the blue/black seam at the footer into a blue haze that bleeds down
+   over the black footer. Applying it only on .vy-open means the closed overlay
+   is fully inert — no bleed — and the blur is present exactly when the menu is
+   actually up (footer not in view then anyway). */
 .vy-overlay.vy-open {
   opacity: 1;
   pointer-events: auto;
+  backdrop-filter: blur(10px);
 }
 .vy-menu-card {
   width: min(420px, 92vw);
@@ -755,6 +761,11 @@ a.vy-contact-card:hover {
   opacity: 0.7;
   letter-spacing: 0.08em;
 }
+/* The SocialLinks wrapper dissolves so its icon anchors join this flex row
+   directly, keeping the 14px gap set on .vy-menu-follow. */
+.vy-menu-socials {
+  display: contents;
+}
 .vy-menu-follow .vy-soc {
   width: 30px;
   height: 30px;
@@ -764,6 +775,8 @@ a.vy-contact-card:hover {
   place-items: center;
   font-size: 13px;
   cursor: pointer;
+  color: inherit;
+  text-decoration: none;
 }
 .vy-menu-follow .vy-soc:hover {
   background: rgba(255, 255, 255, 0.12);
