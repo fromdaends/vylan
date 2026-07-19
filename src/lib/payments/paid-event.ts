@@ -21,6 +21,7 @@ import {
 } from "@/lib/db/payment-requests";
 import { logServiceRoleActivity } from "@/lib/db/activity";
 import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
+import { expireOpenStripeCheckout } from "@/lib/payments/close-other-rail";
 
 // Provider references stored on the invoice at settle time (each rail fills its
 // own pair; the other rail's stay untouched).
@@ -54,6 +55,19 @@ export async function recordInvoicePaid(
     provider,
   });
   if (!result) return { outcome: "already_settled" };
+
+  // Cross-rail closeout: PayPal just settled this invoice, but a Stripe
+  // Checkout session created earlier may still be OPEN and able to take a
+  // card. Expire it (best-effort — the atomic flip above already makes a
+  // second charge unrecordable; this closes the door on the client paying at
+  // all). Stripe-paid invoices need nothing: uncaptured PayPal orders are
+  // inert.
+  if (provider === "paypal" && result.stripeCheckoutSessionId) {
+    await expireOpenStripeCheckout(
+      result.firmId,
+      result.stripeCheckoutSessionId,
+    ).catch(() => {});
+  }
 
   await logServiceRoleActivity(
     result.firmId,

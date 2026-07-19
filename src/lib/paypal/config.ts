@@ -47,6 +47,14 @@ export function paypalPartnerAttributionId(): string | null {
   return v === "" ? null : v;
 }
 
+// The id of the webhook registered on our PayPal app (developer dashboard).
+// It is PayPal's analog of a Stripe signing secret: verify-webhook-signature
+// checks each delivery against it. Absent = the webhook endpoint refuses (503).
+export function paypalWebhookId(): string | null {
+  const v = (process.env.PAYPAL_WEBHOOK_ID ?? "").trim();
+  return v === "" ? null : v;
+}
+
 export function paypalApiBase(): string {
   return paypalEnvironment() === "live"
     ? "https://api-m.paypal.com"

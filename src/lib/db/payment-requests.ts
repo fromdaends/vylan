@@ -510,6 +510,10 @@ export async function markPaymentRequestPaidSR(
   engagementId: string | null;
   amountCents: number;
   currency: string;
+  // A Stripe Checkout session recorded on this invoice BEFORE it was paid —
+  // the paid event uses it for the cross-rail closeout (a PayPal payment
+  // expires the still-open card checkout so the client can't pay twice).
+  stripeCheckoutSessionId: string | null;
 } | null> {
   const sb = getServiceRoleSupabase();
   const { data: cur } = await sb
@@ -568,6 +572,7 @@ export async function markPaymentRequestPaidSR(
     engagementId: row.engagement_id,
     amountCents: row.amount_cents,
     currency: row.currency,
+    stripeCheckoutSessionId: row.stripe_checkout_session_id,
   };
 }
 
