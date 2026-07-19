@@ -10,6 +10,8 @@ import { getBrandingImageUrl } from "@/lib/storage";
 import { assertLocale } from "@/lib/locale";
 import { isStripeConfigured } from "@/lib/stripe";
 import { syncFirmConnectStatusFromStripe } from "@/lib/db/stripe-connect";
+import { isPayPalConfigured, paypalEnvironment } from "@/lib/paypal/config";
+import { syncFirmPayPalStatus } from "@/lib/db/paypal-connect";
 import {
   isQuickbooksConfigured,
   quickbooksEnvironment,
@@ -36,10 +38,20 @@ export default async function SettingsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ tab?: string; connect?: string; qbo?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    connect?: string;
+    qbo?: string;
+    paypal?: string;
+  }>;
 }) {
   const { locale: rawLocale } = await params;
-  const { tab, connect: connectParam, qbo: qboParam } = await searchParams;
+  const {
+    tab,
+    connect: connectParam,
+    qbo: qboParam,
+    paypal: paypalParam,
+  } = await searchParams;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -114,6 +126,56 @@ export default async function SettingsPage({
       }
     : null;
 
+  // PayPal connection status for the second provider card (owner-only, 0730).
+  // The paypal_* columns ride along on getCurrentFirm's select("*"); typed via
+  // a cast because the Firm type predates them. ?paypal=<status> is set by the
+  // onboarding callback redirect.
+  const firmPayPal = firm as typeof firm & {
+    paypal_merchant_id?: string | null;
+    paypal_payments_receivable?: boolean | null;
+    paypal_email_confirmed?: boolean | null;
+  };
+  const paypalAllowed = [
+    "done",
+    "pending",
+    "partnerid",
+    "linked",
+    "clobber",
+    "error",
+  ] as const;
+  const paypalCallbackStatus = paypalAllowed.includes(
+    paypalParam as (typeof paypalAllowed)[number],
+  )
+    ? (paypalParam as (typeof paypalAllowed)[number])
+    : null;
+  const paypalMerchantId = firmPayPal.paypal_merchant_id ?? null;
+  let paypalReceivable = firmPayPal.paypal_payments_receivable === true;
+  let paypalEmailConfirmed = firmPayPal.paypal_email_confirmed === true;
+  // Self-heal, mirroring Stripe above: a linked-but-not-ready account pulls the
+  // live status straight from PayPal instead of waiting on a webhook.
+  if (
+    isOwner &&
+    isPayPalConfigured() &&
+    paypalMerchantId &&
+    !(paypalReceivable && paypalEmailConfirmed)
+  ) {
+    const synced = await syncFirmPayPalStatus(firm.id, paypalMerchantId);
+    if (synced) {
+      paypalReceivable = synced.paymentsReceivable;
+      paypalEmailConfirmed = synced.primaryEmailConfirmed;
+    }
+  }
+  const paypal = isOwner
+    ? {
+        configured: isPayPalConfigured(),
+        merchantId: paypalMerchantId,
+        paymentsReceivable: paypalReceivable,
+        emailConfirmed: paypalEmailConfirmed,
+        environment: paypalEnvironment(),
+        callbackStatus: paypalCallbackStatus,
+      }
+    : null;
+
   // QuickBooks (Intuit) connection status for the owner-only Integrations
   // section. Reads the firm's connection (RLS-scoped; the tokens are not even
   // selectable) and defaults gracefully to "not connected" before migration 0410
@@ -180,6 +242,7 @@ export default async function SettingsPage({
         isOwner={isOwner}
         billingSlot={billingSlot}
         connect={connect}
+        paypal={paypal}
         quickbooks={quickbooks}
         servicePrices={servicePrices}
         paymentsList={paymentsList}

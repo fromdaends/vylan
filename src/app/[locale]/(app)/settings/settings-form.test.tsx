@@ -82,6 +82,7 @@ function renderShell(
         isOwner
         billingSlot={<div>SUBSCRIPTION_SLOT</div>}
         connect={null}
+        paypal={null}
         quickbooks={null}
         servicePrices={null}
         paymentsList={null}

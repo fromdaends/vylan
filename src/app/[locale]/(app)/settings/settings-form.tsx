@@ -44,6 +44,10 @@ import {
   type ConnectStatus,
 } from "@/components/settings/payments-section";
 import {
+  PayPalConnectSection,
+  type PayPalStatus,
+} from "@/components/settings/payments-paypal-section";
+import {
   IntegrationsSection,
   type QuickbooksStatus,
 } from "@/components/settings/integrations-section";
@@ -116,6 +120,7 @@ export function SettingsShell({
   isOwner,
   billingSlot,
   connect,
+  paypal,
   quickbooks,
   servicePrices,
   paymentsList,
@@ -148,6 +153,9 @@ export function SettingsShell({
   // Stripe Connect status for the "Get paid by clients" block at the top of the
   // Payments section. Null for non-owners.
   connect: ConnectStatus | null;
+  // PayPal connection status, the second provider card in the same block. Null
+  // for non-owners (and the card renders nothing when PayPal isn't configured).
+  paypal: PayPalStatus | null;
   // QuickBooks (Intuit) connection status for the Integrations section. Null for
   // non-owners.
   quickbooks: QuickbooksStatus | null;
@@ -254,10 +262,16 @@ export function SettingsShell({
           />
         )}
         {section === "payments" && isOwner && (
-          // Payments home: client-payment collection (Stripe Connect) on top,
-          // the firm's own Vylan subscription below.
+          // Payments home: client-payment collection on top (Stripe card, then
+          // the PayPal card in the same block), the firm's own Vylan
+          // subscription below.
           <div className="space-y-12">
-            {connect && <PaymentsConnectSection connect={connect} />}
+            {connect && (
+              <div>
+                <PaymentsConnectSection connect={connect} />
+                {paypal && <PayPalConnectSection paypal={paypal} />}
+              </div>
+            )}
             {servicePrices && (
               <PaymentsServicePrices prices={servicePrices} />
             )}
