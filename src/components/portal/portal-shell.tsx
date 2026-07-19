@@ -43,6 +43,7 @@ export function PortalShell({
   locale,
   firmLogoUrl,
   justReturnedPaid = false,
+  justReturnedProcessing = false,
   initialMessagesOpen = false,
 }: {
   ctx: PortalContext;
@@ -50,6 +51,8 @@ export function PortalShell({
   firmLogoUrl: string | null;
   // true right after returning from a successful Stripe checkout (?paid=1).
   justReturnedPaid?: boolean;
+  // true right after a PayPal capture came back PENDING (?paypal=processing).
+  justReturnedProcessing?: boolean;
   // true when the client arrived via a "you have a new message" email link
   // (?view=messages) — lands them straight in the thread.
   initialMessagesOpen?: boolean;
@@ -297,6 +300,9 @@ export function PortalShell({
             firmName={ctx.firm.name}
             locale={locale}
             justReturnedPaid={justReturnedPaid}
+            justReturnedProcessing={justReturnedProcessing}
+            stripeReady={ctx.payment_config.stripeReady}
+            paypal={ctx.payment_config.paypal}
           />
         )}
         {ctx.final_documents.length > 0 && (

@@ -23,6 +23,14 @@ import {
   listFinalDocumentsForEngagementSR,
 } from "@/lib/db/final-documents";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
+import { firmPaymentRails } from "@/lib/payments/rails";
+import {
+  isPayPalConfigured,
+  paypalClientId,
+  paypalEnvironment,
+  paypalPartnerAttributionId,
+  paypalSdkUrl,
+} from "@/lib/paypal/config";
 import {
   CLIENT_MESSAGING_SCHEMA_MISSING,
   countUnreadForClient,
@@ -116,6 +124,21 @@ export type PortalContext = {
   // unpaid (and not overridden). The portal then shows a polite locked state
   // instead of the download links, and the gated download route returns 404.
   final_documents_locked: boolean;
+  // Which payment rails this firm can take money on, for the payment card's
+  // method choice. stripeReady drives whether the card path is offered; paypal
+  // is non-null (with the browser-safe SDK config) only when the firm has a
+  // ready PayPal connection AND PayPal is configured for this environment.
+  // Both absent => the card behaves exactly as the Stripe-only original.
+  payment_config: {
+    stripeReady: boolean;
+    paypal: {
+      merchantId: string;
+      clientId: string;
+      partnerAttributionId: string | null;
+      sdkUrl: string;
+      environment: "sandbox" | "live";
+    } | null;
+  };
   // Workflow stage (migration 0690), for the portal's read-only "where things
   // stand" line. null when the engagement has no position or 0690 isn't applied
   // — the portal then simply omits the line. The client NEVER sees the firm's
@@ -359,6 +382,34 @@ export async function loadPortalContext(
     size_bytes: d.size_bytes,
   }));
 
+  // Which rails the client may pay on. The PayPal config is browser-safe (the
+  // partner client id + the firm's merchant id are public identifiers; the
+  // secret never leaves the server) and non-null only when PayPal is configured
+  // for this environment AND the firm has a ready, mode-matched connection.
+  const firmRow = firm as Firm & {
+    paypal_merchant_id?: string | null;
+    paypal_payments_receivable?: boolean | null;
+    paypal_email_confirmed?: boolean | null;
+    paypal_mode?: "sandbox" | "live" | null;
+  };
+  const rails = firmPaymentRails(firmRow, {
+    paypalEnvMode: paypalEnvironment(),
+  });
+  const ppClientId = paypalClientId();
+  const paymentConfig = {
+    stripeReady: rails.stripe,
+    paypal:
+      rails.paypal && isPayPalConfigured() && ppClientId && firmRow.paypal_merchant_id
+        ? {
+            merchantId: firmRow.paypal_merchant_id,
+            clientId: ppClientId,
+            partnerAttributionId: paypalPartnerAttributionId(),
+            sdkUrl: paypalSdkUrl(),
+            environment: paypalEnvironment(),
+          }
+        : null,
+  };
+
   return {
     engagement: engagement as Engagement,
     client: client as Client,
@@ -372,6 +423,7 @@ export async function loadPortalContext(
     signature_status_by_item: signatureStatusByItem,
     final_documents: finalDocuments,
     final_documents_locked: finalDocumentsLocked,
+    payment_config: paymentConfig,
     // Read straight off the engagement row — the firm's event handlers keep it
     // fresh. undefined pre-0690 → null → the portal omits the line entirely.
     stage: (engagement as { stage?: EngagementStage | null }).stage ?? null,

@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   render,
@@ -9,6 +10,25 @@ import {
 import { NextIntlClientProvider } from "next-intl";
 import en from "../../../messages/en.json";
 import { PaymentDueCard } from "./payment-due-card";
+
+// Stub the PayPal button (its SDK/script lifecycle is tested separately) so the
+// card's method-choice logic is what these tests exercise.
+vi.mock("./portal-paypal-button", () => ({
+  PortalPayPalButton: ({ config }: { config: { merchantId: string } }) =>
+    React.createElement(
+      "div",
+      { "data-testid": "paypal-button" },
+      `paypal:${config.merchantId}`,
+    ),
+}));
+
+const PAYPAL_CONFIG = {
+  merchantId: "SELLER1",
+  clientId: "client-1",
+  partnerAttributionId: null,
+  sdkUrl: "https://www.sandbox.paypal.com/web-sdk/v6/core",
+  environment: "sandbox" as const,
+};
 
 afterEach(() => {
   cleanup();
@@ -165,5 +185,92 @@ describe("PaymentDueCard", () => {
     mockCheckout(500, "something_unexpected");
     renderCard();
     expect(await clickPayAndReadError()).toBe(en.Portal.pay_error);
+  });
+
+  it("Stripe-only (no PayPal): the secured line still credits Stripe", () => {
+    renderCard();
+    expect(screen.getByText(en.Portal.pay_secured)).toBeInTheDocument();
+    expect(screen.queryByTestId("paypal-button")).not.toBeInTheDocument();
+  });
+});
+
+// Method choice (Phase 3): what the card offers depends on which rails the firm
+// has connected. The Stripe-only path above stays byte-for-byte unchanged.
+function renderWithRails(
+  opts: {
+    stripeReady?: boolean;
+    paypal?: typeof PAYPAL_CONFIG | null;
+    status?: PR["status"];
+    justReturnedProcessing?: boolean;
+  } = {},
+) {
+  return render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <PaymentDueCard
+        token="tok_test"
+        paymentRequest={{ ...BASE, status: opts.status ?? "requested" }}
+        firmName="Acme"
+        locale="en"
+        justReturnedPaid={false}
+        justReturnedProcessing={opts.justReturnedProcessing ?? false}
+        stripeReady={opts.stripeReady ?? true}
+        paypal={opts.paypal ?? null}
+      />
+    </NextIntlClientProvider>,
+  );
+}
+
+describe("PaymentDueCard — method choice", () => {
+  it("both rails: shows Pay by card, an 'or' divider, and the PayPal button", () => {
+    renderWithRails({ stripeReady: true, paypal: PAYPAL_CONFIG });
+    expect(
+      screen.getByRole("button", { name: new RegExp(en.Portal.pay_by_card) }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(en.Portal.pay_or)).toBeInTheDocument();
+    expect(screen.getByTestId("paypal-button")).toHaveTextContent(
+      "paypal:SELLER1",
+    );
+    // The old inline "Pay now" is not used in the two-rail layout.
+    expect(
+      screen.queryByRole("button", { name: new RegExp(`^${en.Portal.pay_now}$`) }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("PayPal-only (Stripe not ready): shows ONLY the PayPal button, no card button or divider", () => {
+    renderWithRails({ stripeReady: false, paypal: PAYPAL_CONFIG });
+    expect(screen.getByTestId("paypal-button")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: new RegExp(en.Portal.pay_by_card) }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(en.Portal.pay_or)).not.toBeInTheDocument();
+  });
+
+  it("with PayPal present, the secured line drops the 'by Stripe' claim", () => {
+    renderWithRails({ stripeReady: true, paypal: PAYPAL_CONFIG });
+    expect(screen.getByText(en.Portal.pay_secured_generic)).toBeInTheDocument();
+    expect(screen.queryByText(en.Portal.pay_secured)).not.toBeInTheDocument();
+  });
+
+  it("PayPal PENDING return shows the processing state, not due or paid", () => {
+    renderWithRails({
+      paypal: PAYPAL_CONFIG,
+      status: "requested",
+      justReturnedProcessing: true,
+    });
+    expect(
+      screen.getByText(en.Portal.pay_processing_title),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: new RegExp(en.Portal.pay_by_card) }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("a paid invoice ignores the processing flag and shows the thank-you", () => {
+    renderWithRails({
+      paypal: PAYPAL_CONFIG,
+      status: "paid",
+      justReturnedProcessing: true,
+    });
+    expect(screen.getByText(en.Portal.pay_received_title)).toBeInTheDocument();
   });
 });

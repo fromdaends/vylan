@@ -10,6 +10,10 @@ import {
   Download,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+import {
+  PortalPayPalButton,
+  type PortalPayPalConfig,
+} from "./portal-paypal-button";
 
 type PaymentRequest = {
   id: string;
@@ -32,6 +36,9 @@ export function PaymentDueCard({
   firmName,
   locale,
   justReturnedPaid,
+  justReturnedProcessing = false,
+  stripeReady = true,
+  paypal = null,
 }: {
   token: string;
   paymentRequest: PaymentRequest;
@@ -40,6 +47,16 @@ export function PaymentDueCard({
   // true right after returning from a successful Stripe checkout (?paid=1) —
   // show the thank-you optimistically even before the webhook flips the status.
   justReturnedPaid: boolean;
+  // true right after a PayPal capture came back PENDING (eCheck-style): the
+  // client approved and owes nothing more, but the money isn't in yet.
+  justReturnedProcessing?: boolean;
+  // Which rails to offer. Defaults preserve today's Stripe-only card exactly:
+  // stripeReady true + paypal null => the single "Pay now" button, unchanged.
+  // paypal non-null adds the PayPal button; when both rails are on, the card
+  // shows "Pay by card" + PayPal; PayPal-only (stripeReady false) shows only
+  // PayPal.
+  stripeReady?: boolean;
+  paypal?: PortalPayPalConfig | null;
 }) {
   const t = useTranslations("Portal");
   const [loading, setLoading] = useState(false);
@@ -105,6 +122,29 @@ export function PaymentDueCard({
       setError(t("pay_error"));
     }
     setLoading(false);
+  }
+
+  // PayPal came back PENDING (eCheck-style): the client owes nothing more, but
+  // the money hasn't cleared. A calm neutral state — not "paid" (the webhook
+  // flips that later), not "due" (nothing more to do). Only while still unpaid.
+  if (!paid && justReturnedProcessing && paymentRequest.status === "requested") {
+    return (
+      <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+        <div className="flex items-center gap-3.5">
+          <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-accent/15 text-accent">
+            <CreditCard className="size-6" aria-hidden />
+          </span>
+          <div className="min-w-0">
+            <div className="text-[15px] font-semibold tracking-tight">
+              {t("pay_processing_title")}
+            </div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              {t("pay_processing_sub")}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
   }
 
   if (paid) {
@@ -176,20 +216,46 @@ export function PaymentDueCard({
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={pay}
-          disabled={loading}
-          className="inline-flex h-10 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <CreditCard className="size-4" aria-hidden />
-          {loading
-            ? "…"
-            : failed
-              ? t("pay_try_again")
-              : t("pay_now")}
-        </button>
+        {/* Stripe-only (no PayPal rail): the original inline "Pay now" button,
+            byte-for-byte unchanged. */}
+        {!paypal && (
+          <button
+            type="button"
+            onClick={pay}
+            disabled={loading}
+            className="inline-flex h-10 items-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <CreditCard className="size-4" aria-hidden />
+            {loading ? "…" : failed ? t("pay_try_again") : t("pay_now")}
+          </button>
+        )}
       </div>
+      {/* PayPal rail present: a stacked action block with the method choice.
+          When Stripe is also connected, the card button leads; PayPal-only firms
+          show just the PayPal button. */}
+      {paypal && (
+        <div className="mt-4 space-y-3">
+          {stripeReady && (
+            <button
+              type="button"
+              onClick={pay}
+              disabled={loading}
+              className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <CreditCard className="size-4" aria-hidden />
+              {loading ? "…" : failed ? t("pay_try_again") : t("pay_by_card")}
+            </button>
+          )}
+          {stripeReady && (
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span className="h-px flex-1 bg-border" />
+              {t("pay_or")}
+              <span className="h-px flex-1 bg-border" />
+            </div>
+          )}
+          <PortalPayPalButton token={token} config={paypal} locale={locale} />
+        </div>
+      )}
       {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
       {paymentRequest.attachment_id && paymentRequest.attachment_filename && (
         <a
@@ -208,7 +274,11 @@ export function PaymentDueCard({
           </span>
         </a>
       )}
-      <p className="mt-3 text-xs text-muted-foreground">{t("pay_secured")}</p>
+      <p className="mt-3 text-xs text-muted-foreground">
+        {/* "by Stripe" only when Stripe is the sole rail; a neutral line once
+            PayPal is also on offer. */}
+        {paypal ? t("pay_secured_generic") : t("pay_secured")}
+      </p>
     </section>
   );
 }

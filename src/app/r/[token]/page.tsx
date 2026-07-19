@@ -55,7 +55,12 @@ export default async function PortalPage({
   searchParams,
 }: {
   params: Promise<{ token: string }>;
-  searchParams: Promise<{ lang?: string; paid?: string; view?: string }>;
+  searchParams: Promise<{
+    lang?: string;
+    paid?: string;
+    view?: string;
+    paypal?: string;
+  }>;
 }) {
   const { token } = await params;
   const sp = await searchParams;
@@ -107,6 +112,9 @@ export default async function PortalPage({
               locale={locale}
               firmLogoUrl={firmLogoUrl}
               justReturnedPaid={sp.paid === "1"}
+              // PayPal capture came back PENDING (eCheck-style) — show the
+              // "payment processing" state instead of "due".
+              justReturnedProcessing={sp.paypal === "processing"}
               // "You have a new message" email links land straight in the
               // thread (Phase 3 sends them with ?view=messages).
               initialMessagesOpen={sp.view === "messages"}
