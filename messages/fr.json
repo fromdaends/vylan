@@ -2292,7 +2292,7 @@
     "pay_by_card": "Payer par carte",
     "pay_or": "ou",
     "pay_processing": "Traitement de votre paiement…",
-    "pay_paypal_error": "Un problème est survenu avec PayPal. Veuillez réessayer.",
+    "pay_paypal_error": "Un problème est survenu avec PayPal. Veuillez réessayer. Si le problème persiste, un bloqueur de publicités bloque peut-être PayPal; autorisez-le puis actualisez la page.",
     "pay_processing_title": "Paiement en cours de traitement",
     "pay_processing_sub": "Votre paiement PayPal est en route. Rien d'autre n'est requis de votre part — le traitement peut prendre un moment.",
     "pay_secured_generic": "Votre paiement est sécurisé et chiffré.",
