@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { getClient } from "@/lib/db/clients";
 import {
   isQuickbooksConfigured,
   buildAuthorizeUrl,
@@ -15,12 +16,18 @@ export const runtime = "nodejs";
 // Intuit echoes back against this value, so a third party cannot trick an
 // accountant into attaching the attacker's QuickBooks company.
 export const QBO_STATE_COOKIE = "qbo_oauth_state";
+// Carries WHICH client this connect is for (per-client QuickBooks). Kept in an
+// httpOnly cookie — never in the OAuth `state` round-tripped through Intuit — so
+// the client the connection binds to can't be tampered with in the callback URL.
+// Absent = a firm-level connect (the legacy Settings flow).
+export const QBO_CLIENT_COOKIE = "qbo_oauth_client";
 
 // POST /api/integrations/quickbooks/connect
 //
-// Starts QuickBooks (Intuit) OAuth for the current firm. Owner-only. Returns the
-// Intuit authorization URL the browser redirects to. Stage 1: connection only.
-export async function POST() {
+// Starts QuickBooks (Intuit) OAuth. Owner-only. The body may carry a `clientId`
+// to link THAT client's own QuickBooks company (per-client); omitted = the
+// legacy firm-level connect. Returns the Intuit authorization URL to redirect to.
+export async function POST(request: Request) {
   const sb = await getServerSupabase();
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) {
@@ -55,15 +62,38 @@ export async function POST() {
     );
   }
 
+  // Optional per-client connect: verify the named client belongs to THIS firm
+  // (getClient is RLS-scoped, so it returns null for another firm's id) before
+  // trusting it. Omitted/invalid → a firm-level connect (legacy behavior).
+  let clientId: string | null = null;
+  const body = (await request.json().catch(() => null)) as {
+    clientId?: unknown;
+  } | null;
+  if (body && typeof body.clientId === "string" && body.clientId) {
+    const client = await getClient(body.clientId);
+    if (!client) {
+      return NextResponse.json({ error: "no_client" }, { status: 400 });
+    }
+    clientId = body.clientId;
+  }
+
   const state = randomUUID();
   const url = await buildAuthorizeUrl(state);
   const res = NextResponse.json({ url });
-  res.cookies.set(QBO_STATE_COOKIE, state, {
+  const cookieOpts = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "lax" as const,
     path: "/",
     maxAge: 600, // 10 minutes is plenty to complete the Intuit approval.
-  });
+  };
+  res.cookies.set(QBO_STATE_COOKIE, state, cookieOpts);
+  if (clientId) {
+    res.cookies.set(QBO_CLIENT_COOKIE, clientId, cookieOpts);
+  } else {
+    // Clear any stale client cookie so a firm-level connect is never misattributed
+    // to a client from an earlier, abandoned per-client attempt.
+    res.cookies.set(QBO_CLIENT_COOKIE, "", { path: "/", maxAge: 0 });
+  }
   return res;
 }
