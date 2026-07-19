@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 import { assertLocale } from "@/lib/locale";
 import { Link } from "@/i18n/navigation";
-import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
+import { firmHasAnyQuickbooksConnection } from "@/lib/db/quickbooks";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import {
@@ -51,14 +51,14 @@ export default async function QuickbooksDraftsPage({
 
   // Connection gate. The nav item is hidden until QuickBooks is connected, but
   // the page is reachable by direct URL, so show a friendly prompt either way.
-  const [status, user, firm] = await Promise.all([
-    getFirmQuickbooksStatus(),
+  const [connected, user, firm] = await Promise.all([
+    firmHasAnyQuickbooksConnection(),
     getCurrentUser(),
     getCurrentFirm(),
   ]);
   const isOwner = user?.role === "owner";
 
-  if (!status) {
+  if (!connected) {
     // Not-connected state = a welcoming CONNECT prompt (not a bare empty box).
     // Reachable via the sidebar (owners see Integrations even before connecting)
     // or by direct URL. Owners get a primary "Connect QuickBooks" CTA into

@@ -202,8 +202,9 @@ export function AppShell({
   // Hides team shortcuts when collaboration mode is off. The Settings account
   // card remains the intentional entry point for creating a team again.
   teamEnabled?: boolean;
-  // Shows the QuickBooks drafts queue nav item — only when the firm has
-  // QuickBooks connected (the queue is empty/irrelevant otherwise).
+  // Shows the Integrations nav section — only when the firm has QuickBooks
+  // connected (any client). Connecting happens in Settings → Integrations, so the
+  // nav stays hidden (for owners too) until there's an actual connection.
   quickbooksConnected?: boolean;
 }) {
   const pathname = usePathname();
@@ -258,12 +259,11 @@ export function AppShell({
 
   // Integrations hub — now an EXPANDABLE section (like Engagements) whose parent
   // links to the /integrations index and whose sub-items are QuickBooks and
-  // Sage 50. Shown to OWNERS at all times so they can discover it (QuickBooks
-  // lands on its connect prompt when nothing is linked; Sage is a file export
-  // that needs no connection), and to staff once QuickBooks is connected — the
-  // same visibility rule as before, just applied to the whole hub. Connect /
-  // disconnect for QuickBooks still live in Settings -> Integrations.
-  const showIntegrations = quickbooksConnected || isOwner;
+  // Sage 50. Shown once the firm actually uses QuickBooks (any client connected)
+  // — for owners AND staff. Connecting happens in Settings → Integrations (the
+  // single connect entry point), so the nav doesn't appear before there's a real
+  // connection, keeping it out of the way for firms that don't use QuickBooks.
+  const showIntegrations = quickbooksConnected;
 
   // Firm + Settings used to live in a sidebar "ACCOUNT" section; they
   // now live in the avatar dropdown menu (and the mobile sheet's
@@ -383,7 +383,7 @@ export function AppShell({
 
       {/* Global command palette — opened by the sidebar search trigger or
           Cmd/Ctrl-K. Mounted once; renders into a portal. */}
-      <CommandPalette isOwner={isOwner} />
+      <CommandPalette isOwner={isOwner} quickbooksConnected={quickbooksConnected} />
     </div>
     </ActiveNavProvider>
   );

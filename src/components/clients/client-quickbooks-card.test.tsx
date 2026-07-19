@@ -18,10 +18,7 @@ const baseStatus: ClientQuickbooksStatus = {
   callbackStatus: null,
 };
 
-function renderCard(
-  status: Partial<ClientQuickbooksStatus>,
-  isOwner = true,
-) {
+function renderCard(status: Partial<ClientQuickbooksStatus>, isOwner = true) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
       <ClientQuickbooksCard
@@ -35,19 +32,9 @@ function renderCard(
 }
 
 describe("ClientQuickbooksCard", () => {
-  it("owner + not connected: names the client and offers Connect", () => {
-    renderCard({ connected: false });
-    // The client's name in the title is what teaches this is per-client.
-    expect(screen.getByText("Connect Acme's QuickBooks")).toBeTruthy();
-    expect(screen.getByText("Connect QuickBooks")).toBeTruthy();
-  });
-
-  it("staff + not connected: calm note, no Connect button", () => {
-    renderCard({ connected: false }, false);
-    expect(
-      screen.getByText("Ask an owner to connect this client's QuickBooks."),
-    ).toBeTruthy();
-    expect(screen.queryByText("Connect QuickBooks")).toBeNull();
+  it("renders nothing when the client is NOT connected (connecting is central)", () => {
+    const { container } = renderCard({ connected: false });
+    expect(container.firstChild).toBeNull();
   });
 
   it("connected: shows the linked company name and the sandbox badge", () => {
@@ -67,11 +54,9 @@ describe("ClientQuickbooksCard", () => {
     expect(screen.getByText("Reconnect QuickBooks")).toBeTruthy();
   });
 
-  it("not configured: a calm unavailable note, no action", () => {
-    renderCard({ configured: false });
-    expect(
-      screen.getByText("QuickBooks isn't set up yet. Check back soon."),
-    ).toBeTruthy();
-    expect(screen.queryByText("Connect QuickBooks")).toBeNull();
+  it("staff see the connected status but no disconnect action", () => {
+    renderCard({ connected: true, companyName: "Acme Books Inc." }, false);
+    expect(screen.getByText("Connected to QuickBooks")).toBeTruthy();
+    expect(screen.queryByText("Disconnect")).toBeNull();
   });
 });

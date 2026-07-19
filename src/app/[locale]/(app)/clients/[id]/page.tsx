@@ -221,17 +221,23 @@ export default async function ClientDetailPage({
         </dl>
       </div>
 
-      <div className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">
-          {t("qbo_section_title")}
-        </h2>
-        <ClientQuickbooksCard
-          clientId={client.id}
-          clientName={client.display_name}
-          status={clientQuickbooks}
-          isOwner={isOwner}
-        />
-      </div>
+      {/* QuickBooks shows ONLY once THIS client is linked — connecting happens
+          centrally in Settings → Integrations and auto-links by name, so there's
+          no connect card cluttering the pages of clients (or firms) that don't
+          use QuickBooks. */}
+      {clientQuickbooks.connected && (
+        <div className="space-y-3">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">
+            {t("qbo_section_title")}
+          </h2>
+          <ClientQuickbooksCard
+            clientId={client.id}
+            clientName={client.display_name}
+            status={clientQuickbooks}
+            isOwner={isOwner}
+          />
+        </div>
+      )}
 
       <div className="space-y-3">
         <div className="flex flex-row items-center justify-between gap-3">

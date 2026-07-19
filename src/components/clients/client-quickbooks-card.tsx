@@ -2,27 +2,24 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Plug, CheckCircle2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 
-// Per-client QuickBooks connection card, shown on the client detail page between
-// "Contact info" and "Engagements". Mirrors the Settings connection card but is
-// scoped to ONE client: connecting links THIS client's own QuickBooks company, so
-// their receipts post to their own books. Every label names the client so it's
-// clear this is per-client, not a firm-wide switch. Connect/disconnect are
-// owner-only; staff see a calm note. The card always renders (its not-connected
-// state IS the empty state — never a blank gap).
+// Per-client QuickBooks STATUS card, shown on the client detail page ONLY when
+// this client is connected (the page gates on status.connected). Connecting
+// happens centrally in Settings → Integrations and auto-links to the client by
+// name — so there is NO "Connect" invitation here; this card only shows the
+// already-connected states:
+//   - Connected (green): company name + sandbox/production badge, owner can disconnect.
+//   - Needs reconnect (amber): the connection went dead — owner can reconnect (which
+//     re-authorizes THIS client's company, carrying the clientId) or disconnect.
+// A non-owner sees the status but no actions.
 export type ClientQuickbooksStatus = {
-  // Platform app keys present (QBO_CLIENT_ID + QBO_CLIENT_SECRET).
   configured: boolean;
   connected: boolean;
-  // Connection exists but its tokens are dead (revoked / expired / unreadable) —
-  // only reconnecting fixes it (amber state).
   needsReconnect: boolean;
   companyName: string | null;
   environment: "sandbox" | "production";
-  // Status flag the OAuth callback redirected back with (?qbo=...), if any.
   callbackStatus: "done" | "denied" | "error" | "setup" | "enc" | null;
 };
 
@@ -55,7 +52,9 @@ export function ClientQuickbooksCard({
             ? t("qbo_encryption_required")
             : null;
 
-  async function startConnect() {
+  // Reconnect re-authorizes THIS client's QuickBooks — carry the clientId so the
+  // callback relinks it explicitly (no name-match needed).
+  async function reconnect() {
     setLoading(true);
     setError(null);
     try {
@@ -71,13 +70,7 @@ export function ClientQuickbooksCard({
         window.location.assign(data.url);
         return;
       }
-      setError(
-        data?.error === "quickbooks_not_configured"
-          ? t("qbo_unavailable")
-          : data?.error === "quickbooks_encryption_required"
-            ? t("qbo_encryption_required")
-            : t("qbo_connect_error"),
-      );
+      setError(t("qbo_connect_error"));
     } catch {
       setError(t("qbo_connect_error"));
     }
@@ -146,15 +139,6 @@ export function ClientQuickbooksCard({
     </div>
   ) : null;
 
-  // Not configured at the platform level — a calm note, no action.
-  if (!status.configured) {
-    return (
-      <div className="rounded-lg border border-border/50 px-4 py-3 text-xs text-muted-foreground">
-        {t("qbo_unavailable")}
-      </div>
-    );
-  }
-
   // Connected but DEAD: amber reconnect card.
   if (status.connected && status.needsReconnect) {
     return (
@@ -175,7 +159,7 @@ export function ClientQuickbooksCard({
                 <div className="pt-1">
                   <Button
                     size="sm"
-                    onClick={startConnect}
+                    onClick={reconnect}
                     disabled={loading}
                     aria-busy={loading}
                   >
@@ -200,7 +184,7 @@ export function ClientQuickbooksCard({
     );
   }
 
-  // Connected + healthy: green card showing the linked company + sandbox badge.
+  // Connected + healthy: green card showing the linked company + environment badge.
   if (status.connected) {
     return (
       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] p-4">
@@ -236,47 +220,6 @@ export function ClientQuickbooksCard({
     );
   }
 
-  // Not connected: the invitation to connect THIS client's books.
-  return (
-    <div className="rounded-lg border border-border/50 p-4">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#2CA01C]/10">
-          <QuickbooksLogo className="h-5 w-5" />
-        </span>
-        <div className="space-y-2">
-          <div className="text-sm font-medium">
-            {t("qbo_connect_title", { client: clientName })}
-          </div>
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {t("qbo_connect_hint", { client: clientName })}
-          </p>
-          {isOwner ? (
-            <>
-              <div className="flex items-center gap-2 pt-1">
-                <Button
-                  size="sm"
-                  onClick={startConnect}
-                  disabled={loading}
-                  aria-busy={loading}
-                  className="gap-1.5"
-                >
-                  <Plug className="h-4 w-4" />
-                  {loading ? "…" : t("qbo_connect_cta")}
-                </Button>
-              </div>
-              {(error || callbackError) && (
-                <p role="alert" className="text-xs text-destructive">
-                  {error ?? callbackError}
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              {t("qbo_staff_note")}
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  // Not connected → nothing (the page gates on connected; connecting is central).
+  return null;
 }

@@ -37,6 +37,16 @@ describe("buildSearchRegistry", () => {
     }
   });
 
+  it("hides the QuickBooks entry until the firm is connected", () => {
+    const off = buildSearchRegistry(translators, { isOwner: true });
+    const on = buildSearchRegistry(translators, {
+      isOwner: true,
+      quickbooksConnected: true,
+    });
+    expect(off.some((e) => e.id === "integrations-quickbooks")).toBe(false);
+    expect(on.some((e) => e.id === "integrations-quickbooks")).toBe(true);
+  });
+
   it("flags the primary destinations shown in the idle list", () => {
     const reg = buildSearchRegistry(translators, { isOwner: true });
     const primary = reg.filter((e) => e.primary).map((e) => e.id);

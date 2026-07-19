@@ -100,7 +100,13 @@ function measureAnchor(): Anchor {
   return fallback();
 }
 
-export function CommandPalette({ isOwner = false }: { isOwner?: boolean }) {
+export function CommandPalette({
+  isOwner = false,
+  quickbooksConnected = false,
+}: {
+  isOwner?: boolean;
+  quickbooksConnected?: boolean;
+}) {
   const t = useTranslations("CommandPalette");
   const tApp = useTranslations("App");
   const tEng = useTranslations("Engagements");
@@ -130,9 +136,9 @@ export function CommandPalette({ isOwner = false }: { isOwner?: boolean }) {
     () =>
       buildSearchRegistry(
         { app: tApp, eng: tEng, set: tSet, profile: tProfile, auth: tAuth, cmd: t },
-        { isOwner },
+        { isOwner, quickbooksConnected },
       ),
-    [tApp, tEng, tSet, tProfile, tAuth, t, isOwner],
+    [tApp, tEng, tSet, tProfile, tAuth, t, isOwner, quickbooksConnected],
   );
   const primaryDestinations = useMemo(
     () => registry.filter((e) => e.primary),

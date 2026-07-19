@@ -1,6 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
-import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
+import { firmHasAnyQuickbooksConnection } from "@/lib/db/quickbooks";
 import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import { SageLogo } from "@/components/integrations/sage-logo";
 import { IntegrationCard } from "@/components/integrations/integration-card";
@@ -25,8 +25,10 @@ export default async function IntegrationsIndexPage({
   setRequestLocale(locale);
   const t = await getTranslations("Integrations");
 
-  const qbStatus = await getFirmQuickbooksStatus();
-  const qbConnected = qbStatus != null;
+  // The QuickBooks card appears only once the firm actually uses QuickBooks (any
+  // client connected). Before that there's nothing to open, and connecting lives
+  // in Settings → Integrations — so the hub isn't cluttered for non-QBO firms.
+  const qbConnected = await firmHasAnyQuickbooksConnection();
 
   return (
     <div className="mx-auto max-w-4xl animate-in-fade">
@@ -40,21 +42,20 @@ export default async function IntegrationsIndexPage({
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {/* QuickBooks — live integration. Clicking opens the existing page,
-            which shows the connect prompt when not yet linked. */}
-        <IntegrationCard
-          href="/quickbooks/drafts"
-          logo={<QuickbooksLogo className="h-7 w-7" />}
-          tileClassName="bg-[#2CA01C]/10 ring-[#2CA01C]/20"
-          name={t("quickbooks_name")}
-          description={t("quickbooks_desc")}
-          badge={
-            qbConnected
-              ? { label: t("state_connected"), tone: "success" }
-              : { label: t("state_not_connected"), tone: "muted" }
-          }
-          actionLabel={qbConnected ? t("action_open") : t("action_connect")}
-        />
+        {/* QuickBooks — live integration. Shown only once the firm has connected
+            a client (connecting lives in Settings → Integrations). Opens the
+            drafts queue. */}
+        {qbConnected && (
+          <IntegrationCard
+            href="/quickbooks/drafts"
+            logo={<QuickbooksLogo className="h-7 w-7" />}
+            tileClassName="bg-[#2CA01C]/10 ring-[#2CA01C]/20"
+            name={t("quickbooks_name")}
+            description={t("quickbooks_desc")}
+            badge={{ label: t("state_connected"), tone: "success" }}
+            actionLabel={t("action_open")}
+          />
+        )}
 
         {/* Sage 50 — file export. No connection state (Sage 50 is desktop
             software with no live API); the card advertises a downloadable file. */}

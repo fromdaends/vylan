@@ -10,7 +10,7 @@ import {
   userDisplayLabel,
 } from "@/lib/db/users";
 import { hasActiveTeam } from "@/lib/team/mode";
-import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
+import { firmHasAnyQuickbooksConnection } from "@/lib/db/quickbooks";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { getTranslations } from "next-intl/server";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
@@ -80,13 +80,15 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const [avatarUrl, firmLogoUrl, badges, quickbooksStatus] = await Promise.all([
+  const [avatarUrl, firmLogoUrl, badges, quickbooksHasAny] = await Promise.all([
     getBrandingImageUrl(dbUser.avatar_path),
     getBrandingImageUrl(firm.logo_url),
     getEngagementBadges(),
-    // Drives the (conditional) QuickBooks nav item. Cheap + RLS-scoped; null
-    // when not connected or before the migration is applied.
-    getFirmQuickbooksStatus(),
+    // Drives the (conditional) QuickBooks nav item. True when the firm has ANY
+    // connection (firm-level OR any client) — so the nav appears once QuickBooks
+    // is actually in use, not merely because the app's Intuit keys are installed.
+    // Cheap + RLS-scoped; false before the migration is applied.
+    firmHasAnyQuickbooksConnection(),
   ]);
 
   // Free-trial banner state (only rendered for unconverted trial firms).
@@ -117,7 +119,7 @@ export default async function AppLayout({
       firmLogoUrl={firmLogoUrl}
       isOwner={dbUser.role === "owner"}
       teamEnabled={teamEnabled}
-      quickbooksConnected={quickbooksStatus != null}
+      quickbooksConnected={quickbooksHasAny}
       topBar={
         firm.is_demo ? (
           <TrialBanner
