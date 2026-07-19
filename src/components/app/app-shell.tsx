@@ -54,6 +54,7 @@ import {
   isNavItemActive,
   isEngagementViewActive,
   isIntegrationsSectionActive,
+  isIntegrationSubItemVisible,
 } from "@/lib/navigation/active-nav";
 import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import { SageLogo } from "@/components/integrations/sage-logo";
@@ -257,13 +258,13 @@ export function AppShell({
     },
   ];
 
-  // Integrations hub — now an EXPANDABLE section (like Engagements) whose parent
-  // links to the /integrations index and whose sub-items are QuickBooks and
-  // Sage 50. Shown once the firm actually uses QuickBooks (any client connected)
-  // — for owners AND staff. Connecting happens in Settings → Integrations (the
-  // single connect entry point), so the nav doesn't appear before there's a real
-  // connection, keeping it out of the way for firms that don't use QuickBooks.
-  const showIntegrations = quickbooksConnected;
+  // Integrations hub — an EXPANDABLE section (like Engagements) whose parent
+  // links to the /integrations index. The section is ALWAYS shown: it always
+  // contains Sage 50 (a file export that needs no connection and is available to
+  // every firm member), so hiding the whole section would strand Sage and the
+  // hub. Only the QuickBooks SUB-ITEM is gated on `quickbooksConnected` (see
+  // IntegrationsNav) — mirroring the hub page, which always renders the Sage card
+  // but shows the QuickBooks card only once a client is connected.
 
   // Firm + Settings used to live in a sidebar "ACCOUNT" section; they
   // now live in the avatar dropdown menu (and the mobile sheet's
@@ -288,7 +289,7 @@ export function AppShell({
       >
         <SidebarBody
           primaryNav={primaryNav}
-          showIntegrations={showIntegrations}
+          quickbooksConnected={quickbooksConnected}
           labels={labels}
           engagementBadges={engagementBadges}
           brandColor={brandColor}
@@ -644,7 +645,7 @@ function MobileMenuItem({
 
 function SidebarBody({
   primaryNav,
-  showIntegrations,
+  quickbooksConnected,
   labels,
   engagementBadges,
   brandColor,
@@ -658,7 +659,7 @@ function SidebarBody({
   onToggleCollapse,
 }: {
   primaryNav: NavItemDef[];
-  showIntegrations: boolean;
+  quickbooksConnected: boolean;
   labels: Labels;
   engagementBadges: EngagementBadgeCounts;
   brandColor: string;
@@ -793,10 +794,13 @@ function SidebarBody({
           />
           {/* Integrations hub — an expandable section mirroring Engagements:
               the label links to the /integrations index, the chevron reveals the
-              QuickBooks + Sage 50 sub-items with their brand logos. */}
-          {showIntegrations && (
-            <IntegrationsNav labels={labels} collapsed={collapsed} />
-          )}
+              sub-items with their brand logos. Always shown (Sage 50 is always
+              available); the QuickBooks sub-item inside is gated on connection. */}
+          <IntegrationsNav
+            labels={labels}
+            collapsed={collapsed}
+            quickbooksConnected={quickbooksConnected}
+          />
         </NavSection>
       </nav>
 
@@ -1033,13 +1037,19 @@ function NavLink({
 function IntegrationsNav({
   labels,
   collapsed,
+  quickbooksConnected,
 }: {
   labels: Labels;
   collapsed: boolean;
+  quickbooksConnected: boolean;
 }) {
   const pathname = usePathname();
   const onIntegrations = isIntegrationsSectionActive(pathname);
   const [open, setOpen] = useState(onIntegrations);
+  // Sage 50 always shows; QuickBooks appears only once a client is connected.
+  const subnav = INTEGRATION_SUBNAV.filter((item) =>
+    isIntegrationSubItemVisible(item.key, quickbooksConnected),
+  );
   // Re-expand if navigation lands in the section (e.g. via search or a card).
   const lastOnRef = useRef(onIntegrations);
   useEffect(() => {
@@ -1116,7 +1126,7 @@ function IntegrationsNav({
       >
         <div className="overflow-hidden">
           <div className="mt-0.5 space-y-0.5 border-l border-border/50 pl-3 ml-4">
-            {INTEGRATION_SUBNAV.map(({ key, name, href, root, Logo }) => {
+            {subnav.map(({ key, name, href, root, Logo }) => {
               const active = isNavItemActive(pathname, root);
               return (
                 <Link
