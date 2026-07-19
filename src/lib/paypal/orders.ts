@@ -39,10 +39,13 @@ export async function createOrderForInvoice(input: {
   const res = await paypalFetch("/v2/checkout/orders", {
     method: "POST",
     sellerMerchantId: input.sellerMerchantId,
-    // A stable-ish idempotency key so an accidental double create for the same
-    // invoice doesn't spin up two orders. PayPal treats a repeated request id as
-    // the same request. (Distinct from the invoice_id duplicate-block below.)
-    requestId: `vylan-order-${input.invoiceId}`,
+    // DELIBERATELY no PayPal-Request-Id here: a stable idempotency key would
+    // pin this invoice to ONE order forever — including an expired or wedged
+    // one (orders expire ~3h; the dedup window is much longer), bricking the
+    // PayPal path for that invoice. Fresh order per attempt is safe: abandoned
+    // orders expire harmlessly, and double payment is blocked by the status
+    // guards at create/capture, the atomic paid flip, and PayPal's own
+    // invoice_id duplicate block.
     body: {
       intent: "CAPTURE",
       purchase_units: [
@@ -73,6 +76,55 @@ export async function createOrderForInvoice(input: {
     body?.message,
   );
   return { ok: false, reason: "error", detail: body?.name ?? String(res.status) };
+}
+
+export type GetOrderResult =
+  | {
+      ok: true;
+      // CREATED / APPROVED / COMPLETED / VOIDED / PAYER_ACTION_REQUIRED.
+      status: string;
+      // Present once captured.
+      captureId: string | null;
+      captureStatus: string | null;
+      customId: string | null;
+    }
+  | { ok: false; reason: "not_configured" | "not_found" | "error" };
+
+// Read an order's current state — the PayPal analog of retrieving a Stripe
+// checkout session, used by the self-healing reconcile (an APPROVED order whose
+// onApprove callback never reached us can be captured server-side; a COMPLETED
+// one just needs the invoice flipped).
+export async function getOrder(input: {
+  orderId: string;
+  sellerMerchantId: string;
+}): Promise<GetOrderResult> {
+  if (!isPayPalConfigured()) return { ok: false, reason: "not_configured" };
+  const res = await paypalFetch(
+    `/v2/checkout/orders/${encodeURIComponent(input.orderId)}`,
+    { sellerMerchantId: input.sellerMerchantId },
+  );
+  if (!res) return { ok: false, reason: "error" };
+  if (res.status === 404) return { ok: false, reason: "not_found" };
+  const body = res.json as {
+    status?: string;
+    purchase_units?: {
+      custom_id?: string;
+      payments?: { captures?: { id?: string; status?: string }[] };
+    }[];
+  } | null;
+  if (res.status !== 200 || !body?.status) {
+    console.error("[paypal] get order failed:", res.status);
+    return { ok: false, reason: "error" };
+  }
+  const pu = body.purchase_units?.[0];
+  const capture = pu?.payments?.captures?.[0];
+  return {
+    ok: true,
+    status: body.status,
+    captureId: capture?.id ?? null,
+    captureStatus: capture?.status ?? null,
+    customId: pu?.custom_id ?? null,
+  };
 }
 
 export type CaptureOrderResult =

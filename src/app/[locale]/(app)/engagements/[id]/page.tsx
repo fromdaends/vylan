@@ -81,6 +81,8 @@ import {
 } from "@/lib/db/payment-requests";
 import { resolveDefaultAmountCents } from "@/lib/payments/prefill";
 import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
+import { reconcilePayPalOrder } from "@/lib/payments/paypal-reconcile";
+import { firmPaymentRails } from "@/lib/payments/rails";
 import {
   getSignatureRequestsByItem,
   type SignatureRequest,
@@ -174,7 +176,9 @@ export default async function EngagementDetailPage({
   // Payments (Phase 3): only relevant once the firm can actually receive money
   // (Stripe Connect ready). Load the latest request (status badge) + compute the
   // dialog's pre-fill amount (per-service default price -> last amount -> empty).
-  const connectReady = firm?.connect_charges_enabled === true;
+  // "Payable" is rail-agnostic since the PayPal rail (0730): a firm with EITHER
+  // Stripe or PayPal ready can invoice, so the payment panel loads for both.
+  const connectReady = firmPaymentRails(firm).any;
   const [latestPaymentRaw, lastFirmAmountCents] =
     connectReady && firm
       ? await Promise.all([
@@ -197,6 +201,27 @@ export default async function EngagementDetailPage({
     );
     if (status && status !== latestPaymentRaw.status) {
       latestPayment = { ...latestPaymentRaw, status };
+    }
+  }
+  // Same self-heal for the PayPal rail: an APPROVED-but-never-captured order
+  // (the popup's callback can die) or a capture whose record was lost gets
+  // settled here, so the accountant sees "Paid" without depending on a webhook.
+  if (
+    latestPayment &&
+    latestPayment.status === "requested" &&
+    latestPayment.paypal_order_id
+  ) {
+    const paypalMerchantId =
+      (firm as { paypal_merchant_id?: string | null } | null)
+        ?.paypal_merchant_id ?? null;
+    if (paypalMerchantId) {
+      const status = await reconcilePayPalOrder(
+        latestPayment.id,
+        paypalMerchantId,
+      );
+      if (status && status !== latestPayment.status) {
+        latestPayment = { ...latestPayment, status };
+      }
     }
   }
   const paymentPrefillCents = resolveDefaultAmountCents(

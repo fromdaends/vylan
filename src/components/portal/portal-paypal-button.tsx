@@ -105,6 +105,9 @@ export function PortalPayPalButton({
     let cancelled = false;
     let btn: HTMLElement | null = null;
     let clickHandler: (() => void) | null = null;
+    // Set once the session is wired; lets onCancel/onError release the
+    // one-flow-at-a-time latch defined alongside the click handler below.
+    let sessionFlowDone: () => void = () => {};
 
     (async () => {
       try {
@@ -154,15 +157,19 @@ export function PortalPayPalButton({
                 window.location.assign(`/r/${token}?paypal=processing`);
                 return;
               }
+              sessionFlowDone();
               setState("error");
             } catch {
+              sessionFlowDone();
               setState("error");
             }
           },
           onCancel() {
+            sessionFlowDone();
             setState("ready");
           },
           onError() {
+            sessionFlowDone();
             setState("error");
           },
         });
@@ -184,10 +191,25 @@ export function PortalPayPalButton({
         btn = document.createElement("paypal-button");
         btn.setAttribute("type", "pay");
         containerRef.current?.appendChild(btn);
+        // One flow at a time: a re-click while the popup is open would start a
+        // second session flow on the same session and can orphan the first
+        // one's approval callback. The flag clears on cancel/error (the
+        // session handlers above) and on a start failure; approval navigates
+        // away entirely.
+        let inFlight = false;
+        const clearInFlight = () => {
+          inFlight = false;
+        };
+        sessionFlowDone = clearInFlight;
         clickHandler = () => {
+          if (inFlight) return;
+          inFlight = true;
           session
             .start({ presentationMode: "auto" }, createOrder())
-            .catch(() => setState("error"));
+            .catch(() => {
+              setState("error");
+              clearInFlight();
+            });
         };
         btn.addEventListener("click", clickHandler);
         setState("ready");
