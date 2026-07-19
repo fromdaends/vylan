@@ -83,10 +83,6 @@ const howVylanChecksDocuments: HelpArticle = {
       ui("AI was wrong, approve"),
       ".",
     ),
-    p(
-      "The reading itself is done by OpenAI's GPT-5.4, chosen for one specific reason: it looks at your client's document at full resolution. Cheaper models shrink an image before they see it, which is exactly how a scribble over the transit digits on a void cheque sails through as \"looks good\". The detail you need it to catch is small, so it does not get to squint.",
-    ),
-
     h("Sending bad uploads back automatically"),
     p(
       "In your settings there is a toggle called ",

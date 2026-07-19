@@ -114,9 +114,6 @@ const theEngagementAssistant: HelpArticle = {
     p(
       "Each person gets a set number of messages in a rolling window. Confirming or cancelling an action does not count against it, only asking does. If you hit the limit, wait a bit. Everything else in Vylan carries on working.",
     ),
-    note(
-      "It runs on Anthropic's Claude Haiku 4.5. The cheap, fast tier is deliberate: this assistant does not have to know anything, because every answer is looked up from your engagement's real data rather than recalled. Speed is the useful quality when you are mid-task.",
-    ),
   ],
 };
 

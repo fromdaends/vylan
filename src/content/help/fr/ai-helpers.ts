@@ -113,9 +113,6 @@ const theEngagementAssistant: HelpArticle = {
     p(
       "Chaque personne a un nombre de messages donné sur une période glissante. Confirmer ou annuler une action ne compte pas, seules les questions comptent. Si vous atteignez la limite, attendez un peu. Tout le reste de Vylan continue de fonctionner.",
     ),
-    note(
-      "Il tourne sur Claude Haiku 4.5 d'Anthropic. Le palier rapide et économique est voulu : cet assistant n'a rien à savoir par cœur, parce que chaque réponse est cherchée dans les vraies données de votre engagement plutôt que rappelée de mémoire. La vitesse est la qualité utile quand vous êtes en plein travail.",
-    ),
   ],
 };
 
