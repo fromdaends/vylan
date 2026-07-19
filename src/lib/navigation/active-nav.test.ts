@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   isNavItemActive,
   isIntegrationsSectionActive,
+  isIntegrationSubItemVisible,
   engagementToView,
   isEngagementViewActive,
   type EngagementForView,
@@ -46,6 +47,18 @@ describe("isIntegrationsSectionActive", () => {
     expect(isIntegrationsSectionActive("/dashboard")).toBe(false);
     // shares a prefix but isn't the section
     expect(isIntegrationsSectionActive("/integrations-old")).toBe(false);
+  });
+});
+
+describe("isIntegrationSubItemVisible", () => {
+  it("always shows Sage 50 — it's a file export with nothing to connect", () => {
+    expect(isIntegrationSubItemVisible("sage", false)).toBe(true);
+    expect(isIntegrationSubItemVisible("sage", true)).toBe(true);
+  });
+
+  it("shows QuickBooks only once the firm has connected a client", () => {
+    expect(isIntegrationSubItemVisible("quickbooks", false)).toBe(false);
+    expect(isIntegrationSubItemVisible("quickbooks", true)).toBe(true);
   });
 });
 

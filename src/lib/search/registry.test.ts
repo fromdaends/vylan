@@ -47,6 +47,20 @@ describe("buildSearchRegistry", () => {
     expect(on.some((e) => e.id === "integrations-quickbooks")).toBe(true);
   });
 
+  it("always exposes the Integrations hub, even with no QuickBooks connection", () => {
+    // Sage 50 lives in the hub and needs no connection, so the hub must stay
+    // reachable via search for every firm (matches the always-visible nav tab).
+    for (const quickbooksConnected of [false, true]) {
+      const reg = buildSearchRegistry(translators, {
+        isOwner: false,
+        quickbooksConnected,
+      });
+      const hub = reg.find((e) => e.id === "integrations");
+      expect(hub).toBeDefined();
+      expect(hub?.href).toBe("/integrations");
+    }
+  });
+
   it("flags the primary destinations shown in the idle list", () => {
     const reg = buildSearchRegistry(translators, { isOwner: true });
     const primary = reg.filter((e) => e.primary).map((e) => e.id);

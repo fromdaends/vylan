@@ -34,6 +34,24 @@ export function isIntegrationsSectionActive(pathname: string): boolean {
   );
 }
 
+// Which Integrations sub-items belong in the sidebar for a given connection
+// state. Sage 50 is a file export that needs NO connection, so it's ALWAYS
+// present; the QuickBooks sub-item appears only once the firm has actually
+// connected a client's QuickBooks. This mirrors the Integrations hub page, which
+// always renders the Sage card but gates the QuickBooks card the same way.
+//
+// The Integrations SECTION itself is always shown (Sage is always available), so
+// this predicate is the only place connection state narrows what's in the nav —
+// it never hides the whole section, only the QuickBooks row. Keeping it here
+// (pure, no React) keeps the sidebar and its unit tests in one source of truth.
+export function isIntegrationSubItemVisible(
+  key: string,
+  quickbooksConnected: boolean,
+): boolean {
+  if (key === "quickbooks") return quickbooksConnected;
+  return true;
+}
+
 // The lifecycle + status fields needed to classify a single engagement. A full
 // Engagement row satisfies this structurally, so callers can pass one directly.
 export type EngagementForView = {

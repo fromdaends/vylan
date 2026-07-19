@@ -132,17 +132,31 @@ export function buildSearchRegistry(
       keywords: "ready to review awaiting review queue prets a reviser a reviser",
     },
     {
-      id: "integrations-quickbooks",
+      // The Integrations HUB — always reachable. Sage 50 (a file export) needs no
+      // connection, so this destination exists for every firm, connected or not.
+      // Mirrors the sidebar's always-visible Integrations section.
+      id: "integrations",
       label: t.app("nav_integrations"),
       group: "go",
       icon: Plug,
       color: "text-icon-cyan",
+      href: "/integrations",
+      keywords:
+        "integrations integration connect apps sage sage 50 export file quickbooks qbo intuit comptabilite exportation",
+    },
+    {
+      // Direct QuickBooks shortcut — hidden until the firm actually connects a
+      // client's QuickBooks (mirrors the sidebar's gated QuickBooks sub-item).
+      // "QuickBooks" is a brand name, so it isn't localized.
+      id: "integrations-quickbooks",
+      label: "QuickBooks",
+      group: "go",
+      icon: Plug,
+      color: "text-icon-cyan",
       href: "/quickbooks/drafts",
-      // Hidden until the firm actually uses QuickBooks — mirrors the sidebar nav
-      // so it's not a searchable destination before there's a connection.
       requiresQuickbooks: true,
       keywords:
-        "integrations integration connect apps quickbooks drafts bookkeeping transactions approve dismiss qbo intuit integrations comptabilite brouillons ecritures approuver",
+        "quickbooks drafts bookkeeping transactions approve dismiss qbo intuit brouillons ecritures approuver",
     },
     {
       id: "eng-drafts",
