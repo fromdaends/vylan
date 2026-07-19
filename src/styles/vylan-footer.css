@@ -1,0 +1,164 @@
+/* =====================================================================
+   The site-wide black footer (Karbon-style), rendered by
+   src/components/vylan-landing/vylan-footer.tsx on EVERY public page:
+   landing, how-it-works, contact, the help center, privacy and terms.
+
+   SELF-CONTAINED ON PURPOSE. Those pages have three different worlds
+   behind them — the electric-blue marketing root, the help center's white
+   sheet, and the legacy light Tailwind pages — so this footer carries its
+   own near-black background and its own text colours, and drops into any
+   of them without inheriting or fighting anything. That's also why every
+   colour here is hard-coded (matching the marketing-CSS convention, see
+   vylan-landing.css header) and every class is namespaced `vyf-`.
+
+   The stylesheet is imported by the footer component itself, so pages
+   that don't load vylan-landing.css (privacy, terms) still get it.
+   ===================================================================== */
+
+.vyf {
+  background: #0a0a0b;
+  color: #c9cdd4;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.vyf a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.vyf-inner {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 64px 34px 36px;
+}
+
+/* ---------- Top: brand block + link columns ---------- */
+
+.vyf-top {
+  display: grid;
+  grid-template-columns: minmax(200px, 1.2fr) repeat(4, minmax(150px, 1fr));
+  gap: 40px 28px;
+}
+
+.vyf-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.vyf-wordmark {
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 21px;
+  letter-spacing: -0.045em;
+}
+
+.vyf-basedin {
+  font-size: 13px;
+  color: #7c828d;
+}
+
+/* Language switcher: two quiet links, the active one lit. */
+.vyf-lang {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+.vyf-lang a {
+  color: #7c828d;
+  transition: color 140ms ease;
+}
+.vyf-lang a:hover {
+  color: #ffffff;
+}
+.vyf-lang a[aria-current="true"] {
+  color: #ffffff;
+  font-weight: 600;
+}
+.vyf-lang-sep {
+  color: #3a3d43;
+}
+
+.vyf-col-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7c828d;
+  margin: 0 0 14px;
+}
+
+.vyf-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.vyf-col li {
+  margin: 0 0 9px;
+}
+.vyf-col a {
+  transition: color 140ms ease;
+}
+.vyf-col a:hover {
+  color: #ffffff;
+}
+
+/* Non-link lines in the contact column (the location). */
+.vyf-muted {
+  color: #7c828d;
+}
+
+/* ---------- Bottom bar ---------- */
+
+.vyf-bottom {
+  margin-top: 48px;
+  padding-top: 22px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: #7c828d;
+}
+
+.vyf-bottom a {
+  color: #7c828d;
+  transition: color 140ms ease;
+}
+.vyf-bottom a:hover {
+  color: #ffffff;
+}
+
+.vyf-bottom-contact {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Narrow ---------- */
+
+@media (max-width: 900px) {
+  .vyf-top {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+  .vyf-brand {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 480px) {
+  .vyf-inner {
+    padding: 48px 22px 30px;
+  }
+  .vyf-top {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+}

@@ -138,16 +138,6 @@ export default async function HowItWorksPage({
     follow: tv("follow"),
   };
 
-  const footer = {
-    brand: tv("brand_word"),
-    howItWorks: tv("footer_how_it_works"),
-    bookDemo: tv("footer_book_demo"),
-    contact: tv("footer_contact"),
-    login: tv("footer_login"),
-    help: tv("footer_help"),
-    copyright: tv("footer_copyright"),
-    location: tv("contact_location_value"),
-  };
 
   return (
     <div className={`vy-wwd ${schibsted.variable}`}>
@@ -162,7 +152,7 @@ export default async function HowItWorksPage({
         <LeadForm />
       </section>
 
-      <VylanFooter s={footer} helpHref={helpHref} />
+      <VylanFooter />
     </div>
   );
 }

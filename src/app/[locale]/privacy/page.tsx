@@ -3,7 +3,7 @@ import { brand } from "@/lib/brand";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { assertLocale } from "@/lib/locale";
 import { PublicNav } from "@/components/public/public-nav";
-import { PublicFooter } from "@/components/public/public-footer";
+import { VylanFooter } from "@/components/vylan-landing/vylan-footer";
 
 export const dynamic = "force-static";
 
@@ -47,7 +47,7 @@ export default async function PrivacyPage({
         <Section heading={t("h_contact")} body={t("p_contact", { email: brand.supportEmail })} />
       </article>
 
-      <PublicFooter />
+      <VylanFooter />
     </main>
   );
 }

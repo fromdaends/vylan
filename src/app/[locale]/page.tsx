@@ -66,16 +66,6 @@ export default async function Home({
     follow: t("follow"),
   };
 
-  const footer = {
-    brand: t("brand_word"),
-    howItWorks: t("footer_how_it_works"),
-    bookDemo: t("footer_book_demo"),
-    contact: t("footer_contact"),
-    login: t("footer_login"),
-    help: t("footer_help"),
-    copyright: t("footer_copyright"),
-    location: t("contact_location_value"),
-  };
 
   // The help center opens in a new tab (founder spec), so it needs a real
   // resolved URL rather than a client-side route push.
@@ -101,7 +91,7 @@ export default async function Home({
 
       {/* FOOTER (Contact now lives on its own /contact page; the footer keeps
           the details in a small faint line) */}
-      <VylanFooter s={footer} helpHref={helpHref} />
+      <VylanFooter />
     </main>
   );
 }

@@ -193,7 +193,17 @@ export function VylanMenu({
                 {s.navBookDemo} <span className="vy-arr">→</span>
               </a>
             ) : (
-              <a href="#vy-get-access" onClick={closeAndJump}>
+              <a
+                href="#vy-get-access"
+                onClick={(e) => {
+                  // The html-level scroll-behavior:smooth is gone (it animated
+                  // route changes); the smoothness now lives ONLY in
+                  // closeAndJump's scrollIntoView, so the native instant jump
+                  // must not fire first.
+                  e.preventDefault();
+                  closeAndJump();
+                }}
+              >
                 {s.navBookDemo} <span className="vy-arr">→</span>
               </a>
             )}

@@ -64,15 +64,6 @@ export async function HelpShell({
     follow: tv("follow"),
   };
 
-  const footer = {
-    brand: tv("brand_word"),
-    howItWorks: tv("footer_how_it_works"),
-    bookDemo: tv("footer_book_demo"),
-    contact: tv("footer_contact"),
-    login: tv("footer_login"),
-    copyright: tv("footer_copyright"),
-    location: tv("contact_location_value"),
-  };
 
   const searchStrings = {
     placeholder: t("search_placeholder"),
@@ -103,7 +94,7 @@ export async function HelpShell({
 
       <main className="vyh-sheet">{children}</main>
 
-      <VylanFooter s={footer} bookDemoHref={bookDemoHref} />
+      <VylanFooter onHelpSite />
     </div>
   );
 }
