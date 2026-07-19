@@ -20,6 +20,16 @@ describe("storage helpers", () => {
     expect(isAllowedMime("image/webp")).toBe(true);
   });
 
+  it("isAllowedMime accepts machine-readable documents (Excel / CSV)", () => {
+    expect(isAllowedMime("text/csv")).toBe(true);
+    expect(isAllowedMime("application/vnd.ms-excel")).toBe(true);
+    expect(
+      isAllowedMime(
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      ),
+    ).toBe(true);
+  });
+
   it("isAllowedMime rejects executables and arbitrary types", () => {
     expect(isAllowedMime("application/octet-stream")).toBe(false);
     expect(isAllowedMime("text/html")).toBe(false);

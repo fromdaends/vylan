@@ -13,10 +13,13 @@ import {
 } from "@/lib/rate-limit";
 import {
   classifyDocument,
+  classifyDocumentFromText,
   downloadStorageObject,
   isAiConfigured,
+  isSupportedAiMime,
   type ClassificationResult,
 } from "./classify";
+import { extractReadable } from "./readable-extract";
 import { shouldActOnUsability } from "./usability";
 import { expectedYearFromTitle } from "./matching";
 import {
@@ -158,12 +161,39 @@ export async function processClassifyJob(
     mimeType = file.mime_type || dl.mimeType;
   }
 
-  const result = await classifyDocument({
-    expectedDocType: expectedDocType as never,
-    fileBytes: bytes,
-    mimeType,
-    request: requestContext,
-  });
+  // Pick how the classifier READS this file. PDFs and images are read by the
+  // vision model natively. A machine-readable non-image file (Excel / CSV) can't
+  // be opened by the model at all, so we read its text in code and verify it
+  // FROM that text — the SAME checklist check (right document type? belongs to
+  // the client?), just fed as text instead of an image. Anything code also can't
+  // read falls back to the vision path, which returns an explicit
+  // "unsupported format" verdict.
+  let result: ClassificationResult | null;
+  if (isSupportedAiMime(mimeType)) {
+    result = await classifyDocument({
+      expectedDocType: expectedDocType as never,
+      fileBytes: bytes,
+      mimeType,
+      request: requestContext,
+    });
+  } else {
+    const readable = await extractReadable(bytes, mimeType, file.original_filename);
+    if (readable && readable.text.trim() !== "") {
+      result = await classifyDocumentFromText({
+        expectedDocType: expectedDocType as never,
+        text: readable.text,
+        sourceLabel: readable.kind === "csv" ? "CSV file" : "spreadsheet",
+        request: requestContext,
+      });
+    } else {
+      result = await classifyDocument({
+        expectedDocType: expectedDocType as never,
+        fileBytes: bytes,
+        mimeType,
+        request: requestContext,
+      });
+    }
+  }
   if (!result) return { skipped: "no_classification" };
 
   // QuickBooks Stage 3 (Phase 1): for bookkeeping transaction documents
