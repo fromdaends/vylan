@@ -2298,7 +2298,7 @@
     "pay_by_card": "Pay by card",
     "pay_or": "or",
     "pay_processing": "Processing your payment…",
-    "pay_paypal_error": "Something went wrong with PayPal. Please try again.",
+    "pay_paypal_error": "Something went wrong with PayPal. Please try again. If it keeps happening, an ad blocker may be blocking PayPal; allow it and refresh the page.",
     "pay_processing_title": "Payment processing",
     "pay_processing_sub": "Your PayPal payment is on its way. Nothing more is needed from you — this can take a little while to clear.",
     "pay_secured_generic": "Your payment is secure and encrypted.",
