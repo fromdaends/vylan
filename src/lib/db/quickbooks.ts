@@ -44,6 +44,55 @@ export function isMissingSchema(
   );
 }
 
+// ── Per-client scoping (migration 0710) ──────────────────────────────────────
+// The QuickBooks tables moved from ONE row per FIRM to one row per (firm, client),
+// keyed by (firm_id, client_id) unique indexes with NULLS NOT DISTINCT. Every
+// firm-scoped function below takes an OPTIONAL `clientId`:
+//   * undefined (omitted) ≡ null → the FIRM-LEVEL row (client_id IS NULL).
+//   * <uuid> string              → that specific client's row(s).
+// undefined and null are treated identically — both mean "the firm-level row".
+//
+// WHY undefined ≢ "no filter": post-0710 a firm can have BOTH a firm-level row and
+// per-client rows at once (during the Phase 2→3 transition). A no-filter single-row
+// read would then match multiple rows and break (.maybeSingle() errors). Filtering
+// client_id IS NULL returns exactly the one firm-level row.
+//
+// GRACEFUL DEGRADATION: this repo applies migrations manually, so 0710 may not be
+// live yet. The scoped query (with the client_id filter) is always tried first;
+// if the client_id column doesn't exist it fails with a missing-schema error and
+// we transparently retry the ORIGINAL no-filter query — which pre-0710 returns the
+// single legacy row, so behavior is preserved.
+export type QuickbooksClientScope = string | null | undefined;
+
+// Narrow a select/update/delete builder to the requested client scope. undefined
+// and null both mean the firm-level row (client_id IS NULL); only a uuid string
+// filters to a specific client. Kept intentionally loose about the builder type —
+// every PostgREST filter builder (select/update/delete) exposes .eq and .is.
+export function withClientScope<Q>(q: Q, clientId: QuickbooksClientScope): Q {
+  const b = q as unknown as {
+    eq: (col: string, val: unknown) => Q;
+    is: (col: string, val: unknown) => Q;
+  };
+  return typeof clientId === "string"
+    ? b.eq("client_id", clientId)
+    : b.is("client_id", null);
+}
+
+// Run a client-scoped query, degrading to the firm-only (no client_id filter)
+// query only when the client_id column doesn't exist yet (0710 not applied). Both
+// thunks must build a FRESH query (PostgREST builders are single-use). The scoped
+// thunk always runs first; the legacy thunk runs only on a missing-schema error.
+export async function runWithClientFallback<
+  R extends { error: { code?: string; message?: string } | null },
+>(
+  scoped: () => PromiseLike<R>,
+  legacy: () => PromiseLike<R>,
+): Promise<R> {
+  const res = await scoped();
+  if (res.error && isMissingSchema(res.error)) return legacy();
+  return res;
+}
+
 export type FirmQuickbooksStatus = {
   connected: boolean;
   realmId: string;
@@ -55,12 +104,18 @@ export type FirmQuickbooksStatus = {
 // Read the current firm's QuickBooks connection for the Settings UI. Returns null
 // when not connected OR before the migration is applied. Never reads the tokens
 // (the authenticated client cannot select them anyway).
-export async function getFirmQuickbooksStatus(): Promise<FirmQuickbooksStatus | null> {
+export async function getFirmQuickbooksStatus(
+  clientId?: QuickbooksClientScope,
+): Promise<FirmQuickbooksStatus | null> {
   const sb = await getServerSupabase();
-  const { data, error } = await sb
-    .from("quickbooks_connections")
-    .select("realm_id, company_name, environment, connected_at")
-    .maybeSingle();
+  const base = () =>
+    sb
+      .from("quickbooks_connections")
+      .select("realm_id, company_name, environment, connected_at");
+  const { data, error } = await runWithClientFallback(
+    () => withClientScope(base(), clientId).maybeSingle(),
+    () => base().maybeSingle(),
+  );
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] getFirmQuickbooksStatus failed:", error);
@@ -76,6 +131,15 @@ export async function getFirmQuickbooksStatus(): Promise<FirmQuickbooksStatus | 
       (data.environment as string) === "production" ? "production" : "sandbox",
     connectedAt: data.connected_at as string,
   };
+}
+
+// Read a SPECIFIC client's QuickBooks connection status (0710). Same shape as
+// getFirmQuickbooksStatus, or null when that client has no connection. Thin
+// wrapper over the client-scoped path above.
+export async function getClientQuickbooksStatus(
+  clientId: string,
+): Promise<FirmQuickbooksStatus | null> {
+  return getFirmQuickbooksStatus(clientId);
 }
 
 export type UpsertQuickbooksConnectionInput = {
@@ -100,6 +164,7 @@ export type UpsertConnectionResult =
 export async function upsertFirmQuickbooksConnection(
   firmId: string,
   input: UpsertQuickbooksConnectionInput,
+  clientId?: QuickbooksClientScope,
 ): Promise<UpsertConnectionResult> {
   const sb = getServiceRoleSupabase();
   const common = {
@@ -112,60 +177,87 @@ export async function upsertFirmQuickbooksConnection(
     connected_by: input.connectedBy,
     updated_at: new Date().toISOString(),
   };
-  const onConflict = "firm_id";
-  const upsert = (record: Record<string, unknown>) =>
-    sb.from("quickbooks_connections").upsert(record, { onConflict });
-  // Tier 1 (0480 + 0470): ENCRYPTED tokens + the refresh-token fingerprint (the
-  // optimistic-lock key) + company_country.
-  let error = (
-    await upsert({
-      ...common,
-      access_token: maybeEncryptToken(input.accessToken),
-      refresh_token: maybeEncryptToken(input.refreshToken),
-      refresh_token_fingerprint: tokenFingerprint(input.refreshToken),
-      company_country: input.companyCountry,
-    })
-  ).error;
-  if (error && isMissingSchema(error)) {
-    // The fallback tiers below store PLAINTEXT (pre-0480 the optimistic lock
-    // matches on the raw refresh token, so encrypting would break refresh). When
-    // an encryption key IS configured, silently falling back would defeat the
-    // whole point of the key — refuse instead. The callback maps
-    // "migration_pending" to the "finish setup" message (apply 0480, then retry).
-    if (isTokenEncryptionConfigured()) {
-      console.error(
-        "[quickbooks] refusing plaintext fallback: QBO_TOKEN_ENC_KEY is set but migration 0480 (refresh_token_fingerprint) is not applied",
-      );
-      return { ok: false, reason: "migration_pending" };
-    }
-    // Tier 2 (0470, no 0480): no fingerprint column, so we must NOT encrypt — the
-    // legacy optimistic lock still matches on the RAW refresh token. Store plaintext.
-    error = (
+  // One insert-or-replace attempt. `extra` carries the optional client_id column
+  // and `onConflict` names the matching uniqueness. The PRIMARY attempt always
+  // targets the (firm_id, client_id) unique index (0710, NULLS NOT DISTINCT) with
+  // client_id set (null for a firm-level row); the FALLBACK targets the legacy
+  // firm_id unique (0410) with client_id omitted, for pre-0710 environments.
+  const attempt = async (
+    extra: Record<string, string | null>,
+    onConflict: string,
+  ): Promise<UpsertConnectionResult> => {
+    const base = { ...common, ...extra };
+    const upsert = (record: Record<string, unknown>) =>
+      sb.from("quickbooks_connections").upsert(record, { onConflict });
+    // Tier 1 (0480 + 0470): ENCRYPTED tokens + the refresh-token fingerprint (the
+    // optimistic-lock key) + company_country.
+    let error = (
       await upsert({
-        ...common,
-        access_token: input.accessToken,
-        refresh_token: input.refreshToken,
+        ...base,
+        access_token: maybeEncryptToken(input.accessToken),
+        refresh_token: maybeEncryptToken(input.refreshToken),
+        refresh_token_fingerprint: tokenFingerprint(input.refreshToken),
         company_country: input.companyCountry,
       })
     ).error;
     if (error && isMissingSchema(error)) {
-      // Tier 3 (pre-0470): plaintext tokens only.
+      // The fallback tiers below store PLAINTEXT (pre-0480 the optimistic lock
+      // matches on the raw refresh token, so encrypting would break refresh). When
+      // an encryption key IS configured, silently falling back would defeat the
+      // whole point of the key — refuse instead. The callback maps
+      // "migration_pending" to the "finish setup" message (apply 0480, then retry).
+      if (isTokenEncryptionConfigured()) {
+        console.error(
+          "[quickbooks] refusing plaintext fallback: QBO_TOKEN_ENC_KEY is set but migration 0480 (refresh_token_fingerprint) is not applied",
+        );
+        return { ok: false, reason: "migration_pending" };
+      }
+      // Tier 2 (0470, no 0480): no fingerprint column, so we must NOT encrypt — the
+      // legacy optimistic lock still matches on the RAW refresh token. Store plaintext.
       error = (
         await upsert({
-          ...common,
+          ...base,
           access_token: input.accessToken,
           refresh_token: input.refreshToken,
+          company_country: input.companyCountry,
         })
       ).error;
+      if (error && isMissingSchema(error)) {
+        // Tier 3 (pre-0470): plaintext tokens only.
+        error = (
+          await upsert({
+            ...base,
+            access_token: input.accessToken,
+            refresh_token: input.refreshToken,
+          })
+        ).error;
+      }
     }
-  }
-  if (error) {
-    if (isMissingSchema(error))
-      return { ok: false, reason: "migration_pending" };
-    console.error("[quickbooks] upsertFirmQuickbooksConnection failed:", error);
-    return { ok: false, reason: "error" };
-  }
-  return { ok: true };
+    if (error) {
+      if (isMissingSchema(error))
+        return { ok: false, reason: "migration_pending" };
+      console.error(
+        "[quickbooks] upsertFirmQuickbooksConnection failed:",
+        error,
+      );
+      return { ok: false, reason: "error" };
+    }
+    return { ok: true };
+  };
+
+  // PRIMARY (post-0710): ALWAYS conflict on (firm_id, client_id) with client_id
+  // set — undefined ⇒ a firm-level row with client_id NULL, which NULLS NOT
+  // DISTINCT conflict-matches an existing firm-level row. FALLBACK (pre-0710, the
+  // client_id column is absent): the primary saw a missing-schema error on every
+  // tier (→ migration_pending), so retry the legacy firm-only conflict target with
+  // client_id omitted. (A genuine plaintext refusal also returns migration_pending;
+  // the retry simply refuses again, so the outcome is unchanged.)
+  const primary = await attempt(
+    { client_id: clientId ?? null },
+    "firm_id,client_id",
+  );
+  if (primary.ok || primary.reason !== "migration_pending") return primary;
+  return attempt({}, "firm_id");
 }
 
 // Self-heal the connected company's country (service role). Used by the sync job
@@ -175,13 +267,19 @@ export async function upsertFirmQuickbooksConnection(
 export async function updateFirmQuickbooksCompanyCountry(
   firmId: string,
   country: string | null,
+  clientId?: QuickbooksClientScope,
 ): Promise<void> {
   if (!country) return;
   const sb = getServiceRoleSupabase();
-  const { error } = await sb
-    .from("quickbooks_connections")
-    .update({ company_country: country })
-    .eq("firm_id", firmId);
+  const base = () =>
+    sb
+      .from("quickbooks_connections")
+      .update({ company_country: country })
+      .eq("firm_id", firmId);
+  const { error } = await runWithClientFallback(
+    () => withClientScope(base(), clientId),
+    () => base(),
+  );
   if (error && !isMissingSchema(error)) {
     console.error(
       "[quickbooks] updateFirmQuickbooksCompanyCountry failed:",
@@ -197,13 +295,15 @@ export async function updateFirmQuickbooksCompanyCountry(
 // — or an environment without the table yet — simply never runs the extra pass.
 export async function isFirmQuickbooksConnected(
   firmId: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<boolean> {
   const sb = getServiceRoleSupabase();
-  const { data, error } = await sb
-    .from("quickbooks_connections")
-    .select("realm_id")
-    .eq("firm_id", firmId)
-    .maybeSingle();
+  const base = () =>
+    sb.from("quickbooks_connections").select("realm_id").eq("firm_id", firmId);
+  const { data, error } = await runWithClientFallback(
+    () => withClientScope(base(), clientId).maybeSingle(),
+    () => base().maybeSingle(),
+  );
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] isFirmQuickbooksConnected failed:", error);
@@ -239,6 +339,7 @@ export type QuickbooksConnectionReadResult =
 // client (migration 0410), so this MUST go through the service role.
 export async function readFirmQuickbooksConnection(
   firmId: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<QuickbooksConnectionReadResult> {
   const sb = getServiceRoleSupabase();
   // Widest select first (0470 company_country); fall back to the pre-0470 column
@@ -248,21 +349,36 @@ export async function readFirmQuickbooksConnection(
     "realm_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, environment, company_country",
     "realm_id, access_token, refresh_token, access_token_expires_at, refresh_token_expires_at, environment",
   ] as const;
-  let data: Record<string, unknown> | null = null;
-  let error: { code?: string; message?: string } | null = null;
-  for (const sel of selects) {
-    const res = await sb
-      .from("quickbooks_connections")
-      .select(sel)
-      .eq("firm_id", firmId)
-      .maybeSingle();
-    if (res.error && isMissingSchema(res.error)) {
+  // Runs the tiered select loop once. `scopeOn` narrows to the requested client
+  // (0710) — undefined/null ⇒ client_id IS NULL, a uuid ⇒ that client. A missing
+  // client_id column surfaces as a missing-schema error that the outer degrade
+  // path retries with the original no-filter query.
+  const readOnce = async (scopeOn: boolean) => {
+    let data: Record<string, unknown> | null = null;
+    let error: { code?: string; message?: string } | null = null;
+    for (const sel of selects) {
+      let q = sb
+        .from("quickbooks_connections")
+        .select(sel)
+        .eq("firm_id", firmId);
+      if (scopeOn) q = withClientScope(q, clientId);
+      const res = await q.maybeSingle();
+      if (res.error && isMissingSchema(res.error)) {
+        error = res.error;
+        continue;
+      }
+      data = res.data as Record<string, unknown> | null;
       error = res.error;
-      continue;
+      break;
     }
-    data = res.data as Record<string, unknown> | null;
-    error = res.error;
-    break;
+    return { data, error };
+  };
+  // Always try the client-scoped read first; degrade to the no-filter read only
+  // when the client_id column is absent (pre-0710), which returns the single
+  // legacy row.
+  let { data, error } = await readOnce(true);
+  if (error && isMissingSchema(error)) {
+    ({ data, error } = await readOnce(false));
   }
   if (error) {
     // Pre-migration = the feature isn't live: genuinely absent. Anything else is
@@ -312,8 +428,9 @@ export async function readFirmQuickbooksConnection(
 // "read_error" (callers that just need a token treat every miss the same).
 export async function getFirmQuickbooksConnectionWithTokens(
   firmId: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<QuickbooksConnectionWithTokens | null> {
-  const res = await readFirmQuickbooksConnection(firmId);
+  const res = await readFirmQuickbooksConnection(firmId, clientId);
   return res.kind === "ok" ? res.conn : null;
 }
 
@@ -352,6 +469,7 @@ export async function updateFirmQuickbooksTokens(
     accessTokenExpiresAt: string | null;
     refreshTokenExpiresAt: string | null;
   },
+  clientId?: QuickbooksClientScope,
 ): Promise<UpdateTokensResult> {
   const sb = getServiceRoleSupabase();
   const expiryPatch =
@@ -364,70 +482,102 @@ export async function updateFirmQuickbooksTokens(
     ...expiryPatch,
   };
 
-  // Primary path (0480): store ENCRYPTED tokens + the new fingerprint, and match
-  // the old row by its fingerprint (identical whether the old token is stored
-  // encrypted or as legacy plaintext — the fingerprint is always of the plaintext).
-  let res = await sb
-    .from("quickbooks_connections")
-    .update({
-      ...commonPatch,
-      access_token: maybeEncryptToken(tokens.accessToken),
-      refresh_token: maybeEncryptToken(tokens.refreshToken),
-      refresh_token_fingerprint: tokenFingerprint(tokens.refreshToken),
-    })
-    .eq("firm_id", firmId)
-    .eq("refresh_token_fingerprint", tokenFingerprint(expectedRefreshToken))
-    .select("id");
+  // One optimistic-update attempt. `scopeOn` adds the client_id filter to the
+  // WHERE (the client_id column itself is never SET here — the row already carries
+  // it). `schemaMiss` tells the caller the failure was a missing-schema error, so
+  // a client-scoped attempt can degrade to firm-only when 0710 isn't applied yet.
+  const run = async (
+    scopeOn: boolean,
+  ): Promise<{ result: UpdateTokensResult; schemaMiss: boolean }> => {
+    const scope = <Q>(q: Q): Q => (scopeOn ? withClientScope(q, clientId) : q);
 
-  if (res.error && isMissingSchema(res.error)) {
-    // Same plaintext-refusal rule as the upsert: with an encryption key
-    // configured, never write plaintext tokens just because 0480 is missing.
-    // "error" makes the caller discard the rotation (the connection degrades
-    // gracefully) instead of silently downgrading to plaintext at rest.
-    if (isTokenEncryptionConfigured()) {
-      console.error(
-        "[quickbooks] refusing plaintext token rotation: QBO_TOKEN_ENC_KEY is set but migration 0480 is not applied",
-      );
-      return { outcome: "error" };
-    }
-    // Pre-0480: no fingerprint column. Store PLAINTEXT (so encryption isn't left
-    // un-matchable) and match on the raw refresh token, exactly as before.
-    res = await sb
-      .from("quickbooks_connections")
-      .update({
-        ...commonPatch,
-        access_token: tokens.accessToken,
-        refresh_token: tokens.refreshToken,
-      })
-      .eq("firm_id", firmId)
-      .eq("refresh_token", expectedRefreshToken)
-      .select("id");
-  }
+    // Primary path (0480): store ENCRYPTED tokens + the new fingerprint, and match
+    // the old row by its fingerprint (identical whether the old token is stored
+    // encrypted or as legacy plaintext — the fingerprint is always of the plaintext).
+    let res = await scope(
+      sb
+        .from("quickbooks_connections")
+        .update({
+          ...commonPatch,
+          access_token: maybeEncryptToken(tokens.accessToken),
+          refresh_token: maybeEncryptToken(tokens.refreshToken),
+          refresh_token_fingerprint: tokenFingerprint(tokens.refreshToken),
+        })
+        .eq("firm_id", firmId)
+        .eq(
+          "refresh_token_fingerprint",
+          tokenFingerprint(expectedRefreshToken),
+        ),
+    ).select("id");
 
-  if (res.error) {
-    if (!isMissingSchema(res.error)) {
-      console.error(
-        "[quickbooks] updateFirmQuickbooksTokens failed:",
-        res.error,
-      );
+    if (res.error && isMissingSchema(res.error)) {
+      // Same plaintext-refusal rule as the upsert: with an encryption key
+      // configured, never write plaintext tokens just because 0480 is missing.
+      // "error" makes the caller discard the rotation (the connection degrades
+      // gracefully) instead of silently downgrading to plaintext at rest.
+      if (isTokenEncryptionConfigured()) {
+        console.error(
+          "[quickbooks] refusing plaintext token rotation: QBO_TOKEN_ENC_KEY is set but migration 0480 is not applied",
+        );
+        return { result: { outcome: "error" }, schemaMiss: true };
+      }
+      // Pre-0480: no fingerprint column. Store PLAINTEXT (so encryption isn't left
+      // un-matchable) and match on the raw refresh token, exactly as before.
+      res = await scope(
+        sb
+          .from("quickbooks_connections")
+          .update({
+            ...commonPatch,
+            access_token: tokens.accessToken,
+            refresh_token: tokens.refreshToken,
+          })
+          .eq("firm_id", firmId)
+          .eq("refresh_token", expectedRefreshToken),
+      ).select("id");
     }
-    return { outcome: "error" };
+
+    if (res.error) {
+      if (!isMissingSchema(res.error)) {
+        console.error(
+          "[quickbooks] updateFirmQuickbooksTokens failed:",
+          res.error,
+        );
+        return { result: { outcome: "error" }, schemaMiss: false };
+      }
+      return { result: { outcome: "error" }, schemaMiss: true };
+    }
+    return {
+      result:
+        res.data && res.data.length > 0
+          ? { outcome: "updated" }
+          : { outcome: "raced" },
+      schemaMiss: false,
+    };
+  };
+
+  // Always scope the WHERE first (undefined/null ⇒ client_id IS NULL, a uuid ⇒
+  // that client). A missing-schema error means the client_id column (0710) isn't
+  // there yet → degrade to the original no-filter optimistic update.
+  const scoped = await run(true);
+  if (scoped.result.outcome === "error" && scoped.schemaMiss) {
+    return (await run(false)).result;
   }
-  return res.data && res.data.length > 0
-    ? { outcome: "updated" }
-    : { outcome: "raced" };
+  return scoped.result;
 }
 
 // Remove the firm's connection entirely (disconnect). Service-role delete. Safe
 // to call when nothing exists (no-op) or before the migration is applied.
 export async function clearFirmQuickbooksConnection(
   firmId: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<void> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb
-    .from("quickbooks_connections")
-    .delete()
-    .eq("firm_id", firmId);
+  const base = () =>
+    sb.from("quickbooks_connections").delete().eq("firm_id", firmId);
+  const { error } = await runWithClientFallback(
+    () => withClientScope(base(), clientId),
+    () => base(),
+  );
   if (error && !isMissingSchema(error)) {
     console.error("[quickbooks] clearFirmQuickbooksConnection failed:", error);
   }
@@ -440,13 +590,18 @@ export async function clearFirmQuickbooksConnection(
 // not connected or pre-migration.
 export async function getFirmQuickbooksRealm(
   firmId: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<{ realmId: string; environment: QuickbooksEnvironment } | null> {
   const sb = getServiceRoleSupabase();
-  const { data, error } = await sb
-    .from("quickbooks_connections")
-    .select("realm_id, environment")
-    .eq("firm_id", firmId)
-    .maybeSingle();
+  const base = () =>
+    sb
+      .from("quickbooks_connections")
+      .select("realm_id, environment")
+      .eq("firm_id", firmId);
+  const { data, error } = await runWithClientFallback(
+    () => withClientScope(base(), clientId).maybeSingle(),
+    () => base().maybeSingle(),
+  );
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] getFirmQuickbooksRealm failed:", error);

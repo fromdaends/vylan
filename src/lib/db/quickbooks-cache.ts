@@ -9,7 +9,12 @@ import {
   getServerSupabase,
   getServiceRoleSupabase,
 } from "@/lib/supabase/server";
-import { isMissingSchema } from "@/lib/db/quickbooks";
+import {
+  isMissingSchema,
+  runWithClientFallback,
+  withClientScope,
+  type QuickbooksClientScope,
+} from "@/lib/db/quickbooks";
 import { isSellableItem } from "@/lib/quickbooks/suggest";
 import type {
   QbAccount,
@@ -32,12 +37,20 @@ function normalizeStatus(v: unknown): QuickbooksSyncStatus {
 
 // Read the firm's sync bookkeeping (authenticated, RLS). Returns null when the
 // 0420 columns/row aren't there yet OR the firm isn't connected.
-export async function getFirmSyncState(): Promise<FirmSyncState | null> {
+export async function getFirmSyncState(
+  clientId?: QuickbooksClientScope,
+): Promise<FirmSyncState | null> {
   const sb = await getServerSupabase();
-  const { data, error } = await sb
-    .from("quickbooks_connections")
-    .select("last_synced_at, sync_status, sync_error")
-    .maybeSingle();
+  // Sync bookkeeping lives on the connection ROW, which is now per-client (0710),
+  // so a clientId targets that client's connection's sync state.
+  const base = () =>
+    sb
+      .from("quickbooks_connections")
+      .select("last_synced_at, sync_status, sync_error");
+  const { data, error } = await runWithClientFallback(
+    () => withClientScope(base(), clientId).maybeSingle(),
+    () => base().maybeSingle(),
+  );
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] getFirmSyncState failed:", error);
@@ -85,12 +98,19 @@ async function readCachedItems(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   sb: SupabaseClient<any, any, any>,
   firmId?: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<QbItem[] | null> {
-  let q = sb
-    .from("quickbooks_items")
-    .select("qbo_id, name, item_type, income_account_qbo_id, active");
-  if (firmId) q = q.eq("firm_id", firmId);
-  const { data, error } = await q;
+  const base = () => {
+    let q = sb
+      .from("quickbooks_items")
+      .select("qbo_id, name, item_type, income_account_qbo_id, active");
+    if (firmId) q = q.eq("firm_id", firmId);
+    return q;
+  };
+  const { data, error } = await runWithClientFallback(
+    () => withClientScope(base(), clientId),
+    () => base(),
+  );
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[quickbooks] readCachedItems failed:", error);
@@ -108,14 +128,29 @@ async function readCachedItems(
 
 // Read the firm's cached lists (authenticated, RLS firm-scoped). Returns null
 // when the cache tables don't exist yet (caller falls back to a live read).
-export async function readCachedQuickbooksLists(): Promise<QuickbooksLists | null> {
+export async function readCachedQuickbooksLists(
+  clientId?: QuickbooksClientScope,
+): Promise<QuickbooksLists | null> {
   const sb = await getServerSupabase();
-  const [acc, ven, cus, tax] = await Promise.all([
-    sb.from("quickbooks_accounts").select("qbo_id, name, account_type, active"),
-    sb.from("quickbooks_vendors").select("qbo_id, name, active"),
-    sb.from("quickbooks_customers").select("qbo_id, name, active"),
-    sb.from("quickbooks_tax_codes").select("qbo_id, name, active"),
-  ]);
+  const fetch = (scopeOn: boolean) => {
+    const scope = <Q>(q: Q): Q => (scopeOn ? withClientScope(q, clientId) : q);
+    return Promise.all([
+      scope(
+        sb
+          .from("quickbooks_accounts")
+          .select("qbo_id, name, account_type, active"),
+      ),
+      scope(sb.from("quickbooks_vendors").select("qbo_id, name, active")),
+      scope(sb.from("quickbooks_customers").select("qbo_id, name, active")),
+      scope(sb.from("quickbooks_tax_codes").select("qbo_id, name, active")),
+    ]);
+  };
+  // Always try the client-scoped read first; degrade to the no-filter read when
+  // the client_id column isn't there yet (pre-0710).
+  let [acc, ven, cus, tax] = await fetch(true);
+  if ([acc, ven, cus, tax].some((r) => r.error && isMissingSchema(r.error))) {
+    [acc, ven, cus, tax] = await fetch(false);
+  }
   for (const r of [acc, ven, cus, tax]) {
     if (r.error) {
       if (!isMissingSchema(r.error)) {
@@ -132,7 +167,7 @@ export async function readCachedQuickbooksLists(): Promise<QuickbooksLists | nul
     vendors: (ven.data ?? []).map(toCachedNamed),
     customers: (cus.data ?? []).map(toCachedNamed),
     taxCodes: (tax.data ?? []).map(toCachedNamed),
-    items: await readCachedItems(sb),
+    items: await readCachedItems(sb, undefined, clientId),
   };
 }
 
@@ -143,26 +178,44 @@ export async function readCachedQuickbooksLists(): Promise<QuickbooksLists | nul
 // the cache tables don't exist yet (pre-0420).
 export async function readCachedQuickbooksListsForFirm(
   firmId: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<QuickbooksLists | null> {
   const sb = getServiceRoleSupabase();
-  const [acc, ven, cus, tax] = await Promise.all([
-    sb
-      .from("quickbooks_accounts")
-      .select("qbo_id, name, account_type, active")
-      .eq("firm_id", firmId),
-    sb
-      .from("quickbooks_vendors")
-      .select("qbo_id, name, active")
-      .eq("firm_id", firmId),
-    sb
-      .from("quickbooks_customers")
-      .select("qbo_id, name, active")
-      .eq("firm_id", firmId),
-    sb
-      .from("quickbooks_tax_codes")
-      .select("qbo_id, name, active")
-      .eq("firm_id", firmId),
-  ]);
+  const fetch = (scopeOn: boolean) => {
+    const scope = <Q>(q: Q): Q => (scopeOn ? withClientScope(q, clientId) : q);
+    return Promise.all([
+      scope(
+        sb
+          .from("quickbooks_accounts")
+          .select("qbo_id, name, account_type, active")
+          .eq("firm_id", firmId),
+      ),
+      scope(
+        sb
+          .from("quickbooks_vendors")
+          .select("qbo_id, name, active")
+          .eq("firm_id", firmId),
+      ),
+      scope(
+        sb
+          .from("quickbooks_customers")
+          .select("qbo_id, name, active")
+          .eq("firm_id", firmId),
+      ),
+      scope(
+        sb
+          .from("quickbooks_tax_codes")
+          .select("qbo_id, name, active")
+          .eq("firm_id", firmId),
+      ),
+    ]);
+  };
+  // Always try the client-scoped read first; degrade to the no-filter read when
+  // the client_id column isn't there yet (pre-0710).
+  let [acc, ven, cus, tax] = await fetch(true);
+  if ([acc, ven, cus, tax].some((r) => r.error && isMissingSchema(r.error))) {
+    [acc, ven, cus, tax] = await fetch(false);
+  }
   for (const r of [acc, ven, cus, tax]) {
     if (r.error) {
       if (!isMissingSchema(r.error)) {
@@ -179,7 +232,7 @@ export async function readCachedQuickbooksListsForFirm(
     vendors: (ven.data ?? []).map(toCachedNamed),
     customers: (cus.data ?? []).map(toCachedNamed),
     taxCodes: (tax.data ?? []).map(toCachedNamed),
-    items: await readCachedItems(sb, firmId),
+    items: await readCachedItems(sb, firmId, clientId),
   };
 }
 
@@ -195,6 +248,7 @@ export type SetSyncStateInput = {
 export async function setFirmSyncState(
   firmId: string,
   input: SetSyncStateInput,
+  clientId?: QuickbooksClientScope,
 ): Promise<void> {
   const sb = getServiceRoleSupabase();
   const patch: Record<string, unknown> = {
@@ -204,10 +258,14 @@ export async function setFirmSyncState(
   };
   if (input.lastSyncedAt !== undefined)
     patch.last_synced_at = input.lastSyncedAt;
-  const { error } = await sb
-    .from("quickbooks_connections")
-    .update(patch)
-    .eq("firm_id", firmId);
+  // Sync state lives on the connection ROW, now per-client (0710): undefined/null
+  // targets the firm-level row (client_id IS NULL), a uuid that client's row.
+  const base = () =>
+    sb.from("quickbooks_connections").update(patch).eq("firm_id", firmId);
+  const { error } = await runWithClientFallback(
+    () => withClientScope(base(), clientId),
+    () => base(),
+  );
   if (error && !isMissingSchema(error)) {
     console.error("[quickbooks] setFirmSyncState failed:", error);
   }
@@ -247,38 +305,64 @@ export async function replaceCachedEntity(
   entity: CacheEntity,
   rows: CacheRow[],
   syncedAt: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<void> {
   const sb = getServiceRoleSupabase();
   const table = TABLE_BY_ENTITY[entity];
-  const records = rows.map((r) => ({
-    firm_id: firmId,
-    qbo_id: r.id,
-    name: r.name,
-    active: r.active,
-    ...(entity === "accounts" ? { account_type: r.accountType ?? null } : {}),
-    ...(entity === "items"
-      ? {
-          item_type: r.itemType ?? null,
-          income_account_qbo_id: r.incomeAccountId ?? null,
-        }
-      : {}),
-    synced_at: syncedAt,
-  }));
-  // Upsert in chunks so a very large company can't exceed request limits.
-  for (let i = 0; i < records.length; i += 500) {
-    const chunk = records.slice(i, i + 500);
-    const { error } = await sb
+  // Firm-level rows carry client_id NULL; a specific client's rows carry its id.
+  const clientValue = clientId ?? null;
+  // One full upsert-then-prune pass. `useClientId` = the post-0710 path: conflict
+  // on (firm_id, client_id, qbo_id), set client_id, and prune only within this
+  // client's slice. `false` = the pre-0710 legacy path: conflict on (firm_id,
+  // qbo_id), omit client_id, prune the whole firm. Returns schemaMiss (instead of
+  // throwing) when the client-inclusive pass fails on a missing client_id column.
+  const run = async (useClientId: boolean): Promise<{ schemaMiss: boolean }> => {
+    const onConflict = useClientId
+      ? "firm_id,client_id,qbo_id"
+      : "firm_id,qbo_id";
+    const records = rows.map((r) => ({
+      firm_id: firmId,
+      ...(useClientId ? { client_id: clientValue } : {}),
+      qbo_id: r.id,
+      name: r.name,
+      active: r.active,
+      ...(entity === "accounts" ? { account_type: r.accountType ?? null } : {}),
+      ...(entity === "items"
+        ? {
+            item_type: r.itemType ?? null,
+            income_account_qbo_id: r.incomeAccountId ?? null,
+          }
+        : {}),
+      synced_at: syncedAt,
+    }));
+    // Upsert in chunks so a very large company can't exceed request limits.
+    for (let i = 0; i < records.length; i += 500) {
+      const chunk = records.slice(i, i + 500);
+      const { error } = await sb.from(table).upsert(chunk, { onConflict });
+      if (error) {
+        if (useClientId && isMissingSchema(error)) return { schemaMiss: true };
+        throw error;
+      }
+    }
+    // Prune rows whose qbo_id vanished from QuickBooks since this sync started.
+    let del = sb
       .from(table)
-      .upsert(chunk, { onConflict: "firm_id,qbo_id" });
-    if (error) throw error;
-  }
-  // Prune rows whose qbo_id vanished from QuickBooks since this sync started.
-  const { error: delErr } = await sb
-    .from(table)
-    .delete()
-    .eq("firm_id", firmId)
-    .lt("synced_at", syncedAt);
-  if (delErr) throw delErr;
+      .delete()
+      .eq("firm_id", firmId)
+      .lt("synced_at", syncedAt);
+    if (useClientId) del = withClientScope(del, clientValue);
+    const { error: delErr } = await del;
+    if (delErr) {
+      if (useClientId && isMissingSchema(delErr)) return { schemaMiss: true };
+      throw delErr;
+    }
+    return { schemaMiss: false };
+  };
+
+  // PRIMARY (post-0710): always the client-inclusive pass. FALLBACK (pre-0710):
+  // the client_id column is absent, so replace firm-only.
+  const primary = await run(true);
+  if (primary.schemaMiss) await run(false);
 }
 
 // Append/refresh ONE cached row WITHOUT the destructive prune replaceCachedEntity
@@ -293,27 +377,45 @@ export async function upsertCachedEntityRow(
   entity: CacheEntity,
   row: CacheRow,
   syncedAt: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<void> {
   const sb = getServiceRoleSupabase();
   const table = TABLE_BY_ENTITY[entity];
-  const record = {
-    firm_id: firmId,
-    qbo_id: row.id,
-    name: row.name,
-    active: row.active,
-    ...(entity === "accounts" ? { account_type: row.accountType ?? null } : {}),
-    ...(entity === "items"
-      ? {
-          item_type: row.itemType ?? null,
-          income_account_qbo_id: row.incomeAccountId ?? null,
-        }
-      : {}),
-    synced_at: syncedAt,
+  // Firm-level rows carry client_id NULL; a specific client's rows carry its id.
+  const clientValue = clientId ?? null;
+  const run = async (useClientId: boolean): Promise<{ schemaMiss: boolean }> => {
+    const onConflict = useClientId
+      ? "firm_id,client_id,qbo_id"
+      : "firm_id,qbo_id";
+    const record = {
+      firm_id: firmId,
+      ...(useClientId ? { client_id: clientValue } : {}),
+      qbo_id: row.id,
+      name: row.name,
+      active: row.active,
+      ...(entity === "accounts"
+        ? { account_type: row.accountType ?? null }
+        : {}),
+      ...(entity === "items"
+        ? {
+            item_type: row.itemType ?? null,
+            income_account_qbo_id: row.incomeAccountId ?? null,
+          }
+        : {}),
+      synced_at: syncedAt,
+    };
+    const { error } = await sb.from(table).upsert(record, { onConflict });
+    if (error && isMissingSchema(error)) return { schemaMiss: true };
+    if (error) throw error;
+    return { schemaMiss: false };
   };
-  const { error } = await sb
-    .from(table)
-    .upsert(record, { onConflict: "firm_id,qbo_id" });
-  if (error && !isMissingSchema(error)) throw error;
+
+  // PRIMARY (post-0710): client-inclusive conflict target with client_id set.
+  // FALLBACK (pre-0710): client_id column absent, so upsert firm-only. A missing
+  // cache TABLE surfaces as schemaMiss in both passes → a clean no-op, mirroring
+  // the rest of this module.
+  const primary = await run(true);
+  if (primary.schemaMiss) await run(false);
 }
 
 // Delete ALL of a firm's cached QuickBooks reference rows (all five entity
@@ -321,10 +423,17 @@ export async function upsertCachedEntityRow(
 // hold the old company's internal ids, and the next sync rebuilds everything from
 // the newly connected company, so purging loses nothing durable. Service role;
 // per-table best-effort (a missing table pre-migration is a no-op).
-export async function purgeFirmQuickbooksCache(firmId: string): Promise<void> {
+export async function purgeFirmQuickbooksCache(
+  firmId: string,
+  clientId?: QuickbooksClientScope,
+): Promise<void> {
   const sb = getServiceRoleSupabase();
   for (const table of Object.values(TABLE_BY_ENTITY)) {
-    const { error } = await sb.from(table).delete().eq("firm_id", firmId);
+    const base = () => sb.from(table).delete().eq("firm_id", firmId);
+    const { error } = await runWithClientFallback(
+      () => withClientScope(base(), clientId),
+      () => base(),
+    );
     if (error && !isMissingSchema(error)) {
       console.error(`[quickbooks] purge ${table} failed:`, error);
     }

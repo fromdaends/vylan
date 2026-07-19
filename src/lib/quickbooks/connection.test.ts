@@ -90,11 +90,13 @@ describe("getValidAccessToken", () => {
     mockRefresh.mockResolvedValue(FRESH_TOKENS);
     mockUpdate.mockResolvedValue({ outcome: "updated" });
     expect(await getValidAccessToken("f1")).toBe("AT2");
-    // Optimistic concurrency: persist is guarded on the OLD refresh token.
+    // Optimistic concurrency: persist is guarded on the OLD refresh token. The
+    // 4th arg (clientId) is undefined here — a firm-level refresh.
     expect(mockUpdate).toHaveBeenCalledWith(
       "f1",
       "RT",
       expect.objectContaining({ accessToken: "AT2", refreshToken: "RT2" }),
+      undefined,
     );
   });
 

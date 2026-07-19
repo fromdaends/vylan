@@ -25,9 +25,10 @@ type TokenAcquisition = { token: string | null; dead: boolean };
 
 async function acquireValidAccessToken(
   firmId: string,
-  opts?: { force?: boolean },
+  opts?: { force?: boolean; clientId?: string | null },
 ): Promise<TokenAcquisition> {
-  const read = await readFirmQuickbooksConnection(firmId);
+  const clientId = opts?.clientId;
+  const read = await readFirmQuickbooksConnection(firmId, clientId);
   // A transient DB/network failure reading the row is NOT a dead connection —
   // report it like any other transient miss so no false reconnect alarm shows.
   if (read.kind === "read_error") return { token: null, dead: false };
@@ -48,18 +49,23 @@ async function acquireValidAccessToken(
     const fresh = await refreshTokens(conn.refreshToken);
     // Persist BOTH tokens with optimistic concurrency (Intuit rotates the refresh
     // token, so the old one may already be invalid).
-    const result = await updateFirmQuickbooksTokens(firmId, conn.refreshToken, {
-      accessToken: fresh.accessToken,
-      refreshToken: fresh.refreshToken,
-      accessTokenExpiresAt: fresh.accessTokenExpiresAt,
-      refreshTokenExpiresAt: fresh.refreshTokenExpiresAt,
-    });
+    const result = await updateFirmQuickbooksTokens(
+      firmId,
+      conn.refreshToken,
+      {
+        accessToken: fresh.accessToken,
+        refreshToken: fresh.refreshToken,
+        accessTokenExpiresAt: fresh.accessTokenExpiresAt,
+        refreshTokenExpiresAt: fresh.refreshTokenExpiresAt,
+      },
+      clientId,
+    );
     if (result.outcome === "updated")
       return { token: fresh.accessToken, dead: false };
     if (result.outcome === "raced") {
       // A concurrent refresh already rotated + stored the token. Use the stored
       // (valid) access token rather than ours, which may already be superseded.
-      const latest = await getFirmQuickbooksConnectionWithTokens(firmId);
+      const latest = await getFirmQuickbooksConnectionWithTokens(firmId, clientId);
       return { token: latest?.accessToken ?? null, dead: false };
     }
     // "error": the rotated refresh token was NOT durably stored. Do NOT hand out
@@ -87,8 +93,9 @@ async function acquireValidAccessToken(
 // when not connected, not configured, or the refresh fails.
 export async function getValidAccessToken(
   firmId: string,
+  clientId?: string | null,
 ): Promise<string | null> {
-  return (await acquireValidAccessToken(firmId)).token;
+  return (await acquireValidAccessToken(firmId, { clientId })).token;
 }
 
 // Force a token refresh after a data/write call returned 401 despite our clock
@@ -98,9 +105,10 @@ export async function getValidAccessToken(
 // fresh token when it was only a spurious 401. Never throws.
 export async function refreshAccessTokenAfter401(
   firmId: string,
+  clientId?: string | null,
 ): Promise<TokenAcquisition> {
   try {
-    return await acquireValidAccessToken(firmId, { force: true });
+    return await acquireValidAccessToken(firmId, { force: true, clientId });
   } catch {
     return { token: null, dead: false };
   }
@@ -117,9 +125,10 @@ export type QuickbooksConnectionHealth = "ok" | "reconnect_required";
 
 export async function getQuickbooksConnectionHealth(
   firmId: string,
+  clientId?: string | null,
 ): Promise<QuickbooksConnectionHealth> {
   try {
-    const { token, dead } = await acquireValidAccessToken(firmId);
+    const { token, dead } = await acquireValidAccessToken(firmId, { clientId });
     if (token) return "ok";
     return dead ? "reconnect_required" : "ok";
   } catch {
@@ -144,10 +153,11 @@ export type QuickbooksReadContext = {
 // configured / the token cannot be refreshed.
 export async function getQuickbooksReadContext(
   firmId: string,
+  clientId?: string | null,
 ): Promise<QuickbooksReadContext | null> {
-  const conn = await getFirmQuickbooksConnectionWithTokens(firmId);
+  const conn = await getFirmQuickbooksConnectionWithTokens(firmId, clientId);
   if (!conn) return null;
-  const accessToken = await getValidAccessToken(firmId);
+  const accessToken = await getValidAccessToken(firmId, clientId);
   if (!accessToken) return null;
   return {
     accessToken,

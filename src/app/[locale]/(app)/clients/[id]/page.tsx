@@ -31,13 +31,23 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { Plus, FileText } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
+import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
+import {
+  isQuickbooksConfigured,
+  quickbooksEnvironment,
+} from "@/lib/quickbooks/client";
+import { ClientQuickbooksCard } from "@/components/clients/client-quickbooks-card";
 
 export default async function ClientDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
+  searchParams: Promise<{ qbo?: string }>;
 }) {
   const { locale: rawLocale, id } = await params;
+  const { qbo: qboParam } = await searchParams;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -94,6 +104,33 @@ export default async function ClientDetailPage({
   const tStatus = await getTranslations("Status");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
+
+  // Per-client QuickBooks connection status for the card below. Mirrors how
+  // Settings assembles the firm-level status: base status + a health check (which
+  // detects a dead/revoked connection) + the platform-configured flag + the OAuth
+  // callback result from ?qbo=. Connect/disconnect inside the card are owner-only.
+  const qboStatus = await getClientQuickbooksStatus(client.id);
+  const qboHealth =
+    firm && qboStatus?.connected
+      ? await getQuickbooksConnectionHealth(firm.id, client.id)
+      : "ok";
+  const qboCallbackStatus =
+    qboParam === "done" ||
+    qboParam === "denied" ||
+    qboParam === "error" ||
+    qboParam === "setup" ||
+    qboParam === "enc"
+      ? (qboParam as "done" | "denied" | "error" | "setup" | "enc")
+      : null;
+  const clientQuickbooks = {
+    configured: isQuickbooksConfigured(),
+    connected: Boolean(qboStatus?.connected),
+    needsReconnect: qboHealth === "reconnect_required",
+    companyName: qboStatus?.companyName ?? null,
+    environment: qboStatus?.environment ?? quickbooksEnvironment(),
+    callbackStatus: qboCallbackStatus,
+  };
+  const isOwner = me?.role === "owner";
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
@@ -182,6 +219,18 @@ export default async function ClientDetailPage({
           />
           <DetailRow label={t("field_notes")} value={client.notes} wide />
         </dl>
+      </div>
+
+      <div className="space-y-3">
+        <h2 className="text-base font-semibold tracking-tight text-foreground">
+          {t("qbo_section_title")}
+        </h2>
+        <ClientQuickbooksCard
+          clientId={client.id}
+          clientName={client.display_name}
+          status={clientQuickbooks}
+          isOwner={isOwner}
+        />
       </div>
 
       <div className="space-y-3">

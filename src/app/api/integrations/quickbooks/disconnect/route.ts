@@ -14,10 +14,11 @@ export const runtime = "nodejs";
 // POST /api/integrations/quickbooks/disconnect
 //
 // Owner-only. Tells Intuit to revoke our access (best-effort), then clears the
-// firm's stored connection so the Settings UI returns to "not connected". Even if
-// Intuit can't be reached, the local record is cleared — the firm is never stuck
-// looking "connected".
-export async function POST() {
+// stored connection so the UI returns to "not connected". The body may carry a
+// `clientId` to disconnect THAT client's connection (per-client); omitted = the
+// firm-level connection. Even if Intuit can't be reached, the local record is
+// cleared — the firm is never stuck looking "connected".
+export async function POST(request: Request) {
   const sb = await getServerSupabase();
   const { data: auth } = await sb.auth.getUser();
   if (!auth.user) {
@@ -32,18 +33,27 @@ export async function POST() {
     return NextResponse.json({ error: "no_firm" }, { status: 400 });
   }
 
+  let clientId: string | null = null;
+  const body = (await request.json().catch(() => null)) as {
+    clientId?: unknown;
+  } | null;
+  if (body && typeof body.clientId === "string" && body.clientId) {
+    clientId = body.clientId;
+  }
+
   // Revoking the refresh token revokes the whole grant at Intuit. Best-effort:
-  // we clear our record regardless of whether the revoke call succeeds.
-  const conn = await getFirmQuickbooksConnectionWithTokens(firm.id);
+  // we clear our record regardless of whether the revoke call succeeds. The read
+  // is firm-scoped, so it only ever returns THIS firm's connection for that client.
+  const conn = await getFirmQuickbooksConnectionWithTokens(firm.id, clientId);
   if (conn) {
     await revokeToken(conn.refreshToken);
   }
-  await clearFirmQuickbooksConnection(firm.id);
-  // Drop the cached reference lists too: they belong to the disconnected company
-  // and are fully rebuilt by the automatic sync on the next connect. Learned
-  // mappings and drafts are kept — reconnecting the SAME company (the common
-  // fix for a dead connection) must not lose them; a COMPANY change is handled
-  // by the callback's realm comparison.
-  await purgeFirmQuickbooksCache(firm.id);
+  await clearFirmQuickbooksConnection(firm.id, clientId);
+  // Drop that connection's cached reference lists too: they belong to the
+  // disconnected company and are rebuilt by the sync on the next connect. Learned
+  // mappings and drafts are kept — reconnecting the SAME company (the common fix
+  // for a dead connection) must not lose them; a COMPANY change is handled by the
+  // callback's realm comparison.
+  await purgeFirmQuickbooksCache(firm.id, clientId);
   return NextResponse.json({ ok: true });
 }

@@ -11,7 +11,12 @@ import {
   getServerSupabase,
   getServiceRoleSupabase,
 } from "@/lib/supabase/server";
-import { isMissingSchema } from "@/lib/db/quickbooks";
+import {
+  isMissingSchema,
+  runWithClientFallback,
+  withClientScope,
+  type QuickbooksClientScope,
+} from "@/lib/db/quickbooks";
 import type { LearnedMappings, LearnSignal } from "@/lib/quickbooks/suggest";
 
 const SELECT = "signal_type, source_key, target_qbo_id, target_qbo_name";
@@ -35,9 +40,15 @@ function rowsToMappings(
 
 // RLS-scoped read of the caller firm's learned mappings. {} on missing table/error
 // (so a user-context suggestion build degrades to fuzzy-only, never throws).
-export async function readFirmLearnedMappings(): Promise<LearnedMappings> {
+export async function readFirmLearnedMappings(
+  clientId?: QuickbooksClientScope,
+): Promise<LearnedMappings> {
   const sb = await getServerSupabase();
-  const res = await sb.from("quickbooks_learned_mappings").select(SELECT);
+  const base = () => sb.from("quickbooks_learned_mappings").select(SELECT);
+  const res = await runWithClientFallback(
+    () => withClientScope(base(), clientId),
+    () => base(),
+  );
   if (res.error) {
     if (!isMissingSchema(res.error)) {
       console.error("[quickbooks] readFirmLearnedMappings failed:", res.error);
@@ -51,12 +62,15 @@ export async function readFirmLearnedMappings(): Promise<LearnedMappings> {
 // no authenticated session, so RLS / current_firm_id() can't scope them.
 export async function readLearnedMappingsForFirm(
   firmId: string,
+  clientId?: QuickbooksClientScope,
 ): Promise<LearnedMappings> {
   const sb = getServiceRoleSupabase();
-  const res = await sb
-    .from("quickbooks_learned_mappings")
-    .select(SELECT)
-    .eq("firm_id", firmId);
+  const base = () =>
+    sb.from("quickbooks_learned_mappings").select(SELECT).eq("firm_id", firmId);
+  const res = await runWithClientFallback(
+    () => withClientScope(base(), clientId),
+    () => base(),
+  );
   if (res.error) {
     if (!isMissingSchema(res.error)) {
       console.error(
@@ -77,6 +91,7 @@ export async function readLearnedMappingsForFirm(
 // request that triggered the learning.
 export async function recordLearnedMapping(input: {
   firmId: string;
+  clientId?: QuickbooksClientScope;
   signalType: LearnSignal;
   sourceKey: string;
   sourceSample: string;
@@ -84,34 +99,54 @@ export async function recordLearnedMapping(input: {
   reviewerId: string | null;
 }): Promise<void> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb.from("quickbooks_learned_mappings").upsert(
-    {
-      firm_id: input.firmId,
-      signal_type: input.signalType,
-      source_key: input.sourceKey,
-      source_sample: input.sourceSample.slice(0, 300),
-      target_qbo_id: input.target.id,
-      target_qbo_name: input.target.name,
-      reviewed_by: input.reviewerId,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "firm_id,signal_type,source_key" },
-  );
-  if (error && !isMissingSchema(error)) {
-    console.error("[quickbooks] recordLearnedMapping failed:", error);
-  }
+  // undefined/null both mean the firm-level mapping (client_id NULL).
+  const clientValue = input.clientId ?? null;
+  const run = async (useClientId: boolean): Promise<{ schemaMiss: boolean }> => {
+    const onConflict = useClientId
+      ? "firm_id,client_id,signal_type,source_key"
+      : "firm_id,signal_type,source_key";
+    const { error } = await sb.from("quickbooks_learned_mappings").upsert(
+      {
+        firm_id: input.firmId,
+        ...(useClientId ? { client_id: clientValue } : {}),
+        signal_type: input.signalType,
+        source_key: input.sourceKey,
+        source_sample: input.sourceSample.slice(0, 300),
+        target_qbo_id: input.target.id,
+        target_qbo_name: input.target.name,
+        reviewed_by: input.reviewerId,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict },
+    );
+    if (error && isMissingSchema(error)) return { schemaMiss: true };
+    if (error) {
+      console.error("[quickbooks] recordLearnedMapping failed:", error);
+    }
+    return { schemaMiss: false };
+  };
+
+  // PRIMARY (post-0710): client-inclusive conflict target with client_id set.
+  // FALLBACK (pre-0710): the client_id column is absent, so record firm-only.
+  const primary = await run(true);
+  if (primary.schemaMiss) await run(false);
 }
 
 // Delete ALL of a firm's learned mappings. Used when the connected QuickBooks
 // COMPANY changes (different realm / sandbox->production): every learned target
 // id belongs to the old company and would mis-map new documents. Service role;
 // best-effort (missing table pre-0490 is a no-op).
-export async function purgeFirmLearnedMappings(firmId: string): Promise<void> {
+export async function purgeFirmLearnedMappings(
+  firmId: string,
+  clientId?: QuickbooksClientScope,
+): Promise<void> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb
-    .from("quickbooks_learned_mappings")
-    .delete()
-    .eq("firm_id", firmId);
+  const base = () =>
+    sb.from("quickbooks_learned_mappings").delete().eq("firm_id", firmId);
+  const { error } = await runWithClientFallback(
+    () => withClientScope(base(), clientId),
+    () => base(),
+  );
   if (error && !isMissingSchema(error)) {
     console.error("[quickbooks] purgeFirmLearnedMappings failed:", error);
   }
