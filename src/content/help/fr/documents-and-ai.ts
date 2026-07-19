@@ -92,10 +92,6 @@ const howVylanChecksDocuments: HelpArticle = {
       ui("L'IA s'est trompée : approuver"),
       ".",
     ),
-    p(
-      "La lecture elle-même est faite par GPT-5.4 d'OpenAI, choisi pour une raison précise : il regarde le document de votre client en pleine résolution. Les modèles moins chers réduisent l'image avant de la voir, et c'est exactement comme ça qu'un gribouillis sur les chiffres de transit d'un chèque annulé passe pour « conforme ». Le détail qu'il doit attraper est petit, alors on ne le laisse pas plisser les yeux.",
-    ),
-
     h("Renvoyer automatiquement les mauvais téléversements"),
     p(
       "Dans vos réglages se trouve un interrupteur nommé ",
