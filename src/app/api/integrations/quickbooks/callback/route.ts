@@ -143,9 +143,13 @@ export async function GET(request: Request) {
       resolvedClientId,
     );
     if (!saved.ok) {
-      // Pre-migration (0710 not applied) or a DB error: show "finish setup".
+      // Pre-migration (0710 not applied) or a DB error. Route the FAILURE to
+      // Settings (clientId: null), NOT the client page — the client page only
+      // renders the QuickBooks card when that client is connected, so a failure
+      // there would show nothing at all. Settings → Integrations surfaces the
+      // "finish setup" / error message regardless of connection state.
       return back(saved.reason === "migration_pending" ? "setup" : "error", {
-        clientId: resolvedClientId,
+        clientId: null,
       });
     }
     // The connected COMPANY changed for this client (different realm, or sandbox
