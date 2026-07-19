@@ -189,8 +189,9 @@ async function safeRead<R, T>(
 // connection (or the token can't be refreshed).
 export async function readQuickbooksLists(
   firmId: string,
+  clientId?: string | null,
 ): Promise<ReadListsResult> {
-  const ctx = await getQuickbooksReadContext(firmId);
+  const ctx = await getQuickbooksReadContext(firmId, clientId);
   if (!ctx) return { ok: false, reason: "not_connected" };
   const accounts = await safeRead(ctx, "Account", toAccount);
   const vendors = await safeRead(ctx, "Vendor", toVendor);

@@ -19,6 +19,7 @@ import { purgeFirmQuickbooksCache } from "@/lib/db/quickbooks-cache";
 import { purgeFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import { listClients } from "@/lib/db/clients";
 import { matchClientByCompanyName } from "@/lib/quickbooks/client-link";
+import { enqueueQuickbooksSync } from "@/lib/quickbooks/sync";
 import { QBO_STATE_COOKIE, QBO_CLIENT_COOKIE } from "../connect/route";
 
 export const runtime = "nodejs";
@@ -167,6 +168,10 @@ export async function GET(request: Request) {
       await purgeFirmQuickbooksCache(firm.id, resolvedClientId);
       await purgeFirmLearnedMappings(firm.id, resolvedClientId);
     }
+    // Kick off THIS client's first cache sync in the background (best-effort) so
+    // its reference lists (accounts/vendors/customers/tax codes/items) populate,
+    // ready for posting. Per-client since Phase 3b.
+    await enqueueQuickbooksSync(firm.id, resolvedClientId);
     return back("done", { clientId: resolvedClientId });
   } catch (e) {
     if (e instanceof QuickbooksError) {
