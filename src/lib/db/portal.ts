@@ -24,6 +24,8 @@ import {
 } from "@/lib/db/final-documents";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { firmPaymentRails } from "@/lib/payments/rails";
+import { reconcilePayPalOrder } from "@/lib/payments/paypal-reconcile";
+import { firmPayPalMerchantId } from "@/lib/db/paypal-connect";
 import {
   isPayPalConfigured,
   paypalClientId,
@@ -285,13 +287,35 @@ export async function loadPortalContext(
 
   // The latest payment request (if any) for the "Payment due" card. Tolerant of
   // the table being absent before migration 0380 (data stays null on error).
-  const { data: pr } = await sb
+  const { data: prRow } = await sb
     .from("payment_requests")
-    .select("id, amount_cents, currency, description, status")
+    .select("id, amount_cents, currency, description, status, paypal_order_id")
     .eq("engagement_id", engagement.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  let pr = prRow;
+
+  // Self-heal a wedged PayPal payment: an order was created for this invoice
+  // but it's still 'requested' — if the buyer actually APPROVED (and the
+  // popup's callback to the page died, a real incident) the reconcile captures
+  // it server-side; if it was already captured it just flips the invoice. One
+  // extra PayPal read ONLY in that narrow state, never on ordinary loads.
+  // syncStage true: until the Phase 4 webhook exists, this is the only
+  // completer for that path, so the stage/lock must not be left behind.
+  if (
+    pr &&
+    pr.status === "requested" &&
+    (pr as { paypal_order_id?: string | null }).paypal_order_id
+  ) {
+    const sellerId = await firmPayPalMerchantId(engagement.firm_id as string);
+    const healed = await reconcilePayPalOrder(pr.id as string, sellerId, {
+      syncStage: true,
+    });
+    if (healed && healed !== pr.status) {
+      pr = { ...pr, status: healed };
+    }
+  }
   const invoiceAttachment = pr
     ? await getInvoiceAttachmentForEngagementSR(engagement.id)
     : null;

@@ -8,7 +8,7 @@ vi.mock("./client", () => ({
 process.env.PAYPAL_CLIENT_ID = "client-1";
 process.env.PAYPAL_CLIENT_SECRET = "secret-1";
 
-import { createOrderForInvoice, captureOrder } from "./orders";
+import { createOrderForInvoice, captureOrder, getOrder } from "./orders";
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -49,6 +49,18 @@ describe("createOrderForInvoice", () => {
     expect(pu.invoice_id).toBe("inv-1");
     expect(pu.amount).toEqual({ currency_code: "CAD", value: "250.00" });
     expect(pu.payee).toEqual({ merchant_id: "SELLER1" });
+  });
+
+  it("sends NO idempotency request id (a stable one would pin the invoice to an expired order)", async () => {
+    fetchMock.mockResolvedValue({ status: 201, json: { id: "O" } });
+    await createOrderForInvoice({
+      invoiceId: "inv-1",
+      amountCents: 100,
+      currency: "cad",
+      sellerMerchantId: "S",
+    });
+    const opts = fetchMock.mock.calls[0][1] as { requestId?: string };
+    expect(opts.requestId).toBeUndefined();
   });
 
   it("formats odd cent amounts to two decimals", async () => {
@@ -137,6 +149,16 @@ describe("captureOrder", () => {
     });
   });
 
+  it("keeps the capture idempotency key (retrying ONE order must never double-charge)", async () => {
+    fetchMock.mockResolvedValue({
+      status: 201,
+      json: { status: "COMPLETED", purchase_units: [] },
+    });
+    await captureOrder({ orderId: "ORDER1", sellerMerchantId: "S" });
+    const opts = fetchMock.mock.calls[0][1] as { requestId?: string };
+    expect(opts.requestId).toBe("vylan-capture-ORDER1");
+  });
+
   it("PENDING status is returned as ok (not COMPLETED) so the caller leaves the invoice open", async () => {
     fetchMock.mockResolvedValue({
       status: 201,
@@ -156,6 +178,58 @@ describe("captureOrder", () => {
       status: "PENDING",
       captureId: "CAP1",
       customId: "inv-1",
+    });
+  });
+});
+
+describe("getOrder", () => {
+  it("reads an order's status + capture + invoice echo", async () => {
+    fetchMock.mockResolvedValue({
+      status: 200,
+      json: {
+        status: "COMPLETED",
+        purchase_units: [
+          {
+            custom_id: "inv-1",
+            payments: { captures: [{ id: "CAP1", status: "COMPLETED" }] },
+          },
+        ],
+      },
+    });
+    const res = await getOrder({ orderId: "O1", sellerMerchantId: "S" });
+    expect(res).toEqual({
+      ok: true,
+      status: "COMPLETED",
+      captureId: "CAP1",
+      captureStatus: "COMPLETED",
+      customId: "inv-1",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/v2/checkout/orders/O1",
+      expect.objectContaining({ sellerMerchantId: "S" }),
+    );
+  });
+
+  it("an APPROVED order reads with no capture yet", async () => {
+    fetchMock.mockResolvedValue({
+      status: 200,
+      json: { status: "APPROVED", purchase_units: [{ custom_id: "inv-1" }] },
+    });
+    const res = await getOrder({ orderId: "O1", sellerMerchantId: "S" });
+    expect(res).toEqual({
+      ok: true,
+      status: "APPROVED",
+      captureId: null,
+      captureStatus: null,
+      customId: "inv-1",
+    });
+  });
+
+  it("404 = not_found", async () => {
+    fetchMock.mockResolvedValue({ status: 404, json: null });
+    expect(await getOrder({ orderId: "O1", sellerMerchantId: "S" })).toEqual({
+      ok: false,
+      reason: "not_found",
     });
   });
 });

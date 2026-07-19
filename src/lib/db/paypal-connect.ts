@@ -129,6 +129,25 @@ export async function clearFirmPayPalConnection(firmId: string): Promise<void> {
   }
 }
 
+// The firm's PayPal merchant id, or null when not connected. Used by the
+// payment reconcile paths, which need only the seller id (the mode gate guards
+// OFFERING the rail; healing an existing order is always legitimate).
+export async function firmPayPalMerchantId(
+  firmId: string,
+): Promise<string | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("firms")
+    .select("paypal_merchant_id")
+    .eq("id", firmId)
+    .maybeSingle();
+  if (error) {
+    console.error("[paypal-connect] firmPayPalMerchantId failed:", error);
+    return null;
+  }
+  return (data?.paypal_merchant_id as string | null) ?? null;
+}
+
 // Forge-proof firm lookup for the Phase 4 webhook: resolve a firm by its PayPal
 // merchant id (unique-indexed, 0730) — the same trusted-link pattern the
 // Stripe Connect webhook uses.
