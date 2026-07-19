@@ -16,6 +16,14 @@
    ===================================================================== */
 
 .vyf {
+  /* Lift above the landing page's fixed bird background (.vy-figure, a
+     full-viewport SOLID-BLUE layer at position:fixed z-index:0). Without this
+     the footer renders in normal flow BEHIND that layer and is painted over
+     with blue — invisible. The CTA and the old footer both carry this exact
+     pairing for the same reason; the new footer regressed it. Inert on pages
+     with no fixed background (help center, privacy, terms). */
+  position: relative;
+  z-index: 5;
   background: #0a0a0b;
   color: #c9cdd4;
   font-size: 14px;
