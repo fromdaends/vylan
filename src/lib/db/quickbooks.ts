@@ -160,6 +160,32 @@ export async function getClientQuickbooksStatus(
   return getFirmQuickbooksStatus(clientId);
 }
 
+// Does the current firm have ANY QuickBooks connection at all — firm-level OR for
+// any client? This is the "does this firm use QuickBooks" signal that gates the
+// QuickBooks UI (sidebar nav, Integrations hub card, command-palette entry) so
+// NOTHING QuickBooks-y shows until the firm has connected at least one company.
+// Distinct from getFirmQuickbooksStatus (scoped to a single connection row): this
+// counts per-client connections too (no client_id filter). RLS scopes it to the
+// firm. Returns false before the migration / on any error.
+export async function firmHasAnyQuickbooksConnection(): Promise<boolean> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("quickbooks_connections")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error(
+        "[quickbooks] firmHasAnyQuickbooksConnection failed:",
+        error,
+      );
+    }
+    return false;
+  }
+  return data != null;
+}
+
 export type UpsertQuickbooksConnectionInput = {
   realmId: string;
   accessToken: string;

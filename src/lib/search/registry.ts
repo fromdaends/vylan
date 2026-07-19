@@ -68,6 +68,8 @@ export type SearchEntry = {
   action?: SearchActionId;
   /** Hidden for non-owners (billing, audit log, firm export/delete). */
   ownerOnly?: boolean;
+  /** Hidden until the firm has connected QuickBooks (any client). */
+  requiresQuickbooks?: boolean;
   /** Shown in the idle "Jump to" list (before the user types). */
   primary?: boolean;
 };
@@ -85,7 +87,7 @@ export type RegistryTranslators = {
 
 export function buildSearchRegistry(
   t: RegistryTranslators,
-  opts: { isOwner: boolean },
+  opts: { isOwner: boolean; quickbooksConnected?: boolean },
 ): SearchEntry[] {
   const entries: SearchEntry[] = [
     // ── Destinations ("Go to") ───────────────────────────────────────────
@@ -136,6 +138,9 @@ export function buildSearchRegistry(
       icon: Plug,
       color: "text-icon-cyan",
       href: "/quickbooks/drafts",
+      // Hidden until the firm actually uses QuickBooks — mirrors the sidebar nav
+      // so it's not a searchable destination before there's a connection.
+      requiresQuickbooks: true,
       keywords:
         "integrations integration connect apps quickbooks drafts bookkeeping transactions approve dismiss qbo intuit integrations comptabilite brouillons ecritures approuver",
     },
@@ -428,7 +433,11 @@ export function buildSearchRegistry(
     },
   ];
 
-  return opts.isOwner ? entries : entries.filter((e) => !e.ownerOnly);
+  return entries.filter(
+    (e) =>
+      (opts.isOwner || !e.ownerOnly) &&
+      (!e.requiresQuickbooks || opts.quickbooksConnected === true),
+  );
 }
 
 // ── Matching ────────────────────────────────────────────────────────────────

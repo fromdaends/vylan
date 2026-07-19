@@ -28,7 +28,11 @@ export type QuickbooksStatus = {
   // card already renders — no separate "confirming" state is needed (unlike
   // Stripe, whose status arrives later via webhook). "enc" = the go-live safety
   // lock refused a production connect because token encryption isn't configured.
-  callbackStatus: "done" | "denied" | "error" | "setup" | "enc" | null;
+  // "nomatch" = the per-client auto-link couldn't match the connected company to
+  // a client by name (prompt the owner to name a client to match, then reconnect).
+  callbackStatus: "done" | "denied" | "error" | "setup" | "enc" | "nomatch" | null;
+  // The company name from a "nomatch" callback, to name it in the prompt.
+  nomatchCompany: string | null;
 };
 
 export function IntegrationsSection({
@@ -164,6 +168,16 @@ export function IntegrationsSection({
       <h2 className="text-sm font-semibold">{t("qbo_title")}</h2>
       <p className="mt-1 text-xs text-muted-foreground">{t("qbo_hint")}</p>
 
+      {/* Auto-link couldn't match the connected company to a client by name —
+          prompt the owner to name a client to match, then connect again. */}
+      {quickbooks.callbackStatus === "nomatch" && (
+        <div className="mt-4 max-w-xl rounded-lg border border-warning/40 bg-warning/[0.06] p-4 text-xs leading-relaxed text-muted-foreground">
+          {quickbooks.nomatchCompany
+            ? t("qbo_nomatch_company", { company: quickbooks.nomatchCompany })
+            : t("qbo_nomatch")}
+        </div>
+      )}
+
       {!quickbooks.configured ? (
         <div className="mt-4 max-w-xl rounded-lg border border-border/50 px-4 py-3 text-xs text-muted-foreground">
           {t("qbo_unavailable")}
@@ -289,7 +303,7 @@ export function IntegrationsSection({
                       disabled={loading}
                       aria-busy={loading}
                     >
-                      {loading ? "…" : t("qbo_connect_cta")}
+                      {loading ? "…" : t("qbo_connect_client_cta")}
                     </Button>
                   </div>
                   {(error || callbackError) && (
