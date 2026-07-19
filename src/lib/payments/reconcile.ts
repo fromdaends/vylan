@@ -12,11 +12,10 @@
 import { stripe } from "@/lib/stripe";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import {
-  markPaymentRequestPaidSR,
   type PaymentRequest,
   type PaymentRequestStatus,
 } from "@/lib/db/payment-requests";
-import { logServiceRoleActivity } from "@/lib/db/activity";
+import { recordInvoicePaid } from "@/lib/payments/paid-event";
 
 export async function reconcilePaymentRequest(
   paymentRequestId: string,
@@ -50,22 +49,15 @@ export async function reconcilePaymentRequest(
       typeof session.payment_intent === "string"
         ? session.payment_intent
         : (session.payment_intent?.id ?? null);
-    const result = await markPaymentRequestPaidSR(pr.id, {
-      checkoutSessionId: session.id,
-      paymentIntentId,
-    });
-    if (result) {
-      await logServiceRoleActivity(
-        result.firmId,
-        result.engagementId,
-        "client_paid",
-        {
-          amount_cents: result.amountCents,
-          currency: result.currency,
-          payment_request_id: pr.id,
-        },
-      );
-    }
+    // Unified paid event, shared with the webhook — minus the stage sync,
+    // which this path (running mid-render) has never done: the stage catches
+    // up on the webhook or the next stage event, exactly as before.
+    await recordInvoicePaid(
+      pr.id,
+      "stripe",
+      { checkoutSessionId: session.id, paymentIntentId },
+      { syncStage: false },
+    );
     return "paid";
   } catch (e) {
     console.error("[reconcile] checkout session retrieve failed:", e);

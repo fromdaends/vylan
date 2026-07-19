@@ -11,6 +11,8 @@ import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server
 
 export type PaymentRequestStatus = "requested" | "paid" | "failed" | "canceled";
 export type PaymentDelivery = "portal" | "email" | "both";
+// Which rail collected the money (migration 0730). Stamped at the paid flip.
+export type PaidProvider = "stripe" | "paypal";
 
 export type PaymentRequest = {
   id: string;
@@ -24,6 +26,11 @@ export type PaymentRequest = {
   delivery: PaymentDelivery;
   stripe_checkout_session_id: string | null;
   stripe_payment_intent_id: string | null;
+  // PayPal references + which rail settled the invoice (migration 0730).
+  // Optional so reads survive the pre-0730 window; null on Stripe-only rows.
+  paypal_order_id?: string | null;
+  paypal_capture_id?: string | null;
+  paid_provider?: PaidProvider | null;
   paid_at: string | null;
   requested_by_user_id: string | null;
   // True for automated invoices (migration 0590). Optional on the type so reads
@@ -480,12 +487,24 @@ export async function attachCheckoutSessionSR(
     .eq("id", id);
 }
 
-// Mark a request paid. Idempotent: returns null (no-op) if the row is missing or
-// already paid, so a re-delivered webhook can't double-process. Returns the
-// row's firm/engagement/amount so the caller can log the activity.
+// Mark a request paid. Idempotent AND atomic: the UPDATE itself is conditional
+// on the row not already being paid (first writer wins), so a re-delivered
+// webhook, a reconcile racing the webhook, or a second RAIL racing the first
+// (two rails exist as of 0730) can never double-process — the loser sees zero
+// rows updated and gets null, exactly like the pre-read guard. Returns the
+// row's firm/engagement/amount so the caller can log the activity, or null when
+// the row is missing / already paid / lost the race.
 export async function markPaymentRequestPaidSR(
   id: string,
-  opts: { checkoutSessionId?: string | null; paymentIntentId?: string | null },
+  opts: {
+    checkoutSessionId?: string | null;
+    paymentIntentId?: string | null;
+    paypalOrderId?: string | null;
+    paypalCaptureId?: string | null;
+    // Stamped onto paid_provider (0730). Optional so the pre-0730 window and
+    // legacy callers keep working; the column simply stays null.
+    provider?: PaidProvider;
+  },
 ): Promise<{
   firmId: string;
   engagementId: string | null;
@@ -501,21 +520,49 @@ export async function markPaymentRequestPaidSR(
   if (!cur) return null;
   const row = cur as PaymentRequest;
   if (row.status === "paid") return null; // already processed
-  const { error } = await sb
+
+  const base = {
+    status: "paid",
+    paid_at: new Date().toISOString(),
+    stripe_checkout_session_id:
+      opts.checkoutSessionId ?? row.stripe_checkout_session_id,
+    stripe_payment_intent_id:
+      opts.paymentIntentId ?? row.stripe_payment_intent_id,
+  };
+  // The 0730 columns ride along only when the caller supplied them, and are
+  // dropped on the pre-0730 retry below so the flip never fails on a missing
+  // column.
+  const with0730: Record<string, unknown> = { ...base };
+  if (opts.provider) with0730.paid_provider = opts.provider;
+  if (opts.paypalOrderId != null) with0730.paypal_order_id = opts.paypalOrderId;
+  if (opts.paypalCaptureId != null)
+    with0730.paypal_capture_id = opts.paypalCaptureId;
+
+  // .neq guard = the atomic first-writer-wins. .select returns the updated rows
+  // so "zero rows" (someone else already paid it) is detectable.
+  let { data: updated, error } = await sb
     .from("payment_requests")
-    .update({
-      status: "paid",
-      paid_at: new Date().toISOString(),
-      stripe_checkout_session_id:
-        opts.checkoutSessionId ?? row.stripe_checkout_session_id,
-      stripe_payment_intent_id:
-        opts.paymentIntentId ?? row.stripe_payment_intent_id,
-    })
-    .eq("id", id);
+    .update(with0730)
+    .eq("id", id)
+    .neq("status", "paid")
+    .select("id");
+  if (
+    error &&
+    isUnknownColumnError(error) &&
+    Object.keys(with0730).length > Object.keys(base).length
+  ) {
+    ({ data: updated, error } = await sb
+      .from("payment_requests")
+      .update(base)
+      .eq("id", id)
+      .neq("status", "paid")
+      .select("id"));
+  }
   if (error) {
     console.error("[payment-requests] markPaid(SR) failed:", error);
     return null;
   }
+  if ((updated?.length ?? 0) === 0) return null; // lost the race — already paid
   return {
     firmId: row.firm_id,
     engagementId: row.engagement_id,
@@ -524,7 +571,10 @@ export async function markPaymentRequestPaidSR(
   };
 }
 
-// Mark a request failed (async payment failure). Never overwrites a paid row.
+// Mark a request failed (async payment failure). Never overwrites a paid row —
+// the .neq guard makes that atomic (a payment landing between the read and this
+// write survives; the failure becomes a no-op), and zero rows updated reports
+// null so the caller logs nothing.
 export async function markPaymentRequestFailedSR(
   id: string,
 ): Promise<{ firmId: string; engagementId: string | null } | null> {
@@ -536,7 +586,17 @@ export async function markPaymentRequestFailedSR(
     .maybeSingle();
   if (!cur) return null;
   if ((cur as { status: string }).status === "paid") return null;
-  await sb.from("payment_requests").update({ status: "failed" }).eq("id", id);
+  const { data: updated, error } = await sb
+    .from("payment_requests")
+    .update({ status: "failed" })
+    .eq("id", id)
+    .neq("status", "paid")
+    .select("id");
+  if (error) {
+    console.error("[payment-requests] markFailed(SR) failed:", error);
+    return null;
+  }
+  if ((updated?.length ?? 0) === 0) return null; // paid won the race
   return {
     firmId: (cur as { firm_id: string }).firm_id,
     engagementId: (cur as { engagement_id: string | null }).engagement_id,
