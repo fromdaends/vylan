@@ -23,6 +23,7 @@ import {
 import { buildPaymentRequestEmail, sendEmail } from "@/lib/email";
 import { downloadObject, getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getInvoiceAttachmentForEngagementSR } from "@/lib/db/final-documents";
+import { firmPaymentRails } from "@/lib/payments/rails";
 import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
 import { formatCurrency } from "@/lib/format";
 
@@ -89,13 +90,37 @@ export async function sendEngagementInvoice(
     return { ok: false, reason: "already_sent" };
   }
 
-  const { data: firm } = await sb
+  // Read both rails' readiness. Pre-0730 the paypal_* columns don't exist —
+  // retry with the legacy select so the automation keeps working in the
+  // deploy->migrate window (the rail check then sees Stripe only, as today).
+  const railCols =
+    "name, logo_url, connect_charges_enabled, paypal_merchant_id, paypal_payments_receivable, paypal_email_confirmed";
+  let firmRes = await sb
     .from("firms")
-    .select("name, logo_url, connect_charges_enabled")
+    .select(railCols)
     .eq("id", engagement.firm_id)
     .maybeSingle();
-  // No Connect = the firm can't receive a payment; don't create a dead invoice.
-  if (!firm || firm.connect_charges_enabled !== true) {
+  if (
+    firmRes.error &&
+    (firmRes.error.code === "PGRST204" || firmRes.error.code === "42703")
+  ) {
+    firmRes = await sb
+      .from("firms")
+      .select("name, logo_url, connect_charges_enabled")
+      .eq("id", engagement.firm_id)
+      .maybeSingle();
+  }
+  const firm = firmRes.data as {
+    name: string;
+    logo_url: string | null;
+    connect_charges_enabled: boolean;
+    paypal_merchant_id?: string | null;
+    paypal_payments_receivable?: boolean | null;
+    paypal_email_confirmed?: boolean | null;
+  } | null;
+  // No ready rail = the firm can't receive a payment; don't create a dead
+  // invoice. (Stripe today; a connected PayPal also counts once Phase 2 lands.)
+  if (!firm || !firmPaymentRails(firm).any) {
     return { ok: false, reason: "not_connected" };
   }
 

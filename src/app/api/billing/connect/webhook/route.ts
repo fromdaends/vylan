@@ -7,11 +7,9 @@ import {
   clearFirmConnectAccount,
 } from "@/lib/db/stripe-connect";
 import {
-  markPaymentRequestPaidSR,
-  markPaymentRequestFailedSR,
-} from "@/lib/db/payment-requests";
-import { logServiceRoleActivity } from "@/lib/db/activity";
-import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
+  recordInvoicePaid,
+  recordInvoiceFailed,
+} from "@/lib/payments/paid-event";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -114,39 +112,17 @@ async function handlePaymentSucceeded(session: Stripe.Checkout.Session) {
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : (session.payment_intent?.id ?? null);
-  // markPaid is idempotent (no-op if already paid), so a re-delivered event
-  // can't double-process.
-  const result = await markPaymentRequestPaidSR(prId, {
+  // The unified paid event (lib/payments/paid-event.ts) flips the invoice,
+  // logs the activity, and re-syncs the engagement stage — idempotently, so a
+  // re-delivered event can't double-process. Shared with every other rail.
+  await recordInvoicePaid(prId, "stripe", {
     checkoutSessionId: session.id,
     paymentIntentId,
   });
-  if (result) {
-    await logServiceRoleActivity(result.firmId, result.engagementId, "client_paid", {
-      amount_cents: result.amountCents,
-      currency: result.currency,
-      payment_request_id: prId,
-    });
-    // Payment lands: the engagement leaves awaiting_payment. It becomes
-    // "completed" only if the finished work is actually out with the client —
-    // otherwise it settles back on in_preparation until the deliverables are
-    // released, exactly as the spec requires. Paying also lifts the deliverables
-    // lock, so a locked-and-now-paid engagement reads completed in one step.
-    // (engagement_id is nullable — a payment need not belong to an engagement.)
-    if (result.engagementId) await syncEngagementStageSR(result.engagementId);
-  }
 }
 
 async function handlePaymentFailed(pi: Stripe.PaymentIntent) {
   const prId = pi.metadata?.payment_request_id;
   if (!prId) return;
-  const result = await markPaymentRequestFailedSR(prId);
-  if (result) {
-    await logServiceRoleActivity(result.firmId, result.engagementId, "payment_failed", {
-      payment_request_id: prId,
-    });
-    // A failed invoice is still owed, so this rarely moves the stage — but it
-    // can re-apply the deliverables lock a moment of optimism had lifted, which
-    // pulls a "completed" engagement back to awaiting_payment. Honest.
-    if (result.engagementId) await syncEngagementStageSR(result.engagementId);
-  }
+  await recordInvoiceFailed(prId, "stripe");
 }

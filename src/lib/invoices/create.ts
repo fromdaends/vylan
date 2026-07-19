@@ -21,6 +21,7 @@ import {
   type PaymentDelivery,
 } from "@/lib/db/payment-requests";
 import { logUserActivity } from "@/lib/db/activity";
+import { firmPaymentRails } from "@/lib/payments/rails";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { buildPaymentRequestEmail, sendEmail } from "@/lib/email";
@@ -65,8 +66,10 @@ export async function createInvoiceForEngagement(
 ): Promise<CreateInvoiceResult> {
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) return { ok: false, reason: "unauthenticated" };
-  // Can't create a payable invoice until the firm can actually receive money.
-  if (firm.connect_charges_enabled !== true) {
+  // Can't create a payable invoice until the firm can actually receive money on
+  // at least one rail (Stripe today; PayPal too once connected — the invoice is
+  // provider-agnostic, so any ready rail makes it payable).
+  if (!firmPaymentRails(firm).any) {
     return { ok: false, reason: "not_connected" };
   }
   if (!isValidAmount(input.amountCents)) {
