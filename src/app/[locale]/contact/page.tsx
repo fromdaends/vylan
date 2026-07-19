@@ -67,16 +67,6 @@ export default async function ContactPage({
     follow: t("follow"),
   };
 
-  const footer = {
-    brand: t("brand_word"),
-    howItWorks: t("footer_how_it_works"),
-    bookDemo: t("footer_book_demo"),
-    contact: t("footer_contact"),
-    login: t("footer_login"),
-    help: t("footer_help"),
-    copyright: t("footer_copyright"),
-    location: t("contact_location_value"),
-  };
 
   return (
     <div className={`vy-manifesto vy-contactpage ${schibsted.variable}`}>
@@ -142,7 +132,7 @@ export default async function ContactPage({
         <LeadForm />
       </section>
 
-      <VylanFooter s={footer} helpHref={helpHref} />
+      <VylanFooter />
     </div>
   );
 }
