@@ -299,6 +299,13 @@ export async function createEngagementAction(
     }
     if (payload.send) {
       const sent = await sendEngagement(engagementId);
+      // Set the workflow stage the same way sendEngagementAction does. Without
+      // this, an engagement CREATED-AND-SENT in one step (the /engagements/new
+      // flow) keeps stage = null, so its detail header falls back to the "Sent"
+      // status pill instead of the "Collecting documents" stage. The
+      // detail-page Send button synced; this path was missed when stages
+      // were wired in. Best-effort (stage-sync self-heals on the next event).
+      await syncEngagementStage(await getServerSupabase(), engagementId);
       await deliverInviteEmail(engagementId);
       if (sent.sent_at) {
         await scheduleEngagementReminders({
