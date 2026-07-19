@@ -32,8 +32,13 @@ function renderCard(status: Partial<ClientQuickbooksStatus>, isOwner = true) {
 }
 
 describe("ClientQuickbooksCard", () => {
-  it("renders nothing when the client is NOT connected (connecting is central)", () => {
-    const { container } = renderCard({ connected: false });
+  it("not connected + owner: offers Connect QuickBooks (connects THIS client)", () => {
+    renderCard({ connected: false }, true);
+    expect(screen.getByText("Connect QuickBooks")).toBeTruthy();
+  });
+
+  it("not connected + staff: renders nothing", () => {
+    const { container } = renderCard({ connected: false }, false);
     expect(container.firstChild).toBeNull();
   });
 
@@ -54,7 +59,7 @@ describe("ClientQuickbooksCard", () => {
     expect(screen.getByText("Reconnect QuickBooks")).toBeTruthy();
   });
 
-  it("staff see the connected status but no disconnect action", () => {
+  it("connected: staff see the status but no disconnect action", () => {
     renderCard({ connected: true, companyName: "Acme Books Inc." }, false);
     expect(screen.getByText("Connected to QuickBooks")).toBeTruthy();
     expect(screen.queryByText("Disconnect")).toBeNull();
