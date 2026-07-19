@@ -91,6 +91,23 @@
   color: #3a3d43;
 }
 
+/* Social icons under the language switch. Bare muted marks that light up on
+   hover — same restraint as the link columns. */
+.vyf-social {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.vyf-social-link {
+  display: inline-flex;
+  color: #7c828d;
+  transition: color 140ms ease;
+}
+.vyf-social-link:hover {
+  color: #ffffff;
+}
+
 .vyf-col-title {
   font-size: 11px;
   font-weight: 700;
