@@ -1,11 +1,22 @@
+import type { Metadata } from "next";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { brand } from "@/lib/brand";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { assertLocale } from "@/lib/locale";
-import { PublicNav } from "@/components/public/public-nav";
-import { VylanFooter } from "@/components/vylan-landing/vylan-footer";
+import { LegalDoc, type LegalSection } from "@/components/vylan-landing/legal-doc";
 
 export const dynamic = "force-static";
+
+const LAST_UPDATED = "2026-07-19";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<Metadata> {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: "Privacy" });
+  return { title: `${t("title")} · Vylan` };
+}
 
 export default async function PrivacyPage({
   params,
@@ -17,48 +28,28 @@ export default async function PrivacyPage({
   setRequestLocale(locale);
   const t = await getTranslations("Privacy");
 
+  const sections: LegalSection[] = [
+    { h: t("h_overview"), body: t("p_overview") },
+    { h: t("h_what_we_collect"), body: t("p_what_we_collect"), list: true },
+    { h: t("h_why"), body: t("p_why"), list: true },
+    { h: t("h_ai"), body: t("p_ai") },
+    { h: t("h_law25"), body: t("p_law25") },
+    { h: t("h_residency"), body: t("p_residency") },
+    { h: t("h_sharing"), body: t("p_sharing") },
+    { h: t("h_subprocessors"), body: t("p_subprocessors"), list: true },
+    { h: t("h_security"), body: t("p_security") },
+    { h: t("h_retention"), body: t("p_retention") },
+    { h: t("h_rights"), body: t("p_rights"), list: true },
+    { h: t("h_breach"), body: t("p_breach") },
+    { h: t("h_contact"), body: t("p_contact", { email: brand.supportEmail }) },
+  ];
+
   return (
-    <main className="flex-1 flex flex-col pt-24 sm:pt-28">
-      <PublicNav />
-
-      <article className="mx-auto max-w-3xl px-6 py-16 space-y-6">
-        <Alert variant="destructive">
-          <AlertDescription>
-            <strong>{t("draft_banner_title")}</strong> {t("draft_banner_body")}
-          </AlertDescription>
-        </Alert>
-
-        <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t("updated", { date: "2026-05-12" })}
-        </p>
-
-        <Section heading={t("h_overview")} body={t("p_overview")} />
-        <Section heading={t("h_what_we_collect")} body={t("p_what_we_collect")} />
-        <Section heading={t("h_why")} body={t("p_why")} />
-        <Section heading={t("h_law25")} body={t("p_law25")} />
-        <Section heading={t("h_residency")} body={t("p_residency")} />
-        <Section heading={t("h_sharing")} body={t("p_sharing")} />
-        <Section heading={t("h_subprocessors")} body={t("p_subprocessors")} />
-        <Section heading={t("h_security")} body={t("p_security")} />
-        <Section heading={t("h_retention")} body={t("p_retention")} />
-        <Section heading={t("h_rights")} body={t("p_rights")} />
-        <Section heading={t("h_breach")} body={t("p_breach")} />
-        <Section heading={t("h_contact")} body={t("p_contact", { email: brand.supportEmail })} />
-      </article>
-
-      <VylanFooter />
-    </main>
-  );
-}
-
-function Section({ heading, body }: { heading: string; body: string }) {
-  return (
-    <section className="space-y-2">
-      <h2 className="text-xl font-semibold tracking-tight pt-2">{heading}</h2>
-      <p className="text-sm leading-relaxed text-muted-foreground whitespace-pre-line">
-        {body}
-      </p>
-    </section>
+    <LegalDoc
+      locale={locale}
+      title={t("title")}
+      updated={t("updated", { date: LAST_UPDATED })}
+      sections={sections}
+    />
   );
 }
