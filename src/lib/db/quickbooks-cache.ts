@@ -10,6 +10,7 @@ import {
   getServiceRoleSupabase,
 } from "@/lib/supabase/server";
 import {
+  isFirmLevelScope,
   isMissingSchema,
   runWithClientFallback,
   withClientScope,
@@ -48,6 +49,7 @@ export async function getFirmSyncState(
       .from("quickbooks_connections")
       .select("last_synced_at, sync_status, sync_error");
   const { data, error } = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId).maybeSingle(),
     () => base().maybeSingle(),
   );
@@ -108,6 +110,7 @@ async function readCachedItems(
     return q;
   };
   const { data, error } = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId),
     () => base(),
   );
@@ -146,9 +149,14 @@ export async function readCachedQuickbooksLists(
     ]);
   };
   // Always try the client-scoped read first; degrade to the no-filter read when
-  // the client_id column isn't there yet (pre-0710).
+  // the client_id column isn't there yet (pre-0710) AND the scope is firm-level.
+  // For a specific client the missing-schema error stays → return null (no cache
+  // for that client yet), never the firm's rows.
   let [acc, ven, cus, tax] = await fetch(true);
-  if ([acc, ven, cus, tax].some((r) => r.error && isMissingSchema(r.error))) {
+  if (
+    isFirmLevelScope(clientId) &&
+    [acc, ven, cus, tax].some((r) => r.error && isMissingSchema(r.error))
+  ) {
     [acc, ven, cus, tax] = await fetch(false);
   }
   for (const r of [acc, ven, cus, tax]) {
@@ -211,9 +219,14 @@ export async function readCachedQuickbooksListsForFirm(
     ]);
   };
   // Always try the client-scoped read first; degrade to the no-filter read when
-  // the client_id column isn't there yet (pre-0710).
+  // the client_id column isn't there yet (pre-0710) AND the scope is firm-level.
+  // For a specific client the missing-schema error stays → return null (no cache
+  // for that client yet), never the firm's rows.
   let [acc, ven, cus, tax] = await fetch(true);
-  if ([acc, ven, cus, tax].some((r) => r.error && isMissingSchema(r.error))) {
+  if (
+    isFirmLevelScope(clientId) &&
+    [acc, ven, cus, tax].some((r) => r.error && isMissingSchema(r.error))
+  ) {
     [acc, ven, cus, tax] = await fetch(false);
   }
   for (const r of [acc, ven, cus, tax]) {
@@ -263,6 +276,7 @@ export async function setFirmSyncState(
   const base = () =>
     sb.from("quickbooks_connections").update(patch).eq("firm_id", firmId);
   const { error } = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId),
     () => base(),
   );
@@ -359,10 +373,12 @@ export async function replaceCachedEntity(
     return { schemaMiss: false };
   };
 
-  // PRIMARY (post-0710): always the client-inclusive pass. FALLBACK (pre-0710):
-  // the client_id column is absent, so replace firm-only.
+  // PRIMARY (post-0710): always the client-inclusive pass. FALLBACK (pre-0710, the
+  // client_id column is absent): replace firm-only — but ONLY for a firm-level
+  // scope. For a specific client, skip the fallback (it would upsert/prune the
+  // firm's rows); the primary already no-op'd on the missing column.
   const primary = await run(true);
-  if (primary.schemaMiss) await run(false);
+  if (primary.schemaMiss && isFirmLevelScope(clientId)) await run(false);
 }
 
 // Append/refresh ONE cached row WITHOUT the destructive prune replaceCachedEntity
@@ -411,11 +427,12 @@ export async function upsertCachedEntityRow(
   };
 
   // PRIMARY (post-0710): client-inclusive conflict target with client_id set.
-  // FALLBACK (pre-0710): client_id column absent, so upsert firm-only. A missing
-  // cache TABLE surfaces as schemaMiss in both passes → a clean no-op, mirroring
-  // the rest of this module.
+  // FALLBACK (pre-0710, client_id column absent): upsert firm-only — but ONLY for a
+  // firm-level scope; for a specific client, skip it (it would write to the firm
+  // row). A missing cache TABLE surfaces as schemaMiss and, for firm-level, the
+  // fallback also no-ops on the missing table — mirroring the rest of this module.
   const primary = await run(true);
-  if (primary.schemaMiss) await run(false);
+  if (primary.schemaMiss && isFirmLevelScope(clientId)) await run(false);
 }
 
 // Delete ALL of a firm's cached QuickBooks reference rows (all five entity
@@ -431,6 +448,7 @@ export async function purgeFirmQuickbooksCache(
   for (const table of Object.values(TABLE_BY_ENTITY)) {
     const base = () => sb.from(table).delete().eq("firm_id", firmId);
     const { error } = await runWithClientFallback(
+      clientId,
       () => withClientScope(base(), clientId),
       () => base(),
     );

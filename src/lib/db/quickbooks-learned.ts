@@ -12,6 +12,7 @@ import {
   getServiceRoleSupabase,
 } from "@/lib/supabase/server";
 import {
+  isFirmLevelScope,
   isMissingSchema,
   runWithClientFallback,
   withClientScope,
@@ -46,6 +47,7 @@ export async function readFirmLearnedMappings(
   const sb = await getServerSupabase();
   const base = () => sb.from("quickbooks_learned_mappings").select(SELECT);
   const res = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId),
     () => base(),
   );
@@ -68,6 +70,7 @@ export async function readLearnedMappingsForFirm(
   const base = () =>
     sb.from("quickbooks_learned_mappings").select(SELECT).eq("firm_id", firmId);
   const res = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId),
     () => base(),
   );
@@ -127,9 +130,11 @@ export async function recordLearnedMapping(input: {
   };
 
   // PRIMARY (post-0710): client-inclusive conflict target with client_id set.
-  // FALLBACK (pre-0710): the client_id column is absent, so record firm-only.
+  // FALLBACK (pre-0710, client_id column absent): record firm-only — but ONLY for a
+  // firm-level scope. For a specific client, skip it (it would write to the firm's
+  // mappings); the primary already no-op'd on the missing column.
   const primary = await run(true);
-  if (primary.schemaMiss) await run(false);
+  if (primary.schemaMiss && isFirmLevelScope(input.clientId)) await run(false);
 }
 
 // Delete ALL of a firm's learned mappings. Used when the connected QuickBooks
@@ -144,6 +149,7 @@ export async function purgeFirmLearnedMappings(
   const base = () =>
     sb.from("quickbooks_learned_mappings").delete().eq("firm_id", firmId);
   const { error } = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId),
     () => base(),
   );

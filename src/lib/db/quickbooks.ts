@@ -58,11 +58,22 @@ export function isMissingSchema(
 // client_id IS NULL returns exactly the one firm-level row.
 //
 // GRACEFUL DEGRADATION: this repo applies migrations manually, so 0710 may not be
-// live yet. The scoped query (with the client_id filter) is always tried first;
-// if the client_id column doesn't exist it fails with a missing-schema error and
-// we transparently retry the ORIGINAL no-filter query — which pre-0710 returns the
-// single legacy row, so behavior is preserved.
+// live yet. The scoped query (with the client_id filter) is always tried first; if
+// the client_id column doesn't exist it fails with a missing-schema error. The
+// degrade to the ORIGINAL no-filter query is then allowed ONLY for the firm-level
+// scope (undefined/null) — pre-0710 that returns the single legacy row, preserving
+// behavior. For a SPECIFIC client, dropping the filter would wrongly hit the
+// firm-level row (wrong read / disconnect DATA LOSS / connect clobber), so we must
+// NOT fall back — instead the missing-schema error surfaces and the caller yields
+// "absent"/no-op (that client simply has no row yet, pre-0710).
 export type QuickbooksClientScope = string | null | undefined;
+
+// Firm-level scope = undefined or null (the client_id IS NULL row). Only in this
+// case may a pre-0710 missing-schema error degrade to the no-filter fallback; a
+// specific client id must never fall back to the firm-level row.
+export function isFirmLevelScope(clientId: QuickbooksClientScope): boolean {
+  return clientId === undefined || clientId === null;
+}
 
 // Narrow a select/update/delete builder to the requested client scope. undefined
 // and null both mean the firm-level row (client_id IS NULL); only a uuid string
@@ -79,17 +90,23 @@ export function withClientScope<Q>(q: Q, clientId: QuickbooksClientScope): Q {
 }
 
 // Run a client-scoped query, degrading to the firm-only (no client_id filter)
-// query only when the client_id column doesn't exist yet (0710 not applied). Both
-// thunks must build a FRESH query (PostgREST builders are single-use). The scoped
-// thunk always runs first; the legacy thunk runs only on a missing-schema error.
+// query only when the client_id column doesn't exist yet (0710 not applied) AND
+// the scope is firm-level. Both thunks must build a FRESH query (PostgREST builders
+// are single-use). The scoped thunk always runs first; the legacy thunk runs only
+// on a missing-schema error for a firm-level scope. For a specific client the
+// scoped (errored) result is returned as-is, so the caller yields "absent"/no-op —
+// never the firm-level row.
 export async function runWithClientFallback<
   R extends { error: { code?: string; message?: string } | null },
 >(
+  clientId: QuickbooksClientScope,
   scoped: () => PromiseLike<R>,
   legacy: () => PromiseLike<R>,
 ): Promise<R> {
   const res = await scoped();
-  if (res.error && isMissingSchema(res.error)) return legacy();
+  if (res.error && isMissingSchema(res.error) && isFirmLevelScope(clientId)) {
+    return legacy();
+  }
   return res;
 }
 
@@ -113,6 +130,7 @@ export async function getFirmQuickbooksStatus(
       .from("quickbooks_connections")
       .select("realm_id, company_name, environment, connected_at");
   const { data, error } = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId).maybeSingle(),
     () => base().maybeSingle(),
   );
@@ -250,14 +268,18 @@ export async function upsertFirmQuickbooksConnection(
   // DISTINCT conflict-matches an existing firm-level row. FALLBACK (pre-0710, the
   // client_id column is absent): the primary saw a missing-schema error on every
   // tier (→ migration_pending), so retry the legacy firm-only conflict target with
-  // client_id omitted. (A genuine plaintext refusal also returns migration_pending;
-  // the retry simply refuses again, so the outcome is unchanged.)
+  // client_id omitted — but ONLY for a firm-level scope. For a specific client we
+  // must NOT fall back (attempt({}, "firm_id") would OVERWRITE the firm's real
+  // connection with the client's company); instead surface migration_pending so the
+  // OAuth callback shows "finish setup". (A genuine plaintext refusal also returns
+  // migration_pending; for firm-level the retry simply refuses again, unchanged.)
   const primary = await attempt(
     { client_id: clientId ?? null },
     "firm_id,client_id",
   );
   if (primary.ok || primary.reason !== "migration_pending") return primary;
-  return attempt({}, "firm_id");
+  if (isFirmLevelScope(clientId)) return attempt({}, "firm_id");
+  return primary;
 }
 
 // Self-heal the connected company's country (service role). Used by the sync job
@@ -277,6 +299,7 @@ export async function updateFirmQuickbooksCompanyCountry(
       .update({ company_country: country })
       .eq("firm_id", firmId);
   const { error } = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId),
     () => base(),
   );
@@ -301,6 +324,7 @@ export async function isFirmQuickbooksConnected(
   const base = () =>
     sb.from("quickbooks_connections").select("realm_id").eq("firm_id", firmId);
   const { data, error } = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId).maybeSingle(),
     () => base().maybeSingle(),
   );
@@ -373,11 +397,13 @@ export async function readFirmQuickbooksConnection(
     }
     return { data, error };
   };
-  // Always try the client-scoped read first; degrade to the no-filter read only
-  // when the client_id column is absent (pre-0710), which returns the single
-  // legacy row.
+  // Always try the client-scoped read first. Degrade to the no-filter read only
+  // when the client_id column is absent (pre-0710) AND the scope is firm-level —
+  // that returns the single legacy row. For a specific client we must NOT fall
+  // back (it would return the firm-level row); the missing-schema error stays and
+  // maps to {kind:"absent"} below.
   let { data, error } = await readOnce(true);
-  if (error && isMissingSchema(error)) {
+  if (error && isMissingSchema(error) && isFirmLevelScope(clientId)) {
     ({ data, error } = await readOnce(false));
   }
   if (error) {
@@ -557,9 +583,16 @@ export async function updateFirmQuickbooksTokens(
 
   // Always scope the WHERE first (undefined/null ⇒ client_id IS NULL, a uuid ⇒
   // that client). A missing-schema error means the client_id column (0710) isn't
-  // there yet → degrade to the original no-filter optimistic update.
+  // there yet → degrade to the original no-filter optimistic update ONLY for a
+  // firm-level scope. For a specific client, do NOT fall back (it would rotate the
+  // firm row's tokens); return the scoped "error" so the caller discards the
+  // rotation (that client simply has no connection yet, pre-0710).
   const scoped = await run(true);
-  if (scoped.result.outcome === "error" && scoped.schemaMiss) {
+  if (
+    scoped.result.outcome === "error" &&
+    scoped.schemaMiss &&
+    isFirmLevelScope(clientId)
+  ) {
     return (await run(false)).result;
   }
   return scoped.result;
@@ -575,6 +608,7 @@ export async function clearFirmQuickbooksConnection(
   const base = () =>
     sb.from("quickbooks_connections").delete().eq("firm_id", firmId);
   const { error } = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId),
     () => base(),
   );
@@ -599,6 +633,7 @@ export async function getFirmQuickbooksRealm(
       .select("realm_id, environment")
       .eq("firm_id", firmId);
   const { data, error } = await runWithClientFallback(
+    clientId,
     () => withClientScope(base(), clientId).maybeSingle(),
     () => base().maybeSingle(),
   );
