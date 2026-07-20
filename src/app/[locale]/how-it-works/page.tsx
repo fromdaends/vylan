@@ -2,7 +2,12 @@ import type { Metadata } from "next";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
-import { schibsted } from "@/components/vylan-landing/fonts";
+import {
+  schibsted,
+  poppins,
+  quicksand,
+  nunitoSans,
+} from "@/components/vylan-landing/fonts";
 import { VylanMenu } from "@/components/vylan-landing/vylan-menu";
 import { HowItWorksShell } from "@/components/vylan-landing/how-it-works-shell";
 import { LeadForm } from "@/components/vylan-landing/lead-form";
@@ -43,6 +48,8 @@ export default async function HowItWorksPage({
     heroTitle: t("hero_title"),
     heroSub: t("hero_sub"),
     ctaBook: t("cta_book"),
+    ctaSeeHow: t("cta_see_how"),
+    scrollLabel: t("scroll_label"),
     problemEyebrow: t("problem_eyebrow"),
     problemTitle: t("problem_title"),
     problemChips: [
@@ -93,6 +100,7 @@ export default async function HowItWorksPage({
         { name: t("wa_row4_name"), sub: t("wa_row4_sub") },
       ],
     },
+    integrationsLabel: t("integrations_label"),
     payEyebrow: t("pay_eyebrow"),
     payTitlePre: t("pay_title_pre"),
     payTitleWord: t("pay_title_word"),
@@ -107,6 +115,38 @@ export default async function HowItWorksPage({
     payStatTitle: t("pay_stat_title"),
     payStatBody: t("pay_stat_body"),
     payCaption: t("pay_caption"),
+    // "Invoicing built in" — the intro + the invoice mock. The mock's two
+    // service lines and two tax lines are literal strings so French gets its
+    // own number formatting ("2 400,00"), and the tax labels/amounts follow
+    // the same GST 5% / QST 9.975% math the real invoice engine uses.
+    inv: {
+      eyebrow: t("inv_eyebrow"),
+      title: t("inv_title"),
+      body: t("inv_body"),
+      mockNumber: t("inv_mock_number"),
+      mockFormat: t("inv_mock_format"),
+      lines: [
+        { label: t("inv_mock_line1"), amount: t("inv_mock_amt1") },
+        { label: t("inv_mock_line2"), amount: t("inv_mock_amt2") },
+        {
+          label: t("inv_mock_gst"),
+          amount: t("inv_mock_gst_amt"),
+          tax: true,
+          auto: t("inv_mock_auto"),
+        },
+        {
+          label: t("inv_mock_qst"),
+          amount: t("inv_mock_qst_amt"),
+          tax: true,
+          auto: t("inv_mock_auto"),
+        },
+      ],
+      totalLabel: t("inv_mock_total_label"),
+      total: t("inv_mock_total"),
+      foot: t("inv_mock_foot"),
+      directTitle: t("inv_direct_title"),
+      directBody: t("inv_direct_body"),
+    },
     trustEyebrow: t("trust_eyebrow"),
     trustTitle: t("trust_title"),
     trustIntro: t("trust_intro"),
@@ -140,7 +180,9 @@ export default async function HowItWorksPage({
 
 
   return (
-    <div className={`vy-wwd ${schibsted.variable}`}>
+    <div
+      className={`vy-wwd ${schibsted.variable} ${poppins.variable} ${quicksand.variable} ${nunitoSans.variable}`}
+    >
       {/* centred brand + shared slide-down menu (opens on hover) */}
       <VylanMenu s={menu} helpHref={helpHref} />
 
