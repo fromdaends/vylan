@@ -52,6 +52,8 @@ import {
   type QuickbooksStatus,
 } from "@/components/settings/integrations-section";
 import { PaymentsServicePrices } from "@/components/settings/payments-service-prices";
+import { PaymentsInvoicingSection } from "@/components/settings/payments-invoicing-section";
+import type { FirmInvoiceSettings } from "@/lib/db/invoice-settings";
 import { PaymentsInvoiceDefaults } from "@/components/settings/payments-invoice-defaults";
 import { ReminderAutomationDefaults } from "@/components/settings/reminder-automation-defaults";
 import { PaymentsList } from "@/components/payments/payments-list";
@@ -123,6 +125,7 @@ export function SettingsShell({
   paypal,
   quickbooks,
   servicePrices,
+  invoiceSettings,
   paymentsList,
   currentUserId,
   firmName,
@@ -162,6 +165,10 @@ export function SettingsShell({
   // Per-service default prices (cents) for the Payments section editor. Null for
   // non-owners.
   servicePrices: Record<string, number> | null;
+  // Firm invoice settings for the Invoicing section (migration 0750). Null for
+  // non-owners AND for firms that haven't set up invoicing yet — the section
+  // itself renders with defaults in the second case (isOwner gates the first).
+  invoiceSettings: FirmInvoiceSettings | null;
   // Firm-wide recent payments for the Payments section list. Null for non-owners.
   paymentsList: PaymentsListRow[] | null;
   // The viewing owner's id, so the payments list can hide "sent by you" and only
@@ -275,6 +282,8 @@ export function SettingsShell({
             {servicePrices && (
               <PaymentsServicePrices prices={servicePrices} />
             )}
+            <PaymentsInvoicingSection settings={invoiceSettings} />
+
             {paymentsList && paymentsList.length > 0 && (
               <section>
                 <h2 className="text-sm font-semibold">

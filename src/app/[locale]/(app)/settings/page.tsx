@@ -19,6 +19,7 @@ import {
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import { listFirmPaymentsWithNames } from "@/lib/db/payment-requests";
+import { getFirmInvoiceSettings } from "@/lib/db/invoice-settings";
 import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
@@ -212,6 +213,9 @@ export default async function SettingsPage({
   const servicePrices = isOwner ? (firm.service_prices ?? {}) : null;
   // Firm-wide recent payments for the Payments settings list (owner-only).
   const paymentsList = isOwner ? await listFirmPaymentsWithNames() : null;
+  // Firm invoice settings for the Invoicing section (owner-only). Null until
+  // the owner first saves it (or pre-0750) — the section renders defaults.
+  const invoiceSettings = isOwner ? await getFirmInvoiceSettings() : null;
 
   return (
     <div className="max-w-3xl mx-auto space-y-8 animate-in-up">
@@ -245,6 +249,7 @@ export default async function SettingsPage({
         paypal={paypal}
         quickbooks={quickbooks}
         servicePrices={servicePrices}
+        invoiceSettings={invoiceSettings}
         paymentsList={paymentsList}
         currentUserId={user.id}
         firmName={firm.name}
