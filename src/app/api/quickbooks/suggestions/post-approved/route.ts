@@ -13,8 +13,12 @@ import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
-import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
+import {
+  getQuickbooksReadContext,
+  type QuickbooksReadContext,
+} from "@/lib/quickbooks/connection";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { postApprovedDraft, type PostOutcome } from "@/lib/quickbooks/post";
 import { logUserActivity } from "@/lib/db/activity";
 
@@ -69,17 +73,31 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Fetch the connection context + cached lists ONCE for the whole batch. The
-  // caller's firm (RLS-scoped) owns every target row.
+  // Resolve the firm once (RLS owns the targets). The connection context + cached
+  // lists are PER CLIENT (0710): a batch can span multiple clients, each with its
+  // OWN QuickBooks company, so we resolve + memoize them per client id and reuse
+  // within that client's runs — nothing firm-level is fetched up front.
   const firmId = (await getCurrentUser())?.firm_id ?? null;
-  const ctx = firmId ? await getQuickbooksReadContext(firmId) : null;
-  if (!ctx) {
-    return NextResponse.json(
-      { error: "not_connected", detail: "QuickBooks isn't connected." },
-      { status: 409 },
-    );
+
+  type ClientCtx = { ctx: QuickbooksReadContext; lists: QuickbooksLists | null };
+  const byClient = new Map<string, ClientCtx | null>();
+  // Lazily resolve (and cache) a client's context+lists. A client with no
+  // connection → null (its drafts skip). A client revoked mid-run is marked null
+  // so its remaining drafts skip without re-hitting QuickBooks.
+  async function resolveClient(
+    clientId: string | null,
+  ): Promise<ClientCtx | null> {
+    const key = clientId ?? "";
+    if (byClient.has(key)) return byClient.get(key) ?? null;
+    const ctx = firmId
+      ? await getQuickbooksReadContext(firmId, clientId)
+      : null;
+    const resolved: ClientCtx | null = ctx
+      ? { ctx, lists: await readCachedQuickbooksLists(clientId) }
+      : null;
+    byClient.set(key, resolved);
+    return resolved;
   }
-  const lists = await readCachedQuickbooksLists();
 
   let posted = 0;
   let failed = 0;
@@ -90,19 +108,29 @@ export async function POST(request: NextRequest) {
   let needsReview = 0;
   const engagementIds = new Set<string>();
   for (const t of targets) {
+    const resolved = await resolveClient(t.clientId);
+    if (!resolved) {
+      // This client's QuickBooks isn't connected (or was revoked mid-run) — skip.
+      skipped++;
+      continue;
+    }
     let out: PostOutcome;
     try {
-      out = await postApprovedDraft(t.fileId, auth.user.id, { lists, ctx });
+      out = await postApprovedDraft(t.fileId, auth.user.id, {
+        lists: resolved.lists,
+        ctx: resolved.ctx,
+      });
     } catch {
       failed++;
       continue;
     }
     if (out.engagementId) engagementIds.add(out.engagementId);
     if (out.kind === "reconnect_required") {
-      // The connection was revoked — every remaining draft would 401 too. Stop
-      // the batch and report; the card/queue prompt the owner to reconnect.
+      // THIS client's grant was revoked — every remaining draft for this client
+      // would 401 too. Mark it dead so they skip; OTHER clients still post.
+      byClient.set(t.clientId ?? "", null);
       failed++;
-      break;
+      continue;
     }
     if (
       out.kind === "posted" ||

@@ -179,6 +179,104 @@ export async function readCachedQuickbooksLists(
   };
 }
 
+// Read MANY clients' cached lists in one batched pass (authenticated, RLS
+// firm-scoped) — for the firm-wide drafts queue, whose rows span clients. Five
+// queries TOTAL (one per table, `.in(client_id, ...)`) instead of five per
+// client, then grouped in memory. A client with no cached rows simply has no
+// entry in the returned map. Specific-client scope throughout, so there is NO
+// firm-level fallback (pre-0710 the client_id filter errors → empty map: no
+// cache for those clients yet, never the firm's rows). Errors are logged and
+// yield an EMPTY map — the queue renders with empty pickers, nothing breaks.
+export async function readCachedQuickbooksListsByClient(
+  clientIds: string[],
+): Promise<Map<string, QuickbooksLists>> {
+  // Concrete (non-null) arrays internally; the declared return widens to the
+  // nullable-list QuickbooksLists shape.
+  type Grouped = {
+    accounts: QbAccount[];
+    vendors: QbNamed[];
+    customers: QbNamed[];
+    taxCodes: QbNamed[];
+    items: QbItem[];
+  };
+  const out = new Map<string, Grouped>();
+  if (clientIds.length === 0) return out;
+  const sb = await getServerSupabase();
+  const [acc, ven, cus, tax, items] = await Promise.all([
+    sb
+      .from("quickbooks_accounts")
+      .select("client_id, qbo_id, name, account_type, active")
+      .in("client_id", clientIds),
+    sb
+      .from("quickbooks_vendors")
+      .select("client_id, qbo_id, name, active")
+      .in("client_id", clientIds),
+    sb
+      .from("quickbooks_customers")
+      .select("client_id, qbo_id, name, active")
+      .in("client_id", clientIds),
+    sb
+      .from("quickbooks_tax_codes")
+      .select("client_id, qbo_id, name, active")
+      .in("client_id", clientIds),
+    // Items stay TOLERANT like readCachedItems: a missing table (pre-0460) or
+    // error just means "no items" — it must never break the four core lists.
+    sb
+      .from("quickbooks_items")
+      .select("client_id, qbo_id, name, item_type, income_account_qbo_id, active")
+      .in("client_id", clientIds),
+  ]);
+  for (const r of [acc, ven, cus, tax]) {
+    if (r.error) {
+      if (!isMissingSchema(r.error)) {
+        console.error(
+          "[quickbooks] readCachedQuickbooksListsByClient failed:",
+          r.error,
+        );
+      }
+      return out;
+    }
+  }
+  const listsFor = (cid: string): Grouped => {
+    let l = out.get(cid);
+    if (!l) {
+      l = { accounts: [], vendors: [], customers: [], taxCodes: [], items: [] };
+      out.set(cid, l);
+    }
+    return l;
+  };
+  const groupInto = (
+    rows: Array<Record<string, unknown>> | null,
+    add: (l: Grouped, r: Record<string, unknown>) => void,
+  ) => {
+    for (const r of rows ?? []) {
+      const cid = r.client_id as string | null;
+      if (cid) add(listsFor(cid), r);
+    }
+  };
+  groupInto(acc.data as Array<Record<string, unknown>> | null, (l, r) =>
+    l.accounts.push(toCachedAccount(r)),
+  );
+  groupInto(ven.data as Array<Record<string, unknown>> | null, (l, r) =>
+    l.vendors.push(toCachedNamed(r)),
+  );
+  groupInto(cus.data as Array<Record<string, unknown>> | null, (l, r) =>
+    l.customers.push(toCachedNamed(r)),
+  );
+  groupInto(tax.data as Array<Record<string, unknown>> | null, (l, r) =>
+    l.taxCodes.push(toCachedNamed(r)),
+  );
+  if (!items.error) {
+    groupInto(items.data as Array<Record<string, unknown>> | null, (l, r) => {
+      const item = toCachedItem(r);
+      // Same non-sellable filter as readCachedItems (Category/Bundle rows are
+      // rejected by QuickBooks on a transaction line).
+      if (isSellableItem(item.itemType)) l.items.push(item);
+    });
+  }
+  return out;
+}
+
 // Service-role read of a firm's cached lists BY firm id — for background workers
 // (e.g. the classify worker generating a draft suggestion) that have no
 // authenticated session, so RLS / current_firm_id() can't scope them. Mirrors

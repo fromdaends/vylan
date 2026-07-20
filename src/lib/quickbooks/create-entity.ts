@@ -10,6 +10,7 @@ import {
   type QboNameKind,
 } from "@/lib/quickbooks/client";
 import { upsertCachedEntityRow } from "@/lib/db/quickbooks-cache";
+import type { QuickbooksClientScope } from "@/lib/db/quickbooks";
 import type { QuickbooksReadContext } from "@/lib/quickbooks/connection";
 
 // QuickBooks DisplayName is capped at 100 chars and can't contain a colon (it's
@@ -41,8 +42,13 @@ export async function createOrFindNameEntity(input: {
   name: string;
   ctx: QuickbooksReadContext;
   now: string;
+  // The client whose QuickBooks company this entity belongs to (0710 per-client).
+  // Undefined/null = firm-level cache row. The cache MUST be scoped to the same
+  // client the entity was created in, or checkBillPostable won't find the active
+  // party for that client's drafts.
+  clientId?: QuickbooksClientScope;
 }): Promise<CreateEntityResult> {
-  const { firmId, kind, name, ctx, now } = input;
+  const { firmId, kind, name, ctx, now, clientId } = input;
   let entity: { id: string; name: string };
   try {
     entity = await quickbooksCreateNameEntity(ctx, kind, name);
@@ -84,6 +90,7 @@ export async function createOrFindNameEntity(input: {
     kind === "vendor" ? "vendors" : "customers",
     { id: entity.id, name: entity.name, active: true },
     now,
+    clientId,
   );
   return { ok: true, entity };
 }

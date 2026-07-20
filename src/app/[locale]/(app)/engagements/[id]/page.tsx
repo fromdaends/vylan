@@ -46,7 +46,7 @@ import {
   backfillMissingSuggestions,
   type StoredDraft,
 } from "@/lib/db/quickbooks-suggestions";
-import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
+import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import type { LearnedMappings } from "@/lib/quickbooks/suggest";
@@ -266,12 +266,17 @@ export default async function EngagementDetailPage({
   // relevant when this firm has QuickBooks connected; the drafts themselves are
   // keyed by uploaded file. Both reads degrade gracefully (no connection / no
   // 0430 migration yet -> nothing shows).
-  const quickbooksConnected = (await getFirmQuickbooksStatus()) != null;
+  // Per-client (0710): this engagement's QuickBooks connection, cached lists, and
+  // learned matches are THIS client's — not the firm-level row (usually absent
+  // once connections are per-client). Everything degrades gracefully to nothing
+  // when this client isn't connected.
+  const quickbooksConnected =
+    (await getClientQuickbooksStatus(engagement.client_id)) != null;
   const [initialSuggestions, qboLists, qboLearned] = quickbooksConnected
     ? await Promise.all([
         getSuggestionsForEngagement(id),
-        readCachedQuickbooksLists(),
-        readFirmLearnedMappings(),
+        readCachedQuickbooksLists(engagement.client_id),
+        readFirmLearnedMappings(engagement.client_id),
       ])
     : [new Map<string, StoredDraft>(), null, {} as LearnedMappings];
   let suggestionsByFile = initialSuggestions;

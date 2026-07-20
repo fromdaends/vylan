@@ -48,8 +48,12 @@ export function isIntegrationSubItemVisible(
   key: string,
   quickbooksConnected: boolean,
 ): boolean {
-  if (key === "quickbooks") return quickbooksConnected;
-  return true;
+  // Both current integrations are ALWAYS listed: Sage 50 is a file export, and
+  // QuickBooks now shows even before connecting — the drafts page then guides the
+  // owner to connect from a client's page — so it's DISCOVERABLE instead of hidden
+  // (the founder's call). An unknown/future integration falls back to the
+  // connection flag rather than assuming it should show.
+  return key === "quickbooks" || key === "sage" || quickbooksConnected;
 }
 
 // The lifecycle + status fields needed to classify a single engagement. A full

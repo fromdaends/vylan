@@ -69,7 +69,7 @@ export async function POST(
     );
   }
 
-  const ctx = await getQuickbooksReadContext(draft.firmId);
+  const ctx = await getQuickbooksReadContext(draft.firmId, draft.clientId);
   if (!ctx) {
     return NextResponse.json(
       { error: "not_connected", detail: "QuickBooks isn't connected." },

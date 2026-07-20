@@ -56,8 +56,8 @@ describe("isIntegrationSubItemVisible", () => {
     expect(isIntegrationSubItemVisible("sage", true)).toBe(true);
   });
 
-  it("shows QuickBooks only once the firm has connected a client", () => {
-    expect(isIntegrationSubItemVisible("quickbooks", false)).toBe(false);
+  it("always shows QuickBooks — it's discoverable even before connecting", () => {
+    expect(isIntegrationSubItemVisible("quickbooks", false)).toBe(true);
     expect(isIntegrationSubItemVisible("quickbooks", true)).toBe(true);
   });
 });

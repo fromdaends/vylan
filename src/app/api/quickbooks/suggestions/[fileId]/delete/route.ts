@@ -72,7 +72,7 @@ export async function POST(
   const isPosted = draft.status === "posted" && !!draft.postedQboId;
   const matched = draft.matchedQboType != null;
   if (isPosted && !matched) {
-    const ctx = await getQuickbooksReadContext(draft.firmId);
+    const ctx = await getQuickbooksReadContext(draft.firmId, draft.clientId);
     if (!ctx) {
       return NextResponse.json(
         {

@@ -116,7 +116,9 @@ export function QuickbooksEditableField({
       const r = await fetch("/api/quickbooks/entities", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ kind: createKind, name }),
+        // fileId tells the server which draft (and therefore which client's
+        // QuickBooks company) to create the party in — 0710 per-client.
+        body: JSON.stringify({ kind: createKind, name, fileId }),
       });
       const res = (await r.json().catch(() => null)) as {
         ok?: boolean;

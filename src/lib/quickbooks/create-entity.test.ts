@@ -59,15 +59,19 @@ describe("createOrFindNameEntity", () => {
       name: "Northline Office",
       ctx,
       now: NOW,
+      clientId: "cli1",
     });
 
     expect(r).toEqual({ ok: true, entity: { id: "V9", name: "Northline Office" } });
     expect(mockFind).not.toHaveBeenCalled();
+    // The new entity is cached against THAT client (0710 per-client), so the
+    // draft for that client can find it as an active party.
     expect(mockUpsert).toHaveBeenCalledWith(
       "f1",
       "vendors",
       { id: "V9", name: "Northline Office", active: true },
       NOW,
+      "cli1",
     );
   });
 
@@ -82,11 +86,13 @@ describe("createOrFindNameEntity", () => {
       now: NOW,
     });
 
+    // No clientId passed → firm-level cache row (undefined 5th arg).
     expect(mockUpsert).toHaveBeenCalledWith(
       "f1",
       "customers",
       { id: "C3", name: "Lumen Studio", active: true },
       NOW,
+      undefined,
     );
   });
 
@@ -110,6 +116,7 @@ describe("createOrFindNameEntity", () => {
       "vendors",
       { id: "V1", name: "Home Depot", active: true },
       NOW,
+      undefined,
     );
   });
 

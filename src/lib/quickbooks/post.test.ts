@@ -195,6 +195,7 @@ const SUGGESTION = {
 
 const DRAFT = {
   engagementId: "e1",
+  clientId: "cli1",
   firmId: "f1",
   suggestion: SUGGESTION,
   resolved: null,
@@ -575,7 +576,8 @@ describe("postApprovedDraft — connection revoked mid-post (401)", () => {
     const r = await postApprovedDraft("file-1", "user-1");
 
     expect(r.kind).toBe("reconnect_required");
-    expect(mockReAuth).toHaveBeenCalledWith("f1");
+    // Refreshes THIS draft's client connection (0710 per-client), not firm-level.
+    expect(mockReAuth).toHaveBeenCalledWith("f1", "cli1");
     // A connection problem is NOT recorded as a post error on the draft.
     expect(mockRecordPostError).not.toHaveBeenCalled();
   });

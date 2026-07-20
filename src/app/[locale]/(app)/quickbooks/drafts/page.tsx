@@ -14,7 +14,8 @@ import {
   userDisplayLabel,
 } from "@/lib/db/users";
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
-import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import { readCachedQuickbooksListsByClient } from "@/lib/db/quickbooks-cache";
+import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { summarizeDrafts } from "@/lib/quickbooks/draft-summary";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import {
@@ -101,10 +102,12 @@ export default async function QuickbooksDraftsPage({
 
         {isOwner ? (
           <div className="mt-7">
+            {/* Connecting is PER CLIENT (0710): open a client's page and connect
+                their QuickBooks there. Send the owner to the clients list. */}
             <Button asChild size="lg" className="gap-2">
-              <Link href="/settings?tab=integrations">
+              <Link href="/clients">
                 <QuickbooksLogo className="h-4 w-4" />
-                {t("queue_connect_cta")}
+                {t("queue_connect_cta_clients")}
               </Link>
             </Button>
           </div>
@@ -149,20 +152,46 @@ export default async function QuickbooksDraftsPage({
     );
   }
 
-  // Connection health rides along with the data reads: a DEAD connection
-  // (expired/revoked tokens) gets a "reconnect" banner instead of letting every
-  // post fail with no explanation. Capped at 3s — when the stored token is stale
-  // the check calls Intuit, and this page must never wait on a slow upstream
-  // (the un-awaited check still finishes the keep-alive refresh in background;
-  // an inconclusive check just reports "ok", i.e. no banner this load).
-  const HEALTH_BUDGET_MS = 3000;
-  const [rows, qboLists, firmUsers, health] = await Promise.all([
+  const [rows, firmUsers] = await Promise.all([
     listFirmDrafts(),
-    readCachedQuickbooksLists(),
     listFirmUsers(),
-    firm
+  ]);
+
+  // Per-client (0710): the connections that matter on this multi-client page are
+  // the ones its DRAFTS would post to — the distinct client scopes below (plus
+  // firm-level only if a legacy client-less draft exists). Probing the firm-level
+  // row alone would flag a false "reconnect" for every per-client-connected firm
+  // (that row usually doesn't exist anymore).
+  const clientIdsWithDrafts = [
+    ...new Set(rows.map((r) => r.clientId).filter((c): c is string => !!c)),
+  ];
+  const healthScopes: (string | undefined)[] = [
+    ...clientIdsWithDrafts,
+    ...(rows.some((r) => !r.clientId) ? [undefined] : []),
+  ];
+
+  // Connection health + the per-client picker lists load together. Health: a
+  // DEAD connection (expired/revoked tokens) gets a "reconnect" banner instead
+  // of letting every post fail with no explanation; the banner shows if ANY
+  // draft-bearing connection is dead. Capped at 3s — a stale token makes the
+  // check call Intuit, and this page must never wait on a slow upstream (the
+  // un-awaited check still finishes the keep-alive refresh in background; an
+  // inconclusive check just reports "ok", i.e. no banner this load). Lists: one
+  // batched read (5 queries total) so a many-client queue doesn't fan out.
+  const HEALTH_BUDGET_MS = 3000;
+  const [listsByClient, health] = await Promise.all([
+    readCachedQuickbooksListsByClient(clientIdsWithDrafts),
+    firm && healthScopes.length > 0
       ? Promise.race([
-          getQuickbooksConnectionHealth(firm.id),
+          Promise.all(
+            healthScopes.map((cid) =>
+              getQuickbooksConnectionHealth(firm.id, cid),
+            ),
+          ).then((hs) =>
+            hs.includes("reconnect_required")
+              ? ("reconnect_required" as const)
+              : ("ok" as const),
+          ),
           new Promise<"ok">((resolve) =>
             setTimeout(() => resolve("ok"), HEALTH_BUDGET_MS),
           ),
@@ -179,7 +208,7 @@ export default async function QuickbooksDraftsPage({
   });
   const isPayFrom = (t: string | null) =>
     ["bank", "credit card"].includes((t ?? "").toLowerCase());
-  const options: DraftCardOptions = {
+  const buildOptions = (qboLists: QuickbooksLists | null): DraftCardOptions => ({
     vendors: (qboLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
     customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
     accounts: (qboLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
@@ -192,7 +221,23 @@ export default async function QuickbooksDraftsPage({
     paymentAccounts: (qboLists?.accounts ?? [])
       .filter((x) => x.active && isPayFrom(x.accountType))
       .map(toOpt),
+  });
+  // One options set per client (built from that client's cached lists), plus an
+  // empty fallback for a row whose client didn't resolve. Each queue row picks
+  // its own client's options below.
+  const EMPTY_OPTIONS: DraftCardOptions = {
+    vendors: [],
+    customers: [],
+    accounts: [],
+    taxCodes: [],
+    items: [],
+    paymentAccounts: [],
   };
+  const optionsByClient = new Map<string, DraftCardOptions>(
+    [...listsByClient].map(([cid, lists]) => [cid, buildOptions(lists)]),
+  );
+  const optionsFor = (clientId: string | null): DraftCardOptions =>
+    (clientId ? optionsByClient.get(clientId) : undefined) ?? EMPTY_OPTIONS;
 
   // Counts + pipeline total over ALL drafts (so the chips show totals
   // regardless of the active filter).
@@ -282,10 +327,9 @@ export default async function QuickbooksDraftsPage({
               : t("queue_reconnect_staff")}
           </p>
           {isOwner && (
+            // Reconnecting is per client now — it lives on the client's page.
             <Button asChild size="sm" variant="outline">
-              <Link href="/settings?tab=integrations">
-                {t("queue_reconnect_cta")}
-              </Link>
+              <Link href="/clients">{t("queue_reconnect_cta")}</Link>
             </Button>
           )}
         </div>
@@ -310,7 +354,7 @@ export default async function QuickbooksDraftsPage({
           <QueueRow
             key={r.fileId}
             row={r}
-            options={options}
+            options={optionsFor(r.clientId)}
             locale={locale}
             reviewedByName={
               r.reviewedBy ? (reviewerNameById.get(r.reviewedBy) ?? null) : null
