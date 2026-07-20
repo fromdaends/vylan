@@ -379,7 +379,7 @@ describe("editGeneratedInvoiceAction", () => {
   it("rejects malformed lines and unknown tax components", async () => {
     const bad = await editGeneratedInvoiceAction({
       engagementId: ENG_ID,
-      lineItems: [{ description: "", quantity: 1, unit_cents: 100 }],
+      lineItems: [{ description: "x", quantity: 0, unit_cents: 100 }],
       taxesEnabled: true,
       enabledComponents: null,
     });

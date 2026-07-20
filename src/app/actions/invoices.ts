@@ -302,7 +302,7 @@ export async function editGeneratedInvoiceAction(
 
   const ok = await updateGeneratedInvoiceFields(invoice.id, {
     amount_cents: computed.totalCents,
-    description: lines[0].description,
+    description: lines[0].description || null,
     line_items: computed.lineItems,
     tax_breakdown: computed.taxLines,
     subtotal_cents: computed.subtotalCents,

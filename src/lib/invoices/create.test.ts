@@ -336,11 +336,28 @@ describe("createInvoiceForEngagement — generated invoices (0750)", () => {
       engagementId: ENG_ID,
       amountCents: 0,
       delivery: "portal",
-      generated: { ...GENERATED, lineItems: [{ description: "", quantity: 1, unit_cents: 100 }] },
+      generated: { ...GENERATED, lineItems: [{ description: "x", quantity: 0, unit_cents: 100 }] },
     });
     expect(res).toEqual({ ok: false, reason: "invalid_lines" });
     expect(allocateInvoiceSeq).not.toHaveBeenCalled();
     expect(createPaymentRequest).not.toHaveBeenCalled();
+  });
+
+  it("accepts an amount-only line (description optional) and stores a null description", async () => {
+    const res = await createInvoiceForEngagement({
+      engagementId: ENG_ID,
+      amountCents: 0,
+      delivery: "portal",
+      generated: {
+        lineItems: [{ description: "", quantity: 1, unit_cents: 10000 }],
+        taxesEnabled: false,
+        enabledComponents: null,
+      },
+    });
+    expect(res.ok).toBe(true);
+    expect(createPaymentRequest).toHaveBeenCalledWith(
+      expect.objectContaining({ amount_cents: 10000, description: null }),
+    );
   });
 
   it("rejects a computed total below the Stripe minimum before allocating", async () => {

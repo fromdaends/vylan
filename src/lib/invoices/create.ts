@@ -146,7 +146,8 @@ export async function createInvoiceForEngagement(
     const client = await getClient(engagement.client_id);
     const invoiceLanguage = client?.locale === "en" ? "en" : "fr";
     // Fallback description (payments list, emails): the first line's text.
-    if (!description) description = lines[0].description;
+    // Empty (description is optional) → null, same as the flat invoice.
+    if (!description) description = lines[0].description || null;
     invoiceFields = {
       invoice_kind: "generated",
       line_items: computed.lineItems,

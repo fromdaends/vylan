@@ -76,12 +76,12 @@ export function normalizeLineItems(raw: unknown): InvoiceLineItem[] | null {
   const out: InvoiceLineItem[] = [];
   for (const entry of raw as RawLineItem[]) {
     if (!entry || typeof entry !== "object") return null;
+    // Description is OPTIONAL, mirroring the flat invoice it replaces (the
+    // field has always been "Description (optional)"). Renderers show a
+    // localized "Services" fallback for an empty one.
     const description =
       typeof entry.description === "string" ? entry.description.trim() : "";
-    if (
-      description.length < 1 ||
-      description.length > MAX_LINE_DESCRIPTION
-    ) {
+    if (description.length > MAX_LINE_DESCRIPTION) {
       return null;
     }
     const quantity = Number(entry.quantity);
