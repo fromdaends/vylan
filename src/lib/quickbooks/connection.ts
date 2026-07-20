@@ -6,6 +6,7 @@
 
 import {
   getFirmQuickbooksConnectionWithTokens,
+  getFirmQuickbooksStatus,
   readFirmQuickbooksConnection,
   updateFirmQuickbooksTokens,
 } from "@/lib/db/quickbooks";
@@ -134,6 +135,33 @@ export async function getQuickbooksConnectionHealth(
   } catch {
     // Never let a health check break a page render.
     return "ok";
+  }
+}
+
+// Queue-page variant of the health check: additionally distinguishes a MISSING
+// connection ("not_connected" — the scope has no row at all: never connected, or
+// disconnected after its drafts were made) from a DEAD one ("reconnect_required"
+// — a row exists but its grant is expired/revoked/unreadable). The plain
+// getQuickbooksConnectionHealth above keeps mapping both to "reconnect_required"
+// for callers that have already verified a row exists (Settings, client page).
+// The row-existence read runs only in the dead path, so the healthy path costs
+// nothing extra. Uses the AUTHENTICATED client for that read — page/RSC only.
+export type QuickbooksScopeHealth =
+  | QuickbooksConnectionHealth
+  | "not_connected";
+
+export async function getQuickbooksScopeHealth(
+  firmId: string,
+  clientId?: string | null,
+): Promise<QuickbooksScopeHealth> {
+  const health = await getQuickbooksConnectionHealth(firmId, clientId);
+  if (health !== "reconnect_required") return health;
+  try {
+    const status = await getFirmQuickbooksStatus(clientId);
+    return status ? "reconnect_required" : "not_connected";
+  } catch {
+    // If the existence read itself fails, keep the stronger warning.
+    return "reconnect_required";
   }
 }
 
