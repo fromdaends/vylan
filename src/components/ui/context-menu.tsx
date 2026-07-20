@@ -37,7 +37,12 @@ function ContextMenuContent({
       <ContextMenuPrimitive.Content
         data-slot="context-menu-content"
         className={cn(
-          "z-50 max-h-(--radix-context-menu-content-available-height) min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-sm border bg-popover p-1 text-popover-foreground shadow-sm",
+          // outline-hidden + ring-0 on the panel itself: Radix focuses the
+          // content container when the menu opens (for keyboard nav), and the
+          // global *:focus-visible rule (globals.css) would otherwise draw a
+          // blue ring around the whole popup. Items have their own focus styles.
+          // Mirrors DropdownMenuContent, which already does this.
+          "z-50 max-h-(--radix-context-menu-content-available-height) min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-sm border bg-popover p-1 text-popover-foreground shadow-sm outline-hidden focus:outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0",
           className
         )}
         {...props}
@@ -61,7 +66,10 @@ function ContextMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-none px-2 py-1.5 text-sm font-normal outline-hidden select-none focus:bg-muted focus:text-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground data-[variant=destructive]:*:[svg]:text-destructive!",
+        // focus-visible:ring-0 matters most for `asChild` items (the row renders
+        // a real <a>, which the global *:focus-visible rule would ring in blue).
+        // The muted background below is the intended focus affordance.
+        "relative flex cursor-default items-center gap-2 rounded-none px-2 py-1.5 text-sm font-normal outline-hidden select-none focus:bg-muted focus:text-foreground focus-visible:ring-0 focus-visible:ring-offset-0 data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-8 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground data-[variant=destructive]:*:[svg]:text-destructive!",
         className
       )}
       {...props}
