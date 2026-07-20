@@ -21,6 +21,10 @@ export const QBO_STATE_COOKIE = "qbo_oauth_state";
 // the client the connection binds to can't be tampered with in the callback URL.
 // Absent = a firm-level connect (the legacy Settings flow).
 export const QBO_CLIENT_COOKIE = "qbo_oauth_client";
+// Marks this OAuth flow as a CLIENT-LIST IMPORT (the accountant signs into their
+// OWN company; the callback reads its customers, stages them, revokes the tokens
+// and stores NO connection). httpOnly like the others.
+export const QBO_INTENT_COOKIE = "qbo_oauth_intent";
 
 // POST /api/integrations/quickbooks/connect
 //
@@ -62,14 +66,21 @@ export async function POST(request: Request) {
     );
   }
 
+  // Two flavors of flow share this route:
+  //   * intent "import" — client-list import: the owner signs into their OWN
+  //     company; the callback stages its customers and stores NO connection.
+  //   * per-client connect (clientId) — links THAT client's company.
+  const body = (await request.json().catch(() => null)) as {
+    clientId?: unknown;
+    intent?: unknown;
+  } | null;
+  const isImport = body?.intent === "import";
+
   // Optional per-client connect: verify the named client belongs to THIS firm
   // (getClient is RLS-scoped, so it returns null for another firm's id) before
   // trusting it. Omitted/invalid → a firm-level connect (legacy behavior).
   let clientId: string | null = null;
-  const body = (await request.json().catch(() => null)) as {
-    clientId?: unknown;
-  } | null;
-  if (body && typeof body.clientId === "string" && body.clientId) {
+  if (!isImport && body && typeof body.clientId === "string" && body.clientId) {
     const client = await getClient(body.clientId);
     if (!client) {
       return NextResponse.json({ error: "no_client" }, { status: 400 });
@@ -94,6 +105,13 @@ export async function POST(request: Request) {
     // Clear any stale client cookie so a firm-level connect is never misattributed
     // to a client from an earlier, abandoned per-client attempt.
     res.cookies.set(QBO_CLIENT_COOKIE, "", { path: "/", maxAge: 0 });
+  }
+  if (isImport) {
+    res.cookies.set(QBO_INTENT_COOKIE, "import", cookieOpts);
+  } else {
+    // Same stale-cookie hygiene for the intent: an abandoned import attempt must
+    // never turn a later real connect into an import.
+    res.cookies.set(QBO_INTENT_COOKIE, "", { path: "/", maxAge: 0 });
   }
   return res;
 }

@@ -257,7 +257,12 @@
     "menu_close": "Close menu",
     "hero_headline": "You chased every\ndocument by hand.",
     "hero_subprefix": "We'll chase them with",
-    "reel_words": ["AI.", "follow-ups.", "reminders.", "emails."],
+    "reel_words": [
+      "AI.",
+      "follow-ups.",
+      "reminders.",
+      "emails."
+    ],
     "cta_book": "Book a demo",
     "cta_manifesto": "Read the manifesto",
     "cta_how_it_works": "See how it works",
@@ -1325,7 +1330,23 @@
     "email_confirm_title": "Change this client's email?",
     "email_confirm_desc": "You're changing this client's email from {from} to {to}. Document links and reminders will be sent to the new address.",
     "email_confirm_confirm": "Confirm change",
-    "email_confirm_none": "(no email)"
+    "email_confirm_none": "(no email)",
+    "bk_import_title": "Import from your bookkeeping software",
+    "bk_import_hint": "Sign in to your own QuickBooks or Xero company — the one where you invoice your clients — and Vylan lists your customers to bring in as clients. Nothing is changed in your books, and the connection is released right after.",
+    "bk_import_qbo_cta": "Import from QuickBooks",
+    "bk_import_xero_cta": "Import from Xero",
+    "bk_import_unavailable": "A greyed-out option isn't set up yet.",
+    "bk_import_error": "The import couldn't read your customer list. Please try again.",
+    "bk_import_empty": "No active customers were found in that company.",
+    "bk_import_setup": "Almost there — one more setup step is needed before importing. Try again shortly.",
+    "bk_import_denied": "Import cancelled.",
+    "bk_import_session_gone": "This import expired. Start it again.",
+    "bk_import_review_title": "Review the import",
+    "bk_import_review_from": "From {source}",
+    "bk_import_exists": "Already in Vylan",
+    "bk_import_col_name": "Name",
+    "bk_import_col_email": "Email",
+    "bk_import_col_phone": "Phone"
   },
   "Engagements": {
     "title": "Engagements",

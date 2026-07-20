@@ -256,3 +256,25 @@ export async function importAndRedirect(
   revalidatePath("/", "layout");
   redirect(getPathname({ locale, href: "/clients" }));
 }
+
+// Commit a BOOKKEEPING import (a QuickBooks/Xero customer list staged in a
+// client_import_sessions row). Same validated bulk path as the CSV import; the
+// session read is RLS-scoped (proving it belongs to the caller's firm and is
+// neither consumed nor expired), and the session is consumed on success so a
+// double-submit can't create duplicates.
+export async function importFromSessionAndRedirect(
+  sessionId: string,
+  rows: ImportPreviewRow[],
+  locale: "fr" | "en",
+) {
+  const { getClientImportSession, consumeClientImportSession } = await import(
+    "@/lib/db/client-import"
+  );
+  const session = await getClientImportSession(sessionId);
+  if (!session) throw new Error("session_gone");
+  const validated = validateImportRows(rows);
+  await bulkCreateClients(validated);
+  await consumeClientImportSession(sessionId);
+  revalidatePath("/", "layout");
+  redirect(getPathname({ locale, href: "/clients" }));
+}

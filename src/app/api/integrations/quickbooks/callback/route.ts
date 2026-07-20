@@ -9,6 +9,7 @@ import {
   fetchCompanyProfile,
   quickbooksEnvironment,
   quickbooksProductionKeyMissing,
+  revokeToken,
   QuickbooksError,
 } from "@/lib/quickbooks/client";
 import {
@@ -18,7 +19,13 @@ import {
 import { purgeFirmQuickbooksCache } from "@/lib/db/quickbooks-cache";
 import { purgeFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import { enqueueQuickbooksSync } from "@/lib/quickbooks/sync";
-import { QBO_STATE_COOKIE, QBO_CLIENT_COOKIE } from "../connect/route";
+import { fetchQuickbooksCustomerCandidates } from "@/lib/quickbooks/import-clients";
+import { createClientImportSession } from "@/lib/db/client-import";
+import {
+  QBO_STATE_COOKIE,
+  QBO_CLIENT_COOKIE,
+  QBO_INTENT_COOKIE,
+} from "../connect/route";
 
 export const runtime = "nodejs";
 
@@ -49,20 +56,32 @@ export async function GET(request: Request) {
   // Which client this connect is for — set in an httpOnly cookie by the connect
   // route when the owner clicked "Connect QuickBooks" on that client's page.
   const clientId = cookieStore.get(QBO_CLIENT_COOKIE)?.value || null;
+  // Client-list IMPORT flow? (The owner signed into their OWN company; we stage
+  // its customers, revoke the tokens, and store NO connection.)
+  const isImport = cookieStore.get(QBO_INTENT_COOKIE)?.value === "import";
 
   // Redirect back to the client's page (where connecting happens) with a status
-  // flag, burning the one-time cookies. Falls back to Settings only when there is
-  // no client id (shouldn't happen for a normal connect).
-  function back(qbo: string) {
-    const dest = clientId
-      ? new URL(`/${locale}/clients/${clientId}`, url.origin)
-      : new URL(`/${locale}/settings`, url.origin);
-    if (!clientId) dest.searchParams.set("tab", "integrations");
-    dest.searchParams.set("qbo", qbo);
+  // flag, burning the one-time cookies. An IMPORT flow lands back on the import
+  // page instead. Falls back to Settings only when there is no client id
+  // (shouldn't happen for a normal connect).
+  function back(qbo: string, sessionId?: string) {
+    const dest = isImport
+      ? new URL(`/${locale}/clients/import`, url.origin)
+      : clientId
+        ? new URL(`/${locale}/clients/${clientId}`, url.origin)
+        : new URL(`/${locale}/settings`, url.origin);
+    if (isImport) {
+      if (sessionId) dest.searchParams.set("session", sessionId);
+      else dest.searchParams.set("bkimport", qbo);
+    } else {
+      if (!clientId) dest.searchParams.set("tab", "integrations");
+      dest.searchParams.set("qbo", qbo);
+    }
     const res = NextResponse.redirect(dest);
     // Always burn the one-time cookies.
     res.cookies.set(QBO_STATE_COOKIE, "", { path: "/", maxAge: 0 });
     res.cookies.set(QBO_CLIENT_COOKIE, "", { path: "/", maxAge: 0 });
+    res.cookies.set(QBO_INTENT_COOKIE, "", { path: "/", maxAge: 0 });
     return res;
   }
 
@@ -75,10 +94,48 @@ export async function GET(request: Request) {
 
   // Must be an authenticated owner of a firm to store the connection.
   if (!auth.user || me?.role !== "owner") return back("error");
-  // Connecting is always for a specific client (started from that client's page).
-  if (!clientId) return back("error");
   const firm = await getCurrentFirm();
   if (!firm) return back("error");
+
+  // ── CLIENT-LIST IMPORT ─────────────────────────────────────────────────────
+  // Read the just-authorized company's customers, stage them for review, revoke
+  // the grant (nothing persists provider-side), and land on the import page.
+  if (isImport) {
+    let refreshToken: string | null = null;
+    try {
+      const tokens = await exchangeCodeForTokens(code);
+      refreshToken = tokens.refreshToken;
+      const environment = quickbooksEnvironment();
+      const profile = await fetchCompanyProfile(tokens.accessToken, realmId);
+      const candidates = await fetchQuickbooksCustomerCandidates(
+        tokens.accessToken,
+        realmId,
+        environment,
+      );
+      if (candidates.length === 0) return back("empty");
+      const sessionId = await createClientImportSession({
+        firmId: firm.id,
+        provider: "quickbooks",
+        sourceName: profile.name,
+        candidates,
+        createdBy: auth.user.id,
+      });
+      if (!sessionId) return back("setup"); // pre-0750 or a DB error
+      return back("done", sessionId);
+    } catch (e) {
+      console.error(
+        "[quickbooks/callback] client-list import failed:",
+        e instanceof QuickbooksError ? `${e.code} ${e.message}` : e,
+      );
+      return back("error");
+    } finally {
+      // Always release the grant — the import never keeps a connection.
+      if (refreshToken) await revokeToken(refreshToken);
+    }
+  }
+
+  // Connecting is always for a specific client (started from that client's page).
+  if (!clientId) return back("error");
 
   // Go-live safety lock (re-checked here in case the flow was started before the
   // env changed): never STORE production tokens while encryption is unconfigured.
