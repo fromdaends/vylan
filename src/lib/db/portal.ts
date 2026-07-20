@@ -104,6 +104,19 @@ export type PortalContext = {
     attachment_filename: string | null;
     attachment_mime_type: string | null;
     status: "requested" | "paid" | "failed" | "canceled";
+    // Native-invoice detail (0750) — the portal renders the full document
+    // (lines, tax lines with registration numbers, terms, Download PDF) when
+    // invoice_kind is 'generated'. All null/empty on legacy + attached rows,
+    // which keep the simple card exactly as before.
+    invoice_kind: "generated" | "attached" | null;
+    invoice_number: string | null;
+    line_items: unknown;
+    tax_breakdown: unknown;
+    subtotal_cents: number | null;
+    tax_total_cents: number | null;
+    due_date: string | null;
+    invoice_terms: string | null;
+    invoice_language: "en" | "fr" | null;
   } | null;
   // SignWell signing status per signature item (Phase 3). Drives the portal
   // signature card: "sent"/"viewed" => the client can sign, "completed" => signed.
@@ -286,15 +299,28 @@ export async function loadPortalContext(
   const accountantEmail = accountantContact?.email ?? null;
 
   // The latest payment request (if any) for the "Payment due" card. Tolerant of
-  // the table being absent before migration 0380 (data stays null on error).
-  const { data: prRow } = await sb
-    .from("payment_requests")
-    .select("id, amount_cents, currency, description, status, paypal_order_id")
-    .eq("engagement_id", engagement.id)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  let pr = prRow;
+  // the table being absent before migration 0380 (data stays null on error) and
+  // of the 0750 invoice columns being absent (tiered retry → legacy shape).
+  const prLegacyCols =
+    "id, amount_cents, currency, description, status, paypal_order_id";
+  const prInvoiceCols = `${prLegacyCols}, invoice_kind, invoice_number, line_items, tax_breakdown, subtotal_cents, tax_total_cents, due_date, invoice_terms, invoice_language`;
+  const runPr = (cols: string) =>
+    sb
+      .from("payment_requests")
+      .select(cols)
+      .eq("engagement_id", engagement.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+  const first = await runPr(prInvoiceCols);
+  let prRow = first.data;
+  if (
+    first.error &&
+    (first.error.code === "PGRST204" || first.error.code === "42703")
+  ) {
+    ({ data: prRow } = await runPr(prLegacyCols));
+  }
+  let pr = prRow as Record<string, unknown> | null;
 
   // Self-heal a wedged PayPal payment: an order was created for this invoice
   // but it's still 'requested' — if the buyer actually APPROVED (and the
@@ -329,6 +355,17 @@ export async function loadPortalContext(
         attachment_filename: invoiceAttachment?.original_filename ?? null,
         attachment_mime_type: invoiceAttachment?.mime_type ?? null,
         status: pr.status as "requested" | "paid" | "failed" | "canceled",
+        invoice_kind:
+          (pr.invoice_kind as "generated" | "attached" | null) ?? null,
+        invoice_number: (pr.invoice_number as string | null) ?? null,
+        line_items: pr.line_items ?? null,
+        tax_breakdown: pr.tax_breakdown ?? null,
+        subtotal_cents: (pr.subtotal_cents as number | null) ?? null,
+        tax_total_cents: (pr.tax_total_cents as number | null) ?? null,
+        due_date: (pr.due_date as string | null) ?? null,
+        invoice_terms: (pr.invoice_terms as string | null) ?? null,
+        invoice_language:
+          (pr.invoice_language as "en" | "fr" | null) ?? null,
       }
     : null;
 

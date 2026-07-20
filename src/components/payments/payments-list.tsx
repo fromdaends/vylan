@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale, useTranslations } from "next-intl";
+import { FileText } from "lucide-react";
 import { formatCurrency, formatDate, type AppLocale } from "@/lib/format";
 import { PaymentBadge } from "@/components/payments/payment-badge";
 import type { PaymentsListRow } from "@/lib/db/payment-requests";
@@ -46,6 +47,8 @@ export function PaymentsList({
               {r.engagementTitle ?? "—"}
             </div>
             <div className="truncate text-xs text-muted-foreground">
+              {/* The invoice number leads — this list is the invoice history. */}
+              {r.invoiceNumber ? `${r.invoiceNumber} · ` : ""}
               {showClient && r.clientName ? `${r.clientName} · ` : ""}
               {formatDate(r.createdAt, locale, "medium")}
               {senderLabel
@@ -54,6 +57,18 @@ export function PaymentsList({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
+            {r.invoiceKind === "generated" && (
+              <a
+                href={`/api/invoices/${r.id}/pdf`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={t("invoice_view_pdf")}
+                title={t("invoice_view_pdf")}
+                className="text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <FileText className="size-4" />
+              </a>
+            )}
             <span className="text-sm tabular-nums">
               {formatCurrency(r.amountCents / 100, locale)}
             </span>

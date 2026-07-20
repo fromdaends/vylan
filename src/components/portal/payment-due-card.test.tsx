@@ -84,6 +84,64 @@ describe("PaymentDueCard", () => {
     expect(screen.getByText(en.Portal.pay_received_title)).toBeInTheDocument();
   });
 
+  it("renders the full invoice detail + PDF link for a GENERATED invoice", () => {
+    renderCard({
+      amount_cents: 34493,
+      invoice_kind: "generated",
+      invoice_number: "INV-0012",
+      line_items: [
+        { description: "T1 return", quantity: 1, unit_cents: 20000, amount_cents: 20000 },
+        { description: "", quantity: 2, unit_cents: 5000, amount_cents: 10000 },
+      ],
+      tax_breakdown: [
+        {
+          component: "GST",
+          rate_milli_pct: 5000,
+          registration_kind: "gst",
+          base_cents: 30000,
+          amount_cents: 1500,
+          registration_number: "123456789 RT0001",
+        },
+        {
+          component: "QST",
+          rate_milli_pct: 9975,
+          registration_kind: "qst",
+          base_cents: 30000,
+          amount_cents: 2993,
+          registration_number: null,
+        },
+      ],
+      subtotal_cents: 30000,
+      tax_total_cents: 4493,
+      invoice_terms: "Due on receipt",
+      invoice_language: "en",
+    });
+    // Number in the header subtitle; line items with the empty-description
+    // fallback; tax lines with the registration number; totals; PDF link.
+    expect(screen.getByText(/· INV-0012/)).toBeInTheDocument();
+    expect(screen.getByText("T1 return")).toBeInTheDocument();
+    expect(screen.getByText("Professional services")).toBeInTheDocument();
+    expect(screen.getByText("GST (5%)")).toBeInTheDocument();
+    expect(screen.getByText("No. 123456789 RT0001")).toBeInTheDocument();
+    expect(screen.getByText(en.Portal.pay_subtotal)).toBeInTheDocument();
+    expect(screen.getByText("$300.00")).toBeInTheDocument();
+    expect(screen.getByText("Due on receipt")).toBeInTheDocument();
+    const pdfLink = screen.getByText("INV-0012.pdf").closest("a");
+    expect(pdfLink?.getAttribute("href")).toBe(
+      "/api/portal/invoices/pr1/pdf?token=tok_test&download=1",
+    );
+    // Pay button still present.
+    expect(
+      screen.getByRole("button", { name: new RegExp(en.Portal.pay_now) }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the simple card for legacy invoices (no detail table)", () => {
+    renderCard({ description: "2025 return" });
+    expect(screen.getByText(/2025 return/)).toBeInTheDocument();
+    expect(screen.queryByText(en.Portal.pay_subtotal)).not.toBeInTheDocument();
+  });
+
   it("shows the retry state on a failed payment", () => {
     renderCard({ status: "failed" });
     expect(screen.getByText(en.Portal.pay_failed_title)).toBeInTheDocument();

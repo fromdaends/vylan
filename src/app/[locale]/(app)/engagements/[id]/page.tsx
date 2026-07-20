@@ -266,6 +266,9 @@ export default async function EngagementDetailPage({
         ? [{ key, label, unitCents: Math.round(cents) }]
         : [];
     }),
+    // The invoice document's default language = the client's portal language
+    // (overridable per invoice in the builder).
+    clientLocale: (client?.locale === "en" ? "en" : "fr") as "en" | "fr",
   };
   // Whether the Final documents are locked, for the compact lock icon on the
   // header pill (same rule the portal + download route use).
@@ -847,6 +850,7 @@ export default async function EngagementDetailPage({
                       due_date: latestPayment.due_date ?? null,
                       invoice_terms: latestPayment.invoice_terms ?? null,
                       invoice_notes: latestPayment.invoice_notes ?? null,
+                      invoice_language: latestPayment.invoice_language ?? null,
                     }
                   : null
               }
