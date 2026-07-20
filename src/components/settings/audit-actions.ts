@@ -33,6 +33,12 @@ export const AUDIT_ACTIONS = [
   "client_marked_na",
   "client_undid_na",
   "client_message_sent",
+  "client_viewed_portal",
+  "client_opened_documents",
+  "client_opened_signatures",
+  "client_opened_messages",
+  "client_opened_signature",
+  "client_downloaded_deliverable",
   // AI verdicts
   "ai_classified",
   "ai_auto_rejected",

@@ -28,6 +28,44 @@ export async function listActivityForEngagement(
   return (data ?? []) as ActivityEntry[];
 }
 
+// When the engagement's invoice was most recently waived/canceled, read from
+// the permanent audit trail (the `invoice_waived` row logUserActivity writes at
+// waive time). Used to time the header's transient "Payment canceled" chip: it
+// shows only for a few minutes after the waive, then hides — while this audit
+// row stays forever. Returns the ISO timestamp, or null if no waive is logged.
+// RLS-scoped to the caller's firm, same as listActivityForEngagement. Degrades
+// to null on any read error so the header never hard-fails.
+export async function getLatestInvoiceWaivedAt(
+  engagementId: string,
+): Promise<string | null> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("activity_log")
+    .select("created_at")
+    .eq("engagement_id", engagementId)
+    .eq("action", "invoice_waived")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
+  return (data?.created_at as string | undefined) ?? null;
+}
+
+// Whether the engagement's invoice was waived within the last `windowMs`, plus
+// the waive timestamp. Reads the clock HERE (a lib function) rather than in the
+// server component, so the page render stays pure. Drives the header's transient
+// "Payment canceled" chip.
+export async function getRecentInvoiceCancel(
+  engagementId: string,
+  windowMs: number,
+): Promise<{ canceledAt: string | null; recent: boolean }> {
+  const canceledAt = await getLatestInvoiceWaivedAt(engagementId);
+  const recent =
+    canceledAt != null &&
+    Date.now() - new Date(canceledAt).getTime() < windowMs;
+  return { canceledAt, recent };
+}
+
 export type EngagementContributor = {
   userId: string;
   lastAt: string;
