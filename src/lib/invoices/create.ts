@@ -53,6 +53,8 @@ export type GeneratedInvoicePayload = {
   dueDate?: string | null; // YYYY-MM-DD
   terms?: string | null;
   notes?: string | null;
+  // Per-invoice language override; null = the client's portal language.
+  language?: "en" | "fr" | null;
 };
 
 export type CreateInvoiceInput = {
@@ -141,10 +143,15 @@ export async function createInvoiceForEngagement(
     if (chargeCents < MIN_TOTAL_CENTS || chargeCents > MAX_TOTAL_CENTS) {
       return { ok: false, reason: "invalid_amount" };
     }
-    // The client's portal language decides how the invoice renders; captured at
-    // creation (a per-invoice override arrives with the Phase 3 document work).
-    const client = await getClient(engagement.client_id);
-    const invoiceLanguage = client?.locale === "en" ? "en" : "fr";
+    // The document's language: the accountant's per-invoice override when set,
+    // else the client's portal language.
+    let invoiceLanguage: "en" | "fr";
+    if (gen.language === "en" || gen.language === "fr") {
+      invoiceLanguage = gen.language;
+    } else {
+      const client = await getClient(engagement.client_id);
+      invoiceLanguage = client?.locale === "en" ? "en" : "fr";
+    }
     // Fallback description (payments list, emails): the first line's text.
     // Empty (description is optional) → null, same as the flat invoice.
     if (!description) description = lines[0].description || null;

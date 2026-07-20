@@ -112,6 +112,12 @@ export async function requestGeneratedInvoiceAction(
     return { ok: false, error: "invalid_id" };
   }
 
+  // Per-invoice language override; anything else falls back to the client's
+  // portal language server-side.
+  const languageRaw = formData.get("language");
+  const language =
+    languageRaw === "en" || languageRaw === "fr" ? languageRaw : null;
+
   const res = await createInvoiceForEngagement({
     engagementId,
     // Placeholder — the generated path derives the charged amount from the
@@ -126,6 +132,7 @@ export async function requestGeneratedInvoiceAction(
       dueDate: DATE_RE.test(dueRaw) ? dueRaw : null,
       terms: termsRaw || null,
       notes: notesRaw || null,
+      language,
     },
   });
   if (!res.ok) {
