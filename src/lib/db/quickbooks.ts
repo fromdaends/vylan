@@ -676,3 +676,40 @@ export async function getFirmQuickbooksRealm(
       (data.environment as string) === "production" ? "production" : "sandbox",
   };
 }
+
+// Every stored connection to a given Intuit company (realm), ACROSS ALL FIRMS —
+// service-role read for the client-list import flow. Intuit token revocation
+// kills the whole app↔realm grant, so before the import releases its transient
+// tokens it must know whether ANY stored connection would die with them.
+// Returns [] on any error / pre-migration (callers then err on the safe side —
+// with an empty result the import still revokes, which is only wrong if a
+// connection actually existed, and that case returns rows).
+export async function findQuickbooksConnectionsByRealm(
+  realmId: string,
+  environment: QuickbooksEnvironment,
+): Promise<{ firmId: string; clientId: string | null }[]> {
+  const sb = getServiceRoleSupabase();
+  const run = (withClient: boolean) =>
+    sb
+      .from("quickbooks_connections")
+      .select(withClient ? "firm_id, client_id" : "firm_id")
+      .eq("realm_id", realmId)
+      .eq("environment", environment);
+  let { data, error } = await run(true);
+  if (error && isMissingSchema(error)) {
+    ({ data, error } = await run(false)); // pre-0710: no client_id column
+  }
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error(
+        "[quickbooks] findQuickbooksConnectionsByRealm failed:",
+        error,
+      );
+    }
+    return [];
+  }
+  return ((data as Array<Record<string, unknown>> | null) ?? []).map((r) => ({
+    firmId: r.firm_id as string,
+    clientId: (r.client_id as string | null) ?? null,
+  }));
+}
