@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   CheckCircle2,
@@ -67,14 +67,21 @@ export function PortalShell({
   const [filesByItem, setFilesByItem] = useState(ctx.files_by_item);
   const [view, setView] = useState<PortalView>("hub");
   // Portal activity logging (the magic token identifies the client to the
-  // logging endpoint). Section navigations are deduped per mount, so moving back
-  // and forth between sections logs each at most once per visit.
+  // logging endpoint). Log a given event at most once per browser tab-session
+  // (keyed by token + action) so a reload or moving back and forth between
+  // sections doesn't spam the accountant's feed. Best-effort: if sessionStorage
+  // is blocked (private mode), it simply logs each time.
   const token = ctx.engagement.magic_token ?? "";
-  const loggedSectionsRef = useRef<Set<string>>(new Set());
-  const logSectionOnce = useCallback(
+  const logOncePerVisit = useCallback(
     (action: PortalActivityAction) => {
-      if (!token || loggedSectionsRef.current.has(action)) return;
-      loggedSectionsRef.current.add(action);
+      if (!token) return;
+      try {
+        const key = `vylan:portal:${token}:${action}`;
+        if (sessionStorage.getItem(key)) return;
+        sessionStorage.setItem(key, "1");
+      } catch {
+        // Storage blocked: fall through and log.
+      }
       logPortalActivity(token, action);
     },
     [token],
@@ -96,28 +103,18 @@ export function PortalShell({
   function openMessages() {
     setMessagesOpen(true);
     setMessagesUnread(0);
-    logSectionOnce("client_opened_messages");
+    logOncePerVisit("client_opened_messages");
   }
 
-  // Log that the client opened the portal — once per browser tab-session, so a
-  // reload doesn't re-log the same visit (a brand-new visit in a new tab logs a
-  // fresh view). If they landed straight in the message thread (?view=messages),
-  // record that section open too.
+  // Record that the client opened the portal (once per tab-session, so a reload
+  // doesn't re-log the same visit; a fresh visit in a new tab logs again). If
+  // they landed straight in the message thread (?view=messages), log that too.
   useEffect(() => {
-    if (!token) return;
-    let firstView = true;
-    try {
-      const key = `vylan:portal-viewed:${token}`;
-      if (sessionStorage.getItem(key)) firstView = false;
-      else sessionStorage.setItem(key, "1");
-    } catch {
-      // Storage blocked (private mode): fall through and log the view.
-    }
-    if (firstView) logPortalActivity(token, "client_viewed_portal");
+    logOncePerVisit("client_viewed_portal");
     if (initialMessagesOpen && messagingReady) {
-      logSectionOnce("client_opened_messages");
+      logOncePerVisit("client_opened_messages");
     }
-  }, [token, initialMessagesOpen, messagingReady, logSectionOnce]);
+  }, [logOncePerVisit, initialMessagesOpen, messagingReady]);
 
   // Split into the signature group ("To sign") and the document group.
   const { collection: collectionItems, signatures: signatureItems } =
@@ -165,7 +162,7 @@ export function PortalShell({
             : "muted",
       onSelect: () => {
         setView("signatures");
-        logSectionOnce("client_opened_signatures");
+        logOncePerVisit("client_opened_signatures");
       },
     },
     {
@@ -189,7 +186,7 @@ export function PortalShell({
             : "success",
       onSelect: () => {
         setView("documents");
-        logSectionOnce("client_opened_documents");
+        logOncePerVisit("client_opened_documents");
       },
     },
   ];
@@ -330,7 +327,7 @@ export function PortalShell({
                   ? () => {
                       setMessagesOpen(false);
                       setView("documents");
-                      logSectionOnce("client_opened_documents");
+                      logOncePerVisit("client_opened_documents");
                     }
                   : null
               }

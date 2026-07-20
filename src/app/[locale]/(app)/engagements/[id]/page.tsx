@@ -73,7 +73,7 @@ import { EngagementAssignee } from "@/components/engagements/engagement-assignee
 import { EngagementContributors } from "@/components/engagements/engagement-contributors";
 import {
   listEngagementContributors,
-  getLatestInvoiceWaivedAt,
+  getRecentInvoiceCancel,
 } from "@/lib/db/activity";
 import {
   PaymentCanceledChip,
@@ -458,14 +458,13 @@ export default async function EngagementDetailPage({
   // The waive time comes from that log's invoice_waived row (no dedicated
   // column), so a reload past the window shows nothing; the 5s AutoRefresh (and
   // the chip's own timer) drop it in an open tab.
-  const invoiceCanceledAt =
+  const { canceledAt: invoiceCanceledAt, recent: showCanceledChip } =
     latestPayment?.status === "canceled"
-      ? await getLatestInvoiceWaivedAt(engagement.id)
-      : null;
-  const showCanceledChip =
-    invoiceCanceledAt != null &&
-    Date.now() - new Date(invoiceCanceledAt).getTime() <
-      PAYMENT_CANCELED_CHIP_WINDOW_MS;
+      ? await getRecentInvoiceCancel(
+          engagement.id,
+          PAYMENT_CANCELED_CHIP_WINDOW_MS,
+        )
+      : { canceledAt: null, recent: false };
   const tStatus = await getTranslations("Status");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");

@@ -51,6 +51,21 @@ export async function getLatestInvoiceWaivedAt(
   return (data?.created_at as string | undefined) ?? null;
 }
 
+// Whether the engagement's invoice was waived within the last `windowMs`, plus
+// the waive timestamp. Reads the clock HERE (a lib function) rather than in the
+// server component, so the page render stays pure. Drives the header's transient
+// "Payment canceled" chip.
+export async function getRecentInvoiceCancel(
+  engagementId: string,
+  windowMs: number,
+): Promise<{ canceledAt: string | null; recent: boolean }> {
+  const canceledAt = await getLatestInvoiceWaivedAt(engagementId);
+  const recent =
+    canceledAt != null &&
+    Date.now() - new Date(canceledAt).getTime() < windowMs;
+  return { canceledAt, recent };
+}
+
 export type EngagementContributor = {
   userId: string;
   lastAt: string;
