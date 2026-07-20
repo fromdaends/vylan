@@ -57,7 +57,6 @@ describe("normalizeLineItems", () => {
         Array.from({ length: MAX_LINE_ITEMS + 1 }, () => LINE("x", 1, 100)),
       ),
     ).toBeNull();
-    expect(normalizeLineItems([LINE("", 1, 100)])).toBeNull();
     expect(normalizeLineItems([LINE("x".repeat(301), 1, 100)])).toBeNull();
     expect(normalizeLineItems([LINE("x", 0, 100)])).toBeNull();
     expect(normalizeLineItems([LINE("x", -1, 100)])).toBeNull();
@@ -72,6 +71,13 @@ describe("normalizeLineItems", () => {
   it("allows a zero-priced line (comped item on a larger invoice)", () => {
     const lines = normalizeLineItems([LINE("Comped", 1, 0)]);
     expect(lines?.[0].amount_cents).toBe(0);
+  });
+
+  it("allows an empty description (the field is optional, like the flat invoice)", () => {
+    const lines = normalizeLineItems([LINE("", 1, 10000)]);
+    expect(lines).toEqual([
+      { description: "", quantity: 1, unit_cents: 10000, amount_cents: 10000 },
+    ]);
   });
 });
 

@@ -202,8 +202,10 @@ export function InvoiceBuilder({
     [components, offComponents],
   );
 
-  // Parse drafts → computable lines. A line is countable once description AND
-  // rate are valid; untouched trailing blanks are ignored rather than invalid.
+  // Parse drafts → computable lines. A line counts as soon as its AMOUNT is
+  // valid — description is optional (matching the flat invoice this replaces),
+  // so the totals move the moment an amount is typed. Untouched blank lines
+  // are ignored rather than invalid.
   const parsed = useMemo(() => {
     const items: InvoiceLineItem[] = [];
     let anyInvalid = false;
@@ -214,7 +216,6 @@ export function InvoiceBuilder({
       const qty = parseQty(l.quantity);
       const rate = parseRateCents(l.rate);
       if (
-        l.description.trim() === "" ||
         l.description.trim().length > 300 ||
         Number.isNaN(qty) ||
         Number.isNaN(rate) ||
