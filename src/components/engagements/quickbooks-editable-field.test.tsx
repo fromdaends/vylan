@@ -154,9 +154,12 @@ describe("QuickbooksEditableField — AI hints", () => {
     const createCall = fetchMock.mock.calls.find((c) =>
       String(c[0]).includes("/api/quickbooks/entities"),
     ) as unknown as [string, RequestInit];
+    // fileId is sent so the server creates the party in THAT draft's client's
+    // QuickBooks company (0710 per-client).
     expect(JSON.parse(createCall[1].body as string)).toEqual({
       kind: "vendor",
       name: "Northline Office",
+      fileId: "f1",
     });
     const resolveCall = fetchMock.mock.calls.find((c) =>
       String(c[0]).includes("/resolve"),

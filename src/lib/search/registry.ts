@@ -145,16 +145,16 @@ export function buildSearchRegistry(
         "integrations integration connect apps sage sage 50 export file quickbooks qbo intuit comptabilite exportation",
     },
     {
-      // Direct QuickBooks shortcut — hidden until the firm actually connects a
-      // client's QuickBooks (mirrors the sidebar's gated QuickBooks sub-item).
-      // "QuickBooks" is a brand name, so it isn't localized.
+      // Direct QuickBooks shortcut — ALWAYS listed now (mirrors the always-visible
+      // sidebar sub-item + hub card); the drafts page guides an owner to connect
+      // from a client's page when nothing's linked yet. "QuickBooks" is a brand
+      // name, so it isn't localized.
       id: "integrations-quickbooks",
       label: "QuickBooks",
       group: "go",
       icon: Plug,
       color: "text-icon-cyan",
       href: "/quickbooks/drafts",
-      requiresQuickbooks: true,
       keywords:
         "quickbooks drafts bookkeeping transactions approve dismiss qbo intuit brouillons ecritures approuver",
     },

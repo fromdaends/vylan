@@ -2520,6 +2520,7 @@
     "queue_connect_owner": "Vylan turns your clients' receipts and invoices into draft QuickBooks entries you review and approve. No manual data entry.",
     "queue_connect_staff": "Ask your firm owner to connect QuickBooks to start turning receipts and invoices into draft entries you review and approve.",
     "queue_connect_cta": "Connect QuickBooks",
+    "queue_connect_cta_clients": "Choose a client to connect",
     "queue_connect_steps_label": "How it works",
     "queue_connect_step1_title": "Clients upload",
     "queue_connect_step1_desc": "Receipts and invoices arrive through each engagement.",

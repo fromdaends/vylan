@@ -794,8 +794,8 @@ function SidebarBody({
           />
           {/* Integrations hub — an expandable section mirroring Engagements:
               the label links to the /integrations index, the chevron reveals the
-              sub-items with their brand logos. Always shown (Sage 50 is always
-              available); the QuickBooks sub-item inside is gated on connection. */}
+              sub-items with their brand logos. Always shown, and both sub-items
+              (Sage 50 + QuickBooks) always list so QuickBooks is discoverable. */}
           <IntegrationsNav
             labels={labels}
             collapsed={collapsed}
@@ -1046,7 +1046,8 @@ function IntegrationsNav({
   const pathname = usePathname();
   const onIntegrations = isIntegrationsSectionActive(pathname);
   const [open, setOpen] = useState(onIntegrations);
-  // Sage 50 always shows; QuickBooks appears only once a client is connected.
+  // Both integrations always show now — Sage 50 (file export) and QuickBooks
+  // (shown even before connecting, so it's discoverable).
   const subnav = INTEGRATION_SUBNAV.filter((item) =>
     isIntegrationSubItemVisible(item.key, quickbooksConnected),
   );

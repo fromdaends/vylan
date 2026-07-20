@@ -25,9 +25,10 @@ export default async function IntegrationsIndexPage({
   setRequestLocale(locale);
   const t = await getTranslations("Integrations");
 
-  // The QuickBooks card appears only once the firm actually uses QuickBooks (any
-  // client connected). Before that there's nothing to open, and connecting lives
-  // in Settings → Integrations — so the hub isn't cluttered for non-QBO firms.
+  // The QuickBooks card is ALWAYS shown so the integration is discoverable — it
+  // just reads "Not connected" until a client is linked (the founder's call).
+  // Connecting happens per client (from a client's page); opening the card lands
+  // on the QuickBooks surface, which guides the owner there when nothing's linked.
   const qbConnected = await firmHasAnyQuickbooksConnection();
 
   return (
@@ -42,20 +43,22 @@ export default async function IntegrationsIndexPage({
       </header>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {/* QuickBooks — live integration. Shown only once the firm has connected
-            a client (connecting lives in Settings → Integrations). Opens the
-            drafts queue. */}
-        {qbConnected && (
-          <IntegrationCard
-            href="/quickbooks/drafts"
-            logo={<QuickbooksLogo className="h-7 w-7" />}
-            tileClassName="bg-[#2CA01C]/10 ring-[#2CA01C]/20"
-            name={t("quickbooks_name")}
-            description={t("quickbooks_desc")}
-            badge={{ label: t("state_connected"), tone: "success" }}
-            actionLabel={t("action_open")}
-          />
-        )}
+        {/* QuickBooks — live integration. ALWAYS shown (reads "Not connected"
+            until a client is linked) so it's discoverable. Opens the drafts
+            queue, which guides connecting per client when nothing's linked. */}
+        <IntegrationCard
+          href="/quickbooks/drafts"
+          logo={<QuickbooksLogo className="h-7 w-7" />}
+          tileClassName="bg-[#2CA01C]/10 ring-[#2CA01C]/20"
+          name={t("quickbooks_name")}
+          description={t("quickbooks_desc")}
+          badge={
+            qbConnected
+              ? { label: t("state_connected"), tone: "success" }
+              : { label: t("state_not_connected"), tone: "muted" }
+          }
+          actionLabel={t("action_open")}
+        />
 
         {/* Sage 50 — file export. No connection state (Sage 50 is desktop
             software with no live API); the card advertises a downloadable file. */}

@@ -161,14 +161,17 @@ export async function postApprovedDraft(
   }
 
   const lists =
-    opts && "lists" in opts ? opts.lists : await readCachedQuickbooksLists();
+    opts && "lists" in opts
+      ? opts.lists
+      : await readCachedQuickbooksLists(draft.clientId);
 
   // The connection context is needed up front: the company COUNTRY decides whether
-  // we send the non-US GlobalTaxCalculation, so it shapes the payload.
+  // we send the non-US GlobalTaxCalculation, so it shapes the payload. Resolved for
+  // THIS draft's client (0710) — each client posts into its own QuickBooks company.
   const ctx =
     opts && "ctx" in opts
       ? opts.ctx
-      : await getQuickbooksReadContext(draft.firmId);
+      : await getQuickbooksReadContext(draft.firmId, draft.clientId);
   if (!ctx) return { kind: "not_connected", ...base };
 
   // Decide whether to attach tax (net + tax code, QBO computes) or fall back to
@@ -499,7 +502,10 @@ export async function postApprovedDraft(
     // next attempt uses a good one) → fall through to the normal retriable
     // failure. Nothing was created either way, so there is no double-post risk.
     if (e instanceof QuickbooksError && e.status === 401) {
-      const reAuth = await refreshAccessTokenAfter401(draft.firmId);
+      const reAuth = await refreshAccessTokenAfter401(
+        draft.firmId,
+        draft.clientId,
+      );
       if (reAuth.dead) {
         console.error(
           "[quickbooks] post blocked — connection revoked, reconnect required",

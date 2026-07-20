@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/users";
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { summarizeDrafts } from "@/lib/quickbooks/draft-summary";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import {
@@ -101,10 +102,12 @@ export default async function QuickbooksDraftsPage({
 
         {isOwner ? (
           <div className="mt-7">
+            {/* Connecting is PER CLIENT (0710): open a client's page and connect
+                their QuickBooks there. Send the owner to the clients list. */}
             <Button asChild size="lg" className="gap-2">
-              <Link href="/settings?tab=integrations">
+              <Link href="/clients">
                 <QuickbooksLogo className="h-4 w-4" />
-                {t("queue_connect_cta")}
+                {t("queue_connect_cta_clients")}
               </Link>
             </Button>
           </div>
@@ -156,9 +159,8 @@ export default async function QuickbooksDraftsPage({
   // (the un-awaited check still finishes the keep-alive refresh in background;
   // an inconclusive check just reports "ok", i.e. no banner this load).
   const HEALTH_BUDGET_MS = 3000;
-  const [rows, qboLists, firmUsers, health] = await Promise.all([
+  const [rows, firmUsers, health] = await Promise.all([
     listFirmDrafts(),
-    readCachedQuickbooksLists(),
     listFirmUsers(),
     firm
       ? Promise.race([
@@ -170,6 +172,23 @@ export default async function QuickbooksDraftsPage({
       : Promise.resolve("ok" as const),
   ]);
 
+  // Per-client (0710): each draft's pickers must show ITS client's QuickBooks
+  // lists (accounts/vendors/customers/tax/items), not one firm-level set. Load
+  // the lists once per distinct client that has drafts (in parallel), then build
+  // a per-client options map below. A client whose lists don't resolve gets empty
+  // options — the row still renders; its pickers are just empty until it syncs.
+  const clientIdsWithDrafts = [
+    ...new Set(rows.map((r) => r.clientId).filter((c): c is string => !!c)),
+  ];
+  const listsByClient = new Map<string, QuickbooksLists | null>(
+    await Promise.all(
+      clientIdsWithDrafts.map(
+        async (cid) =>
+          [cid, await readCachedQuickbooksLists(cid)] as const,
+      ),
+    ),
+  );
+
   const reviewerNameById = new Map(
     firmUsers.map((u) => [u.id, userDisplayLabel(u)]),
   );
@@ -179,7 +198,7 @@ export default async function QuickbooksDraftsPage({
   });
   const isPayFrom = (t: string | null) =>
     ["bank", "credit card"].includes((t ?? "").toLowerCase());
-  const options: DraftCardOptions = {
+  const buildOptions = (qboLists: QuickbooksLists | null): DraftCardOptions => ({
     vendors: (qboLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
     customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
     accounts: (qboLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
@@ -192,7 +211,23 @@ export default async function QuickbooksDraftsPage({
     paymentAccounts: (qboLists?.accounts ?? [])
       .filter((x) => x.active && isPayFrom(x.accountType))
       .map(toOpt),
+  });
+  // One options set per client (built from that client's cached lists), plus an
+  // empty fallback for a row whose client didn't resolve. Each queue row picks
+  // its own client's options below.
+  const EMPTY_OPTIONS: DraftCardOptions = {
+    vendors: [],
+    customers: [],
+    accounts: [],
+    taxCodes: [],
+    items: [],
+    paymentAccounts: [],
   };
+  const optionsByClient = new Map<string, DraftCardOptions>(
+    [...listsByClient].map(([cid, lists]) => [cid, buildOptions(lists)]),
+  );
+  const optionsFor = (clientId: string | null): DraftCardOptions =>
+    (clientId ? optionsByClient.get(clientId) : undefined) ?? EMPTY_OPTIONS;
 
   // Counts + pipeline total over ALL drafts (so the chips show totals
   // regardless of the active filter).
@@ -310,7 +345,7 @@ export default async function QuickbooksDraftsPage({
           <QueueRow
             key={r.fileId}
             row={r}
-            options={options}
+            options={optionsFor(r.clientId)}
             locale={locale}
             reviewedByName={
               r.reviewedBy ? (reviewerNameById.get(r.reviewedBy) ?? null) : null

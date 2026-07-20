@@ -289,6 +289,12 @@ export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
 // (approve/dismiss/reopen) route.
 export async function getDraftForFile(uploadedFileId: string): Promise<{
   engagementId: string;
+  // The engagement's client (0710 per-client posting): every post/attach/void/
+  // delete resolves THIS client's QuickBooks connection, not the firm-level one.
+  // Derived from the engagement (the suggestion row itself has no client_id).
+  // Null only if the engagement lookup fails — callers then fall back to
+  // firm-level scope (safe: usually "not connected" → no wrong-company write).
+  clientId: string | null;
   firmId: string;
   resolved: ResolvedEntry | null;
   suggestion: TransactionSuggestion | null;
@@ -342,8 +348,30 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
     break;
   }
   if (error || !row) return null;
+  // Resolve the engagement's client so the post path targets that client's
+  // QuickBooks connection (0710). A separate point read (the repo avoids
+  // PostgREST joins); RLS-scoped like the draft read above. On any error we
+  // leave clientId null → firm-level fallback.
+  const engagementId = row.engagement_id as string;
+  let clientId: string | null = null;
+  const engRes = await sb
+    .from("engagements")
+    .select("client_id")
+    .eq("id", engagementId)
+    .maybeSingle();
+  if (engRes.error) {
+    if (!isMissingSchema(engRes.error)) {
+      console.error(
+        "[quickbooks] getDraftForFile client lookup failed:",
+        engRes.error,
+      );
+    }
+  } else {
+    clientId = (engRes.data?.client_id as string | null) ?? null;
+  }
   return {
-    engagementId: row.engagement_id as string,
+    engagementId,
+    clientId,
     firmId: row.firm_id as string,
     resolved: (row.resolved as ResolvedEntry | null) ?? null,
     suggestion: (row.suggestion as TransactionSuggestion | null) ?? null,

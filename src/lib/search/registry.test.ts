@@ -37,14 +37,16 @@ describe("buildSearchRegistry", () => {
     }
   });
 
-  it("hides the QuickBooks entry until the firm is connected", () => {
-    const off = buildSearchRegistry(translators, { isOwner: true });
-    const on = buildSearchRegistry(translators, {
-      isOwner: true,
-      quickbooksConnected: true,
-    });
-    expect(off.some((e) => e.id === "integrations-quickbooks")).toBe(false);
-    expect(on.some((e) => e.id === "integrations-quickbooks")).toBe(true);
+  it("always exposes the QuickBooks entry, even before the firm connects", () => {
+    // QuickBooks is now always discoverable (matches the always-visible nav
+    // sub-item + hub card); the drafts page guides connecting per client.
+    for (const quickbooksConnected of [false, true]) {
+      const reg = buildSearchRegistry(translators, {
+        isOwner: true,
+        quickbooksConnected,
+      });
+      expect(reg.some((e) => e.id === "integrations-quickbooks")).toBe(true);
+    }
   });
 
   it("always exposes the Integrations hub, even with no QuickBooks connection", () => {

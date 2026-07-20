@@ -6,6 +6,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { getDraftForFile } from "@/lib/db/quickbooks-suggestions";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
 import {
   createOrFindNameEntity,
@@ -45,6 +46,11 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+  // The draft this "+ Create" was fired from, so we create the party in THAT
+  // client's QuickBooks company (0710 per-client). A stale client omitting it
+  // falls back to firm-level scope.
+  const fileId =
+    typeof body?.fileId === "string" && body.fileId ? body.fileId : null;
 
   const firm = await getCurrentFirm();
   if (!firm) {
@@ -54,7 +60,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const ctx = await getQuickbooksReadContext(firm.id);
+  // Resolve the draft's client (RLS-scoped read — also confirms the file belongs
+  // to this firm). undefined = firm-level fallback (no fileId / draft not found).
+  const clientId = fileId
+    ? ((await getDraftForFile(fileId))?.clientId ?? null)
+    : undefined;
+
+  const ctx = await getQuickbooksReadContext(firm.id, clientId);
   if (!ctx) {
     return NextResponse.json(
       { error: "not_connected", detail: "QuickBooks isn't connected." },
@@ -68,6 +80,7 @@ export async function POST(request: NextRequest) {
     name,
     ctx,
     now: new Date().toISOString(),
+    clientId,
   });
   if (!result.ok) {
     // Duplicate is a soft/expected outcome (409); any other failure is a 502 from

@@ -91,10 +91,17 @@ export async function processClassifyJob(
   // (skipped) — the next day's cron run can pick it up if still needed.
   const { data: engagementForLimit } = await sb
     .from("engagements")
-    .select("firm_id, title, clients!inner(display_name)")
+    .select("firm_id, client_id, title, clients!inner(display_name)")
     .eq("id", file.engagement_id)
     .single();
   const limitFirmId: string | null = engagementForLimit?.firm_id ?? null;
+  // The engagement's client (0710 per-client QuickBooks): the transaction pass +
+  // draft are gated on / built against THIS client's connection + cached lists,
+  // not the firm-level row (which usually doesn't exist once connections are
+  // per-client). Null falls back to firm-level scope.
+  const limitClientId: string | null =
+    (engagementForLimit as { client_id?: string | null } | null)?.client_id ??
+    null;
   // Can't resolve the firm → can't enforce the monthly OR trial AI cap. Fail
   // CLOSED rather than spend uncapped AI. Retryable (see RETRYABLE_SKIPS): a
   // transient engagement-read miss recovers on the cron's next attempt; a truly
@@ -181,7 +188,10 @@ export async function processClassifyJob(
   // The transaction pass + draft suggestion only matter for QuickBooks-connected
   // firms. Resolve that once: it gates the (billable) extract call AND, below,
   // whether we clean up a now-stale draft.
-  const quickbooksConnected = await isFirmQuickbooksConnected(limitFirmId);
+  const quickbooksConnected = await isFirmQuickbooksConnected(
+    limitFirmId,
+    limitClientId,
+  );
   // We reach this code only AFTER the firm passed the daily rate limit + the
   // monthly/trial pause check, and only when AI is configured (checked at the
   // top), so entering this branch means a real, billable second model call
@@ -282,13 +292,19 @@ export async function processClassifyJob(
   if (quickbooksConnected) {
     try {
       if (transaction) {
-        const cached = await readCachedQuickbooksListsForFirm(limitFirmId);
+        const cached = await readCachedQuickbooksListsForFirm(
+          limitFirmId,
+          limitClientId,
+        );
         // Only (re)write when we have lists to map against; a transient empty
         // cache must not wipe a previously-good draft.
         if (cached) {
           // Feature 3: consult the firm's remembered corrections before fuzzy
           // matching (service-role read; {} pre-0490, so no behavior change).
-          const learned = await readLearnedMappingsForFirm(limitFirmId);
+          const learned = await readLearnedMappingsForFirm(
+            limitFirmId,
+            limitClientId,
+          );
           const suggestion = buildTransactionSuggestion(
             transaction,
             cached,
