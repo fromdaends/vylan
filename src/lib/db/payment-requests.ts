@@ -572,7 +572,7 @@ export async function listFirmPaymentsWithNames(
 // NOT an error), or null on a missing table (pre-0380) / any other failure.
 export async function createPaymentRequestSR(
   input: CreatePaymentRequestInput,
-): Promise<PaymentRequest | "duplicate" | null> {
+): Promise<PaymentRequest | "duplicate" | "seq_duplicate" | null> {
   const sb = getServiceRoleSupabase();
   const { locks_deliverables, ...base } = input;
   const withLock =
@@ -593,8 +593,11 @@ export async function createPaymentRequestSR(
       .single());
   }
   if (error) {
-    // 23505 = unique_violation: a concurrent auto-send won the race. Benign —
-    // there is exactly one live auto invoice, which is the whole point.
+    // 23505 = unique_violation. The invoice-seq backstop (0750) means the
+    // caller should re-allocate a number and retry; the engagement index means
+    // a concurrent auto-send won the race — benign, exactly one live auto
+    // invoice exists, which is the whole point.
+    if (isSeqUniqueViolation(error)) return "seq_duplicate";
     if (error.code === "23505") return "duplicate";
     if (!isMissingSchema(error)) {
       console.error("[payment-requests] createPaymentRequestSR failed:", error);
