@@ -75,10 +75,11 @@ import {
   listEngagementContributors,
   getRecentInvoiceCancel,
 } from "@/lib/db/activity";
-import {
-  PaymentCanceledChip,
-  PAYMENT_CANCELED_CHIP_WINDOW_MS,
-} from "@/components/engagements/payment-canceled-chip";
+import { PaymentCanceledChip } from "@/components/engagements/payment-canceled-chip";
+// From a neutral module, never from the "use client" chip: a value imported
+// from a client module reaches this Server Component as a stub, which silently
+// made the "is the cancel recent?" comparison always false.
+import { PAYMENT_CANCELED_CHIP_WINDOW_MS } from "@/lib/payments/canceled-chip";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
