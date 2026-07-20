@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, act } from "@testing-library/react";
-import {
-  PaymentCanceledChip,
-  PAYMENT_CANCELED_CHIP_WINDOW_MS,
-} from "./payment-canceled-chip";
+import { PaymentCanceledChip } from "./payment-canceled-chip";
+import { PAYMENT_CANCELED_CHIP_WINDOW_MS } from "@/lib/payments/canceled-chip";
 
 afterEach(() => {
   cleanup();
@@ -11,6 +9,18 @@ afterEach(() => {
 });
 
 describe("PaymentCanceledChip", () => {
+  // Regression guard. The window constant must NOT live in / be re-exported from
+  // this "use client" module: the server page imports it to decide whether to
+  // render the chip, and a value exported from a client module reaches a Server
+  // Component as a stub function, not a number — making the "is this cancel
+  // recent?" comparison silently false forever, so the chip never appeared.
+  // That bug shipped once; this keeps the constant in the neutral lib module.
+  it("does not export the window constant (server reads it from lib/payments)", async () => {
+    const mod = await import("./payment-canceled-chip");
+    expect("PAYMENT_CANCELED_CHIP_WINDOW_MS" in mod).toBe(false);
+    expect(typeof PAYMENT_CANCELED_CHIP_WINDOW_MS).toBe("number");
+  });
+
   it("shows during the window, then removes itself after it", () => {
     vi.useFakeTimers();
     const now = new Date();

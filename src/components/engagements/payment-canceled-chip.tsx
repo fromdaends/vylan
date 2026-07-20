@@ -3,14 +3,10 @@
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/cn";
-
-// How long the header's "Payment canceled · $X" chip lingers after the invoice
-// is waived/canceled before it hides itself. The cancellation stays permanently
-// in the Activity feed + audit log; this chip is only a brief header
-// confirmation so a waived invoice doesn't sit in the header forever. ~3 minutes
-// ("a couple of minutes"); one-line change here if the founder wants it
-// shorter/longer.
-export const PAYMENT_CANCELED_CHIP_WINDOW_MS = 3 * 60_000;
+// Deliberately imported from a neutral module, NOT re-exported from here: the
+// server page reads the same constant, and a value exported from a "use client"
+// file reaches the server as a stub, not a number. See the note in that file.
+import { PAYMENT_CANCELED_CHIP_WINDOW_MS } from "@/lib/payments/canceled-chip";
 
 // The transient header chip shown right after a payment/invoice is canceled.
 // The server only mounts it while still inside the window (so a reload minutes
