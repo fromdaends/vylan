@@ -19,7 +19,14 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import {
   createPaymentRequestSR,
   getLatestPaymentRequestForEngagementSR,
+  type CreatePaymentRequestInput,
 } from "@/lib/db/payment-requests";
+import {
+  getFirmInvoiceSettingsSR,
+  allocateInvoiceSeqSR,
+} from "@/lib/db/invoice-settings";
+import { formatInvoiceNumber } from "@/lib/invoices/number";
+import { computeInvoiceTotals, MAX_TOTAL_CENTS } from "@/lib/invoices/totals";
 import { buildPaymentRequestEmail, sendEmail } from "@/lib/email";
 import { downloadObject, getBrandingImageUrlForEmail } from "@/lib/storage";
 import { getInvoiceAttachmentForEngagementSR } from "@/lib/db/final-documents";
@@ -144,25 +151,95 @@ export async function sendEngagementInvoice(
     return { ok: false, reason: "not_complete" };
   }
 
-  const row = await createPaymentRequestSR({
-    firm_id: engagement.firm_id,
-    engagement_id: engagement.id,
-    client_id: engagement.client_id,
-    amount_cents: amountCents,
-    currency: "cad",
-    description: invoiceDescription,
-    // Show it in the portal AND email the pay link — this is an automatic ask,
-    // so the client should be actively notified.
-    delivery: "both",
-    // No human requester: this was automated.
-    requested_by_user_id: null,
-    // Carry the lock preference set at engagement creation (0610).
-    locks_deliverables: locksDeliverables,
-  });
+  // ── Native invoice (0750, founder decision): once the firm has set up
+  // Invoicing, the automation makes a REAL generated invoice — the captured
+  // amount becomes a single line item, the firm's default taxes apply on top
+  // (per default_taxes_enabled and the province's components), and a number is
+  // allocated. A firm that never opened the Invoicing settings keeps the
+  // pre-0750 behavior byte-identical: flat amount, no taxes, no number.
+  const settings = await getFirmInvoiceSettingsSR(engagement.firm_id);
+  let invoiceFields: Partial<CreatePaymentRequestInput> = {};
+  let chargeCents = amountCents;
+  if (settings) {
+    const line = {
+      description: invoiceDescription ?? "",
+      quantity: 1,
+      unit_cents: amountCents,
+      amount_cents: amountCents,
+    };
+    const computed = computeInvoiceTotals([line], {
+      province: settings.province,
+      taxesEnabled: settings.default_taxes_enabled,
+      enabledComponents: null, // all of the province's components
+      registrationNumbers: {
+        gst: settings.gst_number,
+        qst: settings.qst_number,
+        pst: settings.pst_number,
+      },
+    });
+    // A taxed total past the rail ceiling would be unchargeable — fall back to
+    // the flat amount rather than blocking the send (edge case: ~$1M invoice).
+    if (computed.totalCents <= MAX_TOTAL_CENTS) {
+      chargeCents = computed.totalCents;
+      invoiceFields = {
+        invoice_kind: "generated",
+        line_items: computed.lineItems,
+        tax_breakdown: computed.taxLines,
+        subtotal_cents: computed.subtotalCents,
+        tax_total_cents: computed.taxTotalCents,
+        issue_date: new Date().toISOString().slice(0, 10),
+        invoice_terms: settings.default_terms,
+        invoice_notes: settings.default_notes,
+        invoice_language: client.locale === "en" ? "en" : "fr",
+      };
+      const seq = await allocateInvoiceSeqSR(engagement.firm_id);
+      if (seq != null) {
+        invoiceFields.invoice_seq = seq;
+        invoiceFields.invoice_number = formatInvoiceNumber(
+          settings.invoice_prefix,
+          seq,
+        );
+      }
+    }
+  }
+
+  // Insert, re-allocating the number when the seq backstop rejects it (same
+  // self-healing loop as the manual create path).
+  let row: Awaited<ReturnType<typeof createPaymentRequestSR>> = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    row = await createPaymentRequestSR({
+      firm_id: engagement.firm_id,
+      engagement_id: engagement.id,
+      client_id: engagement.client_id,
+      amount_cents: chargeCents,
+      currency: "cad",
+      description: invoiceDescription,
+      // Show it in the portal AND email the pay link — this is an automatic ask,
+      // so the client should be actively notified.
+      delivery: "both",
+      // No human requester: this was automated.
+      requested_by_user_id: null,
+      // Carry the lock preference set at engagement creation (0610).
+      locks_deliverables: locksDeliverables,
+      ...invoiceFields,
+    });
+    if (row !== "seq_duplicate") break;
+    const seq = await allocateInvoiceSeqSR(engagement.firm_id);
+    if (seq == null) {
+      delete invoiceFields.invoice_seq;
+      delete invoiceFields.invoice_number;
+    } else {
+      invoiceFields.invoice_seq = seq;
+      invoiceFields.invoice_number = formatInvoiceNumber(
+        settings?.invoice_prefix ?? "",
+        seq,
+      );
+    }
+  }
   // A concurrent auto-send already created the invoice (DB unique index caught
   // it): treat as already sent, never as a failure to retry.
   if (row === "duplicate") return { ok: false, reason: "already_sent" };
-  if (!row) return { ok: false, reason: "save_failed" };
+  if (!row || row === "seq_duplicate") return { ok: false, reason: "save_failed" };
 
   // Best-effort email — a send failure never undoes the (recorded) invoice.
   let emailSent = false;
@@ -176,7 +253,8 @@ export async function sendEngagementInvoice(
         firmName: firm.name,
         firmLogoUrl,
         engagementTitle: engagement.title,
-        amount: formatCurrency(amountCents / 100, locale),
+        // The charged TOTAL (amount + default taxes once Invoicing is set up).
+        amount: formatCurrency(chargeCents / 100, locale),
         url: `${appUrl}/r/${engagement.magic_token}`,
         locale,
       });
@@ -217,12 +295,20 @@ export async function sendEngagementInvoice(
     actor_type: "system",
     action: "payment_requested",
     metadata: {
-      amount_cents: amountCents,
+      amount_cents: chargeCents,
       currency: "cad",
       payment_request_id: row.id,
       auto: true,
       email_sent: emailSent,
       locks_deliverables: locksDeliverables,
+      ...(invoiceFields.invoice_kind === "generated"
+        ? {
+            invoice_kind: "generated",
+            invoice_number: invoiceFields.invoice_number ?? null,
+            subtotal_cents: invoiceFields.subtotal_cents,
+            tax_total_cents: invoiceFields.tax_total_cents,
+          }
+        : {}),
     },
   });
 
