@@ -1108,74 +1108,57 @@ a.vy-contact-card:hover {
   margin: 0 auto;
 }
 
-/* ---------- HERO: Statement (2026 redesign — centred, aura-backed) ---------- */
+/* ---------- HERO: Kinetic (the variant the founder chose in the design
+   session — left-aligned, editorial column grid, giant three-line headline,
+   sub + CTAs side by side at the foot) ---------- */
 .wwd-hero {
   position: relative;
   z-index: 1;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  text-align: center;
-  padding: 120px 24px 90px;
+  padding: 150px 7vw 110px;
+  overflow: hidden;
+  max-width: 1600px;
+  margin: 0 auto;
 }
-.wwd-hero-aura {
+.wwd-grid {
   position: absolute;
-  top: 46%;
-  left: 50%;
-  width: 1080px;
-  max-width: 120vw;
-  aspect-ratio: 1;
-  margin-left: -540px;
-  transform: translateY(-50%);
+  inset: 0;
   z-index: 0;
   pointer-events: none;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at 50% 50%,
-    rgba(140, 170, 255, 0.6),
-    rgba(70, 110, 255, 0.18) 46%,
-    transparent 70%
-  );
-  filter: blur(28px);
-  animation: wwd-hero-aura 9s ease-in-out infinite;
-}
-@keyframes wwd-hero-aura {
-  0%,
-  100% {
-    transform: translateY(-50%) scale(1);
-    opacity: 0.85;
-  }
-  50% {
-    transform: translateY(-50%) scale(1.14);
-    opacity: 1;
-  }
+  opacity: 0.5;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 16.66% 100%;
 }
 .wwd-hero-inner {
   position: relative;
   z-index: 1;
-  max-width: 1080px;
 }
 .wwd-hero-title {
   font-family: inherit;
   font-weight: 700;
-  letter-spacing: -0.025em;
-  line-height: 0.96;
-  font-size: clamp(44px, 8.4vw, 118px);
-  margin-top: 26px;
+  letter-spacing: -0.03em;
+  line-height: 0.9;
+  font-size: clamp(46px, 11vw, 150px);
+  margin-top: 18px;
 }
 .wwd-line {
   display: block;
   opacity: 1;
 }
 .wwd-hero-foot {
-  margin-top: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 30px;
+  margin-top: 44px;
 }
 .wwd-sub {
-  max-width: 620px;
-  margin: 30px auto 0;
-  font-size: clamp(18px, 2.1vw, 23px);
+  max-width: 480px;
+  font-size: clamp(18px, 1.5vw, 22px);
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.86);
   font-weight: 500;
@@ -1184,9 +1167,7 @@ a.vy-contact-card:hover {
   display: flex;
   gap: 18px;
   align-items: center;
-  justify-content: center;
   flex-wrap: wrap;
-  margin-top: 42px;
 }
 /* Secondary hero action: the underlined "See how it works" scroll link. */
 .wwd-link-btn {
@@ -1201,31 +1182,6 @@ a.vy-contact-card:hover {
   text-underline-offset: 5px;
   text-decoration-thickness: 2px;
   padding: 8px;
-}
-/* Scroll cue: the bobbing chevron at the hero's foot. */
-.wwd-cue {
-  position: absolute;
-  bottom: 34px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: none;
-  border: none;
-  cursor: pointer;
-  animation: wwd-cue 2s ease-in-out infinite;
-}
-@keyframes wwd-cue {
-  0% {
-    transform: translate(-50%, 0);
-    opacity: 0.55;
-  }
-  50% {
-    transform: translate(-50%, 7px);
-    opacity: 1;
-  }
-  100% {
-    transform: translate(-50%, 0);
-    opacity: 0.55;
-  }
 }
 
 /* ---------- THE PROBLEM ---------- */
@@ -1971,8 +1927,20 @@ a.vy-contact-card:hover {
 
 /* ---------- responsive ---------- */
 @media (max-width: 860px) {
+  /* The decorative 6-column overlay (.wwd-grid) is a subtle editorial touch on
+     wide desktop, but on a phone the 6 lines crowd together and read as a
+     rendering glitch (thin white vertical lines). Hide it on mobile; the
+     desktop grid is untouched. */
+  .wwd-grid {
+    display: none;
+  }
   .wwd-hero {
     padding: 130px 24px 90px;
+  }
+  .wwd-hero-foot {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 22px;
   }
   .wwd-problem,
   .wwd-steps,
