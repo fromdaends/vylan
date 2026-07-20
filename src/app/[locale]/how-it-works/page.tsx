@@ -49,7 +49,6 @@ export default async function HowItWorksPage({
     heroSub: t("hero_sub"),
     ctaBook: t("cta_book"),
     ctaSeeHow: t("cta_see_how"),
-    scrollLabel: t("scroll_label"),
     problemEyebrow: t("problem_eyebrow"),
     problemTitle: t("problem_title"),
     problemChips: [

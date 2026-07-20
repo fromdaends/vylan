@@ -32,7 +32,6 @@ type HowItWorksStrings = {
   heroSub: string;
   ctaBook: string;
   ctaSeeHow: string;
-  scrollLabel: string;
   problemEyebrow: string;
   problemTitle: string;
   problemChips: string[];
@@ -254,11 +253,13 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
         if (nr.top < vh * 0.62) n.classList.add("wwd-node-on");
         else n.classList.remove("wwd-node-on");
       });
-      // Pay stat bar: fill as the card scrolls from ~90% to ~42% of the viewport.
+      // Pay stat bar: fill as the card scrolls from ~90% to ~22% of the
+      // viewport — the founder's design-session refinement ("require slightly
+      // more scrolling for it to fill up"; was 42%).
       if (payBar) {
         const br = payBar.getBoundingClientRect();
         const start = vh * 0.9;
-        const end = vh * 0.42;
+        const end = vh * 0.22;
         const p = Math.min(Math.max((start - br.top) / (start - end), 0), 1);
         payBar.style.transform = "scaleX(" + p.toFixed(3) + ")";
       }
@@ -287,9 +288,9 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
       {/* fixed atmospheric background (soft top light + deep bottom) */}
       <div className="wwd-bg" aria-hidden="true" />
 
-      {/* ---------- HERO: Statement ---------- */}
+      {/* ---------- HERO: Kinetic (the founder's chosen variant) ---------- */}
       <section className="wwd-hero" aria-label={s.heroEyebrow}>
-        <div className="wwd-hero-aura" aria-hidden="true" />
+        <div className="wwd-grid" aria-hidden="true" />
         <div className="wwd-hero-inner">
           <div className="wwd-eyebrow wwd-load" style={{ animationDelay: "0.05s" }}>
             {s.heroEyebrow}
@@ -305,7 +306,7 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
               </span>
             ))}
           </h1>
-          <div className="wwd-hero-foot wwd-load" style={{ animationDelay: "0.55s" }}>
+          <div className="wwd-hero-foot wwd-load" style={{ animationDelay: "0.58s" }}>
             <p className="wwd-sub">{s.heroSub}</p>
             <div className="wwd-cta-row">
               <button type="button" className="vy-btn" onClick={scrollToForm}>
@@ -317,16 +318,6 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          className="wwd-cue"
-          aria-label={s.scrollLabel}
-          onClick={scrollToHow}
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M6 9l6 6 6-6" />
-          </svg>
-        </button>
       </section>
 
       {/* ---------- THE PROBLEM ---------- */}
