@@ -17,6 +17,8 @@ const ROW: PaymentsListRow = {
   engagementTitle: "2025 return",
   requestedByUserId: null,
   requestedByName: null,
+  invoiceNumber: null,
+  invoiceKind: null,
 };
 
 function renderList(rows: PaymentsListRow[], currentUserId?: string) {

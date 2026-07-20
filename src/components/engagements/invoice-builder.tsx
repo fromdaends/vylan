@@ -8,6 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/format";
 import {
   PROVINCE_TAXES,
@@ -46,6 +53,8 @@ export type InvoiceBuilderPreset = {
 export type InvoiceBuilderConfig = {
   settings: InvoiceBuilderSettings | null;
   presets: InvoiceBuilderPreset[];
+  // The client's portal language — the invoice document's default language.
+  clientLocale: "en" | "fr";
 };
 
 // The payload the dialog submits. Mirrors GeneratedInvoicePayload on the
@@ -58,6 +67,9 @@ export type InvoiceBuilderPayload = {
   dueDate: string | null;
   terms: string | null;
   notes: string | null;
+  // The document's language (defaults to the client's portal language;
+  // overridable per invoice).
+  language: "en" | "fr";
   totalCents: number;
   valid: boolean;
 };
@@ -70,6 +82,7 @@ export type InvoiceBuilderInitial = {
   dueDate: string | null;
   terms: string | null;
   notes: string | null;
+  language: "en" | "fr" | null;
 };
 
 type LineDraft = {
@@ -191,6 +204,9 @@ export function InvoiceBuilder({
   const [notes, setNotes] = useState(
     initial ? (initial.notes ?? "") : (settings?.defaultNotes ?? ""),
   );
+  const [language, setLanguage] = useState<"en" | "fr">(
+    initial?.language ?? config.clientLocale,
+  );
 
   const components = useMemo(
     () => (settings ? PROVINCE_TAXES[settings.province] : []),
@@ -268,6 +284,7 @@ export function InvoiceBuilder({
       dueDate: dueDate || null,
       terms: terms.trim() || null,
       notes: notes.trim() || null,
+      language,
       totalCents: computation.totalCents,
       valid,
     });
@@ -279,6 +296,7 @@ export function InvoiceBuilder({
     dueDate,
     terms,
     notes,
+    language,
     computation.totalCents,
     valid,
     onChange,
@@ -528,14 +546,36 @@ export function InvoiceBuilder({
           />
         </div>
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="inv-b-notes">{t("invoice_notes_label")}</Label>
-        <Input
-          id="inv-b-notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          maxLength={500}
-        />
+      <div className="grid grid-cols-[1fr_9rem] items-end gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="inv-b-notes">{t("invoice_notes_label")}</Label>
+          <Input
+            id="inv-b-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            maxLength={500}
+            className="h-9"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="inv-b-language">{t("invoice_language_label")}</Label>
+          <Select
+            value={language}
+            onValueChange={(v) => setLanguage(v === "en" ? "en" : "fr")}
+          >
+            <SelectTrigger id="inv-b-language" className="h-9">
+              <SelectValue>
+                {language === "fr"
+                  ? t("invoice_language_fr")
+                  : t("invoice_language_en")}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="en">{t("invoice_language_en")}</SelectItem>
+              <SelectItem value="fr">{t("invoice_language_fr")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* ── Live summary ── */}
