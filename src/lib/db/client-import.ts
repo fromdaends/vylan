@@ -5,10 +5,16 @@
 // go through the authenticated client (RLS firm-scoped); WRITES (create +
 // consume) are service-role. Sessions are one-shot and expire after an hour.
 
+import { z } from "zod";
 import {
   getServerSupabase,
   getServiceRoleSupabase,
 } from "@/lib/supabase/server";
+
+// Same email rule the commit schema enforces (actions/clients.ts) — a junk
+// email from the books degrades to null at STAGING, so one bad address can
+// never fail the whole import at commit time.
+const ImportableEmail = z.string().email().max(254);
 
 export type ImportCandidate = {
   display_name: string;
@@ -53,16 +59,19 @@ export function sanitizeCandidates(raw: unknown): ImportCandidate[] {
   for (const r of raw) {
     if (out.length >= 1000) break;
     const c = r as Record<string, unknown>;
-    const name =
-      typeof c.display_name === "string" ? c.display_name.trim() : "";
-    if (!name || name.length > 160) continue;
-    const email =
-      typeof c.email === "string" && c.email.trim() ? c.email.trim() : null;
+    // Over-long names are TRUNCATED (not dropped) to the clients display_name
+    // cap, so a verbose bookkeeping name still imports.
+    const name = (typeof c.display_name === "string" ? c.display_name.trim() : "")
+      .slice(0, 160)
+      .trim();
+    if (!name) continue;
+    const emailRaw =
+      typeof c.email === "string" && c.email.trim() ? c.email.trim() : "";
     const phone =
       typeof c.phone === "string" && c.phone.trim() ? c.phone.trim() : null;
     out.push({
       display_name: name,
-      email: email && email.length <= 254 ? email : null,
+      email: ImportableEmail.safeParse(emailRaw).success ? emailRaw : null,
       phone: phone && phone.length <= 40 ? phone : null,
     });
   }
@@ -81,6 +90,18 @@ export async function createClientImportSession(input: {
   createdBy: string | null;
 }): Promise<string | null> {
   const sb = getServiceRoleSupabase();
+  // Best-effort sweep of this firm's expired leftovers (abandoned reviews), so
+  // staged names/emails never sit around beyond the TTL.
+  await sb
+    .from("client_import_sessions")
+    .delete()
+    .eq("firm_id", input.firmId)
+    .lt("created_at", new Date(Date.now() - SESSION_TTL_MS).toISOString())
+    .then(({ error }) => {
+      if (error && !isMissingSchema(error)) {
+        console.error("[client-import] expired-session sweep failed:", error);
+      }
+    });
   const { data, error } = await sb
     .from("client_import_sessions")
     .insert({
@@ -134,15 +155,24 @@ export async function getClientImportSession(
   };
 }
 
-// Stamp a session consumed once its import commits (service role, best-effort —
-// an unstamped session simply expires on its own).
-export async function consumeClientImportSession(id: string): Promise<void> {
+// ATOMICALLY claim a session for commit: a conditional DELETE (only an
+// unconsumed row matches) whose returned row count is the single arbiter, so a
+// concurrent double-submit can't import the list twice — exactly one caller
+// gets true, every other gets false ("session gone"). Deleting (not stamping)
+// also means the staged names/emails don't linger in the table after use.
+export async function claimClientImportSession(id: string): Promise<boolean> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb
+  const { data, error } = await sb
     .from("client_import_sessions")
-    .update({ consumed_at: new Date().toISOString() })
-    .eq("id", id);
-  if (error && !isMissingSchema(error)) {
-    console.error("[client-import] consume session failed:", error);
+    .delete()
+    .eq("id", id)
+    .is("consumed_at", null)
+    .select("id");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[client-import] claim session failed:", error);
+    }
+    return false;
   }
+  return Boolean(data && data.length > 0);
 }

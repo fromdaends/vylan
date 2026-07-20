@@ -69,19 +69,32 @@ describe("xeroContactCandidatesFromResponse", () => {
 });
 
 describe("sanitizeCandidates", () => {
-  it("drops malformed rows, trims, and caps at 1000", () => {
+  it("drops malformed rows, trims, truncates long names, and caps at 1000", () => {
     const raw = [
       { display_name: " Acme ", email: " a@b.co ", phone: "" },
       { display_name: "", email: "x@y.z" },
-      { display_name: "x".repeat(161) },
+      { display_name: "x".repeat(161) }, // truncated to 160, not dropped
       "not-an-object",
     ];
     expect(sanitizeCandidates(raw)).toEqual([
       { display_name: "Acme", email: "a@b.co", phone: null },
+      { display_name: "x".repeat(160), email: null, phone: null },
     ]);
     const big = Array.from({ length: 1200 }, (_, i) => ({
       display_name: `C${i}`,
     }));
     expect(sanitizeCandidates(big)).toHaveLength(1000);
+  });
+
+  it("degrades a junk email to null instead of failing the whole import", () => {
+    expect(
+      sanitizeCandidates([
+        { display_name: "Acme", email: "not-an-email" },
+        { display_name: "Beta", email: "ok@example.com" },
+      ]),
+    ).toEqual([
+      { display_name: "Acme", email: null, phone: null },
+      { display_name: "Beta", email: "ok@example.com", phone: null },
+    ]);
   });
 });

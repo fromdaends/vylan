@@ -266,15 +266,24 @@ export async function importFromSessionAndRedirect(
   sessionId: string,
   rows: ImportPreviewRow[],
   locale: "fr" | "en",
-) {
-  const { getClientImportSession, consumeClientImportSession } = await import(
+): Promise<{ error: "session_gone" } | void> {
+  const { getClientImportSession, claimClientImportSession } = await import(
     "@/lib/db/client-import"
   );
+  // RLS-scoped read proves the session belongs to the caller's firm and hasn't
+  // expired; returned as a TYPED value (not a thrown error) because Next.js
+  // masks server-action error messages in production.
   const session = await getClientImportSession(sessionId);
-  if (!session) throw new Error("session_gone");
+  if (!session) return { error: "session_gone" };
+  // Validate BEFORE claiming, so a rejected payload doesn't burn the one-shot.
   const validated = validateImportRows(rows);
+  // Atomic claim (conditional delete) BEFORE inserting: of two concurrent
+  // submits exactly one wins — the loser sees "session gone" instead of
+  // creating every client twice.
+  if (!(await claimClientImportSession(sessionId))) {
+    return { error: "session_gone" };
+  }
   await bulkCreateClients(validated);
-  await consumeClientImportSession(sessionId);
   revalidatePath("/", "layout");
   redirect(getPathname({ locale, href: "/clients" }));
 }

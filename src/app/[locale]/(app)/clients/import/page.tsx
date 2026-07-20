@@ -37,7 +37,9 @@ export default async function ImportPage({
     : null;
   // Existing client names (normalized) so the review greys out duplicates.
   const existingNames = session
-    ? (await listClients({})).map((c) => c.display_name.trim().toLowerCase())
+    ? (await listClients({ includeArchived: true })).map((c) =>
+        c.display_name.trim().toLowerCase(),
+      )
     : [];
   const firm = session ? await getCurrentFirm() : null;
   const defaultClientLocale =

@@ -3,7 +3,11 @@ import { randomUUID } from "crypto";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
-import { isXeroConfigured, buildXeroAuthorizeUrl } from "@/lib/xero/client";
+import {
+  isXeroConfigured,
+  buildXeroAuthorizeUrl,
+  XERO_IMPORT_SCOPES,
+} from "@/lib/xero/client";
 
 export const runtime = "nodejs";
 
@@ -46,7 +50,9 @@ export async function POST(request: Request) {
   }
 
   const state = randomUUID();
-  const res = NextResponse.json({ url: buildXeroAuthorizeUrl(state) });
+  const res = NextResponse.json({
+    url: buildXeroAuthorizeUrl(state, XERO_IMPORT_SCOPES),
+  });
   const cookieOpts = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

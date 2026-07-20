@@ -15,6 +15,7 @@ import {
 import {
   upsertFirmQuickbooksConnection,
   getFirmQuickbooksRealm,
+  findQuickbooksConnectionsByRealm,
 } from "@/lib/db/quickbooks";
 import { purgeFirmQuickbooksCache } from "@/lib/db/quickbooks-cache";
 import { purgeFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
@@ -102,11 +103,45 @@ export async function GET(request: Request) {
   // the grant (nothing persists provider-side), and land on the import page.
   if (isImport) {
     let refreshToken: string | null = null;
+    // Is the just-authorized company ALREADY a stored connection (this firm's
+    // or any other's)? Intuit token revocation kills the whole app↔realm grant,
+    // so revoking our transient import tokens would sever that stored
+    // connection too — in that case we must NOT revoke (the unused import
+    // tokens simply expire on their own).
+    let realmIsConnected = false;
     try {
       const tokens = await exchangeCodeForTokens(code);
       refreshToken = tokens.refreshToken;
       const environment = quickbooksEnvironment();
+      const existing = await findQuickbooksConnectionsByRealm(
+        realmId,
+        environment,
+      );
+      realmIsConnected = existing.length > 0;
       const profile = await fetchCompanyProfile(tokens.accessToken, realmId);
+      // Re-authorizing a company rotates its grant at Intuit, which can strand
+      // the tokens stored on THIS firm's matching connection row(s) — refresh
+      // them with the new pair so that client's connection stays healthy.
+      // (Another firm's row is left alone: it belongs to a different Intuit
+      // user's grant, which this consent doesn't rotate.)
+      for (const match of existing) {
+        if (match.firmId !== firm.id) continue;
+        await upsertFirmQuickbooksConnection(
+          firm.id,
+          {
+            realmId,
+            accessToken: tokens.accessToken,
+            refreshToken: tokens.refreshToken,
+            accessTokenExpiresAt: tokens.accessTokenExpiresAt,
+            refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
+            companyName: profile.name,
+            companyCountry: profile.country,
+            environment,
+            connectedBy: auth.user.id,
+          },
+          match.clientId,
+        );
+      }
       const candidates = await fetchQuickbooksCustomerCandidates(
         tokens.accessToken,
         realmId,
@@ -129,8 +164,9 @@ export async function GET(request: Request) {
       );
       return back("error");
     } finally {
-      // Always release the grant — the import never keeps a connection.
-      if (refreshToken) await revokeToken(refreshToken);
+      // Release the transient grant — UNLESS this company is a stored
+      // connection, whose grant a revoke would kill along with ours.
+      if (refreshToken && !realmIsConnected) await revokeToken(refreshToken);
     }
   }
 

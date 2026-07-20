@@ -69,15 +69,16 @@ export function BookkeepingImportReview({
       }));
     startTransition(async () => {
       try {
-        await importFromSessionAndRedirect(sessionId, rows, locale);
+        // "Session gone" comes back as a TYPED value (production masks thrown
+        // server-action messages); success never returns (redirect).
+        const res = await importFromSessionAndRedirect(sessionId, rows, locale);
+        if (res?.error === "session_gone") {
+          setSubmitError(t("bk_import_session_gone"));
+        }
       } catch (e) {
-        // redirect() throws internally on success — only surface real errors.
+        // redirect() throws internally on success — rethrow it, surface the rest.
         if ((e as Error | null)?.message === "NEXT_REDIRECT") throw e;
-        setSubmitError(
-          (e as Error | null)?.message === "session_gone"
-            ? t("bk_import_session_gone")
-            : t("import_commit_failed"),
-        );
+        setSubmitError(t("import_commit_failed"));
       }
     });
   }

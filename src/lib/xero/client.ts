@@ -39,6 +39,16 @@ export const XERO_SCOPES = [
   "accounting.attachments",
 ].join(" ");
 
+// The client-list IMPORT flow only READS contacts + the organisation and is
+// released minutes later — ask for nothing more (least privilege; the consent
+// screen shows read-only access). offline_access stays so the token response
+// shape (refresh token present) is uniform.
+export const XERO_IMPORT_SCOPES = [
+  "offline_access",
+  "accounting.contacts.read",
+  "accounting.settings.read",
+].join(" ");
+
 // Xero refresh tokens live ~60 days from issuance and the token response does
 // NOT echo a refresh-token lifetime (unlike Intuit's x_refresh_token_expires_in)
 // — so the expiry is derived here. Slightly conservative is fine: the value only
@@ -83,12 +93,15 @@ export function xeroRedirectUri(): string {
 
 // Build the Xero authorization URL the browser is sent to. `state` is the
 // anti-forgery value the callback verifies.
-export function buildXeroAuthorizeUrl(state: string): string {
+export function buildXeroAuthorizeUrl(
+  state: string,
+  scope: string = XERO_SCOPES,
+): string {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: process.env.XERO_CLIENT_ID?.trim() ?? "",
     redirect_uri: xeroRedirectUri(),
-    scope: XERO_SCOPES,
+    scope,
     state,
   });
   return `${XERO_AUTHORIZE_URL}?${params.toString()}`;

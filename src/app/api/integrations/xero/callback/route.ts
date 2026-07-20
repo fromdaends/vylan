@@ -63,16 +63,25 @@ export async function GET(request: Request) {
   if (!firm) return back("error");
 
   let accessToken: string | null = null;
-  let connectionId: string | null = null;
+  let authEventId: string | null = null;
+  // Every connection id this consent is known to have created — ALL are
+  // released in the finally, so no org link (and no free-tier slot) lingers.
+  let connectionIds: string[] = [];
   try {
     const tokens = await exchangeXeroCodeForTokens(code);
     accessToken = tokens.accessToken;
-    // Which org did this consent authorize? Filter /connections by the consent's
-    // auth event; fall back to the full list if the JWT claim is missing. One
-    // flow authorizes ONE org on the standard tiers — if several come back
-    // (pre-existing links), take the first of this event and log it.
-    const authEventId = authEventIdFromAccessToken(tokens.accessToken);
+    // Which org did this consent authorize? Filter /connections by the
+    // consent's auth event. Without the JWT claim we can't tell a fresh link
+    // from pre-existing ones — proceed only if there's exactly one (otherwise
+    // fail closed rather than import from, or disconnect, the wrong org).
+    authEventId = authEventIdFromAccessToken(tokens.accessToken);
     const conns = await fetchXeroConnections(tokens.accessToken, authEventId);
+    if (!authEventId && conns.length > 1) {
+      console.error(
+        "[xero/callback] auth-event id missing and multiple orgs connected — cannot tell which org this consent authorized",
+      );
+      return back("error");
+    }
     const conn = conns[0] ?? null;
     if (!conn) return back("error");
     if (conns.length > 1) {
@@ -80,7 +89,9 @@ export async function GET(request: Request) {
         `[xero/callback] ${conns.length} orgs in one consent; importing from the first (${conn.tenantName ?? conn.tenantId})`,
       );
     }
-    connectionId = conn.connectionId || null;
+    connectionIds = (authEventId ? conns : [conn])
+      .map((c) => c.connectionId)
+      .filter((id): id is string => Boolean(id));
     const org = await fetchXeroOrganisation(tokens.accessToken, conn.tenantId);
     const candidates = await fetchXeroContactCandidates(
       tokens.accessToken,
@@ -103,10 +114,28 @@ export async function GET(request: Request) {
     );
     return back("error");
   } finally {
-    // Always release the org link — an import never keeps a connection (and a
-    // lingering link would occupy a free-tier connection slot). Best-effort.
-    if (accessToken && connectionId) {
-      await disconnectXeroConnection(accessToken, connectionId);
+    // Always release the org link(s) — an import never keeps a connection (and
+    // a lingering link would occupy a free-tier connection slot). If the
+    // connections read itself was what failed, retry it here (filtered to this
+    // consent) so even a learned-nothing failure still releases. Best-effort:
+    // the finally must never throw.
+    try {
+      if (accessToken) {
+        if (connectionIds.length === 0 && authEventId) {
+          const conns = await fetchXeroConnections(
+            accessToken,
+            authEventId,
+          ).catch(() => []);
+          connectionIds = conns
+            .map((c) => c.connectionId)
+            .filter((id): id is string => Boolean(id));
+        }
+        for (const id of connectionIds) {
+          await disconnectXeroConnection(accessToken, id);
+        }
+      }
+    } catch (e) {
+      console.error("[xero/callback] connection release failed:", e);
     }
   }
 }
