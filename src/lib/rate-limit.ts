@@ -45,6 +45,12 @@ export const PORTAL_UPLOAD_CHUNK_PER_IP: LimitSpec = {
   window: "1 h",
 };
 export const PORTAL_MUTATION_PER_TOKEN: LimitSpec = { limit: 120, window: "1 h" };
+// Portal activity/view logging — the client's navigation + view events. Its own
+// bucket (a distinct key namespace, not the mutation bucket) so a click-happy
+// client can't starve real writes like uploads or messages. Generous: a normal
+// visit logs only a handful of events thanks to client-side dedup, so this just
+// guards the unauthenticated endpoint against scripted abuse.
+export const PORTAL_ACTIVITY_PER_TOKEN: LimitSpec = { limit: 300, window: "1 h" };
 // Start a Stripe Checkout for a payment request. Tight: a real client clicks
 // "Pay now" a handful of times at most; this only guards against scripted abuse
 // of the unauthenticated endpoint.

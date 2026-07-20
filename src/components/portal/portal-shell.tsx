@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   CheckCircle2,
@@ -31,6 +31,10 @@ import {
 import { PortalFooter } from "./portal-footer";
 import { PortalMessages } from "./portal-messages";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
+import {
+  logPortalActivity,
+  type PortalActivityAction,
+} from "@/lib/portal/activity-log";
 
 // Which screen the portal is showing. When the engagement has BOTH signatures
 // and documents, the landing is the two-card hub and tapping a card drills into
@@ -62,6 +66,19 @@ export function PortalShell({
   const [uploads, setUploads] = useState(ctx.uploaded_count_by_item);
   const [filesByItem, setFilesByItem] = useState(ctx.files_by_item);
   const [view, setView] = useState<PortalView>("hub");
+  // Portal activity logging (the magic token identifies the client to the
+  // logging endpoint). Section navigations are deduped per mount, so moving back
+  // and forth between sections logs each at most once per visit.
+  const token = ctx.engagement.magic_token ?? "";
+  const loggedSectionsRef = useRef<Set<string>>(new Set());
+  const logSectionOnce = useCallback(
+    (action: PortalActivityAction) => {
+      if (!token || loggedSectionsRef.current.has(action)) return;
+      loggedSectionsRef.current.add(action);
+      logPortalActivity(token, action);
+    },
+    [token],
+  );
   // Messages (Phase 2) is an overlay view on TOP of whatever the portal
   // shows (hub or single list), so it works in every portal variant. It
   // only exists once migration 0650 is live (messaging_ready).
@@ -79,7 +96,28 @@ export function PortalShell({
   function openMessages() {
     setMessagesOpen(true);
     setMessagesUnread(0);
+    logSectionOnce("client_opened_messages");
   }
+
+  // Log that the client opened the portal — once per browser tab-session, so a
+  // reload doesn't re-log the same visit (a brand-new visit in a new tab logs a
+  // fresh view). If they landed straight in the message thread (?view=messages),
+  // record that section open too.
+  useEffect(() => {
+    if (!token) return;
+    let firstView = true;
+    try {
+      const key = `vylan:portal-viewed:${token}`;
+      if (sessionStorage.getItem(key)) firstView = false;
+      else sessionStorage.setItem(key, "1");
+    } catch {
+      // Storage blocked (private mode): fall through and log the view.
+    }
+    if (firstView) logPortalActivity(token, "client_viewed_portal");
+    if (initialMessagesOpen && messagingReady) {
+      logSectionOnce("client_opened_messages");
+    }
+  }, [token, initialMessagesOpen, messagingReady, logSectionOnce]);
 
   // Split into the signature group ("To sign") and the document group.
   const { collection: collectionItems, signatures: signatureItems } =
@@ -125,7 +163,10 @@ export function PortalShell({
           : signSummary.kind === "all_signed"
             ? "success"
             : "muted",
-      onSelect: () => setView("signatures"),
+      onSelect: () => {
+        setView("signatures");
+        logSectionOnce("client_opened_signatures");
+      },
     },
     {
       key: "documents",
@@ -146,7 +187,10 @@ export function PortalShell({
           : docSummary.kind === "outstanding"
             ? "accent"
             : "success",
-      onSelect: () => setView("documents"),
+      onSelect: () => {
+        setView("documents");
+        logSectionOnce("client_opened_documents");
+      },
     },
   ];
   if (showMessagesEntry) {
@@ -286,6 +330,7 @@ export function PortalShell({
                   ? () => {
                       setMessagesOpen(false);
                       setView("documents");
+                      logSectionOnce("client_opened_documents");
                     }
                   : null
               }

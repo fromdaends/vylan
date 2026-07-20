@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import type { RequestItem } from "@/lib/db/request-items";
 import type { SignatureStatus } from "@/lib/signwell/client";
+import { logPortalActivity } from "@/lib/portal/activity-log";
 
 // Load SignWell's embedded signing script once (idempotent). Resolves when
 // window.SignWellEmbed is available. The script renders the signing session in
@@ -86,6 +87,12 @@ export function SignatureItemCard({
 
   async function openSigning() {
     setLocal("opening");
+    // Log the intent to sign (a deliberate client click) — the authoritative
+    // "signed" event is logged separately by the SignWell webhook.
+    logPortalActivity(token, "client_opened_signature", {
+      name: label,
+      ref: item.id,
+    });
     try {
       const res = await fetch(
         `/api/portal/signwell/embed?token=${encodeURIComponent(

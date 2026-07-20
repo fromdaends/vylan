@@ -71,7 +71,14 @@ import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { EngagementContributors } from "@/components/engagements/engagement-contributors";
-import { listEngagementContributors } from "@/lib/db/activity";
+import {
+  listEngagementContributors,
+  getLatestInvoiceWaivedAt,
+} from "@/lib/db/activity";
+import {
+  PaymentCanceledChip,
+  PAYMENT_CANCELED_CHIP_WINDOW_MS,
+} from "@/components/engagements/payment-canceled-chip";
 import { AutoRefresh } from "@/components/engagements/auto-refresh";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -446,6 +453,19 @@ export default async function EngagementDetailPage({
           ? t("payment_status_canceled")
           : t("payment_status_requested")
     : null;
+  // A canceled (waived) invoice shows a brief "Payment canceled" chip in the
+  // header, then hides — the permanent record lives in the Activity/audit log.
+  // The waive time comes from that log's invoice_waived row (no dedicated
+  // column), so a reload past the window shows nothing; the 5s AutoRefresh (and
+  // the chip's own timer) drop it in an open tab.
+  const invoiceCanceledAt =
+    latestPayment?.status === "canceled"
+      ? await getLatestInvoiceWaivedAt(engagement.id)
+      : null;
+  const showCanceledChip =
+    invoiceCanceledAt != null &&
+    Date.now() - new Date(invoiceCanceledAt).getTime() <
+      PAYMENT_CANCELED_CHIP_WINDOW_MS;
   const tStatus = await getTranslations("Status");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
@@ -732,7 +752,9 @@ export default async function EngagementDetailPage({
           {/* Compact invoice status pill (a lock icon when the Final documents
               are locked). All invoice actions now live in the "..." menu's
               Invoice option, to keep the header calm. */}
-          {latestPayment && paymentStatusLabel && (
+          {latestPayment &&
+            paymentStatusLabel &&
+            latestPayment.status !== "canceled" && (
             <Badge
               variant={
                 latestPayment.status === "paid"
@@ -749,6 +771,22 @@ export default async function EngagementDetailPage({
               {paymentStatusLabel} ·{" "}
               {formatCurrency(latestPayment.amount_cents / 100, locale)}
             </Badge>
+          )}
+          {/* Canceled/waived is transient: show the chip for a few minutes after
+              the waive, then hide it. The event stays permanent in the Activity
+              feed + audit log. */}
+          {latestPayment?.status === "canceled" &&
+            paymentStatusLabel &&
+            showCanceledChip &&
+            invoiceCanceledAt && (
+              <PaymentCanceledChip
+                canceledAt={invoiceCanceledAt}
+                label={paymentStatusLabel}
+                amountLabel={formatCurrency(
+                  latestPayment.amount_cents / 100,
+                  locale,
+                )}
+              />
           )}
           {isComplete && (
             <>

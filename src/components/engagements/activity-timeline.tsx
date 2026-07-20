@@ -137,6 +137,18 @@ function describe(
       return t("client_message_sent");
     case "client_undid_na":
       return t("client_undid_na");
+    case "client_viewed_portal":
+      return t("client_viewed_portal");
+    case "client_opened_documents":
+      return t("client_opened_documents");
+    case "client_opened_signatures":
+      return t("client_opened_signatures");
+    case "client_opened_messages":
+      return t("client_opened_messages");
+    case "client_opened_signature":
+      return t("client_opened_signature", { label: meta.name ?? "—" });
+    case "client_downloaded_deliverable":
+      return t("client_downloaded_deliverable", { filename: meta.name ?? "—" });
     case "approve_item":
       return t("approve_item");
     case "reject_item": {
