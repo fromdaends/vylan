@@ -7,7 +7,7 @@ import { assertLocale } from "@/lib/locale";
 import { Link } from "@/i18n/navigation";
 import { firmHasAnyQuickbooksConnection } from "@/lib/db/quickbooks";
 import { getCurrentFirm } from "@/lib/db/firms";
-import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
+import { getQuickbooksScopeHealth } from "@/lib/quickbooks/connection";
 import {
   getCurrentUser,
   listFirmUsers,
@@ -24,6 +24,7 @@ import {
   parseQueueFilter,
   matchesQueueFilter,
   bucketRank,
+  queueHealthScopes,
 } from "@/lib/quickbooks/draft-queue";
 import { DraftsQueue } from "@/components/quickbooks/drafts-queue";
 import { QueueRow } from "@/components/quickbooks/queue-row";
@@ -33,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import {
   AlertTriangle,
   CheckCircle2,
+  Info,
   Sparkles,
   UploadCloud,
 } from "lucide-react";
@@ -157,23 +159,22 @@ export default async function QuickbooksDraftsPage({
     listFirmUsers(),
   ]);
 
-  // Per-client (0710): the connections that matter on this multi-client page are
-  // the ones its DRAFTS would post to — the distinct client scopes below (plus
-  // firm-level only if a legacy client-less draft exists). Probing the firm-level
-  // row alone would flag a false "reconnect" for every per-client-connected firm
-  // (that row usually doesn't exist anymore).
+  // Per-client (0710): picker lists load for every draft-bearing client (posted
+  // rows still render cards), but the HEALTH probe covers only clients whose
+  // drafts still await posting — a settled (posted/dismissed) row's connection
+  // may be legitimately retired, and probing it showed a permanent false
+  // "reconnect" banner on queues with nothing left to post.
   const clientIdsWithDrafts = [
     ...new Set(rows.map((r) => r.clientId).filter((c): c is string => !!c)),
   ];
-  const healthScopes: (string | undefined)[] = [
-    ...clientIdsWithDrafts,
-    ...(rows.some((r) => !r.clientId) ? [undefined] : []),
-  ];
+  const healthScopes = queueHealthScopes(rows);
 
   // Connection health + the per-client picker lists load together. Health: a
-  // DEAD connection (expired/revoked tokens) gets a "reconnect" banner instead
-  // of letting every post fail with no explanation; the banner shows if ANY
-  // draft-bearing connection is dead. Capped at 3s — a stale token makes the
+  // DEAD connection (expired/revoked tokens) gets a "reconnect" banner, and a
+  // MISSING one (client never connected / disconnected since) gets a softer
+  // "connect this client" notice, instead of letting every post fail with no
+  // explanation; the alert shows if ANY open-draft connection is unusable, and
+  // a dead one outranks a missing one. Capped at 3s — a stale token makes the
   // check call Intuit, and this page must never wait on a slow upstream (the
   // un-awaited check still finishes the keep-alive refresh in background; an
   // inconclusive check just reports "ok", i.e. no banner this load). Lists: one
@@ -184,13 +185,13 @@ export default async function QuickbooksDraftsPage({
     firm && healthScopes.length > 0
       ? Promise.race([
           Promise.all(
-            healthScopes.map((cid) =>
-              getQuickbooksConnectionHealth(firm.id, cid),
-            ),
+            healthScopes.map((cid) => getQuickbooksScopeHealth(firm.id, cid)),
           ).then((hs) =>
             hs.includes("reconnect_required")
               ? ("reconnect_required" as const)
-              : ("ok" as const),
+              : hs.includes("not_connected")
+                ? ("not_connected" as const)
+                : ("ok" as const),
           ),
           new Promise<"ok">((resolve) =>
             setTimeout(() => resolve("ok"), HEALTH_BUDGET_MS),
@@ -330,6 +331,23 @@ export default async function QuickbooksDraftsPage({
             // Reconnecting is per client now — it lives on the client's page.
             <Button asChild size="sm" variant="outline">
               <Link href="/clients">{t("queue_reconnect_cta")}</Link>
+            </Button>
+          )}
+        </div>
+      )}
+      {health === "not_connected" && (
+        // Softer than the reconnect alert: nothing expired — a client with
+        // open drafts simply has no QuickBooks connection to post through.
+        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border/60 bg-secondary/40 px-4 py-3 animate-in-up">
+          <Info className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            {isOwner
+              ? t("queue_not_connected_owner")
+              : t("queue_not_connected_staff")}
+          </p>
+          {isOwner && (
+            <Button asChild size="sm" variant="outline">
+              <Link href="/clients">{t("queue_connect_cta")}</Link>
             </Button>
           )}
         </div>

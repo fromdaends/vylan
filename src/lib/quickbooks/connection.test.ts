@@ -5,6 +5,7 @@ import type { QuickbooksConnectionWithTokens } from "@/lib/db/quickbooks";
 // the client real (isAccessTokenStale + QuickbooksError must stay genuine).
 vi.mock("@/lib/db/quickbooks", () => ({
   getFirmQuickbooksConnectionWithTokens: vi.fn(),
+  getFirmQuickbooksStatus: vi.fn(),
   readFirmQuickbooksConnection: vi.fn(),
   updateFirmQuickbooksTokens: vi.fn(),
 }));
@@ -16,16 +17,19 @@ vi.mock("@/lib/quickbooks/client", async (importActual) => {
 import {
   getValidAccessToken,
   getQuickbooksConnectionHealth,
+  getQuickbooksScopeHealth,
   refreshAccessTokenAfter401,
 } from "./connection";
 import {
   getFirmQuickbooksConnectionWithTokens,
+  getFirmQuickbooksStatus,
   readFirmQuickbooksConnection,
   updateFirmQuickbooksTokens,
 } from "@/lib/db/quickbooks";
 import { refreshTokens, QuickbooksError } from "@/lib/quickbooks/client";
 
 const mockGetConn = vi.mocked(getFirmQuickbooksConnectionWithTokens);
+const mockStatus = vi.mocked(getFirmQuickbooksStatus);
 const mockRead = vi.mocked(readFirmQuickbooksConnection);
 const mockUpdate = vi.mocked(updateFirmQuickbooksTokens);
 const mockRefresh = vi.mocked(refreshTokens);
@@ -180,6 +184,57 @@ describe("getQuickbooksConnectionHealth", () => {
     mockRefresh.mockResolvedValue(FRESH_TOKENS);
     mockUpdate.mockResolvedValue({ outcome: "error" });
     expect(await getQuickbooksConnectionHealth("f1")).toBe("ok");
+  });
+});
+
+// Queue-page variant: a MISSING connection (no row for the scope) must read as
+// "not_connected" — the queue shows a soft "connect this client" notice — while
+// a row whose grant is dead keeps the stronger "reconnect_required".
+describe("getQuickbooksScopeHealth", () => {
+  const CONNECTED_STATUS = {
+    connected: true as const,
+    realmId: "realm1",
+    companyName: "Co",
+    environment: "sandbox" as const,
+    connectedAt: "2026-01-01T00:00:00Z",
+  };
+
+  it("is ok when a token is available — no existence read at all", async () => {
+    mockRead.mockResolvedValue(okRead(conn({ accessTokenExpiresAt: FRESH })));
+    expect(await getQuickbooksScopeHealth("f1", "c1")).toBe("ok");
+    expect(mockStatus).not.toHaveBeenCalled();
+  });
+
+  it("is not_connected when the scope has no connection row", async () => {
+    mockRead.mockResolvedValue(ABSENT);
+    mockStatus.mockResolvedValue(null);
+    expect(await getQuickbooksScopeHealth("f1", "c1")).toBe("not_connected");
+    expect(mockStatus).toHaveBeenCalledWith("c1");
+  });
+
+  it("requires reconnect when a row exists but the grant is dead", async () => {
+    mockRead.mockResolvedValue(okRead(conn({ accessTokenExpiresAt: STALE })));
+    mockRefresh.mockRejectedValue(new QuickbooksError("invalid_grant", "dead"));
+    mockStatus.mockResolvedValue(CONNECTED_STATUS);
+    expect(await getQuickbooksScopeHealth("f1", "c1")).toBe(
+      "reconnect_required",
+    );
+  });
+
+  it("requires reconnect when a row exists but its tokens are unreadable", async () => {
+    mockRead.mockResolvedValue(ABSENT); // decrypt failure reads back as absent
+    mockStatus.mockResolvedValue(CONNECTED_STATUS);
+    expect(await getQuickbooksScopeHealth("f1", "c1")).toBe(
+      "reconnect_required",
+    );
+  });
+
+  it("keeps the stronger warning when the existence read itself fails", async () => {
+    mockRead.mockResolvedValue(ABSENT);
+    mockStatus.mockRejectedValue(new Error("db down"));
+    expect(await getQuickbooksScopeHealth("f1", "c1")).toBe(
+      "reconnect_required",
+    );
   });
 });
 

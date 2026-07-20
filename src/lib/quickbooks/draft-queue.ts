@@ -94,6 +94,29 @@ export function bucketRank(bucket: QueueBucket): number {
   return QUEUE_BUCKET_RANK[bucket];
 }
 
+// Which connection scopes the queue's health probe should cover: only clients
+// with drafts still AWAITING action (needs_input / ready / approved) — a dead or
+// missing connection there will actually block a post. Posted/dismissed rows are
+// settled, and the connection behind them may be legitimately retired (e.g. the
+// firm-level row after the move to per-client connections), so probing those
+// scopes showed a permanent false "reconnect" banner on queues with nothing left
+// to post. `undefined` in the result = the legacy firm-level scope, included
+// only when an open CLIENT-LESS row exists.
+export function queueHealthScopes(
+  rows: { clientId: string | null; status?: DraftStatus | string | null }[],
+): (string | undefined)[] {
+  const open = rows.filter((r) => {
+    const s = normalizeDraftStatus(r.status ?? null);
+    return s === "draft" || s === "approved";
+  });
+  const ids = [
+    ...new Set(
+      open.map((r) => r.clientId).filter((c): c is string => !!c),
+    ),
+  ];
+  return open.some((r) => !r.clientId) ? [...ids, undefined] : ids;
+}
+
 export type QueueCounts = Record<QueueBucket, number> & { total: number };
 
 // Count how many drafts fall in each bucket (over the WHOLE set, so the toolbar

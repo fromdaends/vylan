@@ -7,6 +7,7 @@ import {
   matchesQueueFilter,
   countQueueBuckets,
   bucketRank,
+  queueHealthScopes,
   type QueueItem,
 } from "./draft-queue";
 import type {
@@ -229,5 +230,52 @@ describe("bucketRank", () => {
   });
   it("ranks every known bucket", () => {
     for (const b of QUEUE_BUCKETS) expect(typeof bucketRank(b)).toBe("number");
+  });
+});
+
+// The regression this locks in: a queue whose only drafts are already settled
+// (posted/dismissed) must probe NO connection — the connection behind a settled
+// draft may be legitimately retired, and probing it showed a permanent false
+// "reconnect" banner with nothing left to post.
+describe("queueHealthScopes", () => {
+  const row = (clientId: string | null, status: string | null) => ({
+    clientId,
+    status,
+  });
+
+  it("returns no scopes when every draft is settled", () => {
+    expect(
+      queueHealthScopes([
+        row("c1", "posted"),
+        row("c2", "dismissed"),
+        row(null, "posted"),
+      ]),
+    ).toEqual([]);
+  });
+
+  it("covers only clients with drafts awaiting action, deduped", () => {
+    expect(
+      queueHealthScopes([
+        row("c1", "draft"),
+        row("c1", "approved"),
+        row("c2", "posted"),
+        row("c3", "approved"),
+      ]),
+    ).toEqual(["c1", "c3"]);
+  });
+
+  it("adds the firm-level scope only for an OPEN client-less row", () => {
+    expect(queueHealthScopes([row(null, "draft"), row("c1", "draft")])).toEqual(
+      ["c1", undefined],
+    );
+    expect(queueHealthScopes([row(null, "posted"), row("c1", "draft")])).toEqual(
+      ["c1"],
+    );
+  });
+
+  it("treats an unknown/absent status as open (matches the queue buckets)", () => {
+    expect(queueHealthScopes([row("c1", null), row("c2", "whatever")])).toEqual(
+      ["c1", "c2"],
+    );
   });
 });
