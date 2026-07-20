@@ -85,6 +85,7 @@ function renderShell(
         paypal={null}
         quickbooks={null}
         servicePrices={null}
+        invoiceSettings={null}
         paymentsList={null}
         currentUserId="u-test"
         firmName="Acme"
