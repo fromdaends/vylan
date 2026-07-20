@@ -79,6 +79,14 @@ type LineDraft = {
   rate: string;
 };
 
+// Module-level line-id counter: ids only need uniqueness within a session (they
+// are React keys, never persisted), and a module counter keeps id generation
+// out of render (React forbids reading refs there).
+let nextLineId = 1;
+function newLineId(): number {
+  return nextLineId++;
+}
+
 function centsToInput(cents: number): string {
   return (cents / 100).toFixed(2);
 }
@@ -131,14 +139,13 @@ export function InvoiceBuilder({
 }) {
   const t = useTranslations("Engagements");
   const settings = config.settings;
-  const idRef = useRef(1);
 
   const [lines, setLines] = useState<LineDraft[]>(() => {
     if (initial) {
       const stored = parseStoredLineItems(initial.lineItems);
       if (stored.length > 0) {
         return stored.map((l) => ({
-          id: idRef.current++,
+          id: newLineId(),
           description: l.description,
           quantity: qtyToInput(l.quantity),
           rate: centsToInput(l.unit_cents),
@@ -147,7 +154,7 @@ export function InvoiceBuilder({
     }
     return [
       {
-        id: idRef.current++,
+        id: newLineId(),
         description: "",
         quantity: "1",
         rate: defaultAmount,
@@ -185,7 +192,10 @@ export function InvoiceBuilder({
     initial ? (initial.notes ?? "") : (settings?.defaultNotes ?? ""),
   );
 
-  const components = settings ? PROVINCE_TAXES[settings.province] : [];
+  const components = useMemo(
+    () => (settings ? PROVINCE_TAXES[settings.province] : []),
+    [settings],
+  );
   const enabledComponents = useMemo(
     () =>
       components.map((c) => c.id).filter((id) => !offComponents.includes(id)),
@@ -240,10 +250,10 @@ export function InvoiceBuilder({
     computation.totalCents <= 99_999_999;
 
   // Report every change upward; the dialog holds the latest payload for submit.
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
+  // onChange is a useState setter in practice (stable identity), so it can sit
+  // in the effect deps without causing loops.
   useEffect(() => {
-    onChangeRef.current({
+    onChange({
       lineItems: parsed.items.map(({ description, quantity, unit_cents }) => ({
         description,
         quantity,
@@ -270,6 +280,7 @@ export function InvoiceBuilder({
     notes,
     computation.totalCents,
     valid,
+    onChange,
   ]);
 
   function patchLine(id: number, patch: Partial<LineDraft>) {
@@ -300,7 +311,7 @@ export function InvoiceBuilder({
       return [
         ...ls,
         {
-          id: idRef.current++,
+          id: newLineId(),
           description: preset?.label ?? "",
           quantity: "1",
           rate: preset ? centsToInput(preset.unitCents) : "",
