@@ -2,7 +2,11 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createInvoiceForEngagement } from "@/lib/invoices/create";
+import {
+  createInvoiceForEngagement,
+  type GeneratedInvoicePayload,
+} from "@/lib/invoices/create";
+import { isTaxComponentId } from "@/lib/tax/canada";
 import {
   removeStoredInvoiceAttachment,
   storeInvoiceAttachment,
@@ -64,6 +68,73 @@ export async function requestPaymentWithAttachmentAction(
     },
     attachment,
   );
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// FormData entry point for the GENERATE path (the builder): line items +
+// per-component tax toggles + document fields. The server recomputes every
+// total from the raw lines (see lib/invoices/create) — nothing money-shaped
+// is trusted from the payload. amountCents carries a placeholder that the
+// schema requires; the computed total replaces it.
+export async function requestGeneratedInvoiceAction(
+  formData: FormData,
+): Promise<RequestPaymentResult> {
+  let lineItems: unknown;
+  let enabledRaw: unknown;
+  try {
+    lineItems = JSON.parse(String(formData.get("line_items") ?? "null"));
+    const componentsField = formData.get("tax_components");
+    enabledRaw =
+      componentsField == null ? null : JSON.parse(String(componentsField));
+  } catch {
+    return { ok: false, error: "invalid_lines" };
+  }
+  let enabledComponents: GeneratedInvoicePayload["enabledComponents"] = null;
+  if (Array.isArray(enabledRaw)) {
+    if (!enabledRaw.every(isTaxComponentId)) {
+      return { ok: false, error: "invalid_lines" };
+    }
+    enabledComponents = enabledRaw;
+  } else if (enabledRaw != null) {
+    return { ok: false, error: "invalid_lines" };
+  }
+
+  const dueRaw = String(formData.get("due_date") ?? "");
+  const termsRaw = String(formData.get("terms") ?? "").trim();
+  const notesRaw = String(formData.get("notes") ?? "").trim();
+  if (termsRaw.length > 300 || notesRaw.length > 500) {
+    return { ok: false, error: "invalid_lines" };
+  }
+
+  const engagementId = String(formData.get("engagement_id") ?? "");
+  if (!UUID_RE.test(engagementId)) {
+    return { ok: false, error: "invalid_id" };
+  }
+
+  const res = await createInvoiceForEngagement({
+    engagementId,
+    // Placeholder — the generated path derives the charged amount from the
+    // lines server-side and ignores this value.
+    amountCents: 0,
+    delivery: "both",
+    locksDeliverables: formData.get("locks_deliverables") === "true",
+    generated: {
+      lineItems,
+      taxesEnabled: formData.get("tax_enabled") === "true",
+      enabledComponents,
+      dueDate: DATE_RE.test(dueRaw) ? dueRaw : null,
+      terms: termsRaw || null,
+      notes: notesRaw || null,
+    },
+  });
+  if (!res.ok) {
+    const error =
+      res.reason === "invalid_amount" ? "amount_too_small" : res.reason;
+    return { ok: false, error };
+  }
+  revalidatePath(`/engagements/${engagementId}`);
+  return { ok: true, id: res.id };
 }
 
 async function createPaymentRequestWithOptionalAttachment(

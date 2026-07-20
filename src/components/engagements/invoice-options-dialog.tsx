@@ -30,14 +30,23 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { formatCurrency } from "@/lib/format";
-import { requestPaymentWithAttachmentAction } from "@/app/actions/payments";
+import {
+  requestPaymentWithAttachmentAction,
+  requestGeneratedInvoiceAction,
+} from "@/app/actions/payments";
 import {
   unlockDeliverablesAction,
   relockDeliverablesAction,
   waiveInvoiceAction,
   editInvoiceAction,
+  editGeneratedInvoiceAction,
   updateInvoiceAutomationAction,
 } from "@/app/actions/invoices";
+import {
+  InvoiceBuilder,
+  type InvoiceBuilderConfig,
+  type InvoiceBuilderPayload,
+} from "./invoice-builder";
 
 export type InvoiceForOptions = {
   id: string;
@@ -46,6 +55,15 @@ export type InvoiceForOptions = {
   description: string | null;
   locks_deliverables?: boolean;
   override_unlocked?: boolean;
+  // Native-invoice fields (0750) — present on generated invoices only.
+  invoice_kind?: "generated" | "attached" | null;
+  invoice_number?: string | null;
+  line_items?: unknown;
+  tax_breakdown?: unknown;
+  tax_total_cents?: number | null;
+  due_date?: string | null;
+  invoice_terms?: string | null;
+  invoice_notes?: string | null;
 };
 
 export type EngagementInvoiceAutomation = {
@@ -68,6 +86,7 @@ export function InvoiceOptionsDialog({
   locale,
   engagementStatus,
   automation,
+  builder,
   trigger,
 }: {
   engagementId: string;
@@ -78,6 +97,8 @@ export function InvoiceOptionsDialog({
   locale: "fr" | "en";
   engagementStatus: "live" | "complete" | "cancelled";
   automation: EngagementInvoiceAutomation;
+  // Invoice-builder inputs (firm invoice settings + Default-prices presets).
+  builder: InvoiceBuilderConfig;
   trigger: ReactNode;
 }) {
   const t = useTranslations("Engagements");
@@ -94,6 +115,17 @@ export function InvoiceOptionsDialog({
       ? invoice
       : null;
   const isPaid = invoice?.status === "paid";
+  const liveGenerated = liveInvoice?.invoice_kind === "generated";
+
+  // Create-mode choice: Generate (the builder, default) vs Attach my own (the
+  // pre-existing attach-a-document flow, unchanged).
+  const [createMode, setCreateMode] = useState<"generate" | "attach">(
+    "generate",
+  );
+  // Latest builder payload (create or edit). Held in a ref-like state the
+  // submit handlers read; totals are recomputed server-side regardless.
+  const [builderPayload, setBuilderPayload] =
+    useState<InvoiceBuilderPayload | null>(null);
 
   // Editable fields (live invoice) or create fields (no live invoice).
   const [amount, setAmount] = useState(
@@ -157,6 +189,88 @@ export function InvoiceOptionsDialog({
         router.refresh();
       } else {
         setError(t("invoice_edit_error"));
+      }
+    });
+  }
+
+  // Create a GENERATED invoice from the builder payload. Totals are
+  // recomputed server-side from the raw lines; the payload's totalCents is
+  // preview-only.
+  function createGenerated() {
+    setError(null);
+    const p = builderPayload;
+    if (!p || !p.valid) {
+      setError(
+        p && p.totalCents < 50 && p.lineItems.length > 0
+          ? t("request_payment_amount_invalid")
+          : t("invoice_lines_invalid"),
+      );
+      return;
+    }
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set("engagement_id", engagementId);
+      fd.set("line_items", JSON.stringify(p.lineItems));
+      fd.set("tax_enabled", String(p.taxesEnabled));
+      if (p.enabledComponents) {
+        fd.set("tax_components", JSON.stringify(p.enabledComponents));
+      }
+      if (p.dueDate) fd.set("due_date", p.dueDate);
+      if (p.terms) fd.set("terms", p.terms);
+      if (p.notes) fd.set("notes", p.notes);
+      fd.set("locks_deliverables", String(lock));
+      const res = await requestGeneratedInvoiceAction(fd);
+      if (res.ok) {
+        setOpen(false);
+        router.refresh();
+      } else {
+        setError(
+          res.error === "already_invoiced"
+            ? t("request_payment_already_invoiced")
+            : res.error === "not_connected"
+              ? t("invoice_connect_note")
+              : res.error === "invalid_lines"
+                ? t("invoice_lines_invalid")
+                : res.error === "amount_too_small"
+                  ? t("request_payment_amount_invalid")
+                  : t("request_payment_error"),
+        );
+      }
+    });
+  }
+
+  // Save edits to an existing GENERATED invoice (same payload shape).
+  function saveGenerated() {
+    setError(null);
+    setSaved(false);
+    const p = builderPayload;
+    if (!p || !p.valid) {
+      setError(
+        p && p.totalCents < 50 && p.lineItems.length > 0
+          ? t("request_payment_amount_invalid")
+          : t("invoice_lines_invalid"),
+      );
+      return;
+    }
+    startTransition(async () => {
+      const res = await editGeneratedInvoiceAction({
+        engagementId,
+        lineItems: p.lineItems,
+        taxesEnabled: p.taxesEnabled,
+        enabledComponents: p.enabledComponents,
+        dueDate: p.dueDate,
+        terms: p.terms,
+        notes: p.notes,
+      });
+      if (res.ok) {
+        setSaved(true);
+        router.refresh();
+      } else {
+        setError(
+          res.error === "invalid_lines"
+            ? t("invoice_lines_invalid")
+            : t("invoice_edit_error"),
+        );
       }
     });
   }
@@ -268,7 +382,9 @@ export function InvoiceOptionsDialog({
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      {/* max-w-lg (was -md): the line-item table needs the extra width; the
+          attach/automation content just breathes a little more. */}
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("invoice_dialog_title")}</DialogTitle>
           <DialogDescription>
@@ -301,6 +417,14 @@ export function InvoiceOptionsDialog({
               {t("invoice_status_paid")} ·{" "}
               {formatCurrency(invoice.amount_cents / 100, locale)}
             </div>
+            {invoice.invoice_number && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t("invoice_number_label")}{" "}
+                <span className="font-medium tabular-nums">
+                  {invoice.invoice_number}
+                </span>
+              </p>
+            )}
             {invoice.description && (
               <p className="mt-1 text-muted-foreground">
                 {invoice.description}
@@ -312,47 +436,71 @@ export function InvoiceOptionsDialog({
         {/* Live invoice: edit + lock + waive */}
         {liveInvoice && (
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="inv-amount">{t("request_payment_amount")}</Label>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
-                  $
-                </span>
-                <Input
-                  id="inv-amount"
-                  type="number"
-                  inputMode="decimal"
-                  min="0.50"
-                  step="0.01"
-                  value={amount}
-                  onChange={(e) => {
-                    setAmount(e.target.value);
-                    setSaved(false);
-                  }}
-                  className="pl-7"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="inv-desc">
-                {t("request_payment_description")}
-              </Label>
-              <Textarea
-                id="inv-desc"
-                value={description}
-                onChange={(e) => {
-                  setDescription(e.target.value);
-                  setSaved(false);
+            {liveGenerated ? (
+              // Generated invoice: the full builder, seeded from the stored
+              // row; the number is frozen and shown read-only in its summary.
+              <InvoiceBuilder
+                config={builder}
+                initial={{
+                  lineItems: liveInvoice.line_items,
+                  taxBreakdown: liveInvoice.tax_breakdown,
+                  taxesEnabled: ((liveInvoice.tax_total_cents ?? 0) > 0) ||
+                    (Array.isArray(liveInvoice.tax_breakdown) &&
+                      liveInvoice.tax_breakdown.length > 0),
+                  dueDate: liveInvoice.due_date ?? null,
+                  terms: liveInvoice.invoice_terms ?? null,
+                  notes: liveInvoice.invoice_notes ?? null,
                 }}
-                rows={2}
-                maxLength={500}
+                invoiceNumber={liveInvoice.invoice_number ?? null}
+                defaultAmount={defaultAmount}
+                locale={locale}
+                onChange={setBuilderPayload}
               />
-            </div>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="inv-amount">{t("request_payment_amount")}</Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      $
+                    </span>
+                    <Input
+                      id="inv-amount"
+                      type="number"
+                      inputMode="decimal"
+                      min="0.50"
+                      step="0.01"
+                      value={amount}
+                      onChange={(e) => {
+                        setAmount(e.target.value);
+                        setSaved(false);
+                      }}
+                      className="pl-7"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="inv-desc">
+                    {t("request_payment_description")}
+                  </Label>
+                  <Textarea
+                    id="inv-desc"
+                    value={description}
+                    onChange={(e) => {
+                      setDescription(e.target.value);
+                      setSaved(false);
+                    }}
+                    rows={2}
+                    maxLength={500}
+                  />
+                </div>
+              </>
+            )}
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={save}
+              onClick={liveGenerated ? saveGenerated : save}
               disabled={pending}
             >
               {saved ? (
@@ -434,6 +582,74 @@ export function InvoiceOptionsDialog({
             )}
             {connectReady ? (
               <>
+                {/* Generate (the builder, default) vs Attach my own (the
+                    pre-existing flow, unchanged below). */}
+                <div
+                  role="tablist"
+                  aria-label={t("invoice_mode_label")}
+                  className="grid grid-cols-2 gap-1 rounded-lg bg-secondary/60 p-1"
+                >
+                  {(["generate", "attach"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      role="tab"
+                      aria-selected={createMode === m}
+                      onClick={() => {
+                        setCreateMode(m);
+                        setError(null);
+                      }}
+                      className={
+                        "rounded-md px-2 py-1.5 text-xs font-medium transition-colors " +
+                        (createMode === m
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground")
+                      }
+                    >
+                      {m === "generate"
+                        ? t("invoice_mode_generate")
+                        : t("invoice_mode_attach")}
+                    </button>
+                  ))}
+                </div>
+
+                {createMode === "generate" && (
+                  <>
+                    <InvoiceBuilder
+                      config={builder}
+                      initial={null}
+                      invoiceNumber={null}
+                      defaultAmount={defaultAmount}
+                      locale={locale}
+                      onChange={setBuilderPayload}
+                    />
+                    <label className="flex items-start gap-2 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5"
+                        checked={lock}
+                        onChange={(e) => setLock(e.target.checked)}
+                      />
+                      <span>
+                        <span className="block">{t("invoice_lock_label")}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {t("invoice_lock_hint")}
+                        </span>
+                      </span>
+                    </label>
+                    <Button
+                      type="button"
+                      onClick={createGenerated}
+                      disabled={pending}
+                      className="w-full"
+                    >
+                      {t("invoice_create")}
+                    </Button>
+                  </>
+                )}
+
+                {createMode === "attach" && (
+                  <>
                 <div className="space-y-1.5">
                   <Label htmlFor="inv-new-amount">
                     {t("request_payment_amount")}
@@ -519,6 +735,8 @@ export function InvoiceOptionsDialog({
                 >
                   {t("invoice_create")}
                 </Button>
+                  </>
+                )}
               </>
             ) : (
               <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
