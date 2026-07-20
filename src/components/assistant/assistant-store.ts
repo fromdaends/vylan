@@ -116,6 +116,18 @@ export function openAssistantOnPageEngagement(tab?: AssistantTab) {
   emit();
 }
 
+// Open in GENERAL chat — explicitly NOT scoped to any engagement. Used by the
+// profile menu's "Help" (desktop dropdown + mobile account menu, both via the
+// "vylan:open-help" event): asking for help means "help me with the software",
+// not "help me with the engagement I happen to be sitting on". So this clears
+// any previous selection instead of preselecting the current page's engagement
+// the way openAssistant() does — and it clears it even when the panel is
+// already open on an engagement.
+export function openAssistantGeneral(tab?: AssistantTab) {
+  state = { ...state, open: true, tab: tab ?? state.tab, selected: null };
+  emit();
+}
+
 // Open scoped to an EXPLICIT engagement (e.g. a notification's Reply chip),
 // regardless of what page we're on or what the panel had selected.
 export function openAssistantForEngagement(

@@ -3,6 +3,7 @@ import {
   closeAssistant,
   getAssistantState,
   openAssistant,
+  openAssistantGeneral,
   openAssistantOnPageEngagement,
   setAssistantTab,
   setPageEngagement,
@@ -137,6 +138,37 @@ describe("assistant store", () => {
     });
     openAssistant();
     expect(getAssistantState().selected?.id).toBe("e9");
+  });
+
+  // "Help" in the profile menu is a question about the SOFTWARE, so it must land
+  // on the general chat — never on the engagement the user happened to be on.
+  it("openAssistantGeneral clears the page engagement preselect", () => {
+    setPageEngagement({
+      id: "e1",
+      title: "T1 2025",
+      clientName: "Client Inc",
+      status: "sent",
+      createdAt: "2026-07-01T00:00:00Z",
+    });
+    openAssistantGeneral("chat");
+    expect(getAssistantState().open).toBe(true);
+    expect(getAssistantState().tab).toBe("chat");
+    expect(getAssistantState().selected).toBeNull();
+  });
+
+  it("openAssistantGeneral clears an existing selection even when already open", () => {
+    setPageEngagement({
+      id: "e1",
+      title: "T1 2025",
+      clientName: "Client Inc",
+      status: "sent",
+      createdAt: "2026-07-01T00:00:00Z",
+    });
+    openAssistant();
+    expect(getAssistantState().selected?.id).toBe("e1");
+    // Panel already open and scoped to e1; hitting Help must drop to general.
+    openAssistantGeneral("chat");
+    expect(getAssistantState().selected).toBeNull();
   });
 
   it("notifies subscribers on every transition and stops after unsubscribe", () => {

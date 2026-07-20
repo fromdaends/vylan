@@ -28,6 +28,7 @@ import {
   getAssistantState,
   openAssistant,
   openAssistantForEngagement,
+  openAssistantGeneral,
   openAssistantOnPageEngagement,
   setAssistantTab,
   setSelectedEngagement,
@@ -142,7 +143,9 @@ export function AssistantPanel({
   // -------------------------------------------------------------------------
   useEffect(() => {
     function onOpenHelp() {
-      openAssistant("chat");
+      // Help always lands on the GENERAL chat, never on whatever engagement the
+      // user was last looking at — they're asking about the software.
+      openAssistantGeneral("chat");
     }
     function onOpenAssistant(e: Event) {
       const detail = (e as CustomEvent).detail as
