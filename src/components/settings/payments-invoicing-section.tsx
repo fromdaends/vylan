@@ -171,7 +171,9 @@ export function PaymentsInvoicingSection({
             onValueChange={(v) => setProvince(v as ProvinceCode)}
           >
             <SelectTrigger id="invoicing-province">
-              <SelectValue />
+              {/* Children (not the registry) drive the closed-state text so the
+                  current province shows before the content has ever mounted. */}
+              <SelectValue>{provinceName(province, locale)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
               {provinceOptions.map((code) => (
