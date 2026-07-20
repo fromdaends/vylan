@@ -1,10 +1,13 @@
 "use client";
 
 // "What we do / how it works" marketing page body. Ported from the Claude
-// Design "Vylan What We Do" handoff (Kinetic hero), then rebrandeded to the
-// live Vylan marketing system: the design's #2347F2 / Archivo / Hanken became
-// our --vy-blue (#1050ed) and Schibsted Grotesk, and the centred logo + footer
-// come from the shared marketing components so this page can never drift.
+// Design "Vylan What We Do" handoff (2026 redesign: Statement hero) and
+// rebranded to the live Vylan marketing system: the design's #2347F2 / Archivo
+// / Hanken became our --vy-blue (#1050ed) and Schibsted Grotesk, and the
+// centred logo + footer come from the shared marketing components so this page
+// can never drift. The redesign added: the centred aura hero with a secondary
+// scroll CTA, the integrations wordmark marquee, and the "Invoicing built in"
+// showcase (invoice mock + the <3-min and direct-settlement cards).
 //
 // All copy lives in the `VylanHowItWorks` i18n namespace (passed via the
 // useTranslations hook). The accent system is intentional: amber = the messy
@@ -28,6 +31,8 @@ type HowItWorksStrings = {
   heroTitle: string; // may contain "\n" line breaks
   heroSub: string;
   ctaBook: string;
+  ctaSeeHow: string;
+  scrollLabel: string;
   problemEyebrow: string;
   problemTitle: string;
   problemChips: string[];
@@ -38,6 +43,7 @@ type HowItWorksStrings = {
   // The playable stage-board demo. Nested rather than flattened: it's a whole
   // section's worth of strings, and it owns its own component.
   workflow: WorkflowAutomationStrings;
+  integrationsLabel: string;
   payEyebrow: string;
   payTitlePre: string;
   payTitleWord: string;
@@ -48,6 +54,20 @@ type HowItWorksStrings = {
   payStatTitle: string;
   payStatBody: string;
   payCaption: string;
+  // "Invoicing built in": the intro block + the invoice mock's literal strings.
+  inv: {
+    eyebrow: string;
+    title: string;
+    body: string;
+    mockNumber: string;
+    mockFormat: string;
+    lines: { label: string; amount: string; tax?: boolean; auto?: string }[];
+    totalLabel: string;
+    total: string;
+    foot: string;
+    directTitle: string;
+    directBody: string;
+  };
   trustEyebrow: string;
   trustTitle: string;
   trustIntro: string;
@@ -59,6 +79,10 @@ function scrollToForm() {
   document
     .getElementById("vy-get-access")
     ?.scrollIntoView({ behavior: "smooth" });
+}
+
+function scrollToHow() {
+  document.getElementById("wwd-how")?.scrollIntoView({ behavior: "smooth" });
 }
 
 function lines(text: string) {
@@ -90,6 +114,14 @@ function IconCard({ stroke }: { stroke: string }) {
       <rect x="2.5" y="6" width="19" height="12" rx="2" />
       <circle cx="12" cy="12" r="2.6" />
       <path d="M6 9.5v0M18 14.5v0" />
+    </svg>
+  );
+}
+function IconCardFlat({ stroke }: { stroke: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2.5" y="6" width="19" height="12" rx="2" />
+      <path d="M2.5 10h19" />
     </svg>
   );
 }
@@ -130,6 +162,29 @@ const PAY_ICONS = [
   <IconCircleCheck key="rev" stroke="#fff" />,
   <IconCard key="pay" stroke="#0e3a2a" />,
 ];
+
+// One marquee set: the five wordmarks with dot separators. Repeated N times
+// for the seamless -50% loop. Purely decorative text — hidden from the
+// accessibility tree (the section label carries the meaning).
+function MarqueeSet() {
+  return (
+    <div className="wwd-marquee-set" aria-hidden="true">
+      <span className="wwd-mark-stripe">stripe</span>
+      <span className="wwd-mark-dot" />
+      <span className="wwd-mark-paypal">
+        <span className="wwd-mark-paypal-pay">Pay</span>
+        <span className="wwd-mark-paypal-pal">Pal</span>
+      </span>
+      <span className="wwd-mark-dot" />
+      <span className="wwd-mark-quickbooks">quickbooks</span>
+      <span className="wwd-mark-dot" />
+      <span className="wwd-mark-xero">xero</span>
+      <span className="wwd-mark-dot" />
+      <span className="wwd-mark-sage">sage</span>
+      <span className="wwd-mark-dot" />
+    </div>
+  );
+}
 
 export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -232,9 +287,9 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
       {/* fixed atmospheric background (soft top light + deep bottom) */}
       <div className="wwd-bg" aria-hidden="true" />
 
-      {/* ---------- HERO: Kinetic ---------- */}
+      {/* ---------- HERO: Statement ---------- */}
       <section className="wwd-hero" aria-label={s.heroEyebrow}>
-        <div className="wwd-grid" aria-hidden="true" />
+        <div className="wwd-hero-aura" aria-hidden="true" />
         <div className="wwd-hero-inner">
           <div className="wwd-eyebrow wwd-load" style={{ animationDelay: "0.05s" }}>
             {s.heroEyebrow}
@@ -250,15 +305,28 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
               </span>
             ))}
           </h1>
-          <div className="wwd-hero-foot wwd-load" style={{ animationDelay: "0.58s" }}>
+          <div className="wwd-hero-foot wwd-load" style={{ animationDelay: "0.55s" }}>
             <p className="wwd-sub">{s.heroSub}</p>
             <div className="wwd-cta-row">
               <button type="button" className="vy-btn" onClick={scrollToForm}>
                 {s.ctaBook}
               </button>
+              <button type="button" className="wwd-link-btn" onClick={scrollToHow}>
+                {s.ctaSeeHow}
+              </button>
             </div>
           </div>
         </div>
+        <button
+          type="button"
+          className="wwd-cue"
+          aria-label={s.scrollLabel}
+          onClick={scrollToHow}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.8)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
       </section>
 
       {/* ---------- THE PROBLEM ---------- */}
@@ -287,7 +355,7 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
       </section>
 
       {/* ---------- HOW IT WORKS (walkthrough + spine) ---------- */}
-      <section className="wwd-section wwd-steps" data-spine-section>
+      <section className="wwd-section wwd-steps" id="wwd-how" data-spine-section>
         <div className="wwd-steps-head" data-reveal>
           <div className="wwd-eyebrow">{s.stepsEyebrow}</div>
           <h2 className="wwd-h2 wwd-center">{s.stepsTitle}</h2>
@@ -315,6 +383,20 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
           (which explains what happens) and before the payment pipeline — this
           is the section that SHOWS it happening. */}
       <WorkflowAutomation s={s.workflow} />
+
+      {/* ---------- INTEGRATIONS MARQUEE ---------- */}
+      <section className="wwd-integrations" aria-label={s.integrationsLabel}>
+        <div className="wwd-eyebrow wwd-integrations-label" data-reveal>
+          {s.integrationsLabel}
+        </div>
+        <div className="wwd-marquee" data-reveal data-reveal-delay="120">
+          <div className="wwd-marquee-row">
+            {Array.from({ length: 6 }, (_, i) => (
+              <MarqueeSet key={i} />
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ---------- PAYMENT PIPELINE ---------- */}
       <section className="wwd-section wwd-pay">
@@ -344,22 +426,72 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
             ))}
           </div>
         </div>
-        <div className="wwd-pay-stat" data-reveal data-reveal-delay="200">
-          <div className="wwd-pay-stat-card">
-            <div className="wwd-pay-stat-num" aria-hidden="true">
-              <span className="wwd-pay-stat-big">{s.payStatBig}</span>
-              <span className="wwd-pay-stat-unit">{s.payStatUnit}</span>
+
+        {/* ---------- Invoicing built in: intro + mock + side cards ---------- */}
+        <div className="wwd-inv-head" data-reveal data-reveal-delay="160">
+          <div className="wwd-eyebrow wwd-eyebrow-mint">{s.inv.eyebrow}</div>
+          <div className="wwd-inv-title">{s.inv.title}</div>
+          <p className="wwd-inv-body">{s.inv.body}</p>
+        </div>
+        <div className="wwd-inv-grid" data-reveal data-reveal-delay="220">
+          <div className="wwd-inv-doc">
+            <div className="wwd-inv-doc-top">
+              <span className="wwd-inv-doc-label">{s.inv.mockNumber}</span>
+              <span className="wwd-inv-doc-label wwd-inv-doc-label-dim">
+                {s.inv.mockFormat}
+              </span>
             </div>
-            <div className="wwd-pay-stat-main">
-              <div className="wwd-pay-stat-title">{s.payStatTitle}</div>
-              <p className="wwd-pay-stat-text">{s.payStatBody}</p>
-              <div className="wwd-pay-bar-track" aria-hidden="true">
-                <div className="wwd-pay-bar-fill" data-pay-bar />
+            <div className="wwd-inv-lines">
+              {s.inv.lines.map((line, i) => (
+                <div
+                  key={i}
+                  className={
+                    "wwd-inv-line" + (line.tax ? " wwd-inv-line-tax" : "")
+                  }
+                >
+                  <span>
+                    {line.label}
+                    {line.auto ? (
+                      <span className="wwd-inv-auto"> — {line.auto}</span>
+                    ) : null}
+                  </span>
+                  <span className="wwd-inv-amt">{line.amount}</span>
+                </div>
+              ))}
+            </div>
+            <div className="wwd-inv-total">
+              <span className="wwd-inv-doc-label">{s.inv.totalLabel}</span>
+              <span className="wwd-inv-total-num">{s.inv.total}</span>
+            </div>
+            <p className="wwd-inv-foot">{s.inv.foot}</p>
+          </div>
+
+          <div className="wwd-inv-side">
+            <div className="wwd-pay-stat-card">
+              <div className="wwd-pay-stat-num" aria-hidden="true">
+                <span className="wwd-pay-stat-big">{s.payStatBig}</span>
+                <span className="wwd-pay-stat-unit">{s.payStatUnit}</span>
+              </div>
+              <div className="wwd-pay-stat-main">
+                <div className="wwd-pay-stat-title">{s.payStatTitle}</div>
+                <p className="wwd-pay-stat-text">{s.payStatBody}</p>
+                <div className="wwd-pay-bar-track" aria-hidden="true">
+                  <div className="wwd-pay-bar-fill" data-pay-bar />
+                </div>
+              </div>
+            </div>
+            <div className="wwd-inv-direct">
+              <span className="wwd-inv-direct-icon">
+                <IconCardFlat stroke="var(--wwd-mint)" />
+              </span>
+              <div>
+                <div className="wwd-pay-stat-title">{s.inv.directTitle}</div>
+                <p className="wwd-pay-stat-text">{s.inv.directBody}</p>
               </div>
             </div>
           </div>
         </div>
-        <div className="wwd-pay-caption" data-reveal data-reveal-delay="220">
+        <div className="wwd-pay-caption" data-reveal data-reveal-delay="260">
           {s.payCaption}
         </div>
       </section>
@@ -407,6 +539,11 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
             </span>
           ))}
         </h2>
+        <div className="wwd-close-cta" data-reveal data-reveal-delay="160">
+          <button type="button" className="vy-btn" onClick={scrollToForm}>
+            {s.ctaBook}
+          </button>
+        </div>
       </section>
     </div>
   );
