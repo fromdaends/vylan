@@ -14,7 +14,7 @@ import {
   userDisplayLabel,
 } from "@/lib/db/users";
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
-import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import { readCachedQuickbooksListsByClient } from "@/lib/db/quickbooks-cache";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { summarizeDrafts } from "@/lib/quickbooks/draft-summary";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
@@ -152,42 +152,52 @@ export default async function QuickbooksDraftsPage({
     );
   }
 
-  // Connection health rides along with the data reads: a DEAD connection
-  // (expired/revoked tokens) gets a "reconnect" banner instead of letting every
-  // post fail with no explanation. Capped at 3s — when the stored token is stale
-  // the check calls Intuit, and this page must never wait on a slow upstream
-  // (the un-awaited check still finishes the keep-alive refresh in background;
-  // an inconclusive check just reports "ok", i.e. no banner this load).
-  const HEALTH_BUDGET_MS = 3000;
-  const [rows, firmUsers, health] = await Promise.all([
+  const [rows, firmUsers] = await Promise.all([
     listFirmDrafts(),
     listFirmUsers(),
-    firm
+  ]);
+
+  // Per-client (0710): the connections that matter on this multi-client page are
+  // the ones its DRAFTS would post to — the distinct client scopes below (plus
+  // firm-level only if a legacy client-less draft exists). Probing the firm-level
+  // row alone would flag a false "reconnect" for every per-client-connected firm
+  // (that row usually doesn't exist anymore).
+  const clientIdsWithDrafts = [
+    ...new Set(rows.map((r) => r.clientId).filter((c): c is string => !!c)),
+  ];
+  const healthScopes: (string | undefined)[] = [
+    ...clientIdsWithDrafts,
+    ...(rows.some((r) => !r.clientId) ? [undefined] : []),
+  ];
+
+  // Connection health + the per-client picker lists load together. Health: a
+  // DEAD connection (expired/revoked tokens) gets a "reconnect" banner instead
+  // of letting every post fail with no explanation; the banner shows if ANY
+  // draft-bearing connection is dead. Capped at 3s — a stale token makes the
+  // check call Intuit, and this page must never wait on a slow upstream (the
+  // un-awaited check still finishes the keep-alive refresh in background; an
+  // inconclusive check just reports "ok", i.e. no banner this load). Lists: one
+  // batched read (5 queries total) so a many-client queue doesn't fan out.
+  const HEALTH_BUDGET_MS = 3000;
+  const [listsByClient, health] = await Promise.all([
+    readCachedQuickbooksListsByClient(clientIdsWithDrafts),
+    firm && healthScopes.length > 0
       ? Promise.race([
-          getQuickbooksConnectionHealth(firm.id),
+          Promise.all(
+            healthScopes.map((cid) =>
+              getQuickbooksConnectionHealth(firm.id, cid),
+            ),
+          ).then((hs) =>
+            hs.includes("reconnect_required")
+              ? ("reconnect_required" as const)
+              : ("ok" as const),
+          ),
           new Promise<"ok">((resolve) =>
             setTimeout(() => resolve("ok"), HEALTH_BUDGET_MS),
           ),
         ])
       : Promise.resolve("ok" as const),
   ]);
-
-  // Per-client (0710): each draft's pickers must show ITS client's QuickBooks
-  // lists (accounts/vendors/customers/tax/items), not one firm-level set. Load
-  // the lists once per distinct client that has drafts (in parallel), then build
-  // a per-client options map below. A client whose lists don't resolve gets empty
-  // options — the row still renders; its pickers are just empty until it syncs.
-  const clientIdsWithDrafts = [
-    ...new Set(rows.map((r) => r.clientId).filter((c): c is string => !!c)),
-  ];
-  const listsByClient = new Map<string, QuickbooksLists | null>(
-    await Promise.all(
-      clientIdsWithDrafts.map(
-        async (cid) =>
-          [cid, await readCachedQuickbooksLists(cid)] as const,
-      ),
-    ),
-  );
 
   const reviewerNameById = new Map(
     firmUsers.map((u) => [u.id, userDisplayLabel(u)]),
@@ -317,10 +327,9 @@ export default async function QuickbooksDraftsPage({
               : t("queue_reconnect_staff")}
           </p>
           {isOwner && (
+            // Reconnecting is per client now — it lives on the client's page.
             <Button asChild size="sm" variant="outline">
-              <Link href="/settings?tab=integrations">
-                {t("queue_reconnect_cta")}
-              </Link>
+              <Link href="/clients">{t("queue_reconnect_cta")}</Link>
             </Button>
           )}
         </div>

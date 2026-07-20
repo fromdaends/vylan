@@ -61,10 +61,22 @@ export async function POST(request: NextRequest) {
   }
 
   // Resolve the draft's client (RLS-scoped read — also confirms the file belongs
-  // to this firm). undefined = firm-level fallback (no fileId / draft not found).
-  const clientId = fileId
-    ? ((await getDraftForFile(fileId))?.clientId ?? null)
-    : undefined;
+  // to this firm). FAIL CLOSED: when a fileId was sent but its draft/client can't
+  // be resolved, refuse rather than fall back to the legacy firm-level connection
+  // (that would create the vendor/customer in the WRONG QuickBooks company). Only
+  // a legacy client that sent no fileId at all gets the firm-level scope
+  // (undefined), preserving pre-per-client behavior across deploy skew.
+  let clientId: string | undefined;
+  if (fileId) {
+    const draft = await getDraftForFile(fileId);
+    if (!draft) {
+      return NextResponse.json(
+        { error: "not_found", detail: "Draft not found. Refresh and retry." },
+        { status: 404 },
+      );
+    }
+    clientId = draft.clientId;
+  }
 
   const ctx = await getQuickbooksReadContext(firm.id, clientId);
   if (!ctx) {

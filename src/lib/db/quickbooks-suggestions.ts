@@ -220,6 +220,23 @@ export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
           .in("id", fileIds)
       : Promise.resolve({ data: [] as Array<Record<string, unknown>> }),
   ]);
+  // FAIL CLOSED on the engagement read: each row's clientId now decides WHICH
+  // client's QuickBooks connection the bulk post targets, so a transient failure
+  // here must not silently null every clientId (that would route a whole batch
+  // to the legacy firm-level company). Mirror the top-level read's error
+  // handling and return nothing — the queue/bulk just see zero drafts and retry.
+  const engErr =
+    (engRes as { error?: { code?: string; message?: string } | null }).error ??
+    null;
+  if (engErr) {
+    if (!isMissingSchema(engErr)) {
+      console.error(
+        "[quickbooks] listFirmDrafts engagement lookup failed:",
+        engErr,
+      );
+    }
+    return [];
+  }
   const engById = new Map(
     ((engRes.data as Array<Record<string, unknown>> | null) ?? []).map((e) => [
       e.id as string,
@@ -292,9 +309,11 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
   // The engagement's client (0710 per-client posting): every post/attach/void/
   // delete resolves THIS client's QuickBooks connection, not the firm-level one.
   // Derived from the engagement (the suggestion row itself has no client_id).
-  // Null only if the engagement lookup fails — callers then fall back to
-  // firm-level scope (safe: usually "not connected" → no wrong-company write).
-  clientId: string | null;
+  // ALWAYS present: engagements.client_id is NOT NULL, so an unresolvable client
+  // means the lookup FAILED — we then return null (fail closed) rather than let
+  // a write path silently fall back to the legacy firm-level connection and hit
+  // the WRONG QuickBooks company.
+  clientId: string;
   firmId: string;
   resolved: ResolvedEntry | null;
   suggestion: TransactionSuggestion | null;
@@ -350,25 +369,29 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
   if (error || !row) return null;
   // Resolve the engagement's client so the post path targets that client's
   // QuickBooks connection (0710). A separate point read (the repo avoids
-  // PostgREST joins); RLS-scoped like the draft read above. On any error we
-  // leave clientId null → firm-level fallback.
+  // PostgREST joins); RLS-scoped like the draft read above.
+  //
+  // FAIL CLOSED: engagements.client_id is NOT NULL, so "no client" can only mean
+  // the lookup failed (transient DB error) or the engagement isn't visible. A
+  // null here must NEVER degrade to firm-level scope — a leftover legacy
+  // firm-level connection would make post/void/delete hit the WRONG QuickBooks
+  // company. Returning null makes every caller bail safely (404 / not-connected,
+  // retriable) instead.
   const engagementId = row.engagement_id as string;
-  let clientId: string | null = null;
   const engRes = await sb
     .from("engagements")
     .select("client_id")
     .eq("id", engagementId)
     .maybeSingle();
   if (engRes.error) {
-    if (!isMissingSchema(engRes.error)) {
-      console.error(
-        "[quickbooks] getDraftForFile client lookup failed:",
-        engRes.error,
-      );
-    }
-  } else {
-    clientId = (engRes.data?.client_id as string | null) ?? null;
+    console.error(
+      "[quickbooks] getDraftForFile client lookup failed:",
+      engRes.error,
+    );
+    return null;
   }
+  const clientId = (engRes.data?.client_id as string | null) ?? null;
+  if (!clientId) return null;
   return {
     engagementId,
     clientId,
