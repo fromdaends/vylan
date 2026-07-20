@@ -190,6 +190,9 @@ export type UpdateGeneratedInvoiceFields = {
   due_date: string | null;
   invoice_terms: string | null;
   invoice_notes: string | null;
+  // Optional so pre-language callers stay valid; the Phase 3 builder always
+  // sends it (per-invoice language override).
+  invoice_language?: "en" | "fr";
 };
 
 export async function updateGeneratedInvoiceFields(
@@ -212,6 +215,45 @@ export async function updateGeneratedInvoiceFields(
     return false;
   }
   return (data?.length ?? 0) > 0;
+}
+
+// One payment request by id, RLS-scoped (firm members only) — the accountant
+// PDF route. null when not found / not this firm's.
+export async function getPaymentRequestById(
+  id: string,
+): Promise<PaymentRequest | null> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] getById failed:", error);
+    }
+    return null;
+  }
+  return (data as PaymentRequest) ?? null;
+}
+
+// Service-role variant (portal PDF route + the paid-time freeze hook).
+export async function getPaymentRequestByIdSR(
+  id: string,
+): Promise<PaymentRequest | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] getByIdSR failed:", error);
+    }
+    return null;
+  }
+  return (data as PaymentRequest) ?? null;
 }
 
 export async function listPaymentRequestsForEngagement(
@@ -409,6 +451,11 @@ export type PaymentsListRow = {
   // hide "sent by you" so only a teammate's sends are labelled.
   requestedByUserId: string | null;
   requestedByName: string | null;
+  // Native-invoice fields (0750): the number makes this list the invoice
+  // history, and kind='generated' enables the per-row PDF action. Both null on
+  // legacy rows (and everywhere pre-0750).
+  invoiceNumber: string | null;
+  invoiceKind: "generated" | "attached" | null;
 };
 
 // Recent payments (RLS-scoped to the firm) for the Payments settings list and
@@ -420,22 +467,28 @@ export async function listFirmPaymentsWithNames(
 ): Promise<PaymentsListRow[]> {
   const { clientId, limit = 50 } = opts;
   const sb = await getServerSupabase();
-  let query = sb
-    .from("payment_requests")
-    .select(
-      "id, engagement_id, client_id, amount_cents, currency, status, created_at, requested_by_user_id",
-    );
-  if (clientId) query = query.eq("client_id", clientId);
-  const { data: prs, error } = await query
-    .order("created_at", { ascending: false })
-    .limit(limit);
+  // Tiered select (the repo's pre-migration pattern): try with the 0750
+  // invoice columns, fall back to the legacy shape on a missing column so the
+  // list keeps working on an un-migrated environment.
+  const legacyCols =
+    "id, engagement_id, client_id, amount_cents, currency, status, created_at, requested_by_user_id";
+  const withInvoiceCols = `${legacyCols}, invoice_number, invoice_kind`;
+  const run = async (cols: string) => {
+    let query = sb.from("payment_requests").select(cols);
+    if (clientId) query = query.eq("client_id", clientId);
+    return query.order("created_at", { ascending: false }).limit(limit);
+  };
+  let { data: prs, error } = await run(withInvoiceCols);
+  if (error && (error.code === "PGRST204" || error.code === "42703")) {
+    ({ data: prs, error } = await run(legacyCols));
+  }
   if (error) {
     if (!isMissingSchema(error)) {
       console.error("[payment-requests] listFirmPaymentsWithNames failed:", error);
     }
     return [];
   }
-  const rows = prs ?? [];
+  const rows = (prs ?? []) as Array<Record<string, unknown>>;
   const engIds = [
     ...new Set(rows.map((r) => r.engagement_id).filter(Boolean)),
   ] as string[];
@@ -485,14 +538,19 @@ export async function listFirmPaymentsWithNames(
     amountCents: r.amount_cents as number,
     currency: (r.currency as string) ?? "cad",
     createdAt: r.created_at as string,
-    clientName: r.client_id ? (cliName.get(r.client_id) ?? null) : null,
+    clientName: r.client_id
+      ? (cliName.get(r.client_id as string) ?? null)
+      : null,
     engagementTitle: r.engagement_id
-      ? (engTitle.get(r.engagement_id) ?? null)
+      ? (engTitle.get(r.engagement_id as string) ?? null)
       : null,
     requestedByUserId: (r.requested_by_user_id as string | null) ?? null,
     requestedByName: r.requested_by_user_id
-      ? (userName.get(r.requested_by_user_id) ?? null)
+      ? (userName.get(r.requested_by_user_id as string) ?? null)
       : null,
+    invoiceNumber: (r.invoice_number as string | null) ?? null,
+    invoiceKind:
+      (r.invoice_kind as "generated" | "attached" | null) ?? null,
   }));
 }
 

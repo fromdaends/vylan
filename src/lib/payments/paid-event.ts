@@ -22,6 +22,7 @@ import {
 import { logServiceRoleActivity } from "@/lib/db/activity";
 import { syncEngagementStageSR } from "@/lib/engagements/stage-sync";
 import { expireOpenStripeCheckout } from "@/lib/payments/close-other-rail";
+import { freezeInvoicePdfSR } from "@/lib/invoices/pdf-data";
 
 // Provider references stored on the invoice at settle time (each rail fills its
 // own pair; the other rail's stay untouched).
@@ -80,6 +81,13 @@ export async function recordInvoicePaid(
       provider,
     },
   );
+  // Paid = immutable: freeze the generated invoice's PDF as the permanent
+  // record (survives later firm-identity changes). Best-effort and internally
+  // try/caught — a render/storage failure never touches the payment, and the
+  // on-demand path re-renders the now-locked row identically. No-ops for
+  // simple/attached invoices.
+  await freezeInvoicePdfSR(paymentRequestId);
+
   // Payment lands: the engagement leaves awaiting_payment. It becomes
   // "completed" only if the finished work is actually out with the client —
   // otherwise it settles back on in_preparation until the deliverables are

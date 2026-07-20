@@ -3,7 +3,7 @@
 import { useRef, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Lock, Unlock, Check, Upload } from "lucide-react";
+import { Lock, Unlock, Check, Upload, FileText } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -64,6 +64,7 @@ export type InvoiceForOptions = {
   due_date?: string | null;
   invoice_terms?: string | null;
   invoice_notes?: string | null;
+  invoice_language?: "en" | "fr" | null;
 };
 
 export type EngagementInvoiceAutomation = {
@@ -218,6 +219,7 @@ export function InvoiceOptionsDialog({
       if (p.dueDate) fd.set("due_date", p.dueDate);
       if (p.terms) fd.set("terms", p.terms);
       if (p.notes) fd.set("notes", p.notes);
+      fd.set("language", p.language);
       fd.set("locks_deliverables", String(lock));
       const res = await requestGeneratedInvoiceAction(fd);
       if (res.ok) {
@@ -261,6 +263,7 @@ export function InvoiceOptionsDialog({
         dueDate: p.dueDate,
         terms: p.terms,
         notes: p.notes,
+        language: p.language,
       });
       if (res.ok) {
         setSaved(true);
@@ -430,6 +433,17 @@ export function InvoiceOptionsDialog({
                 {invoice.description}
               </p>
             )}
+            {invoice.invoice_kind === "generated" && (
+              <a
+                href={`/api/invoices/${invoice.id}/pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline"
+              >
+                <FileText className="size-3.5" />
+                {t("invoice_view_pdf")}
+              </a>
+            )}
           </div>
         )}
 
@@ -450,6 +464,7 @@ export function InvoiceOptionsDialog({
                   dueDate: liveInvoice.due_date ?? null,
                   terms: liveInvoice.invoice_terms ?? null,
                   notes: liveInvoice.invoice_notes ?? null,
+                  language: liveInvoice.invoice_language ?? null,
                 }}
                 invoiceNumber={liveInvoice.invoice_number ?? null}
                 defaultAmount={defaultAmount}
@@ -496,21 +511,34 @@ export function InvoiceOptionsDialog({
                 </div>
               </>
             )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={liveGenerated ? saveGenerated : save}
-              disabled={pending}
-            >
-              {saved ? (
-                <>
-                  <Check className="size-4" /> {t("invoice_saved")}
-                </>
-              ) : (
-                t("invoice_save")
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={liveGenerated ? saveGenerated : save}
+                disabled={pending}
+              >
+                {saved ? (
+                  <>
+                    <Check className="size-4" /> {t("invoice_saved")}
+                  </>
+                ) : (
+                  t("invoice_save")
+                )}
+              </Button>
+              {liveGenerated && (
+                <a
+                  href={`/api/invoices/${liveInvoice.id}/pdf`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline"
+                >
+                  <FileText className="size-3.5" />
+                  {t("invoice_view_pdf")}
+                </a>
               )}
-            </Button>
+            </div>
 
             <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
               <div className="flex items-center gap-2 text-sm">

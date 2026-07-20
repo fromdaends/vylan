@@ -237,6 +237,8 @@ export type EditGeneratedInvoiceInput = {
   dueDate?: string | null;
   terms?: string | null;
   notes?: string | null;
+  // Per-invoice language override (Phase 3). Ignored unless 'en' | 'fr'.
+  language?: unknown;
 };
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -310,6 +312,9 @@ export async function editGeneratedInvoiceAction(
     due_date: dueDate,
     invoice_terms: input.terms?.trim() || null,
     invoice_notes: input.notes?.trim() || null,
+    ...(input.language === "en" || input.language === "fr"
+      ? { invoice_language: input.language }
+      : {}),
   });
   if (!ok) return { ok: false, error: "save_failed" };
 
