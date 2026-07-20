@@ -36,6 +36,22 @@ export type PaymentRequest = {
   // True for automated invoices (migration 0590). Optional on the type so reads
   // survive the pre-migration window; defaults false for manual requests.
   auto?: boolean;
+  // Native-invoice fields (migration 0750). All optional so reads survive the
+  // pre-0750 window; null/undefined on legacy simple rows. line_items /
+  // tax_breakdown are jsonb — parse with parseStoredLineItems /
+  // parseStoredTaxLines (lib/invoices/totals) rather than trusting the shape.
+  invoice_kind?: "generated" | "attached" | null;
+  line_items?: unknown;
+  tax_breakdown?: unknown;
+  subtotal_cents?: number | null;
+  tax_total_cents?: number | null;
+  invoice_seq?: number | null;
+  invoice_number?: string | null;
+  issue_date?: string | null;
+  due_date?: string | null;
+  invoice_terms?: string | null;
+  invoice_notes?: string | null;
+  invoice_language?: "en" | "fr" | null;
   // Deliverables lock (migration 0610). When locks_deliverables is true and the
   // invoice is unpaid (and not overridden), the engagement's Final documents are
   // gated in the client portal. Optional so reads survive the pre-0610 window.
@@ -81,15 +97,48 @@ export type CreatePaymentRequestInput = {
   // Deliverables lock (migration 0610). Optional so callers that don't gate
   // Final documents omit it; the insert drops it gracefully pre-0610.
   locks_deliverables?: boolean;
+  // Native-invoice payload (migration 0750) — present only on generated
+  // invoices; simple/attached invoices omit every field and insert exactly as
+  // before. The caller (lib/invoices/create) computes all of it server-side.
+  invoice_kind?: "generated" | "attached";
+  line_items?: unknown;
+  tax_breakdown?: unknown;
+  subtotal_cents?: number;
+  tax_total_cents?: number;
+  invoice_seq?: number | null;
+  invoice_number?: string | null;
+  issue_date?: string;
+  due_date?: string | null;
+  invoice_terms?: string | null;
+  invoice_notes?: string | null;
+  invoice_language?: "en" | "fr";
 };
 
-// Returns the created row, the string "duplicate" when the one-invoice-per-
+// Distinguish WHICH unique index rejected an insert: the one-invoice-per-
+// engagement index (caller treats as "already invoiced") vs the per-firm
+// invoice_seq backstop (caller re-allocates a number and retries). Both are
+// 23505; the constraint NAME (our own identifier, not localized prose) is the
+// only discriminator PostgREST exposes.
+function isSeqUniqueViolation(err: {
+  code?: string;
+  message?: string;
+  details?: string;
+} | null): boolean {
+  if (err?.code !== "23505") return false;
+  const text = `${err.message ?? ""} ${err.details ?? ""}`;
+  return text.includes("payment_requests_firm_invoice_seq_uniq");
+}
+
+// Returns the created row; the string "duplicate" when the one-invoice-per-
 // engagement unique index (payment_requests_engagement_active_uniq, 0610)
 // rejected a concurrent create (the caller treats this as "already invoiced",
-// NOT a save failure), or null on a missing table (pre-0380) / other failure.
+// NOT a save failure); "seq_duplicate" when the per-firm invoice-number
+// backstop (payment_requests_firm_invoice_seq_uniq, 0750) rejected the
+// allocated sequence (the caller re-allocates and retries); or null on a
+// missing table (pre-0380) / other failure.
 export async function createPaymentRequest(
   input: CreatePaymentRequestInput,
-): Promise<PaymentRequest | "duplicate" | null> {
+): Promise<PaymentRequest | "duplicate" | "seq_duplicate" | null> {
   const sb = await getServerSupabase();
   const { locks_deliverables, ...base } = input;
   const withLock =
@@ -109,8 +158,10 @@ export async function createPaymentRequest(
       .single());
   }
   if (error) {
-    // 23505 = unique_violation: a concurrent create won the one-invoice race.
-    // Benign — exactly one live invoice exists, which is the whole point.
+    // 23505 = unique_violation. The seq backstop retries with a fresh number;
+    // the engagement index means a concurrent create won the one-invoice race
+    // — benign, exactly one live invoice exists, which is the whole point.
+    if (isSeqUniqueViolation(error)) return "seq_duplicate";
     if (error.code === "23505") return "duplicate";
     if (isMissingSchema(error)) {
       console.warn(
@@ -122,6 +173,45 @@ export async function createPaymentRequest(
     return null;
   }
   return data as PaymentRequest;
+}
+
+// Generated-invoice edit (migration 0750): replace the line items, taxes,
+// dates, terms and the recomputed totals in one write. Same edit-lock contract
+// as every other mutation: never touches a paid/cancelled row, returns true
+// only when a row actually changed. invoice_seq / invoice_number are
+// deliberately NOT updatable — the number is frozen at creation.
+export type UpdateGeneratedInvoiceFields = {
+  amount_cents: number;
+  description: string | null;
+  line_items: unknown;
+  tax_breakdown: unknown;
+  subtotal_cents: number;
+  tax_total_cents: number;
+  due_date: string | null;
+  invoice_terms: string | null;
+  invoice_notes: string | null;
+};
+
+export async function updateGeneratedInvoiceFields(
+  id: string,
+  fields: UpdateGeneratedInvoiceFields,
+): Promise<boolean> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("payment_requests")
+    .update(fields)
+    .eq("id", id)
+    .eq("invoice_kind", "generated")
+    .neq("status", "paid")
+    .neq("status", "canceled")
+    .select("id");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[payment-requests] updateGenerated failed:", error);
+    }
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
 }
 
 export async function listPaymentRequestsForEngagement(

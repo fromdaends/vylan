@@ -13,8 +13,18 @@ import {
   setPaymentRequestOverrideUnlocked,
   relockPaymentRequestDeliverables,
   updatePaymentRequestAmountDescription,
+  updateGeneratedInvoiceFields,
   cancelPaymentRequest,
 } from "@/lib/db/payment-requests";
+import { getFirmInvoiceSettings } from "@/lib/db/invoice-settings";
+import {
+  computeInvoiceTotals,
+  normalizeLineItems,
+  MIN_TOTAL_CENTS,
+  MAX_TOTAL_CENTS,
+} from "@/lib/invoices/totals";
+import { isTaxComponentId, type TaxComponentId } from "@/lib/tax/canada";
+import { expireOpenStripeCheckout } from "@/lib/payments/close-other-rail";
 import { logUserActivity } from "@/lib/db/activity";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { getServerSupabase } from "@/lib/supabase/server";
@@ -184,6 +194,13 @@ export async function editInvoiceAction(input: {
   if (!invoice || invoice.status === "paid" || invoice.status === "canceled") {
     return { ok: false, error: "no_invoice" };
   }
+  // A generated invoice's amount is DERIVED from its line items — the flat
+  // amount editor must never touch one, or the stored breakdown and the
+  // charged total would drift apart. The dialog routes generated invoices to
+  // editGeneratedInvoiceAction; this guard covers a stale client.
+  if (invoice.invoice_kind === "generated") {
+    return { ok: false, error: "no_invoice" };
+  }
   const description = input.description?.trim() ? input.description.trim() : null;
   const ok = await updatePaymentRequestAmountDescription(
     invoice.id,
@@ -192,9 +209,121 @@ export async function editInvoiceAction(input: {
   );
   if (!ok) return { ok: false, error: "save_failed" };
 
+  // An open Stripe Checkout still charges the PRE-edit amount (the session's
+  // price is frozen at creation). Expire it so the client's next "Pay" opens a
+  // fresh session at the new total. Best-effort: an expire failure only means
+  // the old window stays open, exactly as before this feature.
+  if (invoice.stripe_checkout_session_id) {
+    await expireOpenStripeCheckout(firm.id, invoice.stripe_checkout_session_id);
+  }
+
   await logUserActivity(firm.id, input.engagementId, "invoice_edited", {
     payment_request_id: invoice.id,
     amount_cents: cents,
+  });
+  revalidatePath(`/engagements/${input.engagementId}`);
+  return { ok: true };
+}
+
+// Edit an unpaid GENERATED invoice: replace lines / taxes / dates / terms and
+// recompute every total server-side (the same pure lib as creation, so the
+// builder preview, the stored row, and the charged amount stay identical).
+// The invoice number is frozen at creation and never changes here.
+export type EditGeneratedInvoiceInput = {
+  engagementId: string;
+  lineItems: unknown;
+  taxesEnabled: boolean;
+  enabledComponents: unknown;
+  dueDate?: string | null;
+  terms?: string | null;
+  notes?: string | null;
+};
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export async function editGeneratedInvoiceAction(
+  input: EditGeneratedInvoiceInput,
+): Promise<InvoiceEditResult> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "unauthenticated" };
+  if (!UUID_RE.test(input.engagementId)) {
+    return { ok: false, error: "invalid" };
+  }
+  const lines = normalizeLineItems(input.lineItems);
+  if (!lines) return { ok: false, error: "invalid_lines" };
+  // Component toggles: accept only known ids; null = all on.
+  let enabledComponents: TaxComponentId[] | null = null;
+  if (Array.isArray(input.enabledComponents)) {
+    if (!input.enabledComponents.every(isTaxComponentId)) {
+      return { ok: false, error: "invalid" };
+    }
+    enabledComponents = input.enabledComponents;
+  } else if (input.enabledComponents != null) {
+    return { ok: false, error: "invalid" };
+  }
+  const dueDate =
+    typeof input.dueDate === "string" && DATE_RE.test(input.dueDate)
+      ? input.dueDate
+      : null;
+
+  const engagement = await getEngagement(input.engagementId);
+  if (!engagement || engagement.firm_id !== firm.id) {
+    return { ok: false, error: "no_invoice" };
+  }
+  const invoice = await getLatestPaymentRequestForEngagement(input.engagementId);
+  if (
+    !invoice ||
+    invoice.status === "paid" ||
+    invoice.status === "canceled" ||
+    invoice.invoice_kind !== "generated"
+  ) {
+    return { ok: false, error: "no_invoice" };
+  }
+
+  const settings = await getFirmInvoiceSettings();
+  const computed = computeInvoiceTotals(lines, {
+    province: settings?.province ?? null,
+    taxesEnabled: input.taxesEnabled,
+    enabledComponents,
+    registrationNumbers: settings
+      ? {
+          gst: settings.gst_number,
+          qst: settings.qst_number,
+          pst: settings.pst_number,
+        }
+      : undefined,
+  });
+  if (
+    computed.totalCents < MIN_TOTAL_CENTS ||
+    computed.totalCents > MAX_TOTAL_CENTS
+  ) {
+    return { ok: false, error: "amount" };
+  }
+
+  const ok = await updateGeneratedInvoiceFields(invoice.id, {
+    amount_cents: computed.totalCents,
+    description: lines[0].description,
+    line_items: computed.lineItems,
+    tax_breakdown: computed.taxLines,
+    subtotal_cents: computed.subtotalCents,
+    tax_total_cents: computed.taxTotalCents,
+    due_date: dueDate,
+    invoice_terms: input.terms?.trim() || null,
+    invoice_notes: input.notes?.trim() || null,
+  });
+  if (!ok) return { ok: false, error: "save_failed" };
+
+  // Same in-flight protection as the flat edit: a checkout opened before this
+  // edit would charge the old total — expire it.
+  if (invoice.stripe_checkout_session_id) {
+    await expireOpenStripeCheckout(firm.id, invoice.stripe_checkout_session_id);
+  }
+
+  await logUserActivity(firm.id, input.engagementId, "invoice_edited", {
+    payment_request_id: invoice.id,
+    amount_cents: computed.totalCents,
+    invoice_kind: "generated",
+    invoice_number: invoice.invoice_number ?? null,
   });
   revalidatePath(`/engagements/${input.engagementId}`);
   return { ok: true };

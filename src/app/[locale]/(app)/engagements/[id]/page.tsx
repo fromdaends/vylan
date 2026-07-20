@@ -80,6 +80,7 @@ import {
   getLastFirmPaymentAmountCents,
 } from "@/lib/db/payment-requests";
 import { resolveDefaultAmountCents } from "@/lib/payments/prefill";
+import { getFirmInvoiceSettings } from "@/lib/db/invoice-settings";
 import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
 import { reconcilePayPalOrder } from "@/lib/payments/paypal-reconcile";
 import { firmPaymentRails } from "@/lib/payments/rails";
@@ -231,6 +232,34 @@ export default async function EngagementDetailPage({
   );
   const paymentPrefill =
     paymentPrefillCents != null ? (paymentPrefillCents / 100).toFixed(2) : "";
+  // Invoice-builder inputs (migration 0750): the firm's invoice settings (null
+  // = invoicing not set up: builder still works, no taxes / numbering) and the
+  // Default-prices presets as one-tap line items.
+  const invoiceSettings = await getFirmInvoiceSettings();
+  const tSettings = await getTranslations("Settings");
+  const presetDefs = [
+    { key: "t1", label: tSettings("service_price_t1") },
+    { key: "t2", label: tSettings("service_price_t2") },
+    { key: "bookkeeping", label: tSettings("service_price_bookkeeping") },
+  ];
+  const invoiceBuilder = {
+    settings: invoiceSettings
+      ? {
+          province: invoiceSettings.province,
+          invoicePrefix: invoiceSettings.invoice_prefix,
+          nextInvoiceSeq: invoiceSettings.next_invoice_seq,
+          defaultTerms: invoiceSettings.default_terms,
+          defaultNotes: invoiceSettings.default_notes,
+          defaultTaxesEnabled: invoiceSettings.default_taxes_enabled,
+        }
+      : null,
+    presets: presetDefs.flatMap(({ key, label }) => {
+      const cents = firm?.service_prices?.[key];
+      return typeof cents === "number" && cents > 0
+        ? [{ key, label, unitCents: Math.round(cents) }]
+        : [];
+    }),
+  };
   // Whether the Final documents are locked, for the compact lock icon on the
   // header pill (same rule the portal + download route use).
   const deliverablesLocked = computeDeliverablesLocked({
@@ -771,6 +800,16 @@ export default async function EngagementDetailPage({
                       description: latestPayment.description,
                       locks_deliverables: latestPayment.locks_deliverables,
                       override_unlocked: latestPayment.override_unlocked,
+                      // Native-invoice fields (0750) for the builder's edit
+                      // mode; null/undefined on legacy simple rows.
+                      invoice_kind: latestPayment.invoice_kind ?? null,
+                      invoice_number: latestPayment.invoice_number ?? null,
+                      line_items: latestPayment.line_items ?? null,
+                      tax_breakdown: latestPayment.tax_breakdown ?? null,
+                      tax_total_cents: latestPayment.tax_total_cents ?? null,
+                      due_date: latestPayment.due_date ?? null,
+                      invoice_terms: latestPayment.invoice_terms ?? null,
+                      invoice_notes: latestPayment.invoice_notes ?? null,
                     }
                   : null
               }
@@ -778,6 +817,7 @@ export default async function EngagementDetailPage({
                 engagement.invoice_locks_deliverables === true
               }
               invoiceDefaultAmount={paymentPrefill}
+              invoiceBuilder={invoiceBuilder}
               invoiceAutomation={{
                 mode: engagement.invoice_auto_mode ?? "off",
                 delayDays: engagement.invoice_delay_days ?? null,

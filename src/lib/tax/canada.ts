@@ -59,6 +59,21 @@ export type RegistrationKind = "gst" | "qst" | "pst";
 
 export type TaxComponentId = "GST" | "HST" | "QST" | "PST" | "RST";
 
+export const TAX_COMPONENT_IDS: readonly TaxComponentId[] = [
+  "GST",
+  "HST",
+  "QST",
+  "PST",
+  "RST",
+];
+
+export function isTaxComponentId(v: unknown): v is TaxComponentId {
+  return (
+    typeof v === "string" &&
+    (TAX_COMPONENT_IDS as readonly string[]).includes(v)
+  );
+}
+
 export type TaxComponent = {
   id: TaxComponentId;
   // Thousandths of a percent: 5% = 5000, 9.975% = 9975, 13% = 13000.

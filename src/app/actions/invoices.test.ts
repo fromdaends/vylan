@@ -9,7 +9,10 @@ const getLatestPaymentRequestForEngagement = vi.fn();
 const setPaymentRequestOverrideUnlocked = vi.fn();
 const relockPaymentRequestDeliverables = vi.fn();
 const updatePaymentRequestAmountDescription = vi.fn();
+const updateGeneratedInvoiceFields = vi.fn();
 const cancelPaymentRequest = vi.fn();
+const getFirmInvoiceSettings = vi.fn();
+const expireOpenStripeCheckout = vi.fn();
 const logUserActivity = vi.fn();
 const revalidatePath = vi.fn();
 const cancelScheduledInvoice = vi.fn();
@@ -40,7 +43,16 @@ vi.mock("@/lib/db/payment-requests", () => ({
     cents: number,
     desc: string | null,
   ) => updatePaymentRequestAmountDescription(id, cents, desc),
+  updateGeneratedInvoiceFields: (id: string, fields: unknown) =>
+    updateGeneratedInvoiceFields(id, fields),
   cancelPaymentRequest: (id: string) => cancelPaymentRequest(id),
+}));
+vi.mock("@/lib/db/invoice-settings", () => ({
+  getFirmInvoiceSettings: () => getFirmInvoiceSettings(),
+}));
+vi.mock("@/lib/payments/close-other-rail", () => ({
+  expireOpenStripeCheckout: (firmId: string, sessionId: string) =>
+    expireOpenStripeCheckout(firmId, sessionId),
 }));
 vi.mock("@/lib/db/activity", () => ({
   logUserActivity: (...args: unknown[]) => logUserActivity(...args),
@@ -64,6 +76,7 @@ import {
   relockDeliverablesAction,
   waiveInvoiceAction,
   editInvoiceAction,
+  editGeneratedInvoiceAction,
   updateInvoiceAutomationAction,
 } from "./invoices";
 
@@ -97,6 +110,20 @@ beforeEach(() => {
   updateEngagementInvoiceAutomation.mockResolvedValue(true);
   cancelScheduledInvoice.mockResolvedValue(1);
   dispatchInvoiceOnCompletion.mockResolvedValue(undefined);
+  updateGeneratedInvoiceFields.mockResolvedValue(true);
+  getFirmInvoiceSettings.mockResolvedValue({
+    firm_id: FIRM_ID,
+    province: "QC",
+    gst_number: "123456789 RT0001",
+    qst_number: "111 TQ0001",
+    pst_number: null,
+    invoice_prefix: "INV-",
+    next_invoice_seq: 5,
+    default_terms: null,
+    default_notes: null,
+    default_taxes_enabled: true,
+  });
+  expireOpenStripeCheckout.mockResolvedValue(undefined);
 });
 
 describe("unlockDeliverablesAction", () => {
@@ -247,6 +274,140 @@ describe("editInvoiceAction", () => {
       amountCents: 25000,
     });
     expect(res).toEqual({ ok: false, error: "no_invoice" });
+  });
+
+  it("refuses a GENERATED invoice (its amount derives from line items)", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue({
+      id: "pr1",
+      status: "requested",
+      invoice_kind: "generated",
+    });
+    const res = await editInvoiceAction({
+      engagementId: ENG_ID,
+      amountCents: 25000,
+    });
+    expect(res).toEqual({ ok: false, error: "no_invoice" });
+    expect(updatePaymentRequestAmountDescription).not.toHaveBeenCalled();
+  });
+
+  it("expires an open Stripe checkout so the in-flight session can't charge the old amount", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue({
+      id: "pr1",
+      status: "requested",
+      stripe_checkout_session_id: "cs_old",
+    });
+    const res = await editInvoiceAction({
+      engagementId: ENG_ID,
+      amountCents: 25000,
+    });
+    expect(res).toEqual({ ok: true });
+    expect(expireOpenStripeCheckout).toHaveBeenCalledWith(FIRM_ID, "cs_old");
+  });
+});
+
+describe("editGeneratedInvoiceAction", () => {
+  const LINES = [
+    { description: "T1", quantity: 1, unit_cents: 20000 },
+    { description: "Hours", quantity: 2, unit_cents: 5000 },
+  ];
+
+  beforeEach(() => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue({
+      id: "pr1",
+      status: "requested",
+      invoice_kind: "generated",
+      invoice_number: "INV-0004",
+      stripe_checkout_session_id: null,
+    });
+  });
+
+  it("recomputes totals server-side and stores the frozen breakdown", async () => {
+    const res = await editGeneratedInvoiceAction({
+      engagementId: ENG_ID,
+      lineItems: LINES,
+      taxesEnabled: true,
+      enabledComponents: null,
+      dueDate: "2026-08-15",
+      terms: "Net 15",
+      notes: null,
+    });
+    expect(res).toEqual({ ok: true });
+    // $300 subtotal → GST 15.00 + QST 29.93 → $344.93 charged.
+    expect(updateGeneratedInvoiceFields).toHaveBeenCalledWith(
+      "pr1",
+      expect.objectContaining({
+        amount_cents: 34493,
+        subtotal_cents: 30000,
+        tax_total_cents: 4493,
+        due_date: "2026-08-15",
+        invoice_terms: "Net 15",
+      }),
+    );
+  });
+
+  it("refuses a paid invoice (edit-lock after payment)", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue({
+      id: "pr1",
+      status: "paid",
+      invoice_kind: "generated",
+    });
+    const res = await editGeneratedInvoiceAction({
+      engagementId: ENG_ID,
+      lineItems: LINES,
+      taxesEnabled: true,
+      enabledComponents: null,
+    });
+    expect(res).toEqual({ ok: false, error: "no_invoice" });
+    expect(updateGeneratedInvoiceFields).not.toHaveBeenCalled();
+  });
+
+  it("refuses a non-generated invoice", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue({
+      id: "pr1",
+      status: "requested",
+      invoice_kind: null,
+    });
+    const res = await editGeneratedInvoiceAction({
+      engagementId: ENG_ID,
+      lineItems: LINES,
+      taxesEnabled: true,
+      enabledComponents: null,
+    });
+    expect(res).toEqual({ ok: false, error: "no_invoice" });
+  });
+
+  it("rejects malformed lines and unknown tax components", async () => {
+    const bad = await editGeneratedInvoiceAction({
+      engagementId: ENG_ID,
+      lineItems: [{ description: "", quantity: 1, unit_cents: 100 }],
+      taxesEnabled: true,
+      enabledComponents: null,
+    });
+    expect(bad).toEqual({ ok: false, error: "invalid_lines" });
+    const badComponents = await editGeneratedInvoiceAction({
+      engagementId: ENG_ID,
+      lineItems: LINES,
+      taxesEnabled: true,
+      enabledComponents: ["VAT"],
+    });
+    expect(badComponents).toEqual({ ok: false, error: "invalid" });
+  });
+
+  it("expires an open Stripe checkout after a successful edit", async () => {
+    getLatestPaymentRequestForEngagement.mockResolvedValue({
+      id: "pr1",
+      status: "requested",
+      invoice_kind: "generated",
+      stripe_checkout_session_id: "cs_live",
+    });
+    const res = await editGeneratedInvoiceAction({
+      engagementId: ENG_ID,
+      lineItems: LINES,
+      taxesEnabled: false,
+      enabledComponents: null,
+    });
+    expect(res).toEqual({ ok: true });
+    expect(expireOpenStripeCheckout).toHaveBeenCalledWith(FIRM_ID, "cs_live");
   });
 });
 

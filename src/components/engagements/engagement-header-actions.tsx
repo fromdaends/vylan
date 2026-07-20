@@ -20,6 +20,7 @@ import {
   type EngagementInvoiceAutomation,
   type InvoiceForOptions,
 } from "./invoice-options-dialog";
+import type { InvoiceBuilderConfig } from "./invoice-builder";
 import { ReminderAutomationDialog } from "./reminder-automation-dialog";
 import type { ReminderSettings } from "@/lib/reminder-settings";
 import {
@@ -59,6 +60,7 @@ export function EngagementMoreMenu({
   engagementLocksDeliverables,
   invoiceDefaultAmount,
   invoiceAutomation,
+  invoiceBuilder,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -78,6 +80,8 @@ export function EngagementMoreMenu({
   engagementLocksDeliverables?: boolean;
   invoiceDefaultAmount?: string;
   invoiceAutomation: EngagementInvoiceAutomation;
+  // Firm invoice settings + Default-prices presets for the Generate builder.
+  invoiceBuilder: InvoiceBuilderConfig;
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -139,6 +143,7 @@ export function EngagementMoreMenu({
               locale={locale}
               engagementStatus={status}
               automation={invoiceAutomation}
+              builder={invoiceBuilder}
               trigger={
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                   <Receipt />
