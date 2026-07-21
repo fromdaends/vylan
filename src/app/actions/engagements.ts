@@ -55,6 +55,7 @@ import {
   normalizeReminderSettings,
   type ReminderSettings,
 } from "@/lib/reminder-settings";
+import { applyRepeatChoice } from "@/lib/recurring/enable";
 
 export type CreateEngagementState = {
   ok?: boolean;
@@ -140,6 +141,12 @@ const CreateSchema = z.object({
   reminder_settings: ReminderSettingsSchema.optional().transform((value) =>
     normalizeReminderSettings(value),
   ),
+  // Recurring series (migration 0770). Optional + defaults 'off'.
+  repeat_frequency: z
+    .enum(["off", "monthly", "quarterly", "yearly"])
+    .optional()
+    .default("off"),
+  repeat_due_offset_days: z.number().int().min(1).max(365).nullable().optional(),
   items: z.array(ItemSchema).min(0),
 })
   // Any invoice (created now OR automated) needs an amount to bill.
@@ -193,6 +200,8 @@ export async function createEngagementAction(
     invoice_locks_deliverables?: boolean;
     invoice_description?: string | null;
     reminder_settings?: ReminderSettings;
+    repeat_frequency?: "off" | "monthly" | "quarterly" | "yearly";
+    repeat_due_offset_days?: number | null;
     items: TemplateItem[];
     send: boolean;
     locale: "fr" | "en";
@@ -212,6 +221,8 @@ export async function createEngagementAction(
     invoice_locks_deliverables: payload.invoice_locks_deliverables,
     invoice_description: payload.invoice_description,
     reminder_settings: payload.reminder_settings,
+    repeat_frequency: payload.repeat_frequency,
+    repeat_due_offset_days: payload.repeat_due_offset_days,
     items: payload.items,
   });
   if (!parsed.success) {
@@ -356,6 +367,42 @@ export async function createEngagementAction(
         await removeStoredInvoiceAttachment(storedInvoiceAttachment);
       }
       console.error("[createEngagement] create-now invoice failed:", e);
+    }
+  }
+
+  // Repeat (migration 0770): register the series when the accountant chose a
+  // frequency. Best-effort — the engagement already exists, so a failed series
+  // create must never fail creation; the state stays visible (the engagement
+  // page's Repeat dialog shows "does not repeat") and re-enabling there is the
+  // recovery path.
+  if (parsed.data.repeat_frequency !== "off") {
+    try {
+      const [firmForRepeat, userForRepeat, created] = await Promise.all([
+        getCurrentFirm(),
+        getCurrentUser(),
+        getEngagement(engagementId),
+      ]);
+      if (firmForRepeat && created) {
+        await applyRepeatChoice({
+          engagement: created,
+          firmTimezone: firmForRepeat.timezone,
+          userId: userForRepeat?.id ?? null,
+          frequency: parsed.data.repeat_frequency,
+          dueOffsetDays: parsed.data.repeat_due_offset_days ?? 15,
+          // Same widening as the engagement items above; a series snapshots
+          // the checklist it was created with.
+          itemsSnapshot: parsed.data.items.map((i) => ({
+            label_fr: i.label_fr,
+            label_en: i.label_en,
+            description_fr: i.description_fr ?? null,
+            description_en: i.description_en ?? null,
+            doc_type: i.doc_type as DocType,
+            required: i.required,
+          })),
+        });
+      }
+    } catch (e) {
+      console.error("[createEngagement] enable repeat failed:", e);
     }
   }
 

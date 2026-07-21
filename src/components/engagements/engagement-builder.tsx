@@ -25,6 +25,7 @@ import {
   Receipt,
   BellRing,
   ChevronDown,
+  Repeat,
   Upload,
 } from "lucide-react";
 import { addDays } from "date-fns";
@@ -152,6 +153,13 @@ export function EngagementBuilder({
   // "AI Analyze" toggle — on by default. When off, no document the client
   // uploads to this engagement is sent to the AI (saves AI usage/cost).
   const [aiEnabled, setAiEnabled] = useState(true);
+  // Repeat (recurring series, migration 0770): off by default. When set, the
+  // engagement becomes a series that auto-creates the next occurrence each
+  // cycle, due repeatOffsetDays after it opens.
+  const [repeatFrequency, setRepeatFrequency] = useState<
+    "off" | "monthly" | "quarterly" | "yearly"
+  >("off");
+  const [repeatOffsetDays, setRepeatOffsetDays] = useState<string>("15");
   const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(
     () =>
       structuredClone(reminderDefaultSettings ?? DEFAULT_REMINDER_SETTINGS),
@@ -403,6 +411,14 @@ export function EngagementBuilder({
               ? invoiceDescription.trim() || null
               : null,
             reminder_settings: reminderSettings,
+            repeat_frequency: repeatFrequency,
+            repeat_due_offset_days:
+              repeatFrequency !== "off"
+                ? Math.min(
+                    365,
+                    Math.max(1, Math.floor(Number(repeatOffsetDays) || 15)),
+                  )
+                : null,
             items: cleanItems,
             send,
             locale,
@@ -542,6 +558,65 @@ export function EngagementBuilder({
               onCheckedChange={setAiEnabled}
               ariaLabel={t("ai_analyze_label")}
             />
+          </div>
+
+          {/* Repeat (recurring series, migration 0770): monthly / quarterly /
+              yearly. Each cycle auto-creates the next occurrence — same
+              client, same checklist, fresh portal link — due N days after it
+              opens. */}
+          <div className="space-y-3 rounded-lg border border-border p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="repeat-frequency"
+                  className="flex items-center gap-1.5"
+                >
+                  <Repeat
+                    className="size-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                  {t("repeat_section_label")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t("repeat_section_hint")}
+                </p>
+              </div>
+              <Select
+                value={repeatFrequency}
+                onValueChange={(value) =>
+                  setRepeatFrequency(
+                    value as "off" | "monthly" | "quarterly" | "yearly",
+                  )
+                }
+              >
+                <SelectTrigger id="repeat-frequency" className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">{t("repeat_off")}</SelectItem>
+                  <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
+                  <SelectItem value="quarterly">
+                    {t("repeat_quarterly")}
+                  </SelectItem>
+                  <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {repeatFrequency !== "off" && (
+              <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <span>{t("repeat_due_offset_label")}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={repeatOffsetDays}
+                  onChange={(e) => setRepeatOffsetDays(e.target.value)}
+                  aria-label={t("repeat_due_offset_label")}
+                  className="h-8 w-20"
+                />
+                <span>{t("repeat_due_offset_suffix")}</span>
+              </div>
+            )}
           </div>
 
           <div className="space-y-3 rounded-lg border border-border p-3">
