@@ -70,6 +70,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { getRecurringSeries } from "@/lib/db/recurring";
+import { RecurringBadge } from "@/components/engagements/recurring-badge";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { EngagementContributors } from "@/components/engagements/engagement-contributors";
 import {
@@ -254,6 +255,9 @@ export default async function EngagementDetailPage({
         dueOffsetDays: repeatSeriesRow.due_offset_days,
         status: repeatSeriesRow.status,
         nextSpawnOn: repeatSeriesRow.next_spawn_on,
+        itemsCount: Array.isArray(repeatSeriesRow.items)
+          ? repeatSeriesRow.items.length
+          : 0,
       }
     : null;
   // Invoice-builder inputs (migration 0750): the firm's invoice settings (null
@@ -613,6 +617,9 @@ export default async function EngagementDetailPage({
               >
                 {tStatus(derivedStatus)}
               </Badge>
+            )}
+            {engagement.series_id && (
+              <RecurringBadge label={t("repeat_badge")} />
             )}
             {client && (
               <Link

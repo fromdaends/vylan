@@ -174,6 +174,14 @@ function describe(
       return t("manual_reminder");
     case "recurrence_spawned":
       return t("recurrence_spawned", { period: meta.period_key ?? "—" });
+    case "recurrence_paused":
+      return t("recurrence_paused");
+    case "recurrence_resumed":
+      return t("recurrence_resumed");
+    case "recurrence_ended":
+      return t("recurrence_ended");
+    case "recurrence_updated":
+      return t("recurrence_updated");
     case "reminder_fired":
       return t("reminder_fired", { tone: toneLabel(meta.tone, t) });
     case "reminders_paused":
