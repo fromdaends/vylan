@@ -113,3 +113,53 @@ export function dueDateFor(spawn: LocalDate, offsetDays: number): string {
   dt.setUTCDate(dt.getUTCDate() + offsetDays);
   return dt.toISOString().slice(0, 10);
 }
+
+// Calendar comparison: -1 (a before b), 0 (same day), 1 (a after b).
+export function compareLocalDates(a: LocalDate, b: LocalDate): number {
+  if (a.year !== b.year) return a.year < b.year ? -1 : 1;
+  if (a.month !== b.month) return a.month < b.month ? -1 : 1;
+  if (a.day !== b.day) return a.day < b.day ? -1 : 1;
+  return 0;
+}
+
+export type DueSpawn = {
+  // The scheduled date of the period being spawned — the LATEST scheduled
+  // date that is <= today. Period key and due date both derive from it, so
+  // an occurrence always belongs to its calendar period even if the cron ran
+  // a few hours (or days) late.
+  spawnDate: LocalDate;
+  periodKey: string;
+  // The first STRICTLY-FUTURE scheduled date — what the series' next_spawn_on
+  // becomes after this spawn.
+  nextSpawnOn: LocalDate;
+};
+
+// The spawner's one decision, pure and heavily tested: given a series'
+// schedule and the firm-local today, what (if anything) should spawn?
+//
+//   * Not due yet -> null.
+//   * Due -> exactly ONE spawn: the latest scheduled period <= today.
+//     Periods missed during downtime or a pause are SKIPPED, never
+//     backfilled — a week of downtime produces one occurrence per series,
+//     not seven. next_spawn_on always lands strictly in the future, so a
+//     series can never spawn twice in one day even across repeated runs
+//     (and the occurrence ledger backstops that at the database).
+export function resolveDueSpawn(opts: {
+  nextSpawnOn: LocalDate;
+  frequency: RecurringFrequency;
+  anchorDay: number;
+  today: LocalDate;
+}): DueSpawn | null {
+  if (compareLocalDates(opts.nextSpawnOn, opts.today) > 0) return null;
+  let spawn = opts.nextSpawnOn;
+  let next = nextSpawn(spawn, opts.frequency, opts.anchorDay);
+  while (compareLocalDates(next, opts.today) <= 0) {
+    spawn = next;
+    next = nextSpawn(spawn, opts.frequency, opts.anchorDay);
+  }
+  return {
+    spawnDate: spawn,
+    periodKey: periodKeyFor(opts.frequency, spawn),
+    nextSpawnOn: next,
+  };
+}

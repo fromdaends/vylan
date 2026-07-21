@@ -172,6 +172,8 @@ function describe(
       return t("remove_item");
     case "manual_reminder":
       return t("manual_reminder");
+    case "recurrence_spawned":
+      return t("recurrence_spawned", { period: meta.period_key ?? "—" });
     case "reminder_fired":
       return t("reminder_fired", { tone: toneLabel(meta.tone, t) });
     case "reminders_paused":

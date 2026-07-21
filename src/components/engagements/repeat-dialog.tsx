@@ -9,7 +9,8 @@
 import { useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Check } from "lucide-react";
+import { Link } from "@/i18n/navigation";
+import { ArrowRight, Check, Loader2, Zap } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -28,12 +29,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { setEngagementRepeatAction } from "@/app/actions/recurring";
+import {
+  setEngagementRepeatAction,
+  spawnSeriesNowAction,
+} from "@/app/actions/recurring";
 
 export type RepeatFrequencyChoice = "off" | "monthly" | "quarterly" | "yearly";
 
 // What the dialog needs to know about the engagement's series (null = none).
 export type EngagementRepeatInfo = {
+  id: string;
   frequency: "monthly" | "quarterly" | "yearly";
   dueOffsetDays: number;
   status: "active" | "paused" | "ended";
@@ -65,6 +70,36 @@ export function RepeatDialog({
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // The test hook ("spawn next occurrence now"). Its result renders inline:
+  // success links to the new engagement; "duplicate" is the anti-duplicate
+  // ledger visibly doing its job (second click of the same cycle no-ops).
+  const [spawnResult, setSpawnResult] = useState<
+    | { kind: "success"; engagementId: string; title: string }
+    | { kind: "duplicate" }
+    | { kind: "error" }
+    | null
+  >(null);
+  const [spawning, startSpawn] = useTransition();
+
+  function spawnNow() {
+    if (!series) return;
+    setSpawnResult(null);
+    startSpawn(async () => {
+      const result = await spawnSeriesNowAction({ seriesId: series.id });
+      if (result.ok) {
+        setSpawnResult({
+          kind: "success",
+          engagementId: result.engagementId,
+          title: result.title,
+        });
+        router.refresh();
+      } else {
+        setSpawnResult({
+          kind: result.error === "duplicate" ? "duplicate" : "error",
+        });
+      }
+    });
+  }
 
   const showNext =
     series != null &&
@@ -110,6 +145,7 @@ export function RepeatDialog({
         if (!next) {
           setSaved(false);
           setError(null);
+          setSpawnResult(null);
         }
       }}
     >
@@ -182,6 +218,62 @@ export function RepeatDialog({
           </Button>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
+
+        {/* The founder test hook — only for a live series. Runs the exact
+            cron spawn path (force mode), so what it creates is what the
+            schedule will create; a second click of the same cycle no-ops. */}
+        {series && series.status === "active" && (
+          <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+            <div className="space-y-0.5">
+              <p className="flex items-center gap-1.5 text-sm font-medium">
+                <Zap className="size-4 text-muted-foreground" aria-hidden />
+                {t("repeat_spawn_now_title")}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {t("repeat_spawn_now_hint")}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={spawnNow}
+              disabled={spawning}
+            >
+              {spawning ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Zap className="size-4" />
+              )}
+              {t("repeat_spawn_now_button")}
+            </Button>
+            {spawnResult?.kind === "success" && (
+              <p className="text-sm">
+                <Check className="mr-1 inline size-4 text-muted-foreground" />
+                {t("repeat_spawn_now_success", { title: spawnResult.title })}{" "}
+                <Link
+                  href={{
+                    pathname: `/engagements/${spawnResult.engagementId}`,
+                  }}
+                  className="inline-flex items-center gap-0.5 font-medium underline underline-offset-2"
+                >
+                  {t("repeat_spawn_now_open")}
+                  <ArrowRight className="size-3.5" aria-hidden />
+                </Link>
+              </p>
+            )}
+            {spawnResult?.kind === "duplicate" && (
+              <p className="text-sm text-muted-foreground">
+                {t("repeat_spawn_now_duplicate")}
+              </p>
+            )}
+            {spawnResult?.kind === "error" && (
+              <p className="text-sm text-destructive">
+                {t("repeat_spawn_now_error")}
+              </p>
+            )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

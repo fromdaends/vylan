@@ -249,6 +249,7 @@ export default async function EngagementDetailPage({
     : null;
   const repeatSeries = repeatSeriesRow
     ? {
+        id: repeatSeriesRow.id,
         frequency: repeatSeriesRow.frequency,
         dueOffsetDays: repeatSeriesRow.due_offset_days,
         status: repeatSeriesRow.status,

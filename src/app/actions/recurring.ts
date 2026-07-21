@@ -13,6 +13,7 @@ import { listRequestItems } from "@/lib/db/request-items";
 import { endRecurringSeries, getRecurringSeries } from "@/lib/db/recurring";
 import { applyRepeatChoice } from "@/lib/recurring/enable";
 import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
+import { spawnSeriesNow } from "@/lib/recurring/spawn";
 
 // Same permissive uuid check as actions/engagements.ts (seed data isn't
 // strictly RFC 4122).
@@ -84,5 +85,54 @@ export async function setEngagementRepeatAction(input: {
   } catch (error) {
     console.error("[setEngagementRepeatAction] failed:", error);
     return { ok: false, error: "save_failed" };
+  }
+}
+
+export type SpawnNowResult =
+  | { ok: true; engagementId: string; title: string }
+  | { ok: false; error: "not_found" | "duplicate" | "spawn_failed" };
+
+// The founder test hook: force-spawn the series' next occurrence immediately.
+// AUTH here (RLS-scoped series read proves firm ownership); the actual spawn
+// runs in the service-role core — the SAME path the hourly cron uses, so this
+// button demonstrates real behavior, including the anti-duplicate ledger
+// (clicking twice targets the same period and the second click no-ops).
+// NOTE: this sends the REAL invite email to the client, like any spawn.
+export async function spawnSeriesNowAction(input: {
+  seriesId: string;
+}): Promise<SpawnNowResult> {
+  const parsedId = z
+    .string()
+    .regex(UUID_REGEX)
+    .safeParse(input.seriesId);
+  if (!parsedId.success) return { ok: false, error: "not_found" };
+
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "not_found" };
+  // RLS-scoped read: resolves only within the caller's firm.
+  const series = await getRecurringSeries(parsedId.data);
+  if (!series || series.firm_id !== firm.id || series.status !== "active") {
+    return { ok: false, error: "not_found" };
+  }
+
+  try {
+    const outcome = await spawnSeriesNow(series.id);
+    if (!outcome.ok) {
+      return {
+        ok: false,
+        error: outcome.reason === "duplicate" ? "duplicate" : "spawn_failed",
+      };
+    }
+    revalidatePath(`/engagements/${outcome.engagementId}`);
+    revalidatePath("/engagements");
+    revalidatePath("/dashboard");
+    return {
+      ok: true,
+      engagementId: outcome.engagementId,
+      title: outcome.title,
+    };
+  } catch (error) {
+    console.error("[spawnSeriesNowAction] failed:", error);
+    return { ok: false, error: "spawn_failed" };
   }
 }
