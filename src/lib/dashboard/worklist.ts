@@ -178,6 +178,8 @@ export const loadEngagementWorklist = cache(
         archivedAt: e.archived_at,
         deletedAt: e.deleted_at,
         paymentStatus: paymentByEng.get(e.id)?.status ?? null,
+        // Recurring series linkage (0770); undefined pre-migration → no chip.
+        seriesId: e.series_id ?? null,
         // Workflow stage (0690). Read straight off the row — it's kept fresh by
         // the event handlers (see lib/engagements/stage-sync), so no per-row
         // resolution work happens here. undefined pre-migration → the Status

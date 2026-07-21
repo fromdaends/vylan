@@ -10,10 +10,18 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { getEngagement } from "@/lib/db/engagements";
 import { listRequestItems } from "@/lib/db/request-items";
-import { endRecurringSeries, getRecurringSeries } from "@/lib/db/recurring";
+import { logUserActivity } from "@/lib/db/activity";
+import {
+  endRecurringSeries,
+  getRecurringSeries,
+  updateRecurringSeries,
+  type RecurringSeries,
+} from "@/lib/db/recurring";
 import { applyRepeatChoice } from "@/lib/recurring/enable";
 import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { spawnSeriesNow } from "@/lib/recurring/spawn";
+import { normalizeReminderSettings } from "@/lib/reminder-settings";
+import { localToday, nextSpawn, toIsoDate } from "@/lib/recurring/schedule";
 
 // Same permissive uuid check as actions/engagements.ts (seed data isn't
 // strictly RFC 4122).
@@ -134,5 +142,162 @@ export async function spawnSeriesNowAction(input: {
   } catch (error) {
     console.error("[spawnSeriesNowAction] failed:", error);
     return { ok: false, error: "spawn_failed" };
+  }
+}
+
+// ── Series management (Phase 3): pause / resume / end / edit-future ─────────
+
+export type SeriesControlResult =
+  | { ok: true }
+  | { ok: false; error: "not_found" | "no_documents" | "save_failed" };
+
+// Shared auth prologue: the caller must own BOTH the series and the engagement
+// whose page the dialog sits on (the activity log anchors to the engagement).
+async function authorizeSeriesControl(input: {
+  seriesId: string;
+  engagementId: string;
+}): Promise<
+  | { firmId: string; series: RecurringSeries; firmTimezone: string }
+  | null
+> {
+  const idOk =
+    UUID_REGEX.test(input.seriesId) && UUID_REGEX.test(input.engagementId);
+  if (!idOk) return null;
+  const [user, firm, series, engagement] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    getRecurringSeries(input.seriesId),
+    getEngagement(input.engagementId),
+  ]);
+  if (
+    !user ||
+    !firm ||
+    !series ||
+    series.firm_id !== firm.id ||
+    !engagement ||
+    engagement.firm_id !== firm.id
+  ) {
+    return null;
+  }
+  return { firmId: firm.id, series, firmTimezone: firm.timezone };
+}
+
+export async function pauseSeriesAction(input: {
+  seriesId: string;
+  engagementId: string;
+}): Promise<SeriesControlResult> {
+  const ctx = await authorizeSeriesControl(input);
+  if (!ctx || ctx.series.status !== "active") {
+    return { ok: false, error: "not_found" };
+  }
+  try {
+    await updateRecurringSeries(ctx.series.id, {
+      status: "paused",
+      paused_at: new Date().toISOString(),
+    });
+    await logUserActivity(ctx.firmId, input.engagementId, "recurrence_paused", {
+      series_id: ctx.series.id,
+    });
+    revalidatePath(`/engagements/${input.engagementId}`);
+    return { ok: true };
+  } catch (error) {
+    console.error("[pauseSeriesAction] failed:", error);
+    return { ok: false, error: "save_failed" };
+  }
+}
+
+export async function resumeSeriesAction(input: {
+  seriesId: string;
+  engagementId: string;
+}): Promise<SeriesControlResult> {
+  const ctx = await authorizeSeriesControl(input);
+  if (!ctx || ctx.series.status !== "paused") {
+    return { ok: false, error: "not_found" };
+  }
+  try {
+    // FORWARD-ONLY: the next occurrence is scheduled from today, on the
+    // series' anchor day. Cycles missed while paused are never backfilled.
+    const today = localToday(ctx.firmTimezone);
+    await updateRecurringSeries(ctx.series.id, {
+      status: "active",
+      paused_at: null,
+      next_spawn_on: toIsoDate(
+        nextSpawn(today, ctx.series.frequency, ctx.series.anchor_day),
+      ),
+    });
+    await logUserActivity(
+      ctx.firmId,
+      input.engagementId,
+      "recurrence_resumed",
+      { series_id: ctx.series.id },
+    );
+    revalidatePath(`/engagements/${input.engagementId}`);
+    return { ok: true };
+  } catch (error) {
+    console.error("[resumeSeriesAction] failed:", error);
+    return { ok: false, error: "save_failed" };
+  }
+}
+
+export async function endSeriesAction(input: {
+  seriesId: string;
+  engagementId: string;
+}): Promise<SeriesControlResult> {
+  const ctx = await authorizeSeriesControl(input);
+  if (!ctx || ctx.series.status === "ended") {
+    return { ok: false, error: "not_found" };
+  }
+  try {
+    // Status change only: every existing engagement (and the ledger) stays
+    // exactly as it is — ending stops FUTURE spawns, touches nothing else.
+    await endRecurringSeries(ctx.series.id);
+    await logUserActivity(ctx.firmId, input.engagementId, "recurrence_ended", {
+      series_id: ctx.series.id,
+    });
+    revalidatePath(`/engagements/${input.engagementId}`);
+    return { ok: true };
+  } catch (error) {
+    console.error("[endSeriesAction] failed:", error);
+    return { ok: false, error: "save_failed" };
+  }
+}
+
+// Edit-future: re-snapshot THIS engagement's current checklist + reminder
+// settings + AI toggle onto the series, so every FUTURE occurrence copies the
+// updated set. Structurally incapable of touching existing engagements — the
+// series row is the only thing written.
+export async function refreshSeriesSnapshotAction(input: {
+  seriesId: string;
+  engagementId: string;
+}): Promise<SeriesControlResult> {
+  const ctx = await authorizeSeriesControl(input);
+  if (!ctx || ctx.series.status === "ended") {
+    return { ok: false, error: "not_found" };
+  }
+  try {
+    const engagement = await getEngagement(input.engagementId);
+    if (!engagement) return { ok: false, error: "not_found" };
+    const items = snapshotFromRequestItems(
+      await listRequestItems(input.engagementId),
+    );
+    if (items.length === 0) return { ok: false, error: "no_documents" };
+    await updateRecurringSeries(ctx.series.id, {
+      items,
+      ai_enabled: engagement.ai_enabled !== false,
+      reminder_settings: normalizeReminderSettings(
+        engagement.reminder_settings,
+      ),
+    });
+    await logUserActivity(
+      ctx.firmId,
+      input.engagementId,
+      "recurrence_updated",
+      { series_id: ctx.series.id, items_count: items.length },
+    );
+    revalidatePath(`/engagements/${input.engagementId}`);
+    return { ok: true };
+  } catch (error) {
+    console.error("[refreshSeriesSnapshotAction] failed:", error);
+    return { ok: false, error: "save_failed" };
   }
 }

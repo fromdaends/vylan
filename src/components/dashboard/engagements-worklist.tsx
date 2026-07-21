@@ -63,6 +63,7 @@ import {
 import type { EngagementStage } from "@/lib/engagements/stage";
 import type { StageSortDir } from "@/lib/engagements/stage-filter";
 import { StageChip } from "@/components/engagements/stage-chip";
+import { RecurringBadge } from "@/components/engagements/recurring-badge";
 
 export type EngagementStatus =
   | "draft"
@@ -119,6 +120,9 @@ export type WorklistRow = {
   // was ever requested (payment is optional). Drives the Paid / Unpaid / Failed
   // chip. Optional so callers that don't load payments stay valid.
   paymentStatus?: PaymentRequestStatus | null;
+  // Recurring series linkage (migration 0770): non-null when this engagement
+  // belongs to a series — renders the compact "Recurring" chip by the title.
+  seriesId?: string | null;
   // Workflow stage (migration 0690) — WHERE this engagement is in the firm's
   // process. Replaces the generic derivedStatus pill in the Status column for
   // live engagements. null/undefined when the engagement has no workflow
@@ -594,12 +598,17 @@ function WorklistRowView({
             }}
           >
             <TableCell className="px-4 py-3 align-top">
-              <Link
-                href={`/engagements/${row.id}`}
-                className="font-medium text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
-              >
-                {row.title}
-              </Link>
+              <div className="flex items-center gap-1.5">
+                <Link
+                  href={`/engagements/${row.id}`}
+                  className="font-medium text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
+                >
+                  {row.title}
+                </Link>
+                {row.seriesId && (
+                  <RecurringBadge label={tEng("repeat_badge")} compact />
+                )}
+              </div>
               <div className="mt-0.5 truncate text-xs text-muted-foreground">
                 {row.clientName}
               </div>

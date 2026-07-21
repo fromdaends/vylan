@@ -21,6 +21,7 @@ import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PaymentBadge } from "@/components/payments/payment-badge";
+import { RecurringBadge } from "@/components/engagements/recurring-badge";
 import { PaymentsList } from "@/components/payments/payments-list";
 import { ClientFormDialog } from "@/components/clients/client-form-dialog";
 import {
@@ -270,7 +271,15 @@ export default async function ClientDetailPage({
                     className="flex items-center justify-between gap-3 hover:text-foreground"
                   >
                     <div className="min-w-0">
-                      <div className="font-medium truncate">{e.title}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-medium truncate">{e.title}</span>
+                        {e.series_id && (
+                          <RecurringBadge
+                            label={tEng("repeat_badge")}
+                            compact
+                          />
+                        )}
+                      </div>
                       <div className="text-xs text-muted-foreground mt-0.5">
                         {e.type.toUpperCase()}
                         {e.due_date && ` · ${formatDate(e.due_date, locale, "medium")}`}
