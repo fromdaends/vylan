@@ -83,7 +83,9 @@ export function SeriesSyncPrompt({
     // sits at the corner and sonner toasts pop just above it. This card
     // parks ABOVE that whole zone so a "Checklist item added" toast (the very
     // action that usually summons this prompt) can never cover it.
-    <div className="fixed bottom-28 right-4 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-card p-3 shadow-lg animate-in fade-in slide-in-from-bottom-2">
+    // Finish: soft-glass card — larger radius, translucent bg with backdrop
+    // blur, crisp elevated shadow. Tokens only, correct in both themes.
+    <div className="fixed bottom-28 right-4 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card/90 p-4 shadow-xl backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-300">
       {applied ? (
         <p className="flex items-center gap-2 text-sm">
           <Check className="size-4 shrink-0 text-muted-foreground" aria-hidden />
