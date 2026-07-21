@@ -23,7 +23,15 @@ export type ClientXeroStatus = {
   needsReconnect: boolean;
   tenantName: string | null;
   isDemo: boolean;
-  callbackStatus: "done" | "denied" | "error" | "setup" | "inuse" | null;
+  callbackStatus:
+    | "done"
+    | "denied"
+    | "error"
+    | "setup"
+    | "inuse"
+    | "other"
+    | "enc"
+    | null;
 };
 
 export function ClientXeroCard({
@@ -53,7 +61,11 @@ export function ClientXeroCard({
           ? t("xero_connect_setup")
           : status.callbackStatus === "inuse"
             ? t("xero_connect_inuse")
-            : null;
+            : status.callbackStatus === "other"
+              ? t("xero_other_provider")
+              : status.callbackStatus === "enc"
+                ? t("xero_encryption_required")
+                : null;
 
   // Start OAuth for THIS client (first Connect and Reconnect both land here).
   async function startConnect() {
@@ -77,7 +89,9 @@ export function ClientXeroCard({
           ? t("xero_unavailable")
           : data?.error === "other_provider"
             ? t("xero_other_provider")
-            : t("xero_connect_error"),
+            : data?.error === "xero_encryption_required"
+              ? t("xero_encryption_required")
+              : t("xero_connect_error"),
       );
     } catch {
       setError(t("xero_connect_error"));

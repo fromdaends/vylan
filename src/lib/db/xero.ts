@@ -270,6 +270,34 @@ export async function updateClientXeroTokens(
     : { outcome: "raced" };
 }
 
+// Light service-role read of a client's CURRENT org link — tenant + Xero
+// connection id only, NO token decrypt (a row whose tokens can't decrypt is
+// exactly the one most likely being reconnected, and releasing its stale link
+// needs these refs). Null when no row / pre-0740.
+export async function getClientXeroLinkRefs(
+  firmId: string,
+  clientId: string,
+): Promise<{ tenantId: string; connectionId: string | null } | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("xero_connections")
+    .select("tenant_id, connection_id")
+    .eq("firm_id", firmId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingXeroSchema(error)) {
+      console.error("[xero] getClientXeroLinkRefs failed:", error);
+    }
+    return null;
+  }
+  if (!data) return null;
+  return {
+    tenantId: data.tenant_id as string,
+    connectionId: (data.connection_id as string | null) ?? null,
+  };
+}
+
 // Remove a client's connection (disconnect). Service-role delete; no-op safe.
 export async function clearClientXeroConnection(
   firmId: string,

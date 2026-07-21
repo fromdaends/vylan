@@ -21,6 +21,7 @@ import { purgeFirmQuickbooksCache } from "@/lib/db/quickbooks-cache";
 import { purgeFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import { enqueueQuickbooksSync } from "@/lib/quickbooks/sync";
 import { fetchQuickbooksCustomerCandidates } from "@/lib/quickbooks/import-clients";
+import { getClientXeroStatus } from "@/lib/db/xero";
 import { createClientImportSession } from "@/lib/db/client-import";
 import {
   QBO_STATE_COOKIE,
@@ -185,6 +186,12 @@ export async function GET(request: Request) {
   try {
     // Remember which company this client was connected to BEFORE the upsert, so we
     // can detect a company change (realm/environment) and purge the old data.
+    // ONE bookkeeping system per client — re-checked right before storing (the
+    // connect routes gate too, but two flows opened in parallel tabs would both
+    // pass those early gates; this closes the race).
+    const xeroNow = await getClientXeroStatus(clientId);
+    if (xeroNow?.connected) return back("other");
+
     const previous = await getFirmQuickbooksRealm(firm.id, clientId);
 
     const tokens = await exchangeCodeForTokens(code);

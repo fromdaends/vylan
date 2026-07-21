@@ -73,6 +73,18 @@ export class XeroError extends Error {
   }
 }
 
+import { isTokenEncryptionConfigured } from "@/lib/quickbooks/token-cipher";
+
+// Go-live safety lock, mirroring the QuickBooks one: on the PRODUCTION runtime,
+// never store Xero OAuth tokens while encryption at rest is unconfigured.
+// Xero has no sandbox/production key split (every org's tokens are real), so
+// the gate keys off the runtime environment instead of a provider env switch.
+export function xeroTokenKeyMissing(): boolean {
+  return (
+    process.env.NODE_ENV === "production" && !isTokenEncryptionConfigured()
+  );
+}
+
 // Both keys must be present for the integration to work; missing keys show a
 // calm "not set up yet" note instead of erroring (same as QuickBooks/Stripe).
 export function isXeroConfigured(): boolean {

@@ -124,8 +124,9 @@ export default async function ClientDetailPage({
     qboParam === "denied" ||
     qboParam === "error" ||
     qboParam === "setup" ||
-    qboParam === "enc"
-      ? (qboParam as "done" | "denied" | "error" | "setup" | "enc")
+    qboParam === "enc" ||
+    qboParam === "other"
+      ? (qboParam as "done" | "denied" | "error" | "setup" | "enc" | "other")
       : null;
   const clientQuickbooks = {
     configured: isQuickbooksConfigured(),
@@ -148,8 +149,17 @@ export default async function ClientDetailPage({
     xeroParam === "denied" ||
     xeroParam === "error" ||
     xeroParam === "setup" ||
-    xeroParam === "inuse"
-      ? (xeroParam as "done" | "denied" | "error" | "setup" | "inuse")
+    xeroParam === "inuse" ||
+    xeroParam === "other" ||
+    xeroParam === "enc"
+      ? (xeroParam as
+          | "done"
+          | "denied"
+          | "error"
+          | "setup"
+          | "inuse"
+          | "other"
+          | "enc")
       : null;
   const clientXero = {
     configured: isXeroConfigured(),
@@ -263,9 +273,10 @@ export default async function ClientDetailPage({
           <h2 className="text-base font-semibold tracking-tight text-foreground">
             {t("bk_section_title")}
           </h2>
-          {!clientXero.connected &&
-            (clientQuickbooks.connected ||
-              (isOwner && clientQuickbooks.configured)) && (
+          {(clientQuickbooks.connected ||
+            (isOwner &&
+              clientQuickbooks.configured &&
+              !clientXero.connected)) && (
               <ClientQuickbooksCard
                 clientId={client.id}
                 clientName={client.display_name}
@@ -273,8 +284,10 @@ export default async function ClientDetailPage({
                 isOwner={isOwner}
               />
             )}
-          {!clientQuickbooks.connected &&
-            (clientXero.connected || (isOwner && clientXero.configured)) && (
+          {(clientXero.connected ||
+            (isOwner &&
+              clientXero.configured &&
+              !clientQuickbooks.connected)) && (
               <ClientXeroCard
                 clientId={client.id}
                 clientName={client.display_name}

@@ -1427,7 +1427,8 @@
     "xero_disconnect_confirm_q": "Déconnecter le Xero de {client}?",
     "xero_disconnect_confirm_yes": "Oui, déconnecter",
     "xero_disconnect_cancel": "Annuler",
-    "xero_disconnect_error": "Impossible de déconnecter. Réessayez."
+    "xero_disconnect_error": "Impossible de déconnecter. Réessayez.",
+    "xero_encryption_required": "Xero n'est pas encore prêt pour les connexions réelles."
   },
   "Engagements": {
     "title": "Engagements",
