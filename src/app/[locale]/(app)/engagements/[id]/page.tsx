@@ -75,6 +75,9 @@ import {
   deriveInvoiceSnapshotFromEngagement,
   parseInvoiceSnapshot,
 } from "@/lib/recurring/invoice-snapshot";
+import { engagementMatchesSeries } from "@/lib/recurring/sync";
+import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
+import { SeriesSyncPrompt } from "@/components/engagements/series-sync-prompt";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { EngagementContributors } from "@/components/engagements/engagement-contributors";
 import {
@@ -269,21 +272,44 @@ export default async function EngagementDetailPage({
   // to copy (same precedence rule the actions use), and — when recurrence is
   // on — a one-line summary of the SERIES' stored snapshot (what will
   // actually spawn).
-  const repeatInvoiceAvailable =
-    deriveInvoiceSnapshotFromEngagement(
-      engagement,
-      latestPayment
-        ? {
-            status: latestPayment.status,
-            amount_cents: latestPayment.amount_cents,
-            locks_deliverables: latestPayment.locks_deliverables === true,
-            description: latestPayment.description,
-          }
-        : null,
-    ) != null;
+  const currentInvoiceSnap = deriveInvoiceSnapshotFromEngagement(
+    engagement,
+    latestPayment
+      ? {
+          status: latestPayment.status,
+          amount_cents: latestPayment.amount_cents,
+          locks_deliverables: latestPayment.locks_deliverables === true,
+          description: latestPayment.description,
+        }
+      : null,
+  );
+  const repeatInvoiceAvailable = currentInvoiceSnap != null;
   const storedInvoiceSnap = repeatSeriesRow
     ? parseInvoiceSnapshot(repeatSeriesRow.invoice_snapshot)
     : null;
+  // Has this engagement's setup drifted from what the series would spawn?
+  // Drives the "Apply to future occurrences?" prompt + the dialog's
+  // edit-future box (both appear only when there is something to apply).
+  const repeatSeriesOutOfSync =
+    repeatSeriesRow != null &&
+    repeatSeriesRow.status !== "ended" &&
+    !engagementMatchesSeries({
+      series: {
+        items: Array.isArray(repeatSeriesRow.items)
+          ? repeatSeriesRow.items
+          : [],
+        reminder_settings: repeatSeriesRow.reminder_settings,
+        ai_enabled: repeatSeriesRow.ai_enabled,
+        invoice_recreate: repeatSeriesRow.invoice_recreate === true,
+        invoiceSnapshot: storedInvoiceSnap,
+      },
+      engagement: {
+        itemsSnapshot: snapshotFromRequestItems(items),
+        reminder_settings: engagement.reminder_settings,
+        ai_enabled: engagement.ai_enabled !== false,
+        invoiceSnapshot: currentInvoiceSnap,
+      },
+    });
   // Invoice-builder inputs (migration 0750): the firm's invoice settings (null
   // = invoicing not set up: builder still works, no taxes / numbering) and the
   // Default-prices presets as one-tap line items.
@@ -636,6 +662,16 @@ export default async function EngagementDetailPage({
         ]}
       />
 
+      {/* Floating "Apply to future occurrences?" prompt — only when this
+          engagement's setup actually drifted from its series. Fixed
+          bottom-right; self-dismissing per tab session. */}
+      {repeatSeriesOutOfSync && repeatSeries && (
+        <SeriesSyncPrompt
+          seriesId={repeatSeries.id}
+          engagementId={engagement.id}
+        />
+      )}
+
       <header className="flex flex-wrap items-start justify-between gap-3 animate-in-up">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">
@@ -879,6 +915,7 @@ export default async function EngagementDetailPage({
               repeatSeries={repeatSeries}
               repeatInvoiceAvailable={repeatInvoiceAvailable}
               repeatInvoiceSummary={repeatInvoiceSummary}
+              repeatSeriesOutOfSync={repeatSeriesOutOfSync}
               status={isLive ? "live" : isComplete ? "complete" : "cancelled"}
               remindersPaused={engagement.reminders_paused}
               reminderSettings={normalizeReminderSettings(
