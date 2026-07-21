@@ -1749,6 +1749,8 @@
     "repeat_invoice_label": "Recreate the invoice each cycle",
     "repeat_invoice_hint": "Every new occurrence gets its own fresh invoice with the same amount and settings, including the payment lock. When it goes out follows the invoice timing (now, on completion, or delayed).",
     "repeat_invoice_none": "This engagement has no invoice to copy. Set one up in the Invoice options first.",
+    "repeat_invoice_off_hint": "No invoice is set for this engagement yet. Set one up below and each occurrence can bill automatically.",
+    "repeat_invoice_set_button": "Set up the invoice",
     "repeat_invoice_timing_at_spawn": "created as soon as the occurrence opens",
     "repeat_invoice_timing_on_completion": "sent when the occurrence is completed",
     "repeat_invoice_timing_delayed": "sent {days} days after completion",

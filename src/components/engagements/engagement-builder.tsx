@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -164,6 +164,8 @@ export function EngagementBuilder({
   // Invoice recurrence (Phase 4): recreate this engagement's invoice on every
   // occurrence. OFF by default — billing repeats only when explicitly chosen.
   const [repeatInvoiceRecreate, setRepeatInvoiceRecreate] = useState(false);
+  // Scroll target for the Repeat section's "Set up the invoice" shortcut.
+  const invoiceSectionRef = useRef<HTMLDivElement>(null);
   const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(
     () =>
       structuredClone(reminderDefaultSettings ?? DEFAULT_REMINDER_SETTINGS),
@@ -650,31 +652,59 @@ export function EngagementBuilder({
                 <span>{t("repeat_due_offset_suffix")}</span>
               </div>
             )}
-            {/* Invoice recurrence (Phase 4): only offered when BOTH repeat and
-                an invoice timing are chosen. The recurrence decides WHETHER
-                each occurrence bills; the invoice timing decides WHEN. */}
-            {repeatFrequency !== "off" && invoiceMode !== "off" && (
-              <div className="flex items-start justify-between gap-4 border-t border-border pt-3">
-                <div className="space-y-0.5">
-                  <Label
-                    htmlFor="repeat-invoice-recreate"
-                    className="cursor-pointer"
-                  >
-                    {t("repeat_invoice_label")}
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    {t("repeat_invoice_hint")}
-                  </p>
-                </div>
+          </div>
+
+          {/* Invoice recurrence (Phase 4) — its OWN box, like AI Analyze and
+              Reminders, so it reads as a distinct setting. Shown whenever
+              Repeat is on (and the firm can invoice at all): with an invoice
+              configured it's the switch; without one it's a "Set up the
+              invoice" shortcut down to the Invoice box, so accountants know
+              the setting exists. The recurrence decides WHETHER each
+              occurrence bills; the invoice timing decides WHEN. */}
+          {repeatFrequency !== "off" && connectReady && (
+            <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="repeat-invoice-recreate"
+                  className="flex cursor-pointer items-center gap-1.5"
+                >
+                  <Receipt
+                    className="size-4 text-muted-foreground"
+                    aria-hidden
+                  />
+                  {t("repeat_invoice_label")}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {invoiceMode !== "off"
+                    ? t("repeat_invoice_hint")
+                    : t("repeat_invoice_off_hint")}
+                </p>
+              </div>
+              {invoiceMode !== "off" ? (
                 <Switch
                   id="repeat-invoice-recreate"
                   checked={repeatInvoiceRecreate}
                   onCheckedChange={setRepeatInvoiceRecreate}
                   ariaLabel={t("repeat_invoice_label")}
                 />
-              </div>
-            )}
-          </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() =>
+                    invoiceSectionRef.current?.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                    })
+                  }
+                >
+                  {t("repeat_invoice_set_button")}
+                </Button>
+              )}
+            </div>
+          )}
 
           <div className="space-y-3 rounded-lg border border-border p-3">
             <div className="flex items-start justify-between gap-4">
@@ -907,9 +937,14 @@ export function EngagementBuilder({
           </div>
 
           {/* Invoice (migrations 0590 + 0610). Only offered when the firm can
-              actually receive a payment (Stripe Connect charges enabled). */}
+              actually receive a payment (Stripe Connect charges enabled).
+              The ref is the scroll target of the Repeat section's "Set up the
+              invoice" shortcut. */}
           {connectReady ? (
-            <div className="space-y-3 rounded-lg border border-border p-3">
+            <div
+              ref={invoiceSectionRef}
+              className="space-y-3 rounded-lg border border-border p-3"
+            >
               <div className="space-y-0.5">
                 <Label className="flex items-center gap-1.5">
                   <Receipt
