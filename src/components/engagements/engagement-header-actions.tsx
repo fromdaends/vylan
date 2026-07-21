@@ -10,6 +10,7 @@ import {
   Loader2,
   MoreHorizontal,
   Receipt,
+  Repeat,
   Trash2,
   Wallet,
 } from "lucide-react";
@@ -22,6 +23,10 @@ import {
 } from "./invoice-options-dialog";
 import type { InvoiceBuilderConfig } from "./invoice-builder";
 import { ReminderAutomationDialog } from "./reminder-automation-dialog";
+import {
+  RepeatDialog,
+  type EngagementRepeatInfo,
+} from "./repeat-dialog";
 import type { ReminderSettings } from "@/lib/reminder-settings";
 import {
   DropdownMenu,
@@ -61,6 +66,7 @@ export function EngagementMoreMenu({
   invoiceDefaultAmount,
   invoiceAutomation,
   invoiceBuilder,
+  repeatSeries,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -82,6 +88,9 @@ export function EngagementMoreMenu({
   invoiceAutomation: EngagementInvoiceAutomation;
   // Firm invoice settings + Default-prices presets for the Generate builder.
   invoiceBuilder: InvoiceBuilderConfig;
+  // Recurring series (migration 0770): the engagement's series, null when it
+  // isn't in one. Powers the Repeat menu entry + dialog.
+  repeatSeries?: EngagementRepeatInfo | null;
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -126,6 +135,19 @@ export function EngagementMoreMenu({
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                   <Bell />
                   {t("reminder_menu")}
+                </DropdownMenuItem>
+              }
+            />
+          )}
+          {status !== "cancelled" && (
+            <RepeatDialog
+              engagementId={engagementId}
+              locale={locale}
+              series={repeatSeries ?? null}
+              trigger={
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                  <Repeat />
+                  {t("repeat_menu")}
                 </DropdownMenuItem>
               }
             />

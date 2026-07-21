@@ -69,6 +69,7 @@ import {
 import { getServerSupabase } from "@/lib/supabase/server";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
+import { getRecurringSeries } from "@/lib/db/recurring";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { EngagementContributors } from "@/components/engagements/engagement-contributors";
 import {
@@ -240,6 +241,20 @@ export default async function EngagementDetailPage({
   );
   const paymentPrefill =
     paymentPrefillCents != null ? (paymentPrefillCents / 100).toFixed(2) : "";
+  // Recurring series (migration 0770): the engagement's series, when it's in
+  // one. Degrades to null pre-migration (getRecurringSeries soft-fails on
+  // missing schema), so the page renders with Repeat simply reading "off".
+  const repeatSeriesRow = engagement.series_id
+    ? await getRecurringSeries(engagement.series_id)
+    : null;
+  const repeatSeries = repeatSeriesRow
+    ? {
+        frequency: repeatSeriesRow.frequency,
+        dueOffsetDays: repeatSeriesRow.due_offset_days,
+        status: repeatSeriesRow.status,
+        nextSpawnOn: repeatSeriesRow.next_spawn_on,
+      }
+    : null;
   // Invoice-builder inputs (migration 0750): the firm's invoice settings (null
   // = invoicing not set up: builder still works, no taxes / numbering) and the
   // Default-prices presets as one-tap line items.
@@ -816,6 +831,7 @@ export default async function EngagementDetailPage({
             <EngagementMoreMenu
               engagementId={engagement.id}
               locale={locale}
+              repeatSeries={repeatSeries}
               status={isLive ? "live" : isComplete ? "complete" : "cancelled"}
               remindersPaused={engagement.reminders_paused}
               reminderSettings={normalizeReminderSettings(

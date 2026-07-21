@@ -68,6 +68,12 @@ export type Engagement = {
   // the data. Everything else the resolver derives from what the engagement
   // contains.
   preparation_started_at?: string | null;
+  // Recurring series linkage (migration 0770): which series spawned (or
+  // adopted) this engagement, and for which period ('2027-03' / '2027-Q1' /
+  // '2027'). Optional so reads survive the pre-migration window (column
+  // absent → undefined → treated as "not recurring" everywhere).
+  series_id?: string | null;
+  series_period?: string | null;
   created_at: string;
   // Lifecycle (migration 0139). archive = hidden from active views, reversible
   // anytime; soft-delete = 30-day recoverable window before the purge cron.
