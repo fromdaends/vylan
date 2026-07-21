@@ -8,6 +8,7 @@ import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
 import {
   isXeroConfigured,
   buildXeroAuthorizeUrl,
+  xeroTokenKeyMissing,
   XERO_IMPORT_SCOPES,
 } from "@/lib/xero/client";
 
@@ -48,6 +49,17 @@ export async function POST(request: Request) {
   }
   if (!isXeroConfigured()) {
     return NextResponse.json({ error: "xero_not_configured" }, { status: 503 });
+  }
+  // Never START a flow whose tokens couldn't be stored encrypted in production
+  // (the callback re-checks — defense in depth).
+  if (xeroTokenKeyMissing()) {
+    console.error(
+      "[xero/connect] refused: production runtime without QBO_TOKEN_ENC_KEY (tokens would be stored plaintext).",
+    );
+    return NextResponse.json(
+      { error: "xero_encryption_required" },
+      { status: 503 },
+    );
   }
 
   const body = (await request.json().catch(() => null)) as {

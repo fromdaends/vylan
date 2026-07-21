@@ -1427,7 +1427,8 @@
     "xero_disconnect_confirm_q": "Disconnect {client}'s Xero?",
     "xero_disconnect_confirm_yes": "Yes, disconnect",
     "xero_disconnect_cancel": "Cancel",
-    "xero_disconnect_error": "Couldn't disconnect. Try again."
+    "xero_disconnect_error": "Couldn't disconnect. Try again.",
+    "xero_encryption_required": "Xero isn't ready for live connections yet."
   },
   "Engagements": {
     "title": "Engagements",

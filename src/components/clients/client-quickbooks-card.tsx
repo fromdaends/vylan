@@ -22,7 +22,14 @@ export type ClientQuickbooksStatus = {
   needsReconnect: boolean;
   companyName: string | null;
   environment: "sandbox" | "production";
-  callbackStatus: "done" | "denied" | "error" | "setup" | "enc" | null;
+  callbackStatus:
+    | "done"
+    | "denied"
+    | "error"
+    | "setup"
+    | "enc"
+    | "other"
+    | null;
 };
 
 export function ClientQuickbooksCard({
@@ -52,7 +59,9 @@ export function ClientQuickbooksCard({
           ? t("qbo_connect_setup")
           : status.callbackStatus === "enc"
             ? t("qbo_encryption_required")
-            : null;
+            : status.callbackStatus === "other"
+              ? t("qbo_other_provider")
+              : null;
 
   // Start OAuth for THIS client (used by both the first Connect and Reconnect).
   // The client id goes to the connect route, which puts it in an httpOnly cookie;
