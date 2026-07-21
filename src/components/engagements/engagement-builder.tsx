@@ -27,6 +27,7 @@ import {
   ChevronDown,
   Repeat,
   Upload,
+  UserPlus,
 } from "lucide-react";
 import { addDays } from "date-fns";
 import {
@@ -462,12 +463,37 @@ export function EngagementBuilder({
           <CardTitle className="text-base">{t("section_client")}</CardTitle>
         </CardHeader>
         <CardContent>
-          {/* chooseClient re-filters the checklist for the new client's province */}
-          <ClientCombobox
-            clients={clients}
-            value={clientId}
-            onChange={chooseClient}
-          />
+          {clients.length === 0 ? (
+            /* A firm with no clients yet would otherwise see the combobox's
+               bare "No client found" — a confusing dead end. Guide them to add
+               a client first (clients are created from the Clients page). */
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-border/70 px-6 py-8 text-center">
+              <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <UserPlus className="size-5" aria-hidden />
+              </span>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  {t("no_clients_title")}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {t("no_clients_body")}
+                </p>
+              </div>
+              <Button asChild size="sm" className="mt-1">
+                <Link href="/clients">
+                  <UserPlus className="size-4" />
+                  {t("no_clients_cta")}
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            /* chooseClient re-filters the checklist for the new client's province */
+            <ClientCombobox
+              clients={clients}
+              value={clientId}
+              onChange={chooseClient}
+            />
+          )}
         </CardContent>
       </Card>
 
