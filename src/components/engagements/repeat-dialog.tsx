@@ -244,7 +244,10 @@ export function RepeatDialog({
       }}
     >
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      {/* max-w-lg + overflow-x-hidden: the dialog grew several sections in
+          Phase 3/4, and one unwrappable child (a long button label was the
+          culprit once) must clip-safe, never force a horizontal scrollbar. */}
+      <DialogContent className="max-h-[85vh] overflow-y-auto overflow-x-hidden sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{t("repeat_dialog_title")}</DialogTitle>
           <DialogDescription>{t("repeat_dialog_desc")}</DialogDescription>
@@ -462,6 +465,10 @@ export function RepeatDialog({
               type="button"
               variant="outline"
               size="sm"
+              // Buttons are whitespace-nowrap by default; this label is long
+              // (longer still in French) and MUST wrap instead of forcing the
+              // dialog wider than its frame.
+              className="h-auto whitespace-normal text-left"
               onClick={() =>
                 runControl(refreshSeriesSnapshotAction, () =>
                   setFutureApplied(true),
