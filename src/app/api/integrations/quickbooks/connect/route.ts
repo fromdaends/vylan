@@ -4,6 +4,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
 import { getClient } from "@/lib/db/clients";
+import { getClientXeroStatus } from "@/lib/db/xero";
 import {
   isQuickbooksConfigured,
   buildAuthorizeUrl,
@@ -84,6 +85,12 @@ export async function POST(request: Request) {
     const client = await getClient(body.clientId);
     if (!client) {
       return NextResponse.json({ error: "no_client" }, { status: 400 });
+    }
+    // ONE bookkeeping system per client: a client already connected to Xero
+    // can't also connect QuickBooks (the page hides the button; server gate).
+    const xero = await getClientXeroStatus(body.clientId);
+    if (xero?.connected) {
+      return NextResponse.json({ error: "other_provider" }, { status: 409 });
     }
     clientId = body.clientId;
   }

@@ -12,21 +12,35 @@ import {
   fetchXeroContactCandidates,
   disconnectXeroConnection,
   XeroError,
+  type XeroConnection,
 } from "@/lib/xero/client";
 import { createClientImportSession } from "@/lib/db/client-import";
-import { XERO_STATE_COOKIE, XERO_INTENT_COOKIE } from "../connect/route";
+import {
+  upsertClientXeroConnection,
+  findXeroTenantIdsInUse,
+} from "@/lib/db/xero";
+import {
+  XERO_STATE_COOKIE,
+  XERO_INTENT_COOKIE,
+  XERO_CLIENT_COOKIE,
+} from "../connect/route";
 
 export const runtime = "nodejs";
 
 // GET /api/integrations/xero/callback?code=...&state=...
 //
-// Where Xero returns the accountant. Phase 1 handles the CLIENT-LIST IMPORT
-// flow: verify the anti-forgery state, trade the code for tokens, find the org
-// that was just authorized (Xero does NOT put it in the callback URL — we list
-// /connections filtered by the consent's authentication_event_id), read its
-// contact list, stage the candidates, then RELEASE the connection (DELETE
-// /connections/{id}) so nothing persists provider-side and no free-tier
-// connection slot stays occupied. The per-client connect flow ships next.
+// Where Xero returns the accountant, for BOTH flows:
+//   * CLIENT-LIST IMPORT — read the just-authorized org's contacts, stage
+//     them, and RELEASE the org link (unless a stored connection uses that
+//     org — the app↔org link is one shared object at Xero, so releasing it
+//     would sever that client's connection).
+//   * PER-CLIENT CONNECT — store the connection for THE CLIENT the flow was
+//     started from (clientId rides in an httpOnly cookie, like QuickBooks).
+//     The org link is KEPT on success; on failure we deliberately leave it
+//     (releasing could sever a pre-existing link, and a retry reuses it).
+//
+// Xero does NOT put the org id in the callback URL — we list /connections
+// filtered by the consent's authentication_event_id (from the access-token JWT).
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -41,14 +55,24 @@ export async function GET(request: Request) {
   const cookieStore = await cookies();
   const expectedState = cookieStore.get(XERO_STATE_COOKIE)?.value ?? null;
   const isImport = cookieStore.get(XERO_INTENT_COOKIE)?.value === "import";
+  // Which client a per-client connect is for (absent on an import flow).
+  const clientId = cookieStore.get(XERO_CLIENT_COOKIE)?.value || null;
 
+  // Redirect home with a status flag, burning the one-time cookies. Import →
+  // the import page; connect → the client's page (where the card shows the
+  // outcome).
   function back(status: string, sessionId?: string) {
-    const dest = new URL(`/${locale}/clients/import`, url.origin);
-    if (sessionId) dest.searchParams.set("session", sessionId);
-    else dest.searchParams.set("bkimport", status);
+    const dest =
+      !isImport && clientId
+        ? new URL(`/${locale}/clients/${clientId}`, url.origin)
+        : new URL(`/${locale}/clients/import`, url.origin);
+    if (isImport && sessionId) dest.searchParams.set("session", sessionId);
+    else if (isImport) dest.searchParams.set("bkimport", status);
+    else dest.searchParams.set("xero", status);
     const res = NextResponse.redirect(dest);
     res.cookies.set(XERO_STATE_COOKIE, "", { path: "/", maxAge: 0 });
     res.cookies.set(XERO_INTENT_COOKIE, "", { path: "/", maxAge: 0 });
+    res.cookies.set(XERO_CLIENT_COOKIE, "", { path: "/", maxAge: 0 });
     return res;
   }
 
@@ -57,23 +81,77 @@ export async function GET(request: Request) {
   if (!expectedState || state !== expectedState) return back("error");
   if (!isXeroConfigured()) return back("error");
   if (!auth.user || me?.role !== "owner") return back("error");
-  // Only the import flow exists in Phase 1; anything else is unexpected.
-  if (!isImport) return back("error");
+  // Exactly one flow marker must be present.
+  if (!isImport && !clientId) return back("error");
   const firm = await getCurrentFirm();
   if (!firm) return back("error");
 
+  // ── PER-CLIENT CONNECT ─────────────────────────────────────────────────────
+  if (!isImport) {
+    try {
+      const tokens = await exchangeXeroCodeForTokens(code);
+      const authEventId = authEventIdFromAccessToken(tokens.accessToken);
+      const conns = await fetchXeroConnections(tokens.accessToken, authEventId);
+      // Without the consent id we can't tell a fresh link from pre-existing
+      // ones — proceed only when it's unambiguous.
+      if (!authEventId && conns.length > 1) {
+        console.error(
+          "[xero/callback] auth-event id missing with multiple orgs — cannot tell which org this consent authorized",
+        );
+        return back("error");
+      }
+      const conn = conns[0] ?? null;
+      if (!conn) return back("error");
+      if (conns.length > 1) {
+        console.warn(
+          `[xero/callback] ${conns.length} orgs in one consent; connecting the first (${conn.tenantName ?? conn.tenantId})`,
+        );
+      }
+      const org = await fetchXeroOrganisation(tokens.accessToken, conn.tenantId);
+      const saved = await upsertClientXeroConnection(firm.id, clientId!, {
+        tenantId: conn.tenantId,
+        connectionId: conn.connectionId || null,
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        accessTokenExpiresAt: tokens.accessTokenExpiresAt,
+        refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
+        tenantName: org.name ?? conn.tenantName,
+        countryCode: org.countryCode,
+        isDemo: org.isDemo,
+        connectedBy: auth.user.id,
+      });
+      if (!saved.ok) {
+        // tenant_in_use: this org is already another client's connection — do
+        // NOT release the link (it's theirs). The card explains.
+        return back(
+          saved.reason === "tenant_in_use"
+            ? "inuse"
+            : saved.reason === "migration_pending"
+              ? "setup"
+              : "error",
+        );
+      }
+      return back("done");
+    } catch (e) {
+      console.error(
+        "[xero/callback] per-client connect failed:",
+        e instanceof XeroError ? `${e.code} ${e.message}` : e,
+      );
+      // Deliberately NO link release on failure: the link may pre-date this
+      // consent (another client's), and a lingering fresh link is reused by
+      // the retry. Nothing was stored.
+      return back("error");
+    }
+  }
+
+  // ── CLIENT-LIST IMPORT ─────────────────────────────────────────────────────
   let accessToken: string | null = null;
   let authEventId: string | null = null;
-  // Every connection id this consent is known to have created — ALL are
-  // released in the finally, so no org link (and no free-tier slot) lingers.
-  let connectionIds: string[] = [];
+  // The connections this consent covered — candidates for release in finally.
+  let consentConns: XeroConnection[] = [];
   try {
     const tokens = await exchangeXeroCodeForTokens(code);
     accessToken = tokens.accessToken;
-    // Which org did this consent authorize? Filter /connections by the
-    // consent's auth event. Without the JWT claim we can't tell a fresh link
-    // from pre-existing ones — proceed only if there's exactly one (otherwise
-    // fail closed rather than import from, or disconnect, the wrong org).
     authEventId = authEventIdFromAccessToken(tokens.accessToken);
     const conns = await fetchXeroConnections(tokens.accessToken, authEventId);
     if (!authEventId && conns.length > 1) {
@@ -89,9 +167,7 @@ export async function GET(request: Request) {
         `[xero/callback] ${conns.length} orgs in one consent; importing from the first (${conn.tenantName ?? conn.tenantId})`,
       );
     }
-    connectionIds = (authEventId ? conns : [conn])
-      .map((c) => c.connectionId)
-      .filter((id): id is string => Boolean(id));
+    consentConns = authEventId ? conns : [conn];
     const org = await fetchXeroOrganisation(tokens.accessToken, conn.tenantId);
     const candidates = await fetchXeroContactCandidates(
       tokens.accessToken,
@@ -114,24 +190,32 @@ export async function GET(request: Request) {
     );
     return back("error");
   } finally {
-    // Always release the org link(s) — an import never keeps a connection (and
-    // a lingering link would occupy a free-tier connection slot). If the
-    // connections read itself was what failed, retry it here (filtered to this
-    // consent) so even a learned-nothing failure still releases. Best-effort:
-    // the finally must never throw.
+    // Release this consent's org link(s) — an import never keeps a connection
+    // — EXCEPT any org that is a STORED per-client connection: the app↔org
+    // link is one shared object at Xero, so releasing it would sever that
+    // client's live connection (the same hazard as the QuickBooks revoke
+    // guard). If the connections read itself was what failed, retry it here
+    // (filtered to this consent). Best-effort; never throws.
     try {
       if (accessToken) {
-        if (connectionIds.length === 0 && authEventId) {
-          const conns = await fetchXeroConnections(
+        if (consentConns.length === 0 && authEventId) {
+          consentConns = await fetchXeroConnections(
             accessToken,
             authEventId,
           ).catch(() => []);
-          connectionIds = conns
-            .map((c) => c.connectionId)
-            .filter((id): id is string => Boolean(id));
         }
-        for (const id of connectionIds) {
-          await disconnectXeroConnection(accessToken, id);
+        const inUse = await findXeroTenantIdsInUse(
+          consentConns.map((c) => c.tenantId),
+        );
+        for (const c of consentConns) {
+          if (!c.connectionId) continue;
+          if (inUse.has(c.tenantId)) {
+            console.warn(
+              `[xero/callback] keeping org link ${c.tenantName ?? c.tenantId} — it is a stored client connection`,
+            );
+            continue;
+          }
+          await disconnectXeroConnection(accessToken, c.connectionId);
         }
       }
     } catch (e) {

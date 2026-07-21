@@ -39,16 +39,20 @@ import {
   quickbooksEnvironment,
 } from "@/lib/quickbooks/client";
 import { ClientQuickbooksCard } from "@/components/clients/client-quickbooks-card";
+import { getClientXeroStatus } from "@/lib/db/xero";
+import { getXeroConnectionHealth } from "@/lib/xero/connection";
+import { isXeroConfigured } from "@/lib/xero/client";
+import { ClientXeroCard } from "@/components/clients/client-xero-card";
 
 export default async function ClientDetailPage({
   params,
   searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
-  searchParams: Promise<{ qbo?: string }>;
+  searchParams: Promise<{ qbo?: string; xero?: string }>;
 }) {
   const { locale: rawLocale, id } = await params;
-  const { qbo: qboParam } = await searchParams;
+  const { qbo: qboParam, xero: xeroParam } = await searchParams;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -130,6 +134,30 @@ export default async function ClientDetailPage({
     companyName: qboStatus?.companyName ?? null,
     environment: qboStatus?.environment ?? quickbooksEnvironment(),
     callbackStatus: qboCallbackStatus,
+  };
+  // Per-client Xero status — the sibling of the QuickBooks block above. Health
+  // only probes when connected (it doubles as the keep-alive for Xero's 60-day
+  // idle expiry).
+  const xeroStatus = await getClientXeroStatus(client.id);
+  const xeroHealth =
+    firm && xeroStatus?.connected
+      ? await getXeroConnectionHealth(firm.id, client.id)
+      : "ok";
+  const xeroCallbackStatus =
+    xeroParam === "done" ||
+    xeroParam === "denied" ||
+    xeroParam === "error" ||
+    xeroParam === "setup" ||
+    xeroParam === "inuse"
+      ? (xeroParam as "done" | "denied" | "error" | "setup" | "inuse")
+      : null;
+  const clientXero = {
+    configured: isXeroConfigured(),
+    connected: Boolean(xeroStatus?.connected),
+    needsReconnect: xeroHealth === "reconnect_required",
+    tenantName: xeroStatus?.tenantName ?? null,
+    isDemo: xeroStatus?.isDemo ?? false,
+    callbackStatus: xeroCallbackStatus,
   };
   const isOwner = me?.role === "owner";
 
@@ -222,22 +250,38 @@ export default async function ClientDetailPage({
         </dl>
       </div>
 
-      {/* QuickBooks lives on the client's own page: an OWNER can connect this
+      {/* Bookkeeping lives on the client's own page: an OWNER can connect this
           client here (the client is known from context — no name-matching), and
-          once connected everyone sees the status. Hidden for staff on a
-          not-yet-connected client, so it never clutters pages/firms not using it. */}
+          once connected everyone sees the status. ONE system per client: once
+          QuickBooks is connected the Xero card hides (and vice versa) — a
+          receipt can only belong in one set of books. Hidden entirely for
+          staff on a not-yet-connected client. */}
       {(clientQuickbooks.connected ||
-        (isOwner && clientQuickbooks.configured)) && (
+        clientXero.connected ||
+        (isOwner && (clientQuickbooks.configured || clientXero.configured))) && (
         <div className="space-y-3">
           <h2 className="text-base font-semibold tracking-tight text-foreground">
-            {t("qbo_section_title")}
+            {t("bk_section_title")}
           </h2>
-          <ClientQuickbooksCard
-            clientId={client.id}
-            clientName={client.display_name}
-            status={clientQuickbooks}
-            isOwner={isOwner}
-          />
+          {!clientXero.connected &&
+            (clientQuickbooks.connected ||
+              (isOwner && clientQuickbooks.configured)) && (
+              <ClientQuickbooksCard
+                clientId={client.id}
+                clientName={client.display_name}
+                status={clientQuickbooks}
+                isOwner={isOwner}
+              />
+            )}
+          {!clientQuickbooks.connected &&
+            (clientXero.connected || (isOwner && clientXero.configured)) && (
+              <ClientXeroCard
+                clientId={client.id}
+                clientName={client.display_name}
+                status={clientXero}
+                isOwner={isOwner}
+              />
+            )}
         </div>
       )}
 
