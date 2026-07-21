@@ -69,6 +69,7 @@ export function EngagementMoreMenu({
   repeatSeries,
   repeatInvoiceAvailable,
   repeatInvoiceSummary,
+  repeatSeriesOutOfSync,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -96,6 +97,9 @@ export function EngagementMoreMenu({
   // Invoice recurrence (Phase 4): switch gating + the stored-snapshot summary.
   repeatInvoiceAvailable?: boolean;
   repeatInvoiceSummary?: string | null;
+  // Whether this engagement's setup differs from its series (edit-future box
+  // gating).
+  repeatSeriesOutOfSync?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -151,6 +155,7 @@ export function EngagementMoreMenu({
               series={repeatSeries ?? null}
               invoiceAvailable={repeatInvoiceAvailable === true}
               invoiceSummary={repeatInvoiceSummary ?? null}
+              seriesOutOfSync={repeatSeriesOutOfSync === true}
               trigger={
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                   <Repeat />

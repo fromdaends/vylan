@@ -73,6 +73,7 @@ export function RepeatDialog({
   series,
   invoiceAvailable = false,
   invoiceSummary = null,
+  seriesOutOfSync = false,
   trigger,
 }: {
   engagementId: string;
@@ -84,6 +85,10 @@ export function RepeatDialog({
   // Server-built one-liner of what each occurrence's invoice will be
   // ("$450.00 · sent when the occurrence is completed").
   invoiceSummary?: string | null;
+  // Server-computed: does this engagement's current setup differ from what
+  // the series would spawn? The edit-future box only shows when true — when
+  // in sync there is nothing to apply and the box would just be noise.
+  seriesOutOfSync?: boolean;
   trigger: ReactNode;
 }) {
   const t = useTranslations("Engagements");
@@ -446,8 +451,10 @@ export function RepeatDialog({
 
         {/* Edit-future: re-snapshot this engagement's CURRENT checklist +
             reminder settings onto the series. Future occurrences only —
-            structurally incapable of touching existing engagements. */}
-        {series && series.status !== "ended" && (
+            structurally incapable of touching existing engagements. Rendered
+            ONLY when there is actually a difference to apply (founder spec);
+            futureApplied keeps it visible through the post-apply refresh. */}
+        {series && series.status !== "ended" && (seriesOutOfSync || futureApplied) && (
           <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
             <div className="space-y-0.5">
               <p className="flex items-center gap-1.5 text-sm font-medium">
