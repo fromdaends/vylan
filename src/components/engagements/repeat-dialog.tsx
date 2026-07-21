@@ -17,6 +17,7 @@ import {
   Loader2,
   Pause,
   Play,
+  Receipt,
   Square,
   Zap,
 } from "lucide-react";
@@ -44,8 +45,10 @@ import {
   refreshSeriesSnapshotAction,
   resumeSeriesAction,
   setEngagementRepeatAction,
+  setSeriesInvoiceRecreateAction,
   spawnSeriesNowAction,
 } from "@/app/actions/recurring";
+import { Switch } from "@/components/ui/switch";
 
 export type RepeatFrequencyChoice = "off" | "monthly" | "quarterly" | "yearly";
 
@@ -59,17 +62,28 @@ export type EngagementRepeatInfo = {
   // How many documents the series snapshot currently copies onto each new
   // occurrence — shown in the edit-future box.
   itemsCount: number;
+  // Invoice recurrence (Phase 4): whether each occurrence gets its own fresh
+  // invoice.
+  invoiceRecreate: boolean;
 };
 
 export function RepeatDialog({
   engagementId,
   locale,
   series,
+  invoiceAvailable = false,
+  invoiceSummary = null,
   trigger,
 }: {
   engagementId: string;
   locale: "fr" | "en";
   series: EngagementRepeatInfo | null;
+  // Whether THIS engagement currently has invoice material to copy (automation
+  // settings or a live invoice row) — gates the recreate switch.
+  invoiceAvailable?: boolean;
+  // Server-built one-liner of what each occurrence's invoice will be
+  // ("$450.00 · sent when the occurrence is completed").
+  invoiceSummary?: string | null;
   trigger: ReactNode;
 }) {
   const t = useTranslations("Engagements");
@@ -124,6 +138,34 @@ export function RepeatDialog({
   const [controlError, setControlError] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
   const [futureApplied, setFutureApplied] = useState(false);
+  // Invoice recurrence switch — optimistic, snaps back on failure.
+  const [invoiceRecreate, setInvoiceRecreate] = useState(
+    series?.invoiceRecreate ?? false,
+  );
+  const [invoiceError, setInvoiceError] = useState<string | null>(null);
+
+  function toggleInvoiceRecreate(enabled: boolean) {
+    if (!series) return;
+    setInvoiceError(null);
+    setInvoiceRecreate(enabled);
+    startControl(async () => {
+      const result = await setSeriesInvoiceRecreateAction({
+        seriesId: series.id,
+        engagementId,
+        enabled,
+      });
+      if (!result.ok) {
+        setInvoiceRecreate(!enabled);
+        setInvoiceError(
+          result.error === "no_invoice"
+            ? t("repeat_invoice_none")
+            : t("repeat_control_error"),
+        );
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   function runControl(
     action: (input: {
@@ -197,6 +239,7 @@ export function RepeatDialog({
           setControlError(false);
           setEndConfirm(false);
           setFutureApplied(false);
+          setInvoiceError(null);
         }
       }}
     >
@@ -356,6 +399,47 @@ export function RepeatDialog({
             </div>
           </div>
         )}
+
+        {/* Invoice recurrence (Phase 4): the switch shows when this
+            engagement has invoice material to copy OR recurrence is already
+            on (so it can always be turned off). The Automation tab still
+            decides WHEN each occurrence's invoice goes out; this decides
+            WHETHER each occurrence gets one. */}
+        {series &&
+          series.status !== "ended" &&
+          (invoiceAvailable || invoiceRecreate) && (
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="repeat-invoice-recreate"
+                    className="flex cursor-pointer items-center gap-1.5"
+                  >
+                    <Receipt
+                      className="size-4 text-muted-foreground"
+                      aria-hidden
+                    />
+                    {t("repeat_invoice_label")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("repeat_invoice_hint")}
+                  </p>
+                  {invoiceRecreate && invoiceSummary && (
+                    <p className="text-xs font-medium">{invoiceSummary}</p>
+                  )}
+                </div>
+                <Switch
+                  id="repeat-invoice-recreate"
+                  checked={invoiceRecreate}
+                  onCheckedChange={toggleInvoiceRecreate}
+                  ariaLabel={t("repeat_invoice_label")}
+                />
+              </div>
+              {invoiceError && (
+                <p className="text-sm text-destructive">{invoiceError}</p>
+              )}
+            </div>
+          )}
 
         {/* Edit-future: re-snapshot this engagement's CURRENT checklist +
             reminder settings onto the series. Future occurrences only —

@@ -37,6 +37,8 @@ import {
   type LocalDate,
 } from "./schedule";
 import { occurrenceTitle } from "./naming";
+import { parseInvoiceSnapshot } from "./invoice-snapshot";
+import { sendEngagementInvoice } from "@/lib/invoices/send";
 
 // How many due series one cron run will process. Hourly cadence means a
 // backlog larger than this simply drains over the next runs.
@@ -271,6 +273,29 @@ async function spawnOccurrence(
   const magicExpires = new Date();
   magicExpires.setDate(magicExpires.getDate() + 90);
 
+  // Invoice recurrence (Phase 4). The snapshot's settings are stamped onto
+  // the occurrence's own invoice columns, so from here on it behaves exactly
+  // like a hand-made engagement with those settings:
+  //   * on_completion / delayed -> the EXISTING completion dispatcher fires
+  //     its invoice when this occurrence completes (Automation tab shows it).
+  //   * at_spawn -> amount/lock/description land on the row, and right after
+  //     the spawn we invoice it via the same automation sender (atSpawn mode).
+  const invoiceSnap =
+    series.invoice_recreate === true
+      ? parseInvoiceSnapshot(series.invoice_snapshot)
+      : null;
+  const invoiceCols = invoiceSnap
+    ? {
+        invoice_auto_mode:
+          invoiceSnap.timing === "at_spawn" ? "off" : invoiceSnap.timing,
+        invoice_delay_days:
+          invoiceSnap.timing === "delayed" ? invoiceSnap.delay_days : null,
+        invoice_amount_cents: invoiceSnap.amount_cents,
+        invoice_locks_deliverables: invoiceSnap.locks_deliverables,
+        invoice_description: invoiceSnap.description,
+      }
+    : {};
+
   const { data: engagement, error: engErr } = await sb
     .from("engagements")
     .insert({
@@ -287,6 +312,7 @@ async function spawnOccurrence(
       reminder_settings: reminderSettings,
       series_id: series.id,
       series_period: plan.periodKey,
+      ...invoiceCols,
       // Accountability defaults to whoever set the series up (may be null).
       assigned_user_id: series.created_by_user_id,
       ...(series.created_by_user_id ? { assigned_at: nowIso } : {}),
@@ -388,6 +414,26 @@ async function spawnOccurrence(
     });
   } catch (e) {
     console.error("[recurring] activity log failed:", e);
+  }
+
+  // At-spawn invoice: the same idempotent automation sender, in atSpawn mode.
+  // Best-effort — a rail outage or invoice hiccup must never undo the spawn;
+  // the occurrence still exists and the accountant can invoice it manually.
+  // (on_completion / delayed need nothing here: their columns are on the row
+  // and the completion dispatcher owns the timing.)
+  if (invoiceSnap?.timing === "at_spawn") {
+    try {
+      const res = await sendEngagementInvoice(engagementId, { atSpawn: true });
+      if (!res.ok) {
+        console.error(
+          "[recurring] at-spawn invoice skipped:",
+          engagementId,
+          res.reason,
+        );
+      }
+    } catch (e) {
+      console.error("[recurring] at-spawn invoice failed:", e);
+    }
   }
 
   // Invite email — same content path as a hand-sent engagement; best-effort.

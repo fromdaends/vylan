@@ -22,6 +22,8 @@ import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { spawnSeriesNow } from "@/lib/recurring/spawn";
 import { normalizeReminderSettings } from "@/lib/reminder-settings";
 import { localToday, nextSpawn, toIsoDate } from "@/lib/recurring/schedule";
+import { deriveInvoiceSnapshotFromEngagement } from "@/lib/recurring/invoice-snapshot";
+import { getLatestPaymentRequestForEngagement } from "@/lib/db/payment-requests";
 
 // Same permissive uuid check as actions/engagements.ts (seed data isn't
 // strictly RFC 4122).
@@ -281,12 +283,35 @@ export async function refreshSeriesSnapshotAction(input: {
       await listRequestItems(input.engagementId),
     );
     if (items.length === 0) return { ok: false, error: "no_documents" };
+    // When invoice recurrence is on, refresh ITS snapshot from the current
+    // invoice material too — one button applies everything current. If the
+    // material is gone (invoice canceled, automation off), keep the stored
+    // snapshot rather than silently disabling billing the founder turned on.
+    let invoicePatch = {};
+    if (ctx.series.invoice_recreate === true) {
+      const latest = await getLatestPaymentRequestForEngagement(
+        input.engagementId,
+      );
+      const snap = deriveInvoiceSnapshotFromEngagement(
+        engagement,
+        latest
+          ? {
+              status: latest.status,
+              amount_cents: latest.amount_cents,
+              locks_deliverables: latest.locks_deliverables === true,
+              description: latest.description,
+            }
+          : null,
+      );
+      if (snap) invoicePatch = { invoice_snapshot: snap };
+    }
     await updateRecurringSeries(ctx.series.id, {
       items,
       ai_enabled: engagement.ai_enabled !== false,
       reminder_settings: normalizeReminderSettings(
         engagement.reminder_settings,
       ),
+      ...invoicePatch,
     });
     await logUserActivity(
       ctx.firmId,
@@ -298,6 +323,67 @@ export async function refreshSeriesSnapshotAction(input: {
     return { ok: true };
   } catch (error) {
     console.error("[refreshSeriesSnapshotAction] failed:", error);
+    return { ok: false, error: "save_failed" };
+  }
+}
+
+export type InvoiceRecreateResult =
+  | { ok: true }
+  | { ok: false; error: "not_found" | "no_invoice" | "save_failed" };
+
+// The "Recreate the invoice each cycle" switch (Phase 4). Enabling derives a
+// fresh snapshot from the engagement's CURRENT invoice material (automation
+// settings first, else the live invoice row — one precedence rule, see
+// invoice-snapshot.ts). Disabling clears both flag and snapshot; re-enabling
+// re-derives, so the snapshot is never stale on enable.
+export async function setSeriesInvoiceRecreateAction(input: {
+  seriesId: string;
+  engagementId: string;
+  enabled: boolean;
+}): Promise<InvoiceRecreateResult> {
+  const ctx = await authorizeSeriesControl(input);
+  if (!ctx || ctx.series.status === "ended") {
+    return { ok: false, error: "not_found" };
+  }
+  try {
+    if (!input.enabled) {
+      await updateRecurringSeries(ctx.series.id, {
+        invoice_recreate: false,
+        invoice_snapshot: null,
+      });
+    } else {
+      const engagement = await getEngagement(input.engagementId);
+      if (!engagement) return { ok: false, error: "not_found" };
+      const latest = await getLatestPaymentRequestForEngagement(
+        input.engagementId,
+      );
+      const snap = deriveInvoiceSnapshotFromEngagement(
+        engagement,
+        latest
+          ? {
+              status: latest.status,
+              amount_cents: latest.amount_cents,
+              locks_deliverables: latest.locks_deliverables === true,
+              description: latest.description,
+            }
+          : null,
+      );
+      if (!snap) return { ok: false, error: "no_invoice" };
+      await updateRecurringSeries(ctx.series.id, {
+        invoice_recreate: true,
+        invoice_snapshot: snap,
+      });
+    }
+    await logUserActivity(
+      ctx.firmId,
+      input.engagementId,
+      "recurrence_updated",
+      { series_id: ctx.series.id, invoice_recreate: input.enabled },
+    );
+    revalidatePath(`/engagements/${input.engagementId}`);
+    return { ok: true };
+  } catch (error) {
+    console.error("[setSeriesInvoiceRecreateAction] failed:", error);
     return { ok: false, error: "save_failed" };
   }
 }

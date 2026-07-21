@@ -161,6 +161,9 @@ export function EngagementBuilder({
     "off" | "monthly" | "quarterly" | "yearly"
   >("off");
   const [repeatOffsetDays, setRepeatOffsetDays] = useState<string>("15");
+  // Invoice recurrence (Phase 4): recreate this engagement's invoice on every
+  // occurrence. OFF by default — billing repeats only when explicitly chosen.
+  const [repeatInvoiceRecreate, setRepeatInvoiceRecreate] = useState(false);
   const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(
     () =>
       structuredClone(reminderDefaultSettings ?? DEFAULT_REMINDER_SETTINGS),
@@ -420,6 +423,10 @@ export function EngagementBuilder({
                     Math.max(1, Math.floor(Number(repeatOffsetDays) || 15)),
                   )
                 : null,
+            repeat_invoice_recreate:
+              repeatFrequency !== "off" &&
+              invoiceMode !== "off" &&
+              repeatInvoiceRecreate,
             items: cleanItems,
             send,
             locale,
@@ -641,6 +648,30 @@ export function EngagementBuilder({
                   className="h-8 w-20"
                 />
                 <span>{t("repeat_due_offset_suffix")}</span>
+              </div>
+            )}
+            {/* Invoice recurrence (Phase 4): only offered when BOTH repeat and
+                an invoice timing are chosen. The recurrence decides WHETHER
+                each occurrence bills; the invoice timing decides WHEN. */}
+            {repeatFrequency !== "off" && invoiceMode !== "off" && (
+              <div className="flex items-start justify-between gap-4 border-t border-border pt-3">
+                <div className="space-y-0.5">
+                  <Label
+                    htmlFor="repeat-invoice-recreate"
+                    className="cursor-pointer"
+                  >
+                    {t("repeat_invoice_label")}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t("repeat_invoice_hint")}
+                  </p>
+                </div>
+                <Switch
+                  id="repeat-invoice-recreate"
+                  checked={repeatInvoiceRecreate}
+                  onCheckedChange={setRepeatInvoiceRecreate}
+                  ariaLabel={t("repeat_invoice_label")}
+                />
               </div>
             )}
           </div>

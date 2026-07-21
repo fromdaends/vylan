@@ -67,6 +67,8 @@ export function EngagementMoreMenu({
   invoiceAutomation,
   invoiceBuilder,
   repeatSeries,
+  repeatInvoiceAvailable,
+  repeatInvoiceSummary,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -91,6 +93,9 @@ export function EngagementMoreMenu({
   // Recurring series (migration 0770): the engagement's series, null when it
   // isn't in one. Powers the Repeat menu entry + dialog.
   repeatSeries?: EngagementRepeatInfo | null;
+  // Invoice recurrence (Phase 4): switch gating + the stored-snapshot summary.
+  repeatInvoiceAvailable?: boolean;
+  repeatInvoiceSummary?: string | null;
 }) {
   const t = useTranslations("Engagements");
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -144,6 +149,8 @@ export function EngagementMoreMenu({
               engagementId={engagementId}
               locale={locale}
               series={repeatSeries ?? null}
+              invoiceAvailable={repeatInvoiceAvailable === true}
+              invoiceSummary={repeatInvoiceSummary ?? null}
               trigger={
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                   <Repeat />

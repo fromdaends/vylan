@@ -56,6 +56,7 @@ import {
   type ReminderSettings,
 } from "@/lib/reminder-settings";
 import { applyRepeatChoice } from "@/lib/recurring/enable";
+import { parseInvoiceSnapshot } from "@/lib/recurring/invoice-snapshot";
 
 export type CreateEngagementState = {
   ok?: boolean;
@@ -147,6 +148,9 @@ const CreateSchema = z.object({
     .optional()
     .default("off"),
   repeat_due_offset_days: z.number().int().min(1).max(365).nullable().optional(),
+  // Invoice recurrence (Phase 4): recreate this engagement's invoice on every
+  // spawned occurrence. Only meaningful with repeat on + an invoice configured.
+  repeat_invoice_recreate: z.boolean().optional().default(false),
   items: z.array(ItemSchema).min(0),
 })
   // Any invoice (created now OR automated) needs an amount to bill.
@@ -202,6 +206,7 @@ export async function createEngagementAction(
     reminder_settings?: ReminderSettings;
     repeat_frequency?: "off" | "monthly" | "quarterly" | "yearly";
     repeat_due_offset_days?: number | null;
+    repeat_invoice_recreate?: boolean;
     items: TemplateItem[];
     send: boolean;
     locale: "fr" | "en";
@@ -223,6 +228,7 @@ export async function createEngagementAction(
     reminder_settings: payload.reminder_settings,
     repeat_frequency: payload.repeat_frequency,
     repeat_due_offset_days: payload.repeat_due_offset_days,
+    repeat_invoice_recreate: payload.repeat_invoice_recreate,
     items: payload.items,
   });
   if (!parsed.success) {
@@ -383,6 +389,21 @@ export async function createEngagementAction(
         getEngagement(engagementId),
       ]);
       if (firmForRepeat && created) {
+        // Invoice recurrence (Phase 4): snapshot the builder's own invoice
+        // choice. parseInvoiceSnapshot rejects timing 'off' / a missing
+        // amount, so the switch quietly stores nothing when there is no
+        // invoice to recreate.
+        const invoiceSnapshot = parsed.data.repeat_invoice_recreate
+          ? parseInvoiceSnapshot({
+              timing: parsed.data.invoice_create_now
+                ? "at_spawn"
+                : parsed.data.invoice_auto_mode,
+              delay_days: parsed.data.invoice_delay_days ?? null,
+              amount_cents: parsed.data.invoice_amount_cents ?? null,
+              locks_deliverables: parsed.data.invoice_locks_deliverables,
+              description: parsed.data.invoice_description ?? null,
+            })
+          : null;
         await applyRepeatChoice({
           engagement: created,
           firmTimezone: firmForRepeat.timezone,
@@ -399,6 +420,10 @@ export async function createEngagementAction(
             doc_type: i.doc_type as DocType,
             required: i.required,
           })),
+          invoice: {
+            recreate: parsed.data.repeat_invoice_recreate === true,
+            snapshot: invoiceSnapshot,
+          },
         });
       }
     } catch (e) {

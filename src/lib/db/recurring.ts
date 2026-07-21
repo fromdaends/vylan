@@ -79,6 +79,10 @@ export type CreateRecurringSeriesInput = {
   reminder_settings: ReminderSettings | null;
   next_spawn_on: string;
   created_by_user_id: string | null;
+  // Invoice recurrence (Phase 4). Snapshot shape lives in
+  // src/lib/recurring/invoice-snapshot.ts; stored as JSONB.
+  invoice_recreate?: boolean;
+  invoice_snapshot?: Record<string, unknown> | null;
 };
 
 export async function createRecurringSeries(
@@ -108,6 +112,8 @@ export async function updateRecurringSeries(
       | "items"
       | "ai_enabled"
       | "reminder_settings"
+      | "invoice_recreate"
+      | "invoice_snapshot"
       | "status"
       | "next_spawn_on"
       | "paused_at"
