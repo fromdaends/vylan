@@ -4,28 +4,29 @@ import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { Plug, CheckCircle2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
+import { XeroLogo } from "@/components/integrations/xero-logo";
 
-// Per-client QuickBooks card on the client detail page. Connecting happens RIGHT
-// HERE, on the client's own page, so the client is known from context — no
-// name-matching, no "which client?" picker. States:
-//   - Not connected + owner: a small "Connect QuickBooks" button (connects THIS
+// Per-client Xero card on the client detail page — the sibling of
+// ClientQuickbooksCard, same states, same placement rules:
+//   - Not connected + owner: a small "Connect Xero" button (connects THIS
 //     client — the connect route carries this clientId).
-//   - Connected: green "Connected to {company}" + owner disconnect.
-//   - Needs reconnect: amber, owner can reconnect (re-auth this client) or disconnect.
-//   - Not connected + non-owner: nothing (the page hides the section for staff).
-// The page gates the whole section on `connected || (isOwner && configured)`, so
-// this component is only mounted when there's something to show.
-export type ClientQuickbooksStatus = {
+//   - Connected: green "Connected to {organisation}" + owner disconnect. A
+//     "Demo" badge when the org is Xero's resettable Demo Company (Xero has no
+//     sandbox/production key split, so the org itself is the signal).
+//   - Needs reconnect: amber, owner can reconnect or disconnect.
+//   - Not connected + non-owner: nothing.
+// The page gates the whole section (and hides Xero when the client already
+// uses QuickBooks — one bookkeeping system per client).
+export type ClientXeroStatus = {
   configured: boolean;
   connected: boolean;
   needsReconnect: boolean;
-  companyName: string | null;
-  environment: "sandbox" | "production";
-  callbackStatus: "done" | "denied" | "error" | "setup" | "enc" | null;
+  tenantName: string | null;
+  isDemo: boolean;
+  callbackStatus: "done" | "denied" | "error" | "setup" | "inuse" | null;
 };
 
-export function ClientQuickbooksCard({
+export function ClientXeroCard({
   clientId,
   clientName,
   status,
@@ -33,7 +34,7 @@ export function ClientQuickbooksCard({
 }: {
   clientId: string;
   clientName: string;
-  status: ClientQuickbooksStatus;
+  status: ClientXeroStatus;
   isOwner: boolean;
 }) {
   const t = useTranslations("Clients");
@@ -45,23 +46,21 @@ export function ClientQuickbooksCard({
 
   const callbackError =
     status.callbackStatus === "error"
-      ? t("qbo_connect_error")
+      ? t("xero_connect_error")
       : status.callbackStatus === "denied"
-        ? t("qbo_connect_denied")
+        ? t("xero_connect_denied")
         : status.callbackStatus === "setup"
-          ? t("qbo_connect_setup")
-          : status.callbackStatus === "enc"
-            ? t("qbo_encryption_required")
+          ? t("xero_connect_setup")
+          : status.callbackStatus === "inuse"
+            ? t("xero_connect_inuse")
             : null;
 
-  // Start OAuth for THIS client (used by both the first Connect and Reconnect).
-  // The client id goes to the connect route, which puts it in an httpOnly cookie;
-  // the callback links the connection to this client — no name-matching needed.
+  // Start OAuth for THIS client (first Connect and Reconnect both land here).
   async function startConnect() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/integrations/quickbooks/connect", {
+      const res = await fetch("/api/integrations/xero/connect", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ clientId }),
@@ -74,16 +73,14 @@ export function ClientQuickbooksCard({
         return;
       }
       setError(
-        data?.error === "quickbooks_not_configured"
-          ? t("qbo_unavailable")
-          : data?.error === "quickbooks_encryption_required"
-            ? t("qbo_encryption_required")
-            : data?.error === "other_provider"
-              ? t("qbo_other_provider")
-              : t("qbo_connect_error"),
+        data?.error === "xero_not_configured"
+          ? t("xero_unavailable")
+          : data?.error === "other_provider"
+            ? t("xero_other_provider")
+            : t("xero_connect_error"),
       );
     } catch {
-      setError(t("qbo_connect_error"));
+      setError(t("xero_connect_error"));
     }
     setLoading(false);
   }
@@ -92,7 +89,7 @@ export function ClientQuickbooksCard({
     setDisconnecting(true);
     setDisconnectError(null);
     try {
-      const res = await fetch("/api/integrations/quickbooks/disconnect", {
+      const res = await fetch("/api/integrations/xero/disconnect", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ clientId }),
@@ -101,9 +98,9 @@ export function ClientQuickbooksCard({
         window.location.reload();
         return;
       }
-      setDisconnectError(t("qbo_disconnect_error"));
+      setDisconnectError(t("xero_disconnect_error"));
     } catch {
-      setDisconnectError(t("qbo_disconnect_error"));
+      setDisconnectError(t("xero_disconnect_error"));
     }
     setDisconnecting(false);
   }
@@ -113,7 +110,7 @@ export function ClientQuickbooksCard({
       {confirmingDisconnect ? (
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs text-muted-foreground">
-            {t("qbo_disconnect_confirm_q", { client: clientName })}
+            {t("xero_disconnect_confirm_q", { client: clientName })}
           </span>
           <button
             type="button"
@@ -122,7 +119,7 @@ export function ClientQuickbooksCard({
             aria-busy={disconnecting}
             className="text-xs font-medium text-destructive hover:underline disabled:opacity-60"
           >
-            {disconnecting ? "…" : t("qbo_disconnect_confirm_yes")}
+            {disconnecting ? "…" : t("xero_disconnect_confirm_yes")}
           </button>
           <button
             type="button"
@@ -130,7 +127,7 @@ export function ClientQuickbooksCard({
             disabled={disconnecting}
             className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-60"
           >
-            {t("qbo_disconnect_cancel")}
+            {t("xero_disconnect_cancel")}
           </button>
         </div>
       ) : (
@@ -139,7 +136,7 @@ export function ClientQuickbooksCard({
           onClick={() => setConfirmingDisconnect(true)}
           className="text-xs font-medium text-muted-foreground hover:text-foreground"
         >
-          {t("qbo_disconnect_cta")}
+          {t("xero_disconnect_cta")}
         </button>
       )}
       {disconnectError && (
@@ -157,13 +154,11 @@ export function ClientQuickbooksCard({
         <div className="flex items-start gap-3">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
           <div className="space-y-2">
-            <div className="text-sm font-medium">
-              {t("qbo_reconnect_title")}
-            </div>
+            <div className="text-sm font-medium">{t("xero_reconnect_title")}</div>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              {status.companyName
-                ? t("qbo_reconnect_hint_company", { company: status.companyName })
-                : t("qbo_reconnect_hint", { client: clientName })}
+              {status.tenantName
+                ? t("xero_reconnect_hint_company", { company: status.tenantName })
+                : t("xero_reconnect_hint", { client: clientName })}
             </p>
             {isOwner ? (
               <>
@@ -174,7 +169,7 @@ export function ClientQuickbooksCard({
                     disabled={loading}
                     aria-busy={loading}
                   >
-                    {loading ? "…" : t("qbo_reconnect_cta")}
+                    {loading ? "…" : t("xero_reconnect_cta")}
                   </Button>
                 </div>
                 {(error || callbackError) && (
@@ -186,7 +181,7 @@ export function ClientQuickbooksCard({
               </>
             ) : (
               <p className="text-xs leading-relaxed text-muted-foreground">
-                {t("qbo_reconnect_staff")}
+                {t("xero_reconnect_staff")}
               </p>
             )}
           </div>
@@ -195,7 +190,7 @@ export function ClientQuickbooksCard({
     );
   }
 
-  // Connected + healthy: green card showing the linked company + environment badge.
+  // Connected + healthy: green card with the organisation + optional Demo badge.
   if (status.connected) {
     return (
       <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] p-4">
@@ -204,25 +199,18 @@ export function ClientQuickbooksCard({
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium">
-                {t("qbo_connected_title")}
+                {t("xero_connected_title")}
               </span>
-              <span
-                className={
-                  "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium " +
-                  (status.environment === "sandbox"
-                    ? "bg-warning/15 text-warning"
-                    : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400")
-                }
-              >
-                {status.environment === "sandbox"
-                  ? t("qbo_sandbox_badge")
-                  : t("qbo_production_badge")}
-              </span>
+              {status.isDemo && (
+                <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-medium text-warning">
+                  {t("xero_demo_badge")}
+                </span>
+              )}
             </div>
             <p className="text-xs text-muted-foreground">
-              {status.companyName
-                ? t("qbo_connected_company", { company: status.companyName })
-                : t("qbo_connected_hint")}
+              {status.tenantName
+                ? t("xero_connected_company", { company: status.tenantName })
+                : t("xero_connected_hint")}
             </p>
             {disconnectControl}
           </div>
@@ -231,19 +219,17 @@ export function ClientQuickbooksCard({
     );
   }
 
-  // Not connected + owner: a small invitation to connect THIS client's QuickBooks.
-  // (The page only renders this section for owners when not connected, so staff
-  // never see it — but guard anyway.)
+  // Not connected + owner: a small invitation to connect THIS client's Xero.
   if (isOwner) {
     return (
       <div className="rounded-lg border border-border/50 p-4">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#2CA01C]/10">
-            <QuickbooksLogo className="h-5 w-5" />
+          <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-[#13B5EA]/10">
+            <XeroLogo className="h-5 w-5" />
           </span>
           <div className="space-y-2">
             <p className="text-xs leading-relaxed text-muted-foreground">
-              {t("qbo_connect_hint", { client: clientName })}
+              {t("xero_connect_hint", { client: clientName })}
             </p>
             <Button
               size="sm"
@@ -253,7 +239,7 @@ export function ClientQuickbooksCard({
               className="gap-1.5"
             >
               <Plug className="h-4 w-4" />
-              {loading ? "…" : t("qbo_connect_cta")}
+              {loading ? "…" : t("xero_connect_cta")}
             </Button>
             {(error || callbackError) && (
               <p role="alert" className="text-xs text-destructive">

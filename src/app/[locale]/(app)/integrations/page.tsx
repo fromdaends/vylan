@@ -1,7 +1,9 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { firmHasAnyQuickbooksConnection } from "@/lib/db/quickbooks";
+import { firmHasAnyXeroConnection } from "@/lib/db/xero";
 import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
+import { XeroLogo } from "@/components/integrations/xero-logo";
 import { SageLogo } from "@/components/integrations/sage-logo";
 import { IntegrationCard } from "@/components/integrations/integration-card";
 
@@ -30,6 +32,7 @@ export default async function IntegrationsIndexPage({
   // Connecting happens per client (from a client's page); opening the card lands
   // on the QuickBooks surface, which guides the owner there when nothing's linked.
   const qbConnected = await firmHasAnyQuickbooksConnection();
+  const xeroConnected = await firmHasAnyXeroConnection();
 
   return (
     <div className="mx-auto max-w-4xl animate-in-fade">
@@ -58,6 +61,24 @@ export default async function IntegrationsIndexPage({
               : { label: t("state_not_connected"), tone: "muted" }
           }
           actionLabel={t("action_open")}
+        />
+
+        {/* Xero — live integration, the QuickBooks sibling. Always shown
+            ("Not connected" until a client links); connecting happens per
+            client on each client's page, so the card points at the client
+            list. */}
+        <IntegrationCard
+          href="/clients"
+          logo={<XeroLogo className="h-7 w-7" />}
+          tileClassName="bg-[#13B5EA]/10 ring-[#13B5EA]/20"
+          name={t("xero_name")}
+          description={t("xero_desc")}
+          badge={
+            xeroConnected
+              ? { label: t("state_connected"), tone: "success" }
+              : { label: t("state_not_connected"), tone: "muted" }
+          }
+          actionLabel={xeroConnected ? t("action_open") : t("xero_action_connect")}
         />
 
         {/* Sage 50 — file export. No connection state (Sage 50 is desktop
