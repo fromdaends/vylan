@@ -71,6 +71,10 @@ import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { getRecurringSeries } from "@/lib/db/recurring";
 import { RecurringBadge } from "@/components/engagements/recurring-badge";
+import {
+  deriveInvoiceSnapshotFromEngagement,
+  parseInvoiceSnapshot,
+} from "@/lib/recurring/invoice-snapshot";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { EngagementContributors } from "@/components/engagements/engagement-contributors";
 import {
@@ -258,7 +262,27 @@ export default async function EngagementDetailPage({
         itemsCount: Array.isArray(repeatSeriesRow.items)
           ? repeatSeriesRow.items.length
           : 0,
+        invoiceRecreate: repeatSeriesRow.invoice_recreate === true,
       }
+    : null;
+  // Invoice recurrence plumbing: whether THIS engagement has invoice material
+  // to copy (same precedence rule the actions use), and — when recurrence is
+  // on — a one-line summary of the SERIES' stored snapshot (what will
+  // actually spawn).
+  const repeatInvoiceAvailable =
+    deriveInvoiceSnapshotFromEngagement(
+      engagement,
+      latestPayment
+        ? {
+            status: latestPayment.status,
+            amount_cents: latestPayment.amount_cents,
+            locks_deliverables: latestPayment.locks_deliverables === true,
+            description: latestPayment.description,
+          }
+        : null,
+    ) != null;
+  const storedInvoiceSnap = repeatSeriesRow
+    ? parseInvoiceSnapshot(repeatSeriesRow.invoice_snapshot)
     : null;
   // Invoice-builder inputs (migration 0750): the firm's invoice settings (null
   // = invoicing not set up: builder still works, no taxes / numbering) and the
@@ -468,6 +492,19 @@ export default async function EngagementDetailPage({
   );
 
   const t = await getTranslations("Engagements");
+  // Invoice-recurrence summary of the SERIES' stored snapshot (needs `t`, so
+  // it lives here; the snapshot itself was parsed with the series above).
+  const repeatInvoiceSummary = storedInvoiceSnap
+    ? `${formatCurrency(storedInvoiceSnap.amount_cents / 100, locale)} · ${
+        storedInvoiceSnap.timing === "at_spawn"
+          ? t("repeat_invoice_timing_at_spawn")
+          : storedInvoiceSnap.timing === "on_completion"
+            ? t("repeat_invoice_timing_on_completion")
+            : t("repeat_invoice_timing_delayed", {
+                days: storedInvoiceSnap.delay_days ?? 0,
+              })
+      }`
+    : null;
   const paymentStatusLabel = latestPayment
     ? latestPayment.status === "paid"
       ? t("payment_status_paid")
@@ -840,6 +877,8 @@ export default async function EngagementDetailPage({
               engagementId={engagement.id}
               locale={locale}
               repeatSeries={repeatSeries}
+              repeatInvoiceAvailable={repeatInvoiceAvailable}
+              repeatInvoiceSummary={repeatInvoiceSummary}
               status={isLive ? "live" : isComplete ? "complete" : "cancelled"}
               remindersPaused={engagement.reminders_paused}
               reminderSettings={normalizeReminderSettings(

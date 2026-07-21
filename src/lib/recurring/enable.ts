@@ -43,6 +43,12 @@ export type ApplyRepeatInput = {
   // The checklist snapshot future occurrences will copy (collection items
   // only — see src/lib/recurring/snapshot.ts).
   itemsSnapshot: TemplateItem[];
+  // Invoice recurrence (Phase 4), builder path only: when set, the new series
+  // stores it. The engagement-page path manages it via its own switch action.
+  invoice?: {
+    recreate: boolean;
+    snapshot: Record<string, unknown> | null;
+  };
 };
 
 // Enable repeat, or update the schedule of the engagement's existing series.
@@ -99,6 +105,11 @@ export async function applyRepeatChoice(
     ),
     next_spawn_on: toIsoDate(nextSpawn(today, input.frequency, anchorDay)),
     created_by_user_id: input.userId,
+    // Recreate is stored ONLY with a usable snapshot; the switch without an
+    // invoice to copy would spawn nothing anyway.
+    invoice_recreate:
+      input.invoice?.recreate === true && input.invoice.snapshot != null,
+    invoice_snapshot: input.invoice?.snapshot ?? null,
   });
 
   // Ledger the CURRENT period as this engagement, so the spawner can never

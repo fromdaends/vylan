@@ -48,8 +48,16 @@ export type InvoiceSendResult =
   | { ok: false; reason: InvoiceSendReason };
 
 // Send the invoice for one engagement. Safe to call more than once (idempotent).
+//
+// opts.atSpawn (recurring engagements, Phase 4): invoice a freshly SPAWNED
+// occurrence at spawn time instead of at completion — the ONLY difference is
+// the status gate (a spawn is 'sent'/'in_progress', and invoicing up front is
+// the point). Every other rule is identical and deliberately shared: rails
+// gate, one-invoice idempotency, generated-invoice upgrade with taxes and a
+// fresh number, pay-link email, activity, stage sync.
 export async function sendEngagementInvoice(
   engagementId: string,
+  opts: { atSpawn?: boolean } = {},
 ): Promise<InvoiceSendResult> {
   const sb = getServiceRoleSupabase();
 
@@ -80,8 +88,13 @@ export async function sendEngagementInvoice(
 
   // Only invoice finished work. The completion hook calls us right after the
   // status flips to complete; the delayed worker re-checks it here at fire time
-  // (the accountant may have reopened it in the meantime).
-  if (engagement.status !== "complete") {
+  // (the accountant may have reopened it in the meantime). At-spawn invoicing
+  // (recurring series) instead requires a LIVE occurrence — never a cancelled
+  // or already-completed one.
+  const statusOk = opts.atSpawn
+    ? engagement.status === "sent" || engagement.status === "in_progress"
+    : engagement.status === "complete";
+  if (!statusOk) {
     return { ok: false, reason: "not_complete" };
   }
 
@@ -142,12 +155,16 @@ export async function sendEngagementInvoice(
   // reopen (which flips status to in_progress) slips between our first check and
   // the insert. Not fully atomic — the DB unique index is the hard backstop
   // against a double-send; this just avoids invoicing freshly-reopened work.
+  // (At-spawn re-applies its own live-status rule instead.)
   const { data: fresh } = await sb
     .from("engagements")
     .select("status")
     .eq("id", engagement.id)
     .maybeSingle();
-  if (!fresh || fresh.status !== "complete") {
+  const freshOk = opts.atSpawn
+    ? fresh?.status === "sent" || fresh?.status === "in_progress"
+    : fresh?.status === "complete";
+  if (!freshOk) {
     return { ok: false, reason: "not_complete" };
   }
 

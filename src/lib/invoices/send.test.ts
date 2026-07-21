@@ -26,7 +26,9 @@ const serviceRole = {
             return {
               async maybeSingle() {
                 if (table === "engagements") {
-                  if (columns === "status") return { data: { status: "complete" } };
+                  // Mirror the mock row so tests can flip its status (the
+                  // at-spawn cases exercise 'sent' occurrences).
+                  if (columns === "status") return { data: { status: engagement.status } };
                   if (columns.includes("invoice_locks_deliverables")) {
                     return {
                       data: {
@@ -100,6 +102,7 @@ import { sendEngagementInvoice } from "./send";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  engagement.status = "complete";
   getLatestPaymentRequest.mockResolvedValue(null);
   createPaymentRequest.mockResolvedValue({ id: "pay-1" });
   getInvoiceAttachment.mockResolvedValue({
@@ -244,5 +247,56 @@ describe("sendEngagementInvoice", () => {
     createPaymentRequest.mockResolvedValue("duplicate");
     const result = await sendEngagementInvoice("e1");
     expect(result).toEqual({ ok: false, reason: "already_sent" });
+  });
+
+  // At-spawn invoicing (recurring occurrences, Phase 4): the ONLY divergence
+  // from the completion path is the status gate — a fresh spawn is 'sent'.
+  describe("atSpawn mode", () => {
+    it("invoices a live 'sent' occurrence", async () => {
+      engagement.status = "sent";
+      const result = await sendEngagementInvoice("e1", { atSpawn: true });
+      expect(result).toEqual({
+        ok: true,
+        paymentRequestId: "pay-1",
+        emailSent: true,
+      });
+      expect(createPaymentRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ amount_cents: 25_000 }),
+      );
+    });
+
+    it("the default (completion) path still refuses a 'sent' engagement", async () => {
+      engagement.status = "sent";
+      const result = await sendEngagementInvoice("e1");
+      expect(result).toEqual({ ok: false, reason: "not_complete" });
+      expect(createPaymentRequest).not.toHaveBeenCalled();
+    });
+
+    it("atSpawn refuses a completed or cancelled engagement", async () => {
+      engagement.status = "complete";
+      expect(await sendEngagementInvoice("e1", { atSpawn: true })).toEqual({
+        ok: false,
+        reason: "not_complete",
+      });
+      engagement.status = "cancelled";
+      expect(await sendEngagementInvoice("e1", { atSpawn: true })).toEqual({
+        ok: false,
+        reason: "not_complete",
+      });
+      expect(createPaymentRequest).not.toHaveBeenCalled();
+    });
+
+    it("atSpawn keeps the one-invoice idempotency (existing request → already_sent)", async () => {
+      engagement.status = "sent";
+      getLatestPaymentRequest.mockResolvedValue({
+        id: "pay-0",
+        status: "requested",
+      });
+      expect(await sendEngagementInvoice("e1", { atSpawn: true })).toEqual({
+        ok: false,
+        reason: "already_sent",
+      });
+      expect(createPaymentRequest).not.toHaveBeenCalled();
+    });
   });
 });
