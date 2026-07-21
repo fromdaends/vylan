@@ -594,50 +594,47 @@ export function EngagementBuilder({
               ariaLabel={t("ai_analyze_label")}
             />
           </div>
+        </CardContent>
+      </Card>
 
-          {/* Repeat (recurring series, migration 0770): monthly / quarterly /
-              yearly. Each cycle auto-creates the next occurrence — same
-              client, same checklist, fresh portal link — due N days after it
-              opens. */}
-          <div className="space-y-3 rounded-lg border border-border p-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-0.5">
-                <Label
-                  htmlFor="repeat-frequency"
-                  className="flex items-center gap-1.5"
-                >
-                  <Repeat
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  {t("repeat_section_label")}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("repeat_section_hint")}
-                </p>
-              </div>
-              <Select
-                value={repeatFrequency}
-                onValueChange={(value) =>
-                  setRepeatFrequency(
-                    value as "off" | "monthly" | "quarterly" | "yearly",
-                  )
-                }
-              >
-                <SelectTrigger id="repeat-frequency" className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">{t("repeat_off")}</SelectItem>
-                  <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
-                  <SelectItem value="quarterly">
-                    {t("repeat_quarterly")}
-                  </SelectItem>
-                  <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {repeatFrequency !== "off" && (
+      {/* Repeat (recurring series, migration 0770) — its own top-level card
+          (founder feedback: Repeat / Reminders / Invoice should read as
+          separate sections, not one packed Details card). Invoice recurrence
+          stays IN here with Repeat: it's a property of the series. */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-1.5 text-base">
+            <Repeat className="size-4 text-muted-foreground" aria-hidden />
+            {t("repeat_section_label")}
+          </CardTitle>
+          <Select
+            value={repeatFrequency}
+            onValueChange={(value) =>
+              setRepeatFrequency(
+                value as "off" | "monthly" | "quarterly" | "yearly",
+              )
+            }
+          >
+            <SelectTrigger
+              id="repeat-frequency"
+              className="w-40"
+              aria-label={t("repeat_section_label")}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="off">{t("repeat_off")}</SelectItem>
+              <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
+              <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
+              <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            {t("repeat_section_hint")}
+          </p>
+          {repeatFrequency !== "off" && (
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <span>{t("repeat_due_offset_label")}</span>
                 <Input
@@ -652,17 +649,15 @@ export function EngagementBuilder({
                 <span>{t("repeat_due_offset_suffix")}</span>
               </div>
             )}
-          </div>
 
-          {/* Invoice recurrence (Phase 4) — its OWN box, like AI Analyze and
-              Reminders, so it reads as a distinct setting. Shown whenever
-              Repeat is on (and the firm can invoice at all): with an invoice
-              configured it's the switch; without one it's a "Set up the
-              invoice" shortcut down to the Invoice box, so accountants know
-              the setting exists. The recurrence decides WHETHER each
-              occurrence bills; the invoice timing decides WHEN. */}
+          {/* Invoice recurrence (Phase 4) — WITH Repeat, it's a property of
+              the series (founder spec). With an invoice timing chosen it's
+              the switch; with the Invoice card off it's a "Set up the
+              invoice" shortcut that scrolls there, so the setting stays
+              discoverable. The recurrence decides WHETHER each occurrence
+              bills; the invoice timing decides WHEN. */}
           {repeatFrequency !== "off" && connectReady && (
-            <div className="flex items-start justify-between gap-4 rounded-lg border border-border p-3">
+            <div className="flex items-start justify-between gap-4 border-t border-border/60 pt-3">
               <div className="space-y-0.5">
                 <Label
                   htmlFor="repeat-invoice-recreate"
@@ -705,38 +700,34 @@ export function EngagementBuilder({
               )}
             </div>
           )}
+        </CardContent>
+      </Card>
 
-          <div className="space-y-3 rounded-lg border border-border p-3">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-0.5">
-                <Label
-                  htmlFor="automatic-reminders"
-                  className="flex cursor-pointer items-center gap-1.5"
-                >
-                  <BellRing
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  {t("reminder_section_label")}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("reminder_section_hint")}
-                </p>
-                {selectedClient && !selectedClient.email && (
-                  <p className="text-xs font-medium text-destructive">
-                    {t("reminder_missing_email")}
-                  </p>
-                )}
-              </div>
-              <Switch
-                id="automatic-reminders"
-                checked={reminderSettings.enabled}
-                onCheckedChange={(enabled) =>
-                  setReminderSettings((current) => ({ ...current, enabled }))
-                }
-                ariaLabel={t("reminder_section_label")}
-              />
-            </div>
+      {/* Automatic reminders — its own top-level card. */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-1.5 text-base">
+            <BellRing className="size-4 text-muted-foreground" aria-hidden />
+            {t("reminder_section_label")}
+          </CardTitle>
+          <Switch
+            id="automatic-reminders"
+            checked={reminderSettings.enabled}
+            onCheckedChange={(enabled) =>
+              setReminderSettings((current) => ({ ...current, enabled }))
+            }
+            ariaLabel={t("reminder_section_label")}
+          />
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            {t("reminder_section_hint")}
+          </p>
+          {selectedClient && !selectedClient.email && (
+            <p className="text-xs font-medium text-destructive">
+              {t("reminder_missing_email")}
+            </p>
+          )}
 
             {reminderSettings.enabled && (
               <>
@@ -934,29 +925,27 @@ export function EngagementBuilder({
                 )}
               </>
             )}
-          </div>
+        </CardContent>
+      </Card>
 
-          {/* Invoice (migrations 0590 + 0610). Only offered when the firm can
-              actually receive a payment (Stripe Connect charges enabled).
-              The ref is the scroll target of the Repeat section's "Set up the
-              invoice" shortcut. */}
-          {connectReady ? (
-            <div
-              ref={invoiceSectionRef}
-              className="space-y-3 rounded-lg border border-border p-3"
-            >
-              <div className="space-y-0.5">
-                <Label className="flex items-center gap-1.5">
-                  <Receipt
-                    className="size-4 text-muted-foreground"
-                    aria-hidden
-                  />
-                  {t("invoice_section_label")}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {t("invoice_section_hint")}
-                </p>
-              </div>
+      {/* Invoice (migrations 0590 + 0610) — its own top-level card. The
+          wrapper div is the scroll target of the Repeat card's "Set up the
+          invoice" shortcut. Without Stripe Connect the card still shows, with
+          the connect note, so the section isn't silently absent. */}
+      <div ref={invoiceSectionRef}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              <Receipt className="size-4 text-muted-foreground" aria-hidden />
+              {t("invoice_section_label")}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {connectReady ? (
+              <>
+              <p className="text-xs text-muted-foreground">
+                {t("invoice_section_hint")}
+              </p>
               <Select
                 value={invoiceMode}
                 onValueChange={(v) => setInvoiceMode(v as InvoiceTiming)}
@@ -1112,14 +1101,15 @@ export function EngagementBuilder({
                   </label>
                 </div>
               )}
-            </div>
-          ) : (
-            <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-              {t("invoice_auto_needs_connect")}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+              </>
+            ) : (
+              <p className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                {t("invoice_auto_needs_connect")}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <Card
         className={
