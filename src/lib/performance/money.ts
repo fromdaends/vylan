@@ -48,6 +48,7 @@ async function fetchPaid(
         .eq("status", "paid")
         .not("paid_at", "is", null)
         .order("paid_at", { ascending: false })
+        .order("id", { ascending: false })
         .range(offset, offset + PAGE - 1);
       if (range.startIso) q = q.gte("paid_at", range.startIso);
       return q;
@@ -78,6 +79,7 @@ async function fetchOutstanding(
       .select("amount_cents, currency")
       .eq("status", "requested")
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(offset, offset + PAGE - 1);
     if (error) {
       console.error("[performance] fetchOutstanding failed:", error);

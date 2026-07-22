@@ -49,6 +49,7 @@ export function AiSection({
               rate={data.agreementRate}
               muted={data.earlyData}
               label={copy.agreementWord}
+              locale={locale}
             />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
               {data.earlyData
@@ -101,11 +102,14 @@ const TONE_STYLES: Record<
   Tone,
   { box: string; count: string; dot: string; tag: string }
 > = {
+  // Tag text is muted (reads on both themes at all sizes); the case's colour is
+  // carried by the dot + count/box. Exception: the false-pass ("miss") keeps its
+  // red tag — it's the one to notice, and destructive passes AA on the card.
   agreement: {
     box: "border-border",
     count: "text-foreground",
     dot: "bg-success",
-    tag: "text-success",
+    tag: "text-muted-foreground",
   },
   miss: {
     box: "border-destructive/40 bg-destructive/[0.06]",
@@ -117,7 +121,7 @@ const TONE_STYLES: Record<
     box: "border-warning/40",
     count: "text-foreground",
     dot: "bg-warning",
-    tag: "text-warning",
+    tag: "text-muted-foreground",
   },
 };
 

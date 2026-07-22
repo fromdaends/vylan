@@ -4,6 +4,7 @@ import type { DocType } from "@/lib/db/templates";
 import {
   aiBinaryFromKind,
   classifyFourCase,
+  isSystemAutoReject,
   scoreFile,
   type AiScorableFile,
 } from "./ai-verdict";
@@ -75,6 +76,41 @@ describe("classifyFourCase", () => {
     expect(classifyFourCase("pass", "rejected")).toBe("false_pass");
     expect(classifyFourCase("flag", "rejected")).toBe("true_catch");
     expect(classifyFourCase("flag", "approved")).toBe("false_alarm");
+  });
+});
+
+describe("isSystemAutoReject", () => {
+  const autoReject = {
+    review_status: "rejected" as const,
+    reviewed_by: null,
+    ai_rejected: true,
+  };
+
+  it("flags a system auto-rejection (rejected, no reviewer, ai_rejected)", () => {
+    // This is the one that must NOT count — otherwise the AI agrees with itself.
+    expect(isSystemAutoReject(autoReject)).toBe(true);
+  });
+
+  it("keeps a human override of an auto-reject (has a reviewer)", () => {
+    expect(isSystemAutoReject({ ...autoReject, reviewed_by: "user-1" })).toBe(
+      false,
+    );
+  });
+
+  it("keeps a 0240-backfilled human rejection (no reviewer, ai_rejected false)", () => {
+    expect(isSystemAutoReject({ ...autoReject, ai_rejected: false })).toBe(
+      false,
+    );
+  });
+
+  it("keeps approvals (an approval is always a human action)", () => {
+    expect(
+      isSystemAutoReject({
+        review_status: "approved",
+        reviewed_by: null,
+        ai_rejected: true,
+      }),
+    ).toBe(false);
   });
 });
 

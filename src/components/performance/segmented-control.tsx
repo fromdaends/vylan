@@ -6,10 +6,12 @@ import { cn } from "@/lib/cn";
 
 export type SegmentOption<T extends string> = { value: T; label: string };
 
-// A small radiogroup segmented control with a single pill that SLIDES between
-// options (shared-element layout animation). Used for the range selector and
-// the per-chart view toggle. Keyboard + screen-reader friendly; the pill jumps
-// instantly under prefers-reduced-motion.
+// A small segmented control with a single pill that SLIDES between options
+// (shared-element layout animation). Modeled as a labeled GROUP of aria-pressed
+// toggle buttons (not a radiogroup): each option is a native button, so it works
+// with Tab + Enter/Space and announces its pressed state — matching the actual
+// behavior, rather than advertising the radiogroup arrow-key model it doesn't
+// implement. The pill jumps instantly under prefers-reduced-motion.
 export function SegmentedControl<T extends string>({
   options,
   value,
@@ -30,7 +32,7 @@ export function SegmentedControl<T extends string>({
 
   return (
     <div
-      role="radiogroup"
+      role="group"
       aria-label={ariaLabel}
       className={cn(
         "relative inline-flex items-center gap-0.5 rounded-full border border-border/60 bg-muted/50 p-0.5",
@@ -43,8 +45,7 @@ export function SegmentedControl<T extends string>({
           <button
             key={opt.value}
             type="button"
-            role="radio"
-            aria-checked={active}
+            aria-pressed={active}
             disabled={disabled}
             onClick={() => !active && onChange(opt.value)}
             className={cn(

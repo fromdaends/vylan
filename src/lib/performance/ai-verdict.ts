@@ -33,6 +33,25 @@ export function classifyFourCase(
   return decision === "rejected" ? "true_catch" : "false_alarm";
 }
 
+// A SYSTEM auto-rejection has no human reviewer: the AI router set
+// review_status='rejected' with reviewed_by null AND ai_rejected true. These
+// must NOT count as human decisions in the agreement rate — otherwise the AI
+// "agrees with itself" and the rate is tautologically inflated. A human override
+// of an auto-reject sets reviewed_by (so it stays in). We also require
+// ai_rejected because the 0240 backfill left legit historical human rejections
+// with reviewed_by null but ai_rejected false — those are real decisions to keep.
+export function isSystemAutoReject(row: {
+  review_status: "pending" | "approved" | "rejected";
+  reviewed_by: string | null;
+  ai_rejected: boolean;
+}): boolean {
+  return (
+    row.review_status === "rejected" &&
+    row.reviewed_by == null &&
+    row.ai_rejected === true
+  );
+}
+
 // One document's inputs for the historical verdict replay. Mirrors exactly what
 // the engagement checklist feeds deriveFileAi, sourced from stored columns:
 // the file's own AI fields, the requested doc type + strike count from its
