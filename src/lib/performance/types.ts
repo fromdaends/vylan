@@ -37,6 +37,12 @@ export type TimeToPaidSplit = {
   unlockedCount: number;
 };
 
+// One row of the "top clients by amount paid" ranking (range-scoped).
+export type TopClient = { name: string; cents: number; count: number };
+
+// How many clients the ranking shows.
+export const TOP_CLIENTS_LIMIT = 5;
+
 export type MoneySection = {
   currency: string;
   // Range-scoped: sum of invoices PAID inside the selected range.
@@ -57,6 +63,8 @@ export type MoneySection = {
     // Present only when both lock groups meet LOCK_SPLIT_MIN_SAMPLE.
     split: TimeToPaidSplit | null;
   };
+  // Clients ranked by total paid in range (most first), up to TOP_CLIENTS_LIMIT.
+  topClients: TopClient[];
 };
 
 export type FourCase =

@@ -101,12 +101,14 @@ function paid(
   createdIso: string,
   paidIso: string,
   locks: boolean,
+  clientId: string | null = null,
 ): PaidInvoice {
   return {
     amountCents: cents,
     createdAtMs: Date.parse(createdIso),
     paidAtMs: Date.parse(paidIso),
     locksDeliverables: locks,
+    clientId,
   };
 }
 
@@ -157,5 +159,31 @@ describe("aggregateMoney", () => {
     expect(s.collectedCents).toBe(0);
     expect(s.timeToPaid.avgDays).toBeNull();
     expect(s.outstandingCents).toBe(9000);
+  });
+
+  it("ranks the top clients by total paid, most first, names resolved", () => {
+    const rows = [
+      paid(10000, "2026-05-05T12:00:00Z", "2026-05-10T12:00:00Z", false, "c1"),
+      paid(30000, "2026-06-05T12:00:00Z", "2026-06-10T12:00:00Z", false, "c2"),
+      paid(5000, "2026-06-05T12:00:00Z", "2026-06-11T12:00:00Z", false, "c1"),
+      // No client id → excluded from the ranking, but still in collected.
+      paid(2000, "2026-06-05T12:00:00Z", "2026-06-12T12:00:00Z", false, null),
+    ];
+    const names = new Map([
+      ["c1", "Acme"],
+      ["c2", "Globex"],
+    ]);
+    const s = aggregateMoney(rows, [], RANGE, "cad", names);
+    expect(s.topClients).toEqual([
+      { name: "Globex", cents: 30000, count: 1 },
+      { name: "Acme", cents: 15000, count: 2 },
+    ]);
+    expect(s.collectedCents).toBe(47000); // the null-client invoice still counts
+  });
+
+  it("returns an empty ranking when there are no named paid clients", () => {
+    expect(aggregateMoney([], [], RANGE, "cad", new Map()).topClients).toEqual(
+      [],
+    );
   });
 });

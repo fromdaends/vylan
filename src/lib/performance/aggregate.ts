@@ -7,10 +7,12 @@ import { bucketStartMs, enumerateBuckets, type ResolvedRange } from "./range";
 import {
   AI_EARLY_DATA_THRESHOLD,
   LOCK_SPLIT_MIN_SAMPLE,
+  TOP_CLIENTS_LIMIT,
   type AiSection,
   type FourCase,
   type MoneyBucket,
   type MoneySection,
+  type TopClient,
 } from "./types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -76,7 +78,34 @@ export type PaidInvoice = {
   paidAtMs: number;
   createdAtMs: number;
   locksDeliverables: boolean;
+  clientId: string | null;
 };
+
+// Rank clients by total paid in range (most first), resolving names from the
+// provided map. Invoices with no client are excluded from the ranking (they
+// still count in the collected total). Pure so it's unit-tested directly.
+function rankTopClients(
+  paid: PaidInvoice[],
+  clientNames: Map<string, string>,
+): TopClient[] {
+  const byClient = new Map<string, { cents: number; count: number }>();
+  for (const p of paid) {
+    if (!p.clientId) continue;
+    const cur = byClient.get(p.clientId) ?? { cents: 0, count: 0 };
+    cur.cents += p.amountCents;
+    cur.count += 1;
+    byClient.set(p.clientId, cur);
+  }
+  return [...byClient.entries()]
+    .map(([id, v]) => ({
+      name: clientNames.get(id) ?? "",
+      cents: v.cents,
+      count: v.count,
+    }))
+    .filter((c) => c.name !== "")
+    .sort((a, b) => b.cents - a.cents || a.name.localeCompare(b.name))
+    .slice(0, TOP_CLIENTS_LIMIT);
+}
 
 export type OutstandingInvoice = { amountCents: number };
 
@@ -88,6 +117,7 @@ export function aggregateMoney(
   outstanding: OutstandingInvoice[],
   range: ResolvedRange,
   currency: string,
+  clientNames: Map<string, string> = new Map(),
 ): MoneySection {
   const collectedCents = paid.reduce((s, p) => s + p.amountCents, 0);
   const outstandingCents = outstanding.reduce((s, p) => s + p.amountCents, 0);
@@ -138,5 +168,6 @@ export function aggregateMoney(
           }
         : null,
     },
+    topClients: rankTopClients(paid, clientNames),
   };
 }

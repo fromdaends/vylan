@@ -35,6 +35,7 @@ export type PerfCopy = {
     viewLine: string;
     viewLabel: string;
     chartAria: string;
+    topClients: string;
   };
   ai: {
     heading: string;
@@ -97,6 +98,7 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       viewLine: "Trend",
       viewLabel: "Chart view",
       chartAria: "Money collected over time",
+      topClients: "Top clients",
     },
     ai: {
       heading: "AI performance",
@@ -160,6 +162,7 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       viewLine: "Tendance",
       viewLabel: "Type de graphique",
       chartAria: "Sommes encaissées dans le temps",
+      topClients: "Meilleurs clients",
     },
     ai: {
       heading: "Performance de l'IA",
