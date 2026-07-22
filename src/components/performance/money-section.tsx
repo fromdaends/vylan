@@ -25,7 +25,7 @@ export function MoneySection({
   const money = (n: number) => centsToCurrency(n, locale, 0);
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-card sm:p-6">
+    <section>
       <header className="mb-5">
         <h2 className="text-base font-semibold tracking-tight text-foreground">
           {copy.heading}

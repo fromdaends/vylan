@@ -36,7 +36,7 @@ export function AutomationRow({
   ];
 
   return (
-    <section className="rounded-xl border border-border/70 bg-card/60 p-4 sm:p-5">
+    <section className="mt-10 border-t border-border/60 pt-10 sm:mt-12 sm:pt-12">
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">
         {copy.heading}
       </h2>

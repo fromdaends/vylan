@@ -77,7 +77,7 @@ export function PerformanceView({
 
       <div
         className={cn(
-          "space-y-6 transition-opacity duration-200",
+          "transition-opacity duration-200",
           pending && "opacity-60",
         )}
       >
