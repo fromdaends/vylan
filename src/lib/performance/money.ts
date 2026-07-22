@@ -25,6 +25,7 @@ type PaidRow = {
   currency: string | null;
   created_at: string;
   paid_at: string | null;
+  client_id: string | null;
   locks_deliverables?: boolean | null;
 };
 
@@ -36,8 +37,8 @@ async function fetchPaid(
   range: ResolvedRange,
 ): Promise<PaidRow[]> {
   const withLock =
-    "amount_cents, currency, created_at, paid_at, locks_deliverables";
-  const legacy = "amount_cents, currency, created_at, paid_at";
+    "amount_cents, currency, created_at, paid_at, client_id, locks_deliverables";
+  const legacy = "amount_cents, currency, created_at, paid_at, client_id";
   let cols = withLock;
   const rows: PaidRow[] = [];
   for (let offset = 0; offset <= MAX_ROWS; offset += PAGE) {
@@ -111,17 +112,52 @@ export async function loadMoneySection(
       paidAtMs: Date.parse(r.paid_at as string),
       createdAtMs: Date.parse(r.created_at),
       locksDeliverables: r.locks_deliverables === true,
+      clientId: r.client_id,
     }));
   const outstanding: OutstandingInvoice[] = outstandingRows.map((r) => ({
     amountCents: r.amount_cents,
   }));
+
+  // Client display names for the top-clients ranking (RLS-scoped to the firm).
+  const clientIds = [
+    ...new Set(
+      paid.map((p) => p.clientId).filter((id): id is string => id != null),
+    ),
+  ];
+  const clientNames = await fetchClientNames(sb, clientIds);
 
   // Vylan's market is CAD; carry the actual currency if the rows agree, else
   // fall back to cad. Mixed currencies are not expected in practice.
   const currency =
     paidRows[0]?.currency ?? outstandingRows[0]?.currency ?? "cad";
 
-  return aggregateMoney(paid, outstanding, range, currency);
+  return aggregateMoney(paid, outstanding, range, currency, clientNames);
+}
+
+async function fetchClientNames(
+  sb: SupabaseClient,
+  ids: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (ids.length === 0) return out;
+  // Chunk so a very large all-time set stays within URL limits.
+  for (let i = 0; i < ids.length; i += 300) {
+    const { data, error } = await sb
+      .from("clients")
+      .select("id, display_name")
+      .in("id", ids.slice(i, i + 300));
+    if (error) {
+      console.error("[performance] fetchClientNames failed:", error);
+      continue;
+    }
+    for (const c of (data ?? []) as {
+      id: string;
+      display_name: string | null;
+    }[]) {
+      if (c.display_name) out.set(c.id, c.display_name);
+    }
+  }
+  return out;
 }
 
 // Convenience for the page: resolve the range and load money in one call. The

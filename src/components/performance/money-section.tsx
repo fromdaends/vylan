@@ -101,6 +101,41 @@ export function MoneySection({
           </div>
         )}
       </div>
+
+      {data.topClients.length > 0 && (
+        <div className="mt-6 border-t border-border/60 pt-5">
+          <div className="mb-3 text-xs font-medium text-muted-foreground">
+            {copy.topClients}
+          </div>
+          <ol className="space-y-2.5">
+            {data.topClients.map((c, i) => {
+              const pct = Math.max(
+                (c.cents / data.topClients[0].cents) * 100,
+                2,
+              );
+              return (
+                <li key={`${c.name}-${i}`} className="flex items-center gap-3">
+                  <span className="w-4 shrink-0 text-xs tabular-nums text-muted-foreground">
+                    {i + 1}
+                  </span>
+                  <span className="w-28 shrink-0 truncate text-sm text-foreground sm:w-52">
+                    {c.name}
+                  </span>
+                  <div className="relative h-2 min-w-8 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="absolute inset-y-0 left-0 rounded-full bg-success/70 transition-[width] duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <span className="w-24 shrink-0 text-right text-sm font-semibold tabular-nums text-foreground">
+                    {money(c.cents)}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      )}
     </section>
   );
 }
