@@ -17,6 +17,16 @@ import {
   TeamManager,
   TeamSetup,
 } from "@/components/settings/team/team-manager";
+import {
+  TeamWorkloadTable,
+  type TeamWorkloadRow,
+} from "@/components/settings/team/team-workload-table";
+import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
+import { listClients } from "@/lib/db/clients";
+import {
+  computeEngagementWorkload,
+  workloadForMember,
+} from "@/lib/team/workload";
 
 export const dynamic = "force-dynamic";
 
@@ -132,9 +142,59 @@ export default async function TeamPage({
     atCap: cap != null && (usage?.total ?? 0) >= cap,
   };
 
+  // Team Wave 2: the owner-only workload roll-up — one row per active member
+  // (active engagements, ready-to-review, needs-attention, clients). Load the
+  // firm's active worklist + clients ONCE and bucket per assignee. Owner-only, so
+  // staff never pay for the worklist scan.
+  let workloadRows: TeamWorkloadRow[] = [];
+  let workloadUnassigned = {
+    activeEngagements: 0,
+    readyToReview: 0,
+    needsAttention: 0,
+  };
+  if (canManage) {
+    const [worklist, clientsRaw] = await Promise.all([
+      loadEngagementWorklist("active"),
+      listClients(),
+    ]);
+    const { byMember, unassigned } = computeEngagementWorkload(
+      worklist.map((w) => ({
+        assigneeUserId: w.assigneeUserId,
+        readyToReview: w.readyToReview,
+        daysOverdue: w.daysOverdue,
+      })),
+    );
+    workloadUnassigned = unassigned;
+    const clientCountByOwner = new Map<string, number>();
+    for (const c of clientsRaw) {
+      if (c.assigned_user_id) {
+        clientCountByOwner.set(
+          c.assigned_user_id,
+          (clientCountByOwner.get(c.assigned_user_id) ?? 0) + 1,
+        );
+      }
+    }
+    workloadRows = activeMembers.map((m) => {
+      const w = workloadForMember(byMember, m.id);
+      return {
+        id: m.id,
+        name: m.name,
+        role: m.role,
+        avatarUrl: m.avatarUrl,
+        activeEngagements: w.activeEngagements,
+        readyToReview: w.readyToReview,
+        needsAttention: w.needsAttention,
+        clients: clientCountByOwner.get(m.id) ?? 0,
+      };
+    });
+  }
+
   return (
     <div className="space-y-8">
       {breadcrumb}
+      {canManage && workloadRows.length > 0 && (
+        <TeamWorkloadTable rows={workloadRows} unassigned={workloadUnassigned} />
+      )}
       <TeamManager
         firmName={firm.name}
         canManage={canManage}
