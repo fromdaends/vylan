@@ -44,6 +44,16 @@ export type PostState = {
   matchedQboType: string | null;
 };
 
+// Which connected accounting product this draft belongs to (0790). Determined by
+// the draft's client connection: QuickBooks or Xero. Defaults to 'quickbooks' for
+// every pre-0790 row (and any row whose provider column isn't there yet), and any
+// unexpected value normalizes to 'quickbooks' too.
+export type DraftProvider = "quickbooks" | "xero";
+
+export function normalizeDraftProvider(v: unknown): DraftProvider {
+  return v === "xero" ? "xero" : "quickbooks";
+}
+
 // One stored draft: the AI suggestion + the accountant's resolved picks (Stage 4,
 // null until they edit) + its status + who last reviewed it (approved / dismissed
 // / reopened / edited) and when + (Stage 5) its post state.
@@ -53,12 +63,15 @@ export type StoredDraft = {
   status: DraftStatus;
   reviewedBy: string | null;
   reviewedAt: string | null;
+  // 0790: 'xero' when this draft's client is Xero-connected, else 'quickbooks'.
+  provider: DraftProvider;
 } & PostState;
 
 // The select column sets, widest first. Each reader tries them in order and
 // falls through on a missing-schema error, so the app degrades gracefully across
 // the migration windows (0450 = posted_* columns; 0440 = resolved + reviewed_*).
 const ENGAGEMENT_SELECTS = [
+  "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at, matched_qbo_type, provider",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at, matched_qbo_type",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at",
   "uploaded_file_id, suggestion, resolved, status, reviewed_by, reviewed_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note",
@@ -112,6 +125,7 @@ export async function getSuggestionsForEngagement(
       posted_tax_note?: string | null;
       receipt_attached_at?: string | null;
       matched_qbo_type?: string | null;
+      provider?: string | null;
     };
     if (r.uploaded_file_id && r.suggestion) {
       out.set(r.uploaded_file_id, {
@@ -120,6 +134,7 @@ export async function getSuggestionsForEngagement(
         status: normalizeDraftStatus(r.status),
         reviewedBy: r.reviewed_by ?? null,
         reviewedAt: r.reviewed_at ?? null,
+        provider: normalizeDraftProvider(r.provider),
         postedQboId: r.posted_qbo_id ?? null,
         postedAt: r.posted_at ?? null,
         postedBy: r.posted_by ?? null,
@@ -149,9 +164,12 @@ export type FirmDraftRow = {
   reviewedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  // 0790: 'xero' when this draft's client is Xero-connected, else 'quickbooks'.
+  provider: DraftProvider;
 } & PostState;
 
 const FIRM_SELECTS = [
+  "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at, matched_qbo_type, provider",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at, matched_qbo_type",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note, receipt_attached_at",
   "uploaded_file_id, engagement_id, suggestion, resolved, status, reviewed_by, reviewed_at, created_at, updated_at, posted_qbo_id, posted_at, posted_by, post_error, posted_tax_note",
@@ -288,6 +306,7 @@ export async function listFirmDrafts(): Promise<FirmDraftRow[]> {
       reviewedAt: (r.reviewed_at as string | null) ?? null,
       createdAt: (r.created_at as string | null) ?? null,
       updatedAt: (r.updated_at as string | null) ?? null,
+      provider: normalizeDraftProvider(r.provider),
       postedQboId: (r.posted_qbo_id as string | null) ?? null,
       postedAt: (r.posted_at as string | null) ?? null,
       postedBy: (r.posted_by as string | null) ?? null,
@@ -339,9 +358,13 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
   // always be recorded (posting just behaves as before the feature).
   matchedQboType: string | null;
   matchReady: boolean;
+  // 0790: 'xero' when this draft's client is Xero-connected, else 'quickbooks'
+  // (defaults to 'quickbooks' pre-0790 / on the narrower fallback tiers).
+  provider: DraftProvider;
 } | null> {
   const sb = await getServerSupabase();
   const selects = [
+    "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type, provider",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt",
@@ -402,14 +425,18 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
     postedQboId: (row.posted_qbo_id as string | null) ?? null,
     postedSyncToken: (row.posted_qbo_sync_token as string | null) ?? null,
     postAttempt: (row.post_attempt as number | null) ?? 0,
-    // Tiers 0 (0510), 1 (0500) and 2 all carry the 0450 posting columns; tiers
-    // 0–1 also carry the 0500 receipt-attach column; only tier 0 carries the
-    // 0510 register-match column.
-    postReady: tier <= 2,
+    // Tier ladder (widest first): tier 0 adds 0790 provider, tier 1 adds 0510
+    // register-match, tier 2 adds 0500 receipt-attach, tier 3 adds the 0450
+    // posting columns; tiers 4–5 carry none. So 0450 columns live on tiers 0–3,
+    // the 0500 column on tiers 0–2, and the 0510 column on tiers 0–1.
+    postReady: tier <= 3,
     receiptAttachedAt: (row.receipt_attached_at as string | null) ?? null,
-    attachReady: tier <= 1,
+    attachReady: tier <= 2,
     matchedQboType: (row.matched_qbo_type as string | null) ?? null,
-    matchReady: tier === 0,
+    matchReady: tier <= 1,
+    // provider lives only on tier 0 (0790); a narrower fallback tier leaves it
+    // undefined, which normalizes to 'quickbooks'.
+    provider: normalizeDraftProvider(row.provider),
   };
 }
 
@@ -793,21 +820,38 @@ export async function upsertTransactionSuggestion(input: {
   uploadedFileId: string;
   engagementId: string;
   suggestion: TransactionSuggestion;
+  // 0790: which product this draft's client is connected to. Omitted ⇒
+  // 'quickbooks' (the column default), so every existing caller is unchanged.
+  provider?: DraftProvider;
 }): Promise<void> {
   const sb = getServiceRoleSupabase();
-  const { error } = await sb.from("quickbooks_transaction_suggestions").upsert(
-    {
-      firm_id: input.firmId,
-      uploaded_file_id: input.uploadedFileId,
-      engagement_id: input.engagementId,
-      suggestion: input.suggestion,
-      direction: input.suggestion.direction,
-      amount: input.suggestion.amount,
-      status: "draft",
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "uploaded_file_id" },
-  );
+  const base = {
+    firm_id: input.firmId,
+    uploaded_file_id: input.uploadedFileId,
+    engagement_id: input.engagementId,
+    suggestion: input.suggestion,
+    direction: input.suggestion.direction,
+    amount: input.suggestion.amount,
+    status: "draft",
+    updated_at: new Date().toISOString(),
+  };
+  const write = (record: Record<string, unknown>) =>
+    sb
+      .from("quickbooks_transaction_suggestions")
+      .upsert(record, { onConflict: "uploaded_file_id" });
+  // Tiered write (mirrors the other optional-column degrades in this file):
+  // include the 0790 provider column first; if it isn't there yet, retry WITHOUT
+  // it so the draft still lands — it reads back as the default 'quickbooks' until
+  // the migration is applied. A Xero draft written pre-0790 therefore stores as
+  // 'quickbooks' for now; the next classify pass after the migration lands
+  // rewrites it as 'xero'.
+  let { error } = await write({
+    ...base,
+    provider: input.provider ?? "quickbooks",
+  });
+  if (error && isMissingSchema(error)) {
+    ({ error } = await write(base));
+  }
   if (error && !isMissingSchema(error)) {
     console.error("[quickbooks] upsertTransactionSuggestion failed:", error);
   }
@@ -829,8 +873,14 @@ export async function backfillMissingSuggestions(input: {
   // missing draft. Optional/defaulted so pre-learning callers stay valid.
   learned?: LearnedMappings;
   existingFileIds: Set<string>;
+  // 0790: the client's provider (QuickBooks or Xero), so a regenerated Xero
+  // draft carries the right provider tag + "Xero" note wording. Defaults to
+  // 'quickbooks' so pre-Xero callers are unchanged.
+  provider?: DraftProvider;
 }): Promise<number> {
   if (!input.lists) return 0;
+  const provider = input.provider ?? "quickbooks";
+  const providerLabel = provider === "xero" ? "Xero" : "QuickBooks";
   let created = 0;
   for (const f of input.files) {
     if (input.existingFileIds.has(f.id)) continue;
@@ -850,12 +900,14 @@ export async function backfillMissingSuggestions(input: {
         rawTxn as TransactionExtraction,
         input.lists,
         input.learned ?? {},
+        providerLabel,
       );
       await upsertTransactionSuggestion({
         firmId: input.firmId,
         uploadedFileId: f.id,
         engagementId: input.engagementId,
         suggestion,
+        provider,
       });
       created++;
     } catch (err) {

@@ -24,9 +24,10 @@ import {
   shouldExtractTransaction,
   type TransactionExtraction,
 } from "./transaction-extract";
-import { isFirmQuickbooksConnected } from "@/lib/db/quickbooks";
 import { readCachedQuickbooksListsForFirm } from "@/lib/db/quickbooks-cache";
+import { readCachedXeroListsForFirm } from "@/lib/db/xero-cache";
 import { readLearnedMappingsForFirm } from "@/lib/db/quickbooks-learned";
+import { resolveBookkeepingProvider } from "@/lib/bookkeeping/provider";
 import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import {
   upsertTransactionSuggestion,
@@ -173,31 +174,30 @@ export async function processClassifyJob(
   });
   if (!result) return { skipped: "no_classification" };
 
-  // QuickBooks Stage 3 (Phase 1): for bookkeeping transaction documents
-  // (receipts / sales invoices) at a firm that has QuickBooks connected, run a
-  // SECOND, focused read that captures the fields a draft QuickBooks entry needs
-  // (direction, vendor/customer, subtotal, tax split, total, currency, date).
-  // It does NOT touch the tuned tax-slip classifier above. Gated tightly so it
-  // never spends tokens off-target, and fully best-effort: any failure leaves
-  // transaction null and the core classification is unaffected.
+  // Stage 3 (Phase 1): for bookkeeping transaction documents (receipts / sales
+  // invoices) on a client connected to a bookkeeping product (QuickBooks OR
+  // Xero), run a SECOND, focused read that captures the fields a draft entry
+  // needs (direction, vendor/customer, subtotal, tax split, total, currency,
+  // date). It does NOT touch the tuned tax-slip classifier above. Gated tightly
+  // so it never spends tokens off-target, and fully best-effort: any failure
+  // leaves transaction null and the core classification is unaffected.
   //   * only receipts/invoices (whether requested OR detected as one),
-  //   * only when THIS firm has a QuickBooks connection.
+  //   * only when THIS client has a QuickBooks or Xero connection.
   // The result is stored under ai_extracted_fields.transaction (jsonb, no
   // migration) and feeds the Phase-2 mapper that drafts the suggestion.
   let transaction: TransactionExtraction | null = null;
-  // The transaction pass + draft suggestion only matter for QuickBooks-connected
-  // firms. Resolve that once: it gates the (billable) extract call AND, below,
-  // whether we clean up a now-stale draft.
-  const quickbooksConnected = await isFirmQuickbooksConnected(
-    limitFirmId,
-    limitClientId,
-  );
+  // The transaction pass + draft suggestion only matter for a client connected to
+  // a bookkeeping product. Resolve WHICH one once (QuickBooks or Xero, or null):
+  // it gates the (billable) extract call AND, below, which cached lists we map
+  // against + whether we clean up a now-stale draft. A client connects EITHER
+  // QuickBooks OR Xero (never both), so the provider is unambiguous.
+  const provider = await resolveBookkeepingProvider(limitFirmId, limitClientId);
   // We reach this code only AFTER the firm passed the daily rate limit + the
   // monthly/trial pause check, and only when AI is configured (checked at the
   // top), so entering this branch means a real, billable second model call
   // happens. Track that so the firm's AI cap is charged for BOTH calls below.
   const ranTransactionPass =
-    quickbooksConnected &&
+    provider != null &&
     shouldExtractTransaction(expectedDocType, result.document_type);
   if (ranTransactionPass) {
     try {
@@ -283,24 +283,34 @@ export async function processClassifyJob(
   }
 
   // Stage 3 (Phase 3): now that the core classification is persisted, sync this
-  // file's DRAFT QuickBooks suggestion (connected firms only). WITH a transaction
-  // read we map it onto the cached lists and upsert the draft; WITHOUT one (the
-  // doc is no longer a receipt/invoice, or the read failed) we delete any draft
-  // a previous pass left, so a stale card never outlives the read that made it.
-  // Runs AFTER the file update so a failure here can never lose the
-  // classification. Read-only on QuickBooks; best-effort throughout.
-  if (quickbooksConnected) {
+  // file's DRAFT bookkeeping suggestion (connected clients only, QuickBooks OR
+  // Xero). WITH a transaction read we map it onto the client's cached lists and
+  // upsert the draft; WITHOUT one (the doc is no longer a receipt/invoice, or the
+  // read failed) we delete any draft a previous pass left, so a stale card never
+  // outlives the read that made it. Runs AFTER the file update so a failure here
+  // can never lose the classification. Read-only on the accounting product;
+  // best-effort throughout.
+  if (provider != null) {
     try {
       if (transaction) {
-        const cached = await readCachedQuickbooksListsForFirm(
-          limitFirmId,
-          limitClientId,
-        );
+        // Pick the cached-lists source by provider. Both adapt to the SAME
+        // QuickbooksLists shape the matcher consumes (Xero's Phase-2 adapter does
+        // the mapping). Xero is always per-client — without a client id there's
+        // no per-client Xero cache to map against, so treat it as not-connected
+        // (skip) rather than falling back to the firm-level QuickBooks read.
+        const cached =
+          provider === "xero"
+            ? limitClientId
+              ? await readCachedXeroListsForFirm(limitFirmId, limitClientId)
+              : null
+            : await readCachedQuickbooksListsForFirm(limitFirmId, limitClientId);
         // Only (re)write when we have lists to map against; a transient empty
         // cache must not wipe a previously-good draft.
         if (cached) {
-          // Feature 3: consult the firm's remembered corrections before fuzzy
+          // Feature 3: consult the client's remembered corrections before fuzzy
           // matching (service-role read; {} pre-0490, so no behavior change).
+          // The learned table is per-client and a client has ONE provider, so the
+          // same read serves both QuickBooks and Xero.
           const learned = await readLearnedMappingsForFirm(
             limitFirmId,
             limitClientId,
@@ -309,19 +319,21 @@ export async function processClassifyJob(
             transaction,
             cached,
             learned,
+            provider === "xero" ? "Xero" : "QuickBooks",
           );
           await upsertTransactionSuggestion({
             firmId: limitFirmId,
             uploadedFileId: file.id,
             engagementId: file.engagement_id,
             suggestion,
+            provider,
           });
         }
       } else {
         await deleteTransactionSuggestionForFile(file.id);
       }
     } catch (err) {
-      console.warn("[classify] qbo suggestion sync failed:", err);
+      console.warn("[classify] bookkeeping suggestion sync failed:", err);
     }
   }
 

@@ -75,6 +75,33 @@ export async function getClientXeroStatus(
   };
 }
 
+// Cheap service-role "is this client connected to Xero?" check, for the classify
+// worker (no authed session, so RLS can't scope it) to resolve the bookkeeping
+// provider. Mirrors isFirmQuickbooksConnected in db/quickbooks.ts: selects only
+// tenant_id (never the tokens), filtered by firm_id + client_id. Degrades to
+// false on any error or before migration 0740 is applied, so a client without
+// Xero — or an environment without the table yet — simply resolves as
+// not-Xero-connected.
+export async function isClientXeroConnected(
+  firmId: string,
+  clientId: string,
+): Promise<boolean> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("xero_connections")
+    .select("tenant_id")
+    .eq("firm_id", firmId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingXeroSchema(error)) {
+      console.error("[xero] isClientXeroConnected failed:", error);
+    }
+    return false;
+  }
+  return Boolean(data);
+}
+
 // Does the current firm have ANY Xero connection (any client)? Drives the
 // Integrations hub badge. RLS scopes it to the firm; false on error/pre-0740.
 export async function firmHasAnyXeroConnection(): Promise<boolean> {
@@ -377,4 +404,33 @@ export async function listFirmXeroConnectedClients(): Promise<
     tenantName: (r.tenant_name as string | null) ?? null,
     isDemo: r.is_demo === true,
   }));
+}
+
+// Of the given client ids, which are LIVE Xero-connected (authenticated, RLS
+// firm-scoped) — one batched read. Used by the firm-wide drafts queue to derive
+// each row's EFFECTIVE provider from the live connection rather than trusting
+// the stored `provider` column alone: before migration 0790 is applied that
+// column is absent and every row reads 'quickbooks', which would mis-brand a
+// mixed firm's Xero drafts + trip a false QuickBooks reconnect banner. Empty
+// set on error / pre-0740.
+export async function filterXeroConnectedClientIds(
+  clientIds: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (clientIds.length === 0) return out;
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("xero_connections")
+    .select("client_id")
+    .in("client_id", clientIds);
+  if (error) {
+    if (!isMissingXeroSchema(error)) {
+      console.error("[xero] filterXeroConnectedClientIds failed:", error);
+    }
+    return out;
+  }
+  for (const r of (data as Array<Record<string, unknown>> | null) ?? []) {
+    if (typeof r.client_id === "string") out.add(r.client_id);
+  }
+  return out;
 }

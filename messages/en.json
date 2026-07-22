@@ -2649,7 +2649,10 @@
   },
   "Quickbooks": {
     "draft_title": "QuickBooks draft",
+    "draft_title_xero": "Xero draft",
     "draft_kicker": "QuickBooks",
+    "draft_kicker_xero": "Xero",
+    "xero_posting_soon": "Posting to Xero is coming soon — you can review and approve now.",
     "draft_badge": "Draft",
     "readiness": "Match readiness: {pct}%",
     "draft_readonly_hint": "Suggested mapping for your review. Nothing is sent to QuickBooks yet.",

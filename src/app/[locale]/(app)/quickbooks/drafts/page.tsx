@@ -15,6 +15,8 @@ import {
 } from "@/lib/db/users";
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
 import { readCachedQuickbooksListsByClient } from "@/lib/db/quickbooks-cache";
+import { readCachedXeroLists } from "@/lib/db/xero-cache";
+import { filterXeroConnectedClientIds } from "@/lib/db/xero";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { summarizeDrafts } from "@/lib/quickbooks/draft-summary";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
@@ -164,10 +166,49 @@ export default async function QuickbooksDraftsPage({
   // drafts still await posting — a settled (posted/dismissed) row's connection
   // may be legitimately retired, and probing it showed a permanent false
   // "reconnect" banner on queues with nothing left to post.
-  const clientIdsWithDrafts = [
+  //
+  // 0790: the queue now mixes QuickBooks and Xero drafts. Split the draft-bearing
+  // clients by provider so each row's pickers load from the RIGHT product's cache
+  // (QBO clients from the batched QuickBooks read, Xero clients from their Xero
+  // cache). The connection-health probe is QuickBooks-only (Xero posting is Phase
+  // 4), so it must never run against a Xero client — filter those out before
+  // scoping it, or a Xero row would falsely trip the "connect this client" notice.
+  // EFFECTIVE provider per row from the LIVE Xero connection, not just the
+  // stored `provider` column: before migration 0790 lands that column is absent
+  // and every row reads 'quickbooks', which would mis-brand a mixed firm's Xero
+  // drafts and trip a false QuickBooks reconnect banner. A row is Xero if its
+  // stored provider says so OR its client is live-Xero-connected.
+  const draftClientIds = [
     ...new Set(rows.map((r) => r.clientId).filter((c): c is string => !!c)),
   ];
-  const healthScopes = queueHealthScopes(rows);
+  const liveXeroClients = await filterXeroConnectedClientIds(draftClientIds);
+  const effProvider = (r: {
+    provider: "quickbooks" | "xero";
+    clientId: string | null;
+  }): "quickbooks" | "xero" =>
+    r.provider === "xero" || (r.clientId ? liveXeroClients.has(r.clientId) : false)
+      ? "xero"
+      : "quickbooks";
+
+  const qboClientIdsWithDrafts = [
+    ...new Set(
+      rows
+        .filter((r) => effProvider(r) !== "xero")
+        .map((r) => r.clientId)
+        .filter((c): c is string => !!c),
+    ),
+  ];
+  const xeroClientIdsWithDrafts = [
+    ...new Set(
+      rows
+        .filter((r) => effProvider(r) === "xero")
+        .map((r) => r.clientId)
+        .filter((c): c is string => !!c),
+    ),
+  ];
+  const healthScopes = queueHealthScopes(
+    rows.filter((r) => effProvider(r) !== "xero"),
+  );
 
   // Connection health + the per-client picker lists load together. Health: a
   // DEAD connection (expired/revoked tokens) gets a "reconnect" banner, and a
@@ -180,8 +221,21 @@ export default async function QuickbooksDraftsPage({
   // inconclusive check just reports "ok", i.e. no banner this load). Lists: one
   // batched read (5 queries total) so a many-client queue doesn't fan out.
   const HEALTH_BUDGET_MS = 3000;
-  const [listsByClient, health] = await Promise.all([
-    readCachedQuickbooksListsByClient(clientIdsWithDrafts),
+  const [listsByClient, xeroListsByClient, health] = await Promise.all([
+    readCachedQuickbooksListsByClient(qboClientIdsWithDrafts),
+    // Xero has no batched by-client reader; load each distinct Xero client's
+    // cache in parallel and stitch into a map (mirrors the QBO map shape). A
+    // client with no cached rows / pre-0780 yields null → empty pickers.
+    Promise.all(
+      xeroClientIdsWithDrafts.map(
+        async (cid) => [cid, await readCachedXeroLists(cid)] as const,
+      ),
+    ).then(
+      (entries) =>
+        new Map<string, QuickbooksLists | null>(
+          entries.map(([cid, lists]) => [cid, lists]),
+        ),
+    ),
     firm && healthScopes.length > 0
       ? Promise.race([
           Promise.all(
@@ -237,6 +291,12 @@ export default async function QuickbooksDraftsPage({
   const optionsByClient = new Map<string, DraftCardOptions>(
     [...listsByClient].map(([cid, lists]) => [cid, buildOptions(lists)]),
   );
+  // Merge in the Xero clients' options (built from their Xero cache, which the
+  // adapter already shaped as QuickbooksLists). A client is at most one provider,
+  // so these keys never collide with the QuickBooks ones above.
+  for (const [cid, lists] of xeroListsByClient) {
+    optionsByClient.set(cid, buildOptions(lists));
+  }
   const optionsFor = (clientId: string | null): DraftCardOptions =>
     (clientId ? optionsByClient.get(clientId) : undefined) ?? EMPTY_OPTIONS;
 
@@ -289,9 +349,12 @@ export default async function QuickbooksDraftsPage({
 
   // Approved expense + income drafts for the active client filter — what "Post
   // all approved" covers (unknown-direction / unposted-only are excluded).
+  // QuickBooks ONLY (0790): Xero posting is Phase 4, so a Xero draft is never
+  // counted here and the bulk-post button never targets it.
   const postableCount = withBucket.filter(
     (x) =>
       x.bucket === "approved" &&
+      effProvider(x.r) !== "xero" &&
       (x.r.suggestion.direction === "expense" ||
         x.r.suggestion.direction === "income") &&
       !x.r.postedQboId &&
@@ -373,6 +436,7 @@ export default async function QuickbooksDraftsPage({
             key={r.fileId}
             row={r}
             options={optionsFor(r.clientId)}
+            provider={effProvider(r)}
             locale={locale}
             reviewedByName={
               r.reviewedBy ? (reviewerNameById.get(r.reviewedBy) ?? null) : null

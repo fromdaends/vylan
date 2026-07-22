@@ -47,7 +47,9 @@ import {
   type StoredDraft,
 } from "@/lib/db/quickbooks-suggestions";
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
+import { getClientXeroStatus } from "@/lib/db/xero";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import { readCachedXeroLists } from "@/lib/db/xero-cache";
 import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
@@ -372,20 +374,31 @@ export default async function EngagementDetailPage({
     filesByItem.set(u.request_item_id, arr);
   }
 
-  // QuickBooks Stage 3 (Phase 3): the read-only DRAFT suggestion cards. Only
-  // relevant when this firm has QuickBooks connected; the drafts themselves are
-  // keyed by uploaded file. Both reads degrade gracefully (no connection / no
-  // 0430 migration yet -> nothing shows).
-  // Per-client (0710): this engagement's QuickBooks connection, cached lists, and
-  // learned matches are THIS client's — not the firm-level row (usually absent
-  // once connections are per-client). Everything degrades gracefully to nothing
-  // when this client isn't connected.
-  const quickbooksConnected =
-    (await getClientQuickbooksStatus(engagement.client_id)) != null;
-  const [initialSuggestions, qboLists, qboLearned] = quickbooksConnected
+  // Stage 3 (Phase 3): the read-only DRAFT suggestion cards. Relevant when this
+  // client is connected to a bookkeeping product — QuickBooks OR Xero (0790).
+  // A client connects EITHER, never both, so the provider is unambiguous; Xero
+  // is checked first (per-client from day one). The cached lists come from the
+  // matching product (Xero's adapter returns the SAME QuickbooksLists shape the
+  // matcher + pickers consume), so everything downstream is provider-neutral.
+  // Per-client (0710): this engagement's connection, cached lists, and learned
+  // matches are THIS client's. Everything degrades gracefully to nothing when
+  // this client isn't connected / before the migrations land.
+  const [xeroStatus, qboStatus] = await Promise.all([
+    getClientXeroStatus(engagement.client_id),
+    getClientQuickbooksStatus(engagement.client_id),
+  ]);
+  const bookkeepingProvider: "quickbooks" | "xero" | null = xeroStatus
+    ? "xero"
+    : qboStatus
+      ? "quickbooks"
+      : null;
+  const bookkeepingConnected = bookkeepingProvider != null;
+  const [initialSuggestions, bkLists, bkLearned] = bookkeepingConnected
     ? await Promise.all([
         getSuggestionsForEngagement(id),
-        readCachedQuickbooksLists(engagement.client_id),
+        bookkeepingProvider === "xero"
+          ? readCachedXeroLists(engagement.client_id)
+          : readCachedQuickbooksLists(engagement.client_id),
         readFirmLearnedMappings(engagement.client_id),
       ])
     : [new Map<string, StoredDraft>(), null, {} as LearnedMappings];
@@ -394,7 +407,7 @@ export default async function EngagementDetailPage({
   // stored transaction read (re-upload race / pre-migration classify / cleanup),
   // mirroring the payment + signature reconcile-on-load above. Cheap (no AI
   // call) and only re-reads when it actually created something.
-  if (quickbooksConnected && qboLists) {
+  if (bookkeepingConnected && bkLists) {
     const created = await backfillMissingSuggestions({
       firmId: engagement.firm_id,
       engagementId: id,
@@ -402,9 +415,10 @@ export default async function EngagementDetailPage({
         id: u.id,
         ai_extracted_fields: u.ai_extracted_fields,
       })),
-      lists: qboLists,
-      learned: qboLearned,
+      lists: bkLists,
+      learned: bkLearned,
       existingFileIds: new Set(suggestionsByFile.keys()),
+      provider: bookkeepingProvider ?? "quickbooks",
     });
     if (created > 0) suggestionsByFile = await getSuggestionsForEngagement(id);
   }
@@ -423,7 +437,9 @@ export default async function EngagementDetailPage({
     )
     .map(([, d]) => d);
 
-  // The cached QuickBooks lists the accountant picks from (active entries only).
+  // The cached bookkeeping lists the accountant picks from (active entries only).
+  // Same DraftCardOptions shape whether the source is QuickBooks or Xero (Xero's
+  // adapter already produced the QuickbooksLists shape).
   const toOpt = (x: { id: string; name: string }) => ({
     id: x.id,
     name: x.name,
@@ -431,16 +447,17 @@ export default async function EngagementDetailPage({
   const isPayFrom = (t: string | null) =>
     ["bank", "credit card"].includes((t ?? "").toLowerCase());
   const qboOptions: DraftCardOptions = {
-    vendors: (qboLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
-    customers: (qboLists?.customers ?? []).filter((x) => x.active).map(toOpt),
-    accounts: (qboLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
-    // Exclude QuickBooks "adjustment" tax codes: they have no purchase/sales rate
-    // and QuickBooks rejects them on a transaction (tax-calc ValidationFault 6000).
-    taxCodes: (qboLists?.taxCodes ?? [])
+    vendors: (bkLists?.vendors ?? []).filter((x) => x.active).map(toOpt),
+    customers: (bkLists?.customers ?? []).filter((x) => x.active).map(toOpt),
+    accounts: (bkLists?.accounts ?? []).filter((x) => x.active).map(toOpt),
+    // Exclude "adjustment" tax codes: they have no purchase/sales rate and the
+    // product rejects them on a transaction (QuickBooks tax-calc ValidationFault
+    // 6000); harmless to apply to Xero (its rates aren't named this way).
+    taxCodes: (bkLists?.taxCodes ?? [])
       .filter((x) => x.active && isSelectableTaxCode(x.name))
       .map(toOpt),
-    items: (qboLists?.items ?? []).filter((x) => x.active).map(toOpt),
-    paymentAccounts: (qboLists?.accounts ?? [])
+    items: (bkLists?.items ?? []).filter((x) => x.active).map(toOpt),
+    paymentAccounts: (bkLists?.accounts ?? [])
       .filter((x) => x.active && isPayFrom(x.accountType))
       .map(toOpt),
   };
@@ -1037,6 +1054,7 @@ export default async function EngagementDetailPage({
                     files={filesByItem.get(item.id) ?? []}
                     suggestionsByFile={suggestionsByFile}
                     qboOptions={qboOptions}
+                    draftProvider={bookkeepingProvider ?? "quickbooks"}
                     reviewerNameById={reviewerNameById}
                     locale={locale}
                     canEdit={isLive}
@@ -1112,6 +1130,7 @@ async function ItemRow({
   files,
   suggestionsByFile,
   qboOptions,
+  draftProvider,
   reviewerNameById,
   locale,
   canEdit,
@@ -1121,11 +1140,14 @@ async function ItemRow({
 }: {
   item: RequestItem;
   files: (UploadedFile & { url: string })[];
-  // QuickBooks drafts keyed by uploaded file id (empty when QB isn't connected or
-  // the migration isn't applied).
+  // Bookkeeping drafts keyed by uploaded file id (empty when the client isn't
+  // connected to QuickBooks/Xero or the migration isn't applied).
   suggestionsByFile: Map<string, StoredDraft>;
-  // The cached QuickBooks lists the draft cells pick from.
+  // The cached bookkeeping lists the draft cells pick from (QuickBooks or Xero).
   qboOptions: DraftCardOptions;
+  // Which product this client is connected to — drives the card's branding +
+  // posting gate (posting is QuickBooks-only in Phase 3).
+  draftProvider: "quickbooks" | "xero";
   // Reviewer id -> display name, for the draft card's "approved/dismissed by" line.
   reviewerNameById: Map<string, string>;
   locale: "fr" | "en";
@@ -1324,6 +1346,7 @@ async function ItemRow({
                     postedTaxNote={d.postedTaxNote}
                     receiptAttachedAt={d.receiptAttachedAt}
                     matchedQboType={d.matchedQboType}
+                    provider={draftProvider}
                   />
                 );
               })()}
