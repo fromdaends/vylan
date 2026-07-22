@@ -6,12 +6,14 @@ import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
 import {
   PERFORMANCE_RANGES,
+  type AiSection as AiData,
   type MoneySection as MoneyData,
   type PerformanceRange,
 } from "@/lib/performance/types";
 import { perfCopy } from "./copy";
 import { SegmentedControl } from "./segmented-control";
 import { MoneySection } from "./money-section";
+import { AiSection } from "./ai-section";
 
 // Client shell for the Performance page. The range lives in the URL (?range=),
 // so switching it is a soft navigation: the server re-loads the numbers and this
@@ -22,10 +24,12 @@ export function PerformanceView({
   range,
   locale,
   money,
+  ai,
 }: {
   range: PerformanceRange;
   locale: AppLocale;
   money: MoneyData;
+  ai: AiData;
 }) {
   const copy = perfCopy(locale);
   const router = useRouter();
@@ -74,6 +78,7 @@ export function PerformanceView({
         )}
       >
         <MoneySection data={money} locale={locale} copy={copy.money} />
+        <AiSection data={ai} locale={locale} copy={copy.ai} />
       </div>
     </div>
   );
