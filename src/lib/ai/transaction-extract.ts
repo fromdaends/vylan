@@ -76,6 +76,10 @@ export type TransactionExtraction = {
   vendor_name: string | null;
   customer_name: string | null;
   document_date: string | null; // ISO YYYY-MM-DD when possible, else as printed
+  // The document's own number (receipt #, invoice #, order #). Posted as the
+  // transaction's Reference in QuickBooks/Xero so the entry traces back to the
+  // paper. null when the page shows none.
+  document_number: string | null;
   currency: string | null; // ISO 4217 (e.g. "CAD", "USD"); null when unstated
   subtotal: number | null; // pre-tax amount
   total: number | null; // grand total including tax
@@ -127,6 +131,11 @@ const TRANSACTION_TOOL = {
         type: ["string", "null"],
         description:
           "The transaction date printed on the document (invoice date / purchase date) as an ISO date YYYY-MM-DD when you can, else as printed. Null if none is visible.",
+      },
+      document_number: {
+        type: ["string", "null"],
+        description:
+          "The document's own identifying number as printed: receipt number, invoice number, order/transaction number (e.g. 'CC-20418', 'INV-0042', '#4521'). Copy it exactly. Null when the page shows no such number. Do NOT use a date, a total, a phone number, or a tax-registration number.",
       },
       currency: {
         type: ["string", "null"],
@@ -217,6 +226,7 @@ const TRANSACTION_TOOL = {
       "vendor_name",
       "customer_name",
       "document_date",
+      "document_number",
       "currency",
       "subtotal",
       "total",
@@ -249,6 +259,9 @@ Then capture:
 - vendor_name — the supplier/merchant for an expense (null for income).
 - customer_name — the customer billed for income (null for an expense).
 - document_date — the transaction date (ISO YYYY-MM-DD when possible).
+- document_number — the document's own number if printed (receipt/invoice/order
+  number, e.g. "CC-20418"), copied exactly. Null if there's none. Never use a
+  date, total, phone, or tax-registration number.
 - currency — the ISO code (e.g. CAD, USD). Only say CAD when the document
   clearly shows Canadian dollars; otherwise null.
 - subtotal — the pre-tax amount.
@@ -412,6 +425,7 @@ export function parseTransaction(
     vendor_name: str(raw.vendor_name),
     customer_name: str(raw.customer_name),
     document_date: str(raw.document_date),
+    document_number: str(raw.document_number),
     currency: normalizeCurrency(raw.currency),
     subtotal: num(raw.subtotal),
     total: num(raw.total),

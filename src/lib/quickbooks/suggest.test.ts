@@ -62,6 +62,7 @@ function extraction(
     vendor_name: "Home Depot",
     customer_name: null,
     document_date: "2024-03-14",
+    document_number: null,
     currency: "CAD",
     subtotal: 100,
     total: 114.98,

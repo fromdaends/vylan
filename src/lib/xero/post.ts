@@ -53,6 +53,10 @@ import {
   effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
 import { postApprovedDraft, type PostOutcome } from "@/lib/quickbooks/post";
+import {
+  postingLineDescription,
+  postingReference,
+} from "@/lib/quickbooks/suggest";
 import { getUploadedFileById } from "@/lib/db/uploaded-files";
 import { downloadObject } from "@/lib/storage";
 
@@ -153,6 +157,14 @@ export async function postApprovedXeroDraft(
     return { kind: "not_postable", ...base, problems: ["missing_date"] };
   }
 
+  // Human-facing detail on the posted entry: a "vendor — items" line description
+  // and the document's own number as the Xero Reference (traceable to the paper).
+  const lineDescription = postingLineDescription(
+    eff.party?.name ?? s.partySource ?? null,
+    s.lines,
+  );
+  const reference = postingReference(s.reference);
+
   // Posting context: the QuickbooksLists (for the provider-neutral active checks)
   // + the GUID→code maps Xero line items need.
   const pctx = await readXeroPostingContext(draft.firmId, draft.clientId);
@@ -244,6 +256,8 @@ export async function postApprovedXeroDraft(
       bankAccountId: eff.paymentAccount.id, // Xero BankAccount.AccountID (GUID)
       amount: s.amount,
       date: effDate,
+      description: lineDescription,
+      reference,
       tax,
       lines: expenseLines,
     });
@@ -274,6 +288,8 @@ export async function postApprovedXeroDraft(
       accountCode,
       amount: s.amount,
       date: effDate,
+      description: lineDescription,
+      reference,
       tax,
       lines: expenseLines,
     });

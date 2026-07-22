@@ -131,6 +131,10 @@ export type TransactionSuggestion = {
   // mis-read can never post a wrong total. Older stored suggestions lack it.
   lines?: LineSuggestion[];
   date: string | null;
+  // The document's own number (receipt/invoice #), posted as the transaction's
+  // Reference / DocNumber so the books trace back to the paper. Optional so older
+  // stored suggestions (pre-reference) deserialize cleanly.
+  reference?: string | null;
   currency: string | null;
   // The RAW source signals this draft was built from, kept so the resolve route
   // can learn from a correction without re-reading the extraction (Feature 3):
@@ -870,6 +874,7 @@ export function buildTransactionSuggestion(
     paymentAccount,
     lines,
     date: extraction.document_date,
+    reference: extraction.document_number ?? null,
     currency: extraction.currency,
     partySource: partyQuery,
     taxSource: learnKeyForTaxes(extraction.taxes),
@@ -897,4 +902,36 @@ function overallReadiness(
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+// Build the human-facing line description for a POSTED transaction: the vendor/
+// customer name plus a short summary of the receipt's line items when present
+// (e.g. "Central Copiers — printer paper, toner, binding"). Falls back to the
+// party name alone, then to a generic label. Capped so it can't bloat the posted
+// entry. Shared by the QuickBooks + Xero post builders.
+export function postingLineDescription(
+  partyName: string | null,
+  lines: { description: string }[] | undefined,
+): string {
+  const items = (lines ?? [])
+    .map((l) => l.description?.trim())
+    .filter((d): d is string => !!d);
+  let summary = items.slice(0, 3).join(", ");
+  if (items.length > 3) summary += "…";
+  const parts = [partyName?.trim() || null, summary || null].filter(
+    (p): p is string => !!p,
+  );
+  const text = parts.join(" — ") || "Posted from Vylan";
+  return text.length > 200 ? `${text.slice(0, 199)}…` : text;
+}
+
+// A document reference safe to post as the transaction's Reference / DocNumber.
+// Trimmed + capped to 21 chars (QuickBooks' DocNumber limit; Xero is more
+// lenient but one rule keeps the two providers consistent). null → omit it.
+export function postingReference(
+  reference: string | null | undefined,
+): string | null {
+  const r = reference?.trim();
+  if (!r) return null;
+  return r.length > 21 ? r.slice(0, 21) : r;
 }

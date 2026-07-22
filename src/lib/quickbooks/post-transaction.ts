@@ -131,17 +131,20 @@ export type ExpenseLine = { amount: number; accountId: string };
 function buildExpenseLineArray(
   lines: ExpenseLine[],
   taxCodeId: string | null,
+  description?: string | null,
 ): Record<string, unknown>[] {
   return lines.map((l) => {
     const detail: Record<string, unknown> = {
       AccountRef: { value: l.accountId },
     };
     if (taxCodeId) detail.TaxCodeRef = { value: taxCodeId };
-    return {
+    const line: Record<string, unknown> = {
       DetailType: "AccountBasedExpenseLineDetail",
       Amount: round2(l.amount),
       AccountBasedExpenseLineDetail: detail,
     };
+    if (description) line.Description = description;
+    return line;
   });
 }
 
@@ -184,6 +187,11 @@ export type BillInput = {
   amount: number; // gross total — the fallback line amount when no tax is applied
   date: string | null; // ISO YYYY-MM-DD; omitted -> QBO uses today
   memo?: string | null;
+  // The line description shown in QuickBooks (vendor + item summary). Falls back
+  // to nothing when absent.
+  description?: string | null;
+  // The document's own number → QuickBooks DocNumber (traceable to the receipt).
+  reference?: string | null;
   // When set, post the NET amount + the line's tax code and let QBO compute tax.
   tax?: TaxApplication | null;
   // When set (≥1), SPLIT across these lines instead of one; each line already
@@ -202,11 +210,16 @@ export function buildBillPayload(input: BillInput): Record<string, unknown> {
   );
   const bill: Record<string, unknown> = {
     VendorRef: { value: input.vendorId },
-    Line: buildExpenseLineArray(lineList, tax ? tax.taxCodeId : null),
+    Line: buildExpenseLineArray(
+      lineList,
+      tax ? tax.taxCodeId : null,
+      input.description,
+    ),
   };
   applyExpenseTax(bill, tax);
   if (input.date) bill.TxnDate = input.date;
   if (input.memo) bill.PrivateNote = input.memo;
+  if (input.reference) bill.DocNumber = input.reference;
   return bill;
 }
 
@@ -216,6 +229,8 @@ export type InvoiceInput = {
   amount: number; // gross total — the fallback line amount when no tax is applied
   date: string | null; // ISO YYYY-MM-DD; omitted -> QBO uses today
   memo?: string | null;
+  description?: string | null; // line description (customer + item summary)
+  reference?: string | null; // → QuickBooks DocNumber
   // When set, post the NET amount + the line's tax code and let QBO compute tax.
   tax?: TaxApplication | null;
 };
@@ -231,16 +246,17 @@ function buildIncomeTxnBody(input: InvoiceInput): Record<string, unknown> {
     ItemRef: { value: input.itemId },
   };
   if (tax) lineDetail.TaxCodeRef = { value: tax.taxCodeId };
+  const line: Record<string, unknown> = {
+    DetailType: "SalesItemLineDetail",
+    Amount: lineAmount,
+    SalesItemLineDetail: lineDetail,
+  };
+  if (input.description) line.Description = input.description;
   const body: Record<string, unknown> = {
     CustomerRef: { value: input.customerId },
-    Line: [
-      {
-        DetailType: "SalesItemLineDetail",
-        Amount: lineAmount,
-        SalesItemLineDetail: lineDetail,
-      },
-    ],
+    Line: [line],
   };
+  if (input.reference) body.DocNumber = input.reference;
   if (tax) {
     // Transaction-level tax code: MANDATORY to signal Automated-Sales-Tax intent
     // to QuickBooks. Without it an AST company (all modern QBO companies, incl.
@@ -298,6 +314,8 @@ export type PurchaseInput = {
   amount: number; // gross total — the fallback line amount when no tax is applied
   date: string | null;
   memo?: string | null;
+  description?: string | null; // line description (vendor + item summary)
+  reference?: string | null; // → QuickBooks DocNumber
   tax?: TaxApplication | null;
   // When set (≥1), SPLIT the expense across these lines instead of one.
   lines?: ExpenseLine[];
@@ -322,11 +340,16 @@ export function buildPurchasePayload(
     PaymentType: input.paymentType,
     AccountRef: { value: input.paymentAccountId }, // the account paid FROM
     EntityRef: { value: input.vendorId, type: "Vendor" },
-    Line: buildExpenseLineArray(lineList, tax ? tax.taxCodeId : null),
+    Line: buildExpenseLineArray(
+      lineList,
+      tax ? tax.taxCodeId : null,
+      input.description,
+    ),
   };
   applyExpenseTax(purchase, tax);
   if (input.date) purchase.TxnDate = input.date;
   if (input.memo) purchase.PrivateNote = input.memo;
+  if (input.reference) purchase.DocNumber = input.reference;
   return purchase;
 }
 
