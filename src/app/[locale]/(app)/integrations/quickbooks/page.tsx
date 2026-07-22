@@ -1,7 +1,7 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { Link } from "@/i18n/navigation";
-import { UploadCloud, Sparkles, CheckCircle2, Building2 } from "lucide-react";
+import { UploadCloud, Sparkles, CheckCircle2, Building2, BookOpen } from "lucide-react";
 import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import { Button } from "@/components/ui/button";
 import { listFirmQuickbooksConnectedClients } from "@/lib/db/quickbooks";
@@ -51,18 +51,27 @@ export default async function QuickbooksIntegrationPage({
 
   return (
     <div className="mx-auto max-w-3xl space-y-8 animate-in-up">
-      <header className="flex items-start gap-4">
-        <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#2CA01C]/10 ring-1 ring-inset ring-[#2CA01C]/20">
-          <QuickbooksLogo className="h-7 w-7" />
-        </span>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            {t("quickbooks_name")}
-          </h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">
-            {t("qbo_detail_explainer")}
-          </p>
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <span className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#2CA01C]/10 ring-1 ring-inset ring-[#2CA01C]/20">
+            <QuickbooksLogo className="h-7 w-7" />
+          </span>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              {t("quickbooks_name")}
+            </h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {t("qbo_detail_explainer")}
+            </p>
+          </div>
         </div>
+        {/* Jump to the shared Bookkeeping drafts queue (under Engagements). */}
+        <Button asChild variant="outline" size="sm" className="shrink-0 gap-2">
+          <Link href="/quickbooks/drafts">
+            <BookOpen className="h-4 w-4" aria-hidden />
+            {t("view_drafts")}
+          </Link>
+        </Button>
       </header>
 
       {connected.length === 0 ? (

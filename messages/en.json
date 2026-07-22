@@ -2641,6 +2641,7 @@
     "xero_demo_badge": "Demo",
     "xero_unavailable": "Xero isn't set up yet.",
     "xero_how_label": "How it works",
+    "view_drafts": "View drafts",
     "qbo_detail_explainer": "Connect each client's QuickBooks company so their receipts become ready-to-post drafts. Connecting happens on each client's page.",
     "qbo_none_connected": "No clients are connected to QuickBooks yet. Open a client's page and click Connect QuickBooks to link their company.",
     "qbo_connected_count": "{count, plural, one {# client connected} other {# clients connected}}",
