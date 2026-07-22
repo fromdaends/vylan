@@ -7,9 +7,9 @@
 // (sender names + initials on every message, a "your client receives these
 // messages" caption, no AI iconography anywhere).
 //
-// Comment-thread cadence, not live chat (founder call): loads with the page,
-// refreshes every 60s only while the tab is actually visible, and appends
-// your own message on send. Opening the tab stamps the firm's read pointer.
+// Near-live cadence (founder call): loads with the page, refreshes every few
+// seconds only while the tab is actually visible, and appends your own message
+// on send. Opening the tab stamps the firm's read pointer.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -22,8 +22,9 @@ import type { ClientMessageRow } from "@/lib/db/client-messages";
 
 // UI-side mirror of the server/DB cap (CLIENT_MESSAGE_MAX_LENGTH).
 const MAX_LENGTH = 4000;
-// Refresh cadence while the tab is visible. Comment threads, not live chat.
-const POLL_MS = 60_000;
+// Near-live: refresh a few seconds apart while the tab is visible, so a reply
+// lands within a few seconds instead of the old comment-cadence minute.
+const POLL_MS = 4_000;
 
 export function EngagementMessages({
   engagementId,
