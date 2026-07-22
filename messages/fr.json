@@ -2678,6 +2678,7 @@
     "archived": "Archivé",
     "foreign_currency": "Les montants semblent être en {currency}, pas en CAD",
     "tax_no_match": "Aucun code de taxe QuickBooks ne correspond à la taxe de ce reçu; le total publié pourrait l'exclure. Ajoutez un code correspondant dans QuickBooks (un seul code TPS/TVQ combiné pour les reçus qui ont les deux).",
+    "tax_no_match_xero": "Aucun taux de taxe Xero ne correspond à la taxe de ce reçu; le total enregistré pourrait l'exclure. Ajoutez un taux correspondant dans Xero (un seul taux TPS/TVQ combiné pour les reçus qui ont les deux).",
     "refresh_draft": "Actualiser",
     "refresh_failed": "Échec de l’actualisation.",
     "summary_label": "Brouillons QuickBooks",
