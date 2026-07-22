@@ -2631,7 +2631,21 @@
     "download_partial": "Exported {exported} of {total} documents. The rest couldn't be read.",
     "xero_name": "Xero",
     "xero_desc": "Turn each client's receipts and invoices into entries in their own Xero organisation — always after your review.",
-    "xero_action_connect": "Connect from a client's page"
+    "xero_action_connect": "Connect from a client's page",
+    "xero_detail_explainer": "Xero connects per client — each client links their own Xero organisation from their client page, so their receipts post to their own books.",
+    "xero_none_connected": "No clients are connected to Xero yet. Open a client and click Connect Xero to link their books.",
+    "xero_go_to_clients": "Go to clients",
+    "xero_connected_count": "{count, plural, one {# client connected} other {# clients connected}}",
+    "xero_unknown_client": "Client",
+    "xero_demo_badge": "Demo",
+    "xero_unavailable": "Xero isn't set up yet.",
+    "xero_how_label": "How it works",
+    "xero_step1_title": "Connect each client",
+    "xero_step1_desc": "On a client's page, click Connect Xero and sign in to their Xero organisation.",
+    "xero_step2_title": "Receipts come in",
+    "xero_step2_desc": "As documents are collected, Vylan reads each one and prepares a draft entry.",
+    "xero_step3_title": "You approve, it posts",
+    "xero_step3_desc": "Review each draft and approve — Vylan posts it into that client's Xero."
   },
   "Quickbooks": {
     "draft_title": "QuickBooks draft",

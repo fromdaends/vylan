@@ -159,6 +159,18 @@ export function buildSearchRegistry(
         "quickbooks drafts bookkeeping transactions approve dismiss qbo intuit brouillons ecritures approuver",
     },
     {
+      // Direct Xero shortcut — always listed (its landing page guides
+      // connecting per client). "Xero" is a brand name, not localized.
+      id: "integrations-xero",
+      label: "Xero",
+      group: "go",
+      icon: Plug,
+      color: "text-icon-cyan",
+      href: "/integrations/xero",
+      keywords:
+        "xero bookkeeping accounting connect integration comptabilite",
+    },
+    {
       id: "eng-drafts",
       label: t.eng("view_drafts_title"),
       group: "go",

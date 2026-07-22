@@ -2631,7 +2631,21 @@
     "download_partial": "{exported} document(s) sur {total} exportés. Les autres n'ont pas pu être lus.",
     "xero_name": "Xero",
     "xero_desc": "Transformez les reçus et factures de chaque client en écritures dans sa propre organisation Xero — toujours après votre révision.",
-    "xero_action_connect": "Connecter depuis la page d'un client"
+    "xero_action_connect": "Connecter depuis la page d'un client",
+    "xero_detail_explainer": "Xero se connecte par client — chaque client relie sa propre organisation Xero depuis sa page client, pour que ses reçus soient comptabilisés dans ses propres livres.",
+    "xero_none_connected": "Aucun client n'est encore connecté à Xero. Ouvrez un client et cliquez sur Connecter Xero pour relier ses livres.",
+    "xero_go_to_clients": "Voir les clients",
+    "xero_connected_count": "{count, plural, one {# client connecté} other {# clients connectés}}",
+    "xero_unknown_client": "Client",
+    "xero_demo_badge": "Démo",
+    "xero_unavailable": "Xero n'est pas encore configuré.",
+    "xero_how_label": "Comment ça marche",
+    "xero_step1_title": "Connectez chaque client",
+    "xero_step1_desc": "Sur la page d'un client, cliquez sur Connecter Xero et connectez-vous à son organisation Xero.",
+    "xero_step2_title": "Les reçus arrivent",
+    "xero_step2_desc": "À mesure que les documents sont recueillis, Vylan lit chacun et prépare une écriture brouillon.",
+    "xero_step3_title": "Vous approuvez, ça se comptabilise",
+    "xero_step3_desc": "Révisez chaque brouillon et approuvez — Vylan le comptabilise dans le Xero de ce client."
   },
   "Quickbooks": {
     "draft_title": "Brouillon QuickBooks",

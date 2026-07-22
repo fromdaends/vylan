@@ -339,3 +339,42 @@ export async function findXeroTenantIdsInUse(
     (data ?? []).map((r) => (r as { tenant_id: string }).tenant_id),
   );
 }
+
+// The firm's connected Xero clients (id + org name + demo flag), for the Xero
+// integrations landing page. Authenticated (RLS firm-scoped); client display
+// names are stitched in a second query (the repo avoids PostgREST joins).
+// Returns [] on error / pre-0740.
+export async function listFirmXeroConnectedClients(): Promise<
+  { clientId: string; clientName: string | null; tenantName: string | null; isDemo: boolean }[]
+> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("xero_connections")
+    .select("client_id, tenant_name, is_demo")
+    .order("connected_at", { ascending: false });
+  if (error) {
+    if (!isMissingXeroSchema(error)) {
+      console.error("[xero] listFirmXeroConnectedClients failed:", error);
+    }
+    return [];
+  }
+  const rows = (data as Array<Record<string, unknown>> | null) ?? [];
+  if (rows.length === 0) return [];
+  const clientIds = [...new Set(rows.map((r) => r.client_id as string))];
+  const { data: clientRows } = await sb
+    .from("clients")
+    .select("id, display_name")
+    .in("id", clientIds);
+  const nameById = new Map(
+    ((clientRows as Array<Record<string, unknown>> | null) ?? []).map((c) => [
+      c.id as string,
+      (c.display_name as string | null) ?? null,
+    ]),
+  );
+  return rows.map((r) => ({
+    clientId: r.client_id as string,
+    clientName: nameById.get(r.client_id as string) ?? null,
+    tenantName: (r.tenant_name as string | null) ?? null,
+    isDemo: r.is_demo === true,
+  }));
+}
