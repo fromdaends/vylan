@@ -19,6 +19,8 @@ import {
 } from "@/lib/quickbooks/draft-resolve";
 import { attachReceiptToPostedDraft } from "@/lib/quickbooks/post";
 import { logUserActivity } from "@/lib/db/activity";
+import { isClientXeroConnected } from "@/lib/db/xero";
+import { attachXeroReceipt } from "@/lib/xero/post";
 
 export const runtime = "nodejs";
 // Downloads the receipt from storage and uploads it to QuickBooks; give it the
@@ -56,6 +58,69 @@ export async function POST(
       { status: 404 },
     );
   }
+
+  // Xero-connected client → attach the receipt to the posted Xero transaction,
+  // matching the SAME response contract. QuickBooks drafts continue below.
+  if (
+    draft.clientId &&
+    draft.firmId &&
+    (await isClientXeroConnected(draft.firmId, draft.clientId))
+  ) {
+    const r = await attachXeroReceipt(fileId);
+    switch (r.kind) {
+      case "not_found":
+        return NextResponse.json(
+          { error: "not_found", detail: "Draft not found." },
+          { status: 404 },
+        );
+      case "not_enabled":
+        return NextResponse.json(
+          {
+            error: "not_enabled",
+            detail: "Receipt-attach tracking isn't enabled yet.",
+          },
+          { status: 409 },
+        );
+      case "not_posted":
+        return NextResponse.json(
+          { error: "not_posted", detail: "This draft isn't posted." },
+          { status: 409 },
+        );
+      case "not_connected":
+        return NextResponse.json(
+          { error: "not_connected", detail: "Xero isn't connected." },
+          { status: 409 },
+        );
+      case "failed":
+        revalidate(r.engagementId);
+        return NextResponse.json(
+          { error: "attach_failed", detail: r.detail },
+          { status: 502 },
+        );
+      case "attached":
+        revalidate(r.engagementId);
+        if (!r.alreadyAttached) {
+          try {
+            await logUserActivity(
+              draft.firmId,
+              r.engagementId,
+              "attach_qbo_receipt",
+              { file_id: fileId, qbo_id: draft.postedQboId },
+            );
+          } catch (err) {
+            console.error(
+              "[xero attach route] audit log failed (attach applied):",
+              err,
+            );
+          }
+        }
+        return NextResponse.json({
+          ok: true,
+          alreadyAttached: r.alreadyAttached || undefined,
+        });
+    }
+  }
+
   // The 0500 column must exist so the attach can be RECORDED — otherwise a retry
   // would upload again on every click (no persisted "attached" flag) and duplicate
   // the attachment in QuickBooks. Mirrors the post/void routes gating on postReady.

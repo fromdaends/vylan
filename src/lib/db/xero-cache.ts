@@ -35,14 +35,16 @@ type MinimalQuery = {
 } & PromiseLike<QueryResult>;
 type MinimalBuilder = { select: (cols: string) => MinimalQuery };
 
-// Shared cache read: read one client's four cached lists and adapt to
-// QuickbooksLists. `firmId` adds an explicit filter for the service-role path
-// (RLS can't scope it); the authed path passes null and relies on RLS.
-async function readListsWith(
+// Shared cache read: read one client's four cached tables into the typed row
+// arrays (still carrying code / income_account_code, which the QuickbooksLists
+// shape drops). `firmId` adds an explicit filter for the service-role path (RLS
+// can't scope it); the authed path passes null and relies on RLS. Returns null
+// pre-0780 / on error.
+async function readRowsWith(
   sbRaw: unknown,
   clientId: string,
   firmId: string | null,
-): Promise<QuickbooksLists | null> {
+): Promise<XeroReadRows | null> {
   const sb = sbRaw as MinimalSb;
   const read = (table: string, cols: string): MinimalQuery => {
     let q = sb.from(table).select(cols).eq("client_id", clientId);
@@ -97,7 +99,48 @@ async function readListsWith(
     incomeAccountCode: (r.income_account_code as string | null) ?? null,
     active: r.active !== false,
   }));
-  return xeroRowsToLists({ accounts, contacts, taxRates, items: itemRows });
+  return { accounts, contacts, taxRates, items: itemRows };
+}
+
+// Shared cache read adapted to the QuickbooksLists shape the matcher/pickers use.
+async function readListsWith(
+  sbRaw: unknown,
+  clientId: string,
+  firmId: string | null,
+): Promise<QuickbooksLists | null> {
+  const rows = await readRowsWith(sbRaw, clientId, firmId);
+  return rows ? xeroRowsToLists(rows) : null;
+}
+
+// Everything the POSTING orchestration needs for one client, in one read: the
+// QuickbooksLists (for the provider-neutral postability/active checks) PLUS the
+// GUID→code maps the matcher shape drops but Xero line items require — line
+// account = AccountCode, item = ItemCode, and an item's income AccountCode as the
+// fallback when it has no code. (Contact/tax/bank use their ids directly, so no
+// map is needed for those.) Service-role (posting knows firm + client). Null
+// pre-0780 / on error.
+export async function readXeroPostingContext(
+  firmId: string,
+  clientId: string,
+): Promise<{
+  lists: QuickbooksLists;
+  accountCodeById: Map<string, string | null>;
+  itemCodeById: Map<string, string | null>;
+  itemIncomeAccountCodeById: Map<string, string | null>;
+} | null> {
+  const sb = getServiceRoleSupabase();
+  const rows = await readRowsWith(sb, clientId, firmId);
+  if (!rows) return null;
+  const accounts = rows.accounts ?? [];
+  const items = rows.items ?? [];
+  return {
+    lists: xeroRowsToLists(rows),
+    accountCodeById: new Map(accounts.map((a) => [a.xeroId, a.code])),
+    itemCodeById: new Map(items.map((i) => [i.xeroId, i.code])),
+    itemIncomeAccountCodeById: new Map(
+      items.map((i) => [i.xeroId, i.incomeAccountCode]),
+    ),
+  };
 }
 
 // Authenticated (RLS firm-scoped) read for a page render. Null pre-0780 / on error.

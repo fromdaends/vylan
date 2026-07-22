@@ -494,13 +494,14 @@ export async function QuickbooksDraftCard({
         </div>
       </div>
 
-      {/* Stage 5: posting row — Post to QuickBooks (approved) / Posted + Undo.
-          QuickBooks ONLY in Phase 3: posting to Xero lands in Phase 4, so a Xero
-          draft never renders the Post/Undo/Attach controls — instead it shows a
-          muted "coming soon" note once approved. Everything above (review /
-          approve / dismiss / edit) is provider-neutral and already worked. */}
+      {/* Stage 5: posting row — Post (approved) / Posted + Undo. Live for
+          QuickBooks (all directions) and for Xero EXPENSES (Phase 4b: Bill /
+          Spend). Xero INCOME posting is still deferred — a Xero income draft
+          keeps the muted "coming soon" note (Xero's Receive needs a deposit bank
+          account we don't collect for income yet). Everything above (review /
+          approve / dismiss / edit) is provider-neutral. */}
       {(status === "approved" || status === "posted") &&
-        (isXero ? (
+        (isXero && v.direction !== "expense" ? (
           <div className="border-t border-border/40 px-3 py-2">
             <p className="text-[11px] text-muted-foreground">
               {t("xero_posting_soon")}
@@ -511,6 +512,7 @@ export async function QuickbooksDraftCard({
             <PostDraftControls
               fileId={fileId}
               status={status}
+              provider={provider}
               direction={v.direction}
               expenseMode={expenseMode}
               incomeMode={incomeMode}

@@ -63,10 +63,16 @@ export function PostDraftControls({
   taxNote,
   receiptAttached = false,
   matchedExisting = false,
+  provider = "quickbooks",
   locale,
 }: {
   fileId: string;
   status: DraftStatus;
+  // The bookkeeping product this draft posts to. Drives provider-named copy
+  // ("Post to Xero") and hides QuickBooks-only affordances (the smart-match hint,
+  // the Settings→Integrations reconnect link) for Xero — where posting is
+  // register-match-free and reconnecting happens on the client's page.
+  provider?: "quickbooks" | "xero";
   direction: "expense" | "income" | "unknown";
   // For an expense: "purchase" (already paid) posts a QuickBooks Expense; "bill"
   // (unpaid) posts a Bill. Drives only the confirm copy. Ignored for income.
@@ -94,6 +100,11 @@ export function PostDraftControls({
   locale: AppLocale;
 }) {
   const t = useTranslations("Quickbooks");
+  const isXero = provider === "xero";
+  // Pick the Xero-worded variant of a provider-named key when posting to Xero
+  // (the QuickBooks keys are the default). Only the provider-named keys have a
+  // `_xero` sibling; neutral keys ("Undo", "Cancel") are used as-is.
+  const pk = (key: string) => (isXero ? `${key}_xero` : key);
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -230,8 +241,8 @@ export function PostDraftControls({
             {matchedExisting
               ? t("matched_label")
               : postedByName
-                ? t("posted_by", { name: postedByName })
-                : t("posted_label")}
+                ? t(pk("posted_by"), { name: postedByName })
+                : t(pk("posted_label"))}
             {postedAtLabel ? ` · ${postedAtLabel}` : ""}
           </span>
           <div className="flex items-center gap-2">
@@ -260,7 +271,7 @@ export function PostDraftControls({
                     {t(matchedExisting ? "unlink_title" : "undo_title")}
                   </DialogTitle>
                   <DialogDescription>
-                    {t(matchedExisting ? "unlink_body" : "undo_body")}
+                    {t(matchedExisting ? "unlink_body" : pk("undo_body"))}
                   </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
@@ -342,8 +353,8 @@ export function PostDraftControls({
         ? t("post_body_salesreceipt")
         : t("post_body_income")
       : expenseMode === "purchase"
-        ? t("post_body_purchase")
-        : t("post_body");
+        ? t(pk("post_body_purchase"))
+        : t(pk("post_body"));
 
   // Approved expense/income: Post (with retry error if a prior attempt failed).
   // The same dialog swaps to the "already in QuickBooks?" candidate list when
@@ -366,7 +377,7 @@ export function PostDraftControls({
         >
           <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
           {failed ? (failMessage ?? t("post_failed")) : postError}
-          {reconnect && (
+          {reconnect && !isXero && (
             <a
               href={`/${locale}/settings?tab=integrations`}
               className="font-medium underline underline-offset-2"
@@ -391,23 +402,26 @@ export function PostDraftControls({
         <DialogTrigger asChild>
           <Button size="sm" className="ml-auto gap-1.5">
             <Upload className="h-4 w-4" aria-hidden="true" />
-            {t("post_button")}
+            {t(pk("post_button"))}
           </Button>
         </DialogTrigger>
         <DialogContent className="sm:max-w-md">
           {matchCandidates == null ? (
             <>
               <DialogHeader>
-                <DialogTitle>{t("post_title")}</DialogTitle>
+                <DialogTitle>{t(pk("post_title"))}</DialogTitle>
                 <DialogDescription>{confirmBody}</DialogDescription>
               </DialogHeader>
               {/* Set expectations for the smart match: posting may CREATE a new
                   entry, or (if it's already in QuickBooks) attach the receipt to
-                  the existing one — so a confident auto-attach is never a surprise. */}
-              <p className="-mt-1 flex items-start gap-1.5 text-[13px] leading-snug text-muted-foreground">
-                <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span>{t("post_match_hint")}</span>
-              </p>
+                  the existing one — so a confident auto-attach is never a surprise.
+                  QuickBooks only: Xero posting has no register-match. */}
+              {!isXero && (
+                <p className="-mt-1 flex items-start gap-1.5 text-[13px] leading-snug text-muted-foreground">
+                  <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{t("post_match_hint")}</span>
+                </p>
+              )}
               {failed && (
                 <p
                   role="alert"
@@ -418,7 +432,7 @@ export function PostDraftControls({
                     aria-hidden="true"
                   />
                   {failMessage ?? t("post_failed")}
-                  {reconnect && (
+                  {reconnect && !isXero && (
                     <a
                       href={`/${locale}/settings?tab=integrations`}
                       className="font-medium underline underline-offset-2"
