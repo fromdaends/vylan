@@ -35,7 +35,7 @@ export function MoneySection({
         <p className="mt-0.5 text-xs text-muted-foreground">{copy.caption}</p>
       </header>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-0">
         <Tile icon={<Wallet className="size-4 text-icon-emerald" />} label={copy.collected}>
           <CountUp value={data.collectedCents} format={money} className={cn(BIG, "text-foreground")} />
           <p className="mt-1 text-xs text-muted-foreground">
@@ -130,7 +130,7 @@ function Tile({
   children: ReactNode;
 }) {
   return (
-    <div className="min-w-0">
+    <div className="min-w-0 sm:px-6 sm:first:pl-0 sm:last:pr-0 sm:[&:not(:first-child)]:border-l sm:[&:not(:first-child)]:border-border/50">
       <div className="mb-1.5 flex items-center gap-1.5">
         {icon}
         <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
