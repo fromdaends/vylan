@@ -2761,7 +2761,7 @@
     "queue_connect_step3_desc": "Check it, adjust if needed, and post it to your accounting software.",
     "approve_ready": "Approve all ready ({count})",
     "approve_ready_title": "Approve ready drafts",
-    "approve_ready_confirm": "Approve {count, plural, one {# ready draft} other {# ready drafts}}? You can reopen any of them later. Nothing is posted to QuickBooks yet.",
+    "approve_ready_confirm": "Approve {count, plural, one {# ready draft} other {# ready drafts}}? You can reopen any of them later. Nothing is posted yet.",
     "approve_ready_go": "Approve {count}",
     "approve_ready_cancel": "Cancel",
     "approve_ready_failed": "Couldn't approve them. Try again.",

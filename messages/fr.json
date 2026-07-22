@@ -2761,7 +2761,7 @@
     "queue_connect_step3_desc": "Vérifiez-la, ajustez au besoin, et comptabilisez-la dans votre logiciel comptable.",
     "approve_ready": "Approuver les prêts ({count})",
     "approve_ready_title": "Approuver les brouillons prêts",
-    "approve_ready_confirm": "Approuver {count, plural, one {# brouillon prêt} other {# brouillons prêts}}? Vous pourrez en rouvrir n’importe lequel plus tard. Rien n’est encore envoyé à QuickBooks.",
+    "approve_ready_confirm": "Approuver {count, plural, one {# brouillon prêt} other {# brouillons prêts}}? Vous pourrez en rouvrir n’importe lequel plus tard. Rien n’est encore comptabilisé.",
     "approve_ready_go": "Approuver {count}",
     "approve_ready_cancel": "Annuler",
     "approve_ready_failed": "Échec de l’approbation. Réessayez.",
