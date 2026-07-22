@@ -2682,6 +2682,7 @@
     "refresh_draft": "Actualiser",
     "refresh_failed": "Échec de l’actualisation.",
     "summary_label": "Brouillons QuickBooks",
+    "summary_label_xero": "Brouillons Xero",
     "summary_drafts": "{count, plural, one {# brouillon} other {# brouillons}}",
     "summary_needs_input": "{count, plural, one {# à compléter} other {# à compléter}}",
     "summary_total": "{amount} au total",

@@ -406,10 +406,11 @@ export async function QuickbooksDraftCard({
 
       {/* Expense: was it already paid? A paid receipt posts a Purchase (against a
           bank/credit-card account); an unpaid bill posts a Bill. Income has no
-          such choice. QuickBooks-only posting shape (Phase 3): a Xero card can't
-          post yet, so these QuickBooks-flavoured controls stay hidden until the
-          Xero posting form lands (Phase 4) — same gate as the Post row below. */}
-      {!isXero && v.direction === "expense" && (
+          such choice. Shown for BOTH providers — the labels are provider-neutral
+          ("Expense (paid)" / "Paid from"), and a PAID expense can't be approved
+          until its paid-from account is chosen (draftNeedsInput), so this must
+          stay visible for Xero too even though posting is deferred to Phase 4. */}
+      {v.direction === "expense" && (
         <div className="grid grid-cols-1 gap-1.5 px-3 pt-1.5 sm:grid-cols-2">
           <QuickbooksPaidToggle
             key={`paid-${expenseMode}`}
@@ -440,9 +441,9 @@ export async function QuickbooksDraftCard({
 
       {/* INCOME: Invoice (the customer owes) vs Sales receipt (already paid). A
           paid sale deposits to Undeposited Funds by default, so no extra account
-          is required. QuickBooks-only posting shape — hidden on a Xero card
-          (Phase 4) like the expense toggle above. */}
-      {!isXero && v.direction === "income" && (
+          is required. Provider-neutral labels; shown for both providers so income
+          drafts stay reviewable/approvable on Xero too (posting is Phase 4). */}
+      {v.direction === "income" && (
         <div className="px-3 pt-1.5">
           <QuickbooksPaidToggle
             key={`paid-${incomeMode}`}
