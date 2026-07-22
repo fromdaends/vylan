@@ -4,10 +4,10 @@
 // thread on the other".
 //
 //  • Desktop (lg+): a two-pane app — the documents/hub column on the left, the
-//    message thread docked on the right at a fixed one-third width. Documents
-//    keep the dominant two-thirds (the client's main task); a third is a
-//    comfortable, uncramped width for the conversation. Each pane scrolls on its
-//    own so the composer never leaves the bottom of the thread.
+//    message thread docked on the right at a fixed 28% width. Documents keep the
+//    dominant share (the client's main task); ~28% is enough for the
+//    conversation without crowding the checklist. Each pane scrolls on its own
+//    so the composer never leaves the bottom of the thread.
 //  • Mobile (<lg): there is no split. The thread opens as a full-screen overlay
 //    that sits just below the sticky firm header, with its own Back button, so
 //    texting fills the whole screen instead of a short box mid-page.
@@ -81,8 +81,8 @@ export function PortalSplit({
           // Mobile overlay.
           "fixed inset-x-0 bottom-0 top-16",
           messagesOpen ? "flex" : "hidden",
-          // Desktop pane — fixed at one-third of the width.
-          "lg:static lg:inset-auto lg:z-auto lg:flex lg:min-h-0 lg:w-1/3 lg:shrink-0 lg:border-l lg:border-border/60",
+          // Desktop pane — fixed narrow width; documents stay dominant.
+          "lg:static lg:inset-auto lg:z-auto lg:flex lg:min-h-0 lg:w-[28%] lg:shrink-0 lg:border-l lg:border-border/60",
         )}
       >
         {mountPanel ? panel : null}
