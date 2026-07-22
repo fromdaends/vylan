@@ -14,6 +14,7 @@ const txn = (over: Partial<TransactionExtraction>): TransactionExtraction => ({
   vendor_name: null,
   customer_name: null,
   document_date: null,
+  document_number: null,
   currency: null,
   subtotal: null,
   total: null,
@@ -79,6 +80,7 @@ describe("toSageCsvRow", () => {
         ],
         currency: "CAD",
         document_date: "2026-06-15",
+        document_number: null,
       }),
       ctx,
     );

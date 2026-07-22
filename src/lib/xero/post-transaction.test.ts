@@ -119,6 +119,20 @@ describe("buildXeroBillPayload (ACCPAY)", () => {
     expect(body.Status).toBe("DRAFT");
     expect(body.DueDate).toBeUndefined();
   });
+
+  it("carries the line description + Reference through", () => {
+    const body = buildXeroBillPayload({
+      contactId: "C1",
+      accountCode: "400",
+      amount: 100,
+      date: "2026-07-18",
+      description: "Central Copiers — printer paper, toner",
+      reference: "CC-20418",
+    });
+    expect(body.Reference).toBe("CC-20418");
+    const lines = body.LineItems as Record<string, unknown>[];
+    expect(lines[0].Description).toBe("Central Copiers — printer paper, toner");
+  });
 });
 
 describe("buildXeroSpendPayload (SPEND bank transaction)", () => {

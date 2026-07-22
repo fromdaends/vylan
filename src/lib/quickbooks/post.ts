@@ -36,6 +36,10 @@ import { getUploadedFileById } from "@/lib/db/uploaded-files";
 import { downloadObject } from "@/lib/storage";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import {
+  postingLineDescription,
+  postingReference,
+} from "@/lib/quickbooks/suggest";
+import {
   effectiveMapping,
   effectiveDate,
   effectiveExpenseMode,
@@ -151,6 +155,13 @@ export async function postApprovedDraft(
 
   const s = draft.suggestion;
   const eff = effectiveMapping(s, draft.resolved);
+  // Human-facing detail on the posted entry: a "vendor — items" line description
+  // and the document's own number as DocNumber (traceable to the receipt).
+  const lineDescription = postingLineDescription(
+    eff.party?.name ?? s.partySource ?? null,
+    s.lines,
+  );
+  const reference = postingReference(s.reference);
   // A real transaction date is required so QuickBooks auto-matches this to the
   // bank feed instead of dating it "today". draftNeedsInput already blocks
   // approval without one; this re-checks at post time (defense in depth, and it
@@ -249,6 +260,8 @@ export async function postApprovedDraft(
       amount: s.amount,
       date: effDate,
       memo: "Posted from Vylan",
+      description: lineDescription,
+      reference,
       tax,
     };
     if (effectiveIncomeMode(s, draft.resolved) === "salesreceipt") {
@@ -300,6 +313,8 @@ export async function postApprovedDraft(
       amount: s.amount,
       date: effDate,
       memo: "Posted from Vylan",
+      description: lineDescription,
+      reference,
       tax,
       lines: expenseLines,
     });
@@ -326,6 +341,8 @@ export async function postApprovedDraft(
       amount: s.amount,
       date: effDate,
       memo: "Posted from Vylan",
+      description: lineDescription,
+      reference,
       tax,
       lines: expenseLines,
     });
