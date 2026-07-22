@@ -33,13 +33,17 @@ describe("isNavItemActive", () => {
 });
 
 describe("isIntegrationsSectionActive", () => {
-  it("lights on the Integrations hub index and its Sage sub-route", () => {
+  it("lights on the Integrations hub index and its sub-routes", () => {
     expect(isIntegrationsSectionActive("/integrations")).toBe(true);
     expect(isIntegrationsSectionActive("/integrations/sage")).toBe(true);
+    expect(isIntegrationsSectionActive("/integrations/quickbooks")).toBe(true);
+    expect(isIntegrationsSectionActive("/integrations/xero")).toBe(true);
   });
 
-  it("also lights on the pre-existing QuickBooks surface", () => {
-    expect(isIntegrationsSectionActive("/quickbooks/drafts")).toBe(true);
+  it("does NOT light on the shared drafts queue (that's the Bookkeeping tab)", () => {
+    // /quickbooks/drafts is the top-level Bookkeeping tab now, not part of the
+    // Integrations section — so the Integrations parent must stay unlit there.
+    expect(isIntegrationsSectionActive("/quickbooks/drafts")).toBe(false);
   });
 
   it("stays off on unrelated routes", () => {

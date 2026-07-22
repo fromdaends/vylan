@@ -47,10 +47,10 @@ export default async function IntegrationsIndexPage({
 
       <div className="grid gap-4 sm:grid-cols-2">
         {/* QuickBooks — live integration. ALWAYS shown (reads "Not connected"
-            until a client is linked) so it's discoverable. Opens the drafts
-            queue, which guides connecting per client when nothing's linked. */}
+            until a client is linked) so it's discoverable. Opens the QuickBooks
+            connect page (drafts now live in the shared Bookkeeping tab). */}
         <IntegrationCard
-          href="/quickbooks/drafts"
+          href="/integrations/quickbooks"
           logo={<QuickbooksLogo className="h-7 w-7" />}
           tileClassName="bg-[#2CA01C]/10 ring-[#2CA01C]/20"
           name={t("quickbooks_name")}
@@ -64,11 +64,10 @@ export default async function IntegrationsIndexPage({
         />
 
         {/* Xero — live integration, the QuickBooks sibling. Always shown
-            ("Not connected" until a client links); connecting happens per
-            client on each client's page, so the card points at the client
-            list. */}
+            ("Not connected" until a client links); opens the Xero connect page
+            (which explains per-client connecting and lists linked clients). */}
         <IntegrationCard
-          href="/clients"
+          href="/integrations/xero"
           logo={<XeroLogo className="h-7 w-7" />}
           tileClassName="bg-[#13B5EA]/10 ring-[#13B5EA]/20"
           name={t("xero_name")}

@@ -71,6 +71,7 @@ type Labels = {
   engagements: string;
   engagementsToggle: string;
   templates: string;
+  bookkeeping: string;
   integrations: string;
   integrationsToggle: string;
   settings: string;
@@ -128,8 +129,8 @@ const INTEGRATION_SUBNAV: {
   {
     key: "quickbooks",
     name: "QuickBooks",
-    href: "/quickbooks/drafts",
-    root: "/quickbooks",
+    href: "/integrations/quickbooks",
+    root: "/integrations/quickbooks",
     Logo: QuickbooksLogo,
   },
   {
@@ -195,6 +196,7 @@ export function AppShell({
   isOwner = false,
   teamEnabled = true,
   quickbooksConnected = false,
+  xeroConnected = false,
 }: {
   children: React.ReactNode;
   topBar?: React.ReactNode;
@@ -212,10 +214,12 @@ export function AppShell({
   // Hides team shortcuts when collaboration mode is off. The Settings account
   // card remains the intentional entry point for creating a team again.
   teamEnabled?: boolean;
-  // Shows the Integrations nav section — only when the firm has QuickBooks
-  // connected (any client). Connecting happens in Settings → Integrations, so the
-  // nav stays hidden (for owners too) until there's an actual connection.
+  // Shows the QuickBooks Integrations sub-item + drives the Bookkeeping tab.
   quickbooksConnected?: boolean;
+  // Together with quickbooksConnected, drives the top-level "Bookkeeping" tab:
+  // it appears once the firm has ANY bookkeeping connection (QuickBooks OR Xero),
+  // since the drafts queue is a shared surface.
+  xeroConnected?: boolean;
 }) {
   const pathname = usePathname();
   const tApp = useTranslations("App");
@@ -273,6 +277,20 @@ export function AppShell({
       icon: FileText,
       color: "text-icon-amber",
     },
+    // "Bookkeeping" — the shared drafts queue (QuickBooks + Xero). Shown once the
+    // firm has ANY bookkeeping connection; hidden otherwise so it never leads a
+    // brand-new firm to a bare connect wall. Route is the pre-existing
+    // /quickbooks/drafts (kept to avoid churn); the tab + page read neutrally.
+    ...(quickbooksConnected || xeroConnected
+      ? [
+          {
+            href: "/quickbooks/drafts",
+            label: labels.bookkeeping,
+            icon: BookOpen,
+            color: "text-icon-cyan",
+          } as NavItemDef,
+        ]
+      : []),
   ];
 
   // Integrations hub — an EXPANDABLE section (like Engagements) whose parent

@@ -16,7 +16,10 @@ import {
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
 import { readCachedQuickbooksListsByClient } from "@/lib/db/quickbooks-cache";
 import { readCachedXeroLists } from "@/lib/db/xero-cache";
-import { filterXeroConnectedClientIds } from "@/lib/db/xero";
+import {
+  filterXeroConnectedClientIds,
+  firmHasAnyXeroConnection,
+} from "@/lib/db/xero";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { summarizeDrafts } from "@/lib/quickbooks/draft-summary";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
@@ -30,11 +33,11 @@ import {
 } from "@/lib/quickbooks/draft-queue";
 import { DraftsQueue } from "@/components/quickbooks/drafts-queue";
 import { QueueRow } from "@/components/quickbooks/queue-row";
-import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import type { DraftCardOptions } from "@/components/engagements/quickbooks-draft-card";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle,
+  BookOpen,
   CheckCircle2,
   Info,
   Sparkles,
@@ -54,13 +57,18 @@ export default async function QuickbooksDraftsPage({
   const sp = await searchParams;
   const t = await getTranslations("Quickbooks");
 
-  // Connection gate. The nav item is hidden until QuickBooks is connected, but
-  // the page is reachable by direct URL, so show a friendly prompt either way.
-  const [connected, user, firm] = await Promise.all([
+  // Connection gate. The Bookkeeping nav item is hidden until QuickBooks OR Xero
+  // is connected, but the page is reachable by direct URL, so show a friendly
+  // prompt either way. This is the SHARED drafts surface (0790): a firm connected
+  // to only Xero must still see its drafts here — gating on QuickBooks alone would
+  // hide a Xero-only firm's drafts behind a "connect QuickBooks" wall.
+  const [qbConnected, xeroConnected, user, firm] = await Promise.all([
     firmHasAnyQuickbooksConnection(),
+    firmHasAnyXeroConnection(),
     getCurrentUser(),
     getCurrentFirm(),
   ]);
+  const connected = qbConnected || xeroConnected;
   const isOwner = user?.role === "owner";
 
   if (!connected) {
@@ -92,10 +100,11 @@ export default async function QuickbooksDraftsPage({
     ];
     return (
       <div className="mx-auto max-w-2xl py-10 text-center animate-in-up sm:py-16">
-        {/* Brand mark on a soft QuickBooks-green tile — the logo keeps its real
-            brand color; the tint ties the page to QuickBooks without a border. */}
-        <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-[#2CA01C]/10 ring-1 ring-inset ring-[#2CA01C]/20">
-          <QuickbooksLogo className="h-8 w-8" />
+        {/* Provider-neutral mark: this is the SHARED bookkeeping drafts surface
+            (QuickBooks or Xero), so use a neutral BookOpen tile rather than one
+            product's brand tint. */}
+        <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-secondary/60 ring-1 ring-inset ring-border/50">
+          <BookOpen className="h-8 w-8 text-muted-foreground" aria-hidden />
         </div>
         <h1 className="mt-6 text-2xl font-semibold tracking-tight text-balance sm:text-3xl">
           {t("queue_connect_headline")}
@@ -110,7 +119,7 @@ export default async function QuickbooksDraftsPage({
                 their QuickBooks there. Send the owner to the clients list. */}
             <Button asChild size="lg" className="gap-2">
               <Link href="/clients">
-                <QuickbooksLogo className="h-4 w-4" />
+                <BookOpen className="h-4 w-4" aria-hidden />
                 {t("queue_connect_cta_clients")}
               </Link>
             </Button>
@@ -456,7 +465,7 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
     <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
       <div>
         <div className="flex items-center gap-2.5">
-          <QuickbooksLogo className="h-7 w-7 shrink-0" />
+          <BookOpen className="h-7 w-7 shrink-0 text-muted-foreground" aria-hidden />
           <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
         </div>
         <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
