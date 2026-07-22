@@ -56,6 +56,13 @@ export type PerfCopy = {
     earlyData: (n: number) => string;
     empty: string;
   };
+  automation: {
+    heading: string;
+    remindersLabel: string;
+    remindersHint: string;
+    reRequestsLabel: string;
+    reRequestsHint: string;
+  };
 };
 
 export const PERF_COPY: Record<AppLocale, PerfCopy> = {
@@ -114,6 +121,13 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
         `Early data. Based on only ${n} ${n === 1 ? "document" : "documents"} so far, so treat this as a first look rather than a firm track record.`,
       empty: "No documents assessed in this period yet.",
     },
+    automation: {
+      heading: "What Vylan did automatically",
+      remindersLabel: "Reminders sent",
+      remindersHint: "automatic follow-ups you didn't have to send",
+      reRequestsLabel: "Documents re-requested",
+      reRequestsHint: "chased automatically after an auto-rejection",
+    },
   },
   fr: {
     title: "Performance",
@@ -171,6 +185,13 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       earlyData: (n) =>
         `Données préliminaires. Basé sur seulement ${n} document${n === 1 ? "" : "s"} pour l'instant; voyez ceci comme un premier aperçu plutôt qu'un bilan établi.`,
       empty: "Aucun document évalué sur cette période pour l'instant.",
+    },
+    automation: {
+      heading: "Ce que Vylan a fait automatiquement",
+      remindersLabel: "Rappels envoyés",
+      remindersHint: "relances automatiques que vous n'avez pas eu à envoyer",
+      reRequestsLabel: "Documents redemandés",
+      reRequestsHint: "relancés automatiquement après un rejet automatique",
     },
   },
 };
