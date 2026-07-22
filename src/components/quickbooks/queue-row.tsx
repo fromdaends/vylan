@@ -8,6 +8,8 @@ import {
   QuickbooksDraftCard,
   type DraftCardOptions,
 } from "@/components/engagements/quickbooks-draft-card";
+import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
+import { XeroLogo } from "@/components/integrations/xero-logo";
 import { DraftStatusControls } from "@/components/engagements/draft-status-controls";
 import { DeleteDraftControl } from "./delete-draft-control";
 import { draftQueueBucket, type QueueBucket } from "@/lib/quickbooks/draft-queue";
@@ -38,6 +40,12 @@ export async function QueueRow({
 }) {
   const t = await getTranslations("Quickbooks");
   const s = row.suggestion;
+  // Which bookkeeping product this draft belongs to (effective live provider,
+  // falling back to the stored column) — surfaced as a small brand logo on the
+  // collapsed row so the source is scannable at a glance in the mixed queue.
+  const eff = provider ?? row.provider;
+  const ProviderLogo = eff === "xero" ? XeroLogo : QuickbooksLogo;
+  const providerName = eff === "xero" ? "Xero" : "QuickBooks";
   const bucket = draftQueueBucket({
     suggestion: s,
     resolved: row.resolved,
@@ -71,6 +79,15 @@ export async function QueueRow({
 
   const summary = (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+      {/* Source: which product this draft posts to. A small brand logo so the
+          mixed QuickBooks/Xero queue is scannable at a glance. */}
+      <span
+        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-secondary/60 ring-1 ring-inset ring-border/40"
+        title={providerName}
+        aria-label={providerName}
+      >
+        <ProviderLogo className="h-3.5 w-3.5" />
+      </span>
       {/* Identity: client + engagement link, then the document. */}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
@@ -149,7 +166,7 @@ export async function QueueRow({
         receiptAttachedAt={row.receiptAttachedAt}
         matchedQboType={row.matchedQboType}
         showStatusControls={false}
-        provider={provider ?? row.provider}
+        provider={eff}
       />
     </QueueRowDisclosure>
   );
