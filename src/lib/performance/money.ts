@@ -10,8 +10,8 @@ import {
   type OutstandingInvoice,
   type PaidInvoice,
 } from "./aggregate";
-import type { ResolvedRange } from "./range";
-import type { MoneySection } from "./types";
+import { resolveRange, type ResolvedRange } from "./range";
+import type { MoneySection, PerformanceRange } from "./types";
 
 const PAGE = 1000;
 const MAX_ROWS = 50_000;
@@ -120,4 +120,14 @@ export async function loadMoneySection(
     paidRows[0]?.currency ?? outstandingRows[0]?.currency ?? "cad";
 
   return aggregateMoney(paid, outstanding, range, currency);
+}
+
+// Convenience for the page: resolve the range and load money in one call. The
+// clock is read HERE (a lib function), not in the server component's render, so
+// the page stays pure. `nowMs` is injectable for tests.
+export async function loadMoney(
+  range: PerformanceRange,
+  nowMs: number = Date.now(),
+): Promise<MoneySection> {
+  return loadMoneySection(resolveRange(range, nowMs));
 }
