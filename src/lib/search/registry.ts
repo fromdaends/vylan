@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
+  BookOpen,
   Plug,
   ListChecks,
   PencilLine,
@@ -145,18 +146,29 @@ export function buildSearchRegistry(
         "integrations integration connect apps sage sage 50 export file quickbooks qbo intuit comptabilite exportation",
     },
     {
-      // Direct QuickBooks shortcut — ALWAYS listed now (mirrors the always-visible
-      // sidebar sub-item + hub card); the drafts page guides an owner to connect
-      // from a client's page when nothing's linked yet. "QuickBooks" is a brand
+      // The shared drafts queue (QuickBooks + Xero) — the "Bookkeeping" tab.
+      // Always listed; the page guides an owner to connect from a client's page
+      // when nothing's linked yet.
+      id: "bookkeeping-drafts",
+      label: t.app("nav_bookkeeping"),
+      group: "go",
+      icon: BookOpen,
+      color: "text-icon-cyan",
+      href: "/quickbooks/drafts",
+      keywords:
+        "bookkeeping drafts transactions receipts invoices approve dismiss quickbooks xero brouillons ecritures approuver comptabilite",
+    },
+    {
+      // Direct QuickBooks shortcut — its connect/manage page (mirrors the
+      // always-visible sidebar sub-item + hub card). "QuickBooks" is a brand
       // name, so it isn't localized.
       id: "integrations-quickbooks",
       label: "QuickBooks",
       group: "go",
       icon: Plug,
       color: "text-icon-cyan",
-      href: "/quickbooks/drafts",
-      keywords:
-        "quickbooks drafts bookkeeping transactions approve dismiss qbo intuit brouillons ecritures approuver",
+      href: "/integrations/quickbooks",
+      keywords: "quickbooks connect integration qbo intuit comptabilite",
     },
     {
       // Direct Xero shortcut — always listed (its landing page guides

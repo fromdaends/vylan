@@ -186,6 +186,56 @@ export async function firmHasAnyQuickbooksConnection(): Promise<boolean> {
   return data != null;
 }
 
+// The firm's connected QuickBooks clients (id + company name + environment), for
+// the QuickBooks integrations landing page. Mirrors listFirmXeroConnectedClients
+// (db/xero.ts): authenticated (RLS firm-scoped), display names stitched in a
+// second query (the repo avoids PostgREST joins). Returns [] on error / pre-0710.
+export async function listFirmQuickbooksConnectedClients(): Promise<
+  {
+    clientId: string;
+    clientName: string | null;
+    companyName: string | null;
+    isSandbox: boolean;
+  }[]
+> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("quickbooks_connections")
+    .select("client_id, company_name, environment")
+    .order("connected_at", { ascending: false });
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error(
+        "[quickbooks] listFirmQuickbooksConnectedClients failed:",
+        error,
+      );
+    }
+    return [];
+  }
+  // Firm-level (client_id null) connections aren't per-client rows to list here.
+  const rows = (
+    (data as Array<Record<string, unknown>> | null) ?? []
+  ).filter((r) => r.client_id != null);
+  if (rows.length === 0) return [];
+  const clientIds = [...new Set(rows.map((r) => r.client_id as string))];
+  const { data: clientRows } = await sb
+    .from("clients")
+    .select("id, display_name")
+    .in("id", clientIds);
+  const nameById = new Map(
+    ((clientRows as Array<Record<string, unknown>> | null) ?? []).map((c) => [
+      c.id as string,
+      (c.display_name as string | null) ?? null,
+    ]),
+  );
+  return rows.map((r) => ({
+    clientId: r.client_id as string,
+    clientName: nameById.get(r.client_id as string) ?? null,
+    companyName: (r.company_name as string | null) ?? null,
+    isSandbox: (r.environment as string | null) === "sandbox",
+  }));
+}
+
 export type UpsertQuickbooksConnectionInput = {
   realmId: string;
   accessToken: string;

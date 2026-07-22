@@ -21,17 +21,17 @@ export function isNavItemActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
-// The Integrations section spans TWO URL roots: the hub index (/integrations,
-// which also holds the Sage export at /integrations/sage) and the pre-existing
-// QuickBooks surface (/quickbooks/drafts). The sidebar's expandable Integrations
-// parent lights up (and stays expanded) on either, so the rule lives here rather
-// than being re-derived in the component. QuickBooks and Sage are independent
-// features; this only unifies the NAV highlight, nothing else.
+// The Integrations section lives under the /integrations hub (its index, the
+// Sage export at /integrations/sage, and the per-product connect pages
+// /integrations/quickbooks and /integrations/xero). The sidebar's expandable
+// Integrations parent lights up (and stays expanded) on any of those. The DRAFTS
+// queue at /quickbooks/drafts is NO LONGER part of this section — it's the
+// top-level "Bookkeeping" tab now (a shared QuickBooks+Xero surface), which lights
+// via isNavItemActive on its own href — so /quickbooks is deliberately excluded
+// here to avoid both the Bookkeeping tab and the Integrations section lighting at
+// once.
 export function isIntegrationsSectionActive(pathname: string): boolean {
-  return (
-    isNavItemActive(pathname, "/integrations") ||
-    isNavItemActive(pathname, "/quickbooks")
-  );
+  return isNavItemActive(pathname, "/integrations");
 }
 
 // Which Integrations sub-items belong in the sidebar for a given connection

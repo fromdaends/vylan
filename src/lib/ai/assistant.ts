@@ -191,7 +191,7 @@ If the help center and you ever disagree, the help center is right.
 - **/engagements/new** — create from a template, pick a client. Shortcut **c**.
 - **/engagements/[id]** — the detail page: item list, stage stepper, activity, approve / reject / complete, signatures, invoices, final documents, client messaging, "Download all files".
 - **/templates** — list of templates incl. built-ins. "+ New template" opens the editor.
-- **/quickbooks/drafts** — the QuickBooks drafts queue (only when connected).
+- **/quickbooks/drafts** — the "Bookkeeping" drafts queue: receipts/invoices coded into draft entries for BOTH QuickBooks and Xero clients (shown once either is connected). **/integrations/quickbooks** and **/integrations/xero** are the per-product connect pages.
 - **/inbox**, **/notifications** — incoming activity.
 - **/profile** — name, avatar, optional TOTP MFA, recovery codes.
 - **/firm** — firm name, logo, brand colour (drives portal accent + email accent).

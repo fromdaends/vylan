@@ -71,6 +71,7 @@ type Labels = {
   engagements: string;
   engagementsToggle: string;
   templates: string;
+  bookkeeping: string;
   integrations: string;
   integrationsToggle: string;
   settings: string;
@@ -128,8 +129,8 @@ const INTEGRATION_SUBNAV: {
   {
     key: "quickbooks",
     name: "QuickBooks",
-    href: "/quickbooks/drafts",
-    root: "/quickbooks",
+    href: "/integrations/quickbooks",
+    root: "/integrations/quickbooks",
     Logo: QuickbooksLogo,
   },
   {
@@ -195,6 +196,7 @@ export function AppShell({
   isOwner = false,
   teamEnabled = true,
   quickbooksConnected = false,
+  xeroConnected = false,
 }: {
   children: React.ReactNode;
   topBar?: React.ReactNode;
@@ -212,10 +214,12 @@ export function AppShell({
   // Hides team shortcuts when collaboration mode is off. The Settings account
   // card remains the intentional entry point for creating a team again.
   teamEnabled?: boolean;
-  // Shows the Integrations nav section — only when the firm has QuickBooks
-  // connected (any client). Connecting happens in Settings → Integrations, so the
-  // nav stays hidden (for owners too) until there's an actual connection.
+  // Shows the QuickBooks Integrations sub-item + drives the Bookkeeping tab.
   quickbooksConnected?: boolean;
+  // Together with quickbooksConnected, drives the top-level "Bookkeeping" tab:
+  // it appears once the firm has ANY bookkeeping connection (QuickBooks OR Xero),
+  // since the drafts queue is a shared surface.
+  xeroConnected?: boolean;
 }) {
   const pathname = usePathname();
   const tApp = useTranslations("App");
@@ -307,6 +311,7 @@ export function AppShell({
         <SidebarBody
           primaryNav={primaryNav}
           quickbooksConnected={quickbooksConnected}
+          xeroConnected={xeroConnected}
           labels={labels}
           engagementBadges={engagementBadges}
           brandColor={brandColor}
@@ -663,6 +668,7 @@ function MobileMenuItem({
 function SidebarBody({
   primaryNav,
   quickbooksConnected,
+  xeroConnected,
   labels,
   engagementBadges,
   brandColor,
@@ -677,6 +683,7 @@ function SidebarBody({
 }: {
   primaryNav: NavItemDef[];
   quickbooksConnected: boolean;
+  xeroConnected: boolean;
   labels: Labels;
   engagementBadges: EngagementBadgeCounts;
   brandColor: string;
@@ -808,6 +815,7 @@ function SidebarBody({
             labels={labels}
             badges={engagementBadges}
             collapsed={collapsed}
+            bookkeepingConnected={quickbooksConnected || xeroConnected}
           />
           {/* Integrations hub — an expandable section mirroring Engagements:
               the label links to the /integrations index, the chevron reveals the
@@ -1180,14 +1188,25 @@ function EngagementsNav({
   labels,
   badges,
   collapsed,
+  bookkeepingConnected,
 }: {
   labels: Labels;
   badges: EngagementBadgeCounts;
   collapsed: boolean;
+  // Drives the "Bookkeeping" sub-item (the shared QuickBooks+Xero drafts queue),
+  // which lives under Engagements since drafts are downstream of engagement docs.
+  // Shown once the firm has ANY bookkeeping connection.
+  bookkeepingConnected: boolean;
 }) {
   const pathname = usePathname();
   const detailView = useActiveEngagementView();
-  const onEngagements = isNavItemActive(pathname, "/engagements");
+  // The Bookkeeping drafts queue (/quickbooks/drafts) is a sub-item of this
+  // section, so being on it counts as "on Engagements" — the section highlights
+  // + auto-expands there, and there's always a nav anchor even for a disconnected
+  // firm (where the Bookkeeping sub-item itself is hidden).
+  const onBookkeeping = isNavItemActive(pathname, "/quickbooks/drafts");
+  const onEngagements =
+    isNavItemActive(pathname, "/engagements") || onBookkeeping;
   // Open when on any engagements route; otherwise user-controlled.
   const [open, setOpen] = useState(onEngagements);
   // Re-expand if navigation lands under /engagements (e.g. via search).
@@ -1308,6 +1327,25 @@ function EngagementsNav({
                 </Link>
               );
             })}
+            {/* Bookkeeping — the shared QuickBooks+Xero drafts queue. A sibling of
+                the engagement views (drafts are downstream of engagement docs);
+                links to the pre-existing /quickbooks/drafts route. Shown once the
+                firm has any bookkeeping connection. */}
+            {bookkeepingConnected && (
+              <Link
+                href="/quickbooks/drafts"
+                aria-current={onBookkeeping ? "page" : undefined}
+                className={cn(
+                  "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
+                  onBookkeeping
+                    ? "bg-secondary text-foreground font-medium"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
+                )}
+              >
+                <BookOpen className="size-3.5 shrink-0" aria-hidden />
+                <span className="flex-1 truncate">{labels.bookkeeping}</span>
+              </Link>
+            )}
           </div>
         </div>
       </div>

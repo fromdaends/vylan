@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/users";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { firmHasAnyQuickbooksConnection } from "@/lib/db/quickbooks";
+import { firmHasAnyXeroConnection } from "@/lib/db/xero";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { getTranslations } from "next-intl/server";
 import { AssistantPanel } from "@/components/assistant/assistant-panel";
@@ -80,16 +81,18 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const [avatarUrl, firmLogoUrl, badges, quickbooksHasAny] = await Promise.all([
-    getBrandingImageUrl(dbUser.avatar_path),
-    getBrandingImageUrl(firm.logo_url),
-    getEngagementBadges(),
-    // Drives the (conditional) QuickBooks nav item. True when the firm has ANY
-    // connection (firm-level OR any client) — so the nav appears once QuickBooks
-    // is actually in use, not merely because the app's Intuit keys are installed.
-    // Cheap + RLS-scoped; false before the migration is applied.
-    firmHasAnyQuickbooksConnection(),
-  ]);
+  const [avatarUrl, firmLogoUrl, badges, quickbooksHasAny, xeroHasAny] =
+    await Promise.all([
+      getBrandingImageUrl(dbUser.avatar_path),
+      getBrandingImageUrl(firm.logo_url),
+      getEngagementBadges(),
+      // Drive the QuickBooks Integrations sub-item + (with Xero) the Bookkeeping
+      // tab. True when the firm has ANY connection (firm-level OR any client) — so
+      // the nav appears once a product is actually in use, not merely because the
+      // app's keys are installed. Cheap + RLS-scoped; false before the migration.
+      firmHasAnyQuickbooksConnection(),
+      firmHasAnyXeroConnection(),
+    ]);
 
   // Free-trial banner state (only rendered for unconverted trial firms).
   // isTrialExpired / trialDaysLeft default "now" internally so Date.now()
@@ -120,6 +123,7 @@ export default async function AppLayout({
       isOwner={dbUser.role === "owner"}
       teamEnabled={teamEnabled}
       quickbooksConnected={quickbooksHasAny}
+      xeroConnected={xeroHasAny}
       topBar={
         firm.is_demo ? (
           <TrialBanner
@@ -139,6 +143,7 @@ export default async function AppLayout({
         engagements: t("nav_engagements"),
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
+        bookkeeping: t("nav_bookkeeping"),
         integrations: t("nav_integrations"),
         integrationsToggle: t("nav_integrations_toggle"),
         engagementViews: {
