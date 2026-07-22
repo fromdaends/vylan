@@ -1044,6 +1044,7 @@ export default async function EngagementDetailPage({
                 <QuickbooksDraftsSummary
                   drafts={visibleDrafts}
                   locale={locale}
+                  provider={bookkeepingProvider ?? "quickbooks"}
                 />
               )}
               <ul className="space-y-2">

@@ -2682,6 +2682,7 @@
     "refresh_draft": "Refresh",
     "refresh_failed": "Couldn't refresh.",
     "summary_label": "QuickBooks drafts",
+    "summary_label_xero": "Xero drafts",
     "summary_drafts": "{count, plural, one {# draft} other {# drafts}}",
     "summary_needs_input": "{count, plural, one {# needs your input} other {# need your input}}",
     "summary_total": "{amount} total",

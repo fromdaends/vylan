@@ -9,9 +9,13 @@ import { formatCurrency, type AppLocale } from "@/lib/format";
 export async function QuickbooksDraftsSummary({
   drafts,
   locale,
+  provider = "quickbooks",
 }: {
   drafts: DraftItem[];
   locale: AppLocale;
+  // The client's bookkeeping product, so the header reads "Xero drafts" for a
+  // Xero client instead of the QuickBooks default (a client is EITHER, never both).
+  provider?: "quickbooks" | "xero";
 }) {
   if (drafts.length === 0) return null;
   const t = await getTranslations("Quickbooks");
@@ -20,7 +24,9 @@ export async function QuickbooksDraftsSummary({
   return (
     <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-border/40 bg-muted/30 px-3 py-2 text-xs">
       <BookOpen className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-      <span className="font-medium">{t("summary_label")}</span>
+      <span className="font-medium">
+        {provider === "xero" ? t("summary_label_xero") : t("summary_label")}
+      </span>
       <span className="text-muted-foreground">
         {t("summary_drafts", { count: s.total })}
       </span>
