@@ -1723,6 +1723,7 @@
     "send_reminder": "Envoyer un rappel",
     "reminder_sent": "Rappel envoyé",
     "reminder_failed": "Impossible d'envoyer le rappel — veuillez réessayer",
+    "sending_reminder": "Envoi en cours…",
     "pause_reminders": "Pauser les rappels",
     "resume_reminders": "Reprendre les rappels",
     "reminders_paused_badge": "Rappels en pause",
