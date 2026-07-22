@@ -29,7 +29,7 @@ export function AiSection({
   const percent = String(Math.round((data.agreementRate ?? 0) * 100));
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 shadow-card sm:p-6">
+    <section className="mt-10 border-t border-border/60 pt-10 sm:mt-12 sm:pt-12">
       <header className="mb-5">
         <h2 className="text-base font-semibold tracking-tight text-foreground">
           {copy.heading}
@@ -60,7 +60,7 @@ export function AiSection({
 
           {/* Four cases + volume + methodology */}
           <div className="min-w-0">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
               {CASE_ORDER.map(({ key, tone }) => (
                 <CaseCell
                   key={key}
@@ -98,32 +98,28 @@ export function AiSection({
   );
 }
 
-const TONE_STYLES: Record<
-  Tone,
-  { box: string; count: string; dot: string; tag: string }
-> = {
-  // Tag text is muted (reads on both themes at all sizes); the case's colour is
-  // carried by the dot + count/box. Exception: the false-pass ("miss") keeps its
-  // red tag — it's the one to notice, and destructive passes AA on the card.
-  agreement: {
-    box: "border-border",
-    count: "text-foreground",
-    dot: "bg-success",
-    tag: "text-muted-foreground",
-  },
-  miss: {
-    box: "border-destructive/40 bg-destructive/[0.06]",
-    count: "text-destructive",
-    dot: "bg-destructive",
-    tag: "text-destructive",
-  },
-  alarm: {
-    box: "border-warning/40",
-    count: "text-foreground",
-    dot: "bg-warning",
-    tag: "text-muted-foreground",
-  },
-};
+// A left accent bar carries each case's colour (no box) so the four cases mesh
+// with the page instead of floating as cards. Tag text stays muted for
+// contrast; the false-pass ("miss") keeps its red count + tag — it's the one to
+// notice, and destructive passes AA.
+const TONE_STYLES: Record<Tone, { accent: string; count: string; tag: string }> =
+  {
+    agreement: {
+      accent: "border-success/60",
+      count: "text-foreground",
+      tag: "text-muted-foreground",
+    },
+    miss: {
+      accent: "border-destructive",
+      count: "text-destructive",
+      tag: "text-destructive",
+    },
+    alarm: {
+      accent: "border-warning/70",
+      count: "text-foreground",
+      tag: "text-muted-foreground",
+    },
+  };
 
 function CaseCell({
   tone,
@@ -140,15 +136,15 @@ function CaseCell({
 }) {
   const s = TONE_STYLES[tone];
   return (
-    <div className={cn("rounded-lg border p-3", s.box)}>
-      <div className="flex items-center justify-between">
-        <CountUp
-          value={count}
-          format={(n) => formatNumber(Math.round(n), locale)}
-          className={cn("num-display text-2xl font-semibold tabular-nums", s.count)}
-        />
-        <span className={cn("size-2 shrink-0 rounded-full", s.dot)} aria-hidden />
-      </div>
+    <div className={cn("border-l-2 pl-3.5", s.accent)}>
+      <CountUp
+        value={count}
+        format={(n) => formatNumber(Math.round(n), locale)}
+        className={cn(
+          "num-display block text-2xl font-semibold tabular-nums",
+          s.count,
+        )}
+      />
       <div className="mt-1 text-xs text-foreground/90">{label}</div>
       <div
         className={cn(
