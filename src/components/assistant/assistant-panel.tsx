@@ -395,13 +395,12 @@ export function AssistantPanel({
           } as CSSProperties
         }
         className={cn(
-          // The panel is the app's dark NAVY surface (bg-card, hue 262) in both
-          // app themes — matching the rest of the site rather than a flat black
-          // slab. Scope dark semantic color tokens to the panel so
-          // text-foreground/text-muted-foreground remain legible when the
-          // surrounding app is using light mode.
-          "dark fixed inset-y-0 right-0 z-[45] flex w-full flex-col overflow-hidden bg-card text-white outline-none",
-          "sm:inset-y-2 sm:right-2 sm:w-[var(--assistant-w)] sm:rounded-2xl sm:border sm:border-white/10",
+          // The panel follows the APP THEME via semantic tokens — the elevated
+          // card surface (bg-card): navy in dark mode, white in light mode, so
+          // it matches the rest of the site rather than being a dark slab in a
+          // light app.
+          "fixed inset-y-0 right-0 z-[45] flex w-full flex-col overflow-hidden bg-card text-foreground outline-none",
+          "sm:inset-y-2 sm:right-2 sm:w-[var(--assistant-w)] sm:rounded-2xl sm:border sm:border-border",
           "sm:shadow-[-18px_0_48px_-28px_rgba(0,0,0,0.75),0_18px_50px_-30px_rgba(0,0,0,0.8)]",
           dragging
             ? "transition-none"
@@ -612,7 +611,7 @@ function PanelTab({
         "inline-flex cursor-pointer items-center gap-1.5 rounded-t-xl px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
           ? "bg-card text-foreground"
-          : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
       )}
     >
       <Icon className="size-3.5" aria-hidden />

@@ -86,7 +86,7 @@ export function ChatTab({ locale }: { locale: "en" | "fr" }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -8 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="flex h-full min-h-0 flex-col bg-card text-white"
+          className="flex h-full min-h-0 flex-col bg-card text-foreground"
         >
           <ChatView
             locale={locale}
@@ -635,7 +635,7 @@ function ChatView({
             )}
 
             {items.length > 0 && (
-              <div className="text-center text-xs text-zinc-500 tabular-nums">
+              <div className="text-center text-xs text-muted-foreground tabular-nums">
                 {formatConversationTime(
                   items[0].kind === "message"
                     ? items[0].createdAt
@@ -714,7 +714,7 @@ function ChatView({
       </div>
 
       {/* Status notes + input */}
-      <div className="border-t border-white/10 bg-card px-4 pt-3 pb-4">
+      <div className="border-t border-border bg-card px-4 pt-3 pb-4">
         {ready === false && (
           <p className="mb-2.5 px-1 text-xs text-muted-foreground leading-relaxed">
             {ta("chat_not_ready")}{" "}
@@ -764,7 +764,7 @@ function ChatView({
             placeholder={ta("ask_placeholder")}
             maxLength={2000}
             disabled={inputDisabled}
-            className="min-h-[48px] max-h-[160px] w-full resize-none rounded-2xl border-white/10 bg-[#212121] py-3.5 pr-14 pl-4 text-sm leading-relaxed text-white placeholder:text-zinc-500 focus-visible:border-white/20 focus-visible:bg-[#212121] focus-visible:ring-0 disabled:opacity-60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="min-h-[48px] max-h-[160px] w-full resize-none rounded-2xl border-border bg-secondary py-3.5 pr-14 pl-4 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground focus-visible:border-border focus-visible:bg-secondary focus-visible:ring-0 disabled:opacity-60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           />
           <motion.button
             type="submit"
@@ -776,7 +776,7 @@ function ChatView({
             <Send className="size-4" aria-hidden />
           </motion.button>
         </form>
-        <div className="mt-2.5 flex items-center justify-between px-1 text-[10px] text-zinc-600">
+        <div className="mt-2.5 flex items-center justify-between px-1 text-[10px] text-muted-foreground">
           <span>Haiku 4.5</span>
           <UsagePopover limit={limit} locale={locale} />
         </div>
@@ -808,11 +808,11 @@ function ChatGreeting({ engagementTitle }: { engagementTitle: string }) {
 
   return (
     <div className="mx-auto max-w-sm px-4 pt-2 text-center">
-      <p className="text-base font-medium tracking-tight text-white">
+      <p className="text-base font-medium tracking-tight text-foreground">
         {greetings[index]}
       </p>
       {engagementTitle && (
-        <p className="mt-1 text-xs text-zinc-400">
+        <p className="mt-1 text-xs text-muted-foreground">
           {ta("greeting_context", { title: engagementTitle })}
         </p>
       )}
@@ -842,7 +842,7 @@ function UsagePopover({
         <button
           type="button"
           aria-label={locale === "fr" ? "Utilisation" : "Usage"}
-          className="inline-flex size-7 items-center justify-center rounded-md text-zinc-500 hover:bg-white/5 hover:text-zinc-300 focus-visible:outline-none"
+          className="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-muted-foreground focus-visible:outline-none"
         >
           <Gauge className="size-3.5" aria-hidden />
         </button>
@@ -851,16 +851,16 @@ function UsagePopover({
         align="end"
         side="top"
         sideOffset={8}
-        className="w-60 border-white/10 bg-[#212121] p-3 text-white shadow-xl"
+        className="w-60 border-border bg-secondary p-3 text-foreground shadow-xl"
       >
         <div className="flex items-center justify-between gap-3 text-xs">
           <span className="font-medium">
             {locale === "fr" ? "Utilisation" : "Usage"}
           </span>
-          <span className="text-zinc-400 tabular-nums">{label}</span>
+          <span className="text-muted-foreground tabular-nums">{label}</span>
         </div>
         <div
-          className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"
+          className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
           role="progressbar"
           aria-label={label}
           aria-valuemin={0}
@@ -955,7 +955,7 @@ function Message({
   if (role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[82%] whitespace-pre-wrap break-words rounded-3xl bg-[#2f2f2f] px-4 py-2.5 text-sm leading-relaxed text-white">
+        <div className="max-w-[82%] whitespace-pre-wrap break-words rounded-3xl bg-secondary px-4 py-2.5 text-sm leading-relaxed text-foreground">
           {content}
         </div>
       </div>
@@ -974,7 +974,7 @@ function Message({
           <button
             type="button"
             onClick={onFeedback}
-            className="mt-2 text-[11px] text-zinc-600 hover:text-zinc-400 focus-visible:outline-none"
+            className="mt-2 text-[11px] text-muted-foreground hover:text-muted-foreground focus-visible:outline-none"
           >
             {t("ai_send_feedback_compact")}
           </button>
@@ -988,7 +988,7 @@ function ThinkingIndicator({ checking }: { checking: boolean }) {
   const t = useTranslations("Help");
   const ta = useTranslations("Assistant");
   return (
-    <div className="flex h-7 items-center gap-2 text-zinc-400">
+    <div className="flex h-7 items-center gap-2 text-muted-foreground">
       <div className="flex gap-1">
         <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:-280ms] [animation-duration:1.1s]" />
         <span className="size-1.5 rounded-full bg-current animate-bounce [animation-delay:-140ms] [animation-duration:1.1s]" />

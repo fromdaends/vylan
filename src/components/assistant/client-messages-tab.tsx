@@ -151,11 +151,11 @@ export function ClientMessagesTab({
     const isLive = status === "sent" || status === "in_progress";
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex shrink-0 items-center gap-1 border-b border-white/10 px-2 py-1.5">
+        <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
           <button
             type="button"
             onClick={backToInbox}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-white/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ChevronLeft className="size-4" aria-hidden />
             {t("messages_back_to_inbox")}
@@ -189,7 +189,7 @@ export function ClientMessagesTab({
   // --- Inbox list ---------------------------------------------------------
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2 [scrollbar-width:thin]">
+      <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-width:thin]">
         {conversations === null && !failed ? (
           <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" aria-hidden />
@@ -221,7 +221,7 @@ export function ClientMessagesTab({
             </p>
           </div>
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="divide-y divide-border/60">
             {(conversations ?? []).map((c) => (
               <li key={c.engagementId}>
                 <ConversationRow
@@ -267,7 +267,7 @@ function ConversationRow({
     <button
       type="button"
       onClick={onOpen}
-      className="group flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
     >
       <AvatarInitials
         name={title}
