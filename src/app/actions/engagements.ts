@@ -104,55 +104,63 @@ const ReminderSettingsSchema = z
 // Postgres accepts any 8-4-4-4-12 hex string as uuid; Zod 4's strict .uuid()
 // requires RFC 4122 version bits which our seed data doesn't honor. Use the
 // permissive format check.
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const CreateSchema = z.object({
-  client_id: z.string().regex(UUID_REGEX, "invalid_uuid"),
-  title: z.string().min(2, "min_2_chars").max(160, "too_long"),
-  type: z.enum(["t1", "t2", "bookkeeping", "custom"]),
-  due_date: z
-    .string()
-    .nullable()
-    .optional()
-    .transform((v) => (v && v !== "" ? v : null)),
-  // "AI Analyze" switch. Optional + defaults true so existing/forgetful callers
-  // keep AI on; only an explicit false disables it.
-  ai_enabled: z.boolean().optional().default(true),
-  // Invoice automation (migration 0590). Optional + defaults 'off'.
-  invoice_auto_mode: z
-    .enum(["off", "on_completion", "delayed"])
-    .optional()
-    .default("off"),
-  invoice_delay_days: z.number().int().min(1).max(365).nullable().optional(),
-  invoice_amount_cents: z
-    .number()
-    .int()
-    .min(50)
-    .max(99_999_999)
-    .nullable()
-    .optional(),
-  // Create the invoice immediately at engagement creation (payable right away),
-  // as opposed to the deferred on_completion / delayed automation. Mutually
-  // exclusive with a non-'off' auto mode (the builder only sends one timing).
-  invoice_create_now: z.boolean().optional().default(false),
-  // Deliverables lock + description carried onto whichever invoice is created
-  // (migration 0610).
-  invoice_locks_deliverables: z.boolean().optional().default(false),
-  invoice_description: z.string().trim().max(500).nullable().optional(),
-  reminder_settings: ReminderSettingsSchema.optional().transform((value) =>
-    normalizeReminderSettings(value),
-  ),
-  // Recurring series (migration 0770). Optional + defaults 'off'.
-  repeat_frequency: z
-    .enum(["off", "monthly", "quarterly", "yearly"])
-    .optional()
-    .default("off"),
-  repeat_due_offset_days: z.number().int().min(1).max(365).nullable().optional(),
-  // Invoice recurrence (Phase 4): recreate this engagement's invoice on every
-  // spawned occurrence. Only meaningful with repeat on + an invoice configured.
-  repeat_invoice_recreate: z.boolean().optional().default(false),
-  items: z.array(ItemSchema).min(0),
-})
+const CreateSchema = z
+  .object({
+    client_id: z.string().regex(UUID_REGEX, "invalid_uuid"),
+    title: z.string().min(2, "min_2_chars").max(160, "too_long"),
+    type: z.enum(["t1", "t2", "bookkeeping", "custom"]),
+    due_date: z
+      .string()
+      .nullable()
+      .optional()
+      .transform((v) => (v && v !== "" ? v : null)),
+    // "AI Analyze" switch. Optional + defaults true so existing/forgetful callers
+    // keep AI on; only an explicit false disables it.
+    ai_enabled: z.boolean().optional().default(true),
+    // Invoice automation (migration 0590). Optional + defaults 'off'.
+    invoice_auto_mode: z
+      .enum(["off", "on_completion", "delayed"])
+      .optional()
+      .default("off"),
+    invoice_delay_days: z.number().int().min(1).max(365).nullable().optional(),
+    invoice_amount_cents: z
+      .number()
+      .int()
+      .min(50)
+      .max(99_999_999)
+      .nullable()
+      .optional(),
+    // Create the invoice immediately at engagement creation (payable right away),
+    // as opposed to the deferred on_completion / delayed automation. Mutually
+    // exclusive with a non-'off' auto mode (the builder only sends one timing).
+    invoice_create_now: z.boolean().optional().default(false),
+    // Deliverables lock + description carried onto whichever invoice is created
+    // (migration 0610).
+    invoice_locks_deliverables: z.boolean().optional().default(false),
+    invoice_description: z.string().trim().max(500).nullable().optional(),
+    reminder_settings: ReminderSettingsSchema.optional().transform((value) =>
+      normalizeReminderSettings(value),
+    ),
+    // Recurring series (migration 0770). Optional + defaults 'off'.
+    repeat_frequency: z
+      .enum(["off", "monthly", "quarterly", "yearly"])
+      .optional()
+      .default("off"),
+    repeat_due_offset_days: z
+      .number()
+      .int()
+      .min(1)
+      .max(365)
+      .nullable()
+      .optional(),
+    // Invoice recurrence (Phase 4): recreate this engagement's invoice on every
+    // spawned occurrence. Only meaningful with repeat on + an invoice configured.
+    repeat_invoice_recreate: z.boolean().optional().default(false),
+    items: z.array(ItemSchema).min(0),
+  })
   // Any invoice (created now OR automated) needs an amount to bill.
   .refine(
     (v) =>
@@ -715,8 +723,7 @@ export async function toggleRemindersPausedAction(formData: FormData) {
 }
 
 export type ReminderAutomationEditResult =
-  | { ok: true }
-  | { ok: false; error: string };
+  { ok: true } | { ok: false; error: string };
 
 export async function updateReminderAutomationAction(input: {
   engagementId: string;
@@ -774,25 +781,31 @@ export async function updateReminderAutomationAction(input: {
   }
 }
 
-export async function sendReminderAction(formData: FormData) {
+// Returns { ok } so the header button can pop a success/failure toast — the
+// early returns (missing id / no client link) and a delivery exception all
+// report ok:false; only a delivered-and-logged reminder is ok:true.
+export async function sendReminderAction(
+  formData: FormData,
+): Promise<{ ok: boolean }> {
   const id = formData.get("id");
-  if (typeof id !== "string" || !id) return;
+  if (typeof id !== "string" || !id) return { ok: false };
   const engagement = await getEngagement(id);
-  if (!engagement || !engagement.magic_token) return;
+  if (!engagement || !engagement.magic_token) return { ok: false };
   try {
     await deliverInviteEmail(id);
     await logUserActivity(engagement.firm_id, id, "manual_reminder", {});
   } catch (e) {
     console.error("[sendReminderAction] failed:", e);
+    return { ok: false };
   }
   revalidateEngagementPaths(id);
+  return { ok: true };
 }
 
 export async function deleteDraftAction(formData: FormData) {
   const id = formData.get("id");
   const locale = (formData.get("__app_locale") === "en" ? "en" : "fr") as
-    | "fr"
-    | "en";
+    "fr" | "en";
   if (typeof id !== "string" || !id) return;
   // Drafts go through the same 30-day recoverable soft-delete as everything
   // else — nothing is hard-deleted straight from the UI. Owner-only.
@@ -811,8 +824,7 @@ export async function deleteDraftAction(formData: FormData) {
 export async function deleteEngagementAction(formData: FormData) {
   const id = formData.get("id");
   const locale = (formData.get("__app_locale") === "en" ? "en" : "fr") as
-    | "fr"
-    | "en";
+    "fr" | "en";
   if (typeof id !== "string" || !id) return;
   const user = await getCurrentUser();
   if (!user || !canDeleteEngagements(user.role)) return;
