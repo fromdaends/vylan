@@ -30,6 +30,7 @@ import {
 } from "@/lib/portal/group-summary";
 import { PortalFooter } from "./portal-footer";
 import { PortalMessages } from "./portal-messages";
+import { PortalSplit } from "./portal-split";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import {
   logPortalActivity,
@@ -201,6 +202,9 @@ export function PortalShell({
           : t("card_messages_line", { firm: ctx.firm.name }),
       tone: messagesUnread > 0 ? "accent" : "muted",
       onSelect: openMessages,
+      // At lg+ the thread is a permanent side pane, so the hub drops its
+      // messages doorway there (kept on mobile, where messages is an overlay).
+      hideOnDesktop: true,
     });
   }
 
@@ -220,7 +224,10 @@ export function PortalShell({
   // defaults to English) instead of a hardcoded FR/EN branch.
   const helpBody = t("help_body", { title: ctx.engagement.title });
 
-  function handleItemUpdated(itemId: string, patch: Partial<(typeof items)[0]>) {
+  function handleItemUpdated(
+    itemId: string,
+    patch: Partial<(typeof items)[0]>,
+  ) {
     setItems((prev) =>
       prev.map((i) => (i.id === itemId ? { ...i, ...patch } : i)),
     );
@@ -252,7 +259,14 @@ export function PortalShell({
   }
 
   return (
-    <div className="relative flex flex-1 flex-col">
+    <div
+      className={cn(
+        "relative flex flex-1 flex-col",
+        // With the docked messages pane, desktop becomes a fixed-height app so
+        // the documents column and the thread each scroll on their own.
+        showMessagesEntry && "lg:h-[100dvh] lg:overflow-hidden",
+      )}
+    >
       {/* Soft, firm-coloured glow behind the top — gives the surface depth in
           both light and dark without a heavy colour band. */}
       <div
@@ -266,7 +280,14 @@ export function PortalShell({
       <div aria-hidden className="h-1 w-full" style={{ background: brand }} />
 
       <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex h-16 max-w-2xl items-center justify-between gap-3 px-4 sm:px-6">
+        <div
+          className={cn(
+            "mx-auto flex h-16 items-center justify-between gap-3 px-4 sm:px-6",
+            // Full-bleed to span both panes when the desktop split is active;
+            // otherwise the classic centred reading column.
+            showMessagesEntry ? "max-w-2xl lg:max-w-none lg:px-8" : "max-w-2xl",
+          )}
+        >
           <div className="flex min-w-0 items-center gap-3">
             {firmLogoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -309,157 +330,154 @@ export function PortalShell({
         </div>
       </header>
 
-      <main className="animate-in-up mx-auto w-full max-w-2xl flex-1 space-y-8 px-4 py-8 sm:px-6 sm:py-10">
-        {messagesOpen ? (
-          <>
-            <BackBar
-              title={t("messages_section_title")}
-              onBack={() => setMessagesOpen(false)}
-            />
-            <PortalMessages
-              token={ctx.engagement.magic_token ?? ""}
-              firmName={ctx.firm.name}
-              initialMessages={ctx.messages}
-              readOnly={messagesReadOnly}
-              locale={locale}
-              onGoToDocuments={
-                hasDocuments
-                  ? () => {
-                      setMessagesOpen(false);
-                      setView("documents");
-                      logOncePerVisit("client_opened_documents");
-                    }
-                  : null
-              }
-            />
-          </>
-        ) : (
-          <>
-        {ctx.payment_request && (
-          <PaymentDueCard
+      <PortalSplit
+        enabled={showMessagesEntry}
+        messagesOpen={messagesOpen}
+        panel={
+          <PortalMessages
             token={ctx.engagement.magic_token ?? ""}
-            paymentRequest={ctx.payment_request}
             firmName={ctx.firm.name}
+            initialMessages={ctx.messages}
+            readOnly={messagesReadOnly}
             locale={locale}
-            justReturnedPaid={justReturnedPaid}
-            justReturnedProcessing={justReturnedProcessing}
-            stripeReady={ctx.payment_config.stripeReady}
-            paypal={ctx.payment_config.paypal}
+            onGoToDocuments={
+              hasDocuments
+                ? () => {
+                    setMessagesOpen(false);
+                    setView("documents");
+                    logOncePerVisit("client_opened_documents");
+                  }
+                : null
+            }
+            onBack={() => setMessagesOpen(false)}
           />
-        )}
-        {ctx.final_documents.length > 0 && (
-          <PortalFinalDocuments
-            docs={ctx.final_documents}
-            token={ctx.engagement.magic_token ?? ""}
-            locked={ctx.final_documents_locked}
-            justReturnedPaid={justReturnedPaid}
-          />
-        )}
-        {effectiveView === "hub" ? (
-          <>
-            <GreetingSection
-              clientName={ctx.client.display_name}
+        }
+      >
+        <main className="animate-in-up mx-auto w-full max-w-2xl flex-1 space-y-8 px-4 py-8 sm:px-6 sm:py-10">
+          {ctx.payment_request && (
+            <PaymentDueCard
+              token={ctx.engagement.magic_token ?? ""}
+              paymentRequest={ctx.payment_request}
               firmName={ctx.firm.name}
-              stage={ctx.stage}
+              locale={locale}
+              justReturnedPaid={justReturnedPaid}
+              justReturnedProcessing={justReturnedProcessing}
+              stripeReady={ctx.payment_config.stripeReady}
+              paypal={ctx.payment_config.paypal}
             />
-            <PortalHub cards={hubCards} />
-          </>
-        ) : effectiveView === "signatures" ? (
-          <>
-            {showHub ? (
-              <BackBar
-                title={t("sign_section_title")}
-                onBack={() => setView("hub")}
-              />
-            ) : (
+          )}
+          {ctx.final_documents.length > 0 && (
+            <PortalFinalDocuments
+              docs={ctx.final_documents}
+              token={ctx.engagement.magic_token ?? ""}
+              locked={ctx.final_documents_locked}
+              justReturnedPaid={justReturnedPaid}
+            />
+          )}
+          {effectiveView === "hub" ? (
+            <>
               <GreetingSection
                 clientName={ctx.client.display_name}
                 firmName={ctx.firm.name}
                 stage={ctx.stage}
               />
-            )}
-            <section className="animate-in-stagger space-y-3">
-              {signatureItems.map((item) => (
-                <SignatureItemCard
-                  key={item.id}
-                  token={ctx.engagement.magic_token ?? ""}
-                  item={item}
-                  locale={locale}
-                  signatureStatus={
-                    ctx.signature_status_by_item[item.id] ?? null
-                  }
+              <PortalHub cards={hubCards} />
+            </>
+          ) : effectiveView === "signatures" ? (
+            <>
+              {showHub ? (
+                <BackBar
+                  title={t("sign_section_title")}
+                  onBack={() => setView("hub")}
                 />
-              ))}
-            </section>
-          </>
-        ) : (
-          <>
-            {showHub ? (
-              <BackBar
-                title={t("documents_section_title")}
-                onBack={() => setView("hub")}
-              />
-            ) : (
-              <GreetingSection
-                clientName={ctx.client.display_name}
-                firmName={ctx.firm.name}
-                stage={ctx.stage}
-              />
-            )}
-            {docTotal > 0 && (
-              <ProgressCard
-                done={docDone}
-                total={docTotal}
-                pct={docPct}
-                remaining={docRemaining}
-                brand={brand}
-                firmName={ctx.firm.name}
-              />
-            )}
-            <section className="animate-in-stagger space-y-3">
-              {collectionItems.map((item) => (
-                <ItemCard
-                  key={item.id}
-                  token={ctx.engagement.magic_token ?? ""}
-                  item={item}
-                  locale={locale}
-                  uploadedCount={uploads[item.id] ?? 0}
-                  files={filesByItem[item.id] ?? []}
-                  rejection={ctx.rejection_summary_by_item[item.id] ?? null}
-                  autoRequestMissingPages={Boolean(
-                    ctx.firm.auto_request_missing_pages,
-                  )}
-                  onUploaded={(f) => handleUploaded(item.id, f)}
-                  onStatusChange={(status) =>
-                    handleItemUpdated(item.id, { status })
-                  }
+              ) : (
+                <GreetingSection
+                  clientName={ctx.client.display_name}
+                  firmName={ctx.firm.name}
+                  stage={ctx.stage}
                 />
-              ))}
-            </section>
-          </>
-        )}
+              )}
+              <section className="animate-in-stagger space-y-3">
+                {signatureItems.map((item) => (
+                  <SignatureItemCard
+                    key={item.id}
+                    token={ctx.engagement.magic_token ?? ""}
+                    item={item}
+                    locale={locale}
+                    signatureStatus={
+                      ctx.signature_status_by_item[item.id] ?? null
+                    }
+                  />
+                ))}
+              </section>
+            </>
+          ) : (
+            <>
+              {showHub ? (
+                <BackBar
+                  title={t("documents_section_title")}
+                  onBack={() => setView("hub")}
+                />
+              ) : (
+                <GreetingSection
+                  clientName={ctx.client.display_name}
+                  firmName={ctx.firm.name}
+                  stage={ctx.stage}
+                />
+              )}
+              {docTotal > 0 && (
+                <ProgressCard
+                  done={docDone}
+                  total={docTotal}
+                  pct={docPct}
+                  remaining={docRemaining}
+                  brand={brand}
+                  firmName={ctx.firm.name}
+                />
+              )}
+              <section className="animate-in-stagger space-y-3">
+                {collectionItems.map((item) => (
+                  <ItemCard
+                    key={item.id}
+                    token={ctx.engagement.magic_token ?? ""}
+                    item={item}
+                    locale={locale}
+                    uploadedCount={uploads[item.id] ?? 0}
+                    files={filesByItem[item.id] ?? []}
+                    rejection={ctx.rejection_summary_by_item[item.id] ?? null}
+                    autoRequestMissingPages={Boolean(
+                      ctx.firm.auto_request_missing_pages,
+                    )}
+                    onUploaded={(f) => handleUploaded(item.id, f)}
+                    onStatusChange={(status) =>
+                      handleItemUpdated(item.id, { status })
+                    }
+                  />
+                ))}
+              </section>
+            </>
+          )}
 
-        {/* Messages entry for portals WITHOUT the hub (single-group portals
+          {/* Messages entry for portals WITHOUT the hub (single-group portals
             go straight to their list, so they need their own doorway). */}
-        {!showHub && showMessagesEntry && (
-          <MessagesEntryCard
-            unread={messagesUnread}
-            firmName={ctx.firm.name}
-            onOpen={openMessages}
-          />
-        )}
-          </>
-        )}
+          {!showHub && showMessagesEntry && (
+            <MessagesEntryCard
+              unread={messagesUnread}
+              firmName={ctx.firm.name}
+              onOpen={openMessages}
+            />
+          )}
 
-        <PortalFooter
-          email={ctx.accountant_email}
-          subject={helpSubject}
-          body={helpBody}
-          // The Messages thread replaces the footer email picker as the way
-          // to reach the accountant — never both at once (founder).
-          showHelp={!showMessagesEntry}
-        />
-      </main>
+          <PortalFooter
+            email={ctx.accountant_email}
+            subject={helpSubject}
+            body={helpBody}
+            // The Messages thread replaces the footer email picker as the way
+            // to reach the accountant — never both at once (founder).
+            showHelp={!showMessagesEntry}
+          />
+        </main>
+      </PortalSplit>
     </div>
   );
 }
@@ -481,12 +499,9 @@ function MessagesEntryCard({
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full cursor-pointer items-center gap-3.5 rounded-2xl border border-border/60 bg-card p-4 text-left shadow-sm transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="flex w-full cursor-pointer items-center gap-3.5 rounded-2xl border border-border/60 bg-card p-4 text-left shadow-sm transition-colors hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
     >
-      <span
-        className={cnEntryIcon(unread > 0)}
-        aria-hidden
-      >
+      <span className={cnEntryIcon(unread > 0)} aria-hidden>
         <MessageSquare className="size-5" />
       </span>
       <span className="min-w-0 flex-1">

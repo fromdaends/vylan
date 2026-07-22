@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { FileUp, Send } from "lucide-react";
+import { ChevronLeft, FileUp, Send } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import type { PortalMessage } from "@/lib/db/client-messages";
@@ -26,6 +26,7 @@ export function PortalMessages({
   readOnly,
   locale,
   onGoToDocuments,
+  onBack,
 }: {
   token: string;
   firmName: string;
@@ -36,6 +37,9 @@ export function PortalMessages({
   // Jump back to the document checklist (the no-attachments nudge target).
   // Null when this portal has no document items to point at.
   onGoToDocuments: (() => void) | null;
+  // Close the mobile full-screen overlay. Rendered as a Back button that only
+  // shows below lg (the desktop pane is permanent, so it has nothing to close).
+  onBack?: () => void;
 }) {
   const t = useTranslations("Portal");
   const [messages, setMessages] = useState<PortalMessage[]>(initialMessages);
@@ -123,26 +127,50 @@ export function PortalMessages({
   const remaining = MAX_LENGTH - draft.length;
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        {t("messages_intro", { firm: firmName })}
-      </p>
-
-      {messages.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center">
-          <p className="text-[15px] font-medium text-foreground">
-            {t("messages_empty_title")}
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {t("messages_empty_body", { firm: firmName })}
-          </p>
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      {/* Conversation header: who you're talking to, and — on mobile only — a
+          Back button out of the full-screen thread. */}
+      <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-5">
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label={t("hub_back")}
+            className="-ml-1.5 inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+          >
+            <ChevronLeft className="size-5" aria-hidden />
+          </button>
+        )}
+        <AvatarInitials name={firmName} size={38} color="#475569" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+            {t("messages_section_title")}
+          </div>
+          <div className="truncate text-xs text-muted-foreground">
+            {firmName}
+          </div>
         </div>
-      ) : (
-        <div
-          ref={listRef}
-          className="max-h-[26rem] space-y-3 overflow-y-auto rounded-2xl border border-border/60 bg-card p-3 shadow-sm"
-        >
-          {messages.map((m) => {
+      </div>
+
+      {/* Thread — the only scrolling region, so the composer stays put. */}
+      <div
+        ref={listRef}
+        className={cn(
+          "min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5",
+          messages.length === 0 ? "flex" : "space-y-3",
+        )}
+      >
+        {messages.length === 0 ? (
+          <div className="m-auto max-w-sm rounded-2xl border border-dashed border-border px-4 py-8 text-center">
+            <p className="text-[15px] font-medium text-foreground">
+              {t("messages_empty_title")}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("messages_empty_body", { firm: firmName })}
+            </p>
+          </div>
+        ) : (
+          messages.map((m) => {
             const mine = m.sender === "client";
             return (
               <div
@@ -182,73 +210,77 @@ export function PortalMessages({
                 </div>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
 
-      {readOnly ? (
-        <p className="rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">
-          {t("messages_read_only")}
-        </p>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex items-end gap-2">
-            <textarea
-              value={draft}
-              onChange={(e) => {
-                setDraft(e.target.value.slice(0, MAX_LENGTH));
-                setSendError(false);
-              }}
-              placeholder={t("messages_placeholder")}
-              rows={2}
-              aria-label={t("messages_placeholder")}
-              className="min-h-[3.25rem] flex-1 resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={sending || draft.trim().length === 0}
-              className="inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50"
-            >
-              <Send className="size-4" aria-hidden />
-              {sending ? t("messages_sending") : t("messages_send")}
-            </button>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <p
-              className={cn(
-                "text-xs text-destructive",
-                !sendError && "invisible",
-              )}
-              role={sendError ? "alert" : undefined}
-            >
-              {t("messages_send_failed")}
-            </p>
-            {remaining <= 500 && (
-              <p className="text-xs text-muted-foreground">
-                {t("messages_chars_left", { count: remaining })}
-              </p>
-            )}
-          </div>
-          {/* The no-attachments nudge: files belong in the checklist, where
-              they're automatically checked. Permanent, quiet, actionable. */}
-          <p className="flex items-start gap-1.5 rounded-xl bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-            <FileUp className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            <span>
-              {t("messages_nudge")}{" "}
-              {onGoToDocuments && (
-                <button
-                  type="button"
-                  onClick={onGoToDocuments}
-                  className="cursor-pointer font-medium text-foreground underline underline-offset-2 transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {t("messages_nudge_link")}
-                </button>
-              )}
-            </span>
+      {/* Composer / read-only note, pinned to the bottom. The extra bottom
+          padding clears the iPhone home indicator (viewport-fit=cover). */}
+      <div className="shrink-0 border-t border-border/60 px-4 py-3 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)] sm:px-5">
+        {readOnly ? (
+          <p className="rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
+            {t("messages_read_only")}
           </p>
-        </div>
-      )}
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-end gap-2">
+              <textarea
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value.slice(0, MAX_LENGTH));
+                  setSendError(false);
+                }}
+                placeholder={t("messages_placeholder")}
+                rows={2}
+                aria-label={t("messages_placeholder")}
+                className="min-h-[3.25rem] flex-1 resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={sending || draft.trim().length === 0}
+                className="inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50"
+              >
+                <Send className="size-4" aria-hidden />
+                {sending ? t("messages_sending") : t("messages_send")}
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <p
+                className={cn(
+                  "text-xs text-destructive",
+                  !sendError && "invisible",
+                )}
+                role={sendError ? "alert" : undefined}
+              >
+                {t("messages_send_failed")}
+              </p>
+              {remaining <= 500 && (
+                <p className="text-xs text-muted-foreground">
+                  {t("messages_chars_left", { count: remaining })}
+                </p>
+              )}
+            </div>
+            {/* The no-attachments nudge: files belong in the checklist, where
+                they're automatically checked. Permanent, quiet, actionable. */}
+            <p className="flex items-start gap-1.5 rounded-xl bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+              <FileUp className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                {t("messages_nudge")}{" "}
+                {onGoToDocuments && (
+                  <button
+                    type="button"
+                    onClick={onGoToDocuments}
+                    className="cursor-pointer font-medium text-foreground underline underline-offset-2 transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {t("messages_nudge_link")}
+                  </button>
+                )}
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -18,6 +18,9 @@ export type HubCardData = {
   line: string;
   tone: HubTone;
   onSelect: () => void;
+  // Hidden at lg+ where the messages thread is a permanent side pane, so the
+  // hub doesn't carry a doorway to something already on screen.
+  hideOnDesktop?: boolean;
 };
 
 const TONE_ICON: Record<HubTone, string> = {
@@ -50,7 +53,10 @@ function HubCard({ card }: { card: HubCardData }) {
     <button
       type="button"
       onClick={onSelect}
-      className="group flex cursor-pointer items-center gap-4 rounded-2xl border border-border/60 bg-card p-5 text-left shadow-sm transition-all duration-200 hover:border-border hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={cn(
+        "group flex cursor-pointer items-center gap-4 rounded-2xl border border-border/60 bg-card p-5 text-left shadow-sm transition-all duration-200 hover:border-border hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        card.hideOnDesktop && "lg:hidden",
+      )}
     >
       <span
         className={cn(
