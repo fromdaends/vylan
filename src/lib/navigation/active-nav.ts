@@ -53,7 +53,12 @@ export function isIntegrationSubItemVisible(
   // owner to connect from a client's page — so it's DISCOVERABLE instead of hidden
   // (the founder's call). An unknown/future integration falls back to the
   // connection flag rather than assuming it should show.
-  return key === "quickbooks" || key === "sage" || quickbooksConnected;
+  return (
+    key === "quickbooks" ||
+    key === "sage" ||
+    key === "xero" ||
+    quickbooksConnected
+  );
 }
 
 // The lifecycle + status fields needed to classify a single engagement. A full

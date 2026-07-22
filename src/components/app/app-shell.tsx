@@ -58,6 +58,7 @@ import {
 } from "@/lib/navigation/active-nav";
 import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import { SageLogo } from "@/components/integrations/sage-logo";
+import { XeroLogo } from "@/components/integrations/xero-logo";
 import {
   ActiveNavProvider,
   useActiveEngagementView,
@@ -136,6 +137,13 @@ const INTEGRATION_SUBNAV: {
     href: "/integrations/sage",
     root: "/integrations/sage",
     Logo: SageLogo,
+  },
+  {
+    key: "xero",
+    name: "Xero",
+    href: "/integrations/xero",
+    root: "/integrations/xero",
+    Logo: XeroLogo,
   },
 ];
 
