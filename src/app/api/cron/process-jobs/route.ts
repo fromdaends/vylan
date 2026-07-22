@@ -24,6 +24,7 @@ import {
 } from "@/lib/client-messages-notify";
 import { processNotifyAssignmentJob } from "@/lib/team/assignment-notify";
 import { processSyncQuickbooksJob } from "@/lib/quickbooks/sync";
+import { processSyncXeroJob } from "@/lib/xero/sync";
 import { sendEngagementInvoice } from "@/lib/invoices/send";
 import {
   backfillContentHashes,
@@ -196,6 +197,17 @@ async function runJob(
       // permanently-unpopulated cache. Finalize success + the permanent
       // no_firm_id. (The sync also records its outcome in the firm's sync state.)
       if (detail.ok || detail.detail === "no_firm_id") {
+        await markJobDone(job.id);
+      } else {
+        await markJobFailed(job.id, `sync:${detail.detail}`);
+      }
+      return { id: job.id, kind: job.kind, ok: detail.ok, detail };
+    }
+    if (job.kind === "sync_xero") {
+      const detail = await processSyncXeroJob(job.payload);
+      // Same retry policy as sync_quickbooks: retry transient failures via the
+      // queue backoff; finalize success + the permanent no-id case.
+      if (detail.ok || detail.detail === "no_firm_or_client_id") {
         await markJobDone(job.id);
       } else {
         await markJobFailed(job.id, `sync:${detail.detail}`);

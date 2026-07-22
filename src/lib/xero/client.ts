@@ -407,6 +407,122 @@ export async function disconnectXeroConnection(
   }
 }
 
+// ── Reference-list reads (Phase 2 cache sync) ────────────────────────────────
+// Raw shapes: only the fields the cache keeps. Accounts / TaxRates / Items are
+// full-list endpoints (no paging); Contacts is paged (100 default, 1000 max).
+
+export type XeroRawAccount = {
+  AccountID?: string;
+  Code?: string;
+  Name?: string;
+  Type?: string; // BANK, EXPENSE, REVENUE, SALES, OVERHEADS, DIRECTCOSTS, CURRENT…
+  Class?: string; // ASSET, EQUITY, EXPENSE, LIABILITY, REVENUE
+  BankAccountType?: string; // BANK, CREDITCARD, PAYPAL (when Type=BANK)
+  Status?: string; // ACTIVE, ARCHIVED
+};
+export type XeroRawContact = {
+  ContactID?: string;
+  Name?: string;
+  ContactStatus?: string; // ACTIVE, ARCHIVED, GDPRREQUEST
+  IsSupplier?: boolean;
+  IsCustomer?: boolean;
+};
+export type XeroRawTaxRate = {
+  TaxType?: string; // the code put on lines (e.g. CAN007)
+  Name?: string;
+  Status?: string; // ACTIVE, DELETED, ARCHIVED, PENDING
+};
+export type XeroRawItem = {
+  ItemID?: string;
+  Code?: string;
+  Name?: string;
+  IsSold?: boolean;
+  SalesDetails?: { AccountCode?: string } | null;
+  // Xero has no Status on items; a soft-deleted item simply isn't returned.
+};
+
+// GET a Xero Accounting endpoint (tenant-scoped) and return the named array.
+// Throws XeroError on a non-2xx / network failure so the sync can mark itself
+// partial and retry.
+async function xeroGet(
+  accessToken: string,
+  tenantId: string,
+  path: string,
+): Promise<Record<string, unknown>> {
+  const res = await fetch(`${XERO_API_BASE_URL}/${path}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Xero-tenant-id": tenantId,
+      Accept: "application/json",
+    },
+    cache: "no-store",
+    signal: AbortSignal.timeout(XERO_FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new XeroError(
+      "request_failed",
+      `Xero ${path} read failed (${res.status}): ${truncate(detail)}`,
+      res.status,
+    );
+  }
+  return (await res.json()) as Record<string, unknown>;
+}
+
+// Chart of accounts (full list). includeArchived via the ?where filter so the
+// cache carries inactive accounts too (mirrors QBO's Active IN (true,false)).
+export async function fetchXeroAccounts(
+  accessToken: string,
+  tenantId: string,
+): Promise<XeroRawAccount[]> {
+  const json = await xeroGet(accessToken, tenantId, "Accounts");
+  return (json.Accounts as XeroRawAccount[] | undefined) ?? [];
+}
+
+// Tax rates (full list). No paging, no If-Modified-Since.
+export async function fetchXeroTaxRates(
+  accessToken: string,
+  tenantId: string,
+): Promise<XeroRawTaxRate[]> {
+  const json = await xeroGet(accessToken, tenantId, "TaxRates");
+  return (json.TaxRates as XeroRawTaxRate[] | undefined) ?? [];
+}
+
+// Items (full list).
+export async function fetchXeroItems(
+  accessToken: string,
+  tenantId: string,
+): Promise<XeroRawItem[]> {
+  const json = await xeroGet(accessToken, tenantId, "Items");
+  return (json.Items as XeroRawItem[] | undefined) ?? [];
+}
+
+// Contacts — PAGED (100 default, 1000 max). Walk pages until a short one,
+// including archived (?includeArchived=true) so the cache mirrors the org.
+// Capped so a bad response can't loop forever.
+const XERO_CONTACT_PAGE_SIZE = 1000;
+const XERO_MAX_CONTACT_PAGES = 500;
+export async function fetchXeroContactsAll(
+  accessToken: string,
+  tenantId: string,
+): Promise<XeroRawContact[]> {
+  const out: XeroRawContact[] = [];
+  for (let page = 1; page <= XERO_MAX_CONTACT_PAGES; page++) {
+    const json = await xeroGet(
+      accessToken,
+      tenantId,
+      `Contacts?page=${page}&pageSize=${XERO_CONTACT_PAGE_SIZE}&includeArchived=true`,
+    );
+    const rows = (json.Contacts as XeroRawContact[] | undefined) ?? [];
+    for (const r of rows) out.push(r);
+    if (rows.length < XERO_CONTACT_PAGE_SIZE) return out; // short page → done
+  }
+  console.warn(
+    `[xero] Contacts read hit the ${XERO_MAX_CONTACT_PAGES}-page cap (${out.length} rows); list may be truncated.`,
+  );
+  return out;
+}
+
 // ── Client import (Contacts of the firm's OWN org) ──────────────────────────
 
 export type XeroImportCandidate = {
