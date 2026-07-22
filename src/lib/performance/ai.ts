@@ -13,8 +13,8 @@ import type { FileAiInput } from "@/lib/engagements/file-ai-headline";
 import type { DocType } from "@/lib/db/templates";
 import { aggregateAi, type AiCandidate } from "./aggregate";
 import type { AiScorableFile } from "./ai-verdict";
-import type { ResolvedRange } from "./range";
-import type { AiSection } from "./types";
+import { resolveRange, type ResolvedRange } from "./range";
+import type { AiSection, PerformanceRange } from "./types";
 
 const PAGE = 1000;
 const MAX_ROWS = 50_000; // safety backstop against a runaway scan
@@ -152,4 +152,14 @@ export async function loadAiSection(range: ResolvedRange): Promise<AiSection> {
   });
 
   return aggregateAi(candidates, nowMs);
+}
+
+// Convenience for the page: resolve the range and load the AI section in one
+// call. The clock is read HERE (a lib function), not in the server component's
+// render, so the page stays pure. `nowMs` is injectable for tests.
+export async function loadAi(
+  range: PerformanceRange,
+  nowMs: number = Date.now(),
+): Promise<AiSection> {
+  return loadAiSection(resolveRange(range, nowMs));
 }

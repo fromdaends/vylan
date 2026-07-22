@@ -36,6 +36,26 @@ export type PerfCopy = {
     viewLabel: string;
     chartAria: string;
   };
+  ai: {
+    heading: string;
+    caption: string;
+    agreement: (percent: string, count: number) => string;
+    agreementWord: string;
+    cases: {
+      true_pass: string;
+      true_catch: string;
+      false_pass: string;
+      false_alarm: string;
+    };
+    tagAgreement: string;
+    tagMissed: string;
+    tagFalseAlarm: string;
+    assessed: (n: number) => string;
+    skipped: (n: number) => string;
+    methodology: string;
+    earlyData: (n: number) => string;
+    empty: string;
+  };
 };
 
 export const PERF_COPY: Record<AppLocale, PerfCopy> = {
@@ -71,6 +91,29 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       viewLabel: "Chart view",
       chartAria: "Money collected over time",
     },
+    ai: {
+      heading: "AI performance",
+      caption: "How Vylan's document checks stack up against your final calls.",
+      agreement: (percent, count) =>
+        `You agreed with Vylan's assessment on ${percent}% of ${count} ${count === 1 ? "document" : "documents"}.`,
+      agreementWord: "agreement",
+      cases: {
+        true_pass: "AI approved, you approved",
+        true_catch: "AI flagged, you rejected",
+        false_pass: "AI approved, you rejected",
+        false_alarm: "AI flagged, you approved",
+      },
+      tagAgreement: "Agreement",
+      tagMissed: "The miss that matters",
+      tagFalseAlarm: "Safe but noisy",
+      assessed: (n) => `${n} ${n === 1 ? "document" : "documents"} checked`,
+      skipped: (n) => `${n} skipped (AI was off)`,
+      methodology:
+        "This compares Vylan's assessment of each document with your final decision on it. We count only documents where Vylan gave a verdict and you approved or rejected the document. A document that was re-uploaded or that you reopened is counted once, at your final decision.",
+      earlyData: (n) =>
+        `Early data. Based on only ${n} ${n === 1 ? "document" : "documents"} so far, so treat this as a first look rather than a firm track record.`,
+      empty: "No documents assessed in this period yet.",
+    },
   },
   fr: {
     title: "Performance",
@@ -103,6 +146,31 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       viewLine: "Tendance",
       viewLabel: "Type de graphique",
       chartAria: "Sommes encaissées dans le temps",
+    },
+    ai: {
+      heading: "Performance de l'IA",
+      caption:
+        "Comment les vérifications de Vylan se comparent à vos décisions finales.",
+      agreement: (percent, count) =>
+        `Vous étiez d'accord avec l'évaluation de Vylan pour ${percent} % de ${count} document${count === 1 ? "" : "s"}.`,
+      agreementWord: "d'accord",
+      cases: {
+        true_pass: "IA a approuvé, vous avez approuvé",
+        true_catch: "IA a signalé, vous avez rejeté",
+        false_pass: "IA a approuvé, vous avez rejeté",
+        false_alarm: "IA a signalé, vous avez approuvé",
+      },
+      tagAgreement: "Accord",
+      tagMissed: "L'erreur qui compte",
+      tagFalseAlarm: "Sûr mais bruyant",
+      assessed: (n) =>
+        `${n} document${n === 1 ? "" : "s"} vérifié${n === 1 ? "" : "s"}`,
+      skipped: (n) => `${n} ignoré${n === 1 ? "" : "s"} (IA désactivée)`,
+      methodology:
+        "Ceci compare l'évaluation de Vylan pour chaque document à votre décision finale. Nous comptons seulement les documents que Vylan a évalués et que vous avez approuvés ou rejetés. Un document re-téléversé ou rouvert est compté une seule fois, à votre décision finale.",
+      earlyData: (n) =>
+        `Données préliminaires. Basé sur seulement ${n} document${n === 1 ? "" : "s"} pour l'instant; voyez ceci comme un premier aperçu plutôt qu'un bilan établi.`,
+      empty: "Aucun document évalué sur cette période pour l'instant.",
     },
   },
 };
