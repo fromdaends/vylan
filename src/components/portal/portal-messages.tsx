@@ -1,9 +1,9 @@
 "use client";
 
 // Client messaging, portal side (Phase 2): the client's view of the thread
-// with their accountant. Same comment-thread cadence as the firm side: loads
-// with the portal, refreshes every 60s only while the view is open, appends
-// your own message on send. Opening the view stamps the client's read pointer.
+// with their accountant. Near-live cadence, matching the firm side: loads
+// with the portal, refreshes every few seconds only while the view is open,
+// appends your own message on send. Opening the view stamps the read pointer.
 //
 // TEXT ONLY by hard rule — documents must flow through the checklist so the
 // AI pipeline checks them. The composer carries a permanent nudge pointing
@@ -17,7 +17,9 @@ import { AvatarInitials } from "@/components/ui/avatar-initials";
 import type { PortalMessage } from "@/lib/db/client-messages";
 
 const MAX_LENGTH = 4000;
-const POLL_MS = 60_000;
+// Near-live: refresh a few seconds apart while the thread is open + visible,
+// so a reply lands within a few seconds (not the old comment-cadence minute).
+const POLL_MS = 4_000;
 
 export function PortalMessages({
   token,

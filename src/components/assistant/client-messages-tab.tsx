@@ -18,9 +18,10 @@ import { Button } from "@/components/ui/button";
 import { EngagementMessages } from "@/components/engagements/engagement-messages";
 import type { FirmConversation } from "@/lib/db/client-messages";
 
-// Refresh cadence for the inbox while the panel is open. Comment-thread
-// cadence, matching the thread's own poll — this is not live chat.
-const POLL_MS = 45_000;
+// Inbox refresh while the panel is open. A touch slower than an open thread —
+// this is a heavier list query and runs on every panel-open, whereas the open
+// conversation (EngagementMessages) polls every few seconds for the live feel.
+const POLL_MS = 10_000;
 
 // Deterministic avatar tints so the list reads like a real inbox (different
 // people, different colors) without storing anything. All chosen to sit well
