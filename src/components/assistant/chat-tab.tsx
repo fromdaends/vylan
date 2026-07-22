@@ -86,7 +86,7 @@ export function ChatTab({ locale }: { locale: "en" | "fr" }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -8 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="flex h-full min-h-0 flex-col bg-black text-white"
+          className="flex h-full min-h-0 flex-col bg-card text-white"
         >
           <ChatView
             locale={locale}
@@ -252,7 +252,6 @@ function ChatView({
     if (chatReloadNonce === reloadNonceRef.current) return;
     reloadNonceRef.current = chatReloadNonce;
     if (engagementIdRef.current) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setThread(null);
       setHistoryFailedFor(null);
     }
@@ -630,81 +629,79 @@ function ChatView({
             ))}
           </div>
         ) : (
-            <div className="flex flex-col gap-6 px-5 py-6">
-              {items.length === 0 && (
-                <ChatGreeting engagementTitle={selected?.title ?? ""} />
-              )}
+          <div className="flex flex-col gap-6 px-5 py-6">
+            {items.length === 0 && (
+              <ChatGreeting engagementTitle={selected?.title ?? ""} />
+            )}
 
-              {items.length > 0 && (
-                <div className="text-center text-xs text-zinc-500 tabular-nums">
-                  {formatConversationTime(
-                    items[0].kind === "message"
-                      ? items[0].createdAt
-                      : items[0].action.createdAt,
-                    locale,
-                  )}
-                </div>
-              )}
+            {items.length > 0 && (
+              <div className="text-center text-xs text-zinc-500 tabular-nums">
+                {formatConversationTime(
+                  items[0].kind === "message"
+                    ? items[0].createdAt
+                    : items[0].action.createdAt,
+                  locale,
+                )}
+              </div>
+            )}
 
-              <AnimatePresence initial={false}>
-                {items.map((item, i) => {
-                  if (item.kind === "action") {
-                    return (
-                      <motion.div
-                        key={`action:${item.action.id}`}
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2, ease: "easeOut" }}
-                      >
-                        <ActionCard
-                          card={item.action}
-                          locale={locale}
-                          onResolved={resolveCard}
-                        />
-                      </motion.div>
-                    );
-                  }
-                  // The streaming caret and feedback link belong to the final
-                  // assistant message — the last message item in the thread
-                  // (an action card may sort after it).
-                  const isLastMessage = i === lastMessageIndex;
+            <AnimatePresence initial={false}>
+              {items.map((item, i) => {
+                if (item.kind === "action") {
                   return (
                     <motion.div
-                      key={`msg:${i}`}
+                      key={`action:${item.action.id}`}
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.2, ease: "easeOut" }}
                     >
-                      <Message
-                        role={item.role}
-                        content={item.content}
-                        isStreaming={
-                          streaming && isLastMessage && item.role === "assistant"
-                        }
-                        checking={checking}
-                        showFeedback={
-                          !streaming &&
-                          item.role === "assistant" &&
-                          isLastMessage
-                        }
-                        onFeedback={onSwitchToFeedback}
+                      <ActionCard
+                        card={item.action}
+                        locale={locale}
+                        onResolved={resolveCard}
                       />
                     </motion.div>
                   );
-                })}
-              </AnimatePresence>
+                }
+                // The streaming caret and feedback link belong to the final
+                // assistant message — the last message item in the thread
+                // (an action card may sort after it).
+                const isLastMessage = i === lastMessageIndex;
+                return (
+                  <motion.div
+                    key={`msg:${i}`}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                  >
+                    <Message
+                      role={item.role}
+                      content={item.content}
+                      isStreaming={
+                        streaming && isLastMessage && item.role === "assistant"
+                      }
+                      checking={checking}
+                      showFeedback={
+                        !streaming && item.role === "assistant" && isLastMessage
+                      }
+                      onFeedback={onSwitchToFeedback}
+                    />
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
 
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                >
-                  <Alert variant="destructive">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                </motion.div>
-              )}
-            </div>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+              >
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              </motion.div>
+            )}
+          </div>
         )}
 
         {isLoaded && items.length === 0 && error && (
@@ -717,7 +714,7 @@ function ChatView({
       </div>
 
       {/* Status notes + input */}
-      <div className="border-t border-white/10 bg-black px-4 pt-3 pb-4">
+      <div className="border-t border-white/10 bg-card px-4 pt-3 pb-4">
         {ready === false && (
           <p className="mb-2.5 px-1 text-xs text-muted-foreground leading-relaxed">
             {ta("chat_not_ready")}{" "}
@@ -833,9 +830,7 @@ function UsagePopover({
   const remaining = limit?.remaining ?? 0;
   const total = limit?.limit ?? 0;
   const percent =
-    total > 0
-      ? Math.max(0, Math.min(100, (remaining / total) * 100))
-      : 0;
+    total > 0 ? Math.max(0, Math.min(100, (remaining / total) * 100)) : 0;
   const label =
     locale === "fr"
       ? `${remaining} message${remaining === 1 ? "" : "s"} restant${remaining === 1 ? "" : "s"}`

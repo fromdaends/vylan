@@ -321,3 +321,192 @@ export async function markThreadReadByFirm(
   }
   return (res.data ?? []).length > 0;
 }
+
+// ---------------------------------------------------------------------------
+// Firm inbox — the accountant's social-style, cross-client conversation list.
+// ---------------------------------------------------------------------------
+
+// One row in the accountant's message inbox: an engagement's thread summarized
+// for the list (client + engagement identity, the last-message preview, and how
+// many client messages the firm hasn't read).
+export type FirmConversation = {
+  engagementId: string;
+  engagementTitle: string;
+  clientName: string | null;
+  // Engagement status — drives the read-only composer, and which rows can start
+  // a fresh conversation (live) vs. only show history.
+  status: string;
+  lastMessage: {
+    body: string;
+    sender: ClientMessageSender;
+    createdAt: string;
+  } | null;
+  // Client messages newer than the firm's read stamp for this thread.
+  unreadCount: number;
+  // Sort key: the last message's time, or the engagement's own timestamp when
+  // nothing has been exchanged yet.
+  lastActivityAt: string;
+};
+
+// Engagement statuses that can start/continue a conversation. Mirrors the API
+// route's WRITABLE_STATUSES; complete/cancelled threads stay visible (history)
+// but read-only.
+const CONVERSATION_LIVE_STATUSES = new Set(["sent", "in_progress"]);
+
+// PURE: fold the three raw result sets — active-scope engagements, threads, and
+// messages (newest-first) — into the sorted inbox. Exported for unit tests.
+//
+// An engagement earns a row when it's live (messageable now) OR it already has
+// a thread (history to show); draft/other engagements without a thread are left
+// out. Rows sort by most recent activity, so live-but-silent engagements fall
+// below the ones with real messages.
+export function buildFirmConversations(
+  engagements: {
+    id: string;
+    title: string;
+    status: string;
+    clientName: string | null;
+    createdAt: string;
+  }[],
+  threads: { engagement_id: string; firm_last_read_at: string | null }[],
+  // Newest-first, as the DB returns them.
+  messages: {
+    engagement_id: string;
+    sender: ClientMessageSender;
+    body: string;
+    created_at: string;
+  }[],
+): FirmConversation[] {
+  const readAtByEng = new Map<string, string | null>();
+  for (const t of threads)
+    readAtByEng.set(t.engagement_id, t.firm_last_read_at);
+
+  const lastByEng = new Map<
+    string,
+    { body: string; sender: ClientMessageSender; createdAt: string }
+  >();
+  const unreadByEng = new Map<string, number>();
+  for (const m of messages) {
+    // Newest-first, so the first one seen per engagement is its last message.
+    if (!lastByEng.has(m.engagement_id)) {
+      lastByEng.set(m.engagement_id, {
+        body: m.body,
+        sender: m.sender,
+        createdAt: m.created_at,
+      });
+    }
+    if (m.sender === "client") {
+      const cutoff = readAtByEng.get(m.engagement_id) ?? null;
+      const cutoffMs = cutoff ? new Date(cutoff).getTime() : 0;
+      if (new Date(m.created_at).getTime() > cutoffMs) {
+        unreadByEng.set(
+          m.engagement_id,
+          (unreadByEng.get(m.engagement_id) ?? 0) + 1,
+        );
+      }
+    }
+  }
+
+  const rows: FirmConversation[] = [];
+  for (const e of engagements) {
+    const hasThread = readAtByEng.has(e.id);
+    if (!hasThread && !CONVERSATION_LIVE_STATUSES.has(e.status)) continue;
+    const last = lastByEng.get(e.id) ?? null;
+    rows.push({
+      engagementId: e.id,
+      engagementTitle: e.title,
+      clientName: e.clientName,
+      status: e.status,
+      lastMessage: last,
+      unreadCount: unreadByEng.get(e.id) ?? 0,
+      lastActivityAt: last?.createdAt ?? e.createdAt,
+    });
+  }
+
+  rows.sort(
+    (a, b) =>
+      new Date(b.lastActivityAt).getTime() -
+      new Date(a.lastActivityAt).getTime(),
+  );
+  return rows;
+}
+
+// Load the accountant's cross-client inbox on their RLS-scoped session client.
+// Three cheap reads (threads, active-scope engagements, recent messages) folded
+// by buildFirmConversations — no SQL view/RPC, so nothing to migrate.
+export async function listFirmConversations(
+  sb: SupabaseClient,
+): Promise<FirmConversation[] | MessagingSchemaMissing> {
+  // Threads (one per engagement that's ever had a message) + the firm read
+  // stamp. RLS scopes to the caller's firm.
+  const threadsRes = await sb
+    .from("client_message_threads")
+    .select("engagement_id, firm_last_read_at");
+  if (threadsRes.error) {
+    if (isClientMessagingSchemaMissing(threadsRes.error)) {
+      return CLIENT_MESSAGING_SCHEMA_MISSING;
+    }
+    throw threadsRes.error;
+  }
+  const threads = (threadsRes.data ?? []) as {
+    engagement_id: string;
+    firm_last_read_at: string | null;
+  }[];
+
+  // Active-scope engagements (same lifecycle scope as the board/selector) with
+  // the client display name.
+  const engRes = await sb
+    .from("engagements")
+    .select("id, title, status, created_at, clients(display_name)")
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .order("created_at", { ascending: false })
+    .limit(300);
+  if (engRes.error) throw engRes.error;
+  type EngRow = {
+    id: string;
+    title: string;
+    status: string;
+    created_at: string;
+    clients: { display_name: string | null } | null;
+  };
+  const engagements = ((engRes.data ?? []) as unknown as EngRow[]).map((e) => ({
+    id: e.id,
+    title: e.title,
+    status: e.status,
+    clientName: e.clients?.display_name ?? null,
+    createdAt: e.created_at,
+  }));
+
+  // Only pull messages for engagements we'll actually show (threaded or live).
+  const threadEngIds = new Set(threads.map((t) => t.engagement_id));
+  const relevantIds = engagements
+    .filter(
+      (e) => threadEngIds.has(e.id) || CONVERSATION_LIVE_STATUSES.has(e.status),
+    )
+    .map((e) => e.id);
+  if (relevantIds.length === 0) return [];
+
+  // Recent messages, newest-first; grouped in memory for last-message + unread.
+  // Comment-cadence volume; the cap only bounds a very chatty firm.
+  const msgRes = await sb
+    .from("client_messages")
+    .select("engagement_id, sender, body, created_at")
+    .in("engagement_id", relevantIds)
+    .order("created_at", { ascending: false })
+    .limit(2000);
+  if (msgRes.error) {
+    if (isClientMessagingSchemaMissing(msgRes.error)) {
+      return CLIENT_MESSAGING_SCHEMA_MISSING;
+    }
+    throw msgRes.error;
+  }
+  const messages = (msgRes.data ?? []) as {
+    engagement_id: string;
+    sender: ClientMessageSender;
+    body: string;
+    created_at: string;
+  }[];
+
+  return buildFirmConversations(engagements, threads, messages);
+}

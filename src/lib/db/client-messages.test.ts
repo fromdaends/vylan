@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  buildFirmConversations,
   countUnreadForClient,
   countUnreadForFirm,
   isClientMessagingSchemaMissing,
@@ -81,5 +82,120 @@ describe("isClientMessagingSchemaMissing", () => {
     expect(isClientMessagingSchemaMissing({ code: "23505" })).toBe(false);
     expect(isClientMessagingSchemaMissing(null)).toBe(false);
     expect(isClientMessagingSchemaMissing(undefined)).toBe(false);
+  });
+});
+
+describe("buildFirmConversations", () => {
+  const engagements = [
+    {
+      id: "e-live",
+      title: "GST/QST 2026",
+      status: "in_progress",
+      clientName: "Acme Corp",
+      createdAt: "2026-01-01T00:00:00Z",
+    },
+    {
+      id: "e-draft",
+      title: "Draft return",
+      status: "draft",
+      clientName: "Beta Inc",
+      createdAt: "2026-02-01T00:00:00Z",
+    },
+    {
+      id: "e-complete",
+      title: "T1 2025",
+      status: "complete",
+      clientName: "Gamma Ltd",
+      createdAt: "2026-03-01T00:00:00Z",
+    },
+    {
+      id: "e-silent",
+      title: "New mandate",
+      status: "sent",
+      clientName: "Delta Co",
+      createdAt: "2026-06-01T00:00:00Z",
+    },
+  ];
+  const threads = [
+    { engagement_id: "e-live", firm_last_read_at: "2026-07-01T10:00:00Z" },
+    { engagement_id: "e-complete", firm_last_read_at: null },
+  ];
+  // Newest-first, as the DB returns them.
+  const messages = [
+    {
+      engagement_id: "e-live",
+      sender: "client" as const,
+      body: "Any update?",
+      created_at: "2026-07-02T09:00:00Z",
+    },
+    {
+      engagement_id: "e-live",
+      sender: "firm" as const,
+      body: "Working on it",
+      created_at: "2026-07-01T09:00:00Z",
+    },
+    {
+      engagement_id: "e-complete",
+      sender: "firm" as const,
+      body: "All done, thanks",
+      created_at: "2026-06-15T12:00:00Z",
+    },
+    {
+      engagement_id: "e-complete",
+      sender: "client" as const,
+      body: "Here are my docs",
+      created_at: "2026-06-14T12:00:00Z",
+    },
+  ];
+
+  it("includes live + threaded engagements, drops silent drafts, sorts by recency", () => {
+    const rows = buildFirmConversations(engagements, threads, messages);
+    // e-draft (draft, no thread) is excluded; the rest sort by last activity.
+    expect(rows.map((r) => r.engagementId)).toEqual([
+      "e-live",
+      "e-complete",
+      "e-silent",
+    ]);
+  });
+
+  it("summarizes the last message and firm-unread per conversation", () => {
+    const rows = buildFirmConversations(engagements, threads, messages);
+    const live = rows.find((r) => r.engagementId === "e-live")!;
+    expect(live.clientName).toBe("Acme Corp");
+    expect(live.lastMessage).toEqual({
+      sender: "client",
+      body: "Any update?",
+      createdAt: "2026-07-02T09:00:00Z",
+    });
+    // One client message after the 07-01 read pointer.
+    expect(live.unreadCount).toBe(1);
+
+    const complete = rows.find((r) => r.engagementId === "e-complete")!;
+    // Newest message wins as the preview even though it's the firm's.
+    expect(complete.lastMessage?.body).toBe("All done, thanks");
+    // Read pointer null → the one client message counts as unread.
+    expect(complete.unreadCount).toBe(1);
+  });
+
+  it("shows a live engagement with no messages as an empty, unread-free row", () => {
+    const rows = buildFirmConversations(engagements, threads, messages);
+    const silent = rows.find((r) => r.engagementId === "e-silent")!;
+    expect(silent.lastMessage).toBeNull();
+    expect(silent.unreadCount).toBe(0);
+    // Falls back to the engagement's own timestamp for sorting.
+    expect(silent.lastActivityAt).toBe("2026-06-01T00:00:00Z");
+  });
+
+  it("counts no unread once the firm read pointer passes the newest client message", () => {
+    const readPast = [
+      { engagement_id: "e-live", firm_last_read_at: "2026-07-03T00:00:00Z" },
+    ];
+    const rows = buildFirmConversations(
+      engagements.filter((e) => e.id === "e-live"),
+      readPast,
+      messages.filter((m) => m.engagement_id === "e-live"),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.unreadCount).toBe(0);
   });
 });
