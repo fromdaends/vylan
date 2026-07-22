@@ -160,7 +160,7 @@ export async function POST(
       );
     case "not_postable":
       return NextResponse.json(
-        { error: "not_postable", problems: r.problems },
+        { error: "not_postable", problems: r.problems, detail: r.detail },
         { status: 422 },
       );
     case "not_connected":

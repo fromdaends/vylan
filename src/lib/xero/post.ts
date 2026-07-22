@@ -20,7 +20,7 @@ import {
   recordReceiptAttached,
   recordDraftVoided,
 } from "@/lib/db/quickbooks-suggestions";
-import { isClientXeroConnected } from "@/lib/db/xero";
+import { isClientXeroConnected, isClientXeroDemoOrg } from "@/lib/db/xero";
 import { readXeroPostingContext } from "@/lib/db/xero-cache";
 import { getXeroReadContext, type XeroReadContext } from "@/lib/xero/connection";
 import { XeroError } from "@/lib/xero/client";
@@ -118,6 +118,20 @@ export async function postApprovedXeroDraft(
   }
   if (draft.status !== "approved") return { kind: "not_approved", ...base };
   if (!draft.clientId || !draft.firmId) return { kind: "not_connected", ...base };
+
+  // SAFETY GATE: live posting is enabled for Xero DEMO companies only while the
+  // posting path is hardened (register-match dedupe, recorded-provider undo
+  // dispatch — see the go-live checklist). A real client's books can't be written
+  // yet. Fails closed (isClientXeroDemoOrg returns false on any error).
+  if (!(await isClientXeroDemoOrg(draft.firmId, draft.clientId))) {
+    return {
+      kind: "not_postable",
+      ...base,
+      problems: [],
+      detail:
+        "Xero posting is in testing — it's enabled for Xero Demo companies only right now.",
+    };
+  }
 
   const s = draft.suggestion;
 

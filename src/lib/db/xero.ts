@@ -102,6 +102,31 @@ export async function isClientXeroConnected(
   return Boolean(data);
 }
 
+// Is this client's Xero org a DEMO company (Organisation.IsDemoCompany, stored at
+// connect)? Live POSTING is gated to demo orgs while the posting path is still
+// being hardened (register-match dedupe, recorded-provider undo dispatch, etc.),
+// so a real client's books can't be written yet. Fails CLOSED (false) on any
+// error — the safe default is "not a demo → don't post".
+export async function isClientXeroDemoOrg(
+  firmId: string,
+  clientId: string,
+): Promise<boolean> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("xero_connections")
+    .select("is_demo")
+    .eq("firm_id", firmId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingXeroSchema(error)) {
+      console.error("[xero] isClientXeroDemoOrg failed:", error);
+    }
+    return false;
+  }
+  return data?.is_demo === true;
+}
+
 // Does the current firm have ANY Xero connection (any client)? Drives the
 // Integrations hub badge. RLS scopes it to the firm; false on error/pre-0740.
 export async function firmHasAnyXeroConnection(): Promise<boolean> {
