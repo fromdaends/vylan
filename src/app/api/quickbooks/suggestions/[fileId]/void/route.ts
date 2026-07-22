@@ -22,6 +22,8 @@ import {
   effectiveIncomeMode,
 } from "@/lib/quickbooks/draft-resolve";
 import { logUserActivity } from "@/lib/db/activity";
+import { isClientXeroConnected } from "@/lib/db/xero";
+import { undoXeroPost } from "@/lib/xero/post";
 
 export const runtime = "nodejs";
 
@@ -56,6 +58,66 @@ export async function POST(
       { status: 404 },
     );
   }
+
+  // Xero-connected client → undo in Xero (delete the BankTransaction / void the
+  // ACCPAY invoice), then fall through the SAME response contract the client
+  // expects. QuickBooks drafts continue below unchanged.
+  if (
+    draft.clientId &&
+    draft.firmId &&
+    (await isClientXeroConnected(draft.firmId, draft.clientId))
+  ) {
+    const r = await undoXeroPost(fileId);
+    switch (r.kind) {
+      case "not_found":
+        return NextResponse.json(
+          { error: "not_found", detail: "Draft not found." },
+          { status: 404 },
+        );
+      case "not_enabled":
+        return NextResponse.json(
+          { error: "not_enabled", detail: "Xero posting isn't enabled yet." },
+          { status: 409 },
+        );
+      case "not_posted":
+        return NextResponse.json(
+          { error: "not_posted", detail: "This draft isn't posted." },
+          { status: 409 },
+        );
+      case "not_connected":
+        return NextResponse.json(
+          { error: "not_connected", detail: "Xero isn't connected." },
+          { status: 409 },
+        );
+      case "void_failed":
+        revalidate(r.engagementId);
+        return NextResponse.json(
+          { error: "void_failed", detail: r.detail },
+          { status: 502 },
+        );
+      case "record_failed":
+        revalidate(r.engagementId);
+        return NextResponse.json(
+          {
+            error: "record_failed",
+            detail: "Voided in Xero but couldn't update the draft. Refresh.",
+          },
+          { status: 500 },
+        );
+      case "ok":
+        revalidate(r.engagementId);
+        try {
+          await logUserActivity(r.firmId, r.engagementId, "void_qbo_draft", {
+            file_id: fileId,
+            qbo_id: r.postedXeroId,
+          });
+        } catch (err) {
+          console.error("[xero void route] audit log failed (void applied):", err);
+        }
+        return NextResponse.json({ ok: true });
+    }
+  }
+
   if (!draft.postReady) {
     return NextResponse.json(
       { error: "not_enabled", detail: "QuickBooks posting isn't enabled yet." },

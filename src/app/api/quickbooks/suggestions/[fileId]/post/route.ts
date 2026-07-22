@@ -6,10 +6,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
-import {
-  postApprovedDraft,
-  type PostMatchOverride,
-} from "@/lib/quickbooks/post";
+import { type PostMatchOverride } from "@/lib/quickbooks/post";
+import { postApprovedDraftForFile } from "@/lib/xero/post";
 import { isQboTxnEntity } from "@/lib/quickbooks/client";
 import { logUserActivity } from "@/lib/db/activity";
 
@@ -64,7 +62,10 @@ export async function POST(
     match = undefined;
   }
 
-  const r = await postApprovedDraft(fileId, auth.user.id, { match });
+  // Dispatch by provider: a Xero-connected client's draft posts to Xero, all
+  // others to QuickBooks. Both return the same PostOutcome, so the mapping below
+  // is provider-neutral. (Xero ignores the QuickBooks-only `match` override.)
+  const r = await postApprovedDraftForFile(fileId, auth.user.id, { match });
 
   // Revalidate when QuickBooks state may have changed (posted) or an error was
   // recorded — never let it hinge on the best-effort audit below.
