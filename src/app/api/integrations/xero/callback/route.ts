@@ -22,6 +22,8 @@ import {
   getClientXeroLinkRefs,
 } from "@/lib/db/xero";
 import { getFirmQuickbooksStatus } from "@/lib/db/quickbooks";
+import { purgeXeroCache } from "@/lib/db/xero-cache";
+import { enqueueXeroSync } from "@/lib/xero/sync";
 import {
   XERO_STATE_COOKIE,
   XERO_INTENT_COOKIE,
@@ -178,6 +180,16 @@ export async function GET(request: Request) {
           );
         }
       }
+      // The connected ORG changed for this client → its cached lists hold the
+      // OLD org's ids; purge them so the fresh sync rebuilds from the new org
+      // (best-effort; a failure must not undo the connect).
+      if (previous && previous.tenantId !== conn.tenantId) {
+        await purgeXeroCache(firm.id, clientId!);
+      }
+      // Kick off this client's first cache sync in the background so its
+      // reference lists (accounts/contacts/tax rates/items) populate, ready for
+      // the draft-matching phase. Best-effort.
+      await enqueueXeroSync(firm.id, clientId!);
       return back("done");
     } catch (e) {
       console.error(

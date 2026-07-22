@@ -38,7 +38,11 @@ export type JobKind =
   // assigned_by, assigned_at, note? }. Enqueued ~2h out on reassign; superseded
   // if the engagement is reassigned again; the worker re-checks "still assigned
   // + still hasn't been active" before sending, so it's a no-op if they showed up.
-  | "notify_assignment";
+  | "notify_assignment"
+  // Xero reference-list cache sync (migration 0780). Per client: refreshes the
+  // cached accounts/contacts/tax rates/items off the request path. Payload:
+  // { firmId, clientId }. Mirrors 'sync_quickbooks'.
+  | "sync_xero";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {

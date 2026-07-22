@@ -7,6 +7,7 @@ import {
   readClientXeroConnection,
   clearClientXeroConnection,
 } from "@/lib/db/xero";
+import { purgeXeroCache } from "@/lib/db/xero-cache";
 import { getValidXeroAccessToken } from "@/lib/xero/connection";
 
 export const runtime = "nodejs";
@@ -55,5 +56,9 @@ export async function POST(request: Request) {
     }
   }
   await clearClientXeroConnection(firm.id, clientId);
+  // Drop this client's cached reference lists — they belong to the disconnected
+  // org and are rebuilt by the sync on the next connect (mirrors the QBO
+  // disconnect). Best-effort.
+  await purgeXeroCache(firm.id, clientId);
   return NextResponse.json({ ok: true });
 }
