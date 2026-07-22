@@ -2678,6 +2678,7 @@
     "archived": "Archived",
     "foreign_currency": "Amounts appear to be in {currency}, not CAD",
     "tax_no_match": "No QuickBooks tax code matches this receipt's tax, so the posted total may not include it. Add a matching code in QuickBooks (a single combined GST/QST code for receipts that have both).",
+    "tax_no_match_xero": "No Xero tax rate matches this receipt's tax, so the recorded total may not include it. Add a matching tax rate in Xero (a single combined GST/QST rate for receipts that have both).",
     "refresh_draft": "Refresh",
     "refresh_failed": "Couldn't refresh.",
     "summary_label": "QuickBooks drafts",

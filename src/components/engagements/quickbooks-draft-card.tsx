@@ -332,13 +332,17 @@ export async function QuickbooksDraftCard({
           suggested={candidateOptions(suggestion.party, partyOptions)}
           // A brand-new vendor (expense) or customer (income) can be created
           // inline. Only when we know the kind — an unknown-direction draft has
-          // no party list to create into.
+          // no party list to create into. Xero: inline create writes to the
+          // books (posting territory, Phase 4), so it's hidden until then —
+          // matches the deferred Post controls below.
           createKind={
-            v.partyKind === "vendor"
-              ? "vendor"
-              : v.partyKind === "customer"
-                ? "customer"
-                : null
+            isXero
+              ? null
+              : v.partyKind === "vendor"
+                ? "vendor"
+                : v.partyKind === "customer"
+                  ? "customer"
+                  : null
           }
         />
         {/* Income lines post to a product/service ITEM (QuickBooks Invoice);
@@ -402,8 +406,10 @@ export async function QuickbooksDraftCard({
 
       {/* Expense: was it already paid? A paid receipt posts a Purchase (against a
           bank/credit-card account); an unpaid bill posts a Bill. Income has no
-          such choice. */}
-      {v.direction === "expense" && (
+          such choice. QuickBooks-only posting shape (Phase 3): a Xero card can't
+          post yet, so these QuickBooks-flavoured controls stay hidden until the
+          Xero posting form lands (Phase 4) — same gate as the Post row below. */}
+      {!isXero && v.direction === "expense" && (
         <div className="grid grid-cols-1 gap-1.5 px-3 pt-1.5 sm:grid-cols-2">
           <QuickbooksPaidToggle
             key={`paid-${expenseMode}`}
@@ -434,8 +440,9 @@ export async function QuickbooksDraftCard({
 
       {/* INCOME: Invoice (the customer owes) vs Sales receipt (already paid). A
           paid sale deposits to Undeposited Funds by default, so no extra account
-          is required. */}
-      {v.direction === "income" && (
+          is required. QuickBooks-only posting shape — hidden on a Xero card
+          (Phase 4) like the expense toggle above. */}
+      {!isXero && v.direction === "income" && (
         <div className="px-3 pt-1.5">
           <QuickbooksPaidToggle
             key={`paid-${incomeMode}`}
@@ -462,7 +469,7 @@ export async function QuickbooksDraftCard({
       {v.hasTax && suggestion.taxCode && !suggestion.taxCode.match && (
         <p className="mt-2 flex items-start gap-1 px-3 text-[11px] text-warning">
           <TriangleAlert className="mt-px h-3 w-3 shrink-0" aria-hidden="true" />
-          {t("tax_no_match")}
+          {isXero ? t("tax_no_match_xero") : t("tax_no_match")}
         </p>
       )}
 
