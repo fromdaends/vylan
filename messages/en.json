@@ -1732,6 +1732,7 @@
     "send_reminder": "Send reminder",
     "reminder_sent": "Reminder sent",
     "reminder_failed": "Couldn't send the reminder — please try again",
+    "sending_reminder": "Sending…",
     "pause_reminders": "Pause reminders",
     "resume_reminders": "Resume reminders",
     "reminders_paused_badge": "Reminders paused",
