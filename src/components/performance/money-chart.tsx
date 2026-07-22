@@ -59,7 +59,6 @@ export function MoneyChart({
       ? `${linePath} L ${points[points.length - 1].x} ${BASE_Y} L ${points[0].x} ${BASE_Y} Z`
       : "";
 
-  const gridYs = [0, 1, 2, 3].map((k) => PAD_TOP + (k / 3) * (BASE_Y - PAD_TOP));
   const labelEvery = granularity === "day" && n > 12 ? Math.ceil(n / 6) : 1;
 
   const onMove = (e: React.MouseEvent) => {
@@ -81,18 +80,6 @@ export function MoneyChart({
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
       >
-        {/* Faint gridlines + a slightly firmer baseline. */}
-        {gridYs.map((gy, i) => (
-          <div
-            key={gy}
-            className={cn(
-              "pointer-events-none absolute inset-x-0 border-t",
-              i === gridYs.length - 1 ? "border-border/60" : "border-border/25",
-            )}
-            style={{ top: `${gy}%` }}
-          />
-        ))}
-
         {/* Area + line (trend view). */}
         <motion.svg
           className="absolute inset-0 h-full w-full overflow-visible"
@@ -114,7 +101,7 @@ export function MoneyChart({
             d={linePath}
             fill="none"
             stroke="var(--color-success)"
-            strokeWidth={2}
+            strokeWidth={2.5}
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
