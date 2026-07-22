@@ -86,18 +86,50 @@ describe("xeroRowsToLists — unified Contacts split", () => {
     expect(customerIds.sort()).toEqual(["c-both", "c-cus", "c-new"]);
   });
 
-  it("maps accounts + items straight through; null lists stay null", () => {
+  it("maps accounts straight through; null lists stay null", () => {
     const lists = xeroRowsToLists({
       accounts: [toXeroAccountRow({ AccountID: "A1", Name: "Bank", Type: "BANK", BankAccountType: "BANK" })],
       contacts: null,
       taxRates: null,
-      items: [toXeroItemRow({ ItemID: "I1", Code: "X", Name: "X", SalesDetails: { AccountCode: "200" } })],
+      items: null,
     });
     expect(lists.accounts).toEqual([{ id: "A1", name: "Bank", accountType: "Bank", active: true }]);
     expect(lists.vendors).toBeNull();
     expect(lists.customers).toBeNull();
+    expect(lists.items).toBeNull();
+  });
+
+  it("resolves an item's income account CODE to the account's AccountID (GUID)", () => {
+    const lists = xeroRowsToLists({
+      accounts: [
+        toXeroAccountRow({
+          AccountID: "acc-guid",
+          Code: "200",
+          Name: "Consulting Revenue",
+          Type: "REVENUE",
+        }),
+      ],
+      contacts: null,
+      taxRates: null,
+      items: [
+        toXeroItemRow({ ItemID: "i1", Code: "CONSULT", Name: "Consulting", SalesDetails: { AccountCode: "200" } }),
+      ],
+    });
+    // The bridge must land in the AccountID space the matcher compares against.
     expect(lists.items).toEqual([
-      { id: "I1", name: "X", itemType: null, incomeAccountId: "200", active: true },
+      { id: "i1", name: "Consulting", itemType: null, incomeAccountId: "acc-guid", active: true },
     ]);
+  });
+
+  it("leaves incomeAccountId null when the item's code maps to no loaded account", () => {
+    const lists = xeroRowsToLists({
+      accounts: [toXeroAccountRow({ AccountID: "acc-guid", Code: "200", Name: "Revenue", Type: "REVENUE" })],
+      contacts: null,
+      taxRates: null,
+      items: [
+        toXeroItemRow({ ItemID: "i1", Code: "X", Name: "X", SalesDetails: { AccountCode: "999" } }),
+      ],
+    });
+    expect(lists.items?.[0]?.incomeAccountId).toBeNull();
   });
 });

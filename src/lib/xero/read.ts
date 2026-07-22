@@ -154,16 +154,27 @@ export function xeroRowsToLists(input: {
   const taxCodes: QbNamed[] | null = input.taxRates
     ? input.taxRates.map((t) => ({ id: t.xeroId, name: t.name, active: t.active }))
     : null;
+  // Bridge an item's income account from Xero's CODE space to the AccountID
+  // (GUID) space the matcher compares against: suggestItem matches
+  // item.incomeAccountId === account.match.id, and account ids ARE the GUIDs.
+  // Xero items store the income account by CODE, so resolve code → AccountID via
+  // the accounts list; a code that maps to no loaded account → null (must not
+  // spuriously match).
+  const codeToAccountId = new Map<string, string>();
+  for (const a of input.accounts ?? []) {
+    if (a.code) codeToAccountId.set(a.code, a.xeroId);
+  }
   const items: QbItem[] | null = input.items
     ? input.items.map((i) => ({
         id: i.xeroId,
         name: i.name,
         // Xero items have no QBO-style type; the matcher's isSellableItem treats
-        // a null type as sellable (Xero items are products/services, never QBO
-        // Category/Bundle groupings). incomeAccountId bridges income → item, but
-        // Xero items reference the income account by CODE, so we surface the code.
+        // a null type as sellable. (Purchase-only items are already filtered out
+        // upstream in the read layer, so only sold products/services reach here.)
         itemType: null,
-        incomeAccountId: i.incomeAccountCode,
+        incomeAccountId: i.incomeAccountCode
+          ? (codeToAccountId.get(i.incomeAccountCode) ?? null)
+          : null,
         active: i.active,
       }))
     : null;
@@ -220,7 +231,12 @@ export async function readXeroLists(
       accounts: accountsRaw ? accountsRaw.map(toXeroAccountRow) : null,
       contacts: contactsRaw ? contactsRaw.map(toXeroContactRow) : null,
       taxRates: taxRaw ? taxRaw.map(toXeroTaxRateRow) : null,
-      items: itemsRaw ? itemsRaw.map(toXeroItemRow) : null,
+      // Only SOLD items are income candidates; drop purchase-only items
+      // (IsSold === false) so the picker can't offer one Xero rejects on a
+      // sales line. IsSold undefined (older orgs) is treated as sellable.
+      items: itemsRaw
+        ? itemsRaw.filter((r) => r.IsSold !== false).map(toXeroItemRow)
+        : null,
     }),
   };
 }
@@ -262,7 +278,12 @@ export async function readXeroRows(
       accounts: accountsRaw ? accountsRaw.map(toXeroAccountRow) : null,
       contacts: contactsRaw ? contactsRaw.map(toXeroContactRow) : null,
       taxRates: taxRaw ? taxRaw.map(toXeroTaxRateRow) : null,
-      items: itemsRaw ? itemsRaw.map(toXeroItemRow) : null,
+      // Only SOLD items are income candidates; drop purchase-only items
+      // (IsSold === false) so the picker can't offer one Xero rejects on a
+      // sales line. IsSold undefined (older orgs) is treated as sellable.
+      items: itemsRaw
+        ? itemsRaw.filter((r) => r.IsSold !== false).map(toXeroItemRow)
+        : null,
     },
   };
 }
