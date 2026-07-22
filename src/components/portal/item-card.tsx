@@ -3,9 +3,30 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { Upload, Check, CheckCircle2, FileCheck2, FileText, X, RotateCcw, AlertTriangle, Clock, Loader2 } from "lucide-react";
+import {
+  Upload,
+  Check,
+  CheckCircle2,
+  FileCheck2,
+  FileText,
+  X,
+  RotateCcw,
+  AlertTriangle,
+  Clock,
+  Loader2,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
 import type { PortalFile } from "@/lib/db/portal";
 import { PortalImageLightbox } from "./portal-image-lightbox";
@@ -127,6 +148,9 @@ export function ItemCard({
   // file when the page becomes visible again. Cleared once a verdict settles.
   const awaitingVerdictRef = useRef<string | null>(null);
   const [pendingNa, startNa] = useTransition();
+  // Confirmation dialog before opting a line out as "not applicable" — the X
+  // control is discreet, so a client can't set it by accident (founder).
+  const [naConfirmOpen, setNaConfirmOpen] = useState(false);
   // Drag-and-drop a file straight onto the card (desktop nicety; the Upload
   // button is the primary path and works everywhere).
   const [dragging, setDragging] = useState(false);
@@ -239,8 +263,7 @@ export function ItemCard({
     }
   }
 
-  const label =
-    locale === "fr" && item.label_fr ? item.label_fr : item.label;
+  const label = locale === "fr" && item.label_fr ? item.label_fr : item.label;
   const description =
     locale === "fr" && item.description_fr
       ? item.description_fr
@@ -683,81 +706,114 @@ export function ItemCard({
 
           {error && <ErrorLine error={error} />}
 
-          <div className="mt-3.5 flex flex-wrap items-center gap-2">
-            {ds === "approved" ? (
-              <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
-                <Check className="size-4" aria-hidden />
-                {t("status_all_set")}
-              </span>
-            ) : item.status === "na" ? (
-              <Button variant="outline" size="sm" onClick={undoNa} disabled={pendingNa}>
-                <RotateCcw className="size-4" />
-                {t("undo_na")}
-              </Button>
-            ) : (
-              <>
-                <input
-                  ref={inputRef}
-                  type="file"
-                  accept={ACCEPT}
-                  multiple
-                  hidden
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                      uploadFiles(e.target.files);
-                    }
-                  }}
-                />
-                <Button
-                  onClick={() => inputRef.current?.click()}
-                  disabled={uploading}
-                  variant={uploadedCount > 0 ? "outline" : "default"}
-                >
-                  {uploading ? (
-                    <Loader2 className="size-4 animate-spin" aria-hidden />
-                  ) : (
-                    <Upload className="size-4" aria-hidden />
-                  )}
-                  {uploading
-                    ? t("uploading")
-                    : uploadedCount > 0
-                      ? t("add_more")
-                      : t("upload")}
-                </Button>
-                {/* Discoverability hint for the drag-and-drop, which already
-                    works. Pointer/desktop only (the media query) so a touch
-                    user is never told to "drop files"; the Upload button stays
-                    the primary path everywhere. */}
-                <span className="hidden items-center text-xs text-muted-foreground [@media(pointer:fine)]:inline-flex">
-                  {t("or_drop_here")}
+          <div className="mt-3.5 flex items-end justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {ds === "approved" ? (
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium text-success">
+                  <Check className="size-4" aria-hidden />
+                  {t("status_all_set")}
                 </span>
-                {!item.required && (
+              ) : item.status === "na" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={undoNa}
+                  disabled={pendingNa}
+                >
+                  <RotateCcw className="size-4" />
+                  {t("undo_na")}
+                </Button>
+              ) : (
+                <>
+                  <input
+                    ref={inputRef}
+                    type="file"
+                    accept={ACCEPT}
+                    multiple
+                    hidden
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        uploadFiles(e.target.files);
+                      }
+                    }}
+                  />
                   <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={markNa}
-                    disabled={pendingNa || uploading}
+                    onClick={() => inputRef.current?.click()}
+                    disabled={uploading}
+                    variant={uploadedCount > 0 ? "outline" : "default"}
                   >
-                    <X className="size-4" />
-                    {t("mark_na")}
+                    {uploading ? (
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                    ) : (
+                      <Upload className="size-4" aria-hidden />
+                    )}
+                    {uploading
+                      ? t("uploading")
+                      : uploadedCount > 0
+                        ? t("add_more")
+                        : t("upload")}
                   </Button>
+                </>
+              )}
+              {ds !== "approved" &&
+                uploadedCount > 0 &&
+                item.status !== "na" && (
+                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                    <FileCheck2 className="size-3.5" />
+                    {t("uploaded_count", { count: uploadedCount })}
+                  </span>
                 )}
-              </>
-            )}
-            {ds !== "approved" && uploadedCount > 0 && item.status !== "na" && (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <FileCheck2 className="size-3.5" />
-                {t("uploaded_count", { count: uploadedCount })}
-              </span>
-            )}
-            {checking && (
-              <span
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground"
-                aria-live="polite"
-              >
-                <Loader2 className="size-3.5 animate-spin" aria-hidden />
-                {t("checking_document")}
-              </span>
+              {checking && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+                  aria-live="polite"
+                >
+                  <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                  {t("checking_document")}
+                </span>
+              )}
+            </div>
+
+            {/* Discreet "not applicable" control, bottom-right corner: optional
+                lines only, before they're set or approved. The X opens a
+                confirmation first (founder) so nobody opts out by accident. */}
+            {!item.required && item.status !== "na" && ds !== "approved" && (
+              <Dialog open={naConfirmOpen} onOpenChange={setNaConfirmOpen}>
+                <DialogTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={t("mark_na")}
+                    title={t("mark_na")}
+                    disabled={uploading}
+                    className="inline-flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    <X className="size-4" aria-hidden />
+                  </button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>{t("mark_na_title")}</DialogTitle>
+                    <DialogDescription>{t("mark_na_body")}</DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <DialogClose asChild>
+                      <Button type="button" variant="outline">
+                        {t("mark_na_cancel")}
+                      </Button>
+                    </DialogClose>
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        setNaConfirmOpen(false);
+                        markNa();
+                      }}
+                      disabled={pendingNa}
+                    >
+                      {t("mark_na_confirm")}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             )}
           </div>
         </div>
@@ -803,11 +859,7 @@ export function isReviewSettled(status: RequestItemStatus): boolean {
 // an AI auto-reject leaves the item 'pending' but carries a reason (hasIssue),
 // which must read as "needs attention", not "not started".
 type DisplayState =
-  | "approved"
-  | "needs_attention"
-  | "in_review"
-  | "not_started"
-  | "na";
+  "approved" | "needs_attention" | "in_review" | "not_started" | "na";
 
 function displayState(
   status: RequestItemStatus,
@@ -848,7 +900,12 @@ function StatusIcon({ state }: { state: DisplayState }) {
   }
   if (state === "na") {
     return (
-      <span className={cn(ring, "border-2 border-muted-foreground/20 text-muted-foreground")}>
+      <span
+        className={cn(
+          ring,
+          "border-2 border-muted-foreground/20 text-muted-foreground",
+        )}
+      >
         <X className="size-3" aria-hidden />
       </span>
     );
