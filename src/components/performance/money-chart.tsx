@@ -1,7 +1,8 @@
 "use client";
 
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
 import type {
   MoneyBucket,
@@ -9,18 +10,17 @@ import type {
 } from "@/lib/performance/types";
 import { bucketLabel, bucketLabelFull, centsToCurrency } from "./format";
 
-// Chart geometry in a 0..100 box (the SVG uses viewBox 0 0 100 100 with
-// preserveAspectRatio="none"; the line keeps a uniform width via a non-scaling
-// stroke, and the dot / guide / tooltip are HTML positioned in percent so they
-// never distort).
+// Chart geometry in a 0..100 box. Bars + guide + tooltip are HTML positioned in
+// percent so nothing distorts.
 const PAD_X = 3;
 const PAD_TOP = 14;
 const PAD_BOT = 10;
 const BASE_Y = 100 - PAD_BOT;
 
-// A single, thin money-collected trend line with a soft gradient fill. Hovering
-// anywhere snaps a vertical guide to the nearest point and shows a tidy tooltip
-// (exact amount + period). All motion is disabled under prefers-reduced-motion.
+// Money-collected bar chart. One bar per period. Hovering anywhere snaps a
+// vertical guide to the nearest bar, highlights it, and shows a tidy tooltip
+// (exact amount + period). Bars grow in from the baseline; motion is disabled
+// under prefers-reduced-motion.
 export function MoneyChart({
   buckets,
   granularity,
@@ -31,7 +31,6 @@ export function MoneyChart({
   locale: AppLocale;
 }) {
   const reduce = useReducedMotion();
-  const gradId = useId();
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 
@@ -41,17 +40,7 @@ export function MoneyChart({
     PAD_X + ((i + 0.5) / Math.max(1, n)) * (100 - 2 * PAD_X);
   const yAt = (cents: number) =>
     PAD_TOP + (1 - cents / max) * (BASE_Y - PAD_TOP);
-
-  const points = buckets.map((b, i) => ({
-    x: xAt(i),
-    y: yAt(b.cents),
-    cents: b.cents,
-  }));
-  const linePath = monotonePath(points);
-  const areaPath =
-    points.length > 0
-      ? `${linePath} L ${points[points.length - 1].x} ${BASE_Y} L ${points[0].x} ${BASE_Y} Z`
-      : "";
+  const barW = Math.min(((100 - 2 * PAD_X) / Math.max(1, n)) * 0.6, 8);
 
   const labelEvery = granularity === "day" && n > 12 ? Math.ceil(n / 6) : 1;
 
@@ -64,8 +53,6 @@ export function MoneyChart({
     setHover(i);
   };
 
-  const hovered = hover != null ? points[hover] : null;
-
   return (
     <div className="w-full">
       <div
@@ -74,55 +61,55 @@ export function MoneyChart({
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
       >
-        <svg
-          className="absolute inset-0 h-full w-full overflow-visible"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="none"
-          aria-hidden
-          style={{ pointerEvents: "none" }}
-        >
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-success)" stopOpacity="0.2" />
-              <stop offset="100%" stopColor="var(--color-success)" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {areaPath && <path d={areaPath} fill={`url(#${gradId})`} stroke="none" />}
-          <motion.path
-            d={linePath}
-            fill="none"
-            stroke="var(--color-success)"
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-            initial={reduce ? false : { pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={reduce ? { duration: 0 } : { duration: 0.7, ease: "easeOut" }}
-          />
-        </svg>
+        {/* Bars. */}
+        {buckets.map((b, i) => {
+          const top = yAt(b.cents);
+          const active = hover === i;
+          return (
+            <motion.div
+              key={b.start}
+              className={cn(
+                "absolute rounded-t-[3px] transition-colors",
+                active ? "bg-success" : "bg-success/70",
+              )}
+              style={{
+                left: `${xAt(i)}%`,
+                top: `${top}%`,
+                height: `${Math.max(BASE_Y - top, b.cents > 0 ? 0.8 : 0)}%`,
+                width: `${barW}%`,
+                transform: "translateX(-50%)",
+                transformOrigin: "bottom",
+              }}
+              initial={reduce ? false : { scaleY: 0 }}
+              animate={{ scaleY: 1 }}
+              transition={
+                reduce
+                  ? { duration: 0 }
+                  : {
+                      duration: 0.5,
+                      delay: Math.min(i * 0.03, 0.35),
+                      ease: [0.2, 0.8, 0.2, 1],
+                    }
+              }
+            />
+          );
+        })}
 
-        {/* Hover crosshair: guide line + point dot. */}
-        {hovered && (
-          <>
-            <div
-              className="pointer-events-none absolute top-0 bottom-0 w-px bg-foreground/20"
-              style={{ left: `${hovered.x}%` }}
-            />
-            <span
-              className="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-success bg-background"
-              style={{ left: `${hovered.x}%`, top: `${hovered.y}%` }}
-            />
-          </>
+        {/* Hover guide. */}
+        {hover != null && (
+          <div
+            className="pointer-events-none absolute top-0 bottom-0 w-px bg-foreground/15"
+            style={{ left: `${xAt(hover)}%` }}
+          />
         )}
 
         {/* Tooltip. */}
-        {hovered && hover != null && (
+        {hover != null && buckets[hover] && (
           <div
             className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-2 whitespace-nowrap rounded-lg border border-border bg-popover px-2.5 py-1.5 shadow-card"
             style={{
-              left: `${Math.min(Math.max(hovered.x, 12), 88)}%`,
-              top: `${Math.max(hovered.y - 6, 2)}%`,
+              left: `${Math.min(Math.max(xAt(hover), 12), 88)}%`,
+              top: `${Math.max(yAt(buckets[hover].cents) - 6, 2)}%`,
             }}
           >
             <div className="flex items-center gap-1.5">
@@ -161,54 +148,4 @@ export function MoneyChart({
       </span>
     </div>
   );
-}
-
-// Monotone cubic (Fritsch–Carlson) through the points → a smooth SVG path that
-// never overshoots below the data. Falls back to a line for 0–2 points.
-function monotonePath(pts: { x: number; y: number }[]): string {
-  const nPts = pts.length;
-  if (nPts === 0) return "";
-  if (nPts === 1) return `M ${pts[0].x} ${pts[0].y}`;
-  if (nPts === 2) {
-    return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
-  }
-
-  const dx: number[] = [];
-  const slope: number[] = [];
-  for (let i = 0; i < nPts - 1; i++) {
-    dx[i] = pts[i + 1].x - pts[i].x;
-    slope[i] = (pts[i + 1].y - pts[i].y) / dx[i];
-  }
-
-  const tan: number[] = new Array(nPts);
-  tan[0] = slope[0];
-  tan[nPts - 1] = slope[nPts - 2];
-  for (let i = 1; i < nPts - 1; i++) {
-    tan[i] = slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2;
-  }
-  for (let i = 0; i < nPts - 1; i++) {
-    if (slope[i] === 0) {
-      tan[i] = 0;
-      tan[i + 1] = 0;
-      continue;
-    }
-    const a = tan[i] / slope[i];
-    const b = tan[i + 1] / slope[i];
-    const h = Math.hypot(a, b);
-    if (h > 3) {
-      const s = 3 / h;
-      tan[i] = s * a * slope[i];
-      tan[i + 1] = s * b * slope[i];
-    }
-  }
-
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 0; i < nPts - 1; i++) {
-    const x1 = pts[i].x + dx[i] / 3;
-    const y1 = pts[i].y + (tan[i] * dx[i]) / 3;
-    const x2 = pts[i + 1].x - dx[i] / 3;
-    const y2 = pts[i + 1].y - (tan[i + 1] * dx[i]) / 3;
-    d += ` C ${x1} ${y1} ${x2} ${y2} ${pts[i + 1].x} ${pts[i + 1].y}`;
-  }
-  return d;
 }
