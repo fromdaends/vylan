@@ -80,7 +80,11 @@ export function MoneyChart({
                 transform: "translateX(-50%)",
                 transformOrigin: "bottom",
               }}
-              initial={reduce ? false : { scaleY: 0 }}
+              // initial is unconditional (not reduce-gated): the reduced-motion
+              // hook is null on the server but real on the client's first render,
+              // so gating initial on it would hydrate-mismatch the bar transform.
+              // Reduced motion instead makes the transition instant (duration 0).
+              initial={{ scaleY: 0 }}
               animate={{ scaleY: 1 }}
               transition={
                 reduce

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useReducedMotion } from "framer-motion";
+import type { AppLocale } from "@/lib/format";
 import { CountUp } from "./count-up";
+import { formatPercent } from "./format";
 
 // The agreement-rate ring — the centerpiece of the page. A track circle plus a
 // progress arc that fills to the rate, with the percentage counting up in the
@@ -13,11 +15,13 @@ import { CountUp } from "./count-up";
 export function AiRing({
   rate,
   label,
+  locale,
   muted = false,
   size = 208,
 }: {
   rate: number | null;
   label: string;
+  locale: AppLocale;
   muted?: boolean;
   size?: number;
 }) {
@@ -61,9 +65,14 @@ export function AiRing({
           strokeDasharray={circ}
           strokeDashoffset={offset}
           style={{
-            transition: reduce
-              ? "none"
-              : "stroke-dashoffset 0.9s cubic-bezier(0.2, 0.8, 0.2, 1)",
+            // Gate the transition on `drawn` (false on the server AND the first
+            // client render) so the style attribute never depends on the
+            // reduced-motion hook during hydration — that hook is null on the
+            // server but the real value on the client's first render.
+            transition:
+              drawn && !reduce
+                ? "stroke-dashoffset 0.9s cubic-bezier(0.2, 0.8, 0.2, 1)"
+                : "none",
           }}
         />
       </svg>
@@ -74,7 +83,7 @@ export function AiRing({
           <>
             <CountUp
               value={pct * 100}
-              format={(n) => `${Math.round(n)}%`}
+              format={(n) => formatPercent(n, locale)}
               durationMs={900}
               className="num-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl"
             />

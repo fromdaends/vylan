@@ -53,3 +53,14 @@ export function formatDays(days: number, locale: AppLocale): string {
     maximumFractionDigits: 1,
   }).format(rounded);
 }
+
+// A whole-percent string, locale-aware: "85%" (en) / "85 %" (fr, with the space
+// before the sign that French/Quebec typography and the rest of our copy use).
+// `value0to100` is a 0..100 number.
+export function formatPercent(value0to100: number, locale: AppLocale): string {
+  const intl = locale === "fr" ? "fr-CA" : "en-CA";
+  return new Intl.NumberFormat(intl, {
+    style: "percent",
+    maximumFractionDigits: 0,
+  }).format(value0to100 / 100);
+}
