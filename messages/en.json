@@ -1721,6 +1721,8 @@
     "doc_type_search": "Search documents…",
     "doc_type_empty": "No matching document.",
     "send_reminder": "Send reminder",
+    "reminder_sent": "Reminder sent",
+    "reminder_failed": "Couldn't send the reminder — please try again",
     "pause_reminders": "Pause reminders",
     "resume_reminders": "Resume reminders",
     "reminders_paused_badge": "Reminders paused",

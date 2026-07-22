@@ -16,7 +16,6 @@ import {
   sendEngagementAction,
   completeEngagementAction,
   reopenEngagementAction,
-  sendReminderAction,
   deleteDraftAction,
 } from "@/app/actions/engagements";
 import {
@@ -71,6 +70,7 @@ import {
 import { getServerSupabase } from "@/lib/supabase/server";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
+import { SendReminderButton } from "@/components/engagements/send-reminder-button";
 import { getRecurringSeries } from "@/lib/db/recurring";
 import { RecurringBadge } from "@/components/engagements/recurring-badge";
 import {
@@ -623,7 +623,9 @@ export default async function EngagementDetailPage({
   );
   // When each stage was entered, for the stepper's hover tooltips. Sparse: an
   // engagement backfilled by 0690 only knows its current stage.
-  const stageEntered = stageEnteredAt(parseStageHistory(engagement.stage_history));
+  const stageEntered = stageEnteredAt(
+    parseStageHistory(engagement.stage_history),
+  );
 
   // Client portal URL — used by the "Copy payment link" button when a payment is
   // requested. (The client-link copy in the header 3-dots menu builds its own
@@ -837,22 +839,7 @@ export default async function EngagementDetailPage({
                   labelClassName="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-36 group-hover:opacity-100 group-focus-visible:max-w-36 group-focus-visible:opacity-100"
                 />
               ) : (
-                <form action={sendReminderAction}>
-                  <input type="hidden" name="id" value={engagement.id} />
-                  <Button
-                    type="submit"
-                    variant="outline"
-                    size="sm"
-                    aria-label={t("send_reminder")}
-                    title={t("send_reminder")}
-                    className="group h-8 w-8 gap-0 overflow-hidden px-0 transition-[width,padding,gap] duration-200 hover:w-40 hover:gap-1.5 hover:px-3 focus-visible:w-40 focus-visible:gap-1.5 focus-visible:px-3"
-                  >
-                    <BellRing className="size-4" />
-                    <span className="max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-[max-width,opacity] duration-200 group-hover:max-w-36 group-hover:opacity-100 group-focus-visible:max-w-36 group-focus-visible:opacity-100">
-                      {t("send_reminder")}
-                    </span>
-                  </Button>
-                </form>
+                <SendReminderButton engagementId={engagement.id} />
               )}
               {/* Mark complete — the clear primary action. Plain default
                   button hover (no green tint) per founder preference. */}
@@ -871,23 +858,21 @@ export default async function EngagementDetailPage({
           {latestPayment &&
             paymentStatusLabel &&
             latestPayment.status !== "canceled" && (
-            <Badge
-              variant={
-                latestPayment.status === "paid"
-                  ? "default"
-                  : latestPayment.status === "failed"
-                    ? "destructive"
-                    : "secondary"
-              }
-              className="gap-1"
-            >
-              {deliverablesLocked && (
-                <Lock className="size-3" aria-hidden />
-              )}
-              {paymentStatusLabel} ·{" "}
-              {formatCurrency(latestPayment.amount_cents / 100, locale)}
-            </Badge>
-          )}
+              <Badge
+                variant={
+                  latestPayment.status === "paid"
+                    ? "default"
+                    : latestPayment.status === "failed"
+                      ? "destructive"
+                      : "secondary"
+                }
+                className="gap-1"
+              >
+                {deliverablesLocked && <Lock className="size-3" aria-hidden />}
+                {paymentStatusLabel} ·{" "}
+                {formatCurrency(latestPayment.amount_cents / 100, locale)}
+              </Badge>
+            )}
           {/* Canceled/waived is transient: show the chip for a few minutes after
               the waive, then hide it. The event stays permanent in the Activity
               feed + audit log. */}
@@ -903,7 +888,7 @@ export default async function EngagementDetailPage({
                   locale,
                 )}
               />
-          )}
+            )}
           {isComplete && (
             <>
               <form action={reopenEngagementAction}>

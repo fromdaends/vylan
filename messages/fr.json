@@ -1721,6 +1721,8 @@
     "doc_type_search": "Rechercher un document…",
     "doc_type_empty": "Aucun document correspondant.",
     "send_reminder": "Envoyer un rappel",
+    "reminder_sent": "Rappel envoyé",
+    "reminder_failed": "Impossible d'envoyer le rappel — veuillez réessayer",
     "pause_reminders": "Pauser les rappels",
     "resume_reminders": "Reprendre les rappels",
     "reminders_paused_badge": "Rappels en pause",
