@@ -11,13 +11,7 @@
 // refreshes every 60s only while the tab is actually visible, and appends
 // your own message on send. Opening the tab stamps the firm's read pointer.
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -112,7 +106,11 @@ export function EngagementMessages({
       // A new client message arrived while the thread is open: stamp it read
       // so the unread badge doesn't reappear on the next page load.
       const newest = newestClientAt(data.messages);
-      if (visibleRef.current && newest && newest !== lastReadClientAtRef.current) {
+      if (
+        visibleRef.current &&
+        newest &&
+        newest !== lastReadClientAtRef.current
+      ) {
         lastReadClientAtRef.current = newest;
         markRead();
       }
@@ -226,7 +224,7 @@ export function EngagementMessages({
     <div ref={rootRef} className="flex h-full min-h-0 flex-col">
       {/* Slim banner — the standing reminder that this is the CLIENT, not the
           AI. This is the surface's identity line. */}
-      <div className="shrink-0 border-b border-white/10 px-4 py-2.5">
+      <div className="shrink-0 border-b border-border px-4 py-2.5">
         <p className="text-[13px] font-semibold leading-tight text-foreground">
           {clientName
             ? t("thread_with", { name: clientName })
@@ -309,7 +307,7 @@ export function EngagementMessages({
 
       {/* Docked composer (or the read-only note on a closed engagement). */}
       {readOnly ? (
-        <div className="shrink-0 border-t border-white/10 px-4 py-3">
+        <div className="shrink-0 border-t border-border px-4 py-3">
           <p className="text-sm text-muted-foreground">
             {readOnlyReason === "cancelled"
               ? t("read_only_cancelled")
@@ -319,7 +317,7 @@ export function EngagementMessages({
           </p>
         </div>
       ) : (
-        <div className="shrink-0 border-t border-white/10 px-4 pt-3 pb-4">
+        <div className="shrink-0 border-t border-border px-4 pt-3 pb-4">
           <div className="flex items-end gap-2">
             <Textarea
               value={draft}

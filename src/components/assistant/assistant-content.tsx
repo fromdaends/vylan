@@ -27,7 +27,7 @@ export function AssistantContent({
   }
   const lastIndex = blocks.length - 1;
   return (
-    <div className="space-y-2.5 text-sm leading-relaxed text-zinc-100">
+    <div className="space-y-2.5 text-sm leading-relaxed text-foreground">
       {blocks.map((block, i) => {
         const caret = isStreaming && i === lastIndex;
         if (block.type === "bullets" || block.type === "numbered") {
@@ -40,7 +40,7 @@ export function AssistantContent({
               className={cn(
                 "space-y-1 pl-5",
                 ordered ? "list-decimal" : "list-disc",
-                "marker:text-zinc-500",
+                "marker:text-muted-foreground",
               )}
             >
               {block.items.map((item, ii) => (
@@ -77,7 +77,7 @@ function MarkdownSpans({ spans }: { spans: MarkdownSpan[] }) {
       {spans.map((span, i) => {
         if (span.type === "bold") {
           return (
-            <strong key={i} className="font-semibold text-white">
+            <strong key={i} className="font-semibold text-foreground">
               {span.value}
             </strong>
           );
@@ -93,7 +93,7 @@ function MarkdownSpans({ spans }: { spans: MarkdownSpan[] }) {
           return (
             <code
               key={i}
-              className="rounded bg-white/10 px-1 py-0.5 font-mono text-[0.85em] text-zinc-200"
+              className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-foreground"
             >
               {span.value}
             </code>
