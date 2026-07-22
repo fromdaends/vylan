@@ -405,3 +405,32 @@ export async function listFirmXeroConnectedClients(): Promise<
     isDemo: r.is_demo === true,
   }));
 }
+
+// Of the given client ids, which are LIVE Xero-connected (authenticated, RLS
+// firm-scoped) — one batched read. Used by the firm-wide drafts queue to derive
+// each row's EFFECTIVE provider from the live connection rather than trusting
+// the stored `provider` column alone: before migration 0790 is applied that
+// column is absent and every row reads 'quickbooks', which would mis-brand a
+// mixed firm's Xero drafts + trip a false QuickBooks reconnect banner. Empty
+// set on error / pre-0740.
+export async function filterXeroConnectedClientIds(
+  clientIds: string[],
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (clientIds.length === 0) return out;
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("xero_connections")
+    .select("client_id")
+    .in("client_id", clientIds);
+  if (error) {
+    if (!isMissingXeroSchema(error)) {
+      console.error("[xero] filterXeroConnectedClientIds failed:", error);
+    }
+    return out;
+  }
+  for (const r of (data as Array<Record<string, unknown>> | null) ?? []) {
+    if (typeof r.client_id === "string") out.add(r.client_id);
+  }
+  return out;
+}

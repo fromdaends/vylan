@@ -25,12 +25,16 @@ export async function QueueRow({
   locale,
   reviewedByName,
   postedByName,
+  provider,
 }: {
   row: FirmDraftRow;
   options: DraftCardOptions;
   locale: AppLocale;
   reviewedByName: string | null;
   postedByName: string | null;
+  // EFFECTIVE provider from the live connection (the queue page resolves it);
+  // falls back to the stored column when not supplied.
+  provider?: "quickbooks" | "xero";
 }) {
   const t = await getTranslations("Quickbooks");
   const s = row.suggestion;
@@ -145,7 +149,7 @@ export async function QueueRow({
         receiptAttachedAt={row.receiptAttachedAt}
         matchedQboType={row.matchedQboType}
         showStatusControls={false}
-        provider={row.provider}
+        provider={provider ?? row.provider}
       />
     </QueueRowDisclosure>
   );

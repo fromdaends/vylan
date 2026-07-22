@@ -13,6 +13,7 @@ import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
+import { filterXeroConnectedClientIds } from "@/lib/db/xero";
 import {
   getQuickbooksReadContext,
   type QuickbooksReadContext,
@@ -54,13 +55,19 @@ export async function POST(request: NextRequest) {
   // approved EXPENSE drafts (optionally for one client). Income/incomplete drafts
   // are left for postApprovedDraft to skip.
   const rows = await listFirmDrafts();
+  // 0790: posting is QuickBooks-only in Phase 3. Exclude Xero drafts by their
+  // EFFECTIVE provider (live connection), not just the stored `provider` column
+  // — before migration 0790 lands that column is absent and every row reads
+  // 'quickbooks', so a live-Xero client's draft must still be excluded here.
+  const liveXeroClients = await filterXeroConnectedClientIds([
+    ...new Set(rows.map((r) => r.clientId).filter((c): c is string => !!c)),
+  ]);
+  const isXero = (r: { provider: "quickbooks" | "xero"; clientId: string | null }) =>
+    r.provider === "xero" || (r.clientId ? liveXeroClients.has(r.clientId) : false);
   const targets = rows.filter(
     (r) =>
       r.status === "approved" &&
-      // 0790: posting is QuickBooks-only in Phase 3. A Xero draft would resolve a
-      // null QuickBooks context and merely be skipped, but exclude it up front so
-      // it never inflates the skipped count or wastes a context resolution.
-      r.provider !== "xero" &&
+      !isXero(r) &&
       (r.suggestion.direction === "expense" ||
         r.suggestion.direction === "income") &&
       !r.postedQboId &&

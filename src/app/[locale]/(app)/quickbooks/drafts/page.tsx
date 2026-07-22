@@ -16,6 +16,7 @@ import {
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
 import { readCachedQuickbooksListsByClient } from "@/lib/db/quickbooks-cache";
 import { readCachedXeroLists } from "@/lib/db/xero-cache";
+import { filterXeroConnectedClientIds } from "@/lib/db/xero";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { summarizeDrafts } from "@/lib/quickbooks/draft-summary";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
@@ -172,10 +173,27 @@ export default async function QuickbooksDraftsPage({
   // cache). The connection-health probe is QuickBooks-only (Xero posting is Phase
   // 4), so it must never run against a Xero client — filter those out before
   // scoping it, or a Xero row would falsely trip the "connect this client" notice.
+  // EFFECTIVE provider per row from the LIVE Xero connection, not just the
+  // stored `provider` column: before migration 0790 lands that column is absent
+  // and every row reads 'quickbooks', which would mis-brand a mixed firm's Xero
+  // drafts and trip a false QuickBooks reconnect banner. A row is Xero if its
+  // stored provider says so OR its client is live-Xero-connected.
+  const draftClientIds = [
+    ...new Set(rows.map((r) => r.clientId).filter((c): c is string => !!c)),
+  ];
+  const liveXeroClients = await filterXeroConnectedClientIds(draftClientIds);
+  const effProvider = (r: {
+    provider: "quickbooks" | "xero";
+    clientId: string | null;
+  }): "quickbooks" | "xero" =>
+    r.provider === "xero" || (r.clientId ? liveXeroClients.has(r.clientId) : false)
+      ? "xero"
+      : "quickbooks";
+
   const qboClientIdsWithDrafts = [
     ...new Set(
       rows
-        .filter((r) => r.provider !== "xero")
+        .filter((r) => effProvider(r) !== "xero")
         .map((r) => r.clientId)
         .filter((c): c is string => !!c),
     ),
@@ -183,13 +201,13 @@ export default async function QuickbooksDraftsPage({
   const xeroClientIdsWithDrafts = [
     ...new Set(
       rows
-        .filter((r) => r.provider === "xero")
+        .filter((r) => effProvider(r) === "xero")
         .map((r) => r.clientId)
         .filter((c): c is string => !!c),
     ),
   ];
   const healthScopes = queueHealthScopes(
-    rows.filter((r) => r.provider !== "xero"),
+    rows.filter((r) => effProvider(r) !== "xero"),
   );
 
   // Connection health + the per-client picker lists load together. Health: a
@@ -336,7 +354,7 @@ export default async function QuickbooksDraftsPage({
   const postableCount = withBucket.filter(
     (x) =>
       x.bucket === "approved" &&
-      x.r.provider !== "xero" &&
+      effProvider(x.r) !== "xero" &&
       (x.r.suggestion.direction === "expense" ||
         x.r.suggestion.direction === "income") &&
       !x.r.postedQboId &&
@@ -418,6 +436,7 @@ export default async function QuickbooksDraftsPage({
             key={r.fileId}
             row={r}
             options={optionsFor(r.clientId)}
+            provider={effProvider(r)}
             locale={locale}
             reviewedByName={
               r.reviewedBy ? (reviewerNameById.get(r.reviewedBy) ?? null) : null
