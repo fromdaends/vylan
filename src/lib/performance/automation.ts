@@ -11,8 +11,8 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerSupabase } from "@/lib/supabase/server";
-import type { ResolvedRange } from "./range";
-import type { AutomationSection } from "./types";
+import { resolveRange, type ResolvedRange } from "./range";
+import type { AutomationSection, PerformanceRange } from "./types";
 
 async function countAction(
   sb: SupabaseClient,
@@ -42,4 +42,14 @@ export async function loadAutomationSection(
     countAction(sb, "client_retry_sms_sent", range),
   ]);
   return { remindersSent, reRequestEmails, reRequestTexts };
+}
+
+// Convenience for the page: resolve the range and load the automation counts in
+// one call. The clock is read HERE (a lib function), not in the server
+// component's render, so the page stays pure. `nowMs` is injectable for tests.
+export async function loadAutomation(
+  range: PerformanceRange,
+  nowMs: number = Date.now(),
+): Promise<AutomationSection> {
+  return loadAutomationSection(resolveRange(range, nowMs));
 }

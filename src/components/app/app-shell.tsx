@@ -29,6 +29,7 @@ import {
   ClipboardList,
   FileText,
   Folder,
+  Gauge,
   HelpCircle,
   BookOpen,
   LayoutDashboard,
@@ -256,6 +257,14 @@ export function AppShell({
       label: labels.dashboard,
       icon: LayoutDashboard,
       color: "text-icon-blue",
+    },
+    {
+      // "Performance" is the same word in EN and FR, so the label is safe to
+      // hardcode here — no messages/*.json edit needed.
+      href: "/performance",
+      label: "Performance",
+      icon: Gauge,
+      color: "text-icon-purple",
     },
     { href: "/clients", label: labels.clients, icon: Users, color: "text-icon-emerald" },
     {

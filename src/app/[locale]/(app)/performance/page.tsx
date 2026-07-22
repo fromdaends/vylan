@@ -2,6 +2,7 @@ import { setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { loadMoney } from "@/lib/performance/money";
 import { loadAi } from "@/lib/performance/ai";
+import { loadAutomation } from "@/lib/performance/automation";
 import type { PerformanceRange } from "@/lib/performance/types";
 import { PerformanceView } from "@/components/performance/performance-view";
 
@@ -31,9 +32,19 @@ export default async function PerformancePage({
   const { range: rangeParam } = await searchParams;
   const range = parseRange(rangeParam);
 
-  const [money, ai] = await Promise.all([loadMoney(range), loadAi(range)]);
+  const [money, ai, automation] = await Promise.all([
+    loadMoney(range),
+    loadAi(range),
+    loadAutomation(range),
+  ]);
 
   return (
-    <PerformanceView range={range} locale={locale} money={money} ai={ai} />
+    <PerformanceView
+      range={range}
+      locale={locale}
+      money={money}
+      ai={ai}
+      automation={automation}
+    />
   );
 }
