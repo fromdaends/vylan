@@ -111,7 +111,7 @@ export function MoneySection({
             locale={locale}
           />
         ) : (
-          <div className="flex h-44 items-center justify-center rounded-lg border border-dashed border-border/60 px-4 text-center text-sm text-muted-foreground sm:h-52">
+          <div className="flex h-52 items-center justify-center rounded-lg border border-dashed border-border/60 px-4 text-center text-sm text-muted-foreground sm:h-60">
             {copy.noneCollected}
           </div>
         )}

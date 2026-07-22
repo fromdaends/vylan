@@ -30,6 +30,21 @@ export function bucketLabel(
   return new Intl.DateTimeFormat(intl, opts).format(new Date(iso));
 }
 
+// A fuller label for the hover tooltip: "July 2026" for a month, "Jul 21" for a
+// day, formatted in Eastern time to match how the bucket was computed.
+export function bucketLabelFull(
+  iso: string,
+  granularity: MoneyBucketGranularity,
+  locale: AppLocale,
+): string {
+  const intl = locale === "fr" ? "fr-CA" : "en-CA";
+  const opts: Intl.DateTimeFormatOptions =
+    granularity === "day"
+      ? { timeZone: PERFORMANCE_TZ, month: "short", day: "numeric" }
+      : { timeZone: PERFORMANCE_TZ, month: "long", year: "numeric" };
+  return new Intl.DateTimeFormat(intl, opts).format(new Date(iso));
+}
+
 // A one-decimal day count that drops a trailing ".0" (7 not 7.0, 7.5 stays 7.5).
 export function formatDays(days: number, locale: AppLocale): string {
   const rounded = Math.round(days * 10) / 10;
