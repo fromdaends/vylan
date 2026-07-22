@@ -57,6 +57,10 @@ export async function POST(request: NextRequest) {
   const targets = rows.filter(
     (r) =>
       r.status === "approved" &&
+      // 0790: posting is QuickBooks-only in Phase 3. A Xero draft would resolve a
+      // null QuickBooks context and merely be skipped, but exclude it up front so
+      // it never inflates the skipped count or wastes a context resolution.
+      r.provider !== "xero" &&
       (r.suggestion.direction === "expense" ||
         r.suggestion.direction === "income") &&
       !r.postedQboId &&

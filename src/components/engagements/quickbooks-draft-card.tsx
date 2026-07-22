@@ -77,6 +77,7 @@ export async function QuickbooksDraftCard({
   receiptAttachedAt = null,
   matchedQboType = null,
   showStatusControls = true,
+  provider = "quickbooks",
 }: {
   suggestion: TransactionSuggestion;
   // The accountant's saved picks (null until they edit).
@@ -114,8 +115,15 @@ export async function QuickbooksDraftCard({
   // surrounding surface already renders them (the firm-wide queue row does), so
   // they're not shown twice. Defaults true (the engagement page keeps them).
   showStatusControls?: boolean;
+  // Xero Phase 3 (0790): which product this draft's client is connected to.
+  // Drives the brand kicker/title wording and the posting gate — posting stays
+  // QuickBooks-only in Phase 3, so a Xero draft hides the Post controls and shows
+  // a "coming soon" note. Every review/approve/dismiss/edit control is
+  // provider-neutral and works for both. Defaults 'quickbooks'.
+  provider?: "quickbooks" | "xero";
 }) {
   const t = await getTranslations("Quickbooks");
+  const isXero = provider === "xero";
   const v = deriveQuickbooksDraftView(suggestion);
   const eff = effectiveMapping(suggestion, resolved);
   // Bill (unpaid) vs Purchase (paid) for an expense — drives the toggle + whether
@@ -236,9 +244,14 @@ export async function QuickbooksDraftCard({
   // A descriptive title for this particular entry: the vendor/customer it books
   // to (the accountant's pick, else the AI match), falling back to the source
   // document's name, then a generic label only when neither is known. The small
-  // "QuickBooks" kicker above keeps the card's identity; the status pill carries
-  // the state, so the title never has to say "draft".
-  const cardTitle = eff.party?.name ?? documentName ?? t("draft_title");
+  // brand kicker above keeps the card's identity; the status pill carries the
+  // state, so the title never has to say "draft".
+  const cardTitle =
+    eff.party?.name ??
+    documentName ??
+    (isXero ? t("draft_title_xero") : t("draft_title"));
+  // Brand kicker: "QuickBooks" or "Xero", by the draft's client connection.
+  const brandKicker = isXero ? t("draft_kicker_xero") : t("draft_kicker");
 
   return (
     <div
@@ -254,7 +267,7 @@ export async function QuickbooksDraftCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground leading-none">
-            {t("draft_kicker")}
+            {brandKicker}
           </div>
           <div className="mt-1 truncate text-sm font-semibold leading-none">
             {cardTitle}
@@ -473,27 +486,38 @@ export async function QuickbooksDraftCard({
         </div>
       </div>
 
-      {/* Stage 5: posting row — Post to QuickBooks (approved) / Posted + Undo. */}
-      {(status === "approved" || status === "posted") && (
-        <div className="border-t border-border/40 px-3 py-2">
-          <PostDraftControls
-            fileId={fileId}
-            status={status}
-            direction={v.direction}
-            expenseMode={expenseMode}
-            incomeMode={incomeMode}
-            postedAtLabel={
-              postedAt ? formatDate(postedAt, locale, "medium") : null
-            }
-            postedByName={postedByName}
-            postError={postError}
-            taxNote={postedTaxNote}
-            receiptAttached={receiptAttachedAt != null}
-            matchedExisting={matchedQboType != null}
-            locale={locale}
-          />
-        </div>
-      )}
+      {/* Stage 5: posting row — Post to QuickBooks (approved) / Posted + Undo.
+          QuickBooks ONLY in Phase 3: posting to Xero lands in Phase 4, so a Xero
+          draft never renders the Post/Undo/Attach controls — instead it shows a
+          muted "coming soon" note once approved. Everything above (review /
+          approve / dismiss / edit) is provider-neutral and already worked. */}
+      {(status === "approved" || status === "posted") &&
+        (isXero ? (
+          <div className="border-t border-border/40 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">
+              {t("xero_posting_soon")}
+            </p>
+          </div>
+        ) : (
+          <div className="border-t border-border/40 px-3 py-2">
+            <PostDraftControls
+              fileId={fileId}
+              status={status}
+              direction={v.direction}
+              expenseMode={expenseMode}
+              incomeMode={incomeMode}
+              postedAtLabel={
+                postedAt ? formatDate(postedAt, locale, "medium") : null
+              }
+              postedByName={postedByName}
+              postError={postError}
+              taxNote={postedTaxNote}
+              receiptAttached={receiptAttachedAt != null}
+              matchedExisting={matchedQboType != null}
+              locale={locale}
+            />
+          </div>
+        ))}
     </div>
   );
 }

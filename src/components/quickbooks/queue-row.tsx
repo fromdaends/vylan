@@ -145,6 +145,7 @@ export async function QueueRow({
         receiptAttachedAt={row.receiptAttachedAt}
         matchedQboType={row.matchedQboType}
         showStatusControls={false}
+        provider={row.provider}
       />
     </QueueRowDisclosure>
   );

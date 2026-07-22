@@ -4,9 +4,13 @@ import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import { readCachedXeroLists } from "@/lib/db/xero-cache";
+import { getClientXeroStatus } from "@/lib/db/xero";
 import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import { upsertTransactionSuggestion } from "@/lib/db/quickbooks-suggestions";
+import type { QuickbooksLists } from "@/lib/quickbooks/read";
+import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { parseTransaction } from "@/lib/ai/transaction-extract";
 
 export type RegenerateDraftState = {
@@ -58,17 +62,45 @@ export async function regenerateDraftAction(
       : null;
   if (!transaction) return { ok: false, error: "no_transaction" };
 
-  const cached = await readCachedQuickbooksLists();
+  // 0790: which product this file's client is connected to. A client connects
+  // EITHER QuickBooks OR Xero — resolve the engagement's client, and if it's
+  // Xero-connected, remap against the Xero cache (per-client) instead. The
+  // QuickBooks path is unchanged. Both reads (auth/RLS) degrade to null.
+  const engagementId = file.engagement_id as string;
+  const { data: eng } = await sb
+    .from("engagements")
+    .select("client_id")
+    .eq("id", engagementId)
+    .maybeSingle();
+  const clientId = (eng?.client_id as string | null) ?? null;
+  const isXero =
+    clientId != null && (await getClientXeroStatus(clientId)) != null;
+
+  let cached: QuickbooksLists | null;
+  let learned: LearnedMappings;
+  if (isXero && clientId) {
+    cached = await readCachedXeroLists(clientId);
+    learned = await readFirmLearnedMappings(clientId);
+  } else {
+    cached = await readCachedQuickbooksLists();
+    // Feature 3: apply the firm's remembered corrections (RLS read; {} pre-0490).
+    learned = await readFirmLearnedMappings();
+  }
   if (!cached) return { ok: false, error: "no_lists" };
 
-  // Feature 3: apply the firm's remembered corrections (RLS read; {} pre-0490).
-  const learned = await readFirmLearnedMappings();
-  const suggestion = buildTransactionSuggestion(transaction, cached, learned);
+  const provider = isXero ? "xero" : "quickbooks";
+  const suggestion = buildTransactionSuggestion(
+    transaction,
+    cached,
+    learned,
+    isXero ? "Xero" : "QuickBooks",
+  );
   await upsertTransactionSuggestion({
     firmId: firm.id,
     uploadedFileId: file.id,
-    engagementId: file.engagement_id as string,
+    engagementId,
     suggestion,
+    provider,
   });
 
   for (const loc of LOCALES) {

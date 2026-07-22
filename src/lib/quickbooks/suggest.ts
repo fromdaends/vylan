@@ -655,6 +655,11 @@ export function buildTransactionSuggestion(
   extraction: TransactionExtraction,
   lists: QuickbooksLists,
   learned: LearnedMappings = {},
+  // The connected product's display name, used in the human-readable notes only
+  // ("Your Xero vendor list isn't loaded yet", …). Defaults to "QuickBooks" so
+  // every existing caller is unchanged; the Xero path passes "Xero". Purely
+  // cosmetic — matching logic, keys, and stored ids are provider-neutral.
+  providerLabel: string = "QuickBooks",
 ): TransactionSuggestion {
   const notes: string[] = [];
   const direction = extraction.direction;
@@ -699,12 +704,12 @@ export function buildTransactionSuggestion(
   const party = overlayLearned(bestMatches(partyQuery, partyList), partyLearned);
   if (partyKind && partyQuery && partyList === null) {
     notes.push(
-      `Your QuickBooks ${partyKind} list isn't loaded yet, so we couldn't match "${partyQuery}".`,
+      `Your ${providerLabel} ${partyKind} list isn't loaded yet, so we couldn't match "${partyQuery}".`,
     );
   } else if (partyKind && partyQuery && party.match) {
     if (!party.match.active) {
       notes.push(
-        `"${party.match.name}" is archived in QuickBooks — reactivate it or pick another ${partyKind}.`,
+        `"${party.match.name}" is archived in ${providerLabel} — reactivate it or pick another ${partyKind}.`,
       );
     }
   } else if (partyKind && partyQuery && party.candidates.length > 0) {
@@ -713,7 +718,7 @@ export function buildTransactionSuggestion(
     );
   } else if (partyKind && partyQuery) {
     notes.push(
-      `No matching ${partyKind} found for "${partyQuery}" — pick one or add it in QuickBooks.`,
+      `No matching ${partyKind} found for "${partyQuery}" — pick one or add it in ${providerLabel}.`,
     );
   } else if (partyKind && !partyQuery) {
     notes.push(`No ${partyKind} name was read off the document.`);
@@ -737,10 +742,10 @@ export function buildTransactionSuggestion(
     accountLearned,
   );
   if (lists.accounts === null) {
-    notes.push("Your QuickBooks chart of accounts isn't loaded yet.");
+    notes.push(`Your ${providerLabel} chart of accounts isn't loaded yet.`);
   } else if (account.match && !account.match.active) {
     notes.push(
-      `"${account.match.name}" is archived in QuickBooks — pick an active account.`,
+      `"${account.match.name}" is archived in ${providerLabel} — pick an active account.`,
     );
   } else if (!account.match) {
     notes.push(
@@ -755,7 +760,7 @@ export function buildTransactionSuggestion(
   const item = suggestItem(direction, account.match?.id ?? null, lists.items);
   if (direction === "income") {
     if (item.match && !item.match.active) {
-      notes.push(`Item "${item.match.name}" is archived in QuickBooks.`);
+      notes.push(`Item "${item.match.name}" is archived in ${providerLabel}.`);
     } else if (!item.match) {
       notes.push("Choose a product/service for this income entry.");
     }
@@ -773,13 +778,13 @@ export function buildTransactionSuggestion(
     taxLearned,
   );
   if (extraction.taxes.length > 0 && lists.taxCodes === null) {
-    notes.push("Your QuickBooks tax codes aren't loaded yet.");
+    notes.push(`Your ${providerLabel} tax codes aren't loaded yet.`);
   } else if (
     extraction.taxes.length > 0 &&
     taxCode.match &&
     !taxCode.match.active
   ) {
-    notes.push(`Tax code "${taxCode.match.name}" is archived in QuickBooks.`);
+    notes.push(`Tax code "${taxCode.match.name}" is archived in ${providerLabel}.`);
   } else if (extraction.taxes.length > 0 && !taxCode.match) {
     notes.push("Couldn't confidently match the tax — confirm the tax code.");
   }

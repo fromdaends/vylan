@@ -2649,7 +2649,10 @@
   },
   "Quickbooks": {
     "draft_title": "Brouillon QuickBooks",
+    "draft_title_xero": "Brouillon Xero",
     "draft_kicker": "QuickBooks",
+    "draft_kicker_xero": "Xero",
+    "xero_posting_soon": "La publication vers Xero arrive bientôt — vous pouvez déjà réviser et approuver.",
     "draft_badge": "Brouillon",
     "readiness": "Degré de correspondance : {pct} %",
     "draft_readonly_hint": "Correspondance suggérée à vérifier. Rien n’est encore envoyé à QuickBooks.",
