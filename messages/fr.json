@@ -2641,6 +2641,7 @@
     "xero_demo_badge": "Démo",
     "xero_unavailable": "Xero n'est pas encore configuré.",
     "xero_how_label": "Comment ça marche",
+    "view_drafts": "Voir les brouillons",
     "qbo_detail_explainer": "Connectez la société QuickBooks de chaque client pour transformer ses reçus en brouillons prêts à comptabiliser. La connexion se fait sur la page de chaque client.",
     "qbo_none_connected": "Aucun client n'est encore connecté à QuickBooks. Ouvrez la page d'un client et cliquez sur Connecter QuickBooks pour lier sa société.",
     "qbo_connected_count": "{count, plural, one {# client connecté} other {# clients connectés}}",
