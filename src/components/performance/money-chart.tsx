@@ -2,7 +2,6 @@
 
 import { useId, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
 import type {
   MoneyBucket,
@@ -10,30 +9,25 @@ import type {
 } from "@/lib/performance/types";
 import { bucketLabel, bucketLabelFull, centsToCurrency } from "./format";
 
-export type ChartView = "bars" | "line";
-
 // Chart geometry in a 0..100 box (the SVG uses viewBox 0 0 100 100 with
-// preserveAspectRatio="none"; the line keeps a uniform width via a
-// non-scaling stroke, and dots / guide / tooltip are HTML positioned in
-// percent so they never distort).
+// preserveAspectRatio="none"; the line keeps a uniform width via a non-scaling
+// stroke, and the dot / guide / tooltip are HTML positioned in percent so they
+// never distort).
 const PAD_X = 3;
 const PAD_TOP = 14;
 const PAD_BOT = 10;
 const BASE_Y = 100 - PAD_BOT;
 
-// Money-collected chart. A smooth area (trend) and clean bars share one
-// coordinate system and cross-fade when the view toggles. Hovering anywhere
-// snaps a vertical guide to the nearest point and shows a tidy tooltip — the
-// Vercel-style read. All motion is disabled under prefers-reduced-motion.
+// A single, thin money-collected trend line with a soft gradient fill. Hovering
+// anywhere snaps a vertical guide to the nearest point and shows a tidy tooltip
+// (exact amount + period). All motion is disabled under prefers-reduced-motion.
 export function MoneyChart({
   buckets,
   granularity,
-  view,
   locale,
 }: {
   buckets: MoneyBucket[];
   granularity: MoneyBucketGranularity;
-  view: ChartView;
   locale: AppLocale;
 }) {
   const reduce = useReducedMotion();
@@ -80,19 +74,16 @@ export function MoneyChart({
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
       >
-        {/* Area + line (trend view). */}
-        <motion.svg
+        <svg
           className="absolute inset-0 h-full w-full overflow-visible"
           viewBox="0 0 100 100"
           preserveAspectRatio="none"
-          animate={{ opacity: view === "line" ? 1 : 0 }}
-          transition={{ duration: reduce ? 0 : 0.3 }}
           aria-hidden
           style={{ pointerEvents: "none" }}
         >
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--color-success)" stopOpacity="0.28" />
+              <stop offset="0%" stopColor="var(--color-success)" stopOpacity="0.2" />
               <stop offset="100%" stopColor="var(--color-success)" stopOpacity="0" />
             </linearGradient>
           </defs>
@@ -101,7 +92,7 @@ export function MoneyChart({
             d={linePath}
             fill="none"
             stroke="var(--color-success)"
-            strokeWidth={2.5}
+            strokeWidth={1.5}
             strokeLinecap="round"
             strokeLinejoin="round"
             vectorEffect="non-scaling-stroke"
@@ -109,50 +100,7 @@ export function MoneyChart({
             animate={{ pathLength: 1 }}
             transition={reduce ? { duration: 0 } : { duration: 0.7, ease: "easeOut" }}
           />
-        </motion.svg>
-
-        {/* Bars view. */}
-        <motion.div
-          className="absolute inset-0"
-          animate={{ opacity: view === "bars" ? 1 : 0 }}
-          transition={{ duration: reduce ? 0 : 0.3 }}
-          style={{ pointerEvents: "none" }}
-          aria-hidden
-        >
-          {buckets.map((b, i) => {
-            const top = yAt(b.cents);
-            const barW = ((100 - 2 * PAD_X) / n) * 0.55;
-            const active = hover === i;
-            return (
-              <motion.div
-                key={b.start}
-                className={cn(
-                  "absolute rounded-t-[3px] transition-colors",
-                  active ? "bg-success" : "bg-success/70",
-                )}
-                style={{
-                  left: `${xAt(i)}%`,
-                  top: `${top}%`,
-                  height: `${Math.max(BASE_Y - top, b.cents > 0 ? 0.8 : 0)}%`,
-                  width: `${barW}%`,
-                  transform: "translateX(-50%)",
-                  transformOrigin: "bottom",
-                }}
-                initial={reduce ? false : { scaleY: 0 }}
-                animate={{ scaleY: 1 }}
-                transition={
-                  reduce
-                    ? { duration: 0 }
-                    : {
-                        duration: 0.5,
-                        delay: Math.min(i * 0.03, 0.35),
-                        ease: [0.2, 0.8, 0.2, 1],
-                      }
-                }
-              />
-            );
-          })}
-        </motion.div>
+        </svg>
 
         {/* Hover crosshair: guide line + point dot. */}
         {hovered && (
@@ -161,12 +109,10 @@ export function MoneyChart({
               className="pointer-events-none absolute top-0 bottom-0 w-px bg-foreground/20"
               style={{ left: `${hovered.x}%` }}
             />
-            {view === "line" && (
-              <span
-                className="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-success bg-background"
-                style={{ left: `${hovered.x}%`, top: `${hovered.y}%` }}
-              />
-            )}
+            <span
+              className="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-success bg-background"
+              style={{ left: `${hovered.x}%`, top: `${hovered.y}%` }}
+            />
           </>
         )}
 
@@ -218,8 +164,7 @@ export function MoneyChart({
 }
 
 // Monotone cubic (Fritsch–Carlson) through the points → a smooth SVG path that
-// never overshoots below the data (money is never negative, so no dips under the
-// baseline). Falls back to a line for 0–2 points.
+// never overshoots below the data. Falls back to a line for 0–2 points.
 function monotonePath(pts: { x: number; y: number }[]): string {
   const nPts = pts.length;
   if (nPts === 0) return "";
@@ -241,7 +186,6 @@ function monotonePath(pts: { x: number; y: number }[]): string {
   for (let i = 1; i < nPts - 1; i++) {
     tan[i] = slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2;
   }
-  // Enforce monotonicity so the curve can't bulge past the data.
   for (let i = 0; i < nPts - 1; i++) {
     if (slope[i] === 0) {
       tan[i] = 0;

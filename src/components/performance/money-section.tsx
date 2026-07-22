@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Clock, Lock, Timer, Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
 import type { MoneySection as MoneyData } from "@/lib/performance/types";
 import type { PerfCopy } from "./copy";
 import { CountUp } from "./count-up";
-import { MoneyChart, type ChartView } from "./money-chart";
-import { SegmentedControl } from "./segmented-control";
+import { MoneyChart } from "./money-chart";
 import { centsToCurrency, formatDays } from "./format";
 
 const BIG = "num-display block text-3xl font-semibold tracking-tight sm:text-4xl";
@@ -22,7 +21,6 @@ export function MoneySection({
   locale: AppLocale;
   copy: PerfCopy["money"];
 }) {
-  const [view, setView] = useState<ChartView>("bars");
   const hasCollected = data.collectedCount > 0;
   const money = (n: number) => centsToCurrency(n, locale, 0);
 
@@ -88,26 +86,13 @@ export function MoneySection({
       </div>
 
       <div className="mt-6 border-t border-border/60 pt-5">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <span className="text-xs font-medium text-muted-foreground">
-            {copy.chartAria}
-          </span>
-          <SegmentedControl
-            size="sm"
-            ariaLabel={copy.viewLabel}
-            value={view}
-            onChange={setView}
-            options={[
-              { value: "bars", label: copy.viewBars },
-              { value: "line", label: copy.viewLine },
-            ]}
-          />
+        <div className="mb-3 text-xs font-medium text-muted-foreground">
+          {copy.chartAria}
         </div>
         {hasCollected ? (
           <MoneyChart
             buckets={data.buckets}
             granularity={data.granularity}
-            view={view}
             locale={locale}
           />
         ) : (
