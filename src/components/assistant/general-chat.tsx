@@ -57,7 +57,10 @@ export function GeneralChat({
       setInput("");
       queueMicrotask(resizeTextarea);
 
-      const history = [...messages, { role: "user" as const, content: trimmed }];
+      const history = [
+        ...messages,
+        { role: "user" as const, content: trimmed },
+      ];
       // Show the user turn plus an empty assistant placeholder to stream into.
       setMessages([...history, { role: "assistant", content: "" }]);
       setStreaming(true);
@@ -73,19 +76,39 @@ export function GeneralChat({
             messages: history,
             locale,
             pathname:
-              typeof window !== "undefined" ? window.location.pathname : undefined,
+              typeof window !== "undefined"
+                ? window.location.pathname
+                : undefined,
           }),
         });
 
         if (res.status === 429) {
           setError(ta("general_rate_limited"));
           // Drop the empty placeholder.
-          setMessages((prev) => prev.filter((m, i) => !(i === prev.length - 1 && m.role === "assistant" && m.content === "")));
+          setMessages((prev) =>
+            prev.filter(
+              (m, i) =>
+                !(
+                  i === prev.length - 1 &&
+                  m.role === "assistant" &&
+                  m.content === ""
+                ),
+            ),
+          );
           return;
         }
         if (!res.ok || !res.body) {
           setError(ta("general_error"));
-          setMessages((prev) => prev.filter((m, i) => !(i === prev.length - 1 && m.role === "assistant" && m.content === "")));
+          setMessages((prev) =>
+            prev.filter(
+              (m, i) =>
+                !(
+                  i === prev.length - 1 &&
+                  m.role === "assistant" &&
+                  m.content === ""
+                ),
+            ),
+          );
           return;
         }
 
@@ -192,7 +215,7 @@ export function GeneralChat({
       </div>
 
       {/* Input */}
-      <div className="border-t border-white/10 bg-black px-4 pt-3 pb-4">
+      <div className="border-t border-white/10 bg-card px-4 pt-3 pb-4">
         {empty && error && (
           <div className="mb-2.5">
             <Alert variant="destructive">

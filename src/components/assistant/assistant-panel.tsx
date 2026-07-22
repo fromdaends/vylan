@@ -91,25 +91,33 @@ export function AssistantPanel({
   // they haven't opened the panel for yet. Recomputed in a frame callback
   // (never during render) so Date.now() stays out of the render path.
   // -------------------------------------------------------------------------
+  // Total unread client messages across ALL conversations — reported up by the
+  // Client-messages inbox tab. Drives the tab's unread badge and, together with
+  // the page-engagement invite, the FAB dot.
+  const [messagesUnread, setMessagesUnread] = useState(0);
+
   const [badge, setBadge] = useState(false);
   useEffect(() => {
-    let frame: number | null = null;
-    if (!pageEngagement || open) {
-      frame = requestAnimationFrame(() => setBadge(false));
-    } else {
+    // Recomputed in a frame callback (never during render) so Date.now() stays
+    // out of the render path.
+    const frame = requestAnimationFrame(() => {
+      if (open) {
+        setBadge(false);
+        return;
+      }
+      // Any unread client message lights the dot — the inbox now lives in this
+      // panel, so the FAB is its doorway from anywhere in the app.
+      let show = messagesUnread > 0;
       const pe = pageEngagement;
-      frame = requestAnimationFrame(() => {
+      if (pe) {
         const fresh = isFreshEngagement(pe.status, pe.createdAt, Date.now());
         const seen = readSeenEngagements(userId).includes(pe.id);
-        // Unread client messages also light the dot — the Messages surface
-        // now lives inside this panel, so the FAB is its doorway.
-        setBadge((fresh && !seen) || (pe.messagesUnread ?? 0) > 0);
-      });
-    }
-    return () => {
-      if (frame != null) cancelAnimationFrame(frame);
-    };
-  }, [pageEngagement, open, userId]);
+        show = show || (fresh && !seen) || (pe.messagesUnread ?? 0) > 0;
+      }
+      setBadge(show);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [pageEngagement, open, userId, messagesUnread]);
 
   // On open: focus the panel (so Esc + keyboard flow land here) and mark the
   // page's engagement as seen (clears the invitation badge for good). On
@@ -387,11 +395,12 @@ export function AssistantPanel({
           } as CSSProperties
         }
         className={cn(
-          // The assistant is an intentionally black surface in both app
-          // themes. Scope dark semantic color tokens to the panel so
+          // The panel is the app's dark NAVY surface (bg-card, hue 262) in both
+          // app themes — matching the rest of the site rather than a flat black
+          // slab. Scope dark semantic color tokens to the panel so
           // text-foreground/text-muted-foreground remain legible when the
           // surrounding app is using light mode.
-          "dark fixed inset-y-0 right-0 z-[45] flex w-full flex-col overflow-hidden bg-black text-white outline-none",
+          "dark fixed inset-y-0 right-0 z-[45] flex w-full flex-col overflow-hidden bg-card text-white outline-none",
           "sm:inset-y-2 sm:right-2 sm:w-[var(--assistant-w)] sm:rounded-2xl sm:border sm:border-white/10",
           "sm:shadow-[-18px_0_48px_-28px_rgba(0,0,0,0.75),0_18px_50px_-30px_rgba(0,0,0,0.8)]",
           dragging
@@ -443,11 +452,18 @@ export function AssistantPanel({
         {/* Header: engagement selector (subtle) + info + settings + close.
             The old kebab view-menu is gone (founder) — views are the tab
             strip right below. */}
-        <header className="flex items-center gap-1 bg-[#11110f] px-3 pt-2.5 pb-1">
-          <EngagementSelector
-            value={selected}
-            onChange={setSelectedEngagement}
-          />
+        <header className="flex items-center gap-1 bg-secondary px-3 pt-2.5 pb-1">
+          {/* Engagement scope is only for the engagement-bound views (AI chat +
+              Activity). Client messages is a cross-client inbox, so it shows no
+              picker — just a spacer keeping the actions right-aligned. */}
+          {tab === "messages" ? (
+            <div className="flex-1" />
+          ) : (
+            <EngagementSelector
+              value={selected}
+              onChange={setSelectedEngagement}
+            />
+          )}
           {/* Info: expands the capabilities overlay over the panel body. */}
           <button
             type="button"
@@ -488,7 +504,7 @@ export function AssistantPanel({
         <div
           role="tablist"
           aria-label={t("switch_view")}
-          className="flex items-end gap-1 bg-[#11110f] px-2.5 pt-1"
+          className="flex items-end gap-1 bg-secondary px-2.5 pt-1"
         >
           <PanelTab
             active={tab === "messages" && !infoOpen}
@@ -498,11 +514,8 @@ export function AssistantPanel({
             }}
             icon={MessageSquare}
             label={t("tab_client_messages")}
-            badge={
-              selected && pageEngagement?.id === selected.id
-                ? (pageEngagement?.messagesUnread ?? 0)
-                : 0
-            }
+            // Firm-wide unread across every client conversation (from the inbox).
+            badge={messagesUnread}
           />
           <PanelTab
             active={tab === "chat" && !infoOpen}
@@ -537,7 +550,11 @@ export function AssistantPanel({
                 tab !== "messages" && "hidden",
               )}
             >
-              <ClientMessagesTab engagement={selected} locale={locale} />
+              <ClientMessagesTab
+                locale={locale}
+                active={open}
+                onUnreadTotal={setMessagesUnread}
+              />
             </div>
             <div
               className={cn(
@@ -570,7 +587,7 @@ export function AssistantPanel({
 }
 
 // One rounded browser-style tab. The active tab's background matches the
-// content region (bg-black) so tab and view read as one connected surface.
+// content region (bg-card navy) so tab and view read as one connected surface.
 function PanelTab({
   active,
   onClick,
@@ -594,7 +611,7 @@ function PanelTab({
       className={cn(
         "inline-flex cursor-pointer items-center gap-1.5 rounded-t-xl px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "bg-black text-foreground"
+          ? "bg-card text-foreground"
           : "text-muted-foreground hover:bg-white/5 hover:text-foreground",
       )}
     >
