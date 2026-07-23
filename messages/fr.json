@@ -1543,6 +1543,8 @@
     "label_fr_placeholder": "Étiquette (français)",
     "label_en_placeholder": "Label (English)",
     "description_fr_placeholder": "Description optionnelle pour le client",
+    "ai_instructions_placeholder": "Note pour l'IA (facultatif) : p. ex. attendez une déclaration 2024, pas 2026",
+    "ai_instructions_label": "Note pour l'IA (facultatif)",
     "required": "Requis",
     "add_item": "Ajouter un document",
     "checklist_empty": "Aucun document dans la liste. Choisissez un modèle ou ajoutez un élément.",

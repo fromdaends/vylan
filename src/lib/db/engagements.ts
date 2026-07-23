@@ -386,10 +386,23 @@ export async function createEngagementWithItems(
       doc_type: item.doc_type,
       required: item.required,
       order_index: idx,
+      // Optional per-item AI guidance (migration 0390). Added separately-safe:
+      // if the column doesn't exist yet, retry WITHOUT it so creation never
+      // breaks during the deploy→migrate window (same pattern as ai_enabled).
+      ai_instructions: item.ai_instructions ?? null,
     }));
-    const { error: itemsErr } = await supabase
+    let { error: itemsErr } = await supabase
       .from("request_items")
       .insert(rows);
+    if (itemsErr && isUnknownColumnError(itemsErr)) {
+      const rowsNoAi = rows.map(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        ({ ai_instructions, ...r }) => r,
+      );
+      ({ error: itemsErr } = await supabase
+        .from("request_items")
+        .insert(rowsNoAi));
+    }
     if (itemsErr) throw itemsErr;
   }
   return engagement as Engagement;

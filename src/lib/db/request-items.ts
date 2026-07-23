@@ -43,6 +43,10 @@ export type RequestItem = {
   // worker has run for this item. Fetched by the select("*") in both
   // listRequestItems (accountant) and the portal item query.
   ai_set_assessment: SetAssessment | null;
+  // Optional per-item AI guidance (migration 0390). Free text the accountant
+  // typed to steer the AI's assessment of this item's upload. Null = default.
+  // Read by ai/process (per-file) + ai/set-assessment (item-level) prompts.
+  ai_instructions: string | null;
   created_at: string;
 };
 
@@ -103,6 +107,7 @@ export type NewItemInput = {
   description_fr?: string | null;
   doc_type: DocType;
   required: boolean;
+  ai_instructions?: string | null;
 };
 
 export async function addItemToEngagement(
@@ -131,6 +136,7 @@ export async function addItemToEngagement(
       required: input.required,
       order_index: nextIdx,
       status: "pending",
+      ai_instructions: input.ai_instructions ?? null,
     })
     .select("*")
     .single();

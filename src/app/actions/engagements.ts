@@ -72,6 +72,9 @@ const ItemSchema = z.object({
   description_en: z.string().nullable().optional(),
   doc_type: z.string().min(1),
   required: z.boolean(),
+  // Optional per-item AI guidance (migration 0390). Capped so a pasted essay
+  // can't bloat the AI prompt.
+  ai_instructions: z.string().max(1000).nullable().optional(),
 });
 
 const ReminderStepSchema = z.object({
@@ -276,6 +279,7 @@ export async function createEngagementAction(
       description_en: i.description_en ?? null,
       doc_type: i.doc_type as DocType,
       required: i.required,
+      ai_instructions: i.ai_instructions ?? null,
     }));
     const input: CreateEngagementInput = {
       client_id: parsed.data.client_id,

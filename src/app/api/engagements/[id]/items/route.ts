@@ -74,6 +74,7 @@ export async function POST(
     description_fr: description,
     doc_type: parsed.data.doc_type as NewItemInput["doc_type"],
     required: parsed.data.required,
+    ai_instructions: parsed.data.ai_instructions?.trim() || null,
   };
 
   let item;

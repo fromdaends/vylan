@@ -1197,6 +1197,22 @@ export function EngagementBuilder({
                         rows={1}
                         className="text-xs"
                       />
+                      {/* Optional per-item AI note: steers the AI's assessment
+                          of this item's upload. Blank = default behavior. NOT
+                          shown to the client. */}
+                      <Textarea
+                        value={item.ai_instructions ?? ""}
+                        onChange={(e) =>
+                          updateItem(idx, {
+                            ai_instructions: e.target.value || null,
+                          })
+                        }
+                        placeholder={t("ai_instructions_placeholder")}
+                        aria-label={t("ai_instructions_placeholder")}
+                        rows={1}
+                        maxLength={1000}
+                        className="text-xs"
+                      />
                       <div className="flex items-center gap-3 text-xs">
                         <DocTypePicker
                           value={item.doc_type}
