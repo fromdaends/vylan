@@ -58,7 +58,11 @@ export async function GET(
   if (!file) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const { data: engagement } = await sb
+  // Authorize the parent engagement through the AUTHED (RLS) client, not the
+  // service role — so a "Private to me" client's engagement is invisible to
+  // STAFF (0810) and this 404s for them, while owners still pass. RLS also
+  // scopes to the firm; the explicit firm_id eq is kept as defense-in-depth.
+  const { data: engagement } = await supabase
     .from("engagements")
     .select("id")
     .eq("id", file.engagement_id)

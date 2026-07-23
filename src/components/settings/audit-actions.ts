@@ -55,6 +55,7 @@ export const AUDIT_ACTIONS = [
   "invite_resent",
   "engagement_reassigned",
   "client_reassigned",
+  "client_privacy_changed",
   "user_deactivated",
   "user_reactivated",
   "ownership_transferred",
