@@ -165,5 +165,7 @@ function notificationVisual(kind: HomeNotification["kind"]): {
       return { Icon: MessageSquare, tone: "bg-primary/15 text-primary" };
     case "engagement_assigned":
       return { Icon: UserRoundCheck, tone: "bg-primary/15 text-primary" };
+    case "comment_mention":
+      return { Icon: MessageSquare, tone: "bg-accent/15 text-accent" };
   }
 }

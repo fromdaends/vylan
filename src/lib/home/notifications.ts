@@ -53,7 +53,11 @@ export type HomeNotificationKind =
   // A teammate assigned an engagement TO the viewer. Unlike every other kind
   // (which are firm-events anyone relevant sees), this is personally targeted:
   // it only appears for the person the work landed on.
-  | "engagement_assigned";
+  | "engagement_assigned"
+  // A teammate @mentioned the viewer in a file comment (Wave 3). Personally
+  // targeted like engagement_assigned — only the mentioned person sees it,
+  // regardless of who the engagement is assigned to.
+  | "comment_mention";
 
 // Activity-log actions surfaced as notifications (a client paid, a payment
 // failed, an engagement was finished, a client signed, a client messaged).
@@ -146,8 +150,14 @@ export function filterNotificationsForViewer(
   if (!viewer || viewer.isOwner) return notifications;
   return notifications.filter(
     (n) =>
-      n.engagement_id != null &&
-      assigneeByEngagement.get(n.engagement_id) === viewer.userId,
+      // Personally-targeted kinds are already emitted only for this viewer
+      // (engagement_assigned via shouldNotifyAssignee, comment_mention via the
+      // mention set), so they bypass the assignment scope — a mention on an
+      // engagement you don't own must still reach you.
+      n.kind === "comment_mention" ||
+      n.kind === "engagement_assigned" ||
+      (n.engagement_id != null &&
+        assigneeByEngagement.get(n.engagement_id) === viewer.userId),
   );
 }
 
@@ -215,6 +225,38 @@ export async function listHomeNotifications(
         note: typeof meta.note === "string" ? meta.note.trim() || null : null,
         timestamp: a.created_at,
         href: `/engagements/${a.engagement_id}`,
+      });
+    }
+
+    // 0b) "@mentioned you in a comment" — also personally targeted. One
+    // file_comment_mention activity carries the mentioned ids in metadata; emit
+    // for this viewer when they're in the set (and aren't the author).
+    // A higher cap than the other feeds: this is fetched firm-wide before the
+    // per-viewer filter, and mentions are higher-volume than reassigns, so a
+    // small window could drop a specific person's still-recent mention on a busy
+    // team. 200 comfortably covers a small firm's 14-day mention volume.
+    const mentionRows = await listFirmActivityByActions(
+      ["file_comment_mention"],
+      200,
+      recentSinceISO,
+    );
+    for (const a of mentionRows) {
+      const meta = (a.metadata ?? {}) as { mentioned_user_ids?: unknown };
+      const ids = Array.isArray(meta.mentioned_user_ids)
+        ? meta.mentioned_user_ids.filter((x): x is string => typeof x === "string")
+        : [];
+      if (a.actor_id === viewer.userId) continue; // never notify yourself
+      if (!ids.includes(viewer.userId)) continue;
+      out.push({
+        id: a.id,
+        kind: "comment_mention",
+        engagement_id: a.engagement_id,
+        engagement_title: a.engagement_title,
+        client_display_name: a.client_display_name,
+        timestamp: a.created_at,
+        href: a.engagement_id
+          ? `/engagements/${a.engagement_id}`
+          : "/dashboard",
       });
     }
   }
@@ -398,7 +440,14 @@ export async function listHomeNotifications(
   scoped.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   const deduped: HomeNotification[] = [];
   for (const n of scoped) {
-    const key = `${n.kind}:${n.href}`;
+    // Firm-event kinds dedup per engagement (one overdue/ready row each). But a
+    // comment_mention is a distinct per-comment event whose href is only the
+    // engagement — key it on the activity id so two mentions on the same
+    // engagement don't collapse to the latest one.
+    const key =
+      n.kind === "comment_mention"
+        ? `comment_mention:${n.id}`
+        : `${n.kind}:${n.href}`;
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(n);
