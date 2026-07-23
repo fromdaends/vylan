@@ -20,9 +20,15 @@ import {
   type MoneyBucket,
   type MoneySection,
   type TopClient,
+  type TopDocClient,
 } from "./types";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Mean of a list, or null when empty (never fabricate a 0 average). Shared by
+// the money and documents turnaround stats.
+const avg = (xs: number[]): number | null =>
+  xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 
 // ── AI ──────────────────────────────────────────────────────────────────────
 
@@ -88,32 +94,62 @@ function monthsCovered(fromMs: number, toMs: number): number {
   return Math.max(1, (b.y - a.y) * 12 + (b.mo - a.mo) + 1);
 }
 
-// Count of documents received per calendar bucket, plus a per-month average.
-// `receivedMs` is one entry per non-duplicate uploaded file (its upload instant,
-// already range-filtered by the loader). Pure so it's unit-tested directly and
-// mirrors aggregateMoney's bucketing exactly (empty periods render as zero).
+// One document received (uploaded) in range: its upload instant, its decision
+// instant (null if still pending/never decided), and which client sent it.
+export type ReceivedDoc = {
+  uploadedMs: number;
+  reviewedMs: number | null;
+  clientId: string | null;
+};
+
+// The whole Documents view in one pure reduction: per-period counts, per-month
+// average, upload→decision turnaround, and the clients who sent the most.
+// `pendingReview` is a live count (docs still awaiting a decision, ANY upload
+// date) resolved by the loader, so it's threaded in rather than derived here.
+// Mirrors aggregateMoney's bucketing exactly (empty periods render as zero).
 export function aggregateDocuments(
-  receivedMs: number[],
+  docs: ReceivedDoc[],
+  pendingReview: number,
   range: ResolvedRange,
+  clientNames: Map<string, string> = new Map(),
 ): DocumentsSection {
-  const totalReceived = receivedMs.length;
+  const totalReceived = docs.length;
 
   // For all_time the span starts at the earliest upload (or now, if none).
   const fromMs =
     range.startMs ??
-    (receivedMs.length ? Math.min(...receivedMs) : range.endMs);
+    (docs.length ? Math.min(...docs.map((d) => d.uploadedMs)) : range.endMs);
 
   const byBucket = new Map<number, number>();
   for (const start of enumerateBuckets(fromMs, range.endMs, range.granularity)) {
     byBucket.set(start, 0);
   }
-  for (const ms of receivedMs) {
-    const key = bucketStartMs(ms, range.granularity);
+  for (const d of docs) {
+    const key = bucketStartMs(d.uploadedMs, range.granularity);
     byBucket.set(key, (byBucket.get(key) ?? 0) + 1);
   }
   const buckets: CountBucket[] = [...byBucket.entries()]
     .sort((a, b) => a[0] - b[0])
     .map(([start, count]) => ({ start: new Date(start).toISOString(), count }));
+
+  // Whole-day upload→decision turnaround, for docs received in range that have
+  // been reviewed. Never negative (clock skew guard), like time-to-paid.
+  const reviewDays = docs
+    .filter((d) => d.reviewedMs != null)
+    .map((d) => Math.max(0, Math.round(((d.reviewedMs as number) - d.uploadedMs) / DAY_MS)));
+
+  // Clients ranked by documents received in range. No-client uploads still
+  // count in the total but can't be ranked. Pure so it's unit-tested directly.
+  const byClient = new Map<string, number>();
+  for (const d of docs) {
+    if (!d.clientId) continue;
+    byClient.set(d.clientId, (byClient.get(d.clientId) ?? 0) + 1);
+  }
+  const topClients: TopDocClient[] = [...byClient.entries()]
+    .map(([id, count]) => ({ name: clientNames.get(id) ?? "", count }))
+    .filter((c) => c.name !== "")
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, TOP_CLIENTS_LIMIT);
 
   const months = monthsCovered(fromMs, range.endMs);
   return {
@@ -122,6 +158,12 @@ export function aggregateDocuments(
     granularity: range.granularity,
     perMonthAvg: totalReceived / months,
     monthsCovered: months,
+    pendingReview,
+    timeToReview: {
+      avgDays: reviewDays.length ? (avg(reviewDays) as number) : null,
+      count: reviewDays.length,
+    },
+    topClients,
   };
 }
 
@@ -162,9 +204,6 @@ function rankTopClients(
 }
 
 export type OutstandingInvoice = { amountCents: number };
-
-const avg = (xs: number[]): number | null =>
-  xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
 
 export function aggregateMoney(
   paid: PaidInvoice[],

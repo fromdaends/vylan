@@ -36,7 +36,8 @@ export type PerfCopy = {
     viewLabel: string;
     chartAria: string;
     topClients: string;
-    // Money ↔ Documents chart toggle (the chart switches which it shows).
+    // Money ↔ Documents full-section toggle (heading, tiles, chart, top-clients
+    // all switch together).
     chartToggleAria: string;
     chartMoneyLabel: string;
     chartDocsLabel: string;
@@ -46,6 +47,17 @@ export type PerfCopy = {
     docsPerMonth: (n: string) => string;
     docsThisMonth: (n: number) => string;
     docsNone: string;
+    // Documents-view section header + stat tiles + ranking.
+    docsHeading: string;
+    docsCaption: string;
+    docsReceivedLabel: string;
+    docsPendingLabel: string;
+    docsPendingCaption: string;
+    docsNonePending: string;
+    docsTimeToReviewLabel: string;
+    docsTimeToReviewCaption: string;
+    docsNoTimeToReview: string;
+    docsTopClients: string;
   };
   ai: {
     heading: string;
@@ -127,6 +139,16 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       docsThisMonth: (n) =>
         `${n} ${n === 1 ? "document" : "documents"} received this month`,
       docsNone: "No documents received in this period yet.",
+      docsHeading: "Documents",
+      docsCaption: "Documents received from your clients.",
+      docsReceivedLabel: "Received",
+      docsPendingLabel: "Pending review",
+      docsPendingCaption: "awaiting your review right now",
+      docsNonePending: "Nothing awaiting review.",
+      docsTimeToReviewLabel: "Time to review",
+      docsTimeToReviewCaption: "average, documents received in this period",
+      docsNoTimeToReview: "No documents reviewed in this period yet.",
+      docsTopClients: "Top clients by documents",
     },
     ai: {
       heading: "AI performance",
@@ -208,6 +230,16 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       docsThisMonth: (n) =>
         `${n} document${n === 1 ? "" : "s"} reçu${n === 1 ? "" : "s"} ce mois-ci`,
       docsNone: "Aucun document reçu sur cette période pour l'instant.",
+      docsHeading: "Documents",
+      docsCaption: "Documents reçus de vos clients.",
+      docsReceivedLabel: "Reçus",
+      docsPendingLabel: "En attente de révision",
+      docsPendingCaption: "en attente de votre révision en ce moment",
+      docsNonePending: "Rien en attente de révision.",
+      docsTimeToReviewLabel: "Délai de révision",
+      docsTimeToReviewCaption: "moyenne, documents reçus sur cette période",
+      docsNoTimeToReview: "Aucun document révisé sur cette période pour l'instant.",
+      docsTopClients: "Meilleurs clients par documents",
     },
     ai: {
       heading: "Performance de l'IA",
