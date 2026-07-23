@@ -56,6 +56,10 @@ type ActiveMember = {
   role: "owner" | "staff";
   isSelf: boolean;
   avatarUrl: string | null;
+  // Guarded offboarding: how much LIVE work this member holds, so the remove
+  // dialog can offer to reassign it. Optional (only computed for owners).
+  activeEngagements?: number;
+  clients?: number;
 };
 type DeactivatedMember = {
   id: string;
@@ -239,6 +243,11 @@ export function TeamManager({
               member={m}
               canManage={canManage && !m.isSelf && m.role !== "owner"}
               canViewProfile={canManage}
+              // Who this person's work can be handed to on removal: any OTHER
+              // active member (owner included). Empty → no reassign option.
+              reassignTargets={activeMembers
+                .filter((x) => x.id !== m.id)
+                .map((x) => ({ id: x.id, name: x.name }))}
             />
           ))}
         </div>
@@ -435,11 +444,14 @@ function MemberRow({
   member,
   canManage,
   canViewProfile,
+  reassignTargets,
 }: {
   member: ActiveMember;
   canManage: boolean;
   // Owners can open a teammate's profile (their engagements/clients/activity).
   canViewProfile: boolean;
+  // Other active members this person's work can be reassigned to on removal.
+  reassignTargets: { id: string; name: string }[];
 }) {
   const t = useTranslations("Team");
   const errorMessage = useErrorMessage();
@@ -447,9 +459,21 @@ function MemberRow({
   const [pending, startTransition] = useTransition();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  function doDeactivate() {
+  // Does this member hold live work worth reassigning? Drives the "guarded"
+  // remove dialog (counts + reassignee picker) vs. the plain confirm.
+  const activeEngagements = member.activeEngagements ?? 0;
+  const clientCount = member.clients ?? 0;
+  const holdsWork = activeEngagements > 0 || clientCount > 0;
+  const canReassign = holdsWork && reassignTargets.length > 0;
+  // Default the reassignee to the first available teammate (owner sorts first).
+  const [reassignTo, setReassignTo] = useState<string>(
+    reassignTargets[0]?.id ?? "",
+  );
+
+  // reassignToId null = "remove anyway" (leave their work as-is).
+  function doDeactivate(reassignToId: string | null) {
     startTransition(async () => {
-      const res = await deactivateUser(member.id);
+      const res = await deactivateUser(member.id, reassignToId);
       if (res.ok) {
         toast.success(t("member_deactivated"));
         router.refresh();
@@ -534,7 +558,41 @@ function MemberRow({
               {t("deactivate_confirm_body", { name: member.name })}
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
+
+          {/* Guarded offboarding: if this person holds live work, show it and
+              offer to hand it to a teammate so nothing is orphaned. */}
+          {holdsWork && (
+            <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-3">
+              <p className="text-sm">
+                {t("offboard_holds", {
+                  name: member.name,
+                  engagements: activeEngagements,
+                  clients: clientCount,
+                })}
+              </p>
+              {canReassign && (
+                <label className="block">
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                    {t("offboard_reassign_label")}
+                  </span>
+                  <select
+                    value={reassignTo}
+                    onChange={(e) => setReassignTo(e.target.value)}
+                    disabled={pending}
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {reassignTargets.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
             <Button
               type="button"
               variant="outline"
@@ -543,14 +601,34 @@ function MemberRow({
             >
               {t("cancel")}
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={doDeactivate}
-              disabled={pending}
-            >
-              {t("menu_deactivate")}
-            </Button>
+            {canReassign ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => doDeactivate(null)}
+                  disabled={pending}
+                >
+                  {t("offboard_remove_anyway")}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => doDeactivate(reassignTo)}
+                  disabled={pending || !reassignTo}
+                >
+                  {t("offboard_reassign_remove")}
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => doDeactivate(null)}
+                disabled={pending}
+              >
+                {t("menu_deactivate")}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
