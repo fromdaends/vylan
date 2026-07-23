@@ -152,6 +152,14 @@ export default async function TeamPage({
     readyToReview: 0,
     needsAttention: 0,
   };
+  // Members handed to the roster manager — enriched (owners only) with each
+  // person's live-work counts so the guarded-offboarding remove dialog can show
+  // "holds N engagements / M clients" and offer to reassign it.
+  type ManagerMember = (typeof activeMembers)[number] & {
+    activeEngagements?: number;
+    clients?: number;
+  };
+  let membersForManager: ManagerMember[] = activeMembers;
   if (canManage) {
     const [worklist, clientsRaw] = await Promise.all([
       loadEngagementWorklist("active"),
@@ -187,6 +195,11 @@ export default async function TeamPage({
         clients: clientCountByOwner.get(m.id) ?? 0,
       };
     });
+    membersForManager = activeMembers.map((m) => ({
+      ...m,
+      activeEngagements: workloadForMember(byMember, m.id).activeEngagements,
+      clients: clientCountByOwner.get(m.id) ?? 0,
+    }));
   }
 
   return (
@@ -200,7 +213,7 @@ export default async function TeamPage({
         canManage={canManage}
         onTrial={isOnTrial(firm)}
         seat={seat}
-        activeMembers={activeMembers}
+        activeMembers={membersForManager}
         deactivatedMembers={deactivatedMembers}
         pendingInvites={pendingInvites}
         locale={locale}

@@ -600,6 +600,11 @@ export type MemberActionResult =
 // or the firm's only owner (transfer ownership first).
 export async function deactivateUser(
   userId: string,
+  // Guarded offboarding (team Wave 2): when set, the departing member's LIVE
+  // engagements (draft/sent/in_progress) + all their clients are reassigned to
+  // this active teammate BEFORE the deactivation, so nothing is left assigned to
+  // someone who's gone. null / omitted = "remove anyway" (work stays as-is).
+  reassignToId?: string | null,
 ): Promise<MemberActionResult> {
   const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!me || !firm) return { ok: false, error: "no_session" };
@@ -630,6 +635,49 @@ export async function deactivateUser(
   });
   if (!check.ok) return { ok: false, error: check.reason };
 
+  // Guarded offboarding: reassign the departing member's live work first. Done
+  // BEFORE the deactivation so a failure here aborts without stranding a
+  // half-removed member. The reassignee must be an active member of THIS firm
+  // (never the person being removed).
+  if (reassignToId) {
+    if (reassignToId === userId) return { ok: false, error: "not_found" };
+    const { data: dest } = await admin
+      .from("users")
+      .select("id, firm_id, deactivated_at")
+      .eq("id", reassignToId)
+      .maybeSingle();
+    if (!dest || dest.firm_id !== firm.id || dest.deactivated_at) {
+      return { ok: false, error: "not_found" };
+    }
+    const { count: engCount, error: engErr } = await admin
+      .from("engagements")
+      .update(
+        { assigned_user_id: reassignToId },
+        { count: "exact" },
+      )
+      .eq("firm_id", firm.id)
+      .eq("assigned_user_id", userId)
+      .in("status", ["draft", "sent", "in_progress"]);
+    const { count: clientCount, error: clientErr } = await admin
+      .from("clients")
+      .update({ assigned_user_id: reassignToId }, { count: "exact" })
+      .eq("firm_id", firm.id)
+      .eq("assigned_user_id", userId);
+    if (engErr || clientErr) {
+      console.error(
+        "[team] offboard reassign failed:",
+        engErr?.message ?? clientErr?.message,
+      );
+      return { ok: false, error: "update_failed" };
+    }
+    await logUserActivity(firm.id, null, "team_offboard_reassigned", {
+      from_user_id: userId,
+      to_user_id: reassignToId,
+      engagements: engCount ?? 0,
+      clients: clientCount ?? 0,
+    });
+  }
+
   const { error } = await admin
     .from("users")
     .update({
@@ -645,8 +693,11 @@ export async function deactivateUser(
 
   await logUserActivity(firm.id, null, "user_deactivated", {
     target_user_id: userId,
+    reassigned_to: reassignToId ?? undefined,
   });
   revalidatePath(TEAM_PATH);
+  revalidatePath("/engagements");
+  revalidatePath("/clients");
   return { ok: true };
 }
 
