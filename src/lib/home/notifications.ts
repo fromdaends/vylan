@@ -231,9 +231,13 @@ export async function listHomeNotifications(
     // 0b) "@mentioned you in a comment" — also personally targeted. One
     // file_comment_mention activity carries the mentioned ids in metadata; emit
     // for this viewer when they're in the set (and aren't the author).
+    // A higher cap than the other feeds: this is fetched firm-wide before the
+    // per-viewer filter, and mentions are higher-volume than reassigns, so a
+    // small window could drop a specific person's still-recent mention on a busy
+    // team. 200 comfortably covers a small firm's 14-day mention volume.
     const mentionRows = await listFirmActivityByActions(
       ["file_comment_mention"],
-      40,
+      200,
       recentSinceISO,
     );
     for (const a of mentionRows) {
@@ -436,7 +440,14 @@ export async function listHomeNotifications(
   scoped.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   const deduped: HomeNotification[] = [];
   for (const n of scoped) {
-    const key = `${n.kind}:${n.href}`;
+    // Firm-event kinds dedup per engagement (one overdue/ready row each). But a
+    // comment_mention is a distinct per-comment event whose href is only the
+    // engagement — key it on the activity id so two mentions on the same
+    // engagement don't collapse to the latest one.
+    const key =
+      n.kind === "comment_mention"
+        ? `comment_mention:${n.id}`
+        : `${n.kind}:${n.href}`;
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(n);

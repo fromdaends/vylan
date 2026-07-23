@@ -15,6 +15,15 @@ import {
 
 type Member = { id: string; name: string };
 
+// The trailing "@token" before a caret: "@" at the start or after whitespace,
+// then mention characters, at the end of the string. No `g` flag, so it's
+// stateless and safe to reuse across exec/test/replace.
+const MENTION_TOKEN = /(^|\s)@([\p{L}\p{N}._-]*)$/u;
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // Team Wave 3 — the comment thread + @mention composer on one uploaded file.
 // Firm-internal (the client never sees it). Comments post to a file; typing "@"
 // opens a member picker whose pick both inserts "@Name " and records the id to
@@ -55,15 +64,25 @@ export function FileComments({
       .slice(0, 6);
   }, [mentionQuery, members, currentUserId]);
 
-  // Recompute the active @-token from the caret: the word being typed right
-  // before the cursor, when it starts with "@" and has no whitespace.
+  // The active "@token" immediately before the caret (the word being typed after
+  // an "@"), or null when the caret isn't in one.
+  function activeMentionQuery(value: string, caret: number): string | null {
+    const m = MENTION_TOKEN.exec(value.slice(0, caret));
+    return m ? m[2] : null;
+  }
   function onBodyChange(value: string) {
     setBody(value);
     const el = taRef.current;
-    const caret = el ? el.selectionStart : value.length;
-    const upto = value.slice(0, caret);
-    const m = /(^|\s)@([\p{L}\p{N}._-]*)$/u.exec(upto);
-    setMentionQuery(m ? m[2] : null);
+    setMentionQuery(
+      activeMentionQuery(value, el ? el.selectionStart : value.length),
+    );
+  }
+  // The caret moved (arrow keys / click) without a text change — re-evaluate so
+  // the menu closes when the caret leaves an @token, instead of a later pick
+  // replacing the wrong spot.
+  function onCaretChange() {
+    const el = taRef.current;
+    if (el) setMentionQuery(activeMentionQuery(body, el.selectionStart));
   }
 
   function pickMention(member: Member) {
@@ -71,10 +90,16 @@ export function FileComments({
     const caret = el ? el.selectionStart : body.length;
     const before = body.slice(0, caret);
     const after = body.slice(caret);
-    // Replace the trailing "@query" with "@Name ".
+    // Only act if the caret is genuinely at a trailing @token (guards a stale
+    // open menu). A replacement FUNCTION keeps the name literal — a name with
+    // "$1"/"$&" etc. would otherwise be mangled by String.replace.
+    if (!MENTION_TOKEN.test(before)) {
+      setMentionQuery(null);
+      return;
+    }
     const replaced = before.replace(
-      /(^|\s)@([\p{L}\p{N}._-]*)$/u,
-      `$1@${member.name} `,
+      MENTION_TOKEN,
+      (_full, p1: string) => `${p1}@${member.name} `,
     );
     const next = replaced + after;
     setBody(next);
@@ -89,9 +114,15 @@ export function FileComments({
   function submit() {
     const text = body.trim();
     if (!text || pending) return;
-    // Resolve mentions to the picked members whose "@Name" is still in the text.
+    // Resolve mentions to the picked members whose "@Name" is still in the text,
+    // matched as a WHOLE token (a trailing boundary) so "@Sam" doesn't also fire
+    // "Samantha", and with the name escaped. The server re-sanitizes regardless.
     const mentions = picked
-      .filter((p) => body.includes(`@${p.name}`))
+      .filter((p) =>
+        new RegExp(`@${escapeRegExp(p.name)}(?![\\p{L}\\p{N}._-])`, "u").test(
+          body,
+        ),
+      )
       .map((p) => p.id);
     startTransition(async () => {
       const res = await addFileCommentAction({
@@ -167,6 +198,7 @@ export function FileComments({
           ref={taRef}
           value={body}
           onChange={(e) => onBodyChange(e.target.value)}
+          onSelect={onCaretChange}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
