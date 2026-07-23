@@ -1,12 +1,13 @@
 import { getTranslations } from "next-intl/server";
 import {
-  BookOpen,
   ArrowDownLeft,
   ArrowUpRight,
   HelpCircle,
   TriangleAlert,
   ChevronRight,
 } from "lucide-react";
+import { XeroLogo } from "@/components/integrations/xero-logo";
+import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import type {
   TransactionSuggestion,
   ResolvedEntry,
@@ -252,7 +253,6 @@ export async function QuickbooksDraftCard({
     documentName ??
     (isXero ? t("draft_title_xero") : t("draft_title"));
   // Brand kicker: "QuickBooks" or "Xero", by the draft's client connection.
-  const brandKicker = isXero ? t("draft_kicker_xero") : t("draft_kicker");
 
   return (
     // A FLAT, attached bookkeeping section — not a nested card. A hairline
@@ -273,12 +273,14 @@ export async function QuickbooksDraftCard({
           className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-90"
           aria-hidden="true"
         />
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
-          <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
-        </span>
-        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          {brandKicker}
-        </span>
+        {/* The real product mark identifies the destination (Xero / QuickBooks)
+            — clearer than a generic book icon, and its brand colour reads at a
+            glance. The logo replaces the old text kicker (it would be redundant). */}
+        {isXero ? (
+          <XeroLogo className="h-5 w-5 shrink-0" />
+        ) : (
+          <QuickbooksLogo className="h-5 w-5 shrink-0" />
+        )}
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
           {cardTitle}
         </span>
