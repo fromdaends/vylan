@@ -8,6 +8,7 @@ import { resolveRange } from "./range";
 import { loadMoneySection } from "./money";
 import { loadAiSection } from "./ai";
 import { loadAutomationSection } from "./automation";
+import { loadDocumentsSection } from "./documents";
 import type { PerformanceData, PerformanceRange } from "./types";
 
 export async function loadPerformance(
@@ -15,10 +16,11 @@ export async function loadPerformance(
   nowMs: number = Date.now(),
 ): Promise<PerformanceData> {
   const resolved = resolveRange(range, nowMs);
-  const [money, ai, automation] = await Promise.all([
+  const [money, ai, automation, documents] = await Promise.all([
     loadMoneySection(resolved),
     loadAiSection(resolved),
     loadAutomationSection(resolved),
+    loadDocumentsSection(resolved),
   ]);
-  return { range, money, ai, automation };
+  return { range, money, ai, automation, documents };
 }

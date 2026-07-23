@@ -4,11 +4,8 @@ import { useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
-import type {
-  MoneyBucket,
-  MoneyBucketGranularity,
-} from "@/lib/performance/types";
-import { bucketLabel, bucketLabelFull, centsToCurrency } from "./format";
+import type { MoneyBucketGranularity } from "@/lib/performance/types";
+import { bucketLabel, bucketLabelFull } from "./format";
 
 // Chart geometry in a 0..100 box. Bars + guide + tooltip are HTML positioned in
 // percent so nothing distorts.
@@ -17,29 +14,43 @@ const PAD_TOP = 14;
 const PAD_BOT = 10;
 const BASE_Y = 100 - PAD_BOT;
 
-// Money-collected bar chart. One bar per period. Hovering anywhere snaps a
-// vertical guide to the nearest bar, highlights it, and shows a tidy tooltip
-// (exact amount + period). Bars grow in from the baseline; motion is disabled
-// under prefers-reduced-motion.
-export function MoneyChart({
-  buckets,
+export type ChartPoint = { start: string; value: number };
+
+// Generic one-bar-per-period chart. Hovering anywhere snaps a vertical guide to
+// the nearest bar, highlights it, and shows a tidy tooltip (formatted value +
+// period). Bars grow in from the baseline; motion is disabled under
+// prefers-reduced-motion. Money and Documents both render through this so the
+// two chart views are pixel-identical in everything but colour + value format.
+export function BarChart({
+  points,
   granularity,
   locale,
+  formatValue,
+  barClass = "bg-success",
+  barActiveClass = "bg-success",
+  dotClass = "bg-success",
 }: {
-  buckets: MoneyBucket[];
+  points: ChartPoint[];
   granularity: MoneyBucketGranularity;
   locale: AppLocale;
+  // Exact value for the tooltip + the screen-reader alternative.
+  formatValue: (value: number) => string;
+  // Tailwind bg-* for the bars (money = green, documents = blue). barClass is
+  // the resting fill; barActiveClass the hovered fill; dotClass the tooltip dot.
+  barClass?: string;
+  barActiveClass?: string;
+  dotClass?: string;
 }) {
   const reduce = useReducedMotion();
   const containerRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<number | null>(null);
 
-  const n = buckets.length;
-  const max = Math.max(1, ...buckets.map((b) => b.cents));
+  const n = points.length;
+  const max = Math.max(1, ...points.map((b) => b.value));
   const xAt = (i: number) =>
     PAD_X + ((i + 0.5) / Math.max(1, n)) * (100 - 2 * PAD_X);
-  const yAt = (cents: number) =>
-    PAD_TOP + (1 - cents / max) * (BASE_Y - PAD_TOP);
+  const yAt = (value: number) =>
+    PAD_TOP + (1 - value / max) * (BASE_Y - PAD_TOP);
   const barW = Math.min(((100 - 2 * PAD_X) / Math.max(1, n)) * 0.6, 8);
 
   const labelEvery = granularity === "day" && n > 12 ? Math.ceil(n / 6) : 1;
@@ -62,20 +73,20 @@ export function MoneyChart({
         onMouseLeave={() => setHover(null)}
       >
         {/* Bars. */}
-        {buckets.map((b, i) => {
-          const top = yAt(b.cents);
+        {points.map((b, i) => {
+          const top = yAt(b.value);
           const active = hover === i;
           return (
             <motion.div
               key={b.start}
               className={cn(
                 "absolute rounded-t-[3px] transition-colors",
-                active ? "bg-success" : "bg-success/70",
+                active ? barActiveClass : cn(barClass, "opacity-70"),
               )}
               style={{
                 left: `${xAt(i)}%`,
                 top: `${top}%`,
-                height: `${Math.max(BASE_Y - top, b.cents > 0 ? 0.8 : 0)}%`,
+                height: `${Math.max(BASE_Y - top, b.value > 0 ? 0.8 : 0)}%`,
                 width: `${barW}%`,
                 transform: "translateX(-50%)",
                 transformOrigin: "bottom",
@@ -108,22 +119,25 @@ export function MoneyChart({
         )}
 
         {/* Tooltip. */}
-        {hover != null && buckets[hover] && (
+        {hover != null && points[hover] && (
           <div
             className="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-2 whitespace-nowrap rounded-lg border border-border bg-popover px-2.5 py-1.5 shadow-card"
             style={{
               left: `${Math.min(Math.max(xAt(hover), 12), 88)}%`,
-              top: `${Math.max(yAt(buckets[hover].cents) - 6, 2)}%`,
+              top: `${Math.max(yAt(points[hover].value) - 6, 2)}%`,
             }}
           >
             <div className="flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-success" aria-hidden />
+              <span
+                className={cn("size-1.5 rounded-full", dotClass)}
+                aria-hidden
+              />
               <span className="text-sm font-semibold tabular-nums text-popover-foreground">
-                {centsToCurrency(buckets[hover].cents, locale, 2)}
+                {formatValue(points[hover].value)}
               </span>
             </div>
             <div className="mt-0.5 text-[11px] text-muted-foreground">
-              {bucketLabelFull(buckets[hover].start, granularity, locale)}
+              {bucketLabelFull(points[hover].start, granularity, locale)}
             </div>
           </div>
         )}
@@ -131,7 +145,7 @@ export function MoneyChart({
 
       {/* X-axis labels. */}
       <div className="mt-2 flex" aria-hidden>
-        {buckets.map((b, i) => (
+        {points.map((b, i) => (
           <div
             key={b.start}
             className="flex-1 truncate text-center text-[10px] tabular-nums text-muted-foreground"
@@ -143,10 +157,10 @@ export function MoneyChart({
 
       {/* Accessible text alternative. */}
       <span className="sr-only">
-        {buckets
+        {points
           .map(
             (b) =>
-              `${bucketLabelFull(b.start, granularity, locale)}: ${centsToCurrency(b.cents, locale, 2)}`,
+              `${bucketLabelFull(b.start, granularity, locale)}: ${formatValue(b.value)}`,
           )
           .join(", ")}
       </span>

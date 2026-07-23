@@ -30,6 +30,29 @@ export type MoneyBucket = {
   cents: number;
 };
 
+// One bucket of the "documents received over time" chart — the same calendar
+// bucketing as MoneyBucket, but a plain count of documents rather than cents.
+export type CountBucket = {
+  // ISO instant of the bucket start (the start of the Eastern day/month).
+  start: string;
+  count: number;
+};
+
+export type DocumentsSection = {
+  // Total documents received (client uploads, duplicates excluded) in range.
+  totalReceived: number;
+  // Received, bucketed by day (this_month) or month (else). Empty buckets are
+  // included as zero so the chart shows a continuous span — matches MoneyBucket.
+  buckets: CountBucket[];
+  granularity: MoneyBucketGranularity;
+  // Average documents received per calendar month across the range. For
+  // this_month it equals the month's running total; for last_3_months it is the
+  // total over the three months; for all_time it spans the first upload to now.
+  perMonthAvg: number;
+  // Number of calendar months the average is spread over (1 for this_month).
+  monthsCovered: number;
+};
+
 export type TimeToPaidSplit = {
   lockedAvgDays: number;
   lockedCount: number;
@@ -106,4 +129,5 @@ export type PerformanceData = {
   money: MoneySection;
   ai: AiSection;
   automation: AutomationSection;
+  documents: DocumentsSection;
 };

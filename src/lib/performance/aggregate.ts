@@ -3,12 +3,19 @@
 // logic is unit-tested directly. Every number is a plain reduction over records.
 
 import { scoreFile, type AiScorableFile } from "./ai-verdict";
-import { bucketStartMs, enumerateBuckets, type ResolvedRange } from "./range";
+import {
+  bucketStartMs,
+  easternYmd,
+  enumerateBuckets,
+  type ResolvedRange,
+} from "./range";
 import {
   AI_EARLY_DATA_THRESHOLD,
   LOCK_SPLIT_MIN_SAMPLE,
   TOP_CLIENTS_LIMIT,
   type AiSection,
+  type CountBucket,
+  type DocumentsSection,
   type FourCase,
   type MoneyBucket,
   type MoneySection,
@@ -68,6 +75,53 @@ export function aggregateAi(
     skippedAiOffCount,
     notAnalyzedCount,
     earlyData: assessedCount < AI_EARLY_DATA_THRESHOLD,
+  };
+}
+
+// ── Documents received ───────────────────────────────────────────────────────
+
+// Inclusive count of Eastern calendar months spanned by [fromMs, toMs]. Used to
+// turn a total into a per-month average. Always ≥ 1.
+function monthsCovered(fromMs: number, toMs: number): number {
+  const a = easternYmd(fromMs);
+  const b = easternYmd(toMs);
+  return Math.max(1, (b.y - a.y) * 12 + (b.mo - a.mo) + 1);
+}
+
+// Count of documents received per calendar bucket, plus a per-month average.
+// `receivedMs` is one entry per non-duplicate uploaded file (its upload instant,
+// already range-filtered by the loader). Pure so it's unit-tested directly and
+// mirrors aggregateMoney's bucketing exactly (empty periods render as zero).
+export function aggregateDocuments(
+  receivedMs: number[],
+  range: ResolvedRange,
+): DocumentsSection {
+  const totalReceived = receivedMs.length;
+
+  // For all_time the span starts at the earliest upload (or now, if none).
+  const fromMs =
+    range.startMs ??
+    (receivedMs.length ? Math.min(...receivedMs) : range.endMs);
+
+  const byBucket = new Map<number, number>();
+  for (const start of enumerateBuckets(fromMs, range.endMs, range.granularity)) {
+    byBucket.set(start, 0);
+  }
+  for (const ms of receivedMs) {
+    const key = bucketStartMs(ms, range.granularity);
+    byBucket.set(key, (byBucket.get(key) ?? 0) + 1);
+  }
+  const buckets: CountBucket[] = [...byBucket.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([start, count]) => ({ start: new Date(start).toISOString(), count }));
+
+  const months = monthsCovered(fromMs, range.endMs);
+  return {
+    totalReceived,
+    buckets,
+    granularity: range.granularity,
+    perMonthAvg: totalReceived / months,
+    monthsCovered: months,
   };
 }
 

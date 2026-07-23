@@ -4,6 +4,7 @@ import type { DocType } from "@/lib/db/templates";
 import type { ResolvedRange } from "./range";
 import {
   aggregateAi,
+  aggregateDocuments,
   aggregateMoney,
   type AiCandidate,
   type PaidInvoice,
@@ -185,5 +186,85 @@ describe("aggregateMoney", () => {
     expect(aggregateMoney([], [], RANGE, "cad", new Map()).topClients).toEqual(
       [],
     );
+  });
+});
+
+// ── Documents received ───────────────────────────────────────────────────────
+
+const THIS_MONTH: ResolvedRange = {
+  range: "this_month",
+  startMs: Date.parse("2026-07-01T04:00:00Z"),
+  endMs: NOW,
+  startIso: "2026-07-01T04:00:00.000Z",
+  endIso: new Date(NOW).toISOString(),
+  granularity: "day",
+};
+
+const ALL_TIME: ResolvedRange = {
+  range: "all_time",
+  startMs: null,
+  endMs: NOW,
+  startIso: null,
+  endIso: new Date(NOW).toISOString(),
+  granularity: "month",
+};
+
+const at = (iso: string) => Date.parse(iso);
+
+describe("aggregateDocuments", () => {
+  it("counts per month, totals, and averages over the months in range", () => {
+    const received = [
+      at("2026-05-10T12:00:00Z"),
+      at("2026-05-20T12:00:00Z"),
+      at("2026-06-05T12:00:00Z"),
+      at("2026-06-15T12:00:00Z"),
+      at("2026-06-25T12:00:00Z"),
+      at("2026-07-10T12:00:00Z"),
+    ];
+    const s = aggregateDocuments(received, RANGE);
+
+    expect(s.totalReceived).toBe(6);
+    expect(s.granularity).toBe("month");
+    expect(s.buckets.map((b) => b.count)).toEqual([2, 3, 1]); // May, Jun, Jul
+    expect(s.monthsCovered).toBe(3);
+    expect(s.perMonthAvg).toBe(2); // 6 / 3 months
+  });
+
+  it("includes empty months as zero and averages to zero with no uploads", () => {
+    const s = aggregateDocuments([], RANGE);
+    expect(s.totalReceived).toBe(0);
+    expect(s.buckets).toHaveLength(3);
+    expect(s.buckets.every((b) => b.count === 0)).toBe(true);
+    expect(s.monthsCovered).toBe(3);
+    expect(s.perMonthAvg).toBe(0);
+  });
+
+  it("this_month uses day buckets and a single-month average", () => {
+    const received = [
+      at("2026-07-03T12:00:00Z"),
+      at("2026-07-10T12:00:00Z"),
+      at("2026-07-20T12:00:00Z"),
+    ];
+    const s = aggregateDocuments(received, THIS_MONTH);
+
+    expect(s.granularity).toBe("day");
+    expect(s.totalReceived).toBe(3);
+    expect(s.monthsCovered).toBe(1);
+    expect(s.perMonthAvg).toBe(3); // one month → avg equals the month's total
+    // Continuous daily span with the counts summing to the total.
+    expect(s.buckets.reduce((n, b) => n + b.count, 0)).toBe(3);
+    expect(s.buckets.length).toBeGreaterThan(15);
+  });
+
+  it("all_time spans from the earliest upload to now", () => {
+    const received = [at("2026-04-15T12:00:00Z"), at("2026-07-10T12:00:00Z")];
+    const s = aggregateDocuments(received, ALL_TIME);
+
+    expect(s.totalReceived).toBe(2);
+    expect(s.buckets).toHaveLength(4); // Apr, May, Jun, Jul
+    expect(s.buckets[0].count).toBe(1); // Apr
+    expect(s.buckets[3].count).toBe(1); // Jul
+    expect(s.monthsCovered).toBe(4);
+    expect(s.perMonthAvg).toBeCloseTo(0.5, 5);
   });
 });
