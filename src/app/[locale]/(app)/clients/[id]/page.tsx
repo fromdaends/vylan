@@ -12,6 +12,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
+import { ClientPrivacyToggle } from "@/components/clients/client-privacy-toggle";
 import {
   getLatestPaymentStatusByEngagementIds,
   listFirmPaymentsWithNames,
@@ -30,7 +31,7 @@ import {
 } from "@/app/actions/clients";
 import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
-import { Plus, FileText } from "lucide-react";
+import { Plus, FileText, Lock } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
@@ -200,9 +201,18 @@ export default async function ClientDetailPage({
             <span className="text-muted-foreground font-mono text-xs">
               {client.locale.toUpperCase()}
             </span>
+            {isOwner && client.is_private && (
+              <Badge
+                variant="outline"
+                className="gap-1 border-amber-500/40 text-amber-600 dark:text-amber-400"
+              >
+                <Lock className="size-3" aria-hidden="true" />
+                {t("private_badge")}
+              </Badge>
+            )}
           </div>
           {teamEnabled && (
-            <div className="mt-3">
+            <div className="mt-3 space-y-3">
               <ClientAssignee
                 clientId={client.id}
                 assigneeId={client.assigned_user_id}
@@ -210,6 +220,12 @@ export default async function ClientDetailPage({
                 assigneeDeactivated={!!owner?.deactivated_at}
                 members={assignableMembers}
               />
+              {isOwner && (
+                <ClientPrivacyToggle
+                  clientId={client.id}
+                  initialPrivate={client.is_private ?? false}
+                />
+              )}
             </div>
           )}
         </div>

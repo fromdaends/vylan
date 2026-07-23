@@ -70,6 +70,7 @@ const CLIENT: Client = {
   province: null,
   timezone: null,
   industry: null,
+  is_private: false,
 };
 
 function openEditor(client: Client = CLIENT) {

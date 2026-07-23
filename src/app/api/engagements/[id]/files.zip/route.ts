@@ -53,10 +53,13 @@ export async function GET(
   }
   const locale = user?.locale ?? "fr";
 
-  // Firm-scope the engagement lookup. A user from another firm gets an
-  // indistinguishable 404 — no existence oracle.
+  // Authorize the engagement through the AUTHED (RLS) client: a user from
+  // another firm gets an indistinguishable 404 (no existence oracle), AND a
+  // "Private to me" client's engagement is invisible to STAFF (0810) so the bulk
+  // zip 404s for them while owners still pass. The service-role client below
+  // only fetches bytes AFTER this gate. firm_id eq kept as defense-in-depth.
   const sb = getServiceRoleSupabase();
-  const { data: engagement } = await sb
+  const { data: engagement } = await supabase
     .from("engagements")
     .select("id, title, firm_id, client_id")
     .eq("id", id)

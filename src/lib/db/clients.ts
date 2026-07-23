@@ -33,6 +33,13 @@ export type Client = {
   province: string | null;
   timezone: string | null;
   industry: string | null;
+  // "Private to me" (migration 0810). When true, this client and everything
+  // under it is hidden from STAFF and visible only to OWNERS — enforced in RLS,
+  // not here. Possibly undefined at runtime until 0810 is applied to the remote
+  // DB; ALWAYS read it as `client.is_private ?? false` (fail-open = "not
+  // private" = visible, matching today's behavior — do NOT invert this to hide
+  // clients on a transient read blip). Only owners can set it (RLS WITH CHECK).
+  is_private: boolean;
 };
 
 // PostgREST raises PGRST204 ("column not found in schema cache") when asked to
@@ -268,6 +275,33 @@ export async function reassignClient(
   if (error) {
     if (isMissingColumn(error)) return { ok: false, error: "unavailable" };
     console.error("[clients] reassign failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+  return { ok: true };
+}
+
+// Set (or clear) a client's "Private to me" flag (migration 0810). Scoped to
+// firmId so a bad id can never touch another firm's client. is_private is
+// migration-gated: before 0810 is applied the column doesn't exist and the write
+// surfaces as "unavailable" (PGRST204) rather than a 500 — the same
+// progressive-degrade convention as reassignClient. The DB is the real gate:
+// the clients_all RLS WITH CHECK arm rejects a non-owner trying to set it, and
+// once the flag is on the row is invisible to staff. This is the write the owner
+// toggle calls.
+export async function setClientPrivacy(
+  clientId: string,
+  isPrivate: boolean,
+  firmId: string,
+): Promise<{ ok: boolean; error?: "update_failed" | "unavailable" }> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("clients")
+    .update({ is_private: isPrivate })
+    .eq("id", clientId)
+    .eq("firm_id", firmId);
+  if (error) {
+    if (isMissingColumn(error)) return { ok: false, error: "unavailable" };
+    console.error("[clients] set privacy failed:", error.message);
     return { ok: false, error: "update_failed" };
   }
   return { ok: true };

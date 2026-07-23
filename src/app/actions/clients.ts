@@ -10,6 +10,7 @@ import {
   restoreClient,
   bulkCreateClients,
   reassignClient,
+  setClientPrivacy,
   canReceiveClientAssignment,
 } from "@/lib/db/clients";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
@@ -173,6 +174,43 @@ export async function reassignClientAction(
   await logUserActivity(firm.id, null, "client_reassigned", {
     client_id: clientId,
     to_user_id: assigneeId,
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// Toggle a client's "Private to me" flag (Team Wave 4). OWNER-ONLY: this is
+// owner privacy, so unlike reassignment (any member) we gate on role here for a
+// clean UX + defense-in-depth — the clients_all RLS WITH CHECK arm is the real
+// enforcement. Only meaningful in team mode. Logs `client_privacy_changed` for
+// the /settings/audit trail (engagement_id null; client_id + is_private in
+// metadata). Returns "unavailable" if 0810 isn't applied yet (quiet UI message).
+export async function setClientPrivacyAction(
+  clientId: string,
+  isPrivate: boolean,
+): Promise<{
+  ok: boolean;
+  error?: "no_session" | "owner_only" | "not_team" | "unavailable" | "update_failed";
+}> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  // activeMemberCount is ignored by hasActiveTeam (the explicit switch is the
+  // source of truth) but required by its signature — pass 0.
+  if (
+    !hasActiveTeam({ teamEnabled: firm.team_enabled === true, activeMemberCount: 0 })
+  ) {
+    return { ok: false, error: "not_team" };
+  }
+
+  const res = await setClientPrivacy(clientId, isPrivate, firm.id);
+  if (!res.ok) {
+    return { ok: false, error: res.error === "unavailable" ? "unavailable" : "update_failed" };
+  }
+
+  await logUserActivity(firm.id, null, "client_privacy_changed", {
+    client_id: clientId,
+    is_private: isPrivate,
   });
   revalidatePath("/", "layout");
   return { ok: true };
