@@ -8,6 +8,7 @@ import {
   aggregateMoney,
   type AiCandidate,
   type PaidInvoice,
+  type ReceivedDoc,
 } from "./aggregate";
 
 const NOW = Date.parse("2026-07-21T23:03:00Z");
@@ -209,56 +210,66 @@ const ALL_TIME: ResolvedRange = {
   granularity: "month",
 };
 
-const at = (iso: string) => Date.parse(iso);
+const doc = (
+  uploadedIso: string,
+  reviewedIso: string | null = null,
+  clientId: string | null = null,
+): ReceivedDoc => ({
+  uploadedMs: Date.parse(uploadedIso),
+  reviewedMs: reviewedIso ? Date.parse(reviewedIso) : null,
+  clientId,
+});
 
 describe("aggregateDocuments", () => {
-  it("counts per month, totals, and averages over the months in range", () => {
-    const received = [
-      at("2026-05-10T12:00:00Z"),
-      at("2026-05-20T12:00:00Z"),
-      at("2026-06-05T12:00:00Z"),
-      at("2026-06-15T12:00:00Z"),
-      at("2026-06-25T12:00:00Z"),
-      at("2026-07-10T12:00:00Z"),
+  it("counts per month, totals, averages, and passes pending through", () => {
+    const docs = [
+      doc("2026-05-10T12:00:00Z"),
+      doc("2026-05-20T12:00:00Z"),
+      doc("2026-06-05T12:00:00Z"),
+      doc("2026-06-15T12:00:00Z"),
+      doc("2026-06-25T12:00:00Z"),
+      doc("2026-07-10T12:00:00Z"),
     ];
-    const s = aggregateDocuments(received, RANGE);
+    const s = aggregateDocuments(docs, 4, RANGE);
 
     expect(s.totalReceived).toBe(6);
     expect(s.granularity).toBe("month");
     expect(s.buckets.map((b) => b.count)).toEqual([2, 3, 1]); // May, Jun, Jul
     expect(s.monthsCovered).toBe(3);
     expect(s.perMonthAvg).toBe(2); // 6 / 3 months
+    expect(s.pendingReview).toBe(4); // threaded straight through (live count)
   });
 
   it("includes empty months as zero and averages to zero with no uploads", () => {
-    const s = aggregateDocuments([], RANGE);
+    const s = aggregateDocuments([], 0, RANGE);
     expect(s.totalReceived).toBe(0);
     expect(s.buckets).toHaveLength(3);
     expect(s.buckets.every((b) => b.count === 0)).toBe(true);
     expect(s.monthsCovered).toBe(3);
     expect(s.perMonthAvg).toBe(0);
+    expect(s.timeToReview).toEqual({ avgDays: null, count: 0 });
+    expect(s.topClients).toEqual([]);
   });
 
   it("this_month uses day buckets and a single-month average", () => {
-    const received = [
-      at("2026-07-03T12:00:00Z"),
-      at("2026-07-10T12:00:00Z"),
-      at("2026-07-20T12:00:00Z"),
+    const docs = [
+      doc("2026-07-03T12:00:00Z"),
+      doc("2026-07-10T12:00:00Z"),
+      doc("2026-07-20T12:00:00Z"),
     ];
-    const s = aggregateDocuments(received, THIS_MONTH);
+    const s = aggregateDocuments(docs, 0, THIS_MONTH);
 
     expect(s.granularity).toBe("day");
     expect(s.totalReceived).toBe(3);
     expect(s.monthsCovered).toBe(1);
     expect(s.perMonthAvg).toBe(3); // one month → avg equals the month's total
-    // Continuous daily span with the counts summing to the total.
     expect(s.buckets.reduce((n, b) => n + b.count, 0)).toBe(3);
     expect(s.buckets.length).toBeGreaterThan(15);
   });
 
   it("all_time spans from the earliest upload to now", () => {
-    const received = [at("2026-04-15T12:00:00Z"), at("2026-07-10T12:00:00Z")];
-    const s = aggregateDocuments(received, ALL_TIME);
+    const docs = [doc("2026-04-15T12:00:00Z"), doc("2026-07-10T12:00:00Z")];
+    const s = aggregateDocuments(docs, 0, ALL_TIME);
 
     expect(s.totalReceived).toBe(2);
     expect(s.buckets).toHaveLength(4); // Apr, May, Jun, Jul
@@ -266,5 +277,36 @@ describe("aggregateDocuments", () => {
     expect(s.buckets[3].count).toBe(1); // Jul
     expect(s.monthsCovered).toBe(4);
     expect(s.perMonthAvg).toBeCloseTo(0.5, 5);
+  });
+
+  it("averages upload→decision turnaround over reviewed docs only", () => {
+    const docs = [
+      doc("2026-05-10T12:00:00Z", "2026-05-15T12:00:00Z"), // 5 days
+      doc("2026-06-10T12:00:00Z", "2026-06-17T12:00:00Z"), // 7 days
+      doc("2026-07-01T12:00:00Z", null), // still pending — excluded
+    ];
+    const s = aggregateDocuments(docs, 1, RANGE);
+    expect(s.timeToReview.count).toBe(2);
+    expect(s.timeToReview.avgDays).toBe(6); // (5 + 7) / 2
+  });
+
+  it("ranks the top clients by document count, most first, names resolved", () => {
+    const docs = [
+      doc("2026-05-10T12:00:00Z", null, "c1"),
+      doc("2026-06-10T12:00:00Z", null, "c1"),
+      doc("2026-06-11T12:00:00Z", null, "c1"),
+      doc("2026-06-12T12:00:00Z", null, "c2"),
+      doc("2026-06-13T12:00:00Z", null, null), // no client → not ranked, still counted
+    ];
+    const names = new Map([
+      ["c1", "Acme"],
+      ["c2", "Globex"],
+    ]);
+    const s = aggregateDocuments(docs, 0, RANGE, names);
+    expect(s.topClients).toEqual([
+      { name: "Acme", count: 3 },
+      { name: "Globex", count: 1 },
+    ]);
+    expect(s.totalReceived).toBe(5); // the null-client upload still counts
   });
 });

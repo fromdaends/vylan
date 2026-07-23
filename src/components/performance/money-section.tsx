@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Clock, Lock, Timer, Wallet } from "lucide-react";
+import { Clock, FileText, Lock, Timer, Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatNumber, type AppLocale } from "@/lib/format";
 import type {
@@ -16,9 +16,10 @@ import { centsToCurrency, formatDays } from "./format";
 
 const BIG = "num-display block text-3xl font-semibold tracking-tight sm:text-4xl";
 
-// Which dataset the over-time chart shows. The money stat tiles + top-clients
-// list stay put; only the chart (and its title) switch — founder wanted one
-// chart you flip between money collected and documents received.
+// The overview section is a COMPLETE switch between Money and Documents: the
+// heading, the three stat tiles, the over-time chart, and the top-clients
+// ranking all flip together (founder: "a complete switch in-between money and
+// documents"). The toggle lives in the section header and drives everything.
 type ChartMode = "money" | "documents";
 
 export function MoneySection({
@@ -33,112 +34,143 @@ export function MoneySection({
   copy: PerfCopy["money"];
 }) {
   const [mode, setMode] = useState<ChartMode>("money");
+  const isDocs = mode === "documents";
   const hasCollected = data.collectedCount > 0;
   const hasDocs = documents.totalReceived > 0;
   const money = (n: number) => centsToCurrency(n, locale, 0);
+  const num = (n: number) => formatNumber(Math.round(n), locale);
 
   return (
     <section>
-      <header className="mb-5">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">
-          {copy.heading}
-        </h2>
-        <p className="mt-0.5 text-xs text-muted-foreground">{copy.caption}</p>
+      <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold tracking-tight text-foreground">
+            {isDocs ? copy.docsHeading : copy.heading}
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            {isDocs ? copy.docsCaption : copy.caption}
+          </p>
+        </div>
+        <SegmentedControl
+          size="sm"
+          ariaLabel={copy.chartToggleAria}
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: "money", label: copy.chartMoneyLabel },
+            { value: "documents", label: copy.chartDocsLabel },
+          ]}
+        />
       </header>
 
+      {/* Everything below the toggle remounts on mode change (keyed by mode) so
+          the count-up tiles animate cleanly from 0 to the new metric, instead of
+          tweening the shared CountUp instances from the money value to the
+          document value (which briefly renders one metric's number under the
+          other's label). */}
+      <div key={mode}>
+      {/* Stat tiles — money set or document set. */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-0">
-        <Tile icon={<Wallet className="size-4 text-icon-emerald" />} label={copy.collected}>
-          <CountUp value={data.collectedCents} format={money} className={cn(BIG, "text-foreground")} />
-          <p className="mt-1 text-xs text-muted-foreground">
-            {hasCollected
-              ? `${copy.collectedCaption} · ${copy.payments(data.collectedCount)}`
-              : copy.noneCollected}
-          </p>
-        </Tile>
+        {isDocs ? (
+          <>
+            <Tile icon={<FileText className="size-4 text-icon-emerald" />} label={copy.docsReceivedLabel}>
+              <CountUp value={documents.totalReceived} format={num} className={cn(BIG, "text-foreground")} />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {documents.granularity === "day"
+                  ? copy.collectedCaption
+                  : `${copy.collectedCaption} · ${copy.docsPerMonth(num(documents.perMonthAvg))}`}
+              </p>
+            </Tile>
 
-        <Tile icon={<Clock className="size-4 text-icon-amber" />} label={copy.outstanding}>
-          <CountUp value={data.outstandingCents} format={money} className={cn(BIG, "text-foreground")} />
-          <p className="mt-1 text-xs text-muted-foreground">
-            {data.outstandingCount > 0 ? copy.outstandingCaption : copy.noneOutstanding}
-          </p>
-        </Tile>
+            <Tile icon={<Clock className="size-4 text-icon-amber" />} label={copy.docsPendingLabel}>
+              <CountUp value={documents.pendingReview} format={num} className={cn(BIG, "text-foreground")} />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {documents.pendingReview > 0 ? copy.docsPendingCaption : copy.docsNonePending}
+              </p>
+            </Tile>
 
-        <Tile icon={<Timer className="size-4 text-icon-blue" />} label={copy.timeToPaid}>
-          {data.timeToPaid.avgDays != null ? (
-            <>
-              <CountUp
-                value={data.timeToPaid.avgDays}
-                format={(n) => copy.days(formatDays(n, locale))}
-                className={cn(BIG, "text-foreground")}
-              />
-              {data.timeToPaid.split ? (
-                <div className="mt-2 space-y-1" title={copy.lockHint}>
-                  <SplitRow
-                    label={copy.lockOn}
-                    value={copy.days(formatDays(data.timeToPaid.split.lockedAvgDays, locale))}
-                    locked
+            <Tile icon={<Timer className="size-4 text-icon-blue" />} label={copy.docsTimeToReviewLabel}>
+              {documents.timeToReview.avgDays != null ? (
+                <>
+                  <CountUp
+                    value={documents.timeToReview.avgDays}
+                    format={(n) => copy.days(formatDays(n, locale))}
+                    className={cn(BIG, "text-foreground")}
                   />
-                  <SplitRow
-                    label={copy.lockOff}
-                    value={copy.days(formatDays(data.timeToPaid.split.unlockedAvgDays, locale))}
-                  />
-                </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {copy.docsTimeToReviewCaption}
+                  </p>
+                </>
               ) : (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {copy.timeToPaidCaption}
-                </p>
+                <>
+                  <span className={cn(BIG, "text-muted-foreground/40")}>—</span>
+                  <p className="mt-1 text-xs text-muted-foreground">{copy.docsNoTimeToReview}</p>
+                </>
               )}
-            </>
-          ) : (
-            <>
-              <span className={cn(BIG, "text-muted-foreground/40")}>—</span>
-              <p className="mt-1 text-xs text-muted-foreground">{copy.noTimeToPaid}</p>
-            </>
-          )}
-        </Tile>
+            </Tile>
+          </>
+        ) : (
+          <>
+            <Tile icon={<Wallet className="size-4 text-icon-emerald" />} label={copy.collected}>
+              <CountUp value={data.collectedCents} format={money} className={cn(BIG, "text-foreground")} />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {hasCollected
+                  ? `${copy.collectedCaption} · ${copy.payments(data.collectedCount)}`
+                  : copy.noneCollected}
+              </p>
+            </Tile>
+
+            <Tile icon={<Clock className="size-4 text-icon-amber" />} label={copy.outstanding}>
+              <CountUp value={data.outstandingCents} format={money} className={cn(BIG, "text-foreground")} />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {data.outstandingCount > 0 ? copy.outstandingCaption : copy.noneOutstanding}
+              </p>
+            </Tile>
+
+            <Tile icon={<Timer className="size-4 text-icon-blue" />} label={copy.timeToPaid}>
+              {data.timeToPaid.avgDays != null ? (
+                <>
+                  <CountUp
+                    value={data.timeToPaid.avgDays}
+                    format={(n) => copy.days(formatDays(n, locale))}
+                    className={cn(BIG, "text-foreground")}
+                  />
+                  {data.timeToPaid.split ? (
+                    <div className="mt-2 space-y-1" title={copy.lockHint}>
+                      <SplitRow
+                        label={copy.lockOn}
+                        value={copy.days(formatDays(data.timeToPaid.split.lockedAvgDays, locale))}
+                        locked
+                      />
+                      <SplitRow
+                        label={copy.lockOff}
+                        value={copy.days(formatDays(data.timeToPaid.split.unlockedAvgDays, locale))}
+                      />
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {copy.timeToPaidCaption}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <span className={cn(BIG, "text-muted-foreground/40")}>—</span>
+                  <p className="mt-1 text-xs text-muted-foreground">{copy.noTimeToPaid}</p>
+                </>
+              )}
+            </Tile>
+          </>
+        )}
       </div>
 
-      {/* Over-time chart — flips between Money collected and Documents received. */}
+      {/* Over-time chart. */}
       <div className="mt-6 border-t border-border/60 pt-5">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="text-xs font-medium text-muted-foreground">
-            {mode === "money" ? copy.chartAria : copy.chartDocsTitle}
-          </div>
-          <SegmentedControl
-            size="sm"
-            ariaLabel={copy.chartToggleAria}
-            value={mode}
-            onChange={setMode}
-            options={[
-              { value: "money", label: copy.chartMoneyLabel },
-              { value: "documents", label: copy.chartDocsLabel },
-            ]}
-          />
+        <div className="mb-3 text-xs font-medium text-muted-foreground">
+          {isDocs ? copy.chartDocsTitle : copy.chartAria}
         </div>
-
-        {mode === "money" ? (
-          hasCollected ? (
-            <BarChart
-              points={data.buckets.map((b) => ({ start: b.start, value: b.cents }))}
-              granularity={data.granularity}
-              locale={locale}
-              formatValue={(v) => centsToCurrency(v, locale, 2)}
-              barClass="bg-success"
-              barActiveClass="bg-success"
-              dotClass="bg-success"
-            />
-          ) : (
-            <ChartEmpty>{copy.noneCollected}</ChartEmpty>
-          )
-        ) : hasDocs ? (
-          <>
-            <p className="mb-3 text-xs text-muted-foreground tabular-nums">
-              {documents.granularity === "day"
-                ? copy.docsThisMonth(documents.totalReceived)
-                : `${copy.docsReceived(documents.totalReceived)} · ${copy.docsPerMonth(
-                    formatNumber(Math.round(documents.perMonthAvg), locale),
-                  )}`}
-            </p>
+        {isDocs ? (
+          hasDocs ? (
             <BarChart
               points={documents.buckets.map((b) => ({ start: b.start, value: b.count }))}
               granularity={documents.granularity}
@@ -148,47 +180,96 @@ export function MoneySection({
               barActiveClass="bg-icon-blue"
               dotClass="bg-icon-blue"
             />
-          </>
+          ) : (
+            <ChartEmpty>{copy.docsNone}</ChartEmpty>
+          )
+        ) : hasCollected ? (
+          <BarChart
+            points={data.buckets.map((b) => ({ start: b.start, value: b.cents }))}
+            granularity={data.granularity}
+            locale={locale}
+            formatValue={(v) => centsToCurrency(v, locale, 2)}
+            barClass="bg-success"
+            barActiveClass="bg-success"
+            dotClass="bg-success"
+          />
         ) : (
-          <ChartEmpty>{copy.docsNone}</ChartEmpty>
+          <ChartEmpty>{copy.noneCollected}</ChartEmpty>
         )}
       </div>
 
-      {data.topClients.length > 0 && (
-        <div className="mt-6 border-t border-border/60 pt-5">
-          <div className="mb-3 text-xs font-medium text-muted-foreground">
-            {copy.topClients}
-          </div>
-          <ol className="space-y-2.5">
-            {data.topClients.map((c, i) => {
-              const pct = Math.max(
-                (c.cents / data.topClients[0].cents) * 100,
-                2,
-              );
-              return (
-                <li key={`${c.name}-${i}`} className="flex items-center gap-3">
-                  <span className="w-4 shrink-0 text-xs tabular-nums text-muted-foreground">
-                    {i + 1}
-                  </span>
-                  <span className="w-28 shrink-0 truncate text-sm text-foreground sm:w-52">
-                    {c.name}
-                  </span>
-                  <div className="relative h-2 min-w-8 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="absolute inset-y-0 left-0 rounded-full bg-success/70 transition-[width] duration-500"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="w-24 shrink-0 text-right text-sm font-semibold tabular-nums text-foreground">
-                    {money(c.cents)}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        </div>
-      )}
+      {/* Top clients — by money paid or by documents sent. */}
+      {isDocs
+        ? documents.topClients.length > 0 && (
+            <TopClientsList
+              heading={copy.docsTopClients}
+              rows={documents.topClients.map((c) => ({
+                name: c.name,
+                weight: c.count,
+                value: copy.docsCount(formatNumber(c.count, locale), c.count),
+              }))}
+              barClass="bg-icon-blue/70"
+            />
+          )
+        : data.topClients.length > 0 && (
+            <TopClientsList
+              heading={copy.topClients}
+              rows={data.topClients.map((c) => ({
+                name: c.name,
+                weight: c.cents,
+                value: money(c.cents),
+              }))}
+              barClass="bg-success/70"
+            />
+          )}
+      </div>
     </section>
+  );
+}
+
+// Shared ranked list (money by cents, documents by count). `weight` drives the
+// proportion bar; `value` is the pre-formatted right-hand figure.
+function TopClientsList({
+  heading,
+  rows,
+  barClass,
+}: {
+  heading: string;
+  rows: { name: string; weight: number; value: string }[];
+  barClass: string;
+}) {
+  const top = rows[0]?.weight || 1;
+  return (
+    <div className="mt-6 border-t border-border/60 pt-5">
+      <div className="mb-3 text-xs font-medium text-muted-foreground">{heading}</div>
+      <ol className="space-y-2.5">
+        {rows.map((r, i) => {
+          const pct = Math.max((r.weight / top) * 100, 2);
+          return (
+            <li key={`${r.name}-${i}`} className="flex items-center gap-3">
+              <span className="w-4 shrink-0 text-xs tabular-nums text-muted-foreground">
+                {i + 1}
+              </span>
+              <span className="w-28 shrink-0 truncate text-sm text-foreground sm:w-52">
+                {r.name}
+              </span>
+              <div className="relative h-2 min-w-8 flex-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={cn(
+                    "absolute inset-y-0 left-0 rounded-full transition-[width] duration-500",
+                    barClass,
+                  )}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <span className="w-24 shrink-0 text-right text-sm font-semibold tabular-nums text-foreground">
+                {r.value}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
 

@@ -38,6 +38,11 @@ export type CountBucket = {
   count: number;
 };
 
+// One row of the "clients who send the most documents" ranking (range-scoped).
+export type TopDocClient = { name: string; count: number };
+
+// The Documents view is a full parallel of the Money view — the whole section
+// (stat tiles + chart + top-clients) switches when the toggle flips.
 export type DocumentsSection = {
   // Total documents received (client uploads, duplicates excluded) in range.
   totalReceived: number;
@@ -51,6 +56,16 @@ export type DocumentsSection = {
   perMonthAvg: number;
   // Number of calendar months the average is spread over (1 for this_month).
   monthsCovered: number;
+  // Live snapshot of documents still awaiting the accountant's decision
+  // (review_status = 'pending'). NOT range-scoped — parallels Outstanding.
+  pendingReview: number;
+  // Whole-day average from upload to the accountant's decision, for documents
+  // RECEIVED in range that have since been reviewed. null when none reviewed —
+  // parallels Time to paid.
+  timeToReview: { avgDays: number | null; count: number };
+  // Clients ranked by documents received in range (most first), up to
+  // TOP_CLIENTS_LIMIT — parallels MoneySection.topClients.
+  topClients: TopDocClient[];
 };
 
 export type TimeToPaidSplit = {
