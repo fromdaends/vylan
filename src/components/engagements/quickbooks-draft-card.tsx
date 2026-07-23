@@ -5,6 +5,7 @@ import {
   ArrowUpRight,
   HelpCircle,
   TriangleAlert,
+  ChevronRight,
 } from "lucide-react";
 import type {
   TransactionSuggestion,
@@ -254,25 +255,36 @@ export async function QuickbooksDraftCard({
   const brandKicker = isXero ? t("draft_kicker_xero") : t("draft_kicker");
 
   return (
-    <div
+    // A FLAT, attached bookkeeping section — not a nested card. A hairline
+    // divider joins it to the document row above; it collapses (native
+    // <details>), defaulting closed once posted so a settled entry stays quiet.
+    <details
       className={cn(
-        "mt-1.5 overflow-hidden rounded-xl border border-border/60 bg-card/70 shadow-sm",
+        "group mt-2 border-t border-border/40",
         status === "dismissed" ? "opacity-70" : "",
       )}
+      open={status !== "posted"}
     >
-      {/* Header: QuickBooks mark + the entry's title + its state. */}
-      <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
-          <BookOpen className="h-4 w-4" aria-hidden="true" />
+      {/* One-line summary (click to expand): mark · brand · title · amount ·
+          state — enough to read at a glance while collapsed. The webkit marker
+          is hidden so Safari doesn't draw its own triangle next to the chevron. */}
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 hover:bg-secondary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <ChevronRight
+          className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-90"
+          aria-hidden="true"
+        />
+        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent/10 text-accent">
+          <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground leading-none">
-            {brandKicker}
-          </div>
-          <div className="mt-1 truncate text-sm font-semibold leading-none">
-            {cardTitle}
-          </div>
-        </div>
+        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          {brandKicker}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {cardTitle}
+        </span>
+        <span className="shrink-0 text-sm font-semibold tabular-nums">
+          {amountLabel}
+        </span>
         <span
           className={cn(
             "shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
@@ -281,32 +293,27 @@ export async function QuickbooksDraftCard({
         >
           {statusPill.label}
         </span>
-      </div>
+      </summary>
 
-      {/* Hero: the amount, with the direction + date for context. */}
-      <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1 px-3 pt-2.5">
-        <div className="text-2xl font-bold tabular-nums tracking-tight text-foreground">
-          {amountLabel}
-        </div>
-        <div className="flex items-center gap-2 pb-0.5 text-xs">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium",
-              directionPill,
-            )}
-          >
-            <DirectionIcon className="h-3 w-3" aria-hidden="true" />
-            {directionLabel}
-          </span>
-          <QuickbooksDateField
-            fileId={fileId}
-            initial={effDate}
-            locale={locale}
-            label={t("field_date")}
-            prompt={t("date_needed")}
-            disabled={!isDraft}
-          />
-        </div>
+      {/* Meta line: direction + the (editable) transaction date. */}
+      <div className="flex flex-wrap items-center gap-2 px-3 pt-1 text-xs">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium",
+            directionPill,
+          )}
+        >
+          <DirectionIcon className="h-3 w-3" aria-hidden="true" />
+          {directionLabel}
+        </span>
+        <QuickbooksDateField
+          fileId={fileId}
+          initial={effDate}
+          locale={locale}
+          label={t("field_date")}
+          prompt={t("date_needed")}
+          disabled={!isDraft}
+        />
       </div>
 
       {/* The three mapping targets — editable. Anything still unchosen is amber. */}
@@ -528,6 +535,6 @@ export async function QuickbooksDraftCard({
             />
           </div>
         ))}
-    </div>
+    </details>
   );
 }
