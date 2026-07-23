@@ -36,6 +36,16 @@ export type PerfCopy = {
     viewLabel: string;
     chartAria: string;
     topClients: string;
+    // Money ↔ Documents chart toggle (the chart switches which it shows).
+    chartToggleAria: string;
+    chartMoneyLabel: string;
+    chartDocsLabel: string;
+    chartDocsTitle: string;
+    docsReceived: (n: number) => string;
+    docsCount: (n: string, raw: number) => string;
+    docsPerMonth: (n: string) => string;
+    docsThisMonth: (n: number) => string;
+    docsNone: string;
   };
   ai: {
     heading: string;
@@ -56,6 +66,14 @@ export type PerfCopy = {
     methodology: string;
     earlyData: (n: number) => string;
     empty: string;
+    // "AI usage this month" meter — mirrors Settings > Documents (getFirmAiUsage).
+    usageHeading: string;
+    usageLabel: string;
+    usageCount: (used: string, cap: string) => string;
+    usageCountTrial: (used: string, cap: string) => string;
+    usageRemaining: (n: string) => string;
+    usageResets: (date: string) => string;
+    usagePaused: string;
   };
   automation: {
     heading: string;
@@ -99,6 +117,16 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       viewLabel: "Chart view",
       chartAria: "Money collected over time",
       topClients: "Top clients",
+      chartToggleAria: "Chart data",
+      chartMoneyLabel: "Money",
+      chartDocsLabel: "Documents",
+      chartDocsTitle: "Documents received over time",
+      docsReceived: (n) => `${n} ${n === 1 ? "document" : "documents"} received`,
+      docsCount: (n, raw) => `${n} ${raw === 1 ? "document" : "documents"}`,
+      docsPerMonth: (n) => `avg. ${n}/month`,
+      docsThisMonth: (n) =>
+        `${n} ${n === 1 ? "document" : "documents"} received this month`,
+      docsNone: "No documents received in this period yet.",
     },
     ai: {
       heading: "AI performance",
@@ -122,6 +150,13 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       earlyData: (n) =>
         `Early data. Based on only ${n} ${n === 1 ? "document" : "documents"} so far, so treat this as a first look rather than a firm track record.`,
       empty: "No documents assessed in this period yet.",
+      usageHeading: "AI usage this month",
+      usageLabel: "AI document checks",
+      usageCount: (used, cap) => `${used} of ${cap} used this month`,
+      usageCountTrial: (used, cap) => `${used} of ${cap} free-trial checks used`,
+      usageRemaining: (n) => `${n} left`,
+      usageResets: (date) => `resets ${date}`,
+      usagePaused: "Paused",
     },
     automation: {
       heading: "What Vylan did automatically",
@@ -163,6 +198,16 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       viewLabel: "Type de graphique",
       chartAria: "Sommes encaissées dans le temps",
       topClients: "Meilleurs clients",
+      chartToggleAria: "Données du graphique",
+      chartMoneyLabel: "Argent",
+      chartDocsLabel: "Documents",
+      chartDocsTitle: "Documents reçus dans le temps",
+      docsReceived: (n) => `${n} document${n === 1 ? "" : "s"} reçu${n === 1 ? "" : "s"}`,
+      docsCount: (n, raw) => `${n} document${raw === 1 ? "" : "s"}`,
+      docsPerMonth: (n) => `moy. ${n}/mois`,
+      docsThisMonth: (n) =>
+        `${n} document${n === 1 ? "" : "s"} reçu${n === 1 ? "" : "s"} ce mois-ci`,
+      docsNone: "Aucun document reçu sur cette période pour l'instant.",
     },
     ai: {
       heading: "Performance de l'IA",
@@ -188,6 +233,14 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       earlyData: (n) =>
         `Données préliminaires. Basé sur seulement ${n} document${n === 1 ? "" : "s"} pour l'instant; voyez ceci comme un premier aperçu plutôt qu'un bilan établi.`,
       empty: "Aucun document évalué sur cette période pour l'instant.",
+      usageHeading: "Utilisation de l'IA ce mois-ci",
+      usageLabel: "Vérifications IA de documents",
+      usageCount: (used, cap) => `${used} sur ${cap} utilisées ce mois-ci`,
+      usageCountTrial: (used, cap) =>
+        `${used} sur ${cap} vérifications d'essai utilisées`,
+      usageRemaining: (n) => `${n} restantes`,
+      usageResets: (date) => `réinitialise le ${date}`,
+      usagePaused: "En pause",
     },
     automation: {
       heading: "Ce que Vylan a fait automatiquement",

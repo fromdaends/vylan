@@ -4,10 +4,12 @@ import { useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
+import type { AiUsage } from "@/lib/ai/usage";
 import {
   PERFORMANCE_RANGES,
   type AiSection as AiData,
   type AutomationSection as AutoData,
+  type DocumentsSection as DocumentsData,
   type MoneySection as MoneyData,
   type PerformanceRange,
 } from "@/lib/performance/types";
@@ -28,12 +30,16 @@ export function PerformanceView({
   money,
   ai,
   automation,
+  documents,
+  aiUsage,
 }: {
   range: PerformanceRange;
   locale: AppLocale;
   money: MoneyData;
   ai: AiData;
   automation: AutoData;
+  documents: DocumentsData;
+  aiUsage: AiUsage | null;
 }) {
   const copy = perfCopy(locale);
   const router = useRouter();
@@ -81,8 +87,18 @@ export function PerformanceView({
           pending && "opacity-60",
         )}
       >
-        <MoneySection data={money} locale={locale} copy={copy.money} />
-        <AiSection data={ai} locale={locale} copy={copy.ai} />
+        <MoneySection
+          data={money}
+          documents={documents}
+          locale={locale}
+          copy={copy.money}
+        />
+        <AiSection
+          data={ai}
+          usage={aiUsage}
+          locale={locale}
+          copy={copy.ai}
+        />
         <AutomationRow
           data={automation}
           locale={locale}

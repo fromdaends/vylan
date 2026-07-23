@@ -1,27 +1,40 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Clock, Lock, Timer, Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { AppLocale } from "@/lib/format";
-import type { MoneySection as MoneyData } from "@/lib/performance/types";
+import { formatNumber, type AppLocale } from "@/lib/format";
+import type {
+  DocumentsSection as DocumentsData,
+  MoneySection as MoneyData,
+} from "@/lib/performance/types";
 import type { PerfCopy } from "./copy";
 import { CountUp } from "./count-up";
-import { MoneyChart } from "./money-chart";
+import { BarChart } from "./bar-chart";
+import { SegmentedControl } from "./segmented-control";
 import { centsToCurrency, formatDays } from "./format";
 
 const BIG = "num-display block text-3xl font-semibold tracking-tight sm:text-4xl";
 
+// Which dataset the over-time chart shows. The money stat tiles + top-clients
+// list stay put; only the chart (and its title) switch — founder wanted one
+// chart you flip between money collected and documents received.
+type ChartMode = "money" | "documents";
+
 export function MoneySection({
   data,
+  documents,
   locale,
   copy,
 }: {
   data: MoneyData;
+  documents: DocumentsData;
   locale: AppLocale;
   copy: PerfCopy["money"];
 }) {
+  const [mode, setMode] = useState<ChartMode>("money");
   const hasCollected = data.collectedCount > 0;
+  const hasDocs = documents.totalReceived > 0;
   const money = (n: number) => centsToCurrency(n, locale, 0);
 
   return (
@@ -85,20 +98,59 @@ export function MoneySection({
         </Tile>
       </div>
 
+      {/* Over-time chart — flips between Money collected and Documents received. */}
       <div className="mt-6 border-t border-border/60 pt-5">
-        <div className="mb-3 text-xs font-medium text-muted-foreground">
-          {copy.chartAria}
-        </div>
-        {hasCollected ? (
-          <MoneyChart
-            buckets={data.buckets}
-            granularity={data.granularity}
-            locale={locale}
-          />
-        ) : (
-          <div className="flex h-52 items-center justify-center rounded-lg border border-dashed border-border/60 px-4 text-center text-sm text-muted-foreground sm:h-60">
-            {copy.noneCollected}
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="text-xs font-medium text-muted-foreground">
+            {mode === "money" ? copy.chartAria : copy.chartDocsTitle}
           </div>
+          <SegmentedControl
+            size="sm"
+            ariaLabel={copy.chartToggleAria}
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: "money", label: copy.chartMoneyLabel },
+              { value: "documents", label: copy.chartDocsLabel },
+            ]}
+          />
+        </div>
+
+        {mode === "money" ? (
+          hasCollected ? (
+            <BarChart
+              points={data.buckets.map((b) => ({ start: b.start, value: b.cents }))}
+              granularity={data.granularity}
+              locale={locale}
+              formatValue={(v) => centsToCurrency(v, locale, 2)}
+              barClass="bg-success"
+              barActiveClass="bg-success"
+              dotClass="bg-success"
+            />
+          ) : (
+            <ChartEmpty>{copy.noneCollected}</ChartEmpty>
+          )
+        ) : hasDocs ? (
+          <>
+            <p className="mb-3 text-xs text-muted-foreground tabular-nums">
+              {documents.granularity === "day"
+                ? copy.docsThisMonth(documents.totalReceived)
+                : `${copy.docsReceived(documents.totalReceived)} · ${copy.docsPerMonth(
+                    formatNumber(Math.round(documents.perMonthAvg), locale),
+                  )}`}
+            </p>
+            <BarChart
+              points={documents.buckets.map((b) => ({ start: b.start, value: b.count }))}
+              granularity={documents.granularity}
+              locale={locale}
+              formatValue={(v) => copy.docsCount(formatNumber(v, locale), v)}
+              barClass="bg-icon-blue"
+              barActiveClass="bg-icon-blue"
+              dotClass="bg-icon-blue"
+            />
+          </>
+        ) : (
+          <ChartEmpty>{copy.docsNone}</ChartEmpty>
         )}
       </div>
 
@@ -137,6 +189,14 @@ export function MoneySection({
         </div>
       )}
     </section>
+  );
+}
+
+function ChartEmpty({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-52 items-center justify-center rounded-lg border border-dashed border-border/60 px-4 text-center text-sm text-muted-foreground sm:h-60">
+      {children}
+    </div>
   );
 }
 

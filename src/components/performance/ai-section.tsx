@@ -1,7 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/cn";
-import { formatNumber, type AppLocale } from "@/lib/format";
+import { formatDate, formatNumber, type AppLocale } from "@/lib/format";
+import type { AiUsage } from "@/lib/ai/usage";
 import type { AiSection as AiData, FourCase } from "@/lib/performance/types";
 import type { PerfCopy } from "./copy";
 import { AiRing } from "./ai-ring";
@@ -18,10 +19,14 @@ const CASE_ORDER: { key: FourCase; tone: Tone }[] = [
 
 export function AiSection({
   data,
+  usage,
   locale,
   copy,
 }: {
   data: AiData;
+  // Monthly AI-check usage meter (Settings > Documents parity). Null when the
+  // firm couldn't be resolved — the rest of the section still renders.
+  usage: AiUsage | null;
   locale: AppLocale;
   copy: PerfCopy["ai"];
 }) {
@@ -94,7 +99,69 @@ export function AiSection({
           </div>
         </div>
       )}
+
+      {usage && <UsageMeter usage={usage} locale={locale} copy={copy} />}
     </section>
+  );
+}
+
+// The Settings > Documents AI-check meter, mirrored here: {used} of {cap} used
+// this month + how many are left. This is a MONTHLY plan counter (not
+// range-scoped like the agreement stats above), so it carries its own heading.
+function UsageMeter({
+  usage,
+  locale,
+  copy,
+}: {
+  usage: AiUsage;
+  locale: AppLocale;
+  copy: PerfCopy["ai"];
+}) {
+  const used = formatNumber(usage.used, locale);
+  const cap = formatNumber(usage.cap, locale);
+  const remaining = formatNumber(Math.max(0, usage.cap - usage.used), locale);
+  const pct = Math.min(
+    100,
+    Math.round((usage.used / Math.max(1, usage.cap)) * 100),
+  );
+  const showResets = !usage.isTrial && usage.resetsAt !== "";
+
+  return (
+    <div className="mt-8 max-w-md border-t border-border/60 pt-6">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-xs font-medium text-muted-foreground">
+          {copy.usageHeading}
+        </span>
+        {usage.paused && (
+          <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-warning">
+            {copy.usagePaused}
+          </span>
+        )}
+      </div>
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-sm text-foreground">{copy.usageLabel}</span>
+        <span className="text-sm tabular-nums text-muted-foreground">
+          {usage.isTrial
+            ? copy.usageCountTrial(used, cap)
+            : copy.usageCount(used, cap)}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width] duration-500",
+            usage.paused ? "bg-warning" : "bg-icon-blue",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-3 text-[11px] tabular-nums text-muted-foreground">
+        <span>{copy.usageRemaining(remaining)}</span>
+        {showResets && (
+          <span>{copy.usageResets(formatDate(usage.resetsAt, locale, "medium"))}</span>
+        )}
+      </div>
+    </div>
   );
 }
 
