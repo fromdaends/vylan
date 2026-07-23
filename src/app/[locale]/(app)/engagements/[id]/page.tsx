@@ -27,6 +27,11 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate, formatCurrency } from "@/lib/format";
 import { EngagementTabs } from "@/components/engagements/engagement-tabs";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
+import { FileComments } from "@/components/engagements/file-comments";
+import {
+  listCommentsForFiles,
+  type FileComment,
+} from "@/lib/db/file-comments";
 import { ChecklistItemShell } from "@/components/engagements/checklist-item-shell";
 import {
   SetSummaryLine,
@@ -361,6 +366,12 @@ export default async function EngagementDetailPage({
     teamEnabled: firm?.team_enabled === true,
     activeMemberCount: activeMembers.length,
   });
+  // Team Wave 3: file comments + @mentions, per uploaded file. One batched load,
+  // only in team mode (a firm-team feature). Empty pre-0800 / non-team, so the
+  // thread simply doesn't render.
+  const commentsByFile = teamEnabled
+    ? await listCommentsForFiles(uploads.map((u) => u.id))
+    : new Map<string, FileComment[]>();
   // Resolve a reviewer id -> display name for the QuickBooks draft cards
   // (who approved / dismissed). Includes deactivated members so history shows.
   const reviewerNameById = new Map<string, string>(
@@ -1042,6 +1053,11 @@ export default async function EngagementDetailPage({
                     qboOptions={qboOptions}
                     draftProvider={bookkeepingProvider ?? "quickbooks"}
                     reviewerNameById={reviewerNameById}
+                    engagementId={id}
+                    commentsEnabled={teamEnabled}
+                    commentsByFile={commentsByFile}
+                    mentionMembers={activeMembers}
+                    currentUserId={user?.id ?? null}
                     locale={locale}
                     canEdit={isLive}
                     clientName={client?.display_name ?? null}
@@ -1118,6 +1134,11 @@ async function ItemRow({
   qboOptions,
   draftProvider,
   reviewerNameById,
+  engagementId,
+  commentsEnabled,
+  commentsByFile,
+  mentionMembers,
+  currentUserId,
   locale,
   canEdit,
   clientName,
@@ -1126,6 +1147,13 @@ async function ItemRow({
 }: {
   item: RequestItem;
   files: (UploadedFile & { url: string })[];
+  // Team Wave 3 (file comments): the engagement id + per-file threads +
+  // @mentionable active members + the viewer, gated on team mode.
+  engagementId: string;
+  commentsEnabled: boolean;
+  commentsByFile: Map<string, FileComment[]>;
+  mentionMembers: { id: string; name: string }[];
+  currentUserId: string | null;
   // Bookkeeping drafts keyed by uploaded file id (empty when the client isn't
   // connected to QuickBooks/Xero or the migration isn't applied).
   suggestionsByFile: Map<string, StoredDraft>;
@@ -1301,39 +1329,53 @@ async function ItemRow({
               // visible once posted, so a live transaction never disappears.
               footer={(() => {
                 const d = aiEnabled ? suggestionsByFile.get(f.id) : undefined;
-                if (
-                  !d ||
-                  (f.review_status !== "approved" && d.status !== "posted")
-                ) {
-                  return undefined;
-                }
+                const showDraft =
+                  d &&
+                  (f.review_status === "approved" || d.status === "posted");
+                // Nothing to show (no draft + comments off) → no footer, exactly
+                // as before.
+                if (!showDraft && !commentsEnabled) return undefined;
                 return (
-                  <QuickbooksDraftCard
-                    suggestion={d.suggestion}
-                    resolved={d.resolved}
-                    options={qboOptions}
-                    locale={locale}
-                    fileId={f.id}
-                    status={d.status}
-                    reviewedByName={
-                      d.reviewedBy
-                        ? (reviewerNameById.get(d.reviewedBy) ?? null)
-                        : null
-                    }
-                    reviewedAt={d.reviewedAt}
-                    documentName={f.display_name ?? f.original_filename}
-                    postedAt={d.postedAt}
-                    postedByName={
-                      d.postedBy
-                        ? (reviewerNameById.get(d.postedBy) ?? null)
-                        : null
-                    }
-                    postError={d.postError}
-                    postedTaxNote={d.postedTaxNote}
-                    receiptAttachedAt={d.receiptAttachedAt}
-                    matchedQboType={d.matchedQboType}
-                    provider={draftProvider}
-                  />
+                  <>
+                    {showDraft && d && (
+                      <QuickbooksDraftCard
+                        suggestion={d.suggestion}
+                        resolved={d.resolved}
+                        options={qboOptions}
+                        locale={locale}
+                        fileId={f.id}
+                        status={d.status}
+                        reviewedByName={
+                          d.reviewedBy
+                            ? (reviewerNameById.get(d.reviewedBy) ?? null)
+                            : null
+                        }
+                        reviewedAt={d.reviewedAt}
+                        documentName={f.display_name ?? f.original_filename}
+                        postedAt={d.postedAt}
+                        postedByName={
+                          d.postedBy
+                            ? (reviewerNameById.get(d.postedBy) ?? null)
+                            : null
+                        }
+                        postError={d.postError}
+                        postedTaxNote={d.postedTaxNote}
+                        receiptAttachedAt={d.receiptAttachedAt}
+                        matchedQboType={d.matchedQboType}
+                        provider={draftProvider}
+                      />
+                    )}
+                    {commentsEnabled && (
+                      <FileComments
+                        fileId={f.id}
+                        engagementId={engagementId}
+                        initialComments={commentsByFile.get(f.id) ?? []}
+                        members={mentionMembers}
+                        currentUserId={currentUserId}
+                        locale={locale}
+                      />
+                    )}
+                  </>
                 );
               })()}
             />

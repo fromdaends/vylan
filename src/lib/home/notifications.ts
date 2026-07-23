@@ -53,7 +53,11 @@ export type HomeNotificationKind =
   // A teammate assigned an engagement TO the viewer. Unlike every other kind
   // (which are firm-events anyone relevant sees), this is personally targeted:
   // it only appears for the person the work landed on.
-  | "engagement_assigned";
+  | "engagement_assigned"
+  // A teammate @mentioned the viewer in a file comment (Wave 3). Personally
+  // targeted like engagement_assigned — only the mentioned person sees it,
+  // regardless of who the engagement is assigned to.
+  | "comment_mention";
 
 // Activity-log actions surfaced as notifications (a client paid, a payment
 // failed, an engagement was finished, a client signed, a client messaged).
@@ -146,8 +150,14 @@ export function filterNotificationsForViewer(
   if (!viewer || viewer.isOwner) return notifications;
   return notifications.filter(
     (n) =>
-      n.engagement_id != null &&
-      assigneeByEngagement.get(n.engagement_id) === viewer.userId,
+      // Personally-targeted kinds are already emitted only for this viewer
+      // (engagement_assigned via shouldNotifyAssignee, comment_mention via the
+      // mention set), so they bypass the assignment scope — a mention on an
+      // engagement you don't own must still reach you.
+      n.kind === "comment_mention" ||
+      n.kind === "engagement_assigned" ||
+      (n.engagement_id != null &&
+        assigneeByEngagement.get(n.engagement_id) === viewer.userId),
   );
 }
 
@@ -215,6 +225,34 @@ export async function listHomeNotifications(
         note: typeof meta.note === "string" ? meta.note.trim() || null : null,
         timestamp: a.created_at,
         href: `/engagements/${a.engagement_id}`,
+      });
+    }
+
+    // 0b) "@mentioned you in a comment" — also personally targeted. One
+    // file_comment_mention activity carries the mentioned ids in metadata; emit
+    // for this viewer when they're in the set (and aren't the author).
+    const mentionRows = await listFirmActivityByActions(
+      ["file_comment_mention"],
+      40,
+      recentSinceISO,
+    );
+    for (const a of mentionRows) {
+      const meta = (a.metadata ?? {}) as { mentioned_user_ids?: unknown };
+      const ids = Array.isArray(meta.mentioned_user_ids)
+        ? meta.mentioned_user_ids.filter((x): x is string => typeof x === "string")
+        : [];
+      if (a.actor_id === viewer.userId) continue; // never notify yourself
+      if (!ids.includes(viewer.userId)) continue;
+      out.push({
+        id: a.id,
+        kind: "comment_mention",
+        engagement_id: a.engagement_id,
+        engagement_title: a.engagement_title,
+        client_display_name: a.client_display_name,
+        timestamp: a.created_at,
+        href: a.engagement_id
+          ? `/engagements/${a.engagement_id}`
+          : "/dashboard",
       });
     }
   }
