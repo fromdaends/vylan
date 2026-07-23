@@ -19,6 +19,7 @@ import { OverviewStatsStrip } from "@/components/dashboard/overview-stats-strip"
 import { localizedTemplateName } from "@/lib/templates/builtin-names";
 import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
 import { WhatsNewBell } from "@/components/inbox/whats-new-bell";
+import { WhileYouWereAway } from "@/components/dashboard/while-you-were-away";
 import { NeedsAttention } from "@/components/dashboard/needs-attention";
 import { hasActiveTeam } from "@/lib/team/mode";
 
@@ -114,6 +115,12 @@ export default async function DashboardPage({
           </WhatsNewBell>
         }
       />
+
+      {/* "While you were away" — a dismissible catch-up of what changed since
+          this device last looked (reuses the same home notifications; the only
+          new state is a localStorage last-seen, so no migration). Renders
+          nothing on a first visit or when there's nothing new. */}
+      <WhileYouWereAway notifications={notifications} locale={locale} />
 
       {/* Top region: a thin full-width stats strip sitting directly above a
           full-width Needs attention block. Stacked (not side-by-side columns)
