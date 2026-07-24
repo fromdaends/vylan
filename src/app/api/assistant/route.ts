@@ -12,17 +12,24 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type Anthropic from "@anthropic-ai/sdk";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import {
   assistantClient,
   ASSISTANT_MAX_TOKENS,
+  ASSISTANT_MAX_TOOL_ROUNDS,
   ASSISTANT_MODEL,
   buildSystemPrompt,
   isAssistantConfigured,
   normalizeMessages,
 } from "@/lib/ai/assistant";
+import {
+  ASSISTANT_READ_TOOLS,
+  createAssistantReadContext,
+  runAssistantReadTool,
+} from "@/lib/assistant/read-tools";
 import {
   checkRateLimit,
   ASSISTANT_PER_USER,
@@ -152,29 +159,84 @@ export async function POST(request: NextRequest) {
     firmName: firm.name,
     userDisplayName: userDisplayLabel(user),
     isDemoFirm: firm.is_demo,
+    // The assistant can look up (read-only) the firm's real engagements and
+    // documents to answer and summarize — no engagement selector, no actions.
+    canReadFirmData: true,
   });
 
-  // Stream the response as plain UTF-8 text. Each text_delta event
-  // from Anthropic appends to the body. The client reads
-  // `response.body` and concatenates chunks.
+  // Model conversation; grows as the read-tool loop appends tool_use /
+  // tool_result turns. Content starts as the plain strings from the client.
+  const modelMessages: Anthropic.MessageParam[] = messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+  const readCtx = createAssistantReadContext({ sb: supabase, firmId: firm.id });
+
+  // Stream the answer as plain UTF-8 text. Read-tool lookups happen
+  // server-side between rounds (their tool_use blocks are never streamed to
+  // the client); only the model's answer text reaches the browser, so the
+  // existing plain-text reader keeps working unchanged.
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        const sdkStream = await client.messages.stream({
-          model: ASSISTANT_MODEL,
-          max_tokens: ASSISTANT_MAX_TOKENS,
-          system,
-          messages,
-        });
+        for (let round = 0; round < ASSISTANT_MAX_TOOL_ROUNDS; round++) {
+          // Final allowed round: force an answer (tool_choice none) so a
+          // lookup-happy turn can't end with tool calls and no text.
+          const isFinalRound = round === ASSISTANT_MAX_TOOL_ROUNDS - 1;
+          const sdkStream = client.messages.stream(
+            {
+              model: ASSISTANT_MODEL,
+              max_tokens: ASSISTANT_MAX_TOKENS,
+              system,
+              tools: ASSISTANT_READ_TOOLS,
+              ...(isFinalRound
+                ? { tool_choice: { type: "none" as const } }
+                : {}),
+              messages: modelMessages,
+            },
+            { timeout: 40_000, maxRetries: 1 },
+          );
 
-        for await (const event of sdkStream) {
-          if (
-            event.type === "content_block_delta" &&
-            event.delta.type === "text_delta"
-          ) {
-            controller.enqueue(encoder.encode(event.delta.text));
+          let roundText = "";
+          for await (const event of sdkStream) {
+            if (
+              event.type === "content_block_delta" &&
+              event.delta.type === "text_delta"
+            ) {
+              roundText += event.delta.text;
+              controller.enqueue(encoder.encode(event.delta.text));
+            }
           }
+
+          const finalMessage = await sdkStream.finalMessage();
+          if (finalMessage.stop_reason !== "tool_use") break;
+
+          const toolUses = finalMessage.content.filter(
+            (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
+          );
+          if (toolUses.length === 0) break;
+
+          modelMessages.push({
+            role: "assistant",
+            content: finalMessage.content,
+          });
+          const results: Anthropic.ToolResultBlockParam[] = [];
+          for (const use of toolUses) {
+            const result = await runAssistantReadTool(
+              use.name,
+              use.input,
+              readCtx,
+            );
+            results.push({
+              type: "tool_result",
+              tool_use_id: use.id,
+              content: JSON.stringify(result),
+            });
+          }
+          modelMessages.push({ role: "user", content: results });
+          // Paragraph break between any pre-lookup narration and the answer.
+          if (roundText.trim()) controller.enqueue(encoder.encode("\n\n"));
         }
         controller.close();
       } catch (err) {

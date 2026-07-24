@@ -35,6 +35,12 @@ export const ASSISTANT_MODEL = "claude-sonnet-4-6";
 // answers, not essays.
 export const ASSISTANT_MAX_TOKENS = 700;
 
+// Tool-use loop bound for the read-only data lookups (find_engagements + the
+// per-engagement read tools). One question rarely needs more than 2-3 lookups;
+// 5 keeps a confused loop from burning tokens. On the final round the model is
+// forced to answer (tool_choice: none) so a lookup-happy turn still replies.
+export const ASSISTANT_MAX_TOOL_ROUNDS = 5;
+
 // Conversation messages we accept from the client. We deliberately
 // don't accept system/tool roles — those are server-side only.
 export type AssistantMessage = {
@@ -50,6 +56,10 @@ export type AssistantContext = {
   firmName?: string;
   userDisplayName?: string;
   isDemoFirm?: boolean;
+  // When true, the prompt tells the model it can look up the firm's real
+  // engagements and documents (READ-ONLY) via its tools. Off = pure product
+  // help (the original "Ask Vylan" behavior).
+  canReadFirmData?: boolean;
 };
 
 export function isAssistantConfigured(): boolean {
@@ -132,6 +142,21 @@ export function buildSystemPrompt(ctx: AssistantContext): string {
   ]
     .filter(Boolean)
     .join(" ");
+
+  // When the assistant is wired to the firm-wide read tools, tell it how to use
+  // them and — critically — that it is READ-ONLY. It looks up and summarizes;
+  // it never acts. (The action layer is dormant behind a flag.)
+  const dataSection = ctx.canReadFirmData
+    ? `## Looking things up in this firm's real data
+
+You can look up the firm's real engagements and documents to answer questions and summarize — "how is the Smith T1 going", "what is this client still missing", "what got uploaded this week", "which engagements are overdue". Use your lookup tools whenever a question is about a specific engagement, client, document, or the firm's own data. Always call find_engagements FIRST to get the engagement_id, then read that engagement's overview, checklist, documents, or recent activity.
+
+Ground every answer about the firm's data in what the tools return. Never invent an engagement, document, amount, date, or status. If a lookup finds nothing, say so plainly.
+
+You can READ and SUMMARIZE only. You cannot take any action: you cannot send reminders, approve or reject documents, add / edit / remove checklist items, change due dates, or reassign work. If the user asks you to DO one of those, tell them you can look things up and summarize but they make the change themselves in Vylan.
+
+`
+    : "";
 
   return `You are "Ask Vylan", the in-app help assistant for **Vylan**, a SaaS that helps small Canadian accounting firms collect documents from their clients.
 
@@ -265,7 +290,7 @@ Under **Data & privacy**: "Export all firm data" (one ZIP: clients, engagements,
 2. Add an invoice on the engagement and send it.
 3. The client pays by card from their portal. Money goes to the firm's own account.
 
-## Boundaries — stay inside these
+${dataSection}## Boundaries — stay inside these
 
 - Don't quote prices. Billing is paused; if asked, say so and suggest the user book a call or email hello@vylan.app.
 - **Vylan DOES integrate with QuickBooks Online** (connect, sync, transaction suggestions, a drafts queue you approve, posting). Owner-only to connect, in /settings → Integrations. Nothing reaches a client's books without the accountant approving the draft. Vylan does NOT integrate with Sage, Taxprep, CCH, etc. — don't promise those.
