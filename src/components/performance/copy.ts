@@ -51,7 +51,6 @@ export type PerfCopy = {
     docsHeading: string;
     docsCaption: string;
     docsReceivedLabel: string;
-    docsReceivedCaption: string;
     docsPendingLabel: string;
     docsPendingCaption: string;
     docsNonePending: string;
@@ -145,9 +144,8 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
         `${n} ${n === 1 ? "document" : "documents"} received this month`,
       docsNone: "No documents received in this period yet.",
       docsHeading: "Documents",
-      docsCaption: "Documents received from your clients.",
+      docsCaption: "Documents received from your clients through Vylan.",
       docsReceivedLabel: "Received",
-      docsReceivedCaption: "through Vylan",
       docsPendingLabel: "Pending review",
       docsPendingCaption: "awaiting your review right now",
       docsNonePending: "Nothing awaiting review.",
@@ -238,9 +236,8 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
         `${n} document${n === 1 ? "" : "s"} reçu${n === 1 ? "" : "s"} ce mois-ci`,
       docsNone: "Aucun document reçu sur cette période pour l'instant.",
       docsHeading: "Documents",
-      docsCaption: "Documents reçus de vos clients.",
+      docsCaption: "Documents reçus de vos clients via Vylan.",
       docsReceivedLabel: "Reçus",
-      docsReceivedCaption: "via Vylan",
       docsPendingLabel: "En attente de révision",
       docsPendingCaption: "en attente de votre révision en ce moment",
       docsNonePending: "Rien en attente de révision.",
