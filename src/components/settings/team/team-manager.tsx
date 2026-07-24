@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { Link, useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
@@ -122,6 +122,7 @@ export function TeamManager({
   deactivatedMembers,
   pendingInvites,
   locale,
+  belowHeader,
 }: {
   // The firm's name — shown as the page heading (this is the firm's team).
   firmName: string;
@@ -136,6 +137,10 @@ export function TeamManager({
   deactivatedMembers: DeactivatedMember[];
   pendingInvites: PendingInvite[];
   locale: "fr" | "en";
+  // Optional content rendered directly UNDER the firm-name header (above seats +
+  // roster) — the owner-only workload roll-up lives here so the firm name stays
+  // at the very top of the page.
+  belowHeader?: ReactNode;
 }) {
   const t = useTranslations("Team");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -196,6 +201,9 @@ export function TeamManager({
           </div>
         )}
       </div>
+
+      {/* Owner-only workload roll-up, directly under the firm-name header. */}
+      {belowHeader}
 
       {/* Seat usage (owner-only). On an active free trial we swap the seat
           meter for a "locked — book a call to unlock your team" panel. */}

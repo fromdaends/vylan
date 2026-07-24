@@ -14,19 +14,36 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { resolveRange, type ResolvedRange } from "./range";
 import type { AutomationSection, PerformanceRange } from "./types";
 
+// The 0820 "count but don't name" RPC may not be applied yet (PGRST202/42883) —
+// fall back to the RLS-scoped head count, which undercounts a private client's
+// automation events for staff until 0820 lands.
+function isMissingFunction(err: { code?: string } | null): boolean {
+  return err?.code === "PGRST202" || err?.code === "42883";
+}
+
+// Firm-wide count of an automation action in range, INCLUDING private clients
+// (so staff see honest totals) via the 0820 definer RPC; RLS fallback otherwise.
 async function countAction(
   sb: SupabaseClient,
   action: string,
   range: ResolvedRange,
 ): Promise<number> {
+  const { data, error } = await sb.rpc("perf_action_count", {
+    p_action: action,
+    p_start: range.startIso ?? null,
+  });
+  if (!error) return (data as number | null) ?? 0;
+  if (!isMissingFunction(error)) {
+    console.error(`[performance] perf_action_count(${action}) rpc failed:`, error);
+  }
   let q = sb
     .from("activity_log")
     .select("id", { count: "exact", head: true })
     .eq("action", action);
   if (range.startIso) q = q.gte("created_at", range.startIso);
-  const { count, error } = await q;
-  if (error) {
-    console.error(`[performance] countAction(${action}) failed:`, error);
+  const { count, error: rlsErr } = await q;
+  if (rlsErr) {
+    console.error(`[performance] countAction(${action}) failed:`, rlsErr);
     return 0;
   }
   return count ?? 0;
