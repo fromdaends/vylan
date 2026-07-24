@@ -4,7 +4,6 @@ import { useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
-import type { AiUsage } from "@/lib/ai/usage";
 import {
   PERFORMANCE_RANGES,
   type AiSection as AiData,
@@ -31,7 +30,6 @@ export function PerformanceView({
   ai,
   automation,
   documents,
-  aiUsage,
 }: {
   range: PerformanceRange;
   locale: AppLocale;
@@ -39,7 +37,6 @@ export function PerformanceView({
   ai: AiData;
   automation: AutoData;
   documents: DocumentsData;
-  aiUsage: AiUsage | null;
 }) {
   const copy = perfCopy(locale);
   const router = useRouter();
@@ -95,7 +92,6 @@ export function PerformanceView({
         />
         <AiSection
           data={ai}
-          usage={aiUsage}
           locale={locale}
           copy={copy.ai}
         />

@@ -82,14 +82,6 @@ export type PerfCopy = {
     methodology: string;
     earlyData: (n: number) => string;
     empty: string;
-    // "AI usage this month" meter — mirrors Settings > Documents (getFirmAiUsage).
-    usageHeading: string;
-    usageLabel: string;
-    usageCount: (used: string, cap: string) => string;
-    usageCountTrial: (used: string, cap: string) => string;
-    usageRemaining: (n: string) => string;
-    usageResets: (date: string) => string;
-    usagePaused: string;
   };
   automation: {
     heading: string;
@@ -177,13 +169,6 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       earlyData: (n) =>
         `Early data. Based on only ${n} ${n === 1 ? "document" : "documents"} so far, so treat this as a first look rather than a firm track record.`,
       empty: "No documents assessed in this period yet.",
-      usageHeading: "AI usage this month",
-      usageLabel: "AI document checks",
-      usageCount: (used, cap) => `${used} of ${cap} used this month`,
-      usageCountTrial: (used, cap) => `${used} of ${cap} free-trial checks used`,
-      usageRemaining: (n) => `${n} left`,
-      usageResets: (date) => `resets ${date}`,
-      usagePaused: "Paused",
     },
     automation: {
       heading: "What Vylan did automatically",
@@ -271,14 +256,6 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       earlyData: (n) =>
         `Données préliminaires. Basé sur seulement ${n} document${n === 1 ? "" : "s"} pour l'instant; voyez ceci comme un premier aperçu plutôt qu'un bilan établi.`,
       empty: "Aucun document évalué sur cette période pour l'instant.",
-      usageHeading: "Utilisation de l'IA ce mois-ci",
-      usageLabel: "Vérifications IA de documents",
-      usageCount: (used, cap) => `${used} sur ${cap} utilisées ce mois-ci`,
-      usageCountTrial: (used, cap) =>
-        `${used} sur ${cap} vérifications d'essai utilisées`,
-      usageRemaining: (n) => `${n} restantes`,
-      usageResets: (date) => `réinitialise le ${date}`,
-      usagePaused: "En pause",
     },
     automation: {
       heading: "Ce que Vylan a fait automatiquement",
