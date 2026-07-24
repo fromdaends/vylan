@@ -112,6 +112,7 @@
     "section_pending": "Invitations en attente",
     "section_deactivated": "Membres désactivés ({count})",
     "role_owner": "Administrateur",
+    "firm_menu_label": "Options du cabinet",
     "firm_settings_title": "Paramètres du cabinet",
     "firm_settings_subtitle": "Réglages du cabinet que vous et les autres propriétaires pouvez modifier.",
     "firm_private_default_label": "Clients privés par défaut",

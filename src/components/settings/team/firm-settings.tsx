@@ -8,9 +8,9 @@ import { Lock } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { setClientsPrivateDefault } from "@/app/actions/team";
 
-// Team Wave 4 — owner-only "Firm settings" section at the bottom of the team
-// page. Firm-wide switches (starting with the privacy default). Enabling the
-// privacy default also backfills every existing client to private.
+// Team Wave 4 — owner-only firm-wide switches, shown inside the "Firm settings"
+// dialog (opened from the ⋯ menu at the top-right of the team page). Starts with
+// the privacy default; enabling it also backfills every existing client private.
 export function FirmSettings({
   clientsPrivateByDefault,
 }: {
@@ -37,13 +37,7 @@ export function FirmSettings({
   }
 
   return (
-    <section className="space-y-4">
-      <div>
-        <h2 className="text-sm font-semibold">{t("firm_settings_title")}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t("firm_settings_subtitle")}
-        </p>
-      </div>
+    <div className="space-y-4">
       <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-card/40 px-4 py-3">
         <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
           <Lock className="size-4" aria-hidden="true" />
@@ -65,6 +59,6 @@ export function FirmSettings({
           </p>
         </div>
       </div>
-    </section>
+    </div>
   );
 }

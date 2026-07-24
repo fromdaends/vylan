@@ -17,7 +17,9 @@ import {
   Users,
   LogOut,
   ListChecks,
+  SlidersHorizontal,
 } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,9 +58,12 @@ type ActiveMember = {
   role: "owner" | "staff";
   isSelf: boolean;
   avatarUrl: string | null;
-  // Guarded offboarding: how much LIVE work this member holds, so the remove
-  // dialog can offer to reassign it. Optional (only computed for owners).
+  // Live workload (only computed for owners): active engagements, how many are
+  // ready to review, how many need attention (overdue), and client count. Shown
+  // inline in the roster row and used by the guarded-offboarding dialog.
   activeEngagements?: number;
+  readyToReview?: number;
+  needsAttention?: number;
   clients?: number;
 };
 type DeactivatedMember = {
@@ -122,8 +127,8 @@ export function TeamManager({
   deactivatedMembers,
   pendingInvites,
   locale,
-  afterActiveMembers,
-  footer,
+  unassignedWorkload,
+  firmSettings,
 }: {
   // The firm's name — shown as the page heading (this is the firm's team).
   firmName: string;
@@ -138,13 +143,20 @@ export function TeamManager({
   deactivatedMembers: DeactivatedMember[];
   pendingInvites: PendingInvite[];
   locale: "fr" | "en";
-  // Owner-only workload roll-up, rendered right below the Active members list.
-  afterActiveMembers?: ReactNode;
-  // Firm-wide settings section, rendered at the bottom of the team page.
-  footer?: ReactNode;
+  // Unassigned live work (owner-only) — shown as a trailing row in the roster
+  // table so unowned work stays visible after the workload merge.
+  unassignedWorkload?: {
+    activeEngagements: number;
+    readyToReview: number;
+    needsAttention: number;
+  };
+  // Firm-wide settings, rendered inside the ⋯ (top-right) dialog — not inline.
+  firmSettings?: ReactNode;
 }) {
   const t = useTranslations("Team");
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [firmOpen, setFirmOpen] = useState(false);
+  const showStats = canManage;
 
   const seatLabel =
     seat.cap == null
@@ -169,16 +181,6 @@ export function TeamManager({
         </div>
         {canManage && (
           <div className="flex items-center gap-2">
-            {/* Owner-only shortcut to the existing Firm settings section
-                (Settings > Account: logo, name, brand color, client
-                language). No duplicated form — just a clean jump. Staff never
-                see it, and the settings routes stay owner-gated server-side. */}
-            <Link href="/settings?tab=account">
-              <Button type="button" size="sm" variant="outline">
-                <Building2 className="size-4" />
-                {t("edit_firm")}
-              </Button>
-            </Link>
             <Button
               type="button"
               size="sm"
@@ -199,9 +201,56 @@ export function TeamManager({
               )}
               {t("invite_button")}
             </Button>
+            {/* Firm-level config lives behind this ⋯ menu (top-right), not inline:
+                "Firm settings" opens the settings dialog; "Edit firm details"
+                jumps to Settings > Account (logo/name/brand/language). */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t("firm_menu_label")}
+                  className="inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-input text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <MoreHorizontal className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {firmSettings && (
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      setFirmOpen(true);
+                    }}
+                    className="gap-2"
+                  >
+                    <SlidersHorizontal className="size-4" />
+                    {t("firm_settings_title")}
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem asChild className="gap-2">
+                  <Link href="/settings?tab=account">
+                    <Building2 className="size-4" />
+                    {t("edit_firm")}
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>
+
+      {/* Firm settings dialog (opened from the ⋯ menu). */}
+      {firmSettings && (
+        <Dialog open={firmOpen} onOpenChange={setFirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t("firm_settings_title")}</DialogTitle>
+              <DialogDescription>{t("firm_settings_subtitle")}</DialogDescription>
+            </DialogHeader>
+            {firmSettings}
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Seat usage (owner-only). On an active free trial we swap the seat
           meter for a "locked — book a call to unlock your team" panel. */}
@@ -239,28 +288,102 @@ export function TeamManager({
           </div>
         ))}
 
-      {/* Active members */}
+      {/* Active members — MERGED with the workload roll-up: one row per member
+          showing who they are + their live workload (Active / To review / Needs
+          attention / Clients), so there's no separate duplicate table. Stats show
+          for owners only; unowned work rolls into a trailing "Unassigned" row. */}
       <div>
-        <h2 className="text-sm font-semibold">{t("section_active")}</h2>
-        <div className="mt-3 border-t border-border/60">
-          {activeMembers.map((m) => (
-            <MemberRow
-              key={m.id}
-              member={m}
-              canManage={canManage && !m.isSelf && m.role !== "owner"}
-              canViewProfile={canManage}
-              // Who this person's work can be handed to on removal: any OTHER
-              // active member (owner included). Empty → no reassign option.
-              reassignTargets={activeMembers
-                .filter((x) => x.id !== m.id)
-                .map((x) => ({ id: x.id, name: x.name }))}
-            />
-          ))}
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold">{t("section_active")}</h2>
+          {showStats && (
+            <span className="text-xs text-muted-foreground">
+              {t("workload_subtitle")}
+            </span>
+          )}
+        </div>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border/40 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">
+                  {t("workload_col_member")}
+                </th>
+                {showStats && (
+                  <>
+                    <th className="px-3 py-2 text-center font-medium">
+                      {t("workload_col_active")}
+                    </th>
+                    <th className="px-3 py-2 text-center font-medium">
+                      {t("workload_col_review")}
+                    </th>
+                    <th className="px-3 py-2 text-center font-medium">
+                      {t("workload_col_attention")}
+                    </th>
+                    <th className="px-3 py-2 text-center font-medium">
+                      {t("workload_col_clients")}
+                    </th>
+                  </>
+                )}
+                <th className="py-2 pl-3" aria-hidden />
+              </tr>
+            </thead>
+            <tbody>
+              {activeMembers.map((m) => (
+                <MemberRow
+                  key={m.id}
+                  member={m}
+                  showStats={showStats}
+                  canManage={canManage && !m.isSelf && m.role !== "owner"}
+                  canViewProfile={canManage}
+                  // Who this person's work can be handed to on removal: any OTHER
+                  // active member (owner included). Empty → no reassign option.
+                  reassignTargets={activeMembers
+                    .filter((x) => x.id !== m.id)
+                    .map((x) => ({ id: x.id, name: x.name }))}
+                />
+              ))}
+              {showStats &&
+                unassignedWorkload &&
+                unassignedWorkload.activeEngagements > 0 && (
+                  <tr className="border-t border-border/40 bg-muted/20">
+                    <td className="py-3 pr-3">
+                      <Link
+                        href="/engagements"
+                        className="flex items-center gap-3 text-muted-foreground transition-colors hover:text-foreground hover:underline"
+                      >
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs">
+                          —
+                        </span>
+                        <span className="font-medium">
+                          {t("workload_unassigned")}
+                        </span>
+                      </Link>
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <Count value={unassignedWorkload.activeEngagements} />
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <Count
+                        value={unassignedWorkload.readyToReview}
+                        tone="accent"
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <Count
+                        value={unassignedWorkload.needsAttention}
+                        tone="warning"
+                      />
+                    </td>
+                    <td className="px-3 py-3 text-center">
+                      <Count value={0} />
+                    </td>
+                    <td className="py-3 pl-3" aria-hidden />
+                  </tr>
+                )}
+            </tbody>
+          </table>
         </div>
       </div>
-
-      {/* Owner-only workload roll-up, right below the Active members list. */}
-      {afterActiveMembers}
 
       {/* Pending invitations (owner-only; hidden on trial — none can exist) */}
       {canManage && !onTrial && (
@@ -294,9 +417,6 @@ export function TeamManager({
             .map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatarUrl }))}
         />
       )}
-
-      {/* Firm-wide settings (owner-only), at the bottom of the team page. */}
-      {footer}
 
       {canManage && <LeaveTeamSection />}
 
@@ -454,11 +574,14 @@ function TrialTeamLock() {
 
 function MemberRow({
   member,
+  showStats,
   canManage,
   canViewProfile,
   reassignTargets,
 }: {
   member: ActiveMember;
+  // Render the workload stat cells (owner view). Must match the table header.
+  showStats: boolean;
   canManage: boolean;
   // Owners can open a teammate's profile (their engagements/clients/activity).
   canViewProfile: boolean;
@@ -474,6 +597,8 @@ function MemberRow({
   // Does this member hold live work worth reassigning? Drives the "guarded"
   // remove dialog (counts + reassignee picker) vs. the plain confirm.
   const activeEngagements = member.activeEngagements ?? 0;
+  const readyToReview = member.readyToReview ?? 0;
+  const needsAttention = member.needsAttention ?? 0;
   const clientCount = member.clients ?? 0;
   const holdsWork = activeEngagements > 0 || clientCount > 0;
   const canReassign = holdsWork && reassignTargets.length > 0;
@@ -497,72 +622,98 @@ function MemberRow({
   }
 
   return (
-    <div className="flex items-center gap-3 border-b border-border/40 py-3">
-      <AvatarInitials src={member.avatarUrl} name={member.name} size={36} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          {canViewProfile ? (
-            <Link
-              href={`/settings/team/${member.id}`}
-              className="truncate text-sm font-medium hover:underline"
-            >
-              {member.name}
-            </Link>
-          ) : (
-            <span className="truncate text-sm font-medium">{member.name}</span>
-          )}
-          <Badge
-            variant={member.role === "owner" ? "default" : "secondary"}
-            className="shrink-0 font-normal"
-          >
-            {member.role === "owner" ? t("role_owner") : t("role_staff")}
-          </Badge>
-          {member.isSelf && (
-            <span className="text-xs text-muted-foreground">{t("you")}</span>
-          )}
+    <tr className="border-b border-border/40 last:border-0 hover:bg-secondary/30">
+      <td className="py-3 pr-3">
+        <div className="flex items-center gap-3">
+          <AvatarInitials src={member.avatarUrl} name={member.name} size={36} />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              {canViewProfile ? (
+                <Link
+                  href={`/settings/team/${member.id}`}
+                  className="truncate text-sm font-medium hover:underline"
+                >
+                  {member.name}
+                </Link>
+              ) : (
+                <span className="truncate text-sm font-medium">
+                  {member.name}
+                </span>
+              )}
+              <Badge
+                variant={member.role === "owner" ? "default" : "secondary"}
+                className="shrink-0 font-normal"
+              >
+                {member.role === "owner" ? t("role_owner") : t("role_staff")}
+              </Badge>
+              {member.isSelf && (
+                <span className="text-xs text-muted-foreground">{t("you")}</span>
+              )}
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              {member.email}
+            </div>
+          </div>
         </div>
-        <div className="truncate text-xs text-muted-foreground">
-          {member.email}
-        </div>
-      </div>
+      </td>
 
-      {/* Jump to this person's engagements (the "view a teammate's work" lens).
-          Available for every active member, including yourself. */}
-      <Link
-        href={`/engagements?assignee=${member.id}`}
-        title={t("view_engagements")}
-        aria-label={t("view_engagements")}
-        className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ListChecks className="size-4" />
-      </Link>
-
-      {canManage && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              aria-label={t("member_actions")}
-              className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <MoreHorizontal className="size-4" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44">
-            <DropdownMenuItem
-              variant="destructive"
-              onSelect={(e) => {
-                e.preventDefault();
-                setConfirmOpen(true);
-              }}
-            >
-              {t("menu_deactivate")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {showStats && (
+        <>
+          <td className="px-3 py-3 text-center">
+            <Count value={activeEngagements} />
+          </td>
+          <td className="px-3 py-3 text-center">
+            <Count value={readyToReview} tone="accent" />
+          </td>
+          <td className="px-3 py-3 text-center">
+            <Count value={needsAttention} tone="warning" />
+          </td>
+          <td className="px-3 py-3 text-center">
+            <Count value={clientCount} />
+          </td>
+        </>
       )}
 
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+      <td className="py-3 pl-3">
+        <div className="flex items-center justify-end gap-1">
+          {/* Jump to this person's engagements (the "view a teammate's work"
+              lens). Available for every active member, including yourself. */}
+          <Link
+            href={`/engagements?assignee=${member.id}`}
+            title={t("view_engagements")}
+            aria-label={t("view_engagements")}
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ListChecks className="size-4" />
+          </Link>
+
+          {canManage && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={t("member_actions")}
+                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <MoreHorizontal className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setConfirmOpen(true);
+                  }}
+                >
+                  {t("menu_deactivate")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+
+        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("deactivate_confirm_title")}</DialogTitle>
@@ -644,7 +795,35 @@ function MemberRow({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </td>
+    </tr>
+  );
+}
+
+// A workload count cell: muted at zero, tinted (accent for review, warning for
+// attention) when there's something to act on. Shared by the roster rows.
+function Count({
+  value,
+  tone,
+}: {
+  value: number;
+  tone?: "accent" | "warning";
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex min-w-[2ch] justify-center tabular-nums",
+        value === 0
+          ? "text-muted-foreground/60"
+          : tone === "accent"
+            ? "font-semibold text-accent"
+            : tone === "warning"
+              ? "font-semibold text-warning"
+              : "font-medium text-foreground",
+      )}
+    >
+      {value}
+    </span>
   );
 }
 
