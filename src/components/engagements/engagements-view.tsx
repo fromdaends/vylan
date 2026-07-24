@@ -156,12 +156,13 @@ export function EngagementsView({
             ? urlAssignee
             : null;
 
-  const ownsAny =
-    teamEnabled &&
-    !!currentUserId &&
-    rows.some((r) => r.assigneeUserId === currentUserId);
+  // Default to YOUR OWN work in team mode — you see just your engagements until
+  // you switch to All firm or a teammate's lens (founder's call: personal-first,
+  // even if that means an empty list you can widen with one click). A ?assignee=
+  // deep-link or a remembered Mine/All choice still wins (below). Non-team firms
+  // stay on "all" (there's only you, and the Mine/All filter isn't shown).
   const [scope, setScope] = useState<string>(
-    scopeFromUrl ?? (teamEnabled && ownsAny ? "mine" : "all"),
+    scopeFromUrl ?? (teamEnabled ? "mine" : "all"),
   );
   useEffect(() => {
     if (!currentUserId || !teamEnabled) return;

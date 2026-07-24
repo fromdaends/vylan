@@ -92,12 +92,10 @@ export default async function ClientsPage({
   });
 
   // Default to the accountant's OWN clients ("mine") when they actually own at
-  // least one — so /clients opens on their book. Fall back to "all" when they
-  // own none yet (e.g. before migration 0210 backfills owners, or a staff
-  // member with no clients) so the list is never mysteriously empty.
-  const ownsAnyClient = clientsRaw.some(
-    (c) => c.assigned_user_id === currentUserId,
-  );
+  // Default to YOUR OWN clients in team mode — /clients opens on your book, and
+  // you switch to All firm or a teammate via the toolbar / ?owner= (founder's
+  // call: personal-first, even if your book is empty — one click widens it). An
+  // explicit ?owner= still wins. Non-team firms stay on "all".
   // Valid owner-filter values: the two built-ins ("all"/"mine") + any active
   // member id. An unknown ?owner= (e.g. a since-removed member) falls back to
   // the default rather than filtering to nobody.
@@ -109,7 +107,7 @@ export default async function ClientsPage({
       ? rawOwner
       : null;
   const ownerFilter: string = teamEnabled
-    ? (explicitOwner ?? (currentUserId && ownsAnyClient ? "mine" : "all"))
+    ? (explicitOwner ?? (currentUserId ? "mine" : "all"))
     : "all";
 
   // Resolve each firm member's avatar once (small set — seat caps are 1–15)
