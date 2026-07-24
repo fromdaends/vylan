@@ -2913,7 +2913,7 @@
     "tab_chat": "Chat",
     "tab_activity": "Activity",
     "tab_client_messages": "Client messages",
-    "tab_ai_chat": "AI chat",
+    "tab_ai_chat": "Vylan",
     "settings_label": "Assistant settings",
     "messages_pick_engagement": "Choose an engagement above to message its client.",
     "messages_inbox_empty": "No conversations yet",
