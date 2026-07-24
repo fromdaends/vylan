@@ -64,6 +64,7 @@ import { OpenAssistantActivityButton } from "@/components/assistant/open-assista
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
 import { ResumeSignaturePlacement } from "@/components/engagements/resume-signature-placement";
+import { RetrySignatureSetup } from "@/components/engagements/retry-signature-setup";
 import { AddFinalDocumentDialog } from "@/components/engagements/add-final-document-dialog";
 import { FinalDocumentRow } from "@/components/engagements/final-document-row";
 import { listFinalDocumentsForEngagement } from "@/lib/db/final-documents";
@@ -1481,6 +1482,19 @@ async function SignatureRow({
         ? "border-accent/40 text-accent"
         : "border-border text-muted-foreground";
 
+  // "Setup needed" = not signed, not out, not awaiting placement. When a request
+  // row exists but its SignWell setup failed, show WHY (mapped from error_detail)
+  // and a Retry, so it isn't a silent dead end.
+  const isSetupNeeded = !isSigned && !isAwaiting && !isAwaitingPlacement;
+  const canRetrySetup = isSetupNeeded && signatureRequest != null;
+  const setupReasonKey = signatureRequest?.error_detail?.includes(
+    "no_signer_email",
+  )
+    ? "sig_setup_reason_no_email"
+    : signatureRequest?.error_detail?.includes("not_configured")
+      ? "sig_setup_reason_not_configured"
+      : "sig_setup_reason_generic";
+
   // Two short-lived links to the completed PDF (with SignWell's audit page): one
   // that RENDERS inline — the "View" opens the signed PDF on its own browser tab,
   // the browser's native PDF view, not a Vylan page — and one that forces a
@@ -1536,6 +1550,17 @@ async function SignatureRow({
               {t("sig_placement_row_hint")}
             </p>
             <ResumeSignaturePlacement itemId={item.id} />
+          </div>
+        )}
+
+        {isSetupNeeded && canEdit && (
+          <div className="border-t border-border/40 px-4 py-3">
+            <p className="text-sm text-muted-foreground">{t(setupReasonKey)}</p>
+            {canRetrySetup && (
+              <div className="mt-3">
+                <RetrySignatureSetup itemId={item.id} />
+              </div>
+            )}
           </div>
         )}
 

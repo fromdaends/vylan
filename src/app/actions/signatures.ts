@@ -11,6 +11,7 @@ import {
   MAX_BYTES,
   signingDocPath,
   uploadObject,
+  downloadObject,
   truncateFilename,
   getBrandingImageUrlForEmail,
 } from "@/lib/storage";
@@ -28,6 +29,7 @@ import {
   createSignatureRequest,
   getSignatureRequestByItem,
   updateSignatureRequestStatus,
+  updateSignatureRequestSetup,
 } from "@/lib/db/signature-requests";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { sendEmail, buildSignatureRequestEmail } from "@/lib/email";
@@ -135,85 +137,39 @@ export async function addSignatureItemAction(
     console.error("[addSignatureItemAction] client lookup failed:", e);
   }
 
-  // Create the EMBEDDED SignWell signature request. Non-fatal: the checklist
-  // item already exists, so if SignWell isn't configured yet or the call errors,
-  // we still record a signature_requests row marked 'error' so the engagement
-  // surfaces "signing setup needed" instead of silently doing nothing.
-  //
-  // Two placement modes:
-  //  - "place anywhere" (an API Application is configured): the document is
-  //    created as an editable DRAFT and we hand back an editor URL. The client is
-  //    notified only AFTER the accountant positions the field(s) and finalizes.
-  //  - default: sent immediately with an auto-appended signature page (original).
+  // Create the EMBEDDED SignWell request and record it. Non-fatal: the checklist
+  // item already exists, so a failed setup records a row marked 'error' (the row
+  // then surfaces "Signing setup needed" + a Retry) rather than silently doing
+  // nothing. The create logic is shared with the retry path (createSignatureForItem).
   const testMode = isSignwellTestMode();
-  const useEditor = isSignwellEmbeddedEditingEnabled();
-  let srStatus: SignatureStatus = "pending";
-  let srDocId: string | null = null;
-  let srError: string | null = null;
-  let editUrl: string | null = null;
-  if (!isSignwellConfigured()) {
-    srStatus = "error";
-    srError = "signwell_not_configured";
-  } else if (!client?.email) {
-    srStatus = "error";
-    srError = "no_signer_email";
-  } else {
-    try {
-      const doc = await createSignatureDocument({
-        name: (labelEn || labelFr).trim(),
-        fileBase64,
-        fileName: safeName,
-        signerEmail: client.email,
-        signerName: client.display_name,
-        metadata: { request_item_id: itemId, engagement_id: engagementId },
-        embeddedEdit: useEditor,
-      });
-      srDocId = doc.documentId;
-      if (useEditor) {
-        // Draft awaiting the accountant's field placement. It stays 'pending'
-        // (NOT out with the client) until finalize releases it. A missing editor
-        // URL means the API Application is misconfigured — record an error so the
-        // accountant sees "setup needed" rather than an unopenable draft.
-        editUrl = doc.embeddedEditUrl;
-        if (editUrl) {
-          srStatus = "pending";
-        } else {
-          srStatus = "error";
-          srError = "no_edit_url";
-        }
-      } else {
-        // A non-draft document we just created is out for signature. SignWell's
-        // create response can momentarily report "Draft" (-> 'pending'); don't
-        // let that strand the item as "Signing setup needed" — a created document
-        // is at least 'sent'. The webhook/reconcile advance it from there.
-        srStatus = doc.status === "pending" ? "sent" : doc.status;
-      }
-    } catch (e) {
-      srStatus = "error";
-      srError =
-        e instanceof SignwellError
-          ? `${e.code}: ${e.message}`
-          : (e as Error).message;
-      console.error("[addSignatureItemAction] SignWell create failed:", e);
-    }
-  }
+  const setup = await createSignatureForItem({
+    engagementId,
+    itemId,
+    fileBase64,
+    fileName: safeName,
+    labelEn,
+    labelFr,
+    client,
+  });
 
   await createSignatureRequest({
     firm_id: eng.firm_id as string,
     engagement_id: engagementId,
     request_item_id: itemId,
-    signwell_document_id: srDocId,
-    status: srStatus,
+    signwell_document_id: setup.documentId,
+    status: setup.status,
     test_mode: testMode,
     signer_email: client?.email ?? null,
     signer_name: client?.display_name ?? null,
-    error_detail: srError,
+    error_detail: setup.errorReason,
   });
 
   // A draft awaiting field placement is NOT out with the client yet: defer the
   // "signature_requested" audit + the client email to finalize (when it's sent).
   const awaitingPlacement =
-    srStatus === "pending" && srDocId !== null && editUrl !== null;
+    setup.status === "pending" &&
+    setup.documentId !== null &&
+    setup.editUrl !== null;
 
   if (!awaitingPlacement) {
     // Original path: audit the request (always — even a failed setup is a real
@@ -225,8 +181,8 @@ export async function addSignatureItemAction(
       labelEn: labelEn.trim(),
       labelFr: labelFr.trim(),
       testMode,
-      signwellDocumentId: srDocId,
-      notifyClient: srStatus !== "error",
+      signwellDocumentId: setup.documentId,
+      notifyClient: setup.status !== "error",
     });
   }
 
@@ -237,8 +193,204 @@ export async function addSignatureItemAction(
   revalidatePath(`/engagements/${engagementId}`);
   revalidatePath("/dashboard");
   return awaitingPlacement
-    ? { ok: true, editUrl: editUrl ?? undefined, itemId }
+    ? { ok: true, editUrl: setup.editUrl ?? undefined, itemId }
     : { ok: true };
+}
+
+// Create the SignWell document for a signature item and compute the resulting
+// status / document id / editor URL / error reason. Does NO database writes — the
+// caller records the row (insert on add, update on retry) — so the initial
+// request and a retry share one code path and can't drift. Never throws: a
+// SignWell failure comes back as status 'error' with a reason.
+type SignatureSetupResult = {
+  status: SignatureStatus;
+  documentId: string | null;
+  editUrl: string | null;
+  errorReason: string | null;
+};
+
+async function createSignatureForItem(params: {
+  engagementId: string;
+  itemId: string;
+  fileBase64: string;
+  fileName: string;
+  labelEn: string;
+  labelFr: string;
+  client: { email: string | null; display_name: string | null } | null;
+}): Promise<SignatureSetupResult> {
+  const useEditor = isSignwellEmbeddedEditingEnabled();
+
+  if (!isSignwellConfigured()) {
+    return {
+      status: "error",
+      documentId: null,
+      editUrl: null,
+      errorReason: "signwell_not_configured",
+    };
+  }
+  if (!params.client?.email) {
+    return {
+      status: "error",
+      documentId: null,
+      editUrl: null,
+      errorReason: "no_signer_email",
+    };
+  }
+
+  try {
+    const doc = await createSignatureDocument({
+      name: (params.labelEn || params.labelFr).trim(),
+      fileBase64: params.fileBase64,
+      fileName: params.fileName,
+      signerEmail: params.client.email,
+      signerName: params.client.display_name,
+      metadata: {
+        request_item_id: params.itemId,
+        engagement_id: params.engagementId,
+      },
+      embeddedEdit: useEditor,
+    });
+    if (useEditor) {
+      // Editor mode: a draft awaiting field placement. A missing editor URL means
+      // the API Application is misconfigured — treat as a setup error.
+      if (doc.embeddedEditUrl) {
+        return {
+          status: "pending",
+          documentId: doc.documentId,
+          editUrl: doc.embeddedEditUrl,
+          errorReason: null,
+        };
+      }
+      return {
+        status: "error",
+        documentId: doc.documentId,
+        editUrl: null,
+        errorReason: "no_edit_url",
+      };
+    }
+    // Default mode: sent immediately. A created document is at least 'sent' even
+    // if SignWell momentarily reports "Draft" (-> pending).
+    return {
+      status: doc.status === "pending" ? "sent" : doc.status,
+      documentId: doc.documentId,
+      editUrl: null,
+      errorReason: null,
+    };
+  } catch (e) {
+    console.error("[createSignatureForItem] SignWell create failed:", e);
+    return {
+      status: "error",
+      documentId: null,
+      editUrl: null,
+      errorReason:
+        e instanceof SignwellError
+          ? `${e.code}: ${e.message}`
+          : (e as Error).message,
+    };
+  }
+}
+
+// Retry a signature request whose SignWell setup failed (status 'error', or a
+// 'pending' row that never got a document): re-fetch the stored PDF, re-create
+// the SignWell request, and update the row in place. Returns an editor URL to
+// open (editor mode), a plain ok (sent), or an error + reason to surface. RLS-
+// scoped: an accountant only resolves their own firm's item.
+export async function retrySignatureSetupAction(itemId: string): Promise<{
+  ok?: boolean;
+  error?: string;
+  reason?: string;
+  editUrl?: string;
+  itemId?: string;
+}> {
+  if (!itemId) return { error: "generic" };
+
+  const sr = await getSignatureRequestByItem(itemId);
+  if (!sr) return { error: "generic" };
+  const retryable =
+    sr.status === "error" ||
+    (sr.status === "pending" && !sr.signwell_document_id);
+  if (!retryable) return { ok: true }; // already set up — just refresh
+
+  const sb = await getServerSupabase();
+  const { data: item } = await sb
+    .from("request_items")
+    .select("signing_doc_path, signing_doc_name, label, label_fr")
+    .eq("id", itemId)
+    .maybeSingle();
+  const docPath = (item as { signing_doc_path?: string } | null)
+    ?.signing_doc_path;
+  if (!docPath) return { error: "generic" };
+  const docName =
+    (item as { signing_doc_name?: string } | null)?.signing_doc_name ??
+    "document.pdf";
+  const labelEn = (item as { label?: string } | null)?.label ?? "";
+  const labelFr = (item as { label_fr?: string } | null)?.label_fr ?? labelEn;
+
+  const { data: eng } = await sb
+    .from("engagements")
+    .select("client_id")
+    .eq("id", sr.engagement_id)
+    .maybeSingle();
+  const clientId = (eng as { client_id?: string } | null)?.client_id;
+  let client: Awaited<ReturnType<typeof getClient>> = null;
+  try {
+    if (clientId) client = await getClient(clientId);
+  } catch (e) {
+    console.error("[retrySignatureSetupAction] client lookup failed:", e);
+  }
+
+  let fileBase64: string;
+  try {
+    fileBase64 = (await downloadObject(docPath)).toString("base64");
+  } catch (e) {
+    console.error("[retrySignatureSetupAction] doc download failed:", e);
+    return { error: "generic" };
+  }
+
+  const setup = await createSignatureForItem({
+    engagementId: sr.engagement_id,
+    itemId,
+    fileBase64,
+    fileName: docName,
+    labelEn,
+    labelFr,
+    client,
+  });
+
+  await updateSignatureRequestSetup(sr.id, {
+    signwell_document_id: setup.documentId,
+    status: setup.status,
+    error_detail: setup.errorReason,
+    signer_email: client?.email ?? null,
+    signer_name: client?.display_name ?? null,
+  });
+
+  revalidatePath(`/engagements/${sr.engagement_id}`);
+  revalidatePath("/dashboard");
+
+  const awaitingPlacement =
+    setup.status === "pending" &&
+    setup.documentId !== null &&
+    setup.editUrl !== null;
+  if (awaitingPlacement) {
+    return { ok: true, editUrl: setup.editUrl ?? undefined, itemId };
+  }
+  if (setup.status === "error") {
+    return { error: "signwell", reason: setup.errorReason ?? undefined };
+  }
+  // Fallback (auto signature page) succeeded: it's sent now — notify + advance.
+  await announceSignatureRequest({
+    firmId: sr.firm_id,
+    engagementId: sr.engagement_id,
+    itemId,
+    labelEn,
+    labelFr,
+    testMode: sr.test_mode,
+    signwellDocumentId: setup.documentId,
+    notifyClient: true,
+  });
+  await syncEngagementStage(sb, sr.engagement_id);
+  return { ok: true };
 }
 
 // Audit that a signature request went out, and (optionally) email the client the
