@@ -174,8 +174,12 @@ async function loadStageFacts(
     ...checklistFacts(items),
     hasSignatureItems,
     hasSignatureRequests: sigs.length > 0,
+    // A 'pending' request is a DRAFT still being prepared (accountant placing
+    // fields / not yet sent), so it is NOT out with the client and must not hold
+    // the engagement at "awaiting signature". Only sent/viewed count as
+    // outstanding. (Finalizing a draft flips it to 'sent', which does count.)
     hasOutstandingSignature: sigs.some(
-      (s) => s.status === "pending" || s.status === "sent" || s.status === "viewed",
+      (s) => s.status === "sent" || s.status === "viewed",
     ),
     hasInvoice: invoice != null,
     hasUnpaidInvoice:

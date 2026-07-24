@@ -63,6 +63,7 @@ import { OpenPanelOnLoad } from "@/components/assistant/open-panel-on-load";
 import { OpenAssistantActivityButton } from "@/components/assistant/open-assistant-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
+import { ResumeSignaturePlacement } from "@/components/engagements/resume-signature-placement";
 import { AddFinalDocumentDialog } from "@/components/engagements/add-final-document-dialog";
 import { FinalDocumentRow } from "@/components/engagements/final-document-row";
 import { listFinalDocumentsForEngagement } from "@/lib/db/final-documents";
@@ -1430,22 +1431,34 @@ async function SignatureRow({
   const srStatus = signatureRequest?.status ?? null;
   const isSigned = srStatus === "completed" || item.status === "approved";
   const isAwaiting = srStatus === "sent" || srStatus === "viewed";
+  // A 'pending' request that already has a SignWell document is a "place
+  // anywhere" DRAFT: the accountant started the request but hasn't positioned the
+  // signature field yet. They finish placement from this row; the client is not
+  // notified until they do.
+  const isAwaitingPlacement =
+    !isSigned &&
+    srStatus === "pending" &&
+    Boolean(signatureRequest?.signwell_document_id);
   const statusKey = isSigned
     ? "sig_status_signed"
     : isAwaiting
       ? "sig_status_awaiting"
-      : "sig_status_setup_needed";
+      : isAwaitingPlacement
+        ? "sig_status_placement"
+        : "sig_status_setup_needed";
   const showTestChip =
     (isAwaiting || isSigned) && signatureRequest?.test_mode === true;
 
-  // Status-badge tint by state (green when signed, amber while awaiting, neutral
-  // when not set up). The card outline itself stays a plain neutral border in
-  // every state.
+  // Status-badge tint by state (green when signed, amber while awaiting the
+  // client, accent while the accountant still has to place the field, neutral
+  // when not set up). The card outline itself stays a plain neutral border.
   const badgeCls = isSigned
     ? "border-success/40 text-success"
     : isAwaiting
       ? "border-warning/40 text-warning"
-      : "border-border text-muted-foreground";
+      : isAwaitingPlacement
+        ? "border-accent/40 text-accent"
+        : "border-border text-muted-foreground";
 
   // Two short-lived links to the completed PDF (with SignWell's audit page): one
   // that RENDERS inline — the "View" opens the signed PDF on its own browser tab,
@@ -1495,6 +1508,15 @@ async function SignatureRow({
             {t(statusKey)}
           </Badge>
         </div>
+
+        {isAwaitingPlacement && canEdit && (
+          <div className="border-t border-border/40 px-4 py-3">
+            <p className="text-sm text-muted-foreground">
+              {t("sig_placement_row_hint")}
+            </p>
+            <ResumeSignaturePlacement itemId={item.id} />
+          </div>
+        )}
 
         {showFooter && (
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border/40 px-4 py-2.5">

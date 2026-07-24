@@ -78,6 +78,52 @@ export async function createSignatureRequest(
   return data as SignatureRequest;
 }
 
+// RLS-scoped read of a single signature request by its item (accountant side).
+// Firm isolation is enforced by RLS. Used when finalizing / resuming an embedded
+// field-placement draft. Null if missing (or pre-0400).
+export async function getSignatureRequestByItem(
+  requestItemId: string,
+): Promise<SignatureRequest | null> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("signature_requests")
+    .select("*")
+    .eq("request_item_id", requestItemId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[signature-requests] getByItem failed:", error);
+    }
+    return null;
+  }
+  return (data as SignatureRequest) ?? null;
+}
+
+// RLS-scoped status update (accountant side): used to release an embedded
+// field-placement draft (pending -> sent) once the accountant has placed the
+// fields. Never overwrites a completed row. Returns true on a successful write.
+export async function updateSignatureRequestStatus(
+  id: string,
+  status: SignatureStatus,
+  opts: { errorDetail?: string | null } = {},
+): Promise<boolean> {
+  const sb = await getServerSupabase();
+  const patch: Record<string, unknown> = { status };
+  if ("errorDetail" in opts) patch.error_detail = opts.errorDetail ?? null;
+  const { error } = await sb
+    .from("signature_requests")
+    .update(patch)
+    .eq("id", id)
+    .neq("status", "completed");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[signature-requests] updateStatus failed:", error);
+    }
+    return false;
+  }
+  return true;
+}
+
 // All signature requests for an engagement (RLS-scoped). Used by the engagement
 // detail page to show each signature item's status. Degrades to [] before
 // migration 0400 is applied.
