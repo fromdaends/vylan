@@ -2,6 +2,9 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
+import { Check } from "lucide-react";
+import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -173,24 +176,35 @@ function DisplayNameSection({
   t: (k: string) => string;
   tc: (k: string) => string;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [value, setValue] = useState(current);
-  const [saved, setSaved] = useState(false);
+  // The last SAVED value — the Save button lights up only while the field
+  // differs from it, and it advances on a successful save.
+  const [baseline, setBaseline] = useState(current);
+  const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dirty = value.trim() !== baseline.trim();
 
   function save() {
-    setSaved(false);
     setError(null);
-    if (value === current) return;
+    if (!dirty || pending) return;
+    const next = value.trim();
     const fd = new FormData();
-    fd.append("display_name", value);
+    fd.append("display_name", next);
     startTransition(async () => {
       const res = await updateDisplayNameAction(fd);
       if (!res.ok) {
         setError(t(`errors.${res.error}`) || tc("loading"));
         return;
       }
-      setSaved(true);
+      setValue(next);
+      setBaseline(next);
+      setJustSaved(true);
+      toast.success(t("name_saved"));
+      // Push the new name to every surface that shows it (sidebar, roster,
+      // assignee, comments, activity) without a manual reload.
+      router.refresh();
     });
   }
 
@@ -200,26 +214,47 @@ function DisplayNameSection({
       <p className="text-xs text-muted-foreground mt-1">
         {t("section_name_hint")}
       </p>
-      <div className="mt-4 max-w-sm">
-        <Label htmlFor="display_name" className="sr-only">
-          {t("section_name")}
-        </Label>
-        <Input
-          id="display_name"
-          name="display_name"
-          value={value}
-          onChange={(e) => {
-            setValue(e.target.value);
-            setSaved(false);
-          }}
-          onBlur={save}
-          placeholder={placeholder || t("name_placeholder")}
-          disabled={pending}
-        />
-        {saved && (
-          <p className="mt-2 text-xs text-muted-foreground">{t("saved")}</p>
-        )}
-        {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+      <div className="mt-4 flex max-w-sm items-start gap-2">
+        <div className="flex-1">
+          <Label htmlFor="display_name" className="sr-only">
+            {t("section_name")}
+          </Label>
+          <Input
+            id="display_name"
+            name="display_name"
+            value={value}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setJustSaved(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                save();
+              }
+            }}
+            placeholder={placeholder || t("name_placeholder")}
+            disabled={pending}
+          />
+          {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
+        </div>
+        <Button
+          type="button"
+          onClick={save}
+          disabled={!dirty || pending}
+          className="shrink-0"
+        >
+          {pending ? (
+            tc("loading")
+          ) : justSaved && !dirty ? (
+            <>
+              <Check className="size-4" />
+              {t("saved")}
+            </>
+          ) : (
+            t("save")
+          )}
+        </Button>
       </div>
     </section>
   );

@@ -65,7 +65,11 @@ export async function updateDisplayNameAction(
   } catch {
     return { ok: false, error: "save_failed" };
   }
-  revalidatePath("/profile", "layout");
+  // Your name shows across the whole app (sidebar, roster, assignee, comments,
+  // activity), so invalidate the ROOT layout — not just /profile — so every
+  // surface re-resolves it. The client also router.refresh()es for an instant
+  // update on the page you're on.
+  revalidatePath("/", "layout");
   return { ok: true };
 }
 
