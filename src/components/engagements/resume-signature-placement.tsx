@@ -48,6 +48,7 @@ export function ResumeSignaturePlacement({ itemId }: { itemId: string }) {
       }
       await openSignWellSession({
         url: res.url,
+        collapseAppSidebar: true,
         onCompleted: async () => {
           try {
             await finalizeSignaturePlacementAction(itemId);
