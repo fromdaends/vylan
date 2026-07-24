@@ -73,12 +73,17 @@ export function MoneySection({
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-0">
         {isDocs ? (
           <>
+            {/* Leads with the average received PER MONTH (the honest, range-
+                comparable figure) rather than a raw "in this period" total. For
+                a single-month window the two are identical, so we just say
+                "received this month"; over a longer window we show the monthly
+                average with the total as context. */}
             <Tile icon={<FileText className="size-4 text-icon-emerald" />} label={copy.docsReceivedLabel}>
-              <CountUp value={documents.totalReceived} format={num} className={cn(BIG, "text-foreground")} />
+              <CountUp value={documents.perMonthAvg} format={num} className={cn(BIG, "text-foreground")} />
               <p className="mt-1 text-xs text-muted-foreground">
-                {documents.granularity === "day"
-                  ? copy.collectedCaption
-                  : `${copy.collectedCaption} · ${copy.docsPerMonth(num(documents.perMonthAvg))}`}
+                {documents.monthsCovered <= 1
+                  ? copy.docsThisMonthCaption
+                  : `${copy.docsPerMonthCaption} · ${copy.docsReceivedTotal(num(documents.totalReceived))}`}
               </p>
             </Tile>
 
@@ -209,6 +214,8 @@ export function MoneySection({
                 value: copy.docsCount(formatNumber(c.count, locale), c.count),
               }))}
               barClass="bg-icon-blue/70"
+              moreLabel={copy.topClientsMore(documents.topClients.length)}
+              lessLabel={copy.topClientsLess}
             />
           )
         : data.topClients.length > 0 && (
@@ -220,6 +227,8 @@ export function MoneySection({
                 value: money(c.cents),
               }))}
               barClass="bg-success/70"
+              moreLabel={copy.topClientsMore(data.topClients.length)}
+              lessLabel={copy.topClientsLess}
             />
           )}
       </div>
@@ -227,23 +236,34 @@ export function MoneySection({
   );
 }
 
+// How many ranked clients show before the "view more" toggle reveals the rest.
+const TOP_CLIENTS_COLLAPSED = 3;
+
 // Shared ranked list (money by cents, documents by count). `weight` drives the
-// proportion bar; `value` is the pre-formatted right-hand figure.
+// proportion bar; `value` is the pre-formatted right-hand figure. Shows the top
+// three by default; a toggle reveals the full ranking (up to TOP_CLIENTS_LIMIT).
 function TopClientsList({
   heading,
   rows,
   barClass,
+  moreLabel,
+  lessLabel,
 }: {
   heading: string;
   rows: { name: string; weight: number; value: string }[];
   barClass: string;
+  moreLabel: string;
+  lessLabel: string;
 }) {
+  const [expanded, setExpanded] = useState(false);
   const top = rows[0]?.weight || 1;
+  const canExpand = rows.length > TOP_CLIENTS_COLLAPSED;
+  const visible = expanded ? rows : rows.slice(0, TOP_CLIENTS_COLLAPSED);
   return (
     <div className="mt-6 border-t border-border/60 pt-5">
       <div className="mb-3 text-xs font-medium text-muted-foreground">{heading}</div>
       <ol className="space-y-2.5">
-        {rows.map((r, i) => {
+        {visible.map((r, i) => {
           const pct = Math.max((r.weight / top) * 100, 2);
           return (
             <li key={`${r.name}-${i}`} className="flex items-center gap-3">
@@ -269,6 +289,15 @@ function TopClientsList({
           );
         })}
       </ol>
+      {canExpand && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-3 text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
+        >
+          {expanded ? lessLabel : moreLabel}
+        </button>
+      )}
     </div>
   );
 }

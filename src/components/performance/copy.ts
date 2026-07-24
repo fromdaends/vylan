@@ -58,6 +58,13 @@ export type PerfCopy = {
     docsTimeToReviewCaption: string;
     docsNoTimeToReview: string;
     docsTopClients: string;
+    // Received tile now leads with the per-month average (not a period total).
+    docsPerMonthCaption: string;
+    docsThisMonthCaption: string;
+    docsReceivedTotal: (n: string) => string;
+    // Top-clients ranking: show 3, reveal the rest behind a toggle.
+    topClientsMore: (n: number) => string;
+    topClientsLess: string;
   };
   ai: {
     heading: string;
@@ -146,9 +153,14 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       docsPendingCaption: "awaiting your review right now",
       docsNonePending: "Nothing awaiting review.",
       docsTimeToReviewLabel: "Time to review",
-      docsTimeToReviewCaption: "average, documents received in this period",
+      docsTimeToReviewCaption: "average, from upload to your review",
       docsNoTimeToReview: "No documents reviewed in this period yet.",
       docsTopClients: "Top clients by documents",
+      docsPerMonthCaption: "per month, on average",
+      docsThisMonthCaption: "received this month",
+      docsReceivedTotal: (n) => `${n} total`,
+      topClientsMore: (n) => `View all ${n}`,
+      topClientsLess: "Show less",
     },
     ai: {
       heading: "AI performance",
@@ -237,9 +249,14 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       docsPendingCaption: "en attente de votre révision en ce moment",
       docsNonePending: "Rien en attente de révision.",
       docsTimeToReviewLabel: "Délai de révision",
-      docsTimeToReviewCaption: "moyenne, documents reçus sur cette période",
+      docsTimeToReviewCaption: "moyenne, du dépôt à votre révision",
       docsNoTimeToReview: "Aucun document révisé sur cette période pour l'instant.",
       docsTopClients: "Meilleurs clients par documents",
+      docsPerMonthCaption: "par mois, en moyenne",
+      docsThisMonthCaption: "reçus ce mois-ci",
+      docsReceivedTotal: (n) => `${n} au total`,
+      topClientsMore: (n) => `Voir les ${n}`,
+      topClientsLess: "Réduire",
     },
     ai: {
       heading: "Performance de l'IA",
