@@ -5,8 +5,6 @@ import { loadAi } from "@/lib/performance/ai";
 import { loadAutomation } from "@/lib/performance/automation";
 import { loadDocuments } from "@/lib/performance/documents";
 import type { PerformanceRange } from "@/lib/performance/types";
-import { getCurrentFirm } from "@/lib/db/firms";
-import { getFirmAiUsage } from "@/lib/ai/usage";
 import { PerformanceView } from "@/components/performance/performance-view";
 
 // Retrospective firm-performance dashboard. Read-only: it never writes to
@@ -35,17 +33,12 @@ export default async function PerformancePage({
   const { range: rangeParam } = await searchParams;
   const range = parseRange(rangeParam);
 
-  const [money, ai, automation, documents, firm] = await Promise.all([
+  const [money, ai, automation, documents] = await Promise.all([
     loadMoney(range),
     loadAi(range),
     loadAutomation(range),
     loadDocuments(range),
-    getCurrentFirm(),
   ]);
-  // Monthly AI-check usage — the same meter as Settings > Documents. Not
-  // range-scoped (it's this calendar month's plan counter). Null-safe if the
-  // firm can't be resolved so the page still renders every other section.
-  const aiUsage = firm ? await getFirmAiUsage(firm.id) : null;
 
   return (
     <PerformanceView
@@ -55,7 +48,6 @@ export default async function PerformancePage({
       ai={ai}
       automation={automation}
       documents={documents}
-      aiUsage={aiUsage}
     />
   );
 }
