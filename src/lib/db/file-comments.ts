@@ -6,6 +6,8 @@
 // teammate's removal.
 
 import { getServerSupabase } from "@/lib/supabase/server";
+import { userDisplayLabel } from "@/lib/db/users";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type FileComment = {
   id: string;
@@ -42,6 +44,43 @@ function toComment(row: Record<string, unknown>): FileComment {
   };
 }
 
+// Overwrite each comment's denormalized author_name with the author's CURRENT
+// display name (resolved live from the users row), so a teammate renaming
+// themselves updates their name on EVERY past comment — like the rest of the
+// team UI (roster, assignee, activity all resolve live). The stored author_name
+// stays the fallback for an author who has LEFT the firm (their users row is no
+// longer visible via RLS → not in the map → keep the name captured at write).
+async function applyLiveAuthorNames(
+  sb: SupabaseClient,
+  comments: FileComment[],
+): Promise<FileComment[]> {
+  const ids = [
+    ...new Set(
+      comments.map((c) => c.authorUserId).filter((x): x is string => !!x),
+    ),
+  ];
+  if (ids.length === 0) return comments;
+  const { data } = await sb
+    .from("users")
+    .select("id, display_name, name, email")
+    .in("id", ids);
+  const nameById = new Map<string, string>();
+  for (const u of (data as Array<{
+    id: string;
+    display_name: string | null;
+    name: string;
+    email: string;
+  }> | null) ?? []) {
+    nameById.set(u.id, userDisplayLabel(u));
+  }
+  if (nameById.size === 0) return comments;
+  return comments.map((c) =>
+    c.authorUserId && nameById.has(c.authorUserId)
+      ? { ...c, authorName: nameById.get(c.authorUserId) as string }
+      : c,
+  );
+}
+
 // One file's comments, oldest first. [] pre-0800 / on error.
 export async function listFileComments(
   uploadedFileId: string,
@@ -60,7 +99,10 @@ export async function listFileComments(
     }
     return [];
   }
-  return ((data as Array<Record<string, unknown>> | null) ?? []).map(toComment);
+  const comments = ((data as Array<Record<string, unknown>> | null) ?? []).map(
+    toComment,
+  );
+  return applyLiveAuthorNames(sb, comments);
 }
 
 // All comments for a set of files in ONE query, grouped by file (oldest first
@@ -85,8 +127,11 @@ export async function listCommentsForFiles(
     }
     return out;
   }
-  for (const row of (data as Array<Record<string, unknown>> | null) ?? []) {
-    const c = toComment(row);
+  const flat = await applyLiveAuthorNames(
+    sb,
+    ((data as Array<Record<string, unknown>> | null) ?? []).map(toComment),
+  );
+  for (const c of flat) {
     const arr = out.get(c.uploadedFileId) ?? [];
     arr.push(c);
     out.set(c.uploadedFileId, arr);
