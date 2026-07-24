@@ -38,6 +38,7 @@ import {
   FirmSettingsSections,
   type FirmInfo,
 } from "@/components/settings/firm-settings-sections";
+import { TeamSettings } from "@/components/settings/team/firm-settings";
 import { AccountSignInSections } from "@/components/settings/account-security-sections";
 import {
   PaymentsConnectSection,
@@ -69,6 +70,7 @@ type SectionId =
   | "account"
   | "security"
   | "general"
+  | "team"
   | "payments"
   | "automation"
   | "integrations"
@@ -100,6 +102,7 @@ const SECTION_IDS: SectionId[] = [
   "account",
   "security",
   "general",
+  "team",
   "payments",
   "automation",
   "integrations",
@@ -130,6 +133,7 @@ export function SettingsShell({
   currentUserId,
   firmName,
   firm,
+  teamSettings,
   firmLogoUrl,
   email,
   mfaEnabled,
@@ -176,6 +180,13 @@ export function SettingsShell({
   currentUserId: string;
   firmName: string;
   firm: FirmInfo;
+  // Owner + team-mode only (null/absent otherwise): the firm's team settings for
+  // the new Team tab (same block as the team page's ⋯ Firm settings dialog).
+  teamSettings?: {
+    clientsPrivateByDefault: boolean;
+    notifyOnAssignment: boolean;
+    requireReviewSignoff: boolean;
+  } | null;
   firmLogoUrl: string | null;
   email: string;
   mfaEnabled: boolean;
@@ -206,14 +217,20 @@ export function SettingsShell({
     { id: "account", label: t("nav_account"), icon: UserCog },
     { id: "security", label: t("nav_security"), icon: ShieldCheck },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
+    { id: "team", label: t("nav_team"), icon: Users },
     { id: "payments", label: t("nav_payments"), icon: Wallet },
     { id: "automation", label: t("nav_automation"), icon: Zap },
     { id: "integrations", label: t("nav_integrations"), icon: Plug },
     { id: "documents", label: t("nav_documents"), icon: FileText },
     { id: "assistant", label: t("nav_assistant"), icon: Bot },
   ];
-  // Owner-only tabs (Billing, Documents) are hidden from staff.
-  const nav = allNav.filter((n) => isOwner || !isOwnerOnlySettingsSection(n.id));
+  // Owner-only tabs (Billing, Documents, Team) are hidden from staff; the Team
+  // tab also only appears in team mode (teamSettings is null otherwise).
+  const nav = allNav.filter(
+    (n) =>
+      (isOwner || !isOwnerOnlySettingsSection(n.id)) &&
+      (n.id !== "team" || teamSettings != null),
+  );
 
   return (
     <div className="flex flex-col gap-8 md:flex-row md:gap-10">
@@ -267,6 +284,21 @@ export function SettingsShell({
             isOwner={isOwner}
             t={t}
           />
+        )}
+        {section === "team" && teamSettings && (
+          <section>
+            <h2 className="text-sm font-semibold">{t("nav_team")}</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {t("team_section_hint")}
+            </p>
+            <div className="mt-4">
+              <TeamSettings
+                clientsPrivateByDefault={teamSettings.clientsPrivateByDefault}
+                notifyOnAssignment={teamSettings.notifyOnAssignment}
+                requireReviewSignoff={teamSettings.requireReviewSignoff}
+              />
+            </div>
+          </section>
         )}
         {section === "payments" && isOwner && (
           // Payments home: client-payment collection on top (Stripe card, then

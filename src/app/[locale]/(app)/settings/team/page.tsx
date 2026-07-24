@@ -17,7 +17,7 @@ import {
   TeamManager,
   TeamSetup,
 } from "@/components/settings/team/team-manager";
-import { FirmSettings } from "@/components/settings/team/firm-settings";
+import { TeamSettings } from "@/components/settings/team/firm-settings";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { listClients } from "@/lib/db/clients";
 import {
@@ -208,8 +208,10 @@ export default async function TeamPage({
         unassignedWorkload={canManage ? workloadUnassigned : undefined}
         firmSettings={
           canManage ? (
-            <FirmSettings
+            <TeamSettings
               clientsPrivateByDefault={firm.clients_private_by_default === true}
+              notifyOnAssignment={firm.notify_on_assignment !== false}
+              requireReviewSignoff={firm.require_review_signoff === true}
             />
           ) : null
         }

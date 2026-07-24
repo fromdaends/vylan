@@ -94,6 +94,13 @@ export type Firm = {
   // Team > Firm settings. Possibly undefined at runtime until 0830 is applied;
   // ALWAYS read as `firm.clients_private_by_default === true`.
   clients_private_by_default: boolean;
+  // Team settings (migration 0860). notify_on_assignment: email a teammate when
+  // work is assigned to them (default true). require_review_signoff: only an
+  // owner can mark an engagement complete (default false). Both possibly
+  // undefined until 0860 is applied — read notify as `!== false` (defaults on)
+  // and signoff as `=== true` (defaults off).
+  notify_on_assignment: boolean;
+  require_review_signoff: boolean;
   created_at: string;
 };
 

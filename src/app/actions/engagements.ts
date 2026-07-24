@@ -526,6 +526,17 @@ export async function cancelEngagementAction(formData: FormData) {
 export async function completeEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
+  // Owner sign-off gate (Team settings): when the firm requires it, only an
+  // OWNER can mark an engagement complete — staff hand it off and an owner signs
+  // off. Defense-in-depth; the UI already hides the button for staff when on.
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (
+    firm?.require_review_signoff === true &&
+    hasActiveTeam({ teamEnabled: firm.team_enabled === true, activeMemberCount: 0 }) &&
+    me?.role !== "owner"
+  ) {
+    return;
+  }
   await completeEngagement(id);
   await cancelEngagementReminders(id);
   const engagement = await getEngagement(id);
@@ -716,11 +727,12 @@ export async function reassignEngagementAction(
   });
 
   // Schedule the delayed catch-up EMAIL — only when SOMEONE ELSE assigned the
-  // work (never self-assignment). Supersede any pending catch-up for this
+  // work (never self-assignment) AND the firm hasn't turned assignment emails
+  // off (Team settings; defaults on). Supersede any pending catch-up for this
   // engagement (a re-reassignment changes who should be emailed). Best-effort:
   // never fail the reassignment on a queue hiccup. The in-app notification is
-  // instant + independent of this.
-  if (user.id !== assigneeId) {
+  // instant + independent of this (and always shows).
+  if (user.id !== assigneeId && firm.notify_on_assignment !== false) {
     try {
       await cancelPendingJobs(
         "notify_assignment",

@@ -911,6 +911,45 @@ export async function setClientsPrivateDefault(
   return { ok: true };
 }
 
+// The simple boolean team settings (owner-set). Whitelisted so a caller can't
+// flip an arbitrary firms column. clients_private_by_default is NOT here — it
+// has its own action (setClientsPrivateDefault) because enabling it backfills.
+const TEAM_FLAGS = ["notify_on_assignment", "require_review_signoff"] as const;
+export type TeamFlag = (typeof TEAM_FLAGS)[number];
+
+// Toggle a firm team setting (owner-only). Service-role update scoped to the
+// firm (like team_enabled), so no column grant needed; fail-open with
+// "unavailable" if 0860 isn't applied yet. Logs firm_settings_changed.
+export async function setFirmTeamFlag(
+  flag: TeamFlag,
+  enabled: boolean,
+): Promise<FirmSettingResult | { ok: false; error: "unavailable" }> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+  if (!TEAM_FLAGS.includes(flag)) return { ok: false, error: "update_failed" };
+
+  const admin = getServiceRoleSupabase();
+  const { error } = await admin
+    .from("firms")
+    .update({ [flag]: enabled })
+    .eq("id", firm.id);
+  if (error) {
+    if (error.code === "PGRST204" || error.code === "42703") {
+      return { ok: false, error: "unavailable" };
+    }
+    console.error(`[team] setFirmTeamFlag(${flag}) failed:`, error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firm.id, null, "firm_settings_changed", {
+    setting: flag,
+    value: enabled,
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 // Leaves/disbands a one-person team without deleting the firm or any work.
 // Teams with another active member or a live invitation must be resolved first
 // so this action can never surprise someone by removing their collaboration UI.

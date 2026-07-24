@@ -258,6 +258,15 @@ export default async function SettingsPage({
           brand_color: firm.brand_color,
           locale_default: firm.locale_default,
         }}
+        teamSettings={
+          isOwner && firm.team_enabled === true
+            ? {
+                clientsPrivateByDefault: firm.clients_private_by_default === true,
+                notifyOnAssignment: firm.notify_on_assignment !== false,
+                requireReviewSignoff: firm.require_review_signoff === true,
+              }
+            : null
+        }
         firmLogoUrl={firmLogoUrl}
         email={user.email}
         mfaEnabled={mfaEnabled}
