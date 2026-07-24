@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Clock, FileText, Lock, Timer, Wallet } from "lucide-react";
+import { CalendarDays, Clock, FileText, Lock, Timer, Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatNumber, type AppLocale } from "@/lib/format";
 import type {
@@ -73,18 +73,11 @@ export function MoneySection({
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-0">
         {isDocs ? (
           <>
-            {/* Leads with the average received PER MONTH (the honest, range-
-                comparable figure) rather than a raw "in this period" total. For
-                a single-month window the two are identical, so we just say
-                "received this month"; over a longer window we show the monthly
-                average with the total as context. */}
+            {/* Total documents received in range — the headline count the
+                founder wants kept front-and-centre. */}
             <Tile icon={<FileText className="size-4 text-icon-emerald" />} label={copy.docsReceivedLabel}>
-              <CountUp value={documents.perMonthAvg} format={num} className={cn(BIG, "text-foreground")} />
-              <p className="mt-1 text-xs text-muted-foreground">
-                {documents.monthsCovered <= 1
-                  ? copy.docsThisMonthCaption
-                  : `${copy.docsPerMonthCaption} · ${copy.docsReceivedTotal(num(documents.totalReceived))}`}
-              </p>
+              <CountUp value={documents.totalReceived} format={num} className={cn(BIG, "text-foreground")} />
+              <p className="mt-1 text-xs text-muted-foreground">{copy.docsReceivedCaption}</p>
             </Tile>
 
             <Tile icon={<Clock className="size-4 text-icon-amber" />} label={copy.docsPendingLabel}>
@@ -94,24 +87,11 @@ export function MoneySection({
               </p>
             </Tile>
 
-            <Tile icon={<Timer className="size-4 text-icon-blue" />} label={copy.docsTimeToReviewLabel}>
-              {documents.timeToReview.avgDays != null ? (
-                <>
-                  <CountUp
-                    value={documents.timeToReview.avgDays}
-                    format={(n) => copy.days(formatDays(n, locale))}
-                    className={cn(BIG, "text-foreground")}
-                  />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {copy.docsTimeToReviewCaption}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <span className={cn(BIG, "text-muted-foreground/40")}>—</span>
-                  <p className="mt-1 text-xs text-muted-foreground">{copy.docsNoTimeToReview}</p>
-                </>
-              )}
+            {/* Average documents received per calendar month — replaces the
+                retired upload→review turnaround stat (founder: "useless"). */}
+            <Tile icon={<CalendarDays className="size-4 text-icon-blue" />} label={copy.docsPerMonthLabel}>
+              <CountUp value={documents.perMonthAvg} format={num} className={cn(BIG, "text-foreground")} />
+              <p className="mt-1 text-xs text-muted-foreground">{copy.docsPerMonthTileCaption}</p>
             </Tile>
           </>
         ) : (

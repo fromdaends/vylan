@@ -51,17 +51,15 @@ export type PerfCopy = {
     docsHeading: string;
     docsCaption: string;
     docsReceivedLabel: string;
+    docsReceivedCaption: string;
     docsPendingLabel: string;
     docsPendingCaption: string;
     docsNonePending: string;
-    docsTimeToReviewLabel: string;
-    docsTimeToReviewCaption: string;
-    docsNoTimeToReview: string;
+    // Third tile: average documents received per calendar month (replaces the
+    // retired upload→review turnaround stat).
+    docsPerMonthLabel: string;
+    docsPerMonthTileCaption: string;
     docsTopClients: string;
-    // Received tile now leads with the per-month average (not a period total).
-    docsPerMonthCaption: string;
-    docsThisMonthCaption: string;
-    docsReceivedTotal: (n: string) => string;
     // Top-clients ranking: show 3, reveal the rest behind a toggle.
     topClientsMore: (n: number) => string;
     topClientsLess: string;
@@ -149,16 +147,13 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       docsHeading: "Documents",
       docsCaption: "Documents received from your clients.",
       docsReceivedLabel: "Received",
+      docsReceivedCaption: "through Vylan",
       docsPendingLabel: "Pending review",
       docsPendingCaption: "awaiting your review right now",
       docsNonePending: "Nothing awaiting review.",
-      docsTimeToReviewLabel: "Time to review",
-      docsTimeToReviewCaption: "average, from upload to your review",
-      docsNoTimeToReview: "No documents reviewed in this period yet.",
+      docsPerMonthLabel: "Per month",
+      docsPerMonthTileCaption: "documents, on average",
       docsTopClients: "Top clients by documents",
-      docsPerMonthCaption: "per month, on average",
-      docsThisMonthCaption: "received this month",
-      docsReceivedTotal: (n) => `${n} total`,
       topClientsMore: (n) => `View all ${n}`,
       topClientsLess: "Show less",
     },
@@ -245,16 +240,13 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       docsHeading: "Documents",
       docsCaption: "Documents reçus de vos clients.",
       docsReceivedLabel: "Reçus",
+      docsReceivedCaption: "via Vylan",
       docsPendingLabel: "En attente de révision",
       docsPendingCaption: "en attente de votre révision en ce moment",
       docsNonePending: "Rien en attente de révision.",
-      docsTimeToReviewLabel: "Délai de révision",
-      docsTimeToReviewCaption: "moyenne, du dépôt à votre révision",
-      docsNoTimeToReview: "Aucun document révisé sur cette période pour l'instant.",
+      docsPerMonthLabel: "Par mois",
+      docsPerMonthTileCaption: "documents, en moyenne",
       docsTopClients: "Meilleurs clients par documents",
-      docsPerMonthCaption: "par mois, en moyenne",
-      docsThisMonthCaption: "reçus ce mois-ci",
-      docsReceivedTotal: (n) => `${n} au total`,
       topClientsMore: (n) => `Voir les ${n}`,
       topClientsLess: "Réduire",
     },
