@@ -1,10 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Clock, Lock, Timer, Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { AppLocale } from "@/lib/format";
-import type { MoneySection as MoneyData } from "@/lib/performance/types";
+import {
+  TOP_CLIENTS_COLLAPSED,
+  type MoneySection as MoneyData,
+} from "@/lib/performance/types";
 import type { PerfCopy } from "./copy";
 import { CountUp } from "./count-up";
 import { MoneyChart } from "./money-chart";
@@ -23,6 +26,10 @@ export function MoneySection({
 }) {
   const hasCollected = data.collectedCount > 0;
   const money = (n: number) => centsToCurrency(n, locale, 0);
+  const [showAllClients, setShowAllClients] = useState(false);
+  const visibleClients = showAllClients
+    ? data.topClients
+    : data.topClients.slice(0, TOP_CLIENTS_COLLAPSED);
 
   return (
     <section>
@@ -108,7 +115,7 @@ export function MoneySection({
             {copy.topClients}
           </div>
           <ol className="space-y-2.5">
-            {data.topClients.map((c, i) => {
+            {visibleClients.map((c, i) => {
               const pct = Math.max(
                 (c.cents / data.topClients[0].cents) * 100,
                 2,
@@ -134,6 +141,15 @@ export function MoneySection({
               );
             })}
           </ol>
+          {data.topClients.length > TOP_CLIENTS_COLLAPSED && (
+            <button
+              type="button"
+              onClick={() => setShowAllClients((v) => !v)}
+              className="mt-3 cursor-pointer rounded-sm text-xs font-medium text-accent transition-colors hover:text-accent-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {showAllClients ? copy.viewLess : copy.viewMore}
+            </button>
+          )}
         </div>
       )}
     </section>

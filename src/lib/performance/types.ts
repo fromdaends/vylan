@@ -40,8 +40,12 @@ export type TimeToPaidSplit = {
 // One row of the "top clients by amount paid" ranking (range-scoped).
 export type TopClient = { name: string; cents: number; count: number };
 
-// How many clients the ranking shows.
-export const TOP_CLIENTS_LIMIT = 5;
+// How many clients the ranking makes available (the UI shows the first few and
+// reveals the rest behind a "view more").
+export const TOP_CLIENTS_LIMIT = 25;
+
+// How many the ranking shows before "view more".
+export const TOP_CLIENTS_COLLAPSED = 3;
 
 export type MoneySection = {
   currency: string;
