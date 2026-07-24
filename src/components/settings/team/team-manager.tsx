@@ -378,21 +378,16 @@ export function TeamManager({
         </div>
       </div>
 
-      {/* Pending invitations (owner-only; hidden on trial — none can exist) */}
-      {canManage && !onTrial && (
+      {/* Pending invitations — only rendered when there ACTUALLY are some
+          (owner-only; hidden on trial — none can exist). No empty-state box. */}
+      {canManage && !onTrial && pendingInvites.length > 0 && (
         <div>
           <h2 className="text-sm font-semibold">{t("section_pending")}</h2>
-          {pendingInvites.length === 0 ? (
-            <p className="mt-3 rounded-lg border border-dashed border-border/50 px-4 py-8 text-center text-sm text-muted-foreground">
-              {t("pending_empty")}
-            </p>
-          ) : (
-            <div className="mt-3 border-t border-border/60">
-              {pendingInvites.map((inv) => (
-                <InviteRow key={inv.id} invite={inv} locale={locale} />
-              ))}
-            </div>
-          )}
+          <div className="mt-3 border-t border-border/60">
+            {pendingInvites.map((inv) => (
+              <InviteRow key={inv.id} invite={inv} locale={locale} />
+            ))}
+          </div>
         </div>
       )}
 
