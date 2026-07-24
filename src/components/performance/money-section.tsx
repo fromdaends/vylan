@@ -73,11 +73,11 @@ export function MoneySection({
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 sm:gap-0">
         {isDocs ? (
           <>
-            {/* Total documents received in range — the headline count the
-                founder wants kept front-and-centre. */}
+            {/* Total documents received in range — the headline count. The
+                "through Vylan" note now lives in the section subtitle, so this
+                tile is just the number. */}
             <Tile icon={<FileText className="size-4 text-icon-emerald" />} label={copy.docsReceivedLabel}>
               <CountUp value={documents.totalReceived} format={num} className={cn(BIG, "text-foreground")} />
-              <p className="mt-1 text-xs text-muted-foreground">{copy.docsReceivedCaption}</p>
             </Tile>
 
             <Tile icon={<Clock className="size-4 text-icon-amber" />} label={copy.docsPendingLabel}>
