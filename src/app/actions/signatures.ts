@@ -16,15 +16,35 @@ import {
 } from "@/lib/storage";
 import {
   createSignatureDocument,
+  sendDocument,
+  getDocument,
   isSignwellConfigured,
+  isSignwellEmbeddedEditingEnabled,
   isSignwellTestMode,
   SignwellError,
   type SignatureStatus,
 } from "@/lib/signwell/client";
-import { createSignatureRequest } from "@/lib/db/signature-requests";
+import {
+  createSignatureRequest,
+  getSignatureRequestByItem,
+  updateSignatureRequestStatus,
+} from "@/lib/db/signature-requests";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { sendEmail, buildSignatureRequestEmail } from "@/lib/email";
 import type { ItemActionState } from "@/app/actions/items";
+
+// The add-signature action can return an embedded field-placement editor URL (in
+// "place anywhere" mode) so the dialog can open SignWell's editor right after the
+// upload. A superset of ItemActionState so the existing dialog wiring still fits.
+export type SignatureActionState =
+  | (NonNullable<ItemActionState> & {
+      // Set when the accountant should place the signature field(s) in the
+      // embedded editor before the request goes out. The dialog opens this URL,
+      // then calls finalizeSignaturePlacementAction(itemId) on completion.
+      editUrl?: string;
+      itemId?: string;
+    })
+  | null;
 
 // Accountant creates a SIGNATURE item: they name it (FR + EN) and upload the PDF
 // the client needs to sign. We store that document, create the item
@@ -33,9 +53,9 @@ import type { ItemActionState } from "@/app/actions/items";
 // document inside the Vylan portal (Phase 3); the signed copy + audit trail flow
 // back via the SignWell webhook (Phase 4).
 export async function addSignatureItemAction(
-  _prev: ItemActionState,
+  _prev: SignatureActionState,
   formData: FormData,
-): Promise<ItemActionState> {
+): Promise<SignatureActionState> {
   const engagementId = formData.get("engagement_id");
   const labelFr = formData.get("label_fr");
   const labelEn = formData.get("label_en");
@@ -105,27 +125,32 @@ export async function addSignatureItemAction(
     return { error: "generic" };
   }
 
-  // Resolve the signer (client) + firm once — needed for both the SignWell
-  // request and the notification email.
+  // Resolve the signer (client) — needed for the SignWell request. The firm +
+  // magic token for the notification email are resolved lazily in
+  // announceSignatureRequest, so we don't fetch them here.
   let client: Awaited<ReturnType<typeof getClient>> = null;
-  let firm: Awaited<ReturnType<typeof getCurrentFirm>> = null;
   try {
-    [client, firm] = await Promise.all([
-      getClient(eng.client_id as string),
-      getCurrentFirm(),
-    ]);
+    client = await getClient(eng.client_id as string);
   } catch (e) {
-    console.error("[addSignatureItemAction] client/firm lookup failed:", e);
+    console.error("[addSignatureItemAction] client lookup failed:", e);
   }
 
   // Create the EMBEDDED SignWell signature request. Non-fatal: the checklist
   // item already exists, so if SignWell isn't configured yet or the call errors,
   // we still record a signature_requests row marked 'error' so the engagement
   // surfaces "signing setup needed" instead of silently doing nothing.
+  //
+  // Two placement modes:
+  //  - "place anywhere" (an API Application is configured): the document is
+  //    created as an editable DRAFT and we hand back an editor URL. The client is
+  //    notified only AFTER the accountant positions the field(s) and finalizes.
+  //  - default: sent immediately with an auto-appended signature page (original).
   const testMode = isSignwellTestMode();
+  const useEditor = isSignwellEmbeddedEditingEnabled();
   let srStatus: SignatureStatus = "pending";
   let srDocId: string | null = null;
   let srError: string | null = null;
+  let editUrl: string | null = null;
   if (!isSignwellConfigured()) {
     srStatus = "error";
     srError = "signwell_not_configured";
@@ -141,13 +166,28 @@ export async function addSignatureItemAction(
         signerEmail: client.email,
         signerName: client.display_name,
         metadata: { request_item_id: itemId, engagement_id: engagementId },
+        embeddedEdit: useEditor,
       });
       srDocId = doc.documentId;
-      // A non-draft document we just created is out for signature. SignWell's
-      // create response can momentarily report "Draft" (which maps to 'pending');
-      // don't let that strand the item as "Signing setup needed" — a created
-      // document is at least 'sent'. The webhook/reconcile advance it from there.
-      srStatus = doc.status === "pending" ? "sent" : doc.status;
+      if (useEditor) {
+        // Draft awaiting the accountant's field placement. It stays 'pending'
+        // (NOT out with the client) until finalize releases it. A missing editor
+        // URL means the API Application is misconfigured — record an error so the
+        // accountant sees "setup needed" rather than an unopenable draft.
+        editUrl = doc.embeddedEditUrl;
+        if (editUrl) {
+          srStatus = "pending";
+        } else {
+          srStatus = "error";
+          srError = "no_edit_url";
+        }
+      } else {
+        // A non-draft document we just created is out for signature. SignWell's
+        // create response can momentarily report "Draft" (-> 'pending'); don't
+        // let that strand the item as "Signing setup needed" — a created document
+        // is at least 'sent'. The webhook/reconcile advance it from there.
+        srStatus = doc.status === "pending" ? "sent" : doc.status;
+      }
     } catch (e) {
       srStatus = "error";
       srError =
@@ -170,48 +210,172 @@ export async function addSignatureItemAction(
     error_detail: srError,
   });
 
-  // One clean audit row for the request (always — even if SignWell setup
-  // failed, the accountant did request a signature and the item exists).
-  await logUserActivity(
-    eng.firm_id as string,
-    engagementId,
-    "signature_requested",
-    {
-      item_id: itemId,
-      label: labelFr.trim(),
-      test_mode: testMode,
-      ...(srDocId ? { signwell_document_id: srDocId } : {}),
-    },
-  );
+  // A draft awaiting field placement is NOT out with the client yet: defer the
+  // "signature_requested" audit + the client email to finalize (when it's sent).
+  const awaitingPlacement =
+    srStatus === "pending" && srDocId !== null && editUrl !== null;
 
-  // Tell the client a signature is waiting. Best-effort — never fail the action
-  // on an email hiccup (the item already exists and shows in the portal).
-  try {
-    if (client?.email && firm && eng.magic_token) {
-      const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-      const url = `${appUrl}/r/${eng.magic_token}`;
-      const firmLogoUrl = await getBrandingImageUrlForEmail(firm.logo_url);
-      const { subject, html, text } = buildSignatureRequestEmail({
-        clientName: client.display_name,
-        firmName: firm.name,
-        firmLogoUrl,
-        documentName: (client.locale === "en" ? labelEn : labelFr).trim(),
-        url,
-        locale: client.locale,
-      });
-      await sendEmail({ to: client.email, subject, html, text });
-    }
-  } catch (e) {
-    console.error("[addSignatureItemAction] email failed:", e);
+  if (!awaitingPlacement) {
+    // Original path: audit the request (always — even a failed setup is a real
+    // "they asked for a signature") and, unless setup failed, notify the client.
+    await announceSignatureRequest({
+      firmId: eng.firm_id as string,
+      engagementId,
+      itemId,
+      labelEn: labelEn.trim(),
+      labelFr: labelFr.trim(),
+      testMode,
+      signwellDocumentId: srDocId,
+      notifyClient: srStatus !== "error",
+    });
   }
 
-  // A signature is now out with the client — the "first signature request sent"
-  // transition. The resolver decides whether that actually moves the stage: a
-  // request that failed to reach SignWell (status 'error') is the FIRM's problem,
-  // not a wait on the client, so it doesn't count as outstanding.
+  // Resolve the stage. A pending draft isn't outstanding, so this won't move the
+  // engagement to "awaiting signature" until finalize flips it to 'sent'.
   await syncEngagementStage(sb, engagementId);
 
   revalidatePath(`/engagements/${engagementId}`);
   revalidatePath("/dashboard");
+  return awaitingPlacement
+    ? { ok: true, editUrl: editUrl ?? undefined, itemId }
+    : { ok: true };
+}
+
+// Audit that a signature request went out, and (optionally) email the client the
+// "a document is waiting for your signature" notification. Shared by the
+// immediate-send path and the finalize-after-placement path. Best-effort on the
+// email: a mail hiccup never fails the caller (the item + request row exist).
+async function announceSignatureRequest(opts: {
+  firmId: string;
+  engagementId: string;
+  itemId: string;
+  labelEn: string;
+  labelFr: string;
+  testMode: boolean;
+  signwellDocumentId: string | null;
+  notifyClient: boolean;
+}): Promise<void> {
+  await logUserActivity(opts.firmId, opts.engagementId, "signature_requested", {
+    item_id: opts.itemId,
+    label: opts.labelFr,
+    test_mode: opts.testMode,
+    ...(opts.signwellDocumentId
+      ? { signwell_document_id: opts.signwellDocumentId }
+      : {}),
+  });
+
+  if (!opts.notifyClient) return;
+
+  try {
+    const sb = await getServerSupabase();
+    const { data: eng } = await sb
+      .from("engagements")
+      .select("client_id, magic_token")
+      .eq("id", opts.engagementId)
+      .maybeSingle();
+    const magicToken = (eng as { magic_token?: string } | null)?.magic_token;
+    const clientId = (eng as { client_id?: string } | null)?.client_id;
+    if (!magicToken || !clientId) return;
+    const [client, firm] = await Promise.all([
+      getClient(clientId),
+      getCurrentFirm(),
+    ]);
+    if (!client?.email || !firm) return;
+    const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+    const url = `${appUrl}/r/${magicToken}`;
+    const firmLogoUrl = await getBrandingImageUrlForEmail(firm.logo_url);
+    const { subject, html, text } = buildSignatureRequestEmail({
+      clientName: client.display_name,
+      firmName: firm.name,
+      firmLogoUrl,
+      documentName: (client.locale === "en" ? opts.labelEn : opts.labelFr).trim(),
+      url,
+      locale: client.locale,
+    });
+    await sendEmail({ to: client.email, subject, html, text });
+  } catch (e) {
+    console.error("[announceSignatureRequest] failed:", e);
+  }
+}
+
+// Release an embedded field-placement DRAFT once the accountant has positioned
+// the signature field(s) in SignWell's editor: send the document, mark the
+// request out for signature, notify the client, and advance the stage. Idempotent
+// — a request already sent/signed (or a repeat call) is a no-op success.
+export async function finalizeSignaturePlacementAction(
+  itemId: string,
+): Promise<{ ok?: boolean; error?: string }> {
+  if (!itemId) return { error: "generic" };
+
+  const sr = await getSignatureRequestByItem(itemId);
+  if (!sr) return { error: "generic" };
+  // Only a pending draft with a document can be finalized; anything else is
+  // already out / signed / failed — treat as done so the UI just refreshes.
+  if (sr.status !== "pending" || !sr.signwell_document_id) {
+    return { ok: true };
+  }
+  const docId = sr.signwell_document_id;
+
+  // The editor may itself have sent the draft when the accountant finished, so
+  // re-check the live status — SignWell rejects sending a non-draft. Only send if
+  // it's still a draft; otherwise adopt whatever status it already reached.
+  let finalStatus: SignatureStatus;
+  try {
+    const state = await getDocument(docId);
+    finalStatus =
+      state.status === "pending" ? await sendDocument(docId) : state.status;
+  } catch (e) {
+    console.error("[finalizeSignaturePlacementAction] send failed:", e);
+    return { error: "signwell" };
+  }
+
+  await updateSignatureRequestStatus(sr.id, finalStatus);
+
+  // Resolve the item labels for the notification, then announce (audit + email).
+  const sb = await getServerSupabase();
+  const { data: item } = await sb
+    .from("request_items")
+    .select("label, label_fr")
+    .eq("id", itemId)
+    .maybeSingle();
+  const labelEn = (item as { label?: string } | null)?.label ?? "";
+  const labelFr = (item as { label_fr?: string } | null)?.label_fr ?? labelEn;
+
+  await announceSignatureRequest({
+    firmId: sr.firm_id,
+    engagementId: sr.engagement_id,
+    itemId,
+    labelEn,
+    labelFr,
+    testMode: sr.test_mode,
+    signwellDocumentId: docId,
+    notifyClient: finalStatus !== "completed",
+  });
+
+  await syncEngagementStage(sb, sr.engagement_id);
+  revalidatePath(`/engagements/${sr.engagement_id}`);
+  revalidatePath("/dashboard");
   return { ok: true };
+}
+
+// Return a fresh field-placement editor URL for a pending draft, so the
+// accountant can RESUME placing fields after closing the editor (the create-time
+// URL expires once opened). RLS-scoped: an accountant only resolves their own
+// firm's item.
+export async function getSignaturePlacementUrlAction(
+  itemId: string,
+): Promise<{ url?: string; error?: string }> {
+  if (!itemId) return { error: "generic" };
+  const sr = await getSignatureRequestByItem(itemId);
+  if (!sr || !sr.signwell_document_id) return { error: "generic" };
+  if (sr.status !== "pending") return { error: "not_pending" };
+  try {
+    const state = await getDocument(sr.signwell_document_id);
+    if (state.status !== "pending") return { error: "not_pending" };
+    if (!state.embeddedEditUrl) return { error: "no_url" };
+    return { url: state.embeddedEditUrl };
+  } catch (e) {
+    console.error("[getSignaturePlacementUrlAction] failed:", e);
+    return { error: "signwell" };
+  }
 }

@@ -44,6 +44,17 @@ const ServerEnvSchema = z.object({
     (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
     z.string().optional(),
   ),
+  // API Application id (from SignWell dashboard → API → Applications). Enables
+  // "embedded requesting": the accountant places the signature field wherever
+  // they want in an embedded editor. Optional — when unset, signing falls back to
+  // an auto-appended signature page (today's behavior), so this is purely
+  // additive. Not a secret (it's an application identifier), but validated like
+  // one for a consistent "blank = unset" treatment. See signwell/client.ts
+  // (signwellApiApplicationId / isSignwellEmbeddedEditingEnabled).
+  SIGNWELL_API_APPLICATION_ID: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z.string().optional(),
+  ),
   // The per-webhook "Webhook ID" SignWell shows when you create the webhook.
   // It is the HMAC-SHA256 key used to verify each event's authenticity. Without
   // it the webhook rejects events, but completion still self-heals via reconcile.

@@ -2,8 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   isSignwellConfigured,
   isSignwellTestMode,
+  isSignwellEmbeddedEditingEnabled,
+  signwellApiApplicationId,
   mapSignwellStatus,
   createSignatureDocument,
+  sendDocument,
   getDocument,
   getCompletedPdf,
   SignwellError,
@@ -115,6 +118,7 @@ describe("createSignatureDocument", () => {
       status: "sent", // "Created" -> sent
       testMode: true,
       embeddedSigningUrl: "https://embed.example/s",
+      embeddedEditUrl: null, // default mode: no editor url
     });
 
     const [url, init] = fetchMock.mock.calls[0];
@@ -178,6 +182,140 @@ describe("createSignatureDocument", () => {
   });
 });
 
+describe("signwellApiApplicationId / isSignwellEmbeddedEditingEnabled", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("returns the trimmed application id, or null when unset/blank", () => {
+    vi.stubEnv("SIGNWELL_API_APPLICATION_ID", "");
+    expect(signwellApiApplicationId()).toBeNull();
+    vi.stubEnv("SIGNWELL_API_APPLICATION_ID", "  app_123  ");
+    expect(signwellApiApplicationId()).toBe("app_123");
+  });
+
+  it("is enabled only when BOTH the API key and application id are set", () => {
+    vi.stubEnv("SIGNWELL_API_KEY", "");
+    vi.stubEnv("SIGNWELL_API_APPLICATION_ID", "app_123");
+    expect(isSignwellEmbeddedEditingEnabled()).toBe(false); // no key
+
+    vi.stubEnv("SIGNWELL_API_KEY", "test-key");
+    vi.stubEnv("SIGNWELL_API_APPLICATION_ID", "");
+    expect(isSignwellEmbeddedEditingEnabled()).toBe(false); // no app id
+
+    vi.stubEnv("SIGNWELL_API_APPLICATION_ID", "app_123");
+    expect(isSignwellEmbeddedEditingEnabled()).toBe(true);
+  });
+});
+
+describe("createSignatureDocument (embedded editing)", () => {
+  beforeEach(() => {
+    vi.stubEnv("SIGNWELL_API_KEY", "test-key");
+    vi.stubEnv("SIGNWELL_TEST_MODE", "true");
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  const valid = {
+    name: "Engagement letter",
+    fileBase64: "QkFTRTY0",
+    fileName: "letter.pdf",
+    signerEmail: "client@example.com",
+    signerName: "Jane Client",
+  };
+
+  it("creates an editable DRAFT with the API Application and returns the editor url", async () => {
+    vi.stubEnv("SIGNWELL_API_APPLICATION_ID", "app_123");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        id: "doc_draft",
+        status: "Draft",
+        test_mode: true,
+        embedded_edit_url: "https://edit.example/e",
+        recipients: [{ id: "client" }],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await createSignatureDocument({ ...valid, embeddedEdit: true });
+    expect(res.documentId).toBe("doc_draft");
+    expect(res.embeddedEditUrl).toBe("https://edit.example/e");
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    // Draft + no auto page (accountant places the field) + tied to the app.
+    expect(body.draft).toBe(true);
+    expect(body.with_signature_page).toBe(false);
+    expect(body.api_application_id).toBe("app_123");
+  });
+
+  it("falls back to the auto signature page when NO application id is set", async () => {
+    vi.stubEnv("SIGNWELL_API_APPLICATION_ID", "");
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "doc_x", status: "Created", recipients: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await createSignatureDocument({ ...valid, embeddedEdit: true });
+    expect(res.embeddedEditUrl).toBeNull();
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.draft).toBe(false);
+    expect(body.with_signature_page).toBe(true);
+    expect(body.api_application_id).toBeUndefined();
+  });
+});
+
+describe("sendDocument", () => {
+  beforeEach(() => vi.stubEnv("SIGNWELL_API_KEY", "test-key"));
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("POSTs to /send and returns the mapped status (Draft -> sent)", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "doc_1", status: "Sent" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const status = await sendDocument("doc_1");
+    expect(status).toBe("sent");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://www.signwell.com/api/v1/documents/doc_1/send");
+    expect(init.method).toBe("POST");
+  });
+
+  it("treats an unreadable body as a successful send", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => {
+        throw new Error("no body");
+      },
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await sendDocument("doc_1")).toBe("sent");
+  });
+
+  it("throws create_failed on a non-ok response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 409,
+        text: async () => "not a draft",
+      }),
+    );
+    await expect(sendDocument("doc_1")).rejects.toMatchObject({
+      code: "create_failed",
+      status: 409,
+    });
+  });
+});
+
 describe("getDocument", () => {
   beforeEach(() => vi.stubEnv("SIGNWELL_API_KEY", "test-key"));
   afterEach(() => {
@@ -202,12 +340,31 @@ describe("getDocument", () => {
     expect(res).toEqual({
       status: "viewed",
       embeddedSigningUrl: "https://embed.example/fresh",
+      embeddedEditUrl: null,
     });
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("https://www.signwell.com/api/v1/documents/doc_123");
     expect(init.method).toBe("GET");
     expect(init.headers["X-Api-Key"]).toBe("test-key");
+  });
+
+  it("surfaces a fresh editor url for a draft (used to resume placement)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          id: "doc_draft",
+          status: "Draft",
+          embedded_edit_url: "https://edit.example/fresh",
+          recipients: [{ id: "client" }],
+        }),
+      }),
+    );
+    const res = await getDocument("doc_draft");
+    expect(res.status).toBe("pending");
+    expect(res.embeddedEditUrl).toBe("https://edit.example/fresh");
   });
 
   it("throws on a non-ok response", async () => {

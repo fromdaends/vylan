@@ -9,42 +9,10 @@ import { Button } from "@/components/ui/button";
 import type { RequestItem } from "@/lib/db/request-items";
 import type { SignatureStatus } from "@/lib/signwell/client";
 import { logPortalActivity } from "@/lib/portal/activity-log";
-
-// Load SignWell's embedded signing script once (idempotent). Resolves when
-// window.SignWellEmbed is available. The script renders the signing session in
-// an iframe over our page, so the client signs INSIDE Vylan (no redirect).
-let embedScriptPromise: Promise<void> | null = null;
-function loadSignWellEmbed(): Promise<void> {
-  if (typeof window === "undefined") {
-    return Promise.reject(new Error("no_window"));
-  }
-  const w = window as unknown as { SignWellEmbed?: unknown };
-  if (w.SignWellEmbed) return Promise.resolve();
-  if (embedScriptPromise) return embedScriptPromise;
-  embedScriptPromise = new Promise<void>((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "https://static.signwell.com/assets/embedded.js";
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => {
-      embedScriptPromise = null;
-      reject(new Error("script_failed"));
-    };
-    document.head.appendChild(s);
-  });
-  return embedScriptPromise;
-}
-
-type SignWellEmbedInstance = { open: () => void; close?: () => void };
-type SignWellEmbedCtor = new (opts: {
-  url: string;
-  events?: {
-    completed?: (e: unknown) => void;
-    declined?: (e: unknown) => void;
-    closed?: (e: unknown) => void;
-    error?: (e: unknown) => void;
-  };
-}) => SignWellEmbedInstance;
+import {
+  loadSignWellEmbed,
+  getSignWellEmbedCtor,
+} from "@/components/signwell/embed-loader";
 
 type LocalState = "idle" | "opening" | "open" | "submitted" | "error";
 
@@ -113,8 +81,7 @@ export function SignatureItemCard({
       if (!body.embedded_signing_url) throw new Error("no_url");
 
       await loadSignWellEmbed();
-      const Ctor = (window as unknown as { SignWellEmbed?: SignWellEmbedCtor })
-        .SignWellEmbed;
+      const Ctor = getSignWellEmbedCtor();
       if (!Ctor) throw new Error("no_ctor");
 
       const embed = new Ctor({
