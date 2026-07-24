@@ -122,7 +122,8 @@ export function TeamManager({
   deactivatedMembers,
   pendingInvites,
   locale,
-  belowHeader,
+  afterActiveMembers,
+  footer,
 }: {
   // The firm's name — shown as the page heading (this is the firm's team).
   firmName: string;
@@ -137,10 +138,10 @@ export function TeamManager({
   deactivatedMembers: DeactivatedMember[];
   pendingInvites: PendingInvite[];
   locale: "fr" | "en";
-  // Optional content rendered directly UNDER the firm-name header (above seats +
-  // roster) — the owner-only workload roll-up lives here so the firm name stays
-  // at the very top of the page.
-  belowHeader?: ReactNode;
+  // Owner-only workload roll-up, rendered right below the Active members list.
+  afterActiveMembers?: ReactNode;
+  // Firm-wide settings section, rendered at the bottom of the team page.
+  footer?: ReactNode;
 }) {
   const t = useTranslations("Team");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -202,9 +203,6 @@ export function TeamManager({
         )}
       </div>
 
-      {/* Owner-only workload roll-up, directly under the firm-name header. */}
-      {belowHeader}
-
       {/* Seat usage (owner-only). On an active free trial we swap the seat
           meter for a "locked — book a call to unlock your team" panel. */}
       {canManage &&
@@ -261,6 +259,9 @@ export function TeamManager({
         </div>
       </div>
 
+      {/* Owner-only workload roll-up, right below the Active members list. */}
+      {afterActiveMembers}
+
       {/* Pending invitations (owner-only; hidden on trial — none can exist) */}
       {canManage && !onTrial && (
         <div>
@@ -293,6 +294,9 @@ export function TeamManager({
             .map((m) => ({ id: m.id, name: m.name, avatarUrl: m.avatarUrl }))}
         />
       )}
+
+      {/* Firm-wide settings (owner-only), at the bottom of the team page. */}
+      {footer}
 
       {canManage && <LeaveTeamSection />}
 

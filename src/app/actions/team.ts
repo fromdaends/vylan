@@ -838,6 +838,59 @@ export async function createTeam(): Promise<TeamModeResult> {
   return { ok: true };
 }
 
+// --- Firm settings: "clients private by default" ---------------------------
+
+export type FirmSettingResult =
+  | { ok: true }
+  | { ok: false; error: "no_session" | "owner_only" | "update_failed" };
+
+// Owner-only firm switch (Team > Firm settings): when turned ON, new clients
+// default to private AND all of this firm's existing clients are backfilled to
+// private right now. Turning it OFF only changes the default for future clients —
+// it never un-hides clients already made private (non-destructive). Firm-scoped
+// via the service role (like createTeam), so no other tenant is touched.
+export async function setClientsPrivateDefault(
+  enabled: boolean,
+): Promise<FirmSettingResult> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+
+  const admin = getServiceRoleSupabase();
+  const { error } = await admin
+    .from("firms")
+    .update({ clients_private_by_default: enabled })
+    .eq("id", firm.id);
+  if (error) {
+    console.error("[team] setClientsPrivateDefault failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  // Backfill this firm's existing clients to private on enable. Scoped to the
+  // firm; only flips currently-public rows.
+  if (enabled) {
+    const { error: backfillErr } = await admin
+      .from("clients")
+      .update({ is_private: true })
+      .eq("firm_id", firm.id)
+      .eq("is_private", false);
+    if (backfillErr) {
+      console.error(
+        "[team] setClientsPrivateDefault backfill failed:",
+        backfillErr.message,
+      );
+      return { ok: false, error: "update_failed" };
+    }
+  }
+
+  await logUserActivity(firm.id, null, "firm_settings_changed", {
+    setting: "clients_private_by_default",
+    value: enabled,
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 // Leaves/disbands a one-person team without deleting the firm or any work.
 // Teams with another active member or a live invitation must be resolved first
 // so this action can never surprise someone by removing their collaboration UI.

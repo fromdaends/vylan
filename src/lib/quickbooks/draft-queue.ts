@@ -49,8 +49,8 @@ export function draftQueueBucket(item: QueueItem): QueueBucket {
     : "ready";
 }
 
-// The filter the toolbar exposes. "all" is the default view: everything EXCEPT
-// dismissed (a dismissed draft is intentionally out of the working set).
+// The filter the toolbar exposes. "all" is the default view and shows every
+// draft (posted + dismissed included); the other chips narrow to one bucket.
 export const QUEUE_FILTERS = [
   "all",
   "needs_input",
@@ -67,14 +67,14 @@ export function parseQueueFilter(v: string | null | undefined): QueueFilter {
     : "all";
 }
 
-// Does a bucket pass the active filter? "all" shows everything but dismissed; a
-// specific filter shows only that bucket. "all" is the active working set, so it
-// excludes both dismissed (skipped) and posted (done).
+// Does a bucket pass the active filter? "all" shows literally EVERY draft
+// (posted + dismissed included — each also has its own chip); a specific filter
+// shows only that bucket.
 export function matchesQueueFilter(
   filter: QueueFilter,
   bucket: QueueBucket,
 ): boolean {
-  if (filter === "all") return bucket !== "dismissed" && bucket !== "posted";
+  if (filter === "all") return true;
   return filter === bucket;
 }
 

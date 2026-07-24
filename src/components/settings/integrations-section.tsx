@@ -2,8 +2,12 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, ChevronRight } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { QuickbooksLists } from "@/components/settings/quickbooks-lists";
+import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
+import { XeroLogo } from "@/components/integrations/xero-logo";
+import { SageLogo } from "@/components/integrations/sage-logo";
 
 // "Integrations" settings section. QuickBooks now connects PER CLIENT (from each
 // client's own page), so this section is NO LONGER a connect entry point — it just
@@ -113,8 +117,30 @@ export function IntegrationsSection({
 
   return (
     <section>
-      <h2 className="text-sm font-semibold">{t("qbo_title")}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">{t("qbo_hint")}</p>
+      <h2 className="text-sm font-semibold">{t("integrations_hub_title")}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {t("integrations_hub_intro")}
+      </p>
+
+      {/* The real entry point: the Integrations hub (QuickBooks, Xero, Sage).
+          Connecting happens there / per client — this Settings tab just points to
+          it, so it's no longer a QuickBooks-only dead end. */}
+      <Link
+        href="/integrations"
+        className="group mt-4 flex max-w-xl items-center justify-between gap-4 rounded-lg border border-border/60 bg-card/40 px-4 py-3 transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5">
+            <QuickbooksLogo className="h-5 w-5" />
+            <XeroLogo className="h-5 w-5" />
+            <SageLogo className="h-5 w-5" />
+          </span>
+          <span className="text-sm font-medium">
+            {t("integrations_open_cta")}
+          </span>
+        </div>
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+      </Link>
 
       {callbackError && (
         <div
@@ -125,54 +151,52 @@ export function IntegrationsSection({
         </div>
       )}
 
-      {!quickbooks.configured ? (
-        <div className="mt-4 max-w-xl rounded-lg border border-border/50 px-4 py-3 text-xs text-muted-foreground">
-          {t("qbo_unavailable")}
-        </div>
-      ) : quickbooks.connected && quickbooks.needsReconnect ? (
-        // A LEGACY firm-wide connection that went dead. Connecting is now per
-        // client, so there's no reconnect button here — the owner disconnects it,
-        // then connects clients from their pages.
-        <div className="mt-4 max-w-xl rounded-lg border border-warning/40 bg-warning/[0.06] p-4">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
-            <div className="space-y-2">
-              <div className="text-sm font-medium">
-                {t("qbo_reconnect_title")}
-              </div>
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {t("qbo_connect_per_client_note")}
-              </p>
-              {disconnectControl}
-            </div>
-          </div>
-        </div>
-      ) : quickbooks.connected ? (
+      {/* Legacy firm-wide QuickBooks connection (client_id NULL). New connections
+          are per client, so this only appears when an old firm-level link still
+          exists — it lets an owner see + disconnect it. */}
+      {quickbooks.configured && quickbooks.connected && (
         <>
-          <div className="mt-4 max-w-xl rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] p-4">
+          <div
+            className={
+              "mt-4 max-w-xl rounded-lg border p-4 " +
+              (quickbooks.needsReconnect
+                ? "border-warning/40 bg-warning/[0.06]"
+                : "border-emerald-500/30 bg-emerald-500/[0.06]")
+            }
+          >
             <div className="flex items-start gap-3">
-              <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+              {quickbooks.needsReconnect ? (
+                <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
+              ) : (
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+              )}
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-medium">
-                    {t("qbo_connected_title")}
+                    {quickbooks.needsReconnect
+                      ? t("qbo_reconnect_title")
+                      : t("qbo_connected_title")}
                   </span>
-                  <span
-                    className={
-                      "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium " +
-                      (quickbooks.environment === "sandbox"
-                        ? "bg-warning/15 text-warning"
-                        : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400")
-                    }
-                  >
-                    {quickbooks.environment === "sandbox"
-                      ? t("qbo_sandbox_badge")
-                      : t("qbo_production_badge")}
-                  </span>
+                  {!quickbooks.needsReconnect && (
+                    <span
+                      className={
+                        "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium " +
+                        (quickbooks.environment === "sandbox"
+                          ? "bg-warning/15 text-warning"
+                          : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400")
+                      }
+                    >
+                      {quickbooks.environment === "sandbox"
+                        ? t("qbo_sandbox_badge")
+                        : t("qbo_production_badge")}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {quickbooks.companyName
-                    ? t("qbo_connected_company", { company: quickbooks.companyName })
+                    ? t("qbo_connected_company", {
+                        company: quickbooks.companyName,
+                      })
                     : t("qbo_connected_hint")}
                 </p>
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
@@ -182,13 +206,8 @@ export function IntegrationsSection({
               </div>
             </div>
           </div>
-          <QuickbooksLists />
+          {!quickbooks.needsReconnect && <QuickbooksLists />}
         </>
-      ) : (
-        // Not connected → connecting happens per client, on each client's page.
-        <div className="mt-4 max-w-xl rounded-lg border border-border/50 p-4 text-xs leading-relaxed text-muted-foreground">
-          {t("qbo_connect_per_client_note")}
-        </div>
       )}
     </section>
   );
