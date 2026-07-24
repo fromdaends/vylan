@@ -14,6 +14,7 @@ export type SettingsSectionId =
   | "security"
   | "appearance"
   | "general"
+  | "team"
   | "payments"
   | "automation"
   | "integrations"
@@ -24,6 +25,9 @@ export type SettingsSectionId =
 // QuickBooks connection + read its data. Connect/disconnect are gated to owners
 // inside IntegrationsSection (isOwner), not by hiding the whole tab.
 export const OWNER_ONLY_SETTINGS_SECTIONS: readonly SettingsSectionId[] = [
+  // Firm-wide team policy (privacy defaults, assignment emails, sign-off) —
+  // owner-only, and the tab only appears in team mode (gated in settings-form).
+  "team",
   "payments",
   "documents",
   // Whether the AI may act without a human confirming is a firm-wide safety

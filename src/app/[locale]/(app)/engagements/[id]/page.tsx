@@ -652,6 +652,12 @@ export default async function EngagementDetailPage({
     engagement.status === "sent" || engagement.status === "in_progress";
   const isDraft = engagement.status === "draft";
   const isComplete = engagement.status === "complete";
+  // Owner sign-off gate (Team settings): staff can't finish an engagement when
+  // the firm requires an owner's sign-off — they hand it off instead.
+  const needsOwnerSignoff =
+    firm?.require_review_signoff === true &&
+    teamEnabled &&
+    user?.role !== "owner";
 
   return (
     <div className="space-y-6">
@@ -866,14 +872,29 @@ export default async function EngagementDetailPage({
                 <SendReminderButton engagementId={engagement.id} />
               )}
               {/* Mark complete — the clear primary action. Plain default
-                  button hover (no green tint) per founder preference. */}
-              <form action={completeEngagementAction}>
-                <input type="hidden" name="id" value={engagement.id} />
-                <Button type="submit" size="sm">
+                  button hover (no green tint) per founder preference. When the
+                  firm requires an owner's sign-off, staff see a disabled button
+                  + hint instead (an owner marks it done). */}
+              {needsOwnerSignoff ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled
+                  title={t("signoff_needed_hint")}
+                >
                   <CheckCircle2 className="size-4" />
-                  {t("mark_complete")}
+                  {t("signoff_needed")}
                 </Button>
-              </form>
+              ) : (
+                <form action={completeEngagementAction}>
+                  <input type="hidden" name="id" value={engagement.id} />
+                  <Button type="submit" size="sm">
+                    <CheckCircle2 className="size-4" />
+                    {t("mark_complete")}
+                  </Button>
+                </form>
+              )}
             </>
           )}
           {/* Compact invoice status pill (a lock icon when the Final documents
