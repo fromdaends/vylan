@@ -164,35 +164,19 @@ export function EngagementsView({
   const [scope, setScope] = useState<string>(
     scopeFromUrl ?? (teamEnabled ? "mine" : "all"),
   );
+  // Keep the scope in sync with a ?assignee= deep-link (e.g. "view Marie's work"
+  // from the team page). No localStorage: engagements default to "mine" on every
+  // load — same as the Clients list — and switching to All firm / a teammate is a
+  // per-visit choice that doesn't stick, so you always land on your own work.
   useEffect(() => {
-    if (!currentUserId || !teamEnabled) return;
-    // A ?assignee= deep-link always wins (e.g. "view Marie's work" from the team
-    // page) so the viewer's own remembered Mine/All can't clobber it.
-    if (scopeFromUrl) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setScope(scopeFromUrl);
-      return;
-    }
-    let saved: string | null = null;
-    try {
-      saved = localStorage.getItem(`vylan:eng-scope:${currentUserId}`);
-    } catch {
-      saved = null;
-    }
-    if (saved === "mine" || saved === "all") setScope(saved);
+    if (!currentUserId || !teamEnabled || !scopeFromUrl) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setScope(scopeFromUrl);
   }, [currentUserId, teamEnabled, scopeFromUrl]);
   const chooseScope = (s: string) => {
     setScope(s);
-    // Persist ONLY the personal Mine/All default; a teammate lens is transient.
-    if (currentUserId && (s === "mine" || s === "all")) {
-      try {
-        localStorage.setItem(`vylan:eng-scope:${currentUserId}`, s);
-      } catch {
-        /* ignore */
-      }
-    }
     // Reflect a teammate lens in the URL; clear it for Mine/All so the URL stays
-    // clean and the next visit's default governs.
+    // clean and a reload returns to the "mine" default.
     setParams({ [ASSIGNEE_PARAM]: s === "mine" || s === "all" ? null : s });
   };
 
