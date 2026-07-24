@@ -112,6 +112,7 @@
     "section_pending": "Pending invitations",
     "section_deactivated": "Deactivated members ({count})",
     "role_owner": "Owner",
+    "firm_menu_label": "Firm options",
     "firm_settings_title": "Firm settings",
     "firm_settings_subtitle": "Firm-wide switches only you and other owners can change.",
     "firm_private_default_label": "Clients private by default",

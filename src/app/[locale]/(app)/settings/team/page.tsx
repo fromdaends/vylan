@@ -17,10 +17,6 @@ import {
   TeamManager,
   TeamSetup,
 } from "@/components/settings/team/team-manager";
-import {
-  TeamWorkloadTable,
-  type TeamWorkloadRow,
-} from "@/components/settings/team/team-workload-table";
 import { FirmSettings } from "@/components/settings/team/firm-settings";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { listClients } from "@/lib/db/clients";
@@ -147,17 +143,19 @@ export default async function TeamPage({
   // (active engagements, ready-to-review, needs-attention, clients). Load the
   // firm's active worklist + clients ONCE and bucket per assignee. Owner-only, so
   // staff never pay for the worklist scan.
-  let workloadRows: TeamWorkloadRow[] = [];
   let workloadUnassigned = {
     activeEngagements: 0,
     readyToReview: 0,
     needsAttention: 0,
   };
   // Members handed to the roster manager — enriched (owners only) with each
-  // person's live-work counts so the guarded-offboarding remove dialog can show
-  // "holds N engagements / M clients" and offer to reassign it.
+  // person's live workload (active / ready-to-review / needs-attention / clients)
+  // so the roster row can show it inline AND the guarded-offboarding dialog can
+  // offer to reassign their work.
   type ManagerMember = (typeof activeMembers)[number] & {
     activeEngagements?: number;
+    readyToReview?: number;
+    needsAttention?: number;
     clients?: number;
   };
   let membersForManager: ManagerMember[] = activeMembers;
@@ -183,24 +181,16 @@ export default async function TeamPage({
         );
       }
     }
-    workloadRows = activeMembers.map((m) => {
+    membersForManager = activeMembers.map((m) => {
       const w = workloadForMember(byMember, m.id);
       return {
-        id: m.id,
-        name: m.name,
-        role: m.role,
-        avatarUrl: m.avatarUrl,
+        ...m,
         activeEngagements: w.activeEngagements,
         readyToReview: w.readyToReview,
         needsAttention: w.needsAttention,
         clients: clientCountByOwner.get(m.id) ?? 0,
       };
     });
-    membersForManager = activeMembers.map((m) => ({
-      ...m,
-      activeEngagements: workloadForMember(byMember, m.id).activeEngagements,
-      clients: clientCountByOwner.get(m.id) ?? 0,
-    }));
   }
 
   return (
@@ -215,20 +205,11 @@ export default async function TeamPage({
         deactivatedMembers={deactivatedMembers}
         pendingInvites={pendingInvites}
         locale={locale}
-        afterActiveMembers={
-          canManage && workloadRows.length > 0 ? (
-            <TeamWorkloadTable
-              rows={workloadRows}
-              unassigned={workloadUnassigned}
-            />
-          ) : null
-        }
-        footer={
+        unassignedWorkload={canManage ? workloadUnassigned : undefined}
+        firmSettings={
           canManage ? (
             <FirmSettings
-              clientsPrivateByDefault={
-                firm.clients_private_by_default === true
-              }
+              clientsPrivateByDefault={firm.clients_private_by_default === true}
             />
           ) : null
         }
