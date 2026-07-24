@@ -293,14 +293,7 @@ export function TeamManager({
           attention / Clients), so there's no separate duplicate table. Stats show
           for owners only; unowned work rolls into a trailing "Unassigned" row. */}
       <div>
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-sm font-semibold">{t("section_active")}</h2>
-          {showStats && (
-            <span className="text-xs text-muted-foreground">
-              {t("workload_subtitle")}
-            </span>
-          )}
-        </div>
+        <h2 className="text-sm font-semibold">{t("section_active")}</h2>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
