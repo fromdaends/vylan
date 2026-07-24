@@ -8,6 +8,11 @@
 // The script renders a SignWell session (signing OR field placement) in an
 // iframe over our page, so everything stays inside Vylan — no redirect.
 
+import {
+  getSidebarCollapsed,
+  setSidebarCollapsed,
+} from "@/lib/sidebar-collapse";
+
 let embedScriptPromise: Promise<void> | null = null;
 
 // Load the script once (idempotent). Resolves when window.SignWellEmbed exists.
@@ -64,17 +69,47 @@ export async function openSignWellSession(opts: {
   onClosed?: () => void;
   onError?: () => void;
   onDeclined?: () => void;
+  // Collapse the app sidebar while the editor is open (accountant flow) to give
+  // it room, and restore it on any terminal event. Skipped if the rail was
+  // already collapsed, so the user's own preference is preserved.
+  collapseAppSidebar?: boolean;
 }): Promise<void> {
   await loadSignWellEmbed();
   const Ctor = getSignWellEmbedCtor();
   if (!Ctor) throw new Error("no_ctor");
+
+  let restoreSidebar: (() => void) | null = null;
+  if (opts.collapseAppSidebar && !getSidebarCollapsed()) {
+    setSidebarCollapsed(true);
+    restoreSidebar = () => setSidebarCollapsed(false);
+  }
+  // Restore the rail exactly once, on whichever terminal event fires first.
+  const done = () => {
+    if (restoreSidebar) {
+      restoreSidebar();
+      restoreSidebar = null;
+    }
+  };
+
   const embed = new Ctor({
     url: opts.url,
     events: {
-      completed: () => opts.onCompleted(),
-      declined: () => opts.onDeclined?.(),
-      closed: () => opts.onClosed?.(),
-      error: () => opts.onError?.(),
+      completed: () => {
+        done();
+        opts.onCompleted();
+      },
+      declined: () => {
+        done();
+        opts.onDeclined?.();
+      },
+      closed: () => {
+        done();
+        opts.onClosed?.();
+      },
+      error: () => {
+        done();
+        opts.onError?.();
+      },
     },
   });
   embed.open();

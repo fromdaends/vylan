@@ -2,6 +2,11 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
+import {
+  SIDEBAR_COLLAPSED_EVENT,
+  getSidebarCollapsed,
+  setSidebarCollapsed,
+} from "@/lib/sidebar-collapse";
 import { brand } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { logoutAction } from "@/app/actions/auth";
@@ -160,24 +165,15 @@ type NavItemDef = {
   color: string;
 };
 
-const COLLAPSED_KEY = "vylan:sidebar-collapsed";
-const COLLAPSED_EVENT = "vylan:sidebar-collapsed-changed";
-
+// The collapsed-state contract (localStorage key + change event + read/write)
+// lives in @/lib/sidebar-collapse so features outside the shell can flip it too.
 function subscribeCollapsed(callback: () => void) {
-  window.addEventListener(COLLAPSED_EVENT, callback);
+  window.addEventListener(SIDEBAR_COLLAPSED_EVENT, callback);
   window.addEventListener("storage", callback);
   return () => {
-    window.removeEventListener(COLLAPSED_EVENT, callback);
+    window.removeEventListener(SIDEBAR_COLLAPSED_EVENT, callback);
     window.removeEventListener("storage", callback);
   };
-}
-
-function getStoredCollapsed(): boolean {
-  try {
-    return localStorage.getItem(COLLAPSED_KEY) === "true";
-  } catch {
-    return false;
-  }
 }
 
 function getServerCollapsed(): boolean {
@@ -229,19 +225,12 @@ export function AppShell({
 
   const collapsed = useSyncExternalStore(
     subscribeCollapsed,
-    getStoredCollapsed,
+    getSidebarCollapsed,
     getServerCollapsed,
   );
   const setCollapsed = (next: boolean | ((prev: boolean) => boolean)) => {
     const value = typeof next === "function" ? next(collapsed) : next;
-    try {
-      localStorage.setItem(COLLAPSED_KEY, String(value));
-    } catch {
-      // ignore
-    }
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event(COLLAPSED_EVENT));
-    }
+    setSidebarCollapsed(value);
   };
 
   // Close the mobile account sheet on route change (e.g. user tapped
