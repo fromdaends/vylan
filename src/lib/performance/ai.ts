@@ -2,6 +2,14 @@
 // decision in range (RLS scopes to the firm automatically), resolves the small
 // amount of context deriveFileAi needs, and hands everything to aggregateAi.
 //
+// Team Wave 4 note: unlike Money/Documents/Automation (0820 "count but don't
+// name" RPCs), this section is left RLS-scoped ON PURPOSE. Its output is an
+// AGREEMENT RATE + case counts — no client names, no dollars — so a staff
+// viewer's stats are simply computed over the docs they can see (a "Private to
+// me" client's decided docs are excluded for staff, included for owners). That's
+// an operational quality metric, not a firm total that misleads if it excludes a
+// few private-client docs, so no definer aggregate is warranted here.
+//
 // Only files a HUMAN approved or rejected count. Duplicates (exact-content
 // re-uploads) are excluded — not independent AI judgments. SYSTEM auto-rejections
 // are ALSO excluded: the AI router writes review_status='rejected' with NO

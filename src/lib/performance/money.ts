@@ -20,6 +20,15 @@ function isMissingColumn(err: { code?: string } | null): boolean {
   return err?.code === "42703" || err?.code === "PGRST204";
 }
 
+// The Wave-4 "count but don't name" RPCs (migration 0820) may not be applied to
+// the remote DB yet. PostgREST reports an unknown function as PGRST202 (not in
+// schema cache) / 42883 (undefined_function). When that happens we fall back to
+// the RLS-scoped read below — which merely undercounts private clients for staff
+// until 0820 lands, never a 500.
+function isMissingFunction(err: { code?: string } | null): boolean {
+  return err?.code === "PGRST202" || err?.code === "42883";
+}
+
 type PaidRow = {
   amount_cents: number;
   currency: string | null;
@@ -29,10 +38,29 @@ type PaidRow = {
   locks_deliverables?: boolean | null;
 };
 
+// Paid invoices, firm-wide INCLUDING private clients (so staff totals are
+// complete — "count but don't name"). Tries the 0820 definer RPC first; on an
+// un-migrated DB it falls back to the RLS-scoped read (which undercounts private
+// clients for staff until 0820 is applied). The RPC redacts the private client's
+// id for staff, so private invoices count in the totals but can't be named.
+async function fetchPaid(
+  sb: SupabaseClient,
+  range: ResolvedRange,
+): Promise<PaidRow[]> {
+  const { data, error } = await sb.rpc("perf_paid_invoices", {
+    p_start: range.startIso ?? null,
+  });
+  if (!error) return (data ?? []) as unknown as PaidRow[];
+  if (!isMissingFunction(error)) {
+    console.error("[performance] perf_paid_invoices rpc failed:", error);
+  }
+  return fetchPaidViaRls(sb, range);
+}
+
 // Tiered select: try with locks_deliverables (migration 0610) and fall back to
 // the legacy shape if that column is absent, treating those invoices as
 // unlocked — so the money section still renders on an un-migrated environment.
-async function fetchPaid(
+async function fetchPaidViaRls(
   sb: SupabaseClient,
   range: ResolvedRange,
 ): Promise<PaidRow[]> {
@@ -71,6 +99,22 @@ async function fetchPaid(
 }
 
 async function fetchOutstanding(
+  sb: SupabaseClient,
+): Promise<{ amount_cents: number; currency: string | null }[]> {
+  const { data, error } = await sb.rpc("perf_outstanding_invoices");
+  if (!error) {
+    return (data ?? []) as unknown as {
+      amount_cents: number;
+      currency: string | null;
+    }[];
+  }
+  if (!isMissingFunction(error)) {
+    console.error("[performance] perf_outstanding_invoices rpc failed:", error);
+  }
+  return fetchOutstandingViaRls(sb);
+}
+
+async function fetchOutstandingViaRls(
   sb: SupabaseClient,
 ): Promise<{ amount_cents: number; currency: string | null }[]> {
   const rows: { amount_cents: number; currency: string | null }[] = [];

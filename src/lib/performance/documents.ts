@@ -14,21 +14,55 @@ import type { DocumentsSection, PerformanceRange } from "./types";
 const PAGE = 1000;
 const MAX_ROWS = 100_000; // safety backstop against a runaway scan
 
-type ReceivedRow = {
+// The 0820 "count but don't name" RPCs may not be applied yet — PostgREST
+// reports an unknown function as PGRST202 / 42883, in which case we fall back to
+// the RLS-scoped read (which undercounts private clients for staff until 0820).
+function isMissingFunction(err: { code?: string } | null): boolean {
+  return err?.code === "PGRST202" || err?.code === "42883";
+}
+
+// One received file, with its client already resolved (and, from the RPC,
+// redacted to null for staff on private clients).
+type ReceivedResolved = {
   uploaded_at: string;
   reviewed_at: string | null;
-  engagement_id: string;
+  client_id: string | null;
   is_duplicate: boolean | null;
 };
 
-// Every non-duplicate file uploaded in range, with its decision time + owning
-// engagement (the engagement carries the client). Counting/bucketing/ranking
-// all happen in aggregateDocuments.
+// Every file uploaded in range, firm-wide INCLUDING private clients (so staff
+// totals are complete). Tries the 0820 definer RPC first (which resolves +
+// redacts the client id); falls back to the RLS-scoped read on an un-migrated DB.
 async function fetchReceived(
   sb: SupabaseClient,
   range: ResolvedRange,
-): Promise<ReceivedRow[]> {
-  const out: ReceivedRow[] = [];
+): Promise<ReceivedResolved[]> {
+  const { data, error } = await sb.rpc("perf_received_docs", {
+    p_start: range.startIso ?? null,
+  });
+  if (!error) {
+    return ((data ?? []) as unknown as ReceivedResolved[]).filter(
+      (r) => r.is_duplicate !== true,
+    );
+  }
+  if (!isMissingFunction(error)) {
+    console.error("[performance] perf_received_docs rpc failed:", error);
+  }
+  return fetchReceivedViaRls(sb, range);
+}
+
+// RLS fallback: page uploaded_files, then resolve each file's client through its
+// engagement (both RLS-scoped, so private clients are simply absent for staff).
+async function fetchReceivedViaRls(
+  sb: SupabaseClient,
+  range: ResolvedRange,
+): Promise<ReceivedResolved[]> {
+  const rows: {
+    uploaded_at: string;
+    reviewed_at: string | null;
+    engagement_id: string;
+    is_duplicate: boolean | null;
+  }[] = [];
   for (let offset = 0; offset <= MAX_ROWS; offset += PAGE) {
     let q = sb
       .from("uploaded_files")
@@ -45,47 +79,21 @@ async function fetchReceived(
       console.error("[performance] fetchReceived failed:", error);
       break;
     }
-    const batch = (data ?? []) as unknown as (ReceivedRow & { id: string })[];
+    const batch = (data ?? []) as unknown as (typeof rows)[number][];
     for (const r of batch) {
       if (r.is_duplicate === true) continue;
-      out.push(r);
+      rows.push(r);
     }
     if (batch.length < PAGE) break;
   }
-  return out;
-}
 
-// Live count of documents still awaiting the accountant's decision — ANY upload
-// date (parallels Outstanding, which is all currently-unpaid invoices). A HEAD
-// count so no rows travel. `not.is.true` keeps false + null is_duplicate rows
-// and drops only true duplicates.
-async function fetchPendingCount(sb: SupabaseClient): Promise<number> {
-  const { count, error } = await sb
-    .from("uploaded_files")
-    .select("id", { count: "exact", head: true })
-    .eq("review_status", "pending")
-    .not("is_duplicate", "is", true);
-  if (error) {
-    console.error("[performance] fetchPendingCount failed:", error);
-    return 0;
-  }
-  return count ?? 0;
-}
-
-// Client display names for the received engagements' clients (RLS-scoped).
-async function fetchClientNamesForEngagements(
-  sb: SupabaseClient,
-  engagementIds: string[],
-): Promise<{ engToClient: Map<string, string>; names: Map<string, string> }> {
+  const engIds = [...new Set(rows.map((r) => r.engagement_id))];
   const engToClient = new Map<string, string>();
-  const names = new Map<string, string>();
-  if (engagementIds.length === 0) return { engToClient, names };
-
-  for (let i = 0; i < engagementIds.length; i += 300) {
+  for (let i = 0; i < engIds.length; i += 300) {
     const { data, error } = await sb
       .from("engagements")
       .select("id, client_id")
-      .in("id", engagementIds.slice(i, i + 300));
+      .in("id", engIds.slice(i, i + 300));
     if (error) {
       console.error("[performance] fetch engagements failed:", error);
       continue;
@@ -94,8 +102,43 @@ async function fetchClientNamesForEngagements(
       if (e.client_id) engToClient.set(e.id, e.client_id);
     }
   }
+  return rows.map((r) => ({
+    uploaded_at: r.uploaded_at,
+    reviewed_at: r.reviewed_at,
+    client_id: engToClient.get(r.engagement_id) ?? null,
+    is_duplicate: r.is_duplicate,
+  }));
+}
 
-  const clientIds = [...new Set(engToClient.values())];
+// Live count of documents still awaiting the accountant's decision — ANY upload
+// date. Firm-wide INCLUDING private clients via the 0820 RPC; RLS fallback (a
+// HEAD count, no rows travel) undercounts private for staff until 0820 lands.
+async function fetchPendingCount(sb: SupabaseClient): Promise<number> {
+  const { data, error } = await sb.rpc("perf_pending_docs_count");
+  if (!error) return (data as number | null) ?? 0;
+  if (!isMissingFunction(error)) {
+    console.error("[performance] perf_pending_docs_count rpc failed:", error);
+  }
+  const { count, error: rlsErr } = await sb
+    .from("uploaded_files")
+    .select("id", { count: "exact", head: true })
+    .eq("review_status", "pending")
+    .not("is_duplicate", "is", true);
+  if (rlsErr) {
+    console.error("[performance] fetchPendingCount failed:", rlsErr);
+    return 0;
+  }
+  return count ?? 0;
+}
+
+// Client display names (RLS-scoped): private clients' names are ABSENT for staff
+// (so they fall out of the "top clients" ranking — count but don't name) and
+// PRESENT for owners (who see everything). Keyed by client_id.
+async function fetchClientNames(
+  sb: SupabaseClient,
+  clientIds: string[],
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
   for (let i = 0; i < clientIds.length; i += 300) {
     const { data, error } = await sb
       .from("clients")
@@ -112,7 +155,7 @@ async function fetchClientNamesForEngagements(
       if (c.display_name) names.set(c.id, c.display_name);
     }
   }
-  return { engToClient, names };
+  return names;
 }
 
 export async function loadDocumentsSection(
@@ -124,13 +167,17 @@ export async function loadDocumentsSection(
     fetchPendingCount(sb),
   ]);
 
-  const engIds = [...new Set(rows.map((r) => r.engagement_id))];
-  const { engToClient, names } = await fetchClientNamesForEngagements(sb, engIds);
+  const clientIds = [
+    ...new Set(
+      rows.map((r) => r.client_id).filter((id): id is string => id != null),
+    ),
+  ];
+  const names = await fetchClientNames(sb, clientIds);
 
   const docs: ReceivedDoc[] = rows.map((r) => ({
     uploadedMs: Date.parse(r.uploaded_at),
     reviewedMs: r.reviewed_at ? Date.parse(r.reviewed_at) : null,
-    clientId: engToClient.get(r.engagement_id) ?? null,
+    clientId: r.client_id,
   }));
 
   return aggregateDocuments(docs, pendingReview, range, names);

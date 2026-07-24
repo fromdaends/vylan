@@ -205,9 +205,6 @@ export default async function TeamPage({
   return (
     <div className="space-y-8">
       {breadcrumb}
-      {canManage && workloadRows.length > 0 && (
-        <TeamWorkloadTable rows={workloadRows} unassigned={workloadUnassigned} />
-      )}
       <TeamManager
         firmName={firm.name}
         canManage={canManage}
@@ -217,6 +214,14 @@ export default async function TeamPage({
         deactivatedMembers={deactivatedMembers}
         pendingInvites={pendingInvites}
         locale={locale}
+        belowHeader={
+          canManage && workloadRows.length > 0 ? (
+            <TeamWorkloadTable
+              rows={workloadRows}
+              unassigned={workloadUnassigned}
+            />
+          ) : null
+        }
       />
     </div>
   );
