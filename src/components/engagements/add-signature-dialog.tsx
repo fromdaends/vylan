@@ -29,10 +29,12 @@ export function AddSignatureDialog({ engagementId }: { engagementId: string }) {
   const tc = useTranslations("Common");
   const [open, setOpen] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
-  // "form" = filling the dialog; "placing" = the SignWell field-placement editor
-  // is open over the page; "finalizing" = sending after placement. The last two
-  // only occur in "place anywhere" mode (an API Application is configured).
-  const [phase, setPhase] = useState<"form" | "placing" | "finalizing">("form");
+  // "form" = filling the dialog; "placing" = briefly, while the SignWell
+  // field-placement editor is being opened. Once it's open we close this whole
+  // dialog (so it doesn't sit on top of the editor), so "placing" is only ever
+  // shown for the moment between submit and the editor appearing. "place
+  // anywhere" mode only.
+  const [phase, setPhase] = useState<"form" | "placing">("form");
   const fileRef = useRef<HTMLInputElement>(null);
   // Guards against opening the editor twice for the same result (React strict
   // mode double-invokes effects in dev).
@@ -73,7 +75,6 @@ export function AddSignatureDialog({ engagementId }: { engagementId: string }) {
         await openSignWellSession({
           url: editUrl,
           onCompleted: async () => {
-            setPhase("finalizing");
             try {
               await finalizeSignaturePlacementAction(itemId);
             } catch {
@@ -87,6 +88,12 @@ export function AddSignatureDialog({ engagementId }: { engagementId: string }) {
           onClosed: () => close(),
           onError: () => close(),
         });
+        // The SignWell editor is now open and covers the page. Close our own
+        // dialog so its "opening…" card doesn't sit on top of the editor (our
+        // dialog stacks above SignWell's overlay). The completed/closed callbacks
+        // above still fire — this component stays mounted while it's closed.
+        setOpen(false);
+        setFileName(null);
       } catch {
         // Couldn't open the editor (script/network) — leave the draft pending so
         // it can be resumed from the row.
@@ -124,11 +131,7 @@ export function AddSignatureDialog({ engagementId }: { engagementId: string }) {
         {phase !== "form" ? (
           <div className="flex items-center gap-3 py-6 text-sm text-muted-foreground">
             <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
-            <span>
-              {phase === "finalizing"
-                ? t("sig_placement_sending")
-                : t("sig_placement_opening")}
-            </span>
+            <span>{t("sig_placement_opening")}</span>
           </div>
         ) : (
           <form action={action} className="space-y-3">
