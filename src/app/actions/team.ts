@@ -866,18 +866,38 @@ export async function setClientsPrivateDefault(
     return { ok: false, error: "update_failed" };
   }
 
-  // Backfill this firm's existing clients to private on enable. Scoped to the
-  // firm; only flips currently-public rows.
+  // Backfill this firm's existing clients AND engagements to private on enable.
+  // Scoped to the firm; only flips currently-public rows.
   if (enabled) {
-    const { error: backfillErr } = await admin
-      .from("clients")
-      .update({ is_private: true })
-      .eq("firm_id", firm.id)
-      .eq("is_private", false);
-    if (backfillErr) {
+    const [clientsRes, engagementsRes] = await Promise.all([
+      admin
+        .from("clients")
+        .update({ is_private: true })
+        .eq("firm_id", firm.id)
+        .eq("is_private", false),
+      admin
+        .from("engagements")
+        .update({ is_private: true })
+        .eq("firm_id", firm.id)
+        .eq("is_private", false),
+    ]);
+    // Fail-OPEN on a missing is_private column (PGRST204/42703): the engagements
+    // column (0850) may not be applied yet even when the clients one (0810) is —
+    // don't fail the whole toggle over it (it'll backfill once 0850 lands, and
+    // new engagements default private meanwhile). Only a genuine error blocks.
+    const isMissingCol = (e: { code?: string } | null) =>
+      e?.code === "PGRST204" || e?.code === "42703";
+    const realError =
+      (clientsRes.error && !isMissingCol(clientsRes.error)
+        ? clientsRes.error
+        : null) ??
+      (engagementsRes.error && !isMissingCol(engagementsRes.error)
+        ? engagementsRes.error
+        : null);
+    if (realError) {
       console.error(
         "[team] setClientsPrivateDefault backfill failed:",
-        backfillErr.message,
+        realError.message,
       );
       return { ok: false, error: "update_failed" };
     }

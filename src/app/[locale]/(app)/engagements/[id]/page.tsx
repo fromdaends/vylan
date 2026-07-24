@@ -758,6 +758,18 @@ export default async function EngagementDetailPage({
                 {t("ai_off_badge")}
               </Badge>
             )}
+            {/* Not on drafts: a draft's privacy toggle lives in the ⋯ menu, which
+                only appears once the engagement is sent — so we don't show a
+                "Private" badge the owner can't act on yet. */}
+            {user?.role === "owner" && engagement.is_private && !isDraft && (
+              <Badge
+                variant="outline"
+                className="gap-1 border-amber-500/40 text-xs text-amber-600 dark:text-amber-400"
+              >
+                <Lock className="size-3" aria-hidden="true" />
+                {t("private_badge")}
+              </Badge>
+            )}
           </div>
           {/* Workflow stage. Its own row rather than inline above: six nodes
               need horizontal room, and crowding them against the client link +
@@ -925,6 +937,14 @@ export default async function EngagementDetailPage({
             <EngagementMoreMenu
               engagementId={engagement.id}
               locale={locale}
+              privacy={
+                teamEnabled && user?.role === "owner"
+                  ? {
+                      isOwner: true,
+                      isPrivate: engagement.is_private ?? false,
+                    }
+                  : undefined
+              }
               repeatSeries={repeatSeries}
               repeatInvoiceAvailable={repeatInvoiceAvailable}
               repeatInvoiceSummary={repeatInvoiceSummary}

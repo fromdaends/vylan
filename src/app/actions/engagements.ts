@@ -621,6 +621,47 @@ export async function restoreEngagementAction(formData: FormData) {
 // Reassign an engagement's accountability to another ACTIVE firm member. Any
 // firm member may reassign — it's accountability, NOT access control (everyone
 // still sees every engagement). Logs engagement_reassigned for the feed.
+// Toggle an engagement's "Private to me" flag (Team Wave 4). OWNER-ONLY, like the
+// per-client control — the engagements_all RLS WITH CHECK is the real gate; this
+// gives a clean UX + defense-in-depth. Only meaningful in team mode. Returns
+// "unavailable" if 0850 isn't applied yet. Logs engagement_privacy_changed.
+export async function setEngagementPrivacyAction(
+  engagementId: string,
+  isPrivate: boolean,
+): Promise<{
+  ok: boolean;
+  error?: "no_session" | "owner_only" | "not_team" | "unavailable" | "update_failed";
+}> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  if (
+    !hasActiveTeam({ teamEnabled: firm.team_enabled === true, activeMemberCount: 0 })
+  ) {
+    return { ok: false, error: "not_team" };
+  }
+
+  const sb = await getServerSupabase();
+  const { error } = await sb
+    .from("engagements")
+    .update({ is_private: isPrivate })
+    .eq("id", engagementId)
+    .eq("firm_id", firm.id);
+  if (error) {
+    if (error.code === "PGRST204" || error.code === "42703") {
+      return { ok: false, error: "unavailable" };
+    }
+    console.error("[engagements] set privacy failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firm.id, engagementId, "engagement_privacy_changed", {
+    is_private: isPrivate,
+  });
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
 export async function reassignEngagementAction(
   engagementId: string,
   assigneeId: string,

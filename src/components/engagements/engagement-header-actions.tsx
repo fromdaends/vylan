@@ -1,19 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import {
   Bell,
   Check,
   Download,
   Link as LinkIcon,
   Loader2,
+  Lock,
+  LockOpen,
   MoreHorizontal,
   Receipt,
   Repeat,
   Trash2,
   Wallet,
 } from "lucide-react";
+import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { useDownloadAll } from "./use-download-all";
 import {
@@ -44,7 +48,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { deleteEngagementAction } from "@/app/actions/engagements";
+import {
+  deleteEngagementAction,
+  setEngagementPrivacyAction,
+} from "@/app/actions/engagements";
 
 // The "..." overflow menu for an engagement's occasional actions: copying
 // links, reminder controls, downloads, and deletion. Activity remains
@@ -70,6 +77,7 @@ export function EngagementMoreMenu({
   repeatInvoiceAvailable,
   repeatInvoiceSummary,
   repeatSeriesOutOfSync,
+  privacy,
 }: {
   engagementId: string;
   locale: "fr" | "en";
@@ -100,10 +108,35 @@ export function EngagementMoreMenu({
   // Whether this engagement's setup differs from its series (edit-future box
   // gating).
   repeatSeriesOutOfSync?: boolean;
+  // Owner-only "Private to me" override (Team Wave 4). Absent for staff / solo
+  // firms → the menu item isn't shown.
+  privacy?: { isOwner: boolean; isPrivate: boolean };
 }) {
   const t = useTranslations("Engagements");
+  const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [copied, setCopied] = useState<null | "client" | "payment">(null);
+  const [pendingPrivacy, startPrivacy] = useTransition();
+  const [isPrivate, setIsPrivate] = useState(privacy?.isPrivate ?? false);
+
+  const togglePrivacy = () => {
+    if (pendingPrivacy) return;
+    const next = !isPrivate;
+    setIsPrivate(next); // optimistic
+    startPrivacy(async () => {
+      const res = await setEngagementPrivacyAction(engagementId, next);
+      if (res.ok) {
+        router.refresh();
+      } else {
+        setIsPrivate(!next); // revert
+        toast.error(
+          res.error === "unavailable"
+            ? t("privacy_unavailable")
+            : t("privacy_failed"),
+        );
+      }
+    });
+  };
 
   const copy = async (which: "client" | "payment", url: string) => {
     try {
@@ -135,6 +168,21 @@ export function EngagementMoreMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
+          {privacy?.isOwner && (
+            <>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  togglePrivacy();
+                }}
+                disabled={pendingPrivacy}
+              >
+                {isPrivate ? <LockOpen /> : <Lock />}
+                {isPrivate ? t("make_public") : t("make_private")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           {isLive && (
             <ReminderAutomationDialog
               engagementId={engagementId}
