@@ -2,18 +2,18 @@
 
 import { useEffect } from "react";
 import {
-  openAssistantOnPageEngagement,
-  type AssistantTab,
-} from "@/components/assistant/assistant-store";
+  openAi,
+  openMessages,
+} from "@/components/assistant/chat-launcher-store";
 
-// Deep-link opener: the engagement page renders this (AFTER the bridge, so
-// the page's engagement is already published) when the URL carries
-// ?panel=<tab> — e.g. the notifications feed's Reply chip links to
-// /engagements/[id]?panel=messages and lands straight in the panel's
-// Client-messages tab. Renders nothing.
-export function OpenPanelOnLoad({ tab }: { tab: AssistantTab }) {
+// Deep-link opener: the engagement page renders this when the URL carries
+// ?panel=<mode> — the notifications feed's Reply chip links to
+// /engagements/[id]?panel=messages and lands straight in the popup's
+// Client-messages mode. Renders nothing.
+export function OpenPanelOnLoad({ tab }: { tab: "messages" | "ai" }) {
   useEffect(() => {
-    openAssistantOnPageEngagement(tab);
+    if (tab === "messages") openMessages();
+    else openAi();
   }, [tab]);
   return null;
 }

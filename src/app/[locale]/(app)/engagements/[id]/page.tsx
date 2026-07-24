@@ -38,7 +38,6 @@ import {
   shouldShowSetLine,
   isMissingPageBlock,
 } from "@/components/engagements/set-summary-line";
-import { SetSummaryChatButton } from "@/components/assistant/set-summary-chat-button";
 import { EngagementPreview } from "@/components/engagements/engagement-preview/engagement-preview";
 import {
   QuickbooksDraftCard,
@@ -58,7 +57,6 @@ import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
-import { AssistantEngagementBridge } from "@/components/assistant/engagement-panel-bridge";
 import { OpenPanelOnLoad } from "@/components/assistant/open-panel-on-load";
 import { EngagementActivityButton } from "@/components/engagements/engagement-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
@@ -67,13 +65,6 @@ import { ResumeSignaturePlacement } from "@/components/engagements/resume-signat
 import { AddFinalDocumentDialog } from "@/components/engagements/add-final-document-dialog";
 import { FinalDocumentRow } from "@/components/engagements/final-document-row";
 import { listFinalDocumentsForEngagement } from "@/lib/db/final-documents";
-import {
-  CLIENT_MESSAGING_SCHEMA_MISSING,
-  countUnreadForFirm,
-  getThreadForEngagement,
-  listClientMessages,
-} from "@/lib/db/client-messages";
-import { getServerSupabase } from "@/lib/supabase/server";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { EngagementMoreMenu } from "@/components/engagements/engagement-header-actions";
 import { SendReminderButton } from "@/components/engagements/send-reminder-button";
@@ -524,27 +515,9 @@ export default async function EngagementDetailPage({
     }),
   );
 
-  // Client messaging: the thread itself now lives in the Assistant panel's
-  // "Client messages" tab (founder restructure) — the page only computes the
-  // UNREAD count and publishes it through the bridge so the panel FAB + tab
-  // can badge it. Loads under RLS; zero before migration 0650.
-  const supabaseForMessages = await getServerSupabase();
-  const [clientMessagesRaw, messageThreadRaw] = await Promise.all([
-    listClientMessages(supabaseForMessages, engagement.id),
-    getThreadForEngagement(supabaseForMessages, engagement.id),
-  ]);
-  const clientMessages =
-    clientMessagesRaw === CLIENT_MESSAGING_SCHEMA_MISSING
-      ? []
-      : clientMessagesRaw;
-  const messageThread =
-    messageThreadRaw === CLIENT_MESSAGING_SCHEMA_MISSING
-      ? null
-      : messageThreadRaw;
-  const messagesUnread = countUnreadForFirm(
-    clientMessages,
-    messageThread?.firm_last_read_at ?? null,
-  );
+  // Client messaging (the thread + its unread count) now lives entirely in the
+  // chat popup, fetched client-side from /api/client-messages — the engagement
+  // page no longer loads or computes it.
 
   const t = await getTranslations("Engagements");
   // Invoice-recurrence summary of the SERIES' stored snapshot (needs `t`, so
@@ -661,22 +634,8 @@ export default async function EngagementDetailPage({
 
   return (
     <div className="space-y-6">
-      {/* Publishes this engagement to the Assistant panel (mounted in the app
-          layout) so the panel preselects it and can badge its button on fresh
-          engagements. Renders nothing. */}
-      <AssistantEngagementBridge
-        engagement={{
-          id: engagement.id,
-          title: engagement.title,
-          clientName: client?.display_name ?? null,
-          status: engagement.status,
-          createdAt: engagement.created_at,
-          messagesUnread,
-        }}
-      />
-      {/* ?panel=messages (the notifications Reply chip) opens the assistant
-          panel straight onto the Client-messages tab. Must render AFTER the
-          bridge so the page's engagement is already published. */}
+      {/* ?panel=messages (the notifications Reply chip) opens the chat popup
+          straight in Client-messages mode. */}
       {sp.panel === "messages" && <OpenPanelOnLoad tab="messages" />}
       {/* Auto-refresh while the engagement is still active. Picks up new
           client uploads + AI verdicts + activity-log entries without
@@ -1248,12 +1207,6 @@ async function ItemRow({
                 <SetSummaryLine
                   assessment={item.ai_set_assessment}
                   locale={locale}
-                />
-                {/* Open the full summary in the engagement chat (accountant
-                    only — the client Preview renders SetSummaryLine alone). */}
-                <SetSummaryChatButton
-                  engagementId={item.engagement_id}
-                  itemId={item.id}
                 />
               </div>
             )}

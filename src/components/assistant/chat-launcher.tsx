@@ -25,7 +25,9 @@ import {
   expandMessages,
   getChatLauncherServerSnapshot,
   getChatLauncherState,
+  openAi,
   openChat,
+  openMessages,
   setChatMode,
   subscribeChatLauncher,
 } from "@/components/assistant/chat-launcher-store";
@@ -100,6 +102,27 @@ export function ChatLauncher({
       window.removeEventListener("pointerdown", onPointerDown);
     };
   }, [open]);
+
+  // App-wide open channels: the profile "Help" menu fires vylan:open-help
+  // (→ Vylan AI), and notification "reply" rows fire vylan:assistant:open with
+  // tab "messages" (→ the inbox). Same window-event channel the old panel used,
+  // so those callers didn't have to change.
+  useEffect(() => {
+    function onOpenHelp() {
+      openAi();
+    }
+    function onOpenAssistant(e: Event) {
+      const detail = (e as CustomEvent).detail as { tab?: string } | undefined;
+      if (detail?.tab === "messages") openMessages();
+      else openAi();
+    }
+    window.addEventListener("vylan:open-help", onOpenHelp);
+    window.addEventListener("vylan:assistant:open", onOpenAssistant);
+    return () => {
+      window.removeEventListener("vylan:open-help", onOpenHelp);
+      window.removeEventListener("vylan:assistant:open", onOpenAssistant);
+    };
+  }, []);
 
   const badge = messagesUnread > 0;
 

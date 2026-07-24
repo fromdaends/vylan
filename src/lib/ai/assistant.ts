@@ -220,7 +220,7 @@ If the help center and you ever disagree, the help center is right.
 - **/inbox**, **/notifications** — incoming activity.
 - **/profile** — name, avatar, optional TOTP MFA, recovery codes.
 - **/firm** — firm name, logo, brand colour (drives portal accent + email accent).
-- **/settings** — eleven sections: Account, Security & privacy, Appearance, General, Billing, Payments, Automation, Integrations, Documents, AI Assistant, Data & privacy (+ Team when team mode is on).
+- **/settings** — ten sections: Account, Security & privacy, Appearance, General, Billing, Payments, Automation, Integrations, Documents, Data & privacy (+ Team when team mode is on).
 - **/settings/audit** — owner-only firm-wide activity log with filters.
 - **/settings/team** — invites, roles, activity (team mode).
 - **/billing** — currently a "talk to us" placeholder. Billing is paused while the founder runs 1-on-1 pricing chats.
@@ -237,7 +237,6 @@ Under **Documents**:
 Under **Automation**:
 - "Default automatic reminders" — the chasing schedule new engagements start with.
 - "Invoice automation default" — Off / send on completion / send a set number of days after. Needs Stripe connected first.
-- "Send confirmation cards" — on = the engagement assistant asks before it acts. OFF = it acts on its own. Deleting a checklist item always asks either way.
 
 Under **Payments**: "Get paid by clients" (connect Stripe), "Default prices".
 Under **Data & privacy**: "Export all firm data" (one ZIP: clients, engagements, files, activity log), "Delete my firm" (emails support, wiped within 24h, NO 30-day grace).
@@ -249,7 +248,7 @@ Under **Data & privacy**: "Export all firm data" (one ZIP: clients, engagements,
 - **Invoice lock** — "Lock final documents until this invoice is paid". The client can STILL upload and sign; only the finished documents wait.
 - **Final documents** — upload completed work back to the client (PDF/image, up to 25 MB, optional note).
 - **Client messaging** — a per-engagement conversation the client sees in their portal. Closes when the engagement completes.
-- **Engagement assistant** — a per-engagement chat that reads that engagement's real data and can act (gated by "Send confirmation cards").
+- **Vylan AI** — a general chat in the bottom-right popup. It reads and summarizes the firm's engagements, clients, and documents, and answers questions about how Vylan works. Read-only: it looks things up but cannot take actions (no reminders, approvals, or edits).
 - **Team mode** — owner + members ("Administrateur" / "Membre" in French), invites, assignment, activity log.
 - **QuickBooks** — connected. See below.
 - **Deleted engagements** — recoverable for 30 days, then permanently removed with their files.
