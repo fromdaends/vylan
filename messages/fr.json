@@ -1277,6 +1277,7 @@
     "nav_dashboard": "Aperçu",
     "nav_inbox": "Boîte de réception",
     "nav_clients": "Clients",
+    "nav_team_chat": "Clavardage d'équipe",
     "nav_firm": "Cabinet",
     "nav_section_main": "Espace de travail",
     "nav_section_account": "Compte",
@@ -1301,6 +1302,21 @@
     "metric_drafts": "Brouillons",
     "metric_completed": "Complétés",
     "recent_engagements": "Engagements récents"
+  },
+  "TeamChat": {
+    "page_title": "Clavardage d'équipe",
+    "page_subtitle": "Un clavardage de groupe privé pour votre cabinet. Vos clients ne le voient jamais.",
+    "thread_title": "Clavardage d'équipe",
+    "team_only": "Équipe seulement — vos clients ne voient jamais ceci.",
+    "loading": "Chargement…",
+    "empty_title": "Aucun message pour l'instant",
+    "empty_body": "Dites bonjour — c'est le clavardage de groupe privé de votre cabinet.",
+    "placeholder": "Écrivez à votre équipe…",
+    "send": "Envoyer",
+    "sending": "Envoi…",
+    "send_failed": "Échec de l'envoi. Veuillez réessayer.",
+    "chars_left": "{count} caractères restants",
+    "not_activated": "Le clavardage d'équipe sera disponible dans un instant."
   },
   "Clients": {
     "import_commit_failed": "Impossible d'importer les clients. Veuillez réessayer.",

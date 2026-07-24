@@ -140,6 +140,7 @@ export default async function AppLayout({
       labels={{
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),
+        teamChat: t("nav_team_chat"),
         engagements: t("nav_engagements"),
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),

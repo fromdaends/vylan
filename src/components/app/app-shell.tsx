@@ -35,6 +35,7 @@ import {
   LayoutDashboard,
   ListChecks,
   LogOut,
+  MessagesSquare,
   PanelLeft,
   PanelLeftClose,
   PencilLine,
@@ -68,6 +69,7 @@ import {
 type Labels = {
   dashboard: string;
   clients: string;
+  teamChat: string;
   engagements: string;
   engagementsToggle: string;
   templates: string;
@@ -271,6 +273,17 @@ export function AppShell({
       color: "text-icon-purple",
     },
     { href: "/clients", label: labels.clients, icon: Users, color: "text-icon-emerald" },
+    // Team chat — a team-mode-only destination (the firm-wide group chat).
+    ...(teamEnabled
+      ? [
+          {
+            href: "/team",
+            label: labels.teamChat,
+            icon: MessagesSquare,
+            color: "text-icon-cyan",
+          },
+        ]
+      : []),
     {
       href: "/templates",
       label: labels.templates,
@@ -381,6 +394,7 @@ export function AppShell({
         userDisplayName={userDisplayName}
         userAvatarUrl={userAvatarUrl}
         brandColor={brandColor}
+        teamEnabled={teamEnabled}
         onAccountClick={() => setMobileAccountOpen(true)}
       />
 
@@ -421,12 +435,14 @@ function MobileTabBar({
   userDisplayName,
   userAvatarUrl,
   brandColor,
+  teamEnabled = true,
   onAccountClick,
 }: {
   labels: Labels;
   userDisplayName: string;
   userAvatarUrl: string | null;
   brandColor: string;
+  teamEnabled?: boolean;
   onAccountClick: () => void;
 }) {
   const pathname = usePathname();
@@ -439,6 +455,17 @@ function MobileTabBar({
       color: "text-icon-blue",
     },
     { href: "/clients", label: labels.clients, icon: Users, color: "text-icon-emerald" },
+    // Team chat — a team-mode-only destination (the firm-wide group chat).
+    ...(teamEnabled
+      ? [
+          {
+            href: "/team",
+            label: labels.teamChat,
+            icon: MessagesSquare,
+            color: "text-icon-cyan",
+          },
+        ]
+      : []),
     {
       href: "/templates",
       label: labels.templates,
