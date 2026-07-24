@@ -1804,6 +1804,7 @@
     "pause_reminders": "Pause reminders",
     "resume_reminders": "Resume reminders",
     "reminders_paused_badge": "Reminders paused",
+    "activity_menu": "Activity",
     "reminder_menu": "Reminders",
     "reminder_dialog_title": "Reminder automation",
     "reminder_dialog_desc": "Edit this engagement's schedule or pause automatic delivery.",

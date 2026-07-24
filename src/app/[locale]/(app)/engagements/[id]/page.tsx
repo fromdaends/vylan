@@ -60,7 +60,7 @@ import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { AssistantEngagementBridge } from "@/components/assistant/engagement-panel-bridge";
 import { OpenPanelOnLoad } from "@/components/assistant/open-panel-on-load";
-import { OpenAssistantActivityButton } from "@/components/assistant/open-assistant-activity-button";
+import { EngagementActivityButton } from "@/components/engagements/engagement-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
 import { ResumeSignaturePlacement } from "@/components/engagements/resume-signature-placement";
@@ -945,11 +945,13 @@ export default async function EngagementDetailPage({
               </form>
             </>
           )}
-          {/* Activity: drafts keep a standalone icon; every other state opens
-              it from the "..." menu, so the row stays calm. Both now open the
-              Assistant panel's Activity tab (the panel absorbed the old
-              slide-out feed). */}
-          {isDraft && <OpenAssistantActivityButton />}
+          {/* Activity: drafts keep a standalone icon (they have no "..." menu);
+              every other state opens it from the "..." menu. Both now link to
+              the owner-only firm audit log, pre-filtered to this client —
+              hidden from staff, who can't open the audit log. */}
+          {isDraft && user?.role === "owner" && (
+            <EngagementActivityButton clientId={engagement.client_id} />
+          )}
           {/* The "..." menu holds reminder and invoice settings, copy links,
               downloads, cancellation, and deletion so only primary buttons +
               the payment pill stay in the row. Delete keeps its confirmation +
@@ -958,6 +960,8 @@ export default async function EngagementDetailPage({
           {!isDraft && (
             <EngagementMoreMenu
               engagementId={engagement.id}
+              clientId={engagement.client_id}
+              isOwner={user?.role === "owner"}
               locale={locale}
               privacy={
                 teamEnabled && user?.role === "owner"
