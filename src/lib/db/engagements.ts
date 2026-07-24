@@ -74,6 +74,11 @@ export type Engagement = {
   // absent → undefined → treated as "not recurring" everywhere).
   series_id?: string | null;
   series_period?: string | null;
+  // Per-engagement "Private to me" (migration 0850). When true the engagement +
+  // its children are hidden from STAFF, visible to owners — enforced in RLS.
+  // Optional on the type so reads survive the pre-migration window (column
+  // absent → undefined → read as `engagement.is_private ?? false` = public).
+  is_private?: boolean;
   created_at: string;
   // Lifecycle (migration 0139). archive = hidden from active views, reversible
   // anytime; soft-delete = 30-day recoverable window before the purge cron.
@@ -271,10 +276,31 @@ export async function createEngagementWithItems(
   if (!user.user) throw new Error("Not authenticated");
   const { data: u } = await supabase
     .from("users")
-    .select("firm_id")
+    .select("firm_id, role")
     .eq("id", user.user.id)
     .single();
   if (!u?.firm_id) throw new Error("No firm for user");
+
+  // New engagements default to PRIVATE when the firm opted into "private by
+  // default" AND the creator is an OWNER (staff can't set is_private — the
+  // engagements_all WITH CHECK would reject the insert). Migration-gated + fails
+  // open: absent column/flag → public (today's behavior). select('*') never
+  // throws on the absent column.
+  let defaultPrivate = false;
+  if (u.role === "owner") {
+    const { data: f } = await supabase
+      .from("firms")
+      .select("*")
+      .eq("id", u.firm_id)
+      .maybeSingle();
+    defaultPrivate =
+      (f as { clients_private_by_default?: boolean } | null)
+        ?.clients_private_by_default === true;
+  }
+  // Included only when it should be TRUE, so a pre-0850 DB (no is_private column)
+  // only hits the tiered retry for owners with the switch on — and the retry
+  // drops it, creating the engagement public (fail-open).
+  const privateCol = defaultPrivate ? { is_private: true } : {};
 
   // Base row (valid in every environment). ai_enabled (migration 0340) is added
   // separately so creation survives the deploy→migrate window: if that column
@@ -336,11 +362,30 @@ export async function createEngagementWithItems(
       ...invoiceCols590,
       ...invoiceCols610,
       ...reminderCols660,
+      // 0850 is the newest column; if it's missing the tiered retries below
+      // (which omit it) create the engagement public — fail-open.
+      ...privateCol,
     })
     .select("*")
     .single();
-  // Retry tiers, dropping the newest columns first: without 0660, then 0610,
-  // then 0590, then ai_enabled (a very old env missing 0340 too).
+  // Retry tiers, dropping the NEWEST column-set first so an unknown column never
+  // takes co-located data down with it: without 0850 (is_private), then 0660,
+  // then 0610, then 0590, then ai_enabled (a very old env missing 0340 too).
+  if (engErr && isUnknownColumnError(engErr)) {
+    // Drop ONLY is_private (0850) — keep reminder_settings (0660) etc., since
+    // 0660 is necessarily present whenever only 0850 is missing.
+    ({ data: engagement, error: engErr } = await supabase
+      .from("engagements")
+      .insert({
+        ...baseRow,
+        ai_enabled: input.ai_enabled,
+        ...invoiceCols590,
+        ...invoiceCols610,
+        ...reminderCols660,
+      })
+      .select("*")
+      .single());
+  }
   if (engErr && isUnknownColumnError(engErr)) {
     ({ data: engagement, error: engErr } = await supabase
       .from("engagements")
