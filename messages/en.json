@@ -1277,6 +1277,7 @@
     "nav_dashboard": "Overview",
     "nav_inbox": "Inbox",
     "nav_clients": "Clients",
+    "nav_team_chat": "Team chat",
     "nav_engagements": "Engagements",
     "nav_engagements_toggle": "Toggle engagement views",
     "nav_templates": "Templates",
@@ -1301,6 +1302,21 @@
     "metric_drafts": "Drafts",
     "metric_completed": "Completed",
     "recent_engagements": "Recent engagements"
+  },
+  "TeamChat": {
+    "page_title": "Team chat",
+    "page_subtitle": "A private group chat for your firm. Your clients never see it.",
+    "thread_title": "Team chat",
+    "team_only": "Team only — your clients never see this.",
+    "loading": "Loading…",
+    "empty_title": "No messages yet",
+    "empty_body": "Say hello — this is your firm's private group chat.",
+    "placeholder": "Message your team…",
+    "send": "Send",
+    "sending": "Sending…",
+    "send_failed": "Couldn't send. Please try again.",
+    "chars_left": "{count} characters left",
+    "not_activated": "Team chat will be available in a moment."
   },
   "Clients": {
     "import_commit_failed": "Couldn't import the clients. Please try again.",
