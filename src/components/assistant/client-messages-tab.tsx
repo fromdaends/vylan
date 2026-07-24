@@ -242,7 +242,7 @@ export function ClientMessagesTab({
   );
 }
 
-function ConversationRow({
+export function ConversationRow({
   conversation: c,
   locale,
   onOpen,

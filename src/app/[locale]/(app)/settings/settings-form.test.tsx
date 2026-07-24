@@ -68,7 +68,6 @@ function renderShell(
         autoRejectDuplicates={false}
         autoRequestMissingPages={false}
         includeQuebecForms={true}
-        chatConfirmActions={true}
         invoiceDefaultMode="off"
         invoiceDefaultDelayDays={null}
         reminderDefaultSettings={null}

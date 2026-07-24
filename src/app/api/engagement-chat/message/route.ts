@@ -24,6 +24,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getFirmAiUsage, incrementFirmAiUsage } from "@/lib/ai/usage";
 import { assistantClient, isAssistantConfigured } from "@/lib/ai/assistant";
+import { assistantActionsEnabled } from "@/lib/ai/assistant-actions";
 import {
   CHAT_HISTORY_MESSAGES,
   CHAT_MAX_MESSAGE_CHARS,
@@ -239,7 +240,13 @@ export async function POST(request: NextRequest) {
         // to confirmation ON (=== false is false), the safe behavior.
         autoConfirm: firm.chat_confirm_actions === false,
       });
-      const allTools = [...CHAT_TOOLS, ...CHAT_ACTION_TOOLS];
+      // Actions are DORMANT by default (ASSISTANT_ACTIONS_ENABLED off): the
+      // propose_* tools aren't offered, so nothing can be proposed or executed
+      // — this endpoint is read/search only. Kept behind the flag so actions
+      // can be re-enabled with one env flip, not a rebuild.
+      const allTools = assistantActionsEnabled()
+        ? [...CHAT_TOOLS, ...CHAT_ACTION_TOOLS]
+        : [...CHAT_TOOLS];
 
       try {
         for (let round = 0; round < CHAT_MAX_TOOL_ROUNDS; round++) {

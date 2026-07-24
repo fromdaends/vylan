@@ -7,6 +7,7 @@ import {
   Bell,
   Check,
   Download,
+  History,
   Link as LinkIcon,
   Loader2,
   Lock,
@@ -59,6 +60,8 @@ import {
 // dropped — Delete covers removing an engagement.)
 export function EngagementMoreMenu({
   engagementId,
+  clientId,
+  isOwner,
   locale,
   status,
   remindersPaused,
@@ -80,6 +83,12 @@ export function EngagementMoreMenu({
   privacy,
 }: {
   engagementId: string;
+  // The engagement's client id — the Activity item deep-links to the firm
+  // audit log pre-filtered to this client.
+  clientId: string;
+  // Firm owner? The Activity item targets the owner-only audit log, so it's
+  // hidden from staff (who would otherwise hit a 404).
+  isOwner: boolean;
   locale: "fr" | "en";
   status: "live" | "complete" | "cancelled";
   remindersPaused: boolean;
@@ -168,6 +177,24 @@ export function EngagementMoreMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
+          {/* Activity → the owner-only firm audit log, pre-filtered to this
+              engagement's client (Activity moved out of the old assistant
+              panel). Owner-gated: staff can't open the audit log. */}
+          {isOwner && (
+            <>
+              <DropdownMenuItem
+                onSelect={() => {
+                  router.push(
+                    `/settings/audit?client=${encodeURIComponent(clientId)}`,
+                  );
+                }}
+              >
+                <History />
+                {t("activity_menu")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           {privacy?.isOwner && (
             <>
               <DropdownMenuItem
