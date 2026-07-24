@@ -21,6 +21,7 @@ import {
   TeamWorkloadTable,
   type TeamWorkloadRow,
 } from "@/components/settings/team/team-workload-table";
+import { FirmSettings } from "@/components/settings/team/firm-settings";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { listClients } from "@/lib/db/clients";
 import {
@@ -214,11 +215,20 @@ export default async function TeamPage({
         deactivatedMembers={deactivatedMembers}
         pendingInvites={pendingInvites}
         locale={locale}
-        belowHeader={
+        afterActiveMembers={
           canManage && workloadRows.length > 0 ? (
             <TeamWorkloadTable
               rows={workloadRows}
               unassigned={workloadUnassigned}
+            />
+          ) : null
+        }
+        footer={
+          canManage ? (
+            <FirmSettings
+              clientsPrivateByDefault={
+                firm.clients_private_by_default === true
+              }
             />
           ) : null
         }

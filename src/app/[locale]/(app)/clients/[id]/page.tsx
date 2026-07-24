@@ -12,7 +12,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { ClientAssignee } from "@/components/clients/client-assignee";
-import { ClientPrivacyToggle } from "@/components/clients/client-privacy-toggle";
+import { ClientActionsMenu } from "@/components/clients/client-actions-menu";
 import {
   getLatestPaymentStatusByEngagementIds,
   listFirmPaymentsWithNames,
@@ -212,7 +212,7 @@ export default async function ClientDetailPage({
             )}
           </div>
           {teamEnabled && (
-            <div className="mt-3 space-y-3">
+            <div className="mt-3">
               <ClientAssignee
                 clientId={client.id}
                 assigneeId={client.assigned_user_id}
@@ -220,12 +220,6 @@ export default async function ClientDetailPage({
                 assigneeDeactivated={!!owner?.deactivated_at}
                 members={assignableMembers}
               />
-              {isOwner && (
-                <ClientPrivacyToggle
-                  clientId={client.id}
-                  initialPrivate={client.is_private ?? false}
-                />
-              )}
             </div>
           )}
         </div>
@@ -251,6 +245,12 @@ export default async function ClientDetailPage({
                 {t("archive")}
               </Button>
             </form>
+          )}
+          {isOwner && teamEnabled && (
+            <ClientActionsMenu
+              clientId={client.id}
+              isPrivate={client.is_private ?? false}
+            />
           )}
         </div>
       </header>

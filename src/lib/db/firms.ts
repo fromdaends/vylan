@@ -89,6 +89,11 @@ export type Firm = {
   // enabled; owners can leave/disband a one-person team without deleting any
   // firm data, then create the team again later.
   team_enabled: boolean;
+  // When true, new clients default to private (owner-only) and enabling it
+  // backfilled existing clients to private (migration 0830). Owner-set from
+  // Team > Firm settings. Possibly undefined at runtime until 0830 is applied;
+  // ALWAYS read as `firm.clients_private_by_default === true`.
+  clients_private_by_default: boolean;
   created_at: string;
 };
 

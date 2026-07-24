@@ -1,4 +1,31 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { getServerSupabase } from "@/lib/supabase/server";
+
+// New clients default to PRIVATE only when the firm opted in
+// (firms.clients_private_by_default, 0830) AND the creator is an OWNER — staff
+// can't set is_private (the clients_all WITH CHECK would reject the insert), and
+// "clients private by default" is the OWNER's posture. Migration-gated + fails
+// open: if the column/role isn't there yet, this is false = public = today's
+// behavior (select('*') never throws on the absent column).
+async function newClientDefaultsPrivate(
+  supabase: SupabaseClient,
+): Promise<boolean> {
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return false;
+  const { data: u } = await supabase
+    .from("users")
+    .select("firm_id, role")
+    .eq("id", auth.user.id)
+    .maybeSingle();
+  if (!u || u.role !== "owner") return false;
+  const { data: f } = await supabase
+    .from("firms")
+    .select("*")
+    .eq("id", u.firm_id)
+    .maybeSingle();
+  return (f as { clients_private_by_default?: boolean } | null)
+    ?.clients_private_by_default === true;
+}
 
 async function currentFirmId(): Promise<string> {
   const supabase = await getServerSupabase();
@@ -128,34 +155,33 @@ export async function createClient(input: ClientInput): Promise<Client> {
   };
 
   // New clients belong to whoever creates them and carry the optional profile
-  // fields. Both sets of columns are migration-gated (0210 owner, 0220 profile),
-  // so degrade progressively if a migration isn't applied yet: full -> owner
-  // only -> base. Creation never breaks; the gated values just fill in once the
-  // migrations land.
+  // fields + the "private by default" flag. Every gated column is migration-gated
+  // (0210 owner, 0220 profile, 0810 is_private), so degrade INDEPENDENTLY, one
+  // column-set per tier, so an unknown column never takes co-located data down
+  // with it: full -> profile (drop is_private) -> owner (drop profile) -> base.
+  // Creation never breaks; each gated value fills in once its migration lands.
   const withOwner = { ...base, assigned_user_id: owner };
-  const withProfile = {
+  const withProfileNoPrivate = {
     ...withOwner,
     province: input.province ?? null,
     timezone: input.timezone ?? null,
     industry: input.industry ?? null,
   };
-  let { data, error } = await supabase
-    .from("clients")
-    .insert(withProfile)
-    .select("*")
-    .single();
+  const withProfile = {
+    ...withProfileNoPrivate,
+    // Honor the firm's "clients private by default" switch (owner-created only).
+    is_private: await newClientDefaultsPrivate(supabase),
+  };
+  const insertClient = (row: object) =>
+    supabase.from("clients").insert(row).select("*").single();
+  let { data, error } = await insertClient(withProfile);
   if (error && isMissingColumn(error)) {
-    ({ data, error } = await supabase
-      .from("clients")
-      .insert(withOwner)
-      .select("*")
-      .single());
+    ({ data, error } = await insertClient(withProfileNoPrivate));
     if (error && isMissingColumn(error)) {
-      ({ data, error } = await supabase
-        .from("clients")
-        .insert(base)
-        .select("*")
-        .single());
+      ({ data, error } = await insertClient(withOwner));
+      if (error && isMissingColumn(error)) {
+        ({ data, error } = await insertClient(base));
+      }
     }
   }
   if (error) throw error;
@@ -180,18 +206,27 @@ export async function bulkCreateClients(
     notes: i.notes ?? null,
   }));
 
-  // Imported clients belong to the importer. Same pre-0210 fallback as
-  // createClient: retry without the owner column if it doesn't exist yet.
+  // Imported clients belong to the importer and honor the firm's "clients private
+  // by default" switch. Degrade one column-set per tier (like createClient), so an
+  // unknown is_private (0810 pending) doesn't also drop owner attribution (0210):
+  // owner+private -> owner only -> base.
+  const isPrivate = await newClientDefaultsPrivate(supabase);
+  const withOwner = base.map((r) => ({ ...r, assigned_user_id: owner }));
   let { error, count } = await supabase
     .from("clients")
     .insert(
-      base.map((r) => ({ ...r, assigned_user_id: owner })),
+      withOwner.map((r) => ({ ...r, is_private: isPrivate })),
       { count: "exact" },
     );
   if (error && isMissingColumn(error)) {
     ({ error, count } = await supabase
       .from("clients")
-      .insert(base, { count: "exact" }));
+      .insert(withOwner, { count: "exact" }));
+    if (error && isMissingColumn(error)) {
+      ({ error, count } = await supabase
+        .from("clients")
+        .insert(base, { count: "exact" }));
+    }
   }
   if (error) throw error;
   return { created: count ?? base.length };

@@ -96,11 +96,12 @@ describe("parseQueueFilter", () => {
 });
 
 describe("matchesQueueFilter", () => {
-  it("'all' shows everything except dismissed", () => {
+  it("'all' shows literally every bucket (posted + dismissed included)", () => {
     expect(matchesQueueFilter("all", "needs_input")).toBe(true);
     expect(matchesQueueFilter("all", "ready")).toBe(true);
     expect(matchesQueueFilter("all", "approved")).toBe(true);
-    expect(matchesQueueFilter("all", "dismissed")).toBe(false);
+    expect(matchesQueueFilter("all", "posted")).toBe(true);
+    expect(matchesQueueFilter("all", "dismissed")).toBe(true);
   });
   it("a specific filter shows only its own bucket", () => {
     expect(matchesQueueFilter("approved", "approved")).toBe(true);
@@ -190,9 +191,9 @@ describe("posted bucket (Stage 5)", () => {
       "posted",
     );
   });
-  it("'all' excludes both posted and dismissed; the posted filter shows only posted", () => {
-    expect(matchesQueueFilter("all", "posted")).toBe(false);
-    expect(matchesQueueFilter("all", "dismissed")).toBe(false);
+  it("'all' includes posted + dismissed; the posted filter shows only posted", () => {
+    expect(matchesQueueFilter("all", "posted")).toBe(true);
+    expect(matchesQueueFilter("all", "dismissed")).toBe(true);
     expect(matchesQueueFilter("posted", "posted")).toBe(true);
     expect(matchesQueueFilter("posted", "approved")).toBe(false);
   });

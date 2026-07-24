@@ -91,7 +91,9 @@ export function DraftsQueue({
     dismissed: t("status_dismissed"),
   };
   const filterCount: Record<QueueFilter, number> = {
-    all: counts.needs_input + counts.ready + counts.approved,
+    // "All" means literally every draft, posted + dismissed included (each has
+    // its own chip too). Matches matchesQueueFilter("all") = show everything.
+    all: counts.total,
     needs_input: counts.needs_input,
     ready: counts.ready,
     approved: counts.approved,
