@@ -27,7 +27,6 @@ export function PortalMessages({
   initialMessages,
   readOnly,
   locale,
-  onGoToDocuments,
   onBack,
 }: {
   token: string;
@@ -36,9 +35,6 @@ export function PortalMessages({
   // Engagement complete → history visible, composer closed.
   readOnly: boolean;
   locale: "fr" | "en";
-  // Jump back to the document checklist (the no-attachments nudge target).
-  // Null when this portal has no document items to point at.
-  onGoToDocuments: (() => void) | null;
   // Close the mobile full-screen overlay. Rendered as a Back button that only
   // shows below lg (the desktop pane is permanent, so it has nothing to close).
   onBack?: () => void;
@@ -235,16 +231,29 @@ export function PortalMessages({
                 placeholder={t("messages_placeholder")}
                 rows={2}
                 aria-label={t("messages_placeholder")}
+                onKeyDown={(event) => {
+                  if (
+                    event.key !== "Enter" ||
+                    event.shiftKey ||
+                    event.nativeEvent.isComposing
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  void handleSend();
+                }}
                 className="min-h-[3.25rem] flex-1 resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={sending || draft.trim().length === 0}
-                className="inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50"
+                aria-label={
+                  sending ? t("messages_sending") : t("messages_send")
+                }
+                className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50"
               >
                 <Send className="size-4" aria-hidden />
-                {sending ? t("messages_sending") : t("messages_send")}
               </button>
             </div>
             <div className="flex items-center justify-between gap-2">
@@ -264,21 +273,10 @@ export function PortalMessages({
               )}
             </div>
             {/* The no-attachments nudge: files belong in the checklist, where
-                they're automatically checked. Permanent, quiet, actionable. */}
+                they're automatically checked. Permanent and informational. */}
             <p className="flex items-start gap-1.5 rounded-xl bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
               <FileUp className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              <span>
-                {t("messages_nudge")}{" "}
-                {onGoToDocuments && (
-                  <button
-                    type="button"
-                    onClick={onGoToDocuments}
-                    className="cursor-pointer font-medium text-foreground underline underline-offset-2 transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {t("messages_nudge_link")}
-                  </button>
-                )}
-              </span>
+              <span>{t("messages_nudge")}</span>
             </p>
           </div>
         )}

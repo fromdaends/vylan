@@ -29,7 +29,6 @@ function renderPortalMessages(
         initialMessages={[]}
         readOnly={false}
         locale="en"
-        onGoToDocuments={() => undefined}
         {...overrides}
       />
     </NextIntlClientProvider>,
@@ -77,14 +76,10 @@ describe("PortalMessages", () => {
     expect(screen.getByText(/^Marie Tremblay ·/)).toBeInTheDocument();
   });
 
-  it("always shows the no-attachments nudge with the checklist link", () => {
-    const onGoToDocuments = vi.fn();
-    renderPortalMessages({ onGoToDocuments });
+  it("shows the no-attachments nudge without a navigation link", () => {
+    renderPortalMessages();
     expect(screen.getByText(en.Portal.messages_nudge)).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", { name: en.Portal.messages_nudge_link }),
-    );
-    expect(onGoToDocuments).toHaveBeenCalled();
+    expect(screen.queryByText("Go to my documents")).not.toBeInTheDocument();
   });
 
   it("sends a message and appends it to the thread", async () => {
@@ -112,6 +107,7 @@ describe("PortalMessages", () => {
       name: new RegExp(en.Portal.messages_send),
     });
     expect(send).toBeDisabled();
+    expect(send.textContent).toBe("");
     fireEvent.change(
       screen.getByPlaceholderText(en.Portal.messages_placeholder),
       { target: { value: "A new question" } },
@@ -128,6 +124,47 @@ describe("PortalMessages", () => {
       token: "t".repeat(43),
       body: "A new question",
     });
+  });
+
+  it("sends with Enter and leaves Shift+Enter available for a new line", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/portal/messages/send") {
+        return {
+          ok: true,
+          json: async () => ({
+            ok: true,
+            message: {
+              id: "m10",
+              sender: "client",
+              sender_name: "Marie Tremblay",
+              body: "Keyboard message",
+              created_at: "2026-07-02T10:00:00Z",
+            },
+          }),
+        };
+      }
+      return { ok: true, json: async () => ({ ok: true }) };
+    });
+
+    renderPortalMessages();
+    const composer = screen.getByPlaceholderText(
+      en.Portal.messages_placeholder,
+    );
+    fireEvent.change(composer, { target: { value: "Keyboard message" } });
+
+    expect(
+      fireEvent.keyDown(composer, { key: "Enter", shiftKey: true }),
+    ).toBe(true);
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url]) => url === "/api/portal/messages/send",
+      ),
+    ).toHaveLength(0);
+
+    expect(fireEvent.keyDown(composer, { key: "Enter" })).toBe(false);
+    await waitFor(() =>
+      expect(screen.getByText("Keyboard message")).toBeInTheDocument(),
+    );
   });
 
   it("keeps the draft and shows the failure notice when the send fails", async () => {

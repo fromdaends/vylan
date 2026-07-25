@@ -2653,7 +2653,6 @@
     "messages_chars_left": "{count} caractères restants",
     "messages_read_only": "Ce mandat est terminé, les nouveaux messages sont donc fermés. La conversation reste visible ici.",
     "messages_nudge": "Un document à envoyer? Ne le collez pas ici — ajoutez-le à votre liste de documents pour qu'il soit vérifié automatiquement.",
-    "messages_nudge_link": "Aller à mes documents",
     "rejected_action_needed": "Votre comptable a demandé un nouveau document.",
     "preview_open": "Voir {name}",
     "preview_close": "Fermer",
