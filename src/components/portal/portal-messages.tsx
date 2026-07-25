@@ -14,6 +14,8 @@ import { useTranslations } from "next-intl";
 import { ChevronLeft, FileUp, Send } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { PortalMessage } from "@/lib/db/client-messages";
 
 const MAX_LENGTH = 4000;
@@ -222,14 +224,14 @@ export function PortalMessages({
         ) : (
           <div className="space-y-2">
             <div className="flex items-end gap-2">
-              <textarea
+              <Textarea
                 value={draft}
                 onChange={(e) => {
                   setDraft(e.target.value.slice(0, MAX_LENGTH));
                   setSendError(false);
                 }}
                 placeholder={t("messages_placeholder")}
-                rows={2}
+                rows={1}
                 aria-label={t("messages_placeholder")}
                 onKeyDown={(event) => {
                   if (
@@ -242,19 +244,21 @@ export function PortalMessages({
                   event.preventDefault();
                   void handleSend();
                 }}
-                className="min-h-[3.25rem] flex-1 resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="max-h-[140px] min-h-[44px] flex-1 resize-none rounded-2xl"
               />
-              <button
+              <Button
                 type="button"
+                size="icon"
                 onClick={handleSend}
                 disabled={sending || draft.trim().length === 0}
                 aria-label={
                   sending ? t("messages_sending") : t("messages_send")
                 }
-                className="inline-flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50"
+                title={t("messages_send")}
+                className="size-11 shrink-0 rounded-full"
               >
                 <Send className="size-4" aria-hidden />
-              </button>
+              </Button>
             </div>
             <div className="flex items-center justify-between gap-2">
               <p
