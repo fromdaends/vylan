@@ -37,6 +37,7 @@ import {
 import { createEngagementAction } from "@/app/actions/engagements";
 import type { Template, TemplateItem, DocType } from "@/lib/db/templates";
 import { DocTypePicker } from "@/components/engagements/doc-type-picker";
+import { DayOfMonthPicker } from "@/components/engagements/day-of-month-picker";
 import { SelectableTemplateCard } from "@/components/templates/template-card";
 import { templateItemApplies } from "@/lib/doc-types";
 import { resolveInitialTemplate } from "@/lib/engagements/initial-template";
@@ -689,19 +690,16 @@ export function EngagementBuilder({
               </div>
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <span>{t("repeat_custom_on_day")}</span>
-                <Input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={repeatAnchorDay}
-                  onChange={(e) => setRepeatAnchorDay(e.target.value)}
-                  aria-label={t("repeat_custom_on_day_label")}
-                  className="h-8 w-20"
+                {/* Same calendar picker as the engagement page's Repeat dialog,
+                    so setting a schedule feels identical in both places. */}
+                <DayOfMonthPicker
+                  value={
+                    repeatAnchorDay === "" ? null : Number(repeatAnchorDay)
+                  }
+                  locale={locale}
+                  onChange={(day) => setRepeatAnchorDay(String(day))}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                {t("repeat_custom_hint")}
-              </p>
             </div>
           )}
 

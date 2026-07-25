@@ -1834,6 +1834,7 @@
     "repeat_custom_months": "mois",
     "repeat_custom_on_day": "Le",
     "repeat_custom_on_day_label": "Jour du mois",
+    "repeat_custom_pick_day": "Choisir un jour",
     "repeat_custom_hint": "Dans les mois qui n'ont pas ce jour, l'engagement est créé le dernier jour du mois.",
     "repeat_due_offset_label": "Chaque occurrence est due",
     "repeat_due_offset_suffix": "jours après son ouverture",

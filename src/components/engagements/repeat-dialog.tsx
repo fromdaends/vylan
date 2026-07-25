@@ -49,6 +49,7 @@ import {
   spawnSeriesNowAction,
 } from "@/app/actions/recurring";
 import { Switch } from "@/components/ui/switch";
+import { DayOfMonthPicker } from "@/components/engagements/day-of-month-picker";
 
 export type RepeatFrequencyChoice =
   | "off"
@@ -343,22 +344,18 @@ export function RepeatDialog({
             </div>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <span>{t("repeat_custom_on_day")}</span>
-              <Input
-                type="number"
-                min={1}
-                max={31}
-                value={anchorDay}
-                onChange={(event) => {
-                  setAnchorDay(event.target.value);
+              {/* Calendar picker rather than a number spinner — the hint about
+                  short months lives inside it, next to the days it affects. */}
+              <DayOfMonthPicker
+                id="repeat-anchor-day"
+                value={anchorDay === "" ? null : Number(anchorDay)}
+                locale={locale}
+                onChange={(day) => {
+                  setAnchorDay(String(day));
                   setSaved(false);
                 }}
-                aria-label={t("repeat_custom_on_day_label")}
-                className="h-8 w-20"
               />
             </div>
-            <p className="text-xs text-muted-foreground">
-              {t("repeat_custom_hint")}
-            </p>
           </div>
         )}
 
