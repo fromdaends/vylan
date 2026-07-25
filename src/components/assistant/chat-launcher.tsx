@@ -250,18 +250,10 @@ export function ChatLauncher({
 
         {/* Body: both views mounted, visibility toggled, so switching modes (or
             closing) never drops the inbox's unread polling or the AI history.
-            It settles in just after the frame pops (a subtle fade + lift, the
-            Intercom / Messenger touch) instead of appearing all at once. */}
-        <motion.div
-          initial={false}
-          animate={open ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
-          transition={
-            open
-              ? { delay: 0.07, duration: 0.3, ease: [0.16, 1, 0.3, 1] }
-              : { duration: 0.1 }
-          }
-          className="relative min-h-0 flex-1"
-        >
+            Deliberately NOT separately animated — it rides the frame's pop, so
+            the content (client names, etc.) never appears to settle on its own
+            timing while the frame is still springing. */}
+        <div className="relative min-h-0 flex-1">
           <div
             className={cn(
               "absolute inset-0 flex min-h-0 flex-col",
@@ -282,7 +274,7 @@ export function ChatLauncher({
           >
             <LauncherAiChat locale={locale} />
           </div>
-        </motion.div>
+        </div>
       </motion.div>
 
       {/* The opt-in docked, resizable messaging sidebar (Expand). Its own
