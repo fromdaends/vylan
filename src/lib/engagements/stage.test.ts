@@ -274,19 +274,6 @@ describe("resolveStage — preparation is reached by any real act of preparing",
       .toBe("in_preparation");
   });
 
-  it("a signature request having ever existed", () => {
-    expect(
-      resolveStage(
-        facts({
-          ...allSubmitted,
-          hasSignatureItems: true,
-          hasSignatureRequests: true,
-          hasOutstandingSignature: false,
-        }),
-      ),
-    ).toBe("in_preparation");
-  });
-
   it("a deliverable existing (even if still locked)", () => {
     expect(
       resolveStage(
@@ -325,6 +312,36 @@ describe("resolveStage — preparation is reached by any real act of preparing",
         }),
       ),
     ).toBe("awaiting_signature");
+  });
+});
+
+describe("resolveStage — a signature request is not a preparation signal", () => {
+  // Founder-reported: requesting + signing a signature (e.g. a client
+  // authorization) must NOT jump a still-collecting engagement past collection.
+  // A signature can be requested at any point, so its mere existence says nothing
+  // about whether the documents are in. Once it's signed (no longer outstanding),
+  // the stage falls back to whatever the DOCUMENTS say.
+  const signed = {
+    hasSignatureItems: true,
+    hasSignatureRequests: true,
+    hasOutstandingSignature: false,
+  };
+
+  it("signed, but documents still pending -> collecting (not in_preparation)", () => {
+    // The exact regression: default facts are a fresh file (3 docs pending).
+    expect(resolveStage(facts({ ...signed }))).toBe("collecting");
+  });
+
+  it("signed, all documents submitted but not cleared -> in_review", () => {
+    expect(resolveStage(facts({ ...allSubmitted, ...signed }))).toBe(
+      "in_review",
+    );
+  });
+
+  it("signed AND the checklist cleared -> in_preparation (via the docs, not the signature)", () => {
+    expect(resolveStage(facts({ ...allApproved, ...signed }))).toBe(
+      "in_preparation",
+    );
   });
 });
 

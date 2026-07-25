@@ -147,6 +147,9 @@ export type StageFacts = {
   // awaiting_signature stage is skipped for this engagement.
   hasSignatureItems: boolean;
   // At least one signature request row exists (the firm has acted on signing).
+  // NOT a stage-resolution input — see preparationReached for why a signature's
+  // mere existence says nothing about whether collection is done. Kept as an
+  // honest fact for display/analytics.
   hasSignatureRequests: boolean;
   // A signature is genuinely out with the client (pending / sent / viewed).
   // declined / canceled / expired / error are the FIRM's problem, not a wait on
@@ -173,10 +176,19 @@ export type StageFacts = {
 };
 
 // Has the firm visibly moved past collection? True on the explicit click, or on
-// any act that only happens during preparation: every document cleared, a
-// signature put out, a deliverable produced. Note an invoice does NOT count —
-// migration 0610 lets an invoice be created at engagement CREATION time, long
-// before any preparation.
+// any act that only happens during preparation: every document cleared, or a
+// deliverable produced. Note an invoice does NOT count — migration 0610 lets an
+// invoice be created at engagement CREATION time, long before any preparation.
+//
+// A signature request is deliberately NOT a preparation signal. Requesting a
+// signature can happen at ANY point — a client authorization / engagement letter
+// is routinely sent while documents are still being collected — so "a signature
+// exists" says nothing about whether collection is done. While a signature is
+// genuinely OUT, arm 3 (hasOutstandingSignature) already parks the engagement at
+// awaiting_signature; once it's signed, the stage must fall back to whatever the
+// DOCUMENTS say, not stick at in_preparation. (Counting hasSignatureRequests here
+// caused exactly that bug: sign one authorization and a still-collecting file
+// jumped to "In preparation".)
 //
 // The preparationStarted arm deliberately OUTRANKS an outstanding checklist
 // (arm 4 sits above arms 5/6 in the cascade). That's the entire purpose of
@@ -189,7 +201,6 @@ export type StageFacts = {
 function preparationReached(f: StageFacts): boolean {
   return (
     f.preparationStarted ||
-    f.hasSignatureRequests ||
     f.hasFinalDocuments ||
     (f.checklistTotal > 0 && f.checklistApprovedOrNa === f.checklistTotal)
   );
