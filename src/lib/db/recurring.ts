@@ -22,6 +22,10 @@ export type RecurringSeries = {
   title: string;
   type: EngagementType;
   frequency: RecurringFrequency;
+  // Cycle length for a 'custom' series (migration 0890); null for the fixed
+  // frequencies, which derive their cycle from `frequency`. Optional on the
+  // type so reads still parse before 0890 is applied.
+  interval_months?: number | null;
   anchor_day: number;
   due_offset_days: number;
   items: TemplateItem[];
@@ -72,6 +76,8 @@ export type CreateRecurringSeriesInput = {
   title: string;
   type: EngagementType;
   frequency: RecurringFrequency;
+  // Only for frequency 'custom' (migration 0890). Omitted/null otherwise.
+  interval_months?: number | null;
   anchor_day: number;
   due_offset_days: number;
   items: TemplateItem[];
@@ -89,9 +95,16 @@ export async function createRecurringSeries(
   input: CreateRecurringSeriesInput,
 ): Promise<RecurringSeries> {
   const supabase = await getServerSupabase();
+  // Only send interval_months when there is one (a custom series). A fixed
+  // monthly/quarterly/yearly series therefore inserts EXACTLY the same columns
+  // as before 0890, so those keep working in a deploy-ahead-of-SQL window;
+  // only the new custom option needs the column to exist.
+  const { interval_months, ...rest } = input;
+  const row =
+    interval_months == null ? rest : { ...rest, interval_months };
   const { data, error } = await supabase
     .from("recurring_series")
-    .insert(input)
+    .insert(row)
     .select("*")
     .single();
   if (error) throw error;
@@ -107,6 +120,7 @@ export async function updateRecurringSeries(
     Pick<
       RecurringSeries,
       | "frequency"
+      | "interval_months"
       | "anchor_day"
       | "due_offset_days"
       | "items"

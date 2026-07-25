@@ -8,7 +8,13 @@
 // the 1st in UTC. We carry them as plain {year, month, day} parts precisely
 // so no JS Date timezone behavior can leak in.
 
-export type RecurringFrequency = "monthly" | "quarterly" | "yearly";
+// "custom" = every N months on a chosen day, where N is the series'
+// interval_months (migration 0890). The other three are fixed cycles.
+export type RecurringFrequency =
+  | "monthly"
+  | "quarterly"
+  | "yearly"
+  | "custom";
 
 export type RecurringSeriesStatus = "active" | "paused" | "ended";
 
@@ -19,17 +25,60 @@ export const RECURRING_FREQUENCIES: RecurringFrequency[] = [
   "monthly",
   "quarterly",
   "yearly",
+  "custom",
 ];
 
-// Cycle length in months.
-const FREQUENCY_MONTHS: Record<RecurringFrequency, number> = {
+// Bounds for a custom cycle. Mirrored by the DB CHECK in migration 0890 —
+// change both together.
+export const MIN_INTERVAL_MONTHS = 1;
+export const MAX_INTERVAL_MONTHS = 24;
+
+// Cycle length in months for the three fixed frequencies.
+const FIXED_FREQUENCY_MONTHS: Record<
+  Exclude<RecurringFrequency, "custom">,
+  number
+> = {
   monthly: 1,
   quarterly: 3,
   yearly: 12,
 };
 
+// How many months one cycle of this series spans.
+//
+// For "custom" the value comes from the series' interval_months. A custom
+// series ALWAYS has one — migration 0890 enforces
+// `frequency <> 'custom' or interval_months is not null` at the database, and
+// the action schemas validate it on the way in — so the fallback below is a
+// last-resort guard, not a code path we rely on: falling back to the shortest
+// cycle keeps a malformed row spawning (visibly too often) rather than
+// silently never spawning again.
+export function cycleMonths(
+  frequency: RecurringFrequency,
+  intervalMonths?: number | null,
+): number {
+  if (frequency !== "custom") return FIXED_FREQUENCY_MONTHS[frequency];
+  return clampIntervalMonths(intervalMonths);
+}
+
+// Coerce arbitrary input (form field, DB value) to a legal cycle length.
+export function clampIntervalMonths(value: unknown): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return MIN_INTERVAL_MONTHS;
+  return Math.min(MAX_INTERVAL_MONTHS, Math.max(MIN_INTERVAL_MONTHS, n));
+}
+
+// Coerce arbitrary input to a legal day-of-month anchor. Days past the end of
+// a short month are clamped later, per-spawn, by nextSpawn().
+export function clampAnchorDay(value: unknown): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(31, Math.max(1, n));
+}
+
 export function isRecurringFrequency(v: unknown): v is RecurringFrequency {
-  return v === "monthly" || v === "quarterly" || v === "yearly";
+  return (
+    v === "monthly" || v === "quarterly" || v === "yearly" || v === "custom"
+  );
 }
 
 // Today as the firm sees it. Intl with an IANA zone is the one reliable way
@@ -70,8 +119,12 @@ export function nextSpawn(
   from: LocalDate,
   frequency: RecurringFrequency,
   anchorDay: number,
+  // Required in practice for "custom" (ignored for the fixed frequencies).
+  // See cycleMonths() for why a missing value degrades instead of throwing.
+  intervalMonths?: number | null,
 ): LocalDate {
-  const totalMonths = from.month - 1 + FREQUENCY_MONTHS[frequency];
+  const totalMonths =
+    from.month - 1 + cycleMonths(frequency, intervalMonths);
   const year = from.year + Math.floor(totalMonths / 12);
   const month = (totalMonths % 12) + 1;
   const day = Math.min(anchorDay, daysInMonth(year, month));
@@ -84,7 +137,10 @@ export function periodKeyFor(
   frequency: RecurringFrequency,
   d: LocalDate,
 ): string {
-  if (frequency === "monthly") {
+  // Custom cycles are whole months, so two occurrences of one series can never
+  // land in the same month (interval >= 1). That makes the spawn month a valid
+  // unique key, exactly like the monthly case.
+  if (frequency === "monthly" || frequency === "custom") {
     return `${d.year}-${String(d.month).padStart(2, "0")}`;
   }
   if (frequency === "quarterly") {
@@ -148,14 +204,21 @@ export function resolveDueSpawn(opts: {
   nextSpawnOn: LocalDate;
   frequency: RecurringFrequency;
   anchorDay: number;
+  // The series' interval_months — required in practice for "custom".
+  intervalMonths?: number | null;
   today: LocalDate;
 }): DueSpawn | null {
   if (compareLocalDates(opts.nextSpawnOn, opts.today) > 0) return null;
   let spawn = opts.nextSpawnOn;
-  let next = nextSpawn(spawn, opts.frequency, opts.anchorDay);
+  let next = nextSpawn(
+    spawn,
+    opts.frequency,
+    opts.anchorDay,
+    opts.intervalMonths,
+  );
   while (compareLocalDates(next, opts.today) <= 0) {
     spawn = next;
-    next = nextSpawn(spawn, opts.frequency, opts.anchorDay);
+    next = nextSpawn(spawn, opts.frequency, opts.anchorDay, opts.intervalMonths);
   }
   return {
     spawnDate: spawn,

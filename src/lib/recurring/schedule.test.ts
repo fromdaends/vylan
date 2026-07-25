@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compareLocalDates,
+  cycleMonths,
   daysInMonth,
   dueDateFor,
   isRecurringFrequency,
@@ -241,11 +242,131 @@ describe("compareLocalDates", () => {
 });
 
 describe("isRecurringFrequency", () => {
-  it("accepts the three frequencies and nothing else", () => {
+  it("accepts the four frequencies and nothing else", () => {
     expect(isRecurringFrequency("monthly")).toBe(true);
     expect(isRecurringFrequency("quarterly")).toBe(true);
     expect(isRecurringFrequency("yearly")).toBe(true);
+    expect(isRecurringFrequency("custom")).toBe(true);
     expect(isRecurringFrequency("off")).toBe(false);
     expect(isRecurringFrequency("weekly")).toBe(false);
+  });
+});
+
+// Custom recurrence (migration 0890): "every N months, on day D".
+describe("cycleMonths", () => {
+  it("uses the fixed cycle for the three built-in frequencies", () => {
+    expect(cycleMonths("monthly", null)).toBe(1);
+    expect(cycleMonths("quarterly", null)).toBe(3);
+    expect(cycleMonths("yearly", null)).toBe(12);
+  });
+
+  it("uses the series' interval for a custom schedule", () => {
+    expect(cycleMonths("custom", 2)).toBe(2);
+    expect(cycleMonths("custom", 6)).toBe(6);
+  });
+
+  it("ignores the interval for a fixed frequency", () => {
+    expect(cycleMonths("monthly", 7)).toBe(1);
+  });
+
+  it("clamps an out-of-range or missing interval instead of throwing", () => {
+    // The DB CHECK + zod keep these from happening; this is the last-resort
+    // guard, and it must degrade to a valid cycle rather than NaN months.
+    expect(cycleMonths("custom", 0)).toBe(1);
+    expect(cycleMonths("custom", 999)).toBe(24);
+    expect(cycleMonths("custom", null)).toBe(1);
+    expect(cycleMonths("custom", undefined)).toBe(1);
+  });
+});
+
+describe("nextSpawn — custom intervals", () => {
+  it("advances by the chosen number of months, keeping the chosen day", () => {
+    const jan = { year: 2027, month: 1, day: 15 };
+    expect(nextSpawn(jan, "custom", 15, 2)).toEqual({
+      year: 2027,
+      month: 3,
+      day: 15,
+    });
+    expect(nextSpawn(jan, "custom", 15, 5)).toEqual({
+      year: 2027,
+      month: 6,
+      day: 15,
+    });
+  });
+
+  it("rolls over the year boundary", () => {
+    expect(nextSpawn({ year: 2027, month: 11, day: 3 }, "custom", 3, 4)).toEqual(
+      { year: 2028, month: 3, day: 3 },
+    );
+  });
+
+  it("clamps the chosen day to short months without the clamp sticking", () => {
+    // Day 31, every 1 month: Jan 31 -> Feb 28 -> Mar 31 (the anchor, not the
+    // clamped previous spawn, drives each step).
+    const feb = nextSpawn({ year: 2027, month: 1, day: 31 }, "custom", 31, 1);
+    expect(feb).toEqual({ year: 2027, month: 2, day: 28 });
+    expect(nextSpawn(feb, "custom", 31, 1)).toEqual({
+      year: 2027,
+      month: 3,
+      day: 31,
+    });
+  });
+});
+
+describe("periodKeyFor — custom", () => {
+  it("keys a custom occurrence by its spawn month", () => {
+    // Two occurrences of one series can never share a month (interval >= 1),
+    // so YYYY-MM stays unique — which is what UNIQUE(series_id, period_key)
+    // relies on to prevent double spawns.
+    expect(periodKeyFor("custom", { year: 2027, month: 3, day: 15 })).toBe(
+      "2027-03",
+    );
+    expect(periodKeyFor("custom", { year: 2027, month: 11, day: 1 })).toBe(
+      "2027-11",
+    );
+  });
+});
+
+describe("resolveDueSpawn — custom", () => {
+  it("is not due before the scheduled date", () => {
+    expect(
+      resolveDueSpawn({
+        nextSpawnOn: { year: 2027, month: 3, day: 15 },
+        frequency: "custom",
+        anchorDay: 15,
+        intervalMonths: 2,
+        today: { year: 2027, month: 3, day: 14 },
+      }),
+    ).toBeNull();
+  });
+
+  it("spawns the due period and schedules the next one an interval later", () => {
+    const due = resolveDueSpawn({
+      nextSpawnOn: { year: 2027, month: 3, day: 15 },
+      frequency: "custom",
+      anchorDay: 15,
+      intervalMonths: 2,
+      today: { year: 2027, month: 3, day: 15 },
+    });
+    expect(due).toEqual({
+      spawnDate: { year: 2027, month: 3, day: 15 },
+      periodKey: "2027-03",
+      nextSpawnOn: { year: 2027, month: 5, day: 15 },
+    });
+  });
+
+  it("skips missed cycles instead of backfilling them", () => {
+    // Scheduled in March, cron did not run until August: ONE occurrence (the
+    // latest due period, July), never five.
+    const due = resolveDueSpawn({
+      nextSpawnOn: { year: 2027, month: 3, day: 15 },
+      frequency: "custom",
+      anchorDay: 15,
+      intervalMonths: 2,
+      today: { year: 2027, month: 8, day: 2 },
+    });
+    expect(due?.spawnDate).toEqual({ year: 2027, month: 7, day: 15 });
+    expect(due?.periodKey).toBe("2027-07");
+    expect(due?.nextSpawnOn).toEqual({ year: 2027, month: 9, day: 15 });
   });
 });

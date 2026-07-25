@@ -44,3 +44,39 @@ describe("occurrenceTitle", () => {
     ).toBe("Tenue de livres mensuelle - mars 2027");
   });
 });
+
+// Custom recurrence (migration 0890). A custom series repeats on a month
+// cadence and can fire several times a year, so it takes the month-and-year
+// label. Falling through to the year-only default would give EVERY occurrence
+// of an every-2-months series the same title — this is that regression guard.
+describe("periodLabel — custom", () => {
+  it("labels a custom occurrence by month and year, not just the year", () => {
+    expect(periodLabel("custom", { year: 2027, month: 3, day: 15 }, "en")).toBe(
+      "March 2027",
+    );
+    expect(periodLabel("custom", { year: 2027, month: 5, day: 15 }, "en")).toBe(
+      "May 2027",
+    );
+    expect(periodLabel("custom", { year: 2027, month: 3, day: 15 }, "fr")).toBe(
+      "mars 2027",
+    );
+  });
+
+  it("gives two occurrences in the same year distinct titles", () => {
+    const march = occurrenceTitle(
+      "GST/QST return",
+      "custom",
+      { year: 2027, month: 3, day: 15 },
+      "en",
+    );
+    const may = occurrenceTitle(
+      "GST/QST return",
+      "custom",
+      { year: 2027, month: 5, day: 15 },
+      "en",
+    );
+    expect(march).toBe("GST/QST return - March 2027");
+    expect(may).toBe("GST/QST return - May 2027");
+    expect(march).not.toBe(may);
+  });
+});

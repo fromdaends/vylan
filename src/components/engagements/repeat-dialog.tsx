@@ -50,12 +50,21 @@ import {
 } from "@/app/actions/recurring";
 import { Switch } from "@/components/ui/switch";
 
-export type RepeatFrequencyChoice = "off" | "monthly" | "quarterly" | "yearly";
+export type RepeatFrequencyChoice =
+  | "off"
+  | "monthly"
+  | "quarterly"
+  | "yearly"
+  // "every N months on day D" (migration 0890)
+  | "custom";
 
 // What the dialog needs to know about the engagement's series (null = none).
 export type EngagementRepeatInfo = {
   id: string;
-  frequency: "monthly" | "quarterly" | "yearly";
+  frequency: "monthly" | "quarterly" | "yearly" | "custom";
+  // Custom schedules only: cycle length + the chosen day-of-month.
+  intervalMonths?: number | null;
+  anchorDay?: number | null;
   dueOffsetDays: number;
   status: "active" | "paused" | "ended";
   nextSpawnOn: string; // ISO date
@@ -101,6 +110,14 @@ export function RepeatDialog({
   );
   const [offsetDays, setOffsetDays] = useState<string>(
     String(series?.dueOffsetDays ?? 15),
+  );
+  // Custom schedule fields. Held as strings so the number inputs can be
+  // cleared while typing; coerced + clamped on save.
+  const [intervalMonths, setIntervalMonths] = useState<string>(
+    String(series?.intervalMonths ?? 2),
+  );
+  const [anchorDay, setAnchorDay] = useState<string>(
+    series?.anchorDay != null ? String(series.anchorDay) : "",
   );
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -214,6 +231,22 @@ export function RepeatDialog({
       const result = await setEngagementRepeatAction({
         engagementId,
         frequency,
+        // Sent only for a custom schedule; the server ignores them otherwise.
+        ...(frequency === "custom"
+          ? {
+              intervalMonths: Math.min(
+                24,
+                Math.max(1, Math.floor(Number(intervalMonths) || 1)),
+              ),
+              anchorDay: Math.min(
+                31,
+                Math.max(
+                  1,
+                  Math.floor(Number(anchorDay) || new Date().getDate()),
+                ),
+              ),
+            }
+          : {}),
         dueOffsetDays: Math.min(
           365,
           Math.max(1, Math.floor(Number(offsetDays) || 15)),
@@ -263,7 +296,16 @@ export function RepeatDialog({
           <Select
             value={frequency}
             onValueChange={(value) => {
-              setFrequency(value as RepeatFrequencyChoice);
+              const next = value as RepeatFrequencyChoice;
+              setFrequency(next);
+              // Default the day to today when switching to Custom with nothing
+              // chosen yet — matches what the fixed frequencies do implicitly
+              // ("set up on the 12th" means "spawns on the 12th"). Done here,
+              // on a real interaction, so server and client render the same
+              // markup on first paint.
+              if (next === "custom" && anchorDay === "") {
+                setAnchorDay(String(new Date().getDate()));
+              }
               setSaved(false);
             }}
           >
@@ -275,9 +317,50 @@ export function RepeatDialog({
               <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
               <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
               <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
+              <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
+
+        {/* Custom schedule: every N months, on a chosen day. */}
+        {frequency === "custom" && (
+          <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span>{t("repeat_custom_every")}</span>
+              <Input
+                type="number"
+                min={1}
+                max={24}
+                value={intervalMonths}
+                onChange={(event) => {
+                  setIntervalMonths(event.target.value);
+                  setSaved(false);
+                }}
+                aria-label={t("repeat_custom_every_label")}
+                className="h-8 w-20"
+              />
+              <span>{t("repeat_custom_months")}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span>{t("repeat_custom_on_day")}</span>
+              <Input
+                type="number"
+                min={1}
+                max={31}
+                value={anchorDay}
+                onChange={(event) => {
+                  setAnchorDay(event.target.value);
+                  setSaved(false);
+                }}
+                aria-label={t("repeat_custom_on_day_label")}
+                className="h-8 w-20"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t("repeat_custom_hint")}
+            </p>
+          </div>
+        )}
 
         {frequency !== "off" && (
           <div className="space-y-1.5">
