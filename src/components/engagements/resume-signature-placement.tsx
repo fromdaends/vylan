@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { PenLine, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { openSignWellSession } from "@/components/signwell/embed-loader";
+import { openPlacementEditor } from "@/components/engagements/placement-editor";
 import {
   getSignaturePlacementUrlAction,
   finalizeSignaturePlacementAction,
@@ -46,25 +46,12 @@ export function ResumeSignaturePlacement({ itemId }: { itemId: string }) {
         setBusy(false);
         return;
       }
-      await openSignWellSession({
+      await openPlacementEditor({
         url: res.url,
-        collapseAppSidebar: true,
-        onCompleted: async () => {
-          try {
-            await finalizeSignaturePlacementAction(itemId);
-          } catch {
-            // Webhook/reconcile self-heal; the refresh shows the truth.
-          }
+        itemId,
+        onSettled: () => {
           setBusy(false);
           router.refresh();
-        },
-        onClosed: () => {
-          setBusy(false);
-          router.refresh();
-        },
-        onError: () => {
-          setError(true);
-          setBusy(false);
         },
       });
     } catch {

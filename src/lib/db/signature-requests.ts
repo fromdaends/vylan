@@ -124,6 +124,34 @@ export async function updateSignatureRequestStatus(
   return true;
 }
 
+// RLS-scoped in-place update of a request's SignWell setup fields — used when
+// RETRYING a failed setup (re-create the SignWell document for an existing row).
+// Never overwrites a completed row. Returns true on a successful write.
+export async function updateSignatureRequestSetup(
+  id: string,
+  patch: {
+    signwell_document_id: string | null;
+    status: SignatureStatus;
+    error_detail: string | null;
+    signer_email: string | null;
+    signer_name: string | null;
+  },
+): Promise<boolean> {
+  const sb = await getServerSupabase();
+  const { error } = await sb
+    .from("signature_requests")
+    .update(patch)
+    .eq("id", id)
+    .neq("status", "completed");
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[signature-requests] updateSetup failed:", error);
+    }
+    return false;
+  }
+  return true;
+}
+
 // All signature requests for an engagement (RLS-scoped). Used by the engagement
 // detail page to show each signature item's status. Degrades to [] before
 // migration 0400 is applied.
