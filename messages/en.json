@@ -1834,6 +1834,7 @@
     "repeat_custom_months": "months",
     "repeat_custom_on_day": "On day",
     "repeat_custom_on_day_label": "Day of the month",
+    "repeat_custom_pick_day": "Pick a day",
     "repeat_custom_hint": "In months that don't have that day, the engagement is created on the last day of the month instead.",
     "repeat_due_offset_label": "Each occurrence is due",
     "repeat_due_offset_suffix": "days after it opens",
