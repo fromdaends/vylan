@@ -227,10 +227,13 @@ export function ChatLauncher({
             button lives here; the launcher arrow below the panel does that. */}
         <div className="relative shrink-0 bg-chat-header px-4 pt-3.5 pb-9 text-chat-header-foreground">
           <div className="relative flex items-center justify-center">
+            {/* No enclosing track: the two modes are separate items, and only
+                the active one carries a soft pill that blends into the navy
+                (SignWell) — not a connected segmented control. */}
             <div
               role="tablist"
               aria-label={t("switch_view")}
-              className="inline-flex rounded-full bg-white/12 p-0.5"
+              className="inline-flex items-center gap-1"
             >
               <ModeTab
                 active={mode === "messages"}
@@ -347,12 +350,12 @@ function ModeTab({
       onClick={onClick}
       className={cn(
         "inline-flex cursor-pointer items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
-        // On the navy band: the active side is a solid white pill with navy
-        // text; the inactive side is just muted white text, so the control
-        // blends into the colour instead of sitting on it as a separate bar.
+        // Both sides keep white text; the active one just gains a translucent
+        // pill a shade lighter than the band, so it reads as part of the
+        // colour rather than a control sitting on top of it.
         active
-          ? "bg-white text-chat-header shadow-sm"
-          : "text-chat-header-foreground/75 hover:text-chat-header-foreground",
+          ? "bg-white/20 text-chat-header-foreground"
+          : "text-chat-header-foreground/70 hover:bg-white/10 hover:text-chat-header-foreground",
       )}
     >
       <Icon className="size-3.5" aria-hidden />
@@ -361,9 +364,7 @@ function ModeTab({
         <span
           className={cn(
             "inline-flex min-w-[1.125rem] items-center justify-center rounded-full px-1 py-0.5 text-[10px] font-semibold leading-none",
-            active
-              ? "bg-chat-header text-white"
-              : "bg-white text-chat-header",
+            "bg-white text-chat-header",
           )}
         >
           {badge}
