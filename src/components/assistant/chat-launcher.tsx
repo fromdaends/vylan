@@ -177,9 +177,25 @@ export function ChatLauncher({
         animate={
           open
             ? { opacity: 1, scale: 1, y: 0 }
-            : { opacity: 0, scale: 0.96, y: 8 }
+            : { opacity: 0, scale: 0.85, y: 14 }
         }
-        transition={{ type: "spring", stiffness: 460, damping: 34, mass: 0.7 }}
+        transition={
+          open
+            ? {
+                // Pop from the button corner: a spring with a real, visible
+                // overshoot — the same tactile feel as Intercom / Messenger.
+                // `visualDuration` is the perceived settle time and `bounce`
+                // is how much it overshoots (framer-motion v12 spring API).
+                // Opacity fades on its own quick tween so the box never reads
+                // as a flat linear slide.
+                type: "spring",
+                visualDuration: 0.34,
+                bounce: 0.34,
+                opacity: { duration: 0.14, ease: "easeOut" },
+              }
+            : // Close is quick and calm — no bounce on the way out.
+              { duration: 0.13, ease: "easeIn" }
+        }
         style={{ transformOrigin: "bottom right" }}
         className={cn(
           "fixed z-50 right-4 sm:right-6 bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-6",
@@ -233,8 +249,19 @@ export function ChatLauncher({
         </header>
 
         {/* Body: both views mounted, visibility toggled, so switching modes (or
-            closing) never drops the inbox's unread polling or the AI history. */}
-        <div className="relative min-h-0 flex-1">
+            closing) never drops the inbox's unread polling or the AI history.
+            It settles in just after the frame pops (a subtle fade + lift, the
+            Intercom / Messenger touch) instead of appearing all at once. */}
+        <motion.div
+          initial={false}
+          animate={open ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
+          transition={
+            open
+              ? { delay: 0.07, duration: 0.3, ease: [0.16, 1, 0.3, 1] }
+              : { duration: 0.1 }
+          }
+          className="relative min-h-0 flex-1"
+        >
           <div
             className={cn(
               "absolute inset-0 flex min-h-0 flex-col",
@@ -255,7 +282,7 @@ export function ChatLauncher({
           >
             <LauncherAiChat locale={locale} />
           </div>
-        </div>
+        </motion.div>
       </motion.div>
 
       {/* The opt-in docked, resizable messaging sidebar (Expand). Its own
