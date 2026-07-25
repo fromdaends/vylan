@@ -294,8 +294,14 @@ export function ExpandedMessages({
       </div>
 
       {/* Header: title + collapse back to the popup. */}
-      <header className="flex shrink-0 items-center gap-2 border-b border-border bg-secondary px-4 py-2.5">
-        <MessagesSquare className="size-4 text-muted-foreground" aria-hidden />
+      {/* Navy header, matching the popup's band so the two messaging surfaces
+          read as the same product. Slim here — a docked sidebar doesn't need
+          the popup's generous colour zone. */}
+      <header className="flex shrink-0 items-center gap-2 bg-chat-header px-4 py-3 text-chat-header-foreground">
+        <MessagesSquare
+          className="size-4 text-chat-header-foreground/80"
+          aria-hidden
+        />
         <h2 className="text-sm font-semibold tracking-tight">
           {t("launcher_messages")}
         </h2>
@@ -304,7 +310,7 @@ export function ExpandedMessages({
           onClick={collapseMessages}
           aria-label={t("launcher_collapse")}
           title={t("launcher_collapse")}
-          className="ml-auto inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="ml-auto inline-flex size-8 items-center justify-center rounded-full text-chat-header-foreground/70 transition-colors hover:bg-white/10 hover:text-chat-header-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
         >
           <ChevronsRight className="size-4" aria-hidden />
         </button>

@@ -30,6 +30,14 @@
   --primary: oklch(0.45 0.17 262);            /* navy */
   --primary-foreground: oklch(0.99 0 0);
 
+  /* Chat popup header band (the navy zone the toggle + greeting sit on, the
+     SignWell pattern). Its own token rather than reusing --primary because the
+     band carries small white text and must stay dark enough for contrast in
+     BOTH themes — dark mode's --primary is a bright royal blue that would fail
+     that. Light mode can use the brand navy directly. */
+  --chat-header: oklch(0.45 0.17 262);        /* brand navy */
+  --chat-header-foreground: oklch(0.99 0 0);
+
   --secondary: oklch(0.965 0.006 262);
   --secondary-foreground: oklch(0.26 0.03 262);
 
@@ -99,6 +107,12 @@
   --primary: oklch(0.58 0.19 262);            /* vivid navy / royal blue */
   --primary-foreground: oklch(0.99 0.004 262);
 
+  /* Deep navy band — clearly navy, but dark enough that the white toggle text
+     and greeting on it clear 4.5:1. (--primary is far too bright to carry
+     small white text here.) */
+  --chat-header: oklch(0.26 0.075 262);       /* deep navy */
+  --chat-header-foreground: oklch(0.98 0.004 262);
+
   --secondary: oklch(0.195 0.022 262);
   --secondary-foreground: oklch(0.97 0.004 262);
 
@@ -154,6 +168,9 @@
 
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+
+  --color-chat-header: var(--chat-header);
+  --color-chat-header-foreground: var(--chat-header-foreground);
 
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);

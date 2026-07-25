@@ -20,9 +20,12 @@ export type ChatLauncherState = {
   expanded: boolean;
 };
 
+// Opens on the Vylan AI by default (founder): the AI is the "ask anything"
+// front door, and it's the mode that carries the greeting. Messages is one tap
+// away, and the toggle remembers your last choice while you stay on the page.
 let state: ChatLauncherState = {
   open: false,
-  mode: "messages",
+  mode: "ai",
   expanded: false,
 };
 
@@ -46,7 +49,7 @@ export function getChatLauncherState(): ChatLauncherState {
 // useSyncExternalStore requires a referentially-stable server snapshot.
 const SERVER_SNAPSHOT: ChatLauncherState = {
   open: false,
-  mode: "messages",
+  mode: "ai",
   expanded: false,
 };
 
