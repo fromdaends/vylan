@@ -36,6 +36,7 @@ export function EngagementMessages({
   readOnlyReason,
   locale,
   deferInitialLoad = false,
+  hideHeader = false,
 }: {
   engagementId: string;
   clientName: string | null;
@@ -52,6 +53,10 @@ export function EngagementMessages({
   // fetches on first visibility — show a quiet loading state until then
   // instead of a misleading "no messages yet".
   deferInitialLoad?: boolean;
+  // The host already names the thread (the popup puts the client's name beside
+  // its back arrow), so the identity banner would just be a second, bigger copy
+  // of the same thing eating the top of a small surface.
+  hideHeader?: boolean;
 }) {
   const t = useTranslations("ClientMessages");
   const [messages, setMessages] = useState<ClientMessageRow[]>(initialMessages);
@@ -224,17 +229,19 @@ export function EngagementMessages({
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col">
       {/* Slim banner — the standing reminder that this is the CLIENT, not the
-          AI. This is the surface's identity line. */}
-      <div className="shrink-0 border-b border-border px-4 py-2.5">
-        <p className="text-[13px] font-semibold leading-tight text-foreground">
-          {clientName
-            ? t("thread_with", { name: clientName })
-            : t("thread_title")}
-        </p>
-        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-          {t("client_receives")}
-        </p>
-      </div>
+          AI. Suppressed where the host already names the thread. */}
+      {!hideHeader && (
+        <div className="shrink-0 border-b border-border px-4 py-2.5">
+          <p className="text-[13px] font-semibold leading-tight text-foreground">
+            {clientName
+              ? t("thread_with", { name: clientName })
+              : t("thread_title")}
+          </p>
+          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+            {t("client_receives")}
+          </p>
+        </div>
+      )}
 
       {/* The conversation — fills all remaining height and scrolls on its own. */}
       <div
@@ -326,19 +333,32 @@ export function EngagementMessages({
                 setDraft(e.target.value.slice(0, MAX_LENGTH));
                 setSendError(false);
               }}
+              onKeyDown={(e) => {
+                // Enter sends; Shift+Enter starts a new line — the messaging
+                // convention. Without this, Enter only added blank lines and
+                // the send button was the sole way out.
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSend();
+                }
+              }}
               placeholder={placeholder}
               rows={1}
               className="max-h-[140px] min-h-[44px] flex-1 resize-none rounded-2xl"
               aria-label={placeholder}
             />
+            {/* Icon only — the paper plane is unambiguous and keeps a small
+                surface uncluttered. The label lives on aria-label/title. */}
             <Button
               type="button"
+              size="icon"
               onClick={handleSend}
               disabled={sending || draft.trim().length === 0}
-              className="shrink-0 rounded-full"
+              className="size-11 shrink-0 rounded-full"
+              aria-label={sending ? t("sending") : t("send")}
+              title={t("send")}
             >
               <Send className="size-4" aria-hidden />
-              {sending ? t("sending") : t("send")}
             </Button>
           </div>
           <div className="mt-1.5 flex items-center justify-between gap-2 px-1">

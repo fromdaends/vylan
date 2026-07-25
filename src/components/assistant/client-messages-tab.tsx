@@ -152,15 +152,22 @@ export function ClientMessagesTab({
     const isLive = status === "sent" || status === "in_progress";
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
+        {/* One slim row IS the thread header: a bare back arrow plus the
+            client's name. Replaces the old "All conversations" link stacked
+            above a second, larger "Messages with X" banner. */}
+        <div className="flex shrink-0 items-center gap-1.5 border-b border-border px-2 py-1.5">
           <button
             type="button"
             onClick={backToInbox}
-            className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={t("messages_back_to_inbox")}
+            title={t("messages_back_to_inbox")}
+            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ChevronLeft className="size-4" aria-hidden />
-            {t("messages_back_to_inbox")}
           </button>
+          <p className="min-w-0 truncate text-[13px] font-medium text-foreground">
+            {conv?.clientName ?? conv?.engagementTitle ?? ""}
+          </p>
         </div>
         <div className="min-h-0 flex-1">
           <EngagementMessages
@@ -169,6 +176,7 @@ export function ClientMessagesTab({
             clientName={conv?.clientName ?? null}
             initialMessages={[]}
             deferInitialLoad
+            hideHeader
             notActivated={false}
             readOnly={!isLive}
             readOnlyReason={
