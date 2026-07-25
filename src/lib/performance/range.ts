@@ -96,9 +96,16 @@ function monthsBack(y: number, mo: number, n: number): { y: number; mo: number }
 
 // Resolve one of the three ranges into concrete query bounds + a bucket
 // granularity. Takes `nowMs` explicitly so it is pure and testable.
+//
+// `resetAtMs` is the firm's optional "reset stats" baseline (migration 0880): a
+// lower bound the resolved start can only TIGHTEN to, never widen past. For
+// all_time (no natural lower bound) it becomes the start; for the fixed windows
+// it moves the start forward when the reset is more recent. The granularity
+// stays tied to the range type, so a reset never changes day-vs-month bucketing.
 export function resolveRange(
   range: PerformanceRange,
   nowMs: number,
+  resetAtMs: number | null = null,
 ): ResolvedRange {
   const endMs = nowMs;
   const { y, mo } = easternYmd(nowMs);
@@ -116,6 +123,14 @@ export function resolveRange(
   } else {
     startMs = null;
     granularity = "month";
+  }
+
+  // Clamp to the reset baseline: a reset makes the page behave as if the firm
+  // started on that instant. Never let the start exceed "now" (a reset that just
+  // fired yields an empty-but-valid single bucket rather than a negative span).
+  if (resetAtMs != null) {
+    startMs = startMs == null ? resetAtMs : Math.max(startMs, resetAtMs);
+    if (startMs > endMs) startMs = endMs;
   }
 
   return {

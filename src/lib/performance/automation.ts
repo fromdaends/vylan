@@ -67,6 +67,7 @@ export async function loadAutomationSection(
 export async function loadAutomation(
   range: PerformanceRange,
   nowMs: number = Date.now(),
+  resetAtMs: number | null = null,
 ): Promise<AutomationSection> {
-  return loadAutomationSection(resolveRange(range, nowMs));
+  return loadAutomationSection(resolveRange(range, nowMs, resetAtMs));
 }

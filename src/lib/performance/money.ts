@@ -210,6 +210,7 @@ async function fetchClientNames(
 export async function loadMoney(
   range: PerformanceRange,
   nowMs: number = Date.now(),
+  resetAtMs: number | null = null,
 ): Promise<MoneySection> {
-  return loadMoneySection(resolveRange(range, nowMs));
+  return loadMoneySection(resolveRange(range, nowMs, resetAtMs));
 }

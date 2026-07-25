@@ -101,6 +101,12 @@ export type Firm = {
   // and signoff as `=== true` (defaults off).
   notify_on_assignment: boolean;
   require_review_signoff: boolean;
+  // Performance page "reset stats" baseline (migration 0880). When set, the
+  // Performance page counts only records on/after this instant — a non-
+  // destructive, reversible clean slate. NULL / undefined = show full history.
+  // Possibly undefined at runtime until 0880 is applied — read as
+  // `firm.performance_reset_at ?? null`. Owner-set via a service-role action.
+  performance_reset_at?: string | null;
   created_at: string;
 };
 
