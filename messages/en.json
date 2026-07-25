@@ -2659,7 +2659,6 @@
     "messages_chars_left": "{count} characters left",
     "messages_read_only": "This engagement is wrapped up, so new messages are closed. The conversation stays visible here.",
     "messages_nudge": "Need to send a document? Don't paste it here — add it to your document checklist so it's checked automatically.",
-    "messages_nudge_link": "Go to my documents",
     "help_intro": "Question?",
     "help_link": "Email your accountant",
     "help_copy": "Copy",

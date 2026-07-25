@@ -14,6 +14,8 @@ import { useTranslations } from "next-intl";
 import { ChevronLeft, FileUp, Send } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import type { PortalMessage } from "@/lib/db/client-messages";
 
 const MAX_LENGTH = 4000;
@@ -27,7 +29,6 @@ export function PortalMessages({
   initialMessages,
   readOnly,
   locale,
-  onGoToDocuments,
   onBack,
 }: {
   token: string;
@@ -36,9 +37,6 @@ export function PortalMessages({
   // Engagement complete → history visible, composer closed.
   readOnly: boolean;
   locale: "fr" | "en";
-  // Jump back to the document checklist (the no-attachments nudge target).
-  // Null when this portal has no document items to point at.
-  onGoToDocuments: (() => void) | null;
   // Close the mobile full-screen overlay. Rendered as a Back button that only
   // shows below lg (the desktop pane is permanent, so it has nothing to close).
   onBack?: () => void;
@@ -226,26 +224,41 @@ export function PortalMessages({
         ) : (
           <div className="space-y-2">
             <div className="flex items-end gap-2">
-              <textarea
+              <Textarea
                 value={draft}
                 onChange={(e) => {
                   setDraft(e.target.value.slice(0, MAX_LENGTH));
                   setSendError(false);
                 }}
                 placeholder={t("messages_placeholder")}
-                rows={2}
+                rows={1}
                 aria-label={t("messages_placeholder")}
-                className="min-h-[3.25rem] flex-1 resize-y rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onKeyDown={(event) => {
+                  if (
+                    event.key !== "Enter" ||
+                    event.shiftKey ||
+                    event.nativeEvent.isComposing
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  void handleSend();
+                }}
+                className="max-h-[140px] min-h-[44px] flex-1 resize-none rounded-2xl"
               />
-              <button
+              <Button
                 type="button"
+                size="icon"
                 onClick={handleSend}
                 disabled={sending || draft.trim().length === 0}
-                className="inline-flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-50"
+                aria-label={
+                  sending ? t("messages_sending") : t("messages_send")
+                }
+                title={t("messages_send")}
+                className="size-11 shrink-0 rounded-full"
               >
                 <Send className="size-4" aria-hidden />
-                {sending ? t("messages_sending") : t("messages_send")}
-              </button>
+              </Button>
             </div>
             <div className="flex items-center justify-between gap-2">
               <p
@@ -264,21 +277,10 @@ export function PortalMessages({
               )}
             </div>
             {/* The no-attachments nudge: files belong in the checklist, where
-                they're automatically checked. Permanent, quiet, actionable. */}
+                they're automatically checked. Permanent and informational. */}
             <p className="flex items-start gap-1.5 rounded-xl bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
               <FileUp className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              <span>
-                {t("messages_nudge")}{" "}
-                {onGoToDocuments && (
-                  <button
-                    type="button"
-                    onClick={onGoToDocuments}
-                    className="cursor-pointer font-medium text-foreground underline underline-offset-2 transition-colors hover:text-foreground/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {t("messages_nudge_link")}
-                  </button>
-                )}
-              </span>
+              <span>{t("messages_nudge")}</span>
             </p>
           </div>
         )}

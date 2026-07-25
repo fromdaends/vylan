@@ -340,15 +340,6 @@ export function PortalShell({
             initialMessages={ctx.messages}
             readOnly={messagesReadOnly}
             locale={locale}
-            onGoToDocuments={
-              hasDocuments
-                ? () => {
-                    setMessagesOpen(false);
-                    setView("documents");
-                    logOncePerVisit("client_opened_documents");
-                  }
-                : null
-            }
             onBack={() => setMessagesOpen(false)}
           />
         }
