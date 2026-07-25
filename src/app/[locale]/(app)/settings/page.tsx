@@ -238,7 +238,6 @@ export default async function SettingsPage({
         autoRejectDuplicates={firm.auto_reject_duplicates}
         autoRequestMissingPages={firm.auto_request_missing_pages}
         includeQuebecForms={firm.include_quebec_forms ?? true}
-        chatConfirmActions={firm.chat_confirm_actions ?? true}
         invoiceDefaultMode={firm.default_invoice_auto_mode ?? "off"}
         invoiceDefaultDelayDays={firm.default_invoice_delay_days ?? null}
         reminderDefaultSettings={getFirmReminderDefault(firm)}

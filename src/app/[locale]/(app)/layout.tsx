@@ -14,7 +14,7 @@ import { firmHasAnyQuickbooksConnection } from "@/lib/db/quickbooks";
 import { firmHasAnyXeroConnection } from "@/lib/db/xero";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { getTranslations } from "next-intl/server";
-import { AssistantPanel } from "@/components/assistant/assistant-panel";
+import { ChatLauncher } from "@/components/assistant/chat-launcher";
 import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 import { AppShell } from "@/components/app/app-shell";
 import { TrialBanner } from "@/components/app/demo-banner";
@@ -172,7 +172,7 @@ export default async function AppLayout({
       }}
     >
       {children}
-      <AssistantPanel
+      <ChatLauncher
         locale={locale === "fr" ? "fr" : "en"}
         userId={dbUser.id}
       />

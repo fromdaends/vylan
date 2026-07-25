@@ -18,6 +18,7 @@ import { z } from "zod";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { assistantActionsEnabled } from "@/lib/ai/assistant-actions";
 import {
   CHAT_SCHEMA_MISSING,
 } from "@/lib/engagement-chat/db";
@@ -54,6 +55,11 @@ export async function POST(request: NextRequest) {
   if (!user || !firm || user.deactivated_at) {
     return jsonError(401, "unauthorized");
   }
+
+  // Actions are dormant by default: with ASSISTANT_ACTIONS_ENABLED off, no
+  // confirm cards are ever proposed, and this executor refuses to run so even a
+  // stale token can't execute anything.
+  if (!assistantActionsEnabled()) return jsonError(403, "actions_disabled");
 
   let body: z.infer<typeof Body>;
   try {
