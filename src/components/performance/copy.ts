@@ -14,6 +14,21 @@ export type PerfCopy = {
   rangeLabel: string;
   ranges: Record<PerformanceRange, string>;
   loading: string;
+  // Owner-only "Reset stats" control (migration 0880). Non-destructive: it sets
+  // a baseline the stats count from, and can be undone.
+  reset: {
+    action: string;
+    active: (date: string) => string;
+    undo: string;
+    dialogTitle: string;
+    dialogBody: string;
+    confirm: string;
+    cancel: string;
+    done: string;
+    undone: string;
+    failed: string;
+    unavailable: string;
+  };
   money: {
     heading: string;
     caption: string;
@@ -103,6 +118,20 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       all_time: "All time",
     },
     loading: "Updating…",
+    reset: {
+      action: "Reset stats",
+      active: (date) => `Stats reset on ${date}`,
+      undo: "Show all history",
+      dialogTitle: "Reset your Performance stats?",
+      dialogBody:
+        "The page starts counting from today forward. Nothing is deleted — your invoices, documents, payments and history all stay intact and keep working everywhere else. You can undo this anytime to bring the full history back.",
+      confirm: "Reset stats",
+      cancel: "Cancel",
+      done: "Stats reset — counting fresh from today.",
+      undone: "Showing your full history again.",
+      failed: "Couldn't update the stats. Please try again.",
+      unavailable: "This needs a quick database update first.",
+    },
     money: {
       heading: "Money",
       caption: "Payments collected through Vylan.",
@@ -188,6 +217,20 @@ export const PERF_COPY: Record<AppLocale, PerfCopy> = {
       all_time: "Depuis le début",
     },
     loading: "Mise à jour…",
+    reset: {
+      action: "Réinitialiser",
+      active: (date) => `Statistiques réinitialisées le ${date}`,
+      undo: "Afficher tout l'historique",
+      dialogTitle: "Réinitialiser vos statistiques ?",
+      dialogBody:
+        "La page recommence à compter à partir d'aujourd'hui. Rien n'est supprimé — vos factures, documents, paiements et votre historique restent intacts et continuent de fonctionner partout ailleurs. Vous pouvez annuler à tout moment pour retrouver tout l'historique.",
+      confirm: "Réinitialiser",
+      cancel: "Annuler",
+      done: "Statistiques réinitialisées — on repart d'aujourd'hui.",
+      undone: "Tout votre historique est de nouveau affiché.",
+      failed: "Échec de la mise à jour. Veuillez réessayer.",
+      unavailable: "Une petite mise à jour de la base de données est requise d'abord.",
+    },
     money: {
       heading: "Argent",
       caption: "Paiements encaissés via Vylan.",

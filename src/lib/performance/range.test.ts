@@ -55,6 +55,44 @@ describe("resolveRange", () => {
     expect(r.startIso).toBeNull();
     expect(r.granularity).toBe("month");
   });
+
+  describe("reset baseline clamp", () => {
+    const RESET = Date.parse("2026-06-15T12:00:00Z");
+
+    it("becomes the start for all_time (which otherwise has none)", () => {
+      const r = resolveRange("all_time", NOW, RESET);
+      expect(r.startMs).toBe(RESET);
+      expect(r.startIso).toBe("2026-06-15T12:00:00.000Z");
+      expect(r.granularity).toBe("month"); // unchanged by the reset
+    });
+
+    it("tightens a window when the reset is more recent than its start", () => {
+      // last_3_months normally starts 2026-05-01; the reset moves it forward.
+      const r = resolveRange("last_3_months", NOW, RESET);
+      expect(r.startIso).toBe("2026-06-15T12:00:00.000Z");
+      expect(r.granularity).toBe("month");
+    });
+
+    it("never widens a window when the reset predates its start", () => {
+      const old = Date.parse("2026-01-01T00:00:00Z");
+      const r = resolveRange("last_3_months", NOW, old);
+      expect(r.startIso).toBe("2026-05-01T04:00:00.000Z"); // window start wins
+    });
+
+    it("clamps a future reset to now (no negative span)", () => {
+      const future = Date.parse("2026-08-01T00:00:00Z");
+      const r = resolveRange("this_month", NOW, future);
+      expect(r.startMs).toBe(NOW);
+      expect(r.startIso).toBe("2026-07-21T23:03:00.000Z");
+      expect(r.granularity).toBe("day"); // still daily for this_month
+    });
+
+    it("no reset (null) leaves the range untouched", () => {
+      expect(resolveRange("all_time", NOW, null)).toEqual(
+        resolveRange("all_time", NOW),
+      );
+    });
+  });
 });
 
 describe("bucketStartMs", () => {

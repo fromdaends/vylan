@@ -5,6 +5,8 @@ import { loadAi } from "@/lib/performance/ai";
 import { loadAutomation } from "@/lib/performance/automation";
 import { loadDocuments } from "@/lib/performance/documents";
 import type { PerformanceRange } from "@/lib/performance/types";
+import { getCurrentFirm } from "@/lib/db/firms";
+import { getCurrentUser } from "@/lib/db/users";
 import { PerformanceView } from "@/components/performance/performance-view";
 
 // Retrospective firm-performance dashboard. Read-only: it never writes to
@@ -33,11 +35,23 @@ export default async function PerformancePage({
   const { range: rangeParam } = await searchParams;
   const range = parseRange(rangeParam);
 
+  // The firm's "reset stats" baseline (migration 0880) clamps every range-scoped
+  // stat; the current user's role gates the owner-only reset control. Read both
+  // first so the loaders can honour the baseline. `performance_reset_at` may be
+  // undefined until 0880 is applied — treated as "no reset".
+  const [firm, user] = await Promise.all([getCurrentFirm(), getCurrentUser()]);
+  const resetAt = firm?.performance_reset_at ?? null;
+  const parsedReset = resetAt ? Date.parse(resetAt) : NaN;
+  const resetAtMs = Number.isFinite(parsedReset) ? parsedReset : null;
+  const isOwner = user?.role === "owner";
+
+  // `undefined` nowMs lets each loader read the clock itself (a lib function),
+  // keeping this render pure; the reset baseline is threaded as the 3rd arg.
   const [money, ai, automation, documents] = await Promise.all([
-    loadMoney(range),
-    loadAi(range),
-    loadAutomation(range),
-    loadDocuments(range),
+    loadMoney(range, undefined, resetAtMs),
+    loadAi(range, undefined, resetAtMs),
+    loadAutomation(range, undefined, resetAtMs),
+    loadDocuments(range, undefined, resetAtMs),
   ]);
 
   return (
@@ -48,6 +62,8 @@ export default async function PerformancePage({
       ai={ai}
       automation={automation}
       documents={documents}
+      resetAt={resetAt}
+      isOwner={isOwner}
     />
   );
 }

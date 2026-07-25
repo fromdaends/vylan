@@ -189,6 +189,7 @@ export async function loadDocumentsSection(
 export async function loadDocuments(
   range: PerformanceRange,
   nowMs: number = Date.now(),
+  resetAtMs: number | null = null,
 ): Promise<DocumentsSection> {
-  return loadDocumentsSection(resolveRange(range, nowMs));
+  return loadDocumentsSection(resolveRange(range, nowMs, resetAtMs));
 }

@@ -184,6 +184,7 @@ export async function loadAiSection(range: ResolvedRange): Promise<AiSection> {
 export async function loadAi(
   range: PerformanceRange,
   nowMs: number = Date.now(),
+  resetAtMs: number | null = null,
 ): Promise<AiSection> {
-  return loadAiSection(resolveRange(range, nowMs));
+  return loadAiSection(resolveRange(range, nowMs, resetAtMs));
 }

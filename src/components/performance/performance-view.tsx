@@ -17,6 +17,7 @@ import { SegmentedControl } from "./segmented-control";
 import { MoneySection } from "./money-section";
 import { AiSection } from "./ai-section";
 import { AutomationRow } from "./automation-row";
+import { ResetStats } from "./reset-stats";
 
 // Client shell for the Performance page. The range lives in the URL (?range=),
 // so switching it is a soft navigation: the server re-loads the numbers and this
@@ -30,6 +31,8 @@ export function PerformanceView({
   ai,
   automation,
   documents,
+  resetAt,
+  isOwner,
 }: {
   range: PerformanceRange;
   locale: AppLocale;
@@ -37,6 +40,10 @@ export function PerformanceView({
   ai: AiData;
   automation: AutoData;
   documents: DocumentsData;
+  // Firm's "reset stats" baseline (ISO instant) or null when not reset.
+  resetAt: string | null;
+  // Only firm owners get the reset / undo controls.
+  isOwner: boolean;
 }) {
   const copy = perfCopy(locale);
   const router = useRouter();
@@ -59,22 +66,30 @@ export function PerformanceView({
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            aria-live="polite"
-            className="min-w-[5rem] text-right text-xs text-muted-foreground"
-          >
-            {pending ? copy.loading : ""}
-          </span>
-          <SegmentedControl
-            ariaLabel={copy.rangeLabel}
-            value={range}
-            onChange={setRange}
-            options={PERFORMANCE_RANGES.map((r) => ({
-              value: r,
-              label: copy.ranges[r],
-            }))}
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          <ResetStats
+            resetAt={resetAt}
+            isOwner={isOwner}
+            locale={locale}
+            copy={copy.reset}
           />
+          <div className="flex items-center gap-2">
+            <span
+              aria-live="polite"
+              className="min-w-[5rem] text-right text-xs text-muted-foreground"
+            >
+              {pending ? copy.loading : ""}
+            </span>
+            <SegmentedControl
+              ariaLabel={copy.rangeLabel}
+              value={range}
+              onChange={setRange}
+              options={PERFORMANCE_RANGES.map((r) => ({
+                value: r,
+                label: copy.ranges[r],
+              }))}
+            />
+          </div>
         </div>
       </header>
 
