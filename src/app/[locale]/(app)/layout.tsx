@@ -175,6 +175,14 @@ export default async function AppLayout({
       <ChatLauncher
         locale={locale === "fr" ? "fr" : "en"}
         userId={dbUser.id}
+        // Given name only, for the popup greeting. Deliberately NOT
+        // userDisplayLabel(): that falls back to the email local-part, and
+        // "Hi philjette77 👋" reads worse than a plain "Hi 👋".
+        firstName={
+          (dbUser.display_name?.trim() || dbUser.name?.trim() || "").split(
+            /\s+/,
+          )[0]
+        }
       />
       <KeyboardShortcuts />
       <Toaster />
