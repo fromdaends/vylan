@@ -13,7 +13,10 @@ export function periodLabel(
   d: LocalDate,
   locale: "en" | "fr",
 ): string {
-  if (frequency === "monthly") {
+  // Custom cycles are month-based and can repeat several times a year, so they
+  // take the month-and-year label too. Falling through to the year-only default
+  // would give every occurrence of an every-2-months series the SAME title.
+  if (frequency === "monthly" || frequency === "custom") {
     // Mid-month UTC noon so no timezone can shift the month.
     return new Intl.DateTimeFormat(locale === "fr" ? "fr-CA" : "en-CA", {
       month: "long",

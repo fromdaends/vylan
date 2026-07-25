@@ -134,6 +134,7 @@ export async function spawnDueRecurrences(now: Date = new Date()): Promise<{
       nextSpawnOn: scheduled,
       frequency: series.frequency,
       anchorDay: series.anchor_day,
+      intervalMonths: series.interval_months,
       today,
     });
     if (!due) {

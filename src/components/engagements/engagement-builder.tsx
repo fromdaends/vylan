@@ -158,9 +158,13 @@ export function EngagementBuilder({
   // engagement becomes a series that auto-creates the next occurrence each
   // cycle, due repeatOffsetDays after it opens.
   const [repeatFrequency, setRepeatFrequency] = useState<
-    "off" | "monthly" | "quarterly" | "yearly"
+    "off" | "monthly" | "quarterly" | "yearly" | "custom"
   >("off");
   const [repeatOffsetDays, setRepeatOffsetDays] = useState<string>("15");
+  // Custom schedule ("every N months on day D", migration 0890). Strings so the
+  // number inputs can be cleared while typing; clamped on submit.
+  const [repeatIntervalMonths, setRepeatIntervalMonths] = useState<string>("2");
+  const [repeatAnchorDay, setRepeatAnchorDay] = useState<string>("");
   // Invoice recurrence (Phase 4): recreate this engagement's invoice on every
   // occurrence. OFF by default — billing repeats only when explicitly chosen.
   const [repeatInvoiceRecreate, setRepeatInvoiceRecreate] = useState(false);
@@ -418,6 +422,27 @@ export function EngagementBuilder({
               : null,
             reminder_settings: reminderSettings,
             repeat_frequency: repeatFrequency,
+            // Custom schedule only; null keeps a fixed-frequency series
+            // inserting exactly the columns it did before migration 0890.
+            repeat_interval_months:
+              repeatFrequency === "custom"
+                ? Math.min(
+                    24,
+                    Math.max(1, Math.floor(Number(repeatIntervalMonths) || 1)),
+                  )
+                : null,
+            repeat_anchor_day:
+              repeatFrequency === "custom"
+                ? Math.min(
+                    31,
+                    Math.max(
+                      1,
+                      Math.floor(
+                        Number(repeatAnchorDay) || new Date().getDate(),
+                      ),
+                    ),
+                  )
+                : null,
             repeat_due_offset_days:
               repeatFrequency !== "off"
                 ? Math.min(
@@ -609,11 +634,21 @@ export function EngagementBuilder({
           </CardTitle>
           <Select
             value={repeatFrequency}
-            onValueChange={(value) =>
-              setRepeatFrequency(
-                value as "off" | "monthly" | "quarterly" | "yearly",
-              )
-            }
+            onValueChange={(value) => {
+              const next = value as
+                | "off"
+                | "monthly"
+                | "quarterly"
+                | "yearly"
+                | "custom";
+              setRepeatFrequency(next);
+              // Default the day to today when Custom is first chosen (the fixed
+              // frequencies anchor on the setup day implicitly). Set on a real
+              // interaction so first paint stays deterministic.
+              if (next === "custom" && repeatAnchorDay === "") {
+                setRepeatAnchorDay(String(new Date().getDate()));
+              }
+            }}
           >
             <SelectTrigger
               id="repeat-frequency"
@@ -627,6 +662,7 @@ export function EngagementBuilder({
               <SelectItem value="monthly">{t("repeat_monthly")}</SelectItem>
               <SelectItem value="quarterly">{t("repeat_quarterly")}</SelectItem>
               <SelectItem value="yearly">{t("repeat_yearly")}</SelectItem>
+              <SelectItem value="custom">{t("repeat_custom")}</SelectItem>
             </SelectContent>
           </Select>
         </CardHeader>
@@ -634,6 +670,41 @@ export function EngagementBuilder({
           <p className="text-xs text-muted-foreground">
             {t("repeat_section_hint")}
           </p>
+
+          {/* Custom schedule: every N months, on a chosen day. */}
+          {repeatFrequency === "custom" && (
+            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span>{t("repeat_custom_every")}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={repeatIntervalMonths}
+                  onChange={(e) => setRepeatIntervalMonths(e.target.value)}
+                  aria-label={t("repeat_custom_every_label")}
+                  className="h-8 w-20"
+                />
+                <span>{t("repeat_custom_months")}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span>{t("repeat_custom_on_day")}</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={repeatAnchorDay}
+                  onChange={(e) => setRepeatAnchorDay(e.target.value)}
+                  aria-label={t("repeat_custom_on_day_label")}
+                  className="h-8 w-20"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t("repeat_custom_hint")}
+              </p>
+            </div>
+          )}
+
           {repeatFrequency !== "off" && (
               <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <span>{t("repeat_due_offset_label")}</span>

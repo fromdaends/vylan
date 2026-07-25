@@ -259,6 +259,9 @@ export default async function EngagementDetailPage({
     ? {
         id: repeatSeriesRow.id,
         frequency: repeatSeriesRow.frequency,
+        // Custom schedules ("every N months on day D") prefill the dialog.
+        intervalMonths: repeatSeriesRow.interval_months ?? null,
+        anchorDay: repeatSeriesRow.anchor_day,
         dueOffsetDays: repeatSeriesRow.due_offset_days,
         status: repeatSeriesRow.status,
         nextSpawnOn: repeatSeriesRow.next_spawn_on,

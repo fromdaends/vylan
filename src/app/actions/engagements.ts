@@ -146,9 +146,13 @@ const CreateSchema = z
     ),
     // Recurring series (migration 0770). Optional + defaults 'off'.
     repeat_frequency: z
-      .enum(["off", "monthly", "quarterly", "yearly"])
+      .enum(["off", "monthly", "quarterly", "yearly", "custom"])
       .optional()
       .default("off"),
+    // Custom schedule ("every N months on day D", migration 0890). Bounds
+    // mirror the DB CHECKs. Validated as a pair below.
+    repeat_interval_months: z.number().int().min(1).max(24).nullable().optional(),
+    repeat_anchor_day: z.number().int().min(1).max(31).nullable().optional(),
     repeat_due_offset_days: z
       .number()
       .int()
@@ -212,7 +216,9 @@ export async function createEngagementAction(
     invoice_locks_deliverables?: boolean;
     invoice_description?: string | null;
     reminder_settings?: ReminderSettings;
-    repeat_frequency?: "off" | "monthly" | "quarterly" | "yearly";
+    repeat_frequency?: "off" | "monthly" | "quarterly" | "yearly" | "custom";
+    repeat_interval_months?: number | null;
+    repeat_anchor_day?: number | null;
     repeat_due_offset_days?: number | null;
     repeat_invoice_recreate?: boolean;
     items: TemplateItem[];
@@ -235,6 +241,8 @@ export async function createEngagementAction(
     invoice_description: payload.invoice_description,
     reminder_settings: payload.reminder_settings,
     repeat_frequency: payload.repeat_frequency,
+    repeat_interval_months: payload.repeat_interval_months,
+    repeat_anchor_day: payload.repeat_anchor_day,
     repeat_due_offset_days: payload.repeat_due_offset_days,
     repeat_invoice_recreate: payload.repeat_invoice_recreate,
     items: payload.items,
@@ -417,6 +425,8 @@ export async function createEngagementAction(
           firmTimezone: firmForRepeat.timezone,
           userId: userForRepeat?.id ?? null,
           frequency: parsed.data.repeat_frequency,
+          intervalMonths: parsed.data.repeat_interval_months,
+          anchorDay: parsed.data.repeat_anchor_day,
           dueOffsetDays: parsed.data.repeat_due_offset_days ?? 15,
           // Same widening as the engagement items above; a series snapshots
           // the checklist it was created with.

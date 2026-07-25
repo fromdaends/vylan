@@ -30,11 +30,23 @@ import { getLatestPaymentRequestForEngagement } from "@/lib/db/payment-requests"
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const RepeatSchema = z.object({
-  engagementId: z.string().regex(UUID_REGEX),
-  frequency: z.enum(["off", "monthly", "quarterly", "yearly"]),
-  dueOffsetDays: z.number().int().min(1).max(365),
-});
+const RepeatSchema = z
+  .object({
+    engagementId: z.string().regex(UUID_REGEX),
+    frequency: z.enum(["off", "monthly", "quarterly", "yearly", "custom"]),
+    // Custom schedules ("every N months on day D"). Bounds mirror the DB
+    // CHECKs in migration 0890.
+    intervalMonths: z.number().int().min(1).max(24).optional(),
+    anchorDay: z.number().int().min(1).max(31).optional(),
+    dueOffsetDays: z.number().int().min(1).max(365),
+  })
+  // A custom schedule without a cycle length is meaningless — reject it here
+  // rather than letting the database CHECK be the only thing standing between
+  // a malformed series and the scheduler.
+  .refine(
+    (v) => v.frequency !== "custom" || v.intervalMonths != null,
+    { path: ["intervalMonths"], message: "interval_required" },
+  );
 
 export type RepeatEditResult =
   | { ok: true }
@@ -42,7 +54,9 @@ export type RepeatEditResult =
 
 export async function setEngagementRepeatAction(input: {
   engagementId: string;
-  frequency: "off" | "monthly" | "quarterly" | "yearly";
+  frequency: "off" | "monthly" | "quarterly" | "yearly" | "custom";
+  intervalMonths?: number;
+  anchorDay?: number;
   dueOffsetDays: number;
 }): Promise<RepeatEditResult> {
   const parsed = RepeatSchema.safeParse(input);
@@ -87,6 +101,8 @@ export async function setEngagementRepeatAction(input: {
       firmTimezone: firm.timezone,
       userId: user.id,
       frequency: parsed.data.frequency,
+      intervalMonths: parsed.data.intervalMonths,
+      anchorDay: parsed.data.anchorDay,
       dueOffsetDays: parsed.data.dueOffsetDays,
       itemsSnapshot: items,
     });
@@ -224,7 +240,12 @@ export async function resumeSeriesAction(input: {
       status: "active",
       paused_at: null,
       next_spawn_on: toIsoDate(
-        nextSpawn(today, ctx.series.frequency, ctx.series.anchor_day),
+        nextSpawn(
+          today,
+          ctx.series.frequency,
+          ctx.series.anchor_day,
+          ctx.series.interval_months,
+        ),
       ),
     });
     await logUserActivity(
