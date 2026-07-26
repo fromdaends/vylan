@@ -20,6 +20,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { TeamChatLauncher } from "@/components/settings/team/team-chat-launcher";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -179,8 +180,13 @@ export function TeamManager({
             {canManage ? t("subtitle") : t("subtitle_readonly")}
           </p>
         </div>
-        {canManage && (
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {/* Team chat — opens the bottom-right chat launcher on the firm's
+              thread, and (while this page is mounted) is what makes the Team
+              mode exist there at all. Every member gets it, not just owners. */}
+          <TeamChatLauncher />
+          {canManage && (
+            <>
             <Button
               type="button"
               size="sm"
@@ -235,8 +241,9 @@ export function TeamManager({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Firm settings dialog (opened from the ⋯ menu). */}

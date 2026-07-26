@@ -48,6 +48,9 @@ export async function GET() {
   return NextResponse.json({
     messages,
     unread: countTeamUnreadForUser(messages, lastReadAt, user.id),
+    // The launcher's Team view mounts client-side (no server render), so it
+    // needs to know who "me" is to right-align its own bubbles.
+    currentUserId: user.id,
   });
 }
 

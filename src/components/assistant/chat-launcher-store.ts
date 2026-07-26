@@ -8,7 +8,11 @@
 // The popup has two modes (Client messages / Vylan AI) and can EXPAND messaging
 // into a docked, resizable sidebar (opt-in, not the old default panel).
 
-export type ChatMode = "messages" | "ai";
+// "team" is the firm's internal team chat. Unlike the other two it is NOT a
+// permanent mode: it only exists while the Team page is mounted (that page sets
+// teamChatAvailable and opens the launcher on it). Leave the page and the mode
+// disappears — the launcher falls back to the AI.
+export type ChatMode = "messages" | "ai" | "team";
 
 export type ChatLauncherState = {
   // The compact bottom-right popup is open.
@@ -18,6 +22,8 @@ export type ChatLauncherState = {
   // Messaging is expanded into the docked, resizable Instagram-style sidebar.
   // Mutually exclusive with the compact popup: expanding closes the popup.
   expanded: boolean;
+  // True only while the Team page is mounted — what makes the "team" mode exist.
+  teamChatAvailable: boolean;
 };
 
 // Opens on the Vylan AI by default (founder): the AI is the "ask anything"
@@ -27,6 +33,7 @@ let state: ChatLauncherState = {
   open: false,
   mode: "ai",
   expanded: false,
+  teamChatAvailable: false,
 };
 
 const listeners = new Set<() => void>();
@@ -51,6 +58,7 @@ const SERVER_SNAPSHOT: ChatLauncherState = {
   open: false,
   mode: "ai",
   expanded: false,
+  teamChatAvailable: false,
 };
 
 export function getChatLauncherServerSnapshot(): ChatLauncherState {
@@ -97,5 +105,29 @@ export function expandMessages() {
 // Collapse the docked sidebar back to nothing (the FAB reappears).
 export function collapseMessages() {
   state = { ...state, expanded: false };
+  emit();
+}
+
+// The Team page publishes/retracts the team chat's availability as it mounts and
+// unmounts. On retract, a launcher sitting on the team mode falls back to the AI
+// so it can never strand on a mode that no longer exists.
+export function setTeamChatAvailable(available: boolean) {
+  state = {
+    ...state,
+    teamChatAvailable: available,
+    mode: !available && state.mode === "team" ? "ai" : state.mode,
+  };
+  emit();
+}
+
+// Open the popup straight into the firm's team chat (the Team page's button).
+export function openTeamChat() {
+  state = {
+    ...state,
+    open: true,
+    expanded: false,
+    teamChatAvailable: true,
+    mode: "team",
+  };
   emit();
 }
