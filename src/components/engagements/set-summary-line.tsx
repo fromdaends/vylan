@@ -69,17 +69,50 @@ export function SetSummaryLine({
   // accountant already reads elsewhere. Shown only as supporting context.
   const pct = Math.round(Math.max(0, Math.min(1, assessment.confidence)) * 100);
 
+  // Cross-statement arithmetic results (statement-chain.ts). These are
+  // CODE-verified facts — a balance that doesn't chain, a hole between
+  // statement periods — so they get their own lines under the model's
+  // conclusion rather than being blended into its prose. Same bilingual
+  // convention as the conclusion; capped so a pathological set can't flood
+  // the header.
+  const findings = (assessment.chain_findings ?? []).slice(0, 3);
+  const coverage = (assessment.chain_coverage ?? []).slice(0, 2);
+  const pick = (t: { text_en: string; text_fr: string }) =>
+    locale === "fr" ? t.text_fr || t.text_en : t.text_en || t.text_fr;
+
   return (
-    <div
-      className={cn(
-        "flex items-start gap-1.5 text-xs leading-relaxed",
-        tone.color,
-        className,
-      )}
-    >
-      <Icon className="mt-px size-3.5 shrink-0" aria-hidden />
-      <span className="min-w-0 text-foreground/80">{text}</span>
-      <span className="shrink-0 tabular-nums text-muted-foreground">{pct}%</span>
+    <div className={cn("space-y-1", className)}>
+      <div
+        className={cn("flex items-start gap-1.5 text-xs leading-relaxed", tone.color)}
+      >
+        <Icon className="mt-px size-3.5 shrink-0" aria-hidden />
+        <span className="min-w-0 text-foreground/80">{text}</span>
+        <span className="shrink-0 tabular-nums text-muted-foreground">{pct}%</span>
+      </div>
+      {findings.map((f, i) => (
+        <div
+          key={`cf-${i}`}
+          className="flex items-start gap-1.5 text-xs leading-relaxed text-warning"
+        >
+          <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
+          <span className="min-w-0">{pick(f)}</span>
+        </div>
+      ))}
+      {/* Coverage reads as quiet reassurance ("Apr 27 – Dec 26, 8 statements,
+          no gaps"), so it only earns a line when there are several statements
+          to summarize — and stays muted, never a warning colour. */}
+      {findings.length === 0 &&
+        coverage
+          .filter((c) => c.statements >= 3)
+          .map((c, i) => (
+            <div
+              key={`cc-${i}`}
+              className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
+            >
+              <CheckCircle2 className="mt-px size-3.5 shrink-0" aria-hidden />
+              <span className="min-w-0">{pick(c)}</span>
+            </div>
+          ))}
     </div>
   );
 }
