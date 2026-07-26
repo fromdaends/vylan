@@ -38,8 +38,15 @@ export type ChainFinding = {
   prev_closing?: number;
   next_opening?: number;
   delta_cents?: number;
-  // Deterministic, client-safe prose for the accountant. Both languages,
-  // matching the bilingual conclusion convention.
+  // Short heading for the summary UI ("Missing statement"). The accountant
+  // scans these; the detail below carries the specifics.
+  label_en: string;
+  label_fr: string;
+  // The specifics, without repeating the label.
+  detail_en: string;
+  detail_fr: string;
+  // The full self-contained sentence — used for the flags array / audit trail,
+  // where there is no label beside it to give context.
   text_en: string;
   text_fr: string;
 };
@@ -49,6 +56,10 @@ export type ChainCoverage = {
   start: string;
   end: string;
   statements: number;
+  label_en: string;
+  label_fr: string;
+  detail_en: string;
+  detail_fr: string;
   text_en: string;
   text_fr: string;
 };
@@ -215,6 +226,10 @@ export function analyzeStatements(statements: ExtractedStatement[]): {
           account_ref: refShort,
           from: prev.st.period_end!,
           to: next.st.period_start!,
+          label_en: "Statement missing",
+          label_fr: "Relevé manquant",
+          detail_en: `${fmtDate(prev.st.period_end!, "en")} – ${fmtDate(next.st.period_start!, "en")} (${spanLabel(holeDays, "en")})${refShort ? ` · account ${refShort}` : ""}`,
+          detail_fr: `${fmtDate(prev.st.period_end!, "fr")} – ${fmtDate(next.st.period_start!, "fr")} (${spanLabel(holeDays, "fr")})${refShort ? ` · compte ${refShort}` : ""}`,
           text_en: `A statement appears to be missing between ${fmtDate(prev.st.period_end!, "en")} and ${fmtDate(next.st.period_start!, "en")} (${spanLabel(holeDays, "en")})${acctEn}.`,
           text_fr: `Un relevé semble manquer entre le ${fmtDate(prev.st.period_end!, "fr")} et le ${fmtDate(next.st.period_start!, "fr")} (${spanLabel(holeDays, "fr")})${acctFr}.`,
         });
@@ -236,6 +251,10 @@ export function analyzeStatements(statements: ExtractedStatement[]): {
           prev_closing: close,
           next_opening: open,
           delta_cents: cents(open) - cents(close),
+          label_en: "Balances don't chain",
+          label_fr: "Soldes non concordants",
+          detail_en: `Closes ${fmtMoney(close, "en")} on ${fmtDate(prev.st.period_end!, "en")}, next opens ${fmtMoney(open, "en")} · ${fmtMoney(delta, "en")} difference${refShort ? ` · account ${refShort}` : ""}`,
+          detail_fr: `Ferme à ${fmtMoney(close, "fr")} le ${fmtDate(prev.st.period_end!, "fr")}, le suivant ouvre à ${fmtMoney(open, "fr")} · écart de ${fmtMoney(delta, "fr")}${refShort ? ` · compte ${refShort}` : ""}`,
           text_en: `Balances don't chain${acctEn}: the statement ending ${fmtDate(prev.st.period_end!, "en")} closes at ${fmtMoney(close, "en")} but the next one opens at ${fmtMoney(open, "en")} (a ${fmtMoney(delta, "en")} difference) — a statement or pages may be missing.`,
           text_fr: `Les soldes ne s'enchaînent pas${acctFr} : le relevé se terminant le ${fmtDate(prev.st.period_end!, "fr")} ferme à ${fmtMoney(close, "fr")} mais le suivant ouvre à ${fmtMoney(open, "fr")} (écart de ${fmtMoney(delta, "fr")}) — un relevé ou des pages pourraient manquer.`,
         });
@@ -251,11 +270,19 @@ export function analyzeStatements(statements: ExtractedStatement[]): {
       const gapsEn =
         gaps === 0 ? "no gaps between them" : `${gaps} gap${gaps === 1 ? "" : "s"}`;
       const gapsFr = gaps === 0 ? "sans trou" : `${gaps} trou${gaps === 1 ? "" : "s"}`;
+      // Terser for the labelled detail row, where "Coverage" already supplies
+      // the context that the standalone sentence has to carry itself.
+      const gapsShortEn = gaps === 0 ? "no gaps" : `${gaps} gap${gaps === 1 ? "" : "s"}`;
+      const gapsShortFr = gapsFr;
       coverage.push({
         account_ref: refShort,
         start,
         end,
         statements: n,
+        label_en: "Coverage",
+        label_fr: "Couverture",
+        detail_en: `${fmtDate(start, "en")} – ${fmtDate(end, "en")} · ${n} statements · ${gapsShortEn}${refShort ? ` · account ${refShort}` : ""}`,
+        detail_fr: `${fmtDate(start, "fr")} – ${fmtDate(end, "fr")} · ${n} relevés · ${gapsShortFr}${refShort ? ` · compte ${refShort}` : ""}`,
         text_en: `Statements${acctEn} cover ${fmtDate(start, "en")} – ${fmtDate(end, "en")} (${n} statements, ${gapsEn}).`,
         text_fr: `Les relevés${acctFr} couvrent du ${fmtDate(start, "fr")} au ${fmtDate(end, "fr")} (${n} relevés, ${gapsFr}).`,
       });
