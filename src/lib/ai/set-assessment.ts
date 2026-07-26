@@ -402,8 +402,9 @@ export type SetDuplicateAction = DuplicateDecision | "none";
 export function decideDuplicateAction(opts: {
   autoRejectDuplicates: boolean;
   confidence: number;
-  // True when the EARLIER file this one duplicates was itself rejected (by the
-  // AI or by the accountant).
+  // True when the client was asked to replace the EARLIER file this one
+  // duplicates — rejected, or merely flagged unusable. See
+  // wasClientAskedToReplace.
   keeperRejected: boolean;
 }): SetDuplicateAction {
   // A re-upload of a document whose earlier copy was REJECTED is the client
@@ -570,18 +571,29 @@ type FileRow = {
   content_hash: string | null;
   uploaded_at: string;
   // Optional so older callers/tests that build a FileRow by hand still compile;
-  // absent reads as "not rejected".
+  // absent reads as "nothing wrong with it".
   ai_rejected?: boolean | null;
   review_status?: "pending" | "approved" | "rejected" | null;
+  ai_usability?: { usable?: boolean | null } | null;
 };
 
-// Was this file already turned down — by the AI or by the accountant? A later
-// copy of a rejected file is a corrected re-upload, not a duplicate.
-export function isRejectedFile(
-  f: Pick<FileRow, "ai_rejected" | "review_status"> | undefined,
+// Was the client effectively asked to send this file again?
+//
+// Three states qualify, and the third is the one that actually bites: with the
+// firm's auto-reject setting OFF, a redacted/blurry upload is NOT rejected —
+// ai_rejected stays false and review_status stays "pending". It is merely
+// FLAGGED ("Needs review", usable=false) while the client is still shown
+// "please upload a complete unredacted copy". That is precisely the case where
+// a re-upload arrives, so keying only on rejection missed the real-world bug.
+export function wasClientAskedToReplace(
+  f:
+    | Pick<FileRow, "ai_rejected" | "review_status" | "ai_usability">
+    | undefined,
 ): boolean {
   if (!f) return false;
-  return f.ai_rejected === true || f.review_status === "rejected";
+  if (f.ai_rejected === true) return true;
+  if (f.review_status === "rejected") return true;
+  return f.ai_usability?.usable === false;
 }
 
 type PreparedFile = {
@@ -676,7 +688,7 @@ export async function processSetAssessmentJob(
     // ai_rejected / review_status ride along so a duplicate can tell whether the
     // EARLIER copy it points at was itself rejected — see decideDuplicateAction.
     .select(
-      "id, storage_path, mime_type, content_hash, uploaded_at, ai_rejected, review_status",
+      "id, storage_path, mime_type, content_hash, uploaded_at, ai_rejected, review_status, ai_usability",
     )
     .eq("request_item_id", itemId)
     .eq("is_duplicate", false)
@@ -865,7 +877,7 @@ export async function processSetAssessmentJob(
     const decision = decideDuplicateAction({
       autoRejectDuplicates,
       confidence: page.duplicate_confidence,
-      keeperRejected: isRejectedFile(
+      keeperRejected: wasClientAskedToReplace(
         allFiles.find((f) => f.id === page.duplicate_of_file_id),
       ),
     });

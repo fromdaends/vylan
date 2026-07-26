@@ -4,7 +4,7 @@ import {
   computeFilesSignature,
   decideSetRouting,
   decideDuplicateAction,
-  isRejectedFile,
+  wasClientAskedToReplace,
   SET_INCOMPLETE_CONFIDENCE_BAR,
   DUPLICATE_AUTO_REJECT_CONFIDENCE,
   type SetAssessmentPage,
@@ -304,21 +304,42 @@ describe("decideDuplicateAction", () => {
   });
 });
 
-describe("isRejectedFile", () => {
-  it("counts an AI rejection and an accountant rejection", () => {
-    expect(isRejectedFile({ ai_rejected: true, review_status: "pending" })).toBe(true);
-    expect(isRejectedFile({ ai_rejected: false, review_status: "rejected" })).toBe(true);
+describe("wasClientAskedToReplace", () => {
+  it("counts an AI auto-rejection and an accountant rejection", () => {
+    expect(wasClientAskedToReplace({ ai_rejected: true, review_status: "pending" })).toBe(true);
+    expect(wasClientAskedToReplace({ ai_rejected: false, review_status: "rejected" })).toBe(true);
   });
 
-  it("does not count a healthy or not-yet-reviewed file", () => {
-    expect(isRejectedFile({ ai_rejected: false, review_status: "pending" })).toBe(false);
-    expect(isRejectedFile({ ai_rejected: false, review_status: "approved" })).toBe(false);
+  // THE reported case. With auto-reject OFF, a redacted upload is never
+  // "rejected" — it sits at ai_rejected=false / review_status="pending" and is
+  // only FLAGGED ("Needs review"), while the client is still told to send a
+  // clean copy. Keying on rejection alone missed exactly this, and the
+  // corrected re-upload kept coming back "already uploaded".
+  it("counts a file merely FLAGGED unusable (Needs review), not just rejected", () => {
+    expect(
+      wasClientAskedToReplace({
+        ai_rejected: false,
+        review_status: "pending",
+        ai_usability: { usable: false },
+      }),
+    ).toBe(true);
   });
 
-  it("treats a missing file or missing fields as not rejected", () => {
+  it("does not count a healthy, usable or not-yet-judged file", () => {
+    expect(wasClientAskedToReplace({ ai_rejected: false, review_status: "pending" })).toBe(false);
+    expect(wasClientAskedToReplace({ ai_rejected: false, review_status: "approved" })).toBe(false);
+    expect(
+      wasClientAskedToReplace({ ai_rejected: false, review_status: "pending", ai_usability: { usable: true } }),
+    ).toBe(false);
+    expect(
+      wasClientAskedToReplace({ ai_rejected: false, review_status: "pending", ai_usability: null }),
+    ).toBe(false);
+  });
+
+  it("treats a missing file or missing fields as not asked-to-replace", () => {
     // The keeper may have been deleted between the upload and the assessment.
-    expect(isRejectedFile(undefined)).toBe(false);
-    expect(isRejectedFile({})).toBe(false);
+    expect(wasClientAskedToReplace(undefined)).toBe(false);
+    expect(wasClientAskedToReplace({})).toBe(false);
   });
 });
 
