@@ -330,7 +330,9 @@ GROUND EVERYTHING IN THE ${fileCount} FILE(S) YOU WERE ACTUALLY GIVEN. Never cla
 
 For every file, add one pages[] entry:
 - image_index: the 1-based "File N" position as presented (File 1 was uploaded first).
-- position / of_total: page number and total when they apply; null when they do not (e.g. separate receipts).
+COUNT THE PAGES INSIDE EACH FILE — a single PDF is NOT complete just because it is one tidy file. One uploaded file can hold many pages, so for EVERY file: read the printed page markers on the pages themselves ("Page 2 of 4", "page 2 de 4", "2/4", "continued on next page", "suite à la page suivante") and compare the total they state against the pages actually present in that file. If a statement's own footer says it has 4 pages and you were shown 3 of them, the set is INCOMPLETE — set outcome to "incomplete", name the missing page numbers in the conclusion, and ask the client for exactly those pages. A file whose last page says "continued on next page" with no page following it is missing at least one page. "Complete" means every page the document itself claims to have is present — never infer completeness from the file being a PDF, from the pages you were given running in order, or from the first page looking whole.
+
+- position / of_total: page number and total when they apply; null when they do not (e.g. separate receipts). For a MULTI-PAGE file, of_total is the total the document itself states (e.g. 4 when the footer reads "Page 2 of 4"), NOT the number of pages in the upload.
 - placement:
   * "printed" — a page indicator is printed and readable on the page itself (e.g. "page 2 de 4", "2/4").
   * "inferred" — no readable printed number, but the content locks the position: a running balance chaining from the previous page's closing balance, transactions/dates that continue across pages, a "continued"/"suite" marker, an opening- or closing-balance line. State WHICH evidence in note.
