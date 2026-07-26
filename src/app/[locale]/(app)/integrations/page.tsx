@@ -1,7 +1,9 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
+import { FolderUp } from "lucide-react";
 import { assertLocale } from "@/lib/locale";
 import { firmHasAnyQuickbooksConnection } from "@/lib/db/quickbooks";
 import { firmHasAnyXeroConnection } from "@/lib/db/xero";
+import { getFirmStorageConnection } from "@/lib/db/filing";
 import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
 import { XeroLogo } from "@/components/integrations/xero-logo";
 import { SageLogo } from "@/components/integrations/sage-logo";
@@ -33,6 +35,7 @@ export default async function IntegrationsIndexPage({
   // on the QuickBooks surface, which guides the owner there when nothing's linked.
   const qbConnected = await firmHasAnyQuickbooksConnection();
   const xeroConnected = await firmHasAnyXeroConnection();
+  const storageConnection = await getFirmStorageConnection();
 
   return (
     <div className="mx-auto max-w-4xl animate-in-fade">
@@ -78,6 +81,23 @@ export default async function IntegrationsIndexPage({
               : { label: t("state_not_connected"), tone: "muted" }
           }
           actionLabel={xeroConnected ? t("action_open") : t("xero_action_connect")}
+        />
+
+        {/* Document filing — the shared cloud-storage filing engine (Drive /
+            SharePoint / Dropbox / SmartVault behind ONE feature page). A
+            Vylan-native card: lucide glyph, no brand tile. */}
+        <IntegrationCard
+          href="/integrations/filing"
+          logo={<FolderUp className="h-6 w-6 text-icon-amber" aria-hidden />}
+          tileClassName="bg-icon-amber/10 ring-icon-amber/20"
+          name={t("filing_name")}
+          description={t("filing_desc")}
+          badge={
+            storageConnection
+              ? { label: t("state_connected"), tone: "success" }
+              : { label: t("state_not_connected"), tone: "muted" }
+          }
+          actionLabel={t("action_open")}
         />
 
         {/* Sage 50 — file export. No connection state (Sage 50 is desktop

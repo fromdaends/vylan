@@ -157,6 +157,108 @@ export async function getFirmStorageConnection(): Promise<StorageConnectionDispl
   };
 }
 
+// ── Live-preview sample ─────────────────────────────────────────────────────
+
+import { expectedYearFromTitle } from "@/lib/ai/matching";
+import { resolveYear, type FilingTokenContext } from "@/lib/filing/tokens";
+
+export type FilingPreviewSample = {
+  tokenContext: FilingTokenContext;
+  // Same document with the year unresolvable — the settings preview's second
+  // line, showing the firm what the Unsorted fallback does.
+  yearlessContext: FilingTokenContext;
+  // True when built from one of the firm's real classified uploads.
+  fromRealDocument: boolean;
+};
+
+function cannedSample(firmName: string): FilingPreviewSample {
+  const base: FilingTokenContext = {
+    clientName: "Marie Tremblay",
+    clientType: "individual",
+    firmName,
+    engagementTitle: "T1 2024",
+    docTypeCode: "t4",
+    docConfidence: 0.95,
+    year: 2024,
+    issuerName: "Hydro-Québec",
+    partyName: "Marie Tremblay",
+    period: null,
+    date: "2025-02-28",
+    originalName: "IMG_4482.jpg",
+  };
+  return {
+    tokenContext: base,
+    yearlessContext: { ...base, year: null },
+    fromRealDocument: false,
+  };
+}
+
+/**
+ * Build the settings page's live-preview sample from the firm's most recent
+ * CLASSIFIED upload (RLS-scoped), falling back to a canned example for brand
+ * new firms. Pure display data — nothing here is uploaded anywhere.
+ */
+export async function getFilingPreviewSample(
+  firmName: string,
+): Promise<FilingPreviewSample> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("uploaded_files")
+    .select(
+      "original_filename, ai_classification, ai_confidence, ai_extracted_fields, uploaded_at, engagements(*, clients(display_name, type))",
+    )
+    .not("ai_classification", "is", null)
+    .order("uploaded_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return cannedSample(firmName);
+
+  const eng = data.engagements as unknown as
+    | (Record<string, unknown> & {
+        clients?: { display_name?: string | null; type?: string | null } | null;
+      })
+    | null;
+  const client = eng?.clients ?? null;
+  if (!eng || !client?.display_name) return cannedSample(firmName);
+
+  const fields = (data.ai_extracted_fields ?? {}) as Record<string, unknown>;
+  const num = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  const str = (v: unknown): string | null =>
+    typeof v === "string" && v.trim() !== "" ? v : null;
+
+  const title = str(eng.title) ?? "";
+  const year = resolveYear({
+    extractedYear: num(fields.extracted_year),
+    // tax_year is a 0900 column — absent pre-migration, undefined reads null.
+    engagementTaxYear: num(eng.tax_year),
+    titleYear: expectedYearFromTitle(title),
+    dueDate: str(eng.due_date),
+  });
+
+  const tokenContext: FilingTokenContext = {
+    clientName: client.display_name,
+    clientType: client.type === "business" ? "business" : "individual",
+    firmName,
+    engagementTitle: title,
+    docTypeCode: str(data.ai_classification),
+    docConfidence: num(data.ai_confidence),
+    year,
+    issuerName: str(fields.issuer_name),
+    partyName: str(fields.party_name),
+    period: str(fields.account_or_period),
+    date:
+      str(fields.document_date) ??
+      String(data.uploaded_at ?? "").slice(0, 10),
+    originalName: data.original_filename as string,
+  };
+  return {
+    tokenContext,
+    yearlessContext: { ...tokenContext, year: null },
+    fromRealDocument: true,
+  };
+}
+
 // ── Runs + ledger (service-role writers for the engine) ─────────────────────
 
 // The engine's FilingLedger, bound to one run. connection/firm/engagement/

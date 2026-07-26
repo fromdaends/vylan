@@ -1300,7 +1300,8 @@
     "metric_active": "Actifs",
     "metric_drafts": "Brouillons",
     "metric_completed": "Complétés",
-    "recent_engagements": "Engagements récents"
+    "recent_engagements": "Engagements récents",
+    "nav_integrations_filing": "Classement"
   },
   "TeamChat": {
     "page_title": "Clavardage d'équipe",
@@ -1960,7 +1961,10 @@
       "invoice_attachment_too_large": "Ce document de facture est trop volumineux. La limite est de 25 Mo.",
       "invoice_attachment_type": "Joignez un fichier PDF ou une image.",
       "invoice_attachment_upload_error": "Impossible de téléverser le document de facture. Veuillez réessayer."
-    }
+    },
+    "builder_tax_year_label": "Année d'imposition",
+    "builder_tax_year_hint": "Utilisée pour classer et vérifier les documents. Facultatif.",
+    "builder_tax_year_none": "Aucune"
   },
   "Attention": {
     "metric_active": "Actifs",
@@ -2764,7 +2768,9 @@
     "xero_step2_title": "Les reçus arrivent",
     "xero_step2_desc": "À mesure que les documents sont recueillis, Vylan lit chacun et prépare une écriture brouillon.",
     "xero_step3_title": "Vous approuvez, ça se comptabilise",
-    "xero_step3_desc": "Révisez chaque brouillon et approuvez — Vylan le comptabilise dans le Xero de ce client."
+    "xero_step3_desc": "Révisez chaque brouillon et approuvez — Vylan le comptabilise dans le Xero de ce client.",
+    "filing_name": "Classement de documents",
+    "filing_desc": "Classez les documents approuvés vers Google Drive, SharePoint, Dropbox ou SmartVault."
   },
   "Quickbooks": {
     "draft_title": "Brouillon QuickBooks",
@@ -3073,5 +3079,54 @@
     "action_error_reminded_recently": "Un rappel a déjà été envoyé récemment, celui-ci n'a donc pas été envoyé.",
     "action_error_network": "Problème de connexion — vérifiez dans l'onglet Activité si l'action est passée avant de réessayer.",
     "tab_team": "Équipe"
+  },
+  "Filing": {
+    "page_title": "Classement de documents",
+    "page_subtitle": "Classez les documents approuvés de vos clients dans le stockage infonuagique de votre cabinet — bon dossier, bon nom, automatiquement.",
+    "connect_section": "Stockage",
+    "settings_section": "Dossiers et nommage",
+    "settings_intro": "Une seule structure de dossiers et une seule convention de nommage, appliquées à chaque document, peu importe le stockage connecté.",
+    "provider_google_drive_name": "Google Drive",
+    "provider_google_drive_desc": "Classez vos documents dans le Google Drive de votre cabinet.",
+    "provider_microsoft_name": "SharePoint / OneDrive",
+    "provider_microsoft_desc": "Classez vos documents dans votre bibliothèque SharePoint ou OneDrive.",
+    "provider_dropbox_name": "Dropbox",
+    "provider_dropbox_desc": "Classez vos documents dans le Dropbox de votre cabinet.",
+    "provider_smartvault_name": "SmartVault",
+    "provider_smartvault_desc": "Classez vos documents dans le SmartVault de votre cabinet.",
+    "state_connected": "Connecté",
+    "state_not_connected": "Non connecté",
+    "state_coming_soon": "Bientôt disponible",
+    "action_connect": "Connecter",
+    "hint_next_update": "La connexion arrive dans la prochaine mise à jour.",
+    "hint_coming_soon": "En attente de l'accès à l'API SmartVault.",
+    "residency_note": "Vylan héberge vos données au Canada. Les documents classés vers un stockage connecté quittent Vylan et résident là où ce fournisseur les héberge.",
+    "folder_label": "Structure de dossiers",
+    "folder_hint": "Séparez les niveaux de dossiers par « / ». Cliquez un jeton ci-dessous pour l'insérer.",
+    "name_label": "Nom de fichier",
+    "name_hint": "L'extension du document est ajoutée automatiquement.",
+    "tokens_label": "Jetons — cliquez pour insérer dans {target}",
+    "tokens_target_folder": "la structure de dossiers",
+    "tokens_target_name": "le nom de fichier",
+    "preview_label": "Aperçu",
+    "preview_real_doc": "Basé sur votre dernier document analysé",
+    "preview_sample_doc": "Basé sur un document d'exemple",
+    "preview_yearless": "Si aucune année ne peut être déterminée : {path}",
+    "language_label": "Langue des dossiers",
+    "language_hint": "Langue des noms de dossiers générés, comme les catégories.",
+    "language_en": "English",
+    "language_fr": "Français",
+    "auto_label": "Classer automatiquement quand une collecte est complétée",
+    "auto_hint": "Les documents approuvés sont classés dans votre stockage quand la collecte d'un dossier est complète. Le classement sur demande reste possible.",
+    "save": "Enregistrer",
+    "saved": "Réglages de classement enregistrés.",
+    "save_failed": "Impossible d'enregistrer. Réessayez.",
+    "unavailable_body": "Le classement de documents n'est pas encore activé sur cet environnement.",
+    "owner_only_note": "Seul le propriétaire du cabinet peut modifier ces réglages.",
+    "error_folder_empty": "La structure de dossiers ne peut pas être vide.",
+    "error_name_empty": "Le nom de fichier ne peut pas être vide.",
+    "error_unknown_token": "Jeton inconnu : {tokens}",
+    "error_too_deep": "Limitez la structure de dossiers à 8 niveaux ou moins.",
+    "error_missing_client_token": "La structure de dossiers doit inclure '{client_name}' pour que chaque document soit classé sous le bon client."
   }
 }

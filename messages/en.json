@@ -1300,7 +1300,8 @@
     "metric_active": "Active",
     "metric_drafts": "Drafts",
     "metric_completed": "Completed",
-    "recent_engagements": "Recent engagements"
+    "recent_engagements": "Recent engagements",
+    "nav_integrations_filing": "Document filing"
   },
   "TeamChat": {
     "page_title": "Team chat",
@@ -1960,7 +1961,10 @@
       "invoice_attachment_too_large": "That invoice document is too large. The limit is 25 MB.",
       "invoice_attachment_type": "Attach a PDF or image file.",
       "invoice_attachment_upload_error": "The invoice document could not be uploaded. Please try again."
-    }
+    },
+    "builder_tax_year_label": "Tax year",
+    "builder_tax_year_hint": "Used to file and check documents. Optional.",
+    "builder_tax_year_none": "None"
   },
   "Attention": {
     "metric_active": "Active",
@@ -2764,7 +2768,9 @@
     "xero_step2_title": "Receipts come in",
     "xero_step2_desc": "As documents are collected, Vylan reads each one and prepares a draft entry.",
     "xero_step3_title": "You approve, it posts",
-    "xero_step3_desc": "Review each draft and approve — Vylan posts it into that client's Xero."
+    "xero_step3_desc": "Review each draft and approve — Vylan posts it into that client's Xero.",
+    "filing_name": "Document filing",
+    "filing_desc": "File approved documents into Google Drive, SharePoint, Dropbox or SmartVault."
   },
   "Quickbooks": {
     "draft_title": "QuickBooks draft",
@@ -3073,5 +3079,54 @@
     "action_error_reminded_recently": "A reminder was already sent recently, so this one wasn't sent.",
     "action_error_network": "Connection problem — check whether it went through in the Activity tab before retrying.",
     "tab_team": "Team"
+  },
+  "Filing": {
+    "page_title": "Document filing",
+    "page_subtitle": "File approved client documents into your firm's cloud storage — right folder, right name, automatically.",
+    "connect_section": "Storage",
+    "settings_section": "Folders & naming",
+    "settings_intro": "One folder structure and one naming convention, applied to every document no matter which storage you connect.",
+    "provider_google_drive_name": "Google Drive",
+    "provider_google_drive_desc": "File documents into your firm's Google Drive.",
+    "provider_microsoft_name": "SharePoint / OneDrive",
+    "provider_microsoft_desc": "File documents into your SharePoint library or OneDrive.",
+    "provider_dropbox_name": "Dropbox",
+    "provider_dropbox_desc": "File documents into your firm's Dropbox.",
+    "provider_smartvault_name": "SmartVault",
+    "provider_smartvault_desc": "File documents into your firm's SmartVault.",
+    "state_connected": "Connected",
+    "state_not_connected": "Not connected",
+    "state_coming_soon": "Coming soon",
+    "action_connect": "Connect",
+    "hint_next_update": "Connecting arrives in the next update.",
+    "hint_coming_soon": "Pending SmartVault API access.",
+    "residency_note": "Vylan stores your data in Canada. Documents you file to a connected storage provider leave Vylan and live wherever that provider hosts them.",
+    "folder_label": "Folder structure",
+    "folder_hint": "Separate folder levels with /. Click a token below to insert it.",
+    "name_label": "File name",
+    "name_hint": "The document's file extension is added automatically.",
+    "tokens_label": "Tokens — click to insert into the {target}",
+    "tokens_target_folder": "folder structure",
+    "tokens_target_name": "file name",
+    "preview_label": "Preview",
+    "preview_real_doc": "Based on your most recent analyzed document",
+    "preview_sample_doc": "Based on a sample document",
+    "preview_yearless": "If no year can be determined: {path}",
+    "language_label": "Folder language",
+    "language_hint": "Language of generated folder names, like categories.",
+    "language_en": "English",
+    "language_fr": "Français",
+    "auto_label": "File automatically when a collection completes",
+    "auto_hint": "Approved documents are filed to your storage when an engagement's collection is complete. Filing on demand stays available either way.",
+    "save": "Save",
+    "saved": "Filing settings saved.",
+    "save_failed": "Could not save. Please try again.",
+    "unavailable_body": "Document filing isn't enabled on this environment yet.",
+    "owner_only_note": "Only the firm owner can change filing settings.",
+    "error_folder_empty": "The folder structure can't be empty.",
+    "error_name_empty": "The file name can't be empty.",
+    "error_unknown_token": "Unknown token: {tokens}",
+    "error_too_deep": "Keep the folder structure to 8 levels or fewer.",
+    "error_missing_client_token": "The folder structure must include '{client_name}' so every document files under the right client."
   }
 }

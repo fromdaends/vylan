@@ -134,7 +134,7 @@ const SEPARATOR_CHAR = /[\s\-_.·—]/;
 // Strip control characters from a token value so it can't smuggle the marker
 // (full sanitization happens after assembly).
 function cleanValue(v: string): string {
-  // eslint-disable-next-line no-control-regex
+   
   return v.replace(/[\x00-\x1f\x7f]/g, "");
 }
 

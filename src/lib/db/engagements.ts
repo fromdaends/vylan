@@ -241,6 +241,8 @@ export type CreateEngagementInput = {
   title: string;
   type: EngagementType;
   due_date: string | null;
+  // Structured tax year (migration 0900). Optional; null = not set.
+  tax_year?: number | null;
   // "AI Analyze" switch from the engagement builder. Defaults true upstream.
   ai_enabled: boolean;
   // Invoice automation (migration 0590). 'off' = no automatic invoice.
@@ -301,6 +303,12 @@ export async function createEngagementWithItems(
   // only hits the tiered retry for owners with the switch on — and the retry
   // drops it, creating the engagement public (fail-open).
   const privateCol = defaultPrivate ? { is_private: true } : {};
+  // tax_year (0900) rides along only when the accountant actually set one, so
+  // a no-year engagement never depends on the new column; when it IS included
+  // and the column is missing, the first retry tier below drops it (the year
+  // is then simply not stored — fail-open, title scrape still covers filing).
+  const taxYearCol =
+    input.tax_year != null ? { tax_year: input.tax_year } : {};
 
   // Base row (valid in every environment). ai_enabled (migration 0340) is added
   // separately so creation survives the deploy→migrate window: if that column
@@ -362,15 +370,31 @@ export async function createEngagementWithItems(
       ...invoiceCols590,
       ...invoiceCols610,
       ...reminderCols660,
-      // 0850 is the newest column; if it's missing the tiered retries below
-      // (which omit it) create the engagement public — fail-open.
       ...privateCol,
+      // 0900 is the newest column; if it's missing the FIRST retry tier below
+      // (which omits it) still creates the engagement — fail-open.
+      ...taxYearCol,
     })
     .select("*")
     .single();
   // Retry tiers, dropping the NEWEST column-set first so an unknown column never
   // takes co-located data down with it: without 0850 (is_private), then 0660,
   // then 0610, then 0590, then ai_enabled (a very old env missing 0340 too).
+  if (engErr && isUnknownColumnError(engErr)) {
+    // Drop ONLY tax_year (0900) — keep is_private (0850) and everything older.
+    ({ data: engagement, error: engErr } = await supabase
+      .from("engagements")
+      .insert({
+        ...baseRow,
+        ai_enabled: input.ai_enabled,
+        ...invoiceCols590,
+        ...invoiceCols610,
+        ...reminderCols660,
+        ...privateCol,
+      })
+      .select("*")
+      .single());
+  }
   if (engErr && isUnknownColumnError(engErr)) {
     // Drop ONLY is_private (0850) — keep reminder_settings (0660) etc., since
     // 0660 is necessarily present whenever only 0850 is missing.

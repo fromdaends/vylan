@@ -18,7 +18,7 @@
 //     stay comfortably under Windows' 260-char default limit
 
 const ILLEGAL = /[\\/<>:"|?*]/g;
-// eslint-disable-next-line no-control-regex
+ 
 const CONTROL = /[\x00-\x1f\x7f]/g;
 
 // Windows reserved device names — bare or with any extension ("CON.pdf" is

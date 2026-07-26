@@ -34,6 +34,7 @@ import {
   ClipboardList,
   FileText,
   Folder,
+  FolderUp,
   Gauge,
   HelpCircle,
   BookOpen,
@@ -79,6 +80,9 @@ type Labels = {
   bookkeeping: string;
   integrations: string;
   integrationsToggle: string;
+  // Localized name of the "Document filing" integrations sub-item (the other
+  // sub-items are brand names and need no translation).
+  integrationsFiling: string;
   settings: string;
   firm: string;
   logout: string;
@@ -122,15 +126,41 @@ const ENGAGEMENT_SUBNAV: {
 // brand logo (not a line icon) — a deliberate, small departure so the marks read
 // as the real tools. Brand NAMES are not localized. QuickBooks is the existing
 // live surface (/quickbooks/drafts); Sage 50 is the new file-export page. The
+// Document filing is a Vylan-native feature (no brand mark) — a folder-up
+// glyph in the filing feature's amber, shaped like the brand-logo components
+// so the subnav can treat every entry the same.
+function FilingGlyph({
+  className,
+  "aria-hidden": ariaHidden = true,
+}: {
+  className?: string;
+  "aria-hidden"?: boolean;
+}) {
+  return (
+    <FolderUp
+      className={cn("text-icon-amber", className)}
+      aria-hidden={ariaHidden}
+    />
+  );
+}
+
 // `root` is what the sidebar highlights against (QuickBooks lives under a
-// different URL root than the hub index).
+// different URL root than the hub index). `name` null = localized via
+// labels.integrationsFiling (brand names stay hardcoded, they don't translate).
 const INTEGRATION_SUBNAV: {
   key: string;
-  name: string;
+  name: string | null;
   href: string;
   root: string;
   Logo: typeof QuickbooksLogo;
 }[] = [
+  {
+    key: "filing",
+    name: null,
+    href: "/integrations/filing",
+    root: "/integrations/filing",
+    Logo: FilingGlyph,
+  },
   {
     key: "quickbooks",
     name: "QuickBooks",
@@ -1157,7 +1187,9 @@ function IntegrationsNav({
                 >
                   {/* Brand marks keep their real color in both themes. */}
                   <Logo className="size-4 shrink-0" aria-hidden />
-                  <span className="flex-1 truncate">{name}</span>
+                  <span className="flex-1 truncate">
+                    {name ?? labels.integrationsFiling}
+                  </span>
                 </Link>
               );
             })}
