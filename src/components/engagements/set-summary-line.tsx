@@ -78,48 +78,62 @@ export function SetSummaryLine({
 
   // Cross-statement arithmetic results (statement-chain.ts). These are
   // CODE-verified facts — a balance that doesn't chain, a hole between
-  // statement periods — so they get their own lines under the model's
-  // conclusion rather than being blended into its prose. Same bilingual
-  // convention as the conclusion; capped so a pathological set can't flood
-  // the header.
+  // statement periods — so they are presented as their own labelled rows under
+  // a divider, NOT blended into the model's prose. Each row is a bold heading
+  // ("Statement missing") plus a muted detail line, so an accountant scanning a
+  // long checklist reads the headings and only drops into the specifics when
+  // one matters. Capped so a pathological set can't flood the header.
   const findings = (assessment.chain_findings ?? []).slice(0, 3);
-  const coverage = (assessment.chain_coverage ?? []).slice(0, 2);
-  const pick = (t: { text_en: string; text_fr: string }) =>
-    locale === "fr" ? t.text_fr || t.text_en : t.text_en || t.text_fr;
+  // Coverage is quiet reassurance, so it only earns a row when there are
+  // several statements to summarize — and never in warning colours.
+  const coverage = (assessment.chain_coverage ?? [])
+    .filter((c) => c.statements >= 3)
+    .slice(0, 2);
+  const L = (t: { label_en: string; label_fr: string }) =>
+    locale === "fr" ? t.label_fr || t.label_en : t.label_en || t.label_fr;
+  const D = (t: { detail_en: string; detail_fr: string }) =>
+    locale === "fr" ? t.detail_fr || t.detail_en : t.detail_en || t.detail_fr;
+  const hasRows = findings.length > 0 || coverage.length > 0;
 
   return (
-    <div className={cn("space-y-1", className)}>
-      <div
-        className={cn("flex items-start gap-1.5 text-xs leading-relaxed", tone.color)}
-      >
+    <div className={cn("text-xs leading-relaxed", className)}>
+      {/* The model's own verdict. */}
+      <div className={cn("flex items-start gap-1.5", tone.color)}>
         <Icon className="mt-px size-3.5 shrink-0" aria-hidden />
         <span className="min-w-0 text-foreground/80">{text}</span>
         <span className="shrink-0 tabular-nums text-muted-foreground">{pct}%</span>
       </div>
-      {findings.map((f, i) => (
-        <div
-          key={`cf-${i}`}
-          className="flex items-start gap-1.5 text-xs leading-relaxed text-warning"
-        >
-          <AlertTriangle className="mt-px size-3.5 shrink-0" aria-hidden />
-          <span className="min-w-0">{pick(f)}</span>
-        </div>
-      ))}
-      {/* Coverage reads as quiet reassurance ("Apr 27 – Dec 26, 8 statements,
-          no gaps"), so it only earns a line when there are several statements
-          to summarize — and stays muted, never a warning colour. */}
-      {findings.length === 0 &&
-        coverage
-          .filter((c) => c.statements >= 3)
-          .map((c, i) => (
-            <div
-              key={`cc-${i}`}
-              className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"
-            >
-              <CheckCircle2 className="mt-px size-3.5 shrink-0" aria-hidden />
-              <span className="min-w-0">{pick(c)}</span>
+
+      {/* Checked-by-arithmetic rows, visually separated from the prose above. */}
+      {hasRows && (
+        <div className="mt-1.5 space-y-1.5 border-t border-border/60 pt-1.5">
+          {findings.map((f, i) => (
+            <div key={`cf-${i}`} className="flex items-start gap-1.5">
+              <AlertTriangle
+                className="mt-px size-3.5 shrink-0 text-warning"
+                aria-hidden
+              />
+              <div className="min-w-0">
+                <div className="font-medium text-warning">{L(f)}</div>
+                <div className="text-muted-foreground">{D(f)}</div>
+              </div>
             </div>
           ))}
+          {findings.length === 0 &&
+            coverage.map((c, i) => (
+              <div key={`cc-${i}`} className="flex items-start gap-1.5">
+                <CheckCircle2
+                  className="mt-px size-3.5 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                <div className="min-w-0">
+                  <div className="font-medium text-foreground/70">{L(c)}</div>
+                  <div className="text-muted-foreground">{D(c)}</div>
+                </div>
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
