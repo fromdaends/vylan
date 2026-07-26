@@ -218,7 +218,7 @@ export function ChatLauncher({
           // arrow), so the offsets clear the button + a gap.
           "fixed z-50 right-4 sm:right-6 bottom-[calc(8.75rem+env(safe-area-inset-bottom))] sm:bottom-[5.25rem]",
           "flex w-[calc(100vw-2rem)] sm:w-[420px] h-[70vh] sm:h-[640px] max-h-[calc(100vh-11rem)] flex-col overflow-hidden",
-          "rounded-2xl border border-border bg-card text-foreground shadow-[0_24px_60px_-24px_rgba(0,0,0,0.7)]",
+          "rounded-2xl border border-border bg-card text-foreground shadow-[0_24px_60px_-24px_rgba(0,0,0,0.7)] dark:bg-black",
           !open && "pointer-events-none",
         )}
       >
@@ -293,7 +293,7 @@ export function ChatLauncher({
 
             Pulled up over the navy band's edge (-mt-5 + rounded top) so the two
             surfaces read as stacked layers rather than stapled together. */}
-        <div className="relative -mt-5 min-h-0 flex-1 overflow-hidden rounded-t-2xl bg-card">
+        <div className="relative -mt-5 min-h-0 flex-1 overflow-hidden rounded-t-2xl bg-card dark:bg-black">
           <div
             className={cn(
               "absolute inset-0 flex min-h-0 flex-col",

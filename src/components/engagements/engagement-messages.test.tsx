@@ -82,17 +82,17 @@ describe("EngagementMessages", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders both sides of the thread with sender names and bodies", () => {
-    renderMessages({ initialMessages: sampleMessages });
+  it("renders both sides without repeating sender names under the bubbles", () => {
+    const { container } = renderMessages({ initialMessages: sampleMessages });
     expect(
       screen.getByText("Hi Marie, your T4 looks good."),
     ).toBeInTheDocument();
     expect(
       screen.getByText("Thanks! One question about the RRSP slip."),
     ).toBeInTheDocument();
-    // Sender line under each bubble (name · time).
-    expect(screen.getByText(/^Zach ·/)).toBeInTheDocument();
-    expect(screen.getByText(/^Marie Tremblay ·/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Zach ·/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Marie Tremblay ·/)).not.toBeInTheDocument();
+    expect(container.querySelectorAll("time")).toHaveLength(2);
   });
 
   it("disables Send until something is typed, then posts and appends", async () => {
@@ -180,7 +180,7 @@ describe("EngagementMessages", () => {
     });
     // sampleMessages: firm at 10:00, client at 11:00; read pointer 12:00 —
     // the (only) firm message is seen.
-    expect(screen.getByText(`· ${en.ClientMessages.seen}`)).toBeInTheDocument();
+    expect(screen.getByText(en.ClientMessages.seen)).toBeInTheDocument();
   });
 
   it("shows no Seen marker while the client hasn't read the latest firm message", () => {
@@ -189,7 +189,7 @@ describe("EngagementMessages", () => {
       initialClientLastReadAt: "2026-07-01T09:00:00Z",
     });
     expect(
-      screen.queryByText(`· ${en.ClientMessages.seen}`),
+      screen.queryByText(en.ClientMessages.seen),
     ).not.toBeInTheDocument();
   });
 

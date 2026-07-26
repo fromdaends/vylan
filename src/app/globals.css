@@ -107,13 +107,9 @@
   --primary: oklch(0.58 0.19 262);            /* vivid navy / royal blue */
   --primary-foreground: oklch(0.99 0.004 262);
 
-  /* Dark mode gets NO colour band: the popup is one flat surface (founder).
-     A navy band over the near-black body read as a lighter slab floating on
-     the panel rather than one object — the two-tone that works beautifully in
-     light mode looks muddy against a pitch-black page. So this matches --card
-     exactly and the band simply disappears; the toggle and greeting sit
-     straight on the panel in white. Light mode keeps its navy band. */
-  --chat-header: oklch(0.14 0.015 262);       /* = --card (flat, no band) */
+  /* Keep the same two-zone hierarchy in dark mode: a deep, visible navy band
+     over a pure-black conversation surface. */
+  --chat-header: oklch(0.36 0.14 262);        /* deep navy */
   --chat-header-foreground: oklch(0.98 0.004 262);
 
   --secondary: oklch(0.195 0.022 262);
