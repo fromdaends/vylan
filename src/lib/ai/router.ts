@@ -17,6 +17,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { enqueueJob } from "@/lib/db/jobs";
 import { recomputeItemStatus } from "@/lib/db/file-review";
 import type { UsabilityVerdict } from "./usability";
+import { AUTO_REJECT_STRIKE_LIMIT } from "./usability";
 
 export type RouterDecision =
   | "auto_reject_and_notify_client"
@@ -28,7 +29,7 @@ export type RouterDecision =
 // (the safety net for when the AI is wrong and the client can't get it right).
 // Founder set this to 5 — favour sending bad documents back to the client over
 // landing them in the accountant's queue. Tunable in one place.
-export const AUTO_REJECT_STRIKE_LIMIT = 5;
+export { AUTO_REJECT_STRIKE_LIMIT } from "./usability";
 
 export function decide(opts: {
   autoRejectOn: boolean;

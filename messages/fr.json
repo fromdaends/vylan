@@ -2036,9 +2036,9 @@
   },
   "Usability": {
     "label": "Qualité IA",
-    "state_flagged": "Signalé pour révision",
+    "state_flagged": "À revoir · client non avisé",
     "state_auto_rejected": "Rejeté automatiquement, client averti",
-    "state_escalated": "Signalé deux fois : à réviser",
+    "state_escalated": "À revoir · client relancé {count} fois",
     "primary_issue": "Problème principal",
     "confidence": "Confiance",
     "client_message": "Message envoyé au client",

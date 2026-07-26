@@ -2036,9 +2036,9 @@
   },
   "Usability": {
     "label": "AI quality",
-    "state_flagged": "Flagged for review",
+    "state_flagged": "Needs review · client not notified",
     "state_auto_rejected": "Auto-rejected, client notified",
-    "state_escalated": "Flagged twice, please review",
+    "state_escalated": "Needs review · client asked {count} times",
     "primary_issue": "Primary issue",
     "confidence": "Confidence",
     "client_message": "Message sent to client",

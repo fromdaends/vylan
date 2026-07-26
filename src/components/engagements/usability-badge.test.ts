@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { __test } from "./usability-badge";
+import { AUTO_REJECT_STRIKE_LIMIT } from "@/lib/ai/usability";
 import {
   USABLE_BY_DEFAULT,
   type UsabilityVerdict,
@@ -35,14 +36,20 @@ describe("UsabilityBadge.pickState", () => {
     expect(__test.pickState(UNUSABLE, false, 0)).toBe("flagged");
   });
 
-  it("returns 'auto_rejected' when ai_rejected is true and strikes < 2", () => {
-    expect(__test.pickState(UNUSABLE, true, 0)).toBe("auto_rejected");
-    expect(__test.pickState(UNUSABLE, true, 1)).toBe("auto_rejected");
+  // Every strike BELOW the limit was genuinely auto-rejected and did email the
+  // client, so the badge must say so. The old code compared against a hardcoded
+  // 2 while the router escalates at AUTO_REJECT_STRIKE_LIMIT (5), so strikes 2-4
+  // displayed "Needs review" for documents the client had already been asked
+  // to redo — the accountant was told to act on something already handled.
+  it("returns 'auto_rejected' for every strike below the router's limit", () => {
+    for (let strikes = 0; strikes < AUTO_REJECT_STRIKE_LIMIT; strikes++) {
+      expect(__test.pickState(UNUSABLE, true, strikes)).toBe("auto_rejected");
+    }
   });
 
-  it("returns 'escalated' when ai_rejected and strikes have reached 2+", () => {
-    expect(__test.pickState(UNUSABLE, true, 2)).toBe("escalated");
-    expect(__test.pickState(UNUSABLE, true, 7)).toBe("escalated");
+  it("returns 'escalated' only once the router's strike limit is reached", () => {
+    expect(__test.pickState(UNUSABLE, true, AUTO_REJECT_STRIKE_LIMIT)).toBe("escalated");
+    expect(__test.pickState(UNUSABLE, true, AUTO_REJECT_STRIKE_LIMIT + 2)).toBe("escalated");
   });
 
   it("does NOT escalate when ai_rejected is false even with high strikes", () => {
