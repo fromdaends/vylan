@@ -28,4 +28,26 @@ describe("shouldShowSetLine", () => {
     expect(shouldShowSetLine(assess("incomplete"), 1)).toBe(true);
     expect(shouldShowSetLine(assess("unplaceable"), 1)).toBe(true);
   });
+
+  // The headline bookkeeping case: a year of statements inside ONE PDF, every
+  // page present (outcome "complete", fileCount 1), but a month missing between
+  // two of them. Without this the finding is computed and never shown.
+  it("shows a single COMPLETE file when a cross-statement finding exists", () => {
+    const withFinding = {
+      outcome: "complete",
+      chain_findings: [
+        { kind: "gap", from: "2026-02-26", to: "2026-03-27", text_en: "x", text_fr: "x" },
+      ],
+    } as unknown as SetAssessment;
+    expect(shouldShowSetLine(withFinding, 1)).toBe(true);
+  });
+
+  it("still hides a lone clean file when there are no findings", () => {
+    const noFindings = {
+      outcome: "complete",
+      chain_findings: [],
+      chain_coverage: [{ statements: 3 }],
+    } as unknown as SetAssessment;
+    expect(shouldShowSetLine(noFindings, 1)).toBe(false);
+  });
 });

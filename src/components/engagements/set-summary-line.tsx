@@ -17,6 +17,13 @@ export function shouldShowSetLine(
   fileCount: number,
 ): assessment is SetAssessment {
   if (!assessment) return false;
+  // A cross-statement finding (balances that don't chain, a missing month) is
+  // the whole reason the check exists, and it can land on a SINGLE file whose
+  // pages are all present — a year of statements in one PDF with a month
+  // missing is outcome "complete" with fileCount 1. Without this the finding
+  // would be computed and then never displayed, which is exactly the headline
+  // bookkeeping case.
+  if ((assessment.chain_findings?.length ?? 0) > 0) return true;
   return (
     fileCount > 1 ||
     assessment.outcome === "incomplete" ||
