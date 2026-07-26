@@ -3127,6 +3127,21 @@
     "error_name_empty": "The file name can't be empty.",
     "error_unknown_token": "Unknown token: {tokens}",
     "error_too_deep": "Keep the folder structure to 8 levels or fewer.",
-    "error_missing_client_token": "The folder structure must include '{client_name}' so every document files under the right client."
+    "error_missing_client_token": "The folder structure must include '{client_name}' so every document files under the right client.",
+    "state_reconnect": "Reconnect needed",
+    "connected_as": "Connected as {email}",
+    "open_folder": "Open the Vylan folder in Drive",
+    "action_disconnect": "Disconnect",
+    "action_reconnect": "Reconnect",
+    "disconnect_title": "Disconnect Google Drive?",
+    "disconnect_body": "Vylan will stop filing documents to your Drive. Nothing already filed is removed, and you can reconnect anytime.",
+    "cancel": "Cancel",
+    "toast_connected": "Google Drive connected.",
+    "toast_disconnected": "Google Drive disconnected.",
+    "toast_error_generic": "Connection failed. Please try again.",
+    "toast_error_denied": "You declined the Google authorization.",
+    "toast_error_other_provider": "Another storage is already connected. Disconnect it first.",
+    "toast_error_not_configured": "Google Drive isn't set up on this environment yet.",
+    "google_root_hint": "Vylan files into a “Vylan” folder it creates in your Drive. You can move or rename that folder anywhere; Vylan keeps filing into it."
   }
 }

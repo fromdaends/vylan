@@ -6,9 +6,13 @@ import {
   getFilingPreviewSample,
   getFirmFilingSettings,
   getFirmStorageConnection,
+  getStorageConnectionRootLink,
 } from "@/lib/db/filing";
 import { ProviderGrid } from "@/components/filing/provider-grid";
 import { FilingSettingsForm } from "@/components/filing/filing-settings-form";
+import { FilingStatusToasts } from "@/components/filing/google-card-actions";
+import { isGoogleFilingConfigured } from "@/lib/filing/google/oauth";
+import { isStorageTokenEncryptionConfigured } from "@/lib/filing/token-cipher";
 
 // Live connection + settings state — never serve a cached "Not connected".
 export const dynamic = "force-dynamic";
@@ -34,6 +38,12 @@ export default async function FilingPage({
     getFirmStorageConnection(),
   ]);
   const sample = await getFilingPreviewSample(firm?.name ?? "—");
+  // Root-folder link for the connected card (provider_config is server-only;
+  // this display read runs AFTER the RLS-scoped read proved the row is ours).
+  const rootLink =
+    connection?.status === "active"
+      ? await getStorageConnectionRootLink(connection.id)
+      : null;
 
   // Until the firm saves filing settings, default the FOLDER LANGUAGE to the
   // firm's own default locale — a French-default firm should see French
@@ -63,14 +73,29 @@ export default async function FilingPage({
           {t("connect_section")}
         </h2>
         <div className="mt-3">
-          <ProviderGrid connection={connection} />
+          <ProviderGrid
+            connection={connection}
+            rootLink={rootLink}
+            isOwner={user?.role === "owner"}
+            googleConfigured={
+              isGoogleFilingConfigured() &&
+              (process.env.NODE_ENV !== "production" ||
+                isStorageTokenEncryptionConfigured())
+            }
+          />
         </div>
+        {/* Where files land: the app-created "Vylan" folder the firm can move
+            anywhere in their Drive. */}
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          {t("google_root_hint")}
+        </p>
         {/* Data-residency honesty: Vylan hosts in Canada; the firm's storage
             may not be. One plain sentence, the founder's call. */}
-        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
           {t("residency_note")}
         </p>
       </section>
+      <FilingStatusToasts />
 
       <section aria-labelledby="filing-settings" className="mt-10 border-t border-border/60 pt-8">
         <h2
