@@ -1277,7 +1277,6 @@
     "nav_dashboard": "Aperçu",
     "nav_inbox": "Boîte de réception",
     "nav_clients": "Clients",
-    "nav_team_chat": "Clavardage d'équipe",
     "nav_firm": "Cabinet",
     "nav_section_main": "Espace de travail",
     "nav_section_account": "Compte",
@@ -1316,7 +1315,8 @@
     "sending": "Envoi…",
     "send_failed": "Échec de l'envoi. Veuillez réessayer.",
     "chars_left": "{count} caractères restants",
-    "not_activated": "Le clavardage d'équipe sera disponible dans un instant."
+    "not_activated": "Le clavardage d'équipe sera disponible dans un instant.",
+    "open_button": "Clavardage d'équipe"
   },
   "Clients": {
     "import_commit_failed": "Impossible d'importer les clients. Veuillez réessayer.",
@@ -3071,6 +3071,7 @@
     "action_error_failed": "L'action n'a pas pu être complétée. Rien n'a été modifié — réessayez ou faites-le depuis la liste.",
     "action_error_state_changed": "L'action ne correspond plus à l'état actuel du mandat. Rien n'a été modifié.",
     "action_error_reminded_recently": "Un rappel a déjà été envoyé récemment, celui-ci n'a donc pas été envoyé.",
-    "action_error_network": "Problème de connexion — vérifiez dans l'onglet Activité si l'action est passée avant de réessayer."
+    "action_error_network": "Problème de connexion — vérifiez dans l'onglet Activité si l'action est passée avant de réessayer.",
+    "tab_team": "Équipe"
   }
 }

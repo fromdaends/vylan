@@ -1277,7 +1277,6 @@
     "nav_dashboard": "Overview",
     "nav_inbox": "Inbox",
     "nav_clients": "Clients",
-    "nav_team_chat": "Team chat",
     "nav_engagements": "Engagements",
     "nav_engagements_toggle": "Toggle engagement views",
     "nav_templates": "Templates",
@@ -1316,7 +1315,8 @@
     "sending": "Sending…",
     "send_failed": "Couldn't send. Please try again.",
     "chars_left": "{count} characters left",
-    "not_activated": "Team chat will be available in a moment."
+    "not_activated": "Team chat will be available in a moment.",
+    "open_button": "Team chat"
   },
   "Clients": {
     "import_commit_failed": "Couldn't import the clients. Please try again.",
@@ -3071,6 +3071,7 @@
     "action_error_failed": "This couldn't be completed. Nothing was changed — try again or do it from the checklist.",
     "action_error_state_changed": "This no longer matches the engagement's current state. Nothing was changed.",
     "action_error_reminded_recently": "A reminder was already sent recently, so this one wasn't sent.",
-    "action_error_network": "Connection problem — check whether it went through in the Activity tab before retrying."
+    "action_error_network": "Connection problem — check whether it went through in the Activity tab before retrying.",
+    "tab_team": "Team"
   }
 }
