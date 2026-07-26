@@ -31,15 +31,24 @@ export function getProvider(): "anthropic" | "openai" {
     : "anthropic";
 }
 
-// The OpenAI model id, overridable via env. Default is gpt-5.4 (full): it's the
-// cheapest GPT-5 revision whose vision reads images at full fidelity ("high"
-// detail goes up to ~2.56M px / 2048px on the long edge). The older gpt-5-mini
-// and base gpt-5 down-sample images to ~768px on the short edge before they
-// "see" them, which hid subtle redactions (a scribble over a void cheque's
-// transit digits sailed through as "looks good"). Override per-deployment with
-// OPENAI_MODEL (e.g. "gpt-5.4-mini" cheaper, or "gpt-5.5" newer) with no code change.
+// The OpenAI model id, overridable via env. Default is gpt-5.6-terra: like
+// gpt-5.4 it reads images at full fidelity ("high" detail, up to ~2.56M px /
+// 2048px on the long edge) — the older gpt-5-mini and base gpt-5 down-sample to
+// ~768px before they "see" anything, which hid subtle redactions (a scribble
+// over a void cheque's transit digits sailed through as "looks good"), so those
+// remain unusable here.
+//
+// Measured against gpt-5.4 on a 12-document eval suite (2026-07-25), same prompt
+// and schema, 3 runs per document: identical accuracy, ~19% cheaper per document
+// (~$26 vs ~$32 per 1000 — it spends far fewer reasoning tokens for the same
+// verdict) and ~2x faster. Terra was NOT more accurate on its own; the accuracy
+// gain in that change came from the prompt hardening below, which helps both.
+//
+// Override per-deployment with OPENAI_MODEL (e.g. "gpt-5.4" to roll back)
+// with no code change. NOTE: this is only consulted when AI_CLASSIFIER_PROVIDER
+// =openai — otherwise getProvider() routes to Anthropic and this value is unused.
 export function getOpenAiModel(): string {
-  return process.env.OPENAI_MODEL?.trim() || "gpt-5.4";
+  return process.env.OPENAI_MODEL?.trim() || "gpt-5.6-terra";
 }
 
 // Cap the long edge before the model sees it. 2048px matches the high-detail
@@ -663,6 +672,41 @@ requested in plain words (e.g. FR "Nous avons besoin d'un spécimen de
 chèque — ce document semble être un permis de conduire." / EN "We need a
 void cheque — this looks like a driver's licence."). Never mention AI,
 codes, or confidence to the client.
+
+THREE MORE WAYS A DOCUMENT IS UNUSABLE. These are as fatal as a scribble over a
+value, and they are the ones most often missed:
+
+(a) MISSING IS AS BAD AS COVERED. A key IDENTIFYING field left entirely BLANK —
+no value printed at all, and nothing visibly covering it — makes the document
+unusable. Never reason "nothing is covering it, so it is fine". The identifying
+fields are: the person's or company's name; the identifying number the form is
+built around (SIN/NAS on a T-slip or RL slip; account, transit and institution
+numbers on a cheque; business number on a GST/QST return); the tax year or
+period; and the form's main amount. When one is simply not printed, set
+key_values_obscured=true, usable=false, primary_issue=key_fields_obscured,
+usability_confidence at least 0.85, and name the missing field in
+issue_summary_en and issue_summary_fr. This does NOT apply to a box that is
+routinely blank because it does not apply to this taxpayer (for example a T4 RPP
+box carrying no amount for this employee) — only the identifying fields above.
+
+(b) CUT OFF OR INCOMPLETE CAPTURE. If the page is cropped so part of the form is
+missing — an edge sliced off, the bottom or a whole row/column of boxes out of
+frame, or only part of a multi-page document — it is unusable EVEN IF everything
+still visible is perfectly sharp. Judge this from the form's own structure, not from what is legible: is the
+page's BOTTOM EDGE present, is the issuer footer there, does the box grid finish
+or does the image stop part-way through it? A crop that ends mid-form is cut off
+even when every value above the cut is crisp. Set usable=false and
+primary_issue=partial_capture.
+
+(c) TOO DARK OR TOO WASHED OUT. If the photo is so underexposed, overexposed or
+glare-washed that you cannot read a key value with certainty, treat it as unread
+— never infer a value from context, shape or expectation. Set usable=false and
+primary_issue=text_unreadable.
+
+Guardrail for those three: a shadow across part of the page, a slight camera
+angle, or mild overall softness that still leaves EVERY key value legible is
+perfectly acceptable — pass those. Reject only when a key value is genuinely
+missing, out of frame, or not readable with certainty.
 
 Always call the classify_document tool. Never reply with prose.`;
 }

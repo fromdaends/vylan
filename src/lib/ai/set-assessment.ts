@@ -330,7 +330,9 @@ GROUND EVERYTHING IN THE ${fileCount} FILE(S) YOU WERE ACTUALLY GIVEN. Never cla
 
 For every file, add one pages[] entry:
 - image_index: the 1-based "File N" position as presented (File 1 was uploaded first).
-- position / of_total: page number and total when they apply; null when they do not (e.g. separate receipts).
+COUNT THE PAGES INSIDE EACH FILE — a single PDF is NOT complete just because it is one tidy file. One uploaded file can hold many pages, so for EVERY file: read the printed page markers on the pages themselves ("Page 2 of 4", "page 2 de 4", "2/4", "continued on next page", "suite à la page suivante") and compare the total they state against the pages actually present in that file. If a statement's own footer says it has 4 pages and you were shown 3 of them, the set is INCOMPLETE — set outcome to "incomplete", name the missing page numbers in the conclusion, and ask the client for exactly those pages. A file whose last page says "continued on next page" with no page following it is missing at least one page. "Complete" means every page the document itself claims to have is present — never infer completeness from the file being a PDF, from the pages you were given running in order, or from the first page looking whole.
+
+- position / of_total: page number and total when they apply; null when they do not (e.g. separate receipts). For a MULTI-PAGE file, of_total is the total the document itself states (e.g. 4 when the footer reads "Page 2 of 4"), NOT the number of pages in the upload.
 - placement:
   * "printed" — a page indicator is printed and readable on the page itself (e.g. "page 2 de 4", "2/4").
   * "inferred" — no readable printed number, but the content locks the position: a running balance chaining from the previous page's closing balance, transactions/dates that continue across pages, a "continued"/"suite" marker, an opening- or closing-balance line. State WHICH evidence in note.
@@ -340,6 +342,7 @@ For every file, add one pages[] entry:
 Duplicates within the set (content-aware — judge the actual document, not its bytes):
 - If a file is the SAME actual document or the SAME page as an EARLIER file already in this set — identical SPECIFIC content (same date, same amounts, same transactions, same account, the very same page photographed again) — set its duplicate_of_image_index to that earlier file's image_index. The earliest copy is the keeper; only the later copy is the duplicate.
 - A DIFFERENT page of the same document is NEVER a duplicate — it completes the set.
+- A CORRECTED RE-UPLOAD is not a duplicate. When a later file is the same document as an earlier one but is visibly BETTER — the earlier copy had a value blacked out, cut off, blurred or otherwise unreadable and the later copy shows it properly, or the later copy has more of the pages — the client is replacing a copy they were asked to redo. Leave duplicate_of_image_index null on the later file, and treat the COMPLETE, READABLE copy as the one that counts. Only mark a duplicate when the later copy adds nothing the earlier one already had.
 - Two documents that merely share a merchant, a layout, or a format are NOT duplicates: a dozen receipts from the same pharmacy, or a recurring monthly bill, are DIFFERENT documents (different dates, amounts, transactions). Leave duplicate_of_image_index null for all of them.
 - When you DO mark a duplicate, also set duplicate_confidence (0 to 1) to how certain you are the two are the very same document. Reserve 0.9 and above for cases you are nearly certain about — that high band is what may be auto-rejected; anything lower is sent to the accountant.
 - When you are not certain two files are the very same document, leave duplicate_of_image_index null. Never over-flag a duplicate.
@@ -396,10 +399,25 @@ export const DEFAULT_MISSING_PAGE_ASK_EN =
 // firm opted in AND the model is very confident; otherwise it is flagged for the
 // accountant. Mirrors the duplicate-setting philosophy (auto-fire on the sure
 // cases only). Exported for tests.
+export type SetDuplicateAction = DuplicateDecision | "none";
+
 export function decideDuplicateAction(opts: {
   autoRejectDuplicates: boolean;
   confidence: number;
-}): DuplicateDecision {
+  // True when the client was asked to replace the EARLIER file this one
+  // duplicates — rejected, or merely flagged unusable. See
+  // wasClientAskedToReplace.
+  keeperRejected: boolean;
+}): SetDuplicateAction {
+  // A re-upload of a document whose earlier copy was REJECTED is the client
+  // doing exactly what we asked — sending a corrected copy. The "earliest copy
+  // is the keeper" rule would mark that fix as a duplicate and tell them "this
+  // document was already uploaded", which dead-ends the one path out: the bad
+  // copy stays, the good copy is thrown away, and the client has no way to
+  // satisfy the request. So a duplicate of a rejected file is never actioned —
+  // the new file is judged on its own merits by the per-file classifier, which
+  // still catches it if it is just as redacted/blurry as the first attempt.
+  if (opts.keeperRejected) return "none";
   return opts.autoRejectDuplicates &&
     opts.confidence >= DUPLICATE_AUTO_REJECT_CONFIDENCE
     ? "auto_reject"
@@ -554,7 +572,31 @@ type FileRow = {
   mime_type: string | null;
   content_hash: string | null;
   uploaded_at: string;
+  // Optional so older callers/tests that build a FileRow by hand still compile;
+  // absent reads as "nothing wrong with it".
+  ai_rejected?: boolean | null;
+  review_status?: "pending" | "approved" | "rejected" | null;
+  ai_usability?: { usable?: boolean | null } | null;
 };
+
+// Was the client effectively asked to send this file again?
+//
+// Three states qualify, and the third is the one that actually bites: with the
+// firm's auto-reject setting OFF, a redacted/blurry upload is NOT rejected —
+// ai_rejected stays false and review_status stays "pending". It is merely
+// FLAGGED ("Needs review", usable=false) while the client is still shown
+// "please upload a complete unredacted copy". That is precisely the case where
+// a re-upload arrives, so keying only on rejection missed the real-world bug.
+export function wasClientAskedToReplace(
+  f:
+    | Pick<FileRow, "ai_rejected" | "review_status" | "ai_usability">
+    | undefined,
+): boolean {
+  if (!f) return false;
+  if (f.ai_rejected === true) return true;
+  if (f.review_status === "rejected") return true;
+  return f.ai_usability?.usable === false;
+}
 
 type PreparedFile = {
   file: FileRow;
@@ -573,6 +615,8 @@ export async function processSetAssessmentJob(
     outcome: SetOutcome;
     routing: SetRoutingAction;
     duplicatesFlagged: number;
+    // Duplicates suppressed because they replace a REJECTED earlier copy.
+    supersededResubmissions: number;
   };
 }> {
   if (!isAiConfigured()) return { skipped: "ai_not_configured" };
@@ -643,7 +687,11 @@ export async function processSetAssessmentJob(
   // The set: every non-duplicate file of the item, in upload order.
   const { data: fileRows } = await sb
     .from("uploaded_files")
-    .select("id, storage_path, mime_type, content_hash, uploaded_at")
+    // ai_rejected / review_status ride along so a duplicate can tell whether the
+    // EARLIER copy it points at was itself rejected — see decideDuplicateAction.
+    .select(
+      "id, storage_path, mime_type, content_hash, uploaded_at, ai_rejected, review_status, ai_usability",
+    )
     .eq("request_item_id", itemId)
     .eq("is_duplicate", false)
     .order("uploaded_at", { ascending: true });
@@ -823,13 +871,23 @@ export async function processSetAssessmentJob(
   // excludes them.
   const clientLocale: "fr" | "en" = client?.locale === "en" ? "en" : "fr";
   let duplicatesFlagged = 0;
+  // Duplicates suppressed because they replace a REJECTED earlier copy.
+  let supersededResubmissions = 0;
   let duplicatesAutoRejected = 0;
   for (const page of assessment.pages) {
     if (!page.duplicate_of_file_id) continue;
     const decision = decideDuplicateAction({
       autoRejectDuplicates,
       confidence: page.duplicate_confidence,
+      keeperRejected: wasClientAskedToReplace(
+        allFiles.find((f) => f.id === page.duplicate_of_file_id),
+      ),
     });
+    // Corrected re-upload of a rejected file: leave it alone entirely.
+    if (decision === "none") {
+      supersededResubmissions += 1;
+      continue;
+    }
     await applyDuplicateDecision({
       supabase: sb,
       decision,
@@ -864,6 +922,7 @@ export async function processSetAssessmentJob(
       flag_count: assessment.flags.length,
       duplicates_flagged: duplicatesFlagged,
       duplicates_auto_rejected: duplicatesAutoRejected,
+      superseded_resubmissions: supersededResubmissions,
     },
   });
 
@@ -892,6 +951,7 @@ export async function processSetAssessmentJob(
       outcome: assessment.outcome,
       routing,
       duplicatesFlagged,
+      supersededResubmissions,
     },
   };
 }

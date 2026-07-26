@@ -31,6 +31,15 @@ export function isUsabilityIssue(v: unknown): v is UsabilityIssue {
 // warning in Phase 5, but never auto-reject. Tunable in one place.
 export const USABILITY_CONFIDENCE_THRESHOLD = 0.8;
 
+// How many times ONE checklist item may be auto-bounced back to the client
+// before the router stops and hands it to the accountant instead.
+//
+// Lives HERE, not in router.ts, because the accountant's badge needs it too and
+// router.ts pulls in server-only DB modules — importing that from a "use client"
+// component drags them into the browser bundle. This module has no imports at
+// all, so both sides can share the number safely.
+export const AUTO_REJECT_STRIKE_LIMIT = 5;
+
 export type UsabilityVerdict = {
   usable: boolean;
   confidence: number;

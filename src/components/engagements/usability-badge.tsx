@@ -20,6 +20,10 @@ import {
 } from "@/components/ui/dialog";
 import { overrideAiRejection } from "@/app/actions/usability-override";
 import type { UsabilityVerdict } from "@/lib/ai/usability";
+// The SAME limit the router escalates at, from the dependency-free module
+// (NOT router.ts, which pulls in server-only DB code) — so the badge always
+// describes what the router actually did and the two cannot drift apart.
+import { AUTO_REJECT_STRIKE_LIMIT } from "@/lib/ai/usability";
 import type { AppLocale } from "@/lib/format";
 
 type BadgeState =
@@ -34,7 +38,15 @@ function pickState(
 ): BadgeState | null {
   // No verdict, or the AI thinks the file is fine → no badge.
   if (verdict.usable) return null;
-  if (rejectionCount >= 2 && aiRejected) return "escalated";
+  // "escalated" must mean what the ROUTER actually did: stop bouncing the
+  // document back and hand it to the accountant. That only happens at
+  // AUTO_REJECT_STRIKE_LIMIT (5). This used to compare against a hardcoded 2,
+  // so a file on its 2nd-4th strike — which WAS auto-rejected and DID email the
+  // client — displayed as "Needs review", telling the accountant to act on
+  // something already handled and hiding that the client had been asked.
+  if (rejectionCount >= AUTO_REJECT_STRIKE_LIMIT && aiRejected) {
+    return "escalated";
+  }
   if (aiRejected) return "auto_rejected";
   // AI says unusable but the system didn't auto-act (firm flag off,
   // or confidence under threshold). Surface for review.
@@ -106,7 +118,9 @@ export function UsabilityBadge({
           {t("label")}
         </span>
         <span className={`font-medium ${style.text}`}>
-          {t(`state_${state}`)}
+          {state === "escalated"
+            ? t("state_escalated", { count: rejectionCount })
+            : t(`state_${state}`)}
         </span>
         {localizedSummary && (
           <span className={`${style.text} truncate flex-1 min-w-0`}>

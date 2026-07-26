@@ -4,6 +4,7 @@ import {
   computeFilesSignature,
   decideSetRouting,
   decideDuplicateAction,
+  wasClientAskedToReplace,
   SET_INCOMPLETE_CONFIDENCE_BAR,
   DUPLICATE_AUTO_REJECT_CONFIDENCE,
   type SetAssessmentPage,
@@ -275,12 +276,70 @@ describe("decideDuplicateAction", () => {
   const bar = DUPLICATE_AUTO_REJECT_CONFIDENCE;
 
   it("auto-rejects only when the firm opted in AND it's confident enough", () => {
-    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar })).toBe("auto_reject");
-    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar - 0.01 })).toBe("flag");
+    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar, keeperRejected: false })).toBe("auto_reject");
+    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar - 0.01, keeperRejected: false })).toBe("flag");
   });
 
   it("never auto-rejects with the setting off, however confident", () => {
-    expect(decideDuplicateAction({ autoRejectDuplicates: false, confidence: 1 })).toBe("flag");
+    expect(decideDuplicateAction({ autoRejectDuplicates: false, confidence: 1, keeperRejected: false })).toBe("flag");
+  });
+
+  // The bug this guards: a client was told "some amounts on page 1 are blacked
+  // out, please upload a complete copy", did exactly that, and the corrected
+  // file came back "This document was already uploaded" — the bad copy kept,
+  // the good one thrown away, and no way left to satisfy the request.
+  it("takes NO duplicate action when the earlier copy was rejected (corrected re-upload)", () => {
+    expect(
+      decideDuplicateAction({ autoRejectDuplicates: true, confidence: 1, keeperRejected: true }),
+    ).toBe("none");
+    expect(
+      decideDuplicateAction({ autoRejectDuplicates: false, confidence: 1, keeperRejected: true }),
+    ).toBe("none");
+  });
+
+  it("still flags a plain duplicate of a file that was NOT rejected", () => {
+    expect(
+      decideDuplicateAction({ autoRejectDuplicates: false, confidence: 0.95, keeperRejected: false }),
+    ).toBe("flag");
+  });
+});
+
+describe("wasClientAskedToReplace", () => {
+  it("counts an AI auto-rejection and an accountant rejection", () => {
+    expect(wasClientAskedToReplace({ ai_rejected: true, review_status: "pending" })).toBe(true);
+    expect(wasClientAskedToReplace({ ai_rejected: false, review_status: "rejected" })).toBe(true);
+  });
+
+  // THE reported case. With auto-reject OFF, a redacted upload is never
+  // "rejected" — it sits at ai_rejected=false / review_status="pending" and is
+  // only FLAGGED ("Needs review"), while the client is still told to send a
+  // clean copy. Keying on rejection alone missed exactly this, and the
+  // corrected re-upload kept coming back "already uploaded".
+  it("counts a file merely FLAGGED unusable (Needs review), not just rejected", () => {
+    expect(
+      wasClientAskedToReplace({
+        ai_rejected: false,
+        review_status: "pending",
+        ai_usability: { usable: false },
+      }),
+    ).toBe(true);
+  });
+
+  it("does not count a healthy, usable or not-yet-judged file", () => {
+    expect(wasClientAskedToReplace({ ai_rejected: false, review_status: "pending" })).toBe(false);
+    expect(wasClientAskedToReplace({ ai_rejected: false, review_status: "approved" })).toBe(false);
+    expect(
+      wasClientAskedToReplace({ ai_rejected: false, review_status: "pending", ai_usability: { usable: true } }),
+    ).toBe(false);
+    expect(
+      wasClientAskedToReplace({ ai_rejected: false, review_status: "pending", ai_usability: null }),
+    ).toBe(false);
+  });
+
+  it("treats a missing file or missing fields as not asked-to-replace", () => {
+    // The keeper may have been deleted between the upload and the assessment.
+    expect(wasClientAskedToReplace(undefined)).toBe(false);
+    expect(wasClientAskedToReplace({})).toBe(false);
   });
 });
 
