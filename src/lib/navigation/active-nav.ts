@@ -57,6 +57,9 @@ export function isIntegrationSubItemVisible(
     key === "quickbooks" ||
     key === "sage" ||
     key === "xero" ||
+    // Document filing: always listed — connect state lives on its page, and
+    // like Sage/QuickBooks the feature must be discoverable before connecting.
+    key === "filing" ||
     quickbooksConnected
   );
 }

@@ -117,6 +117,8 @@ const CreateSchema = z
       .nullable()
       .optional()
       .transform((v) => (v && v !== "" ? v : null)),
+    // Structured tax year (migration 0900). Optional; null = not set.
+    tax_year: z.number().int().min(2000).max(2100).nullable().optional(),
     // "AI Analyze" switch. Optional + defaults true so existing/forgetful callers
     // keep AI on; only an explicit false disables it.
     ai_enabled: z.boolean().optional().default(true),
@@ -208,6 +210,7 @@ export async function createEngagementAction(
     title: string;
     type: "t1" | "t2" | "bookkeeping" | "custom";
     due_date: string | null;
+    tax_year?: number | null;
     ai_enabled?: boolean;
     invoice_auto_mode?: "off" | "on_completion" | "delayed";
     invoice_delay_days?: number | null;
@@ -232,6 +235,7 @@ export async function createEngagementAction(
     title: payload.title,
     type: payload.type,
     due_date: payload.due_date,
+    tax_year: payload.tax_year,
     ai_enabled: payload.ai_enabled,
     invoice_auto_mode: payload.invoice_auto_mode,
     invoice_delay_days: payload.invoice_delay_days,
@@ -290,6 +294,7 @@ export async function createEngagementAction(
       title: parsed.data.title,
       type: parsed.data.type,
       due_date: parsed.data.due_date,
+      tax_year: parsed.data.tax_year ?? null,
       ai_enabled: parsed.data.ai_enabled,
       invoice_auto_mode: parsed.data.invoice_auto_mode,
       // Normalize: only carry the delay/amount that the chosen mode uses, so an

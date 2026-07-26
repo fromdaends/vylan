@@ -65,6 +65,13 @@ type KnownErrorKey =
   | "invoice_attachment_too_large"
   | "invoice_attachment_type"
   | "invoice_attachment_upload_error";
+// Next year down to 6 back — the practical range for a new engagement (late
+// prior-year filings included) without a free-text year field.
+const TAX_YEAR_OPTIONS = (() => {
+  const next = new Date().getFullYear() + 1;
+  return Array.from({ length: 8 }, (_, i) => next - i);
+})();
+
 const KNOWN_ERRORS = new Set<string>([
   "missing_client",
   "missing_template",
@@ -152,6 +159,9 @@ export function EngagementBuilder({
   const [title, setTitle] = useState("");
   const [titleTouched, setTitleTouched] = useState(false);
   const [dueDate, setDueDate] = useState("");
+  // Optional structured tax year ("" = none). Options: next year down to 6
+  // back — covers late prior-year filings without a free-text field.
+  const [taxYear, setTaxYear] = useState("");
   // "AI Analyze" toggle — on by default. When off, no document the client
   // uploads to this engagement is sent to the AI (saves AI usage/cost).
   const [aiEnabled, setAiEnabled] = useState(true);
@@ -412,6 +422,7 @@ export function EngagementBuilder({
             title: effectiveTitle.trim(),
             type: selectedTemplate.type,
             due_date: dueDate || null,
+            tax_year: taxYear ? Number(taxYear) : null,
             ai_enabled: aiEnabled,
             invoice_auto_mode: autoMode,
             invoice_delay_days: invoiceDelay,
@@ -595,6 +606,27 @@ export function EngagementBuilder({
             />
             <p className="text-xs text-muted-foreground">
               {t("due_date_hint")}
+            </p>
+          </div>
+          {/* Structured tax year (migration 0900). Optional — drives document
+              filing's {year} and, later, the AI's expected-year context. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="tax_year">{t("builder_tax_year_label")}</Label>
+            <select
+              id="tax_year"
+              value={taxYear}
+              onChange={(e) => setTaxYear(e.target.value)}
+              className="h-10 w-fit min-w-32 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-all hover:border-foreground/20 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              <option value="">{t("builder_tax_year_none")}</option>
+              {TAX_YEAR_OPTIONS.map((y) => (
+                <option key={y} value={String(y)}>
+                  {y}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              {t("builder_tax_year_hint")}
             </p>
           </div>
           {/* "AI Analyze" toggle. On by default; turning it off means no
