@@ -4,6 +4,7 @@ import {
   computeFilesSignature,
   decideSetRouting,
   decideDuplicateAction,
+  isRejectedFile,
   SET_INCOMPLETE_CONFIDENCE_BAR,
   DUPLICATE_AUTO_REJECT_CONFIDENCE,
   type SetAssessmentPage,
@@ -275,12 +276,49 @@ describe("decideDuplicateAction", () => {
   const bar = DUPLICATE_AUTO_REJECT_CONFIDENCE;
 
   it("auto-rejects only when the firm opted in AND it's confident enough", () => {
-    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar })).toBe("auto_reject");
-    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar - 0.01 })).toBe("flag");
+    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar, keeperRejected: false })).toBe("auto_reject");
+    expect(decideDuplicateAction({ autoRejectDuplicates: true, confidence: bar - 0.01, keeperRejected: false })).toBe("flag");
   });
 
   it("never auto-rejects with the setting off, however confident", () => {
-    expect(decideDuplicateAction({ autoRejectDuplicates: false, confidence: 1 })).toBe("flag");
+    expect(decideDuplicateAction({ autoRejectDuplicates: false, confidence: 1, keeperRejected: false })).toBe("flag");
+  });
+
+  // The bug this guards: a client was told "some amounts on page 1 are blacked
+  // out, please upload a complete copy", did exactly that, and the corrected
+  // file came back "This document was already uploaded" — the bad copy kept,
+  // the good one thrown away, and no way left to satisfy the request.
+  it("takes NO duplicate action when the earlier copy was rejected (corrected re-upload)", () => {
+    expect(
+      decideDuplicateAction({ autoRejectDuplicates: true, confidence: 1, keeperRejected: true }),
+    ).toBe("none");
+    expect(
+      decideDuplicateAction({ autoRejectDuplicates: false, confidence: 1, keeperRejected: true }),
+    ).toBe("none");
+  });
+
+  it("still flags a plain duplicate of a file that was NOT rejected", () => {
+    expect(
+      decideDuplicateAction({ autoRejectDuplicates: false, confidence: 0.95, keeperRejected: false }),
+    ).toBe("flag");
+  });
+});
+
+describe("isRejectedFile", () => {
+  it("counts an AI rejection and an accountant rejection", () => {
+    expect(isRejectedFile({ ai_rejected: true, review_status: "pending" })).toBe(true);
+    expect(isRejectedFile({ ai_rejected: false, review_status: "rejected" })).toBe(true);
+  });
+
+  it("does not count a healthy or not-yet-reviewed file", () => {
+    expect(isRejectedFile({ ai_rejected: false, review_status: "pending" })).toBe(false);
+    expect(isRejectedFile({ ai_rejected: false, review_status: "approved" })).toBe(false);
+  });
+
+  it("treats a missing file or missing fields as not rejected", () => {
+    // The keeper may have been deleted between the upload and the assessment.
+    expect(isRejectedFile(undefined)).toBe(false);
+    expect(isRejectedFile({})).toBe(false);
   });
 });
 
