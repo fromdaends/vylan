@@ -30,6 +30,13 @@ import {
 } from "./classify";
 import { assessSetWithOpenAI } from "./openai-classify";
 import { pdfPageCount, describeFilePages } from "./pdf-pages";
+import {
+  analyzeStatements,
+  parseExtractedStatements,
+  type ChainCoverage,
+  type ChainFinding,
+  type ExtractedStatement,
+} from "./statement-chain";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { isEngagementAiEnabled } from "./engagement-ai";
 import { expectedYearFromTitle } from "./matching";
@@ -114,6 +121,14 @@ export type SetAssessment = {
   /** Sorted "<file_id>:<content_hash>" of the files this run actually covered —
    *  lets readers detect a stale assessment after later uploads/deletes. */
   files_signature: string[];
+  /**
+   * Bank/credit-card statement extraction + the code-side verdicts built from
+   * it (balance chaining, period coverage — see statement-chain.ts). All
+   * optional: assessments written before this feature read as "no extraction".
+   */
+  statements?: ExtractedStatement[];
+  chain_findings?: ChainFinding[];
+  chain_coverage?: ChainCoverage[];
 };
 
 // ---------------------------------------------------------------------------
@@ -274,6 +289,54 @@ export const SET_ASSESSMENT_TOOL = {
           ],
         },
       },
+      statements: {
+        type: "array",
+        description:
+          "For bank / credit-card statement sets ONLY: one entry per STATEMENT identified across the files (one file can contain several statements; a statement can span files). Pure transcription of what is PRINTED — never compute, never infer, never verify anything. Empty array for any other kind of document set.",
+        items: {
+          type: "object",
+          properties: {
+            image_index: {
+              type: "integer",
+              description:
+                "1-based index of the file this statement STARTS in (File 1 = first uploaded).",
+            },
+            account_ref: {
+              type: ["string", "null"],
+              description:
+                "The account number EXACTLY as printed, masked forms included (e.g. '21691 09441 22', '****4821'). Null when not clearly legible.",
+            },
+            period_start: {
+              type: ["string", "null"],
+              description:
+                "The statement period's first day as printed, as an ISO date (YYYY-MM-DD). Null when not clearly legible.",
+            },
+            period_end: {
+              type: ["string", "null"],
+              description:
+                "The statement period's last day as printed, as an ISO date (YYYY-MM-DD). Null when not clearly legible.",
+            },
+            opening_balance: {
+              type: ["number", "null"],
+              description:
+                "The opening balance EXACTLY as printed (negative allowed). Null when not printed or not fully legible — NEVER computed from transactions.",
+            },
+            closing_balance: {
+              type: ["number", "null"],
+              description:
+                "The closing balance EXACTLY as printed (negative allowed). Null when not printed or not fully legible — NEVER computed from transactions.",
+            },
+          },
+          required: [
+            "image_index",
+            "account_ref",
+            "period_start",
+            "period_end",
+            "opening_balance",
+            "closing_balance",
+          ],
+        },
+      },
       flags: {
         type: "array",
         items: { type: "string" },
@@ -297,6 +360,7 @@ export const SET_ASSESSMENT_TOOL = {
       "confidence",
       "outcome",
       "pages",
+      "statements",
       "flags",
       "client_request_fr",
       "client_request_en",
@@ -351,6 +415,19 @@ Duplicates within the set (content-aware — judge the actual document, not its 
 - Two documents that merely share a merchant, a layout, or a format are NOT duplicates: a dozen receipts from the same pharmacy, or a recurring monthly bill, are DIFFERENT documents (different dates, amounts, transactions). Leave duplicate_of_image_index null for all of them.
 - When you DO mark a duplicate, also set duplicate_confidence (0 to 1) to how certain you are the two are the very same document. Reserve 0.9 and above for cases you are nearly certain about — that high band is what may be auto-rejected; anything lower is sent to the accountant.
 - When you are not certain two files are the very same document, leave duplicate_of_image_index null. Never over-flag a duplicate.
+
+FOR BANK / CREDIT-CARD STATEMENT SETS, ALSO TRANSCRIBE EACH STATEMENT — fill the
+statements array with one entry per statement you can identify (one file may
+contain several statements; a statement may span several files — anchor each to
+the file it STARTS in). For each: the account number AS PRINTED (masked forms
+like "****4821" are fine), the period start and end dates as printed (as ISO
+dates), and the opening and closing balances EXACTLY as printed. This is pure
+transcription: never compute a balance from the transactions, never infer a
+date from context, never round, and never "correct" what the page says. Any
+value not clearly and completely legible is null — a partial read is not a
+read. Do NOT check whether balances chain or periods connect — the system does
+that arithmetic itself; your only job is faithful copying. For any other kind
+of document set, statements is an empty array.
 
 Cropping has two very different severities — keep them apart:
 - If only a blank margin or the page-number FOOTER is cropped but ALL of the page's actual content is visible, the page is fine: place it by content continuity and note "page number not visible". Do NOT treat it as missing or unreadable.
@@ -487,6 +564,7 @@ export function parseSetAssessment(
   | "client_request_en"
   | "pages"
   | "flags"
+  | "statements"
 > | null {
   const en = str(raw.conclusion_en);
   const fr = str(raw.conclusion_fr);
@@ -564,6 +642,7 @@ export function parseSetAssessment(
     client_request_en: clientEn || clientFr,
     pages,
     flags,
+    statements: parseExtractedStatements(raw.statements, orderedFileIds),
   };
 }
 
@@ -871,6 +950,20 @@ ${pageFacts}`;
     ),
   };
 
+  // Cross-statement arithmetic (balance chaining + period coverage). The model
+  // only transcribed; every verdict here comes from code, so a finding is a
+  // checked fact, not an opinion. Findings ride the stored assessment (the
+  // summary line renders them bilingually) and the EN text joins flags for the
+  // audit trail.
+  {
+    const { findings, coverage } = analyzeStatements(assessment.statements ?? []);
+    if (findings.length > 0) assessment.chain_findings = findings;
+    if (coverage.length > 0) assessment.chain_coverage = coverage;
+    if (findings.length > 0) {
+      assessment.flags = [...findings.map((f) => f.text_en), ...assessment.flags];
+    }
+  }
+
   // NEVER a silent cap. If the budget forced files out of this run, say so on
   // the assessment itself — otherwise the summary reads as though it covered
   // the whole item while it skipped part of it, which is exactly the kind of
@@ -1071,4 +1164,5 @@ async function assessSetWithAnthropic(
   }
   return null;
 }
+
 
