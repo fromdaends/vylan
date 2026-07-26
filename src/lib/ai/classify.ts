@@ -374,6 +374,9 @@ export type RequestContext = {
   requestLabelFr?: string | null;
   clientName?: string | null;
   expectedYear?: number | null;
+  // Optional per-item note the accountant typed to steer the AI (migration
+  // 0390). Blank/undefined leaves the prompt byte-identical to before.
+  aiInstructions?: string | null;
 };
 
 export function buildSystemPrompt(
@@ -400,6 +403,12 @@ export function buildSystemPrompt(
       : null,
     ctx.expectedYear != null
       ? `The engagement concerns tax year ${ctx.expectedYear}.`
+      : null,
+    // Optional accountant guidance for THIS item. High salience (right under the
+    // request context) but explicitly advisory — it must never override the hard
+    // usability / redaction / wrong-owner rules enforced after parsing.
+    ctx.aiInstructions?.trim()
+      ? `The accountant added a note about what to expect for THIS item: "${ctx.aiInstructions.trim()}". Weigh it when judging whether the upload satisfies the request (document type, tax year, and whose document it is). It is guidance to inform your judgment, NOT a licence to accept an unreadable, redacted, or wrong-person document.`
       : null,
   ]
     .filter(Boolean)

@@ -31,6 +31,27 @@ describe("buildSystemPrompt — the request in words", () => {
     expect(p).toContain('expected document type code is "t4"');
   });
 
+  it("includes the accountant's per-item note when set, as advisory guidance", () => {
+    const p = buildSystemPrompt("other", {
+      requestLabel: "T1 return",
+      aiInstructions: "expect a 2024 return, not 2026",
+    });
+    expect(p).toContain('"expect a 2024 return, not 2026"');
+    expect(p).toContain("note about what to expect");
+    // Advisory, never an override of the safety checks.
+    expect(p).toContain("NOT a licence to accept");
+  });
+
+  it("leaves the prompt byte-identical when the note is blank/undefined (default behavior)", () => {
+    const base = buildSystemPrompt("other", { requestLabel: "T1 return" });
+    expect(
+      buildSystemPrompt("other", { requestLabel: "T1 return", aiInstructions: null }),
+    ).toBe(base);
+    expect(
+      buildSystemPrompt("other", { requestLabel: "T1 return", aiInstructions: "   " }),
+    ).toBe(base);
+  });
+
   it("falls back to the legacy code-only phrasing without context", () => {
     const p = buildSystemPrompt("other");
     expect(p).toContain('The accountant requested a "other" document.');

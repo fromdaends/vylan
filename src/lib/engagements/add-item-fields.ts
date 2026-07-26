@@ -23,6 +23,8 @@ export const addItemSchema = z.object({
   label_en: z.string().max(200).optional().nullable(),
   description: z.string().max(500).optional().nullable(),
   description_fr: z.string().max(500).optional().nullable(),
+  // Optional per-item AI guidance (migration 0390). Capped to bound prompt size.
+  ai_instructions: z.string().max(1000).optional().nullable(),
   doc_type: z.string().min(1),
   required: z
     .union([z.literal("on"), z.literal("true"), z.literal("false")])

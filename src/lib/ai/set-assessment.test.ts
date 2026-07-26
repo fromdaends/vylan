@@ -4,10 +4,35 @@ import {
   computeFilesSignature,
   decideSetRouting,
   decideDuplicateAction,
+  buildSetSystemPrompt,
   SET_INCOMPLETE_CONFIDENCE_BAR,
   DUPLICATE_AUTO_REJECT_CONFIDENCE,
   type SetAssessmentPage,
 } from "./set-assessment";
+
+describe("buildSetSystemPrompt — per-item AI note", () => {
+  const base = {
+    requestLabel: "Bank statements",
+    requestLabelFr: "Relevés bancaires",
+    clientName: "Tyler Jette",
+    expectedYear: 2025,
+  };
+  it("includes the accountant's note when set", () => {
+    const p = buildSetSystemPrompt(
+      { ...base, aiInstructions: "expect all 12 months" },
+      3,
+    );
+    expect(p).toContain('"expect all 12 months"');
+    expect(p).toContain("Accountant's note");
+  });
+  it("leaves the prompt unchanged when the note is blank (default behavior)", () => {
+    const plain = buildSetSystemPrompt({ ...base, aiInstructions: null }, 3);
+    expect(buildSetSystemPrompt({ ...base, aiInstructions: "  " }, 3)).toBe(
+      plain,
+    );
+    expect(plain).not.toContain("Accountant's note");
+  });
+});
 
 // These cover the PURE output-parsing layer (parseSetAssessment) and the
 // staleness fingerprint (computeFilesSignature). The model call + DB I/O in

@@ -23,6 +23,7 @@ function makeItem(over: Partial<RequestItem> = {}): RequestItem {
     signing_doc_name: null,
     signing_doc_mime: null,
     ai_set_assessment: null,
+    ai_instructions: null,
     created_at: "2026-06-08T00:00:00Z",
     ...over,
   };
