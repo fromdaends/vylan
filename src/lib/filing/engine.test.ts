@@ -16,10 +16,22 @@ import type { FilingTokenContext } from "./tokens";
 
 class MemoryLedger implements FilingLedger {
   filed = new Set<string>();
+  // attemptId -> intent (mirrors the DB's 'uploading' rows)
+  attempts = new Map<
+    string,
+    {
+      key: string;
+      status: "uploading" | "filed" | "failed" | "skipped";
+      folderPath: string;
+      filedName: string;
+      error?: string;
+    }
+  >();
   skips: Array<{ fileId: string; reason: SkipReason }> = [];
   failures: Array<{ fileId: string; error: string }> = [];
-  // When true, recordFiled pretends another run won the unique-index race.
+  // When true, confirmFiled pretends another run won the unique-index race.
   raceOnce = false;
+  private seq = 0;
 
   private key(source: FilingSource, fileId: string) {
     return `${source}:${fileId}`;
@@ -27,21 +39,54 @@ class MemoryLedger implements FilingLedger {
   async alreadyFiled(source: FilingSource, fileId: string) {
     return this.filed.has(this.key(source, fileId));
   }
-  async recordFiled(row: { source: FilingSource; fileId: string }) {
-    if (this.raceOnce) {
+  async beginUpload(row: {
+    source: FilingSource;
+    fileId: string;
+    folderPath: string;
+    filedName: string;
+  }) {
+    const attemptId = `attempt-${++this.seq}`;
+    this.attempts.set(attemptId, {
+      key: this.key(row.source, row.fileId),
+      status: "uploading",
+      folderPath: row.folderPath,
+      filedName: row.filedName,
+    });
+    return { attemptId };
+  }
+  async confirmFiled(
+    attemptId: string,
+    row: { filedName: string; providerFileId: string; link: string | null },
+  ) {
+    const a = this.attempts.get(attemptId);
+    if (!a) throw new Error("unknown attempt");
+    if (this.raceOnce || this.filed.has(a.key)) {
       this.raceOnce = false;
+      a.status = "skipped";
       return "duplicate" as const;
     }
-    const k = this.key(row.source, row.fileId);
-    if (this.filed.has(k)) return "duplicate" as const;
-    this.filed.add(k);
+    a.status = "filed";
+    a.filedName = row.filedName;
+    this.filed.add(a.key);
     return "ok" as const;
+  }
+  async markFailed(attemptId: string, error: string) {
+    const a = this.attempts.get(attemptId);
+    if (!a) throw new Error("unknown attempt");
+    a.status = "failed";
+    a.error = error;
+    this.failures.push({ fileId: a.key.split(":")[1]!, error });
   }
   async recordSkip(row: { fileId: string; reason: SkipReason }) {
     this.skips.push({ fileId: row.fileId, reason: row.reason });
   }
   async recordFailure(row: { fileId: string; error: string }) {
     this.failures.push({ fileId: row.fileId, error: row.error });
+  }
+  /** No attempt row may end the run still 'uploading'. */
+  openAttempts(): number {
+    return [...this.attempts.values()].filter((a) => a.status === "uploading")
+      .length;
   }
 }
 
@@ -328,7 +373,7 @@ describe("runFiling", () => {
     });
   });
 
-  it("one failed upload never aborts the batch", async () => {
+  it("one failed upload never aborts the batch, and settles its intent row", async () => {
     const store = new MockStorage();
     const ledger = new MemoryLedger();
     const good = candidate({ fileId: "file-good" });
@@ -351,6 +396,7 @@ describe("runFiling", () => {
     expect(report.filedCount).toBe(1);
     expect(ledger.failures).toHaveLength(1);
     expect(ledger.failures[0].fileId).toBe("file-bad");
+    expect(ledger.openAttempts()).toBe(0);
     expect(
       store
         .allByPath()

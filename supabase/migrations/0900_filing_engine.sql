@@ -203,7 +203,11 @@ create table if not exists filed_documents (
   -- 'final' = final_documents.
   source text not null check (source in ('checklist', 'final')),
   file_id uuid not null,
-  status text not null check (status in ('filed', 'skipped', 'failed')),
+  -- 'uploading' is the pre-upload INTENT record: the destination is written
+  -- BEFORE bytes move, so even a crash mid-upload leaves an auditable row of
+  -- where this document was headed. Terminal states: filed/skipped/failed.
+  status text not null
+    check (status in ('uploading', 'filed', 'skipped', 'failed')),
   -- Why a skip was a skip ('already_filed' | 'not_approved' | 'rejected' |
   -- 'duplicate' | 'final_not_opted_in' | 'no_bytes') / what an upload error was.
   skip_reason text,

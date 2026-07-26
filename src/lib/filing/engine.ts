@@ -97,27 +97,38 @@ export function withUniqueTag(fileName: string, fileId: string): string {
 
 // Ledger + bytes access, injected. The DB-backed implementation lives in the
 // data layer; tests use an in-memory one.
+//
+// Upload lifecycle: beginUpload writes the INTENT (destination path + name)
+// BEFORE any bytes move — a crash mid-upload leaves an auditable record of
+// where the document was headed — then confirmFiled/markFailed settle it.
 export type FilingLedger = {
   /** Has this document already been FILED to this destination? */
   alreadyFiled(source: FilingSource, fileId: string): Promise<boolean>;
-  /**
-   * Record a successful upload. Returns "duplicate" when the DB's partial
-   * unique index says another run filed it first (the race case) — the engine
-   * then reports it as skipped/already_filed rather than filed twice.
-   */
-  recordFiled(row: {
+  /** Record intent pre-upload; returns a handle for confirm/fail. */
+  beginUpload(row: {
     source: FilingSource;
     fileId: string;
     folderPath: string;
     filedName: string;
-    providerFileId: string;
-    link: string | null;
-  }): Promise<"ok" | "duplicate">;
+  }): Promise<{ attemptId: string }>;
+  /**
+   * Settle the intent as FILED (with the final name — collisions may have
+   * bumped it after intent was written). Returns "duplicate" when the DB's
+   * partial unique index says another run filed this document first (the race
+   * case) — the engine then reports already_filed rather than filed twice.
+   */
+  confirmFiled(
+    attemptId: string,
+    row: { filedName: string; providerFileId: string; link: string | null },
+  ): Promise<"ok" | "duplicate">;
+  /** Settle the intent as FAILED with a human-readable error. */
+  markFailed(attemptId: string, error: string): Promise<void>;
   recordSkip(row: {
     source: FilingSource;
     fileId: string;
     reason: SkipReason;
   }): Promise<void>;
+  /** A failure BEFORE intent was written (rendering, bytes download). */
   recordFailure(row: {
     source: FilingSource;
     fileId: string;
@@ -252,76 +263,94 @@ export async function runFiling(
 
       const bytes = await deps.downloadBytes(doc.storagePath!);
 
-      // Collision loop: probe, then upload; a conflict (raced by another
-      // writer between probe and upload) bumps the counter and retries.
-      let uploaded: { providerFileId: string; link: string | null } | null =
-        null;
-      let finalName = fileName;
-      for (let attempt = 1; attempt <= MAX_COLLISION_ATTEMPTS + 1; attempt++) {
-        finalName =
-          attempt <= MAX_COLLISION_ATTEMPTS
-            ? withCounter(fileName, attempt)
-            : withUniqueTag(fileName, doc.fileId);
-        if (
-          attempt <= MAX_COLLISION_ATTEMPTS &&
-          (await deps.connector.fileExists(deps.ctx, folderId, finalName))
-        ) {
-          continue;
-        }
-        try {
-          uploaded = await deps.connector.uploadFile(
-            deps.ctx,
-            folderId,
-            finalName,
-            bytes,
-            doc.mimeType,
-          );
-          break;
-        } catch (e) {
-          if (e instanceof StorageConflictError) continue;
-          throw e;
-        }
-      }
-      if (!uploaded) {
-        throw new Error("no free name after collision attempts");
-      }
-
+      // INTENT first: the destination is on record before any bytes move.
       const folderPath = segments.join("/");
-      const recorded = await deps.ledger.recordFiled({
+      const { attemptId } = await deps.ledger.beginUpload({
         source: doc.source,
         fileId: doc.fileId,
         folderPath,
-        filedName: finalName,
-        providerFileId: uploaded.providerFileId,
-        link: uploaded.link,
+        filedName: fileName,
       });
-      if (recorded === "duplicate") {
-        // Another run beat us to the ledger. The upload above may have left a
-        // twin in the destination; we still NEVER delete — report as already
-        // filed and let the report say so.
-        await deps.ledger.recordSkip({
-          source: doc.source,
-          fileId: doc.fileId,
-          reason: "already_filed",
+
+      try {
+        // Collision loop: probe, then upload; a conflict (raced by another
+        // writer between probe and upload) bumps the counter and retries.
+        let uploaded: { providerFileId: string; link: string | null } | null =
+          null;
+        let finalName = fileName;
+        for (
+          let attempt = 1;
+          attempt <= MAX_COLLISION_ATTEMPTS + 1;
+          attempt++
+        ) {
+          finalName =
+            attempt <= MAX_COLLISION_ATTEMPTS
+              ? withCounter(fileName, attempt)
+              : withUniqueTag(fileName, doc.fileId);
+          if (
+            attempt <= MAX_COLLISION_ATTEMPTS &&
+            (await deps.connector.fileExists(deps.ctx, folderId, finalName))
+          ) {
+            continue;
+          }
+          try {
+            uploaded = await deps.connector.uploadFile(
+              deps.ctx,
+              folderId,
+              finalName,
+              bytes,
+              doc.mimeType,
+            );
+            break;
+          } catch (e) {
+            if (e instanceof StorageConflictError) continue;
+            throw e;
+          }
+        }
+        if (!uploaded) {
+          throw new Error("no free name after collision attempts");
+        }
+
+        const recorded = await deps.ledger.confirmFiled(attemptId, {
+          filedName: finalName,
+          providerFileId: uploaded.providerFileId,
+          link: uploaded.link,
         });
+        if (recorded === "duplicate") {
+          // Another run beat us to the ledger. The upload above may have left
+          // a twin in the destination; we still NEVER delete — report as
+          // already filed and let the report say so. (confirmFiled settles the
+          // intent row as the skip record itself — no extra recordSkip here.)
+          outcomes.push({
+            fileId: doc.fileId,
+            source: doc.source,
+            status: "skipped",
+            reason: "already_filed",
+          });
+          continue;
+        }
+
         outcomes.push({
           fileId: doc.fileId,
           source: doc.source,
-          status: "skipped",
-          reason: "already_filed",
+          status: "filed",
+          folderPath,
+          filedName: finalName,
+          providerFileId: uploaded.providerFileId,
+          link: uploaded.link,
+        });
+      } catch (e) {
+        // Settle the open intent, then let the outer handler report.
+        const message = e instanceof Error ? e.message : String(e);
+        await deps.ledger.markFailed(attemptId, message);
+        outcomes.push({
+          fileId: doc.fileId,
+          source: doc.source,
+          status: "failed",
+          error: message,
         });
         continue;
       }
-
-      outcomes.push({
-        fileId: doc.fileId,
-        source: doc.source,
-        status: "filed",
-        folderPath,
-        filedName: finalName,
-        providerFileId: uploaded.providerFileId,
-        link: uploaded.link,
-      });
     } catch (e) {
       if (e instanceof FilingGuardError) throw e;
       const message = e instanceof Error ? e.message : String(e);
