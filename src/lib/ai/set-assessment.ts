@@ -29,6 +29,7 @@ import {
   isSupportedAiMime,
 } from "./classify";
 import { assessSetWithOpenAI } from "./openai-classify";
+import { pdfPageCount, describeFilePages } from "./pdf-pages";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { isEngagementAiEnabled } from "./engagement-ai";
 import { expectedYearFromTitle } from "./matching";
@@ -126,11 +127,15 @@ export type SetAssessment = {
 export const SET_ASSESSMENT_DEBOUNCE_MS = 2 * 60 * 1000;
 
 // Payload bounds for ONE call. 10 files at the 2048px/JPEG-q90 prep is far
-// under provider request limits while covering any realistic page set; the
-// byte budget guards the PDF case (uploads can be 25 MB each). When an item
-// holds more, the first files (upload order) are assessed and a flag says so.
-export const MAX_SET_FILES = 10;
-export const MAX_SET_BYTES = 20 * 1024 * 1024;
+// under provider request limits. Raised for bookkeeping reality: a year of
+// statements arrives as 12+ separate PDFs, which the old 10-file cap silently
+// truncated. The byte budget guards the PDF case (uploads can be 25 MB each).
+//
+// When an item holds more than fits, the first files (upload order) are
+// assessed and a flag on the assessment SAYS SO — the cap is never silent.
+// (It used to claim that in a comment while emitting no such flag.)
+export const MAX_SET_FILES = 16;
+export const MAX_SET_BYTES = 32 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
 // Scheduling (debounced, one pending job per item)
@@ -601,6 +606,8 @@ export function wasClientAskedToReplace(
 type PreparedFile = {
   file: FileRow;
   isPdf: boolean;
+  // Measured in code (pdf-lib), never guessed by the model. null = unreadable.
+  pageCount: number | null;
   base64: string;
   mediaType: string;
 };
@@ -716,8 +723,15 @@ export async function processSetAssessmentJob(
   // SAME prep as classify (2048px cap, JPEG q90); PDFs pass through untouched.
   const prepared: PreparedFile[] = [];
   let budget = 0;
+  // Files the budget forced us to leave out. Reported to the accountant rather
+  // than dropped in silence — a summary that reads as if it covered everything
+  // while it skipped a third of the item is worse than no summary.
+  let skippedFiles = 0;
   for (const f of readable) {
-    if (prepared.length >= MAX_SET_FILES) break;
+    if (prepared.length >= MAX_SET_FILES) {
+      skippedFiles = readable.length - prepared.length;
+      break;
+    }
     const dl = await downloadStorageObject(f.storage_path);
     if (!dl) return { skipped: "download_failed" }; // transient — cron retries
     const mt = normalizeMimeType(f.mime_type || dl.mimeType);
@@ -728,12 +742,14 @@ export async function processSetAssessmentJob(
     // Always include the first file, even alone over budget (same situation a
     // single-file classify handles today); stop before any later overflow.
     if (prepared.length > 0 && budget + prep.bytes.length > MAX_SET_BYTES) {
+      skippedFiles = readable.length - prepared.length;
       break;
     }
     budget += prep.bytes.length;
     prepared.push({
       file: f,
       isPdf,
+      pageCount: isPdf ? await pdfPageCount(prep.bytes) : 1,
       base64: prep.bytes.toString("base64"),
       mediaType: prep.mimeType,
     });
@@ -750,7 +766,12 @@ export async function processSetAssessmentJob(
     requestContext.requestLabel?.trim() ||
     requestContext.requestLabelFr?.trim() ||
     "the requested document";
-  const userText = `The accountant requested: "${requestedAs}". The ${prepared.length} file(s) above were uploaded by the client to this ONE checklist item, in upload order (File 1 was uploaded first). Assess them together as a set.`;
+  const pageFacts = describeFilePages(
+    prepared.map((p) => ({ isPdf: p.isPdf, pageCount: p.pageCount })),
+  );
+  const userText = `The accountant requested: "${requestedAs}". The ${prepared.length} file(s) above were uploaded by the client to this ONE checklist item, in upload order (File 1 was uploaded first). Assess them together as a set.
+
+${pageFacts}`;
 
   let raw: Record<string, unknown> | null = null;
   const provider = getProvider();
@@ -849,6 +870,17 @@ export async function processSetAssessmentJob(
       })),
     ),
   };
+
+  // NEVER a silent cap. If the budget forced files out of this run, say so on
+  // the assessment itself — otherwise the summary reads as though it covered
+  // the whole item while it skipped part of it, which is exactly the kind of
+  // quiet miss this feature exists to prevent.
+  if (skippedFiles > 0) {
+    assessment.flags = [
+      `Reviewed the first ${prepared.length} of ${prepared.length + skippedFiles} files together; the rest were not compared as a set.`,
+      ...assessment.flags,
+    ];
+  }
 
   // Loud on purpose: if the 0320 column is missing this throws, the job
   // retries, and the failure is visible in the jobs table — never a silent
@@ -1039,3 +1071,4 @@ async function assessSetWithAnthropic(
   }
   return null;
 }
+
