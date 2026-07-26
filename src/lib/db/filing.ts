@@ -131,14 +131,17 @@ export type StorageConnectionDisplay = {
   connectedAt: string;
 };
 
-/** The current firm's ACTIVE connection, or null. Secrets are not readable
- * here by construction (column grants) — display fields only. */
+/** The current firm's connection (active OR error — error still renders the
+ * card, with a reconnect prompt), or null. Secrets are not readable here by
+ * construction (column grants) — display fields only. */
 export async function getFirmStorageConnection(): Promise<StorageConnectionDisplay | null> {
   const sb = await getServerSupabase();
   const { data, error } = await sb
     .from("storage_connections")
     .select("id, provider, status, account_label, root_label, connected_at")
-    .eq("status", "active")
+    .in("status", ["active", "error"])
+    .order("connected_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (error) {
     if (!isFilingSchemaMissing(error)) {
@@ -257,6 +260,256 @@ export async function getFilingPreviewSample(
     yearlessContext: { ...tokenContext, year: null },
     fromRealDocument: true,
   };
+}
+
+// ── Storage connection write path (service-role) ────────────────────────────
+
+import {
+  decryptStorageToken,
+  maybeEncryptStorageToken,
+  storageTokenFingerprint,
+} from "@/lib/filing/token-cipher";
+
+/**
+ * Persist a Google Drive connection after OAuth. Revives the firm's most
+ * recent google_drive row (any status) instead of inserting a new one, so the
+ * connection id — and with it the filed_documents idempotency history — stays
+ * continuous across disconnect/error/reconnect cycles. Refuses when another
+ * provider is actively connected (v1: one destination per firm; the partial
+ * unique index is the DB-level backstop).
+ */
+export async function saveGoogleConnection(input: {
+  firmId: string;
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresAt: string;
+  accountEmail: string | null;
+  rootFolderId: string;
+  rootLink: string | null;
+  connectedBy: string;
+}): Promise<"ok" | "other_provider" | "error"> {
+  const sb = getServiceRoleSupabase();
+
+  const { data: active, error: activeErr } = await sb
+    .from("storage_connections")
+    .select("id, provider")
+    .eq("firm_id", input.firmId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (activeErr) {
+    console.error("[filing] connection lookup failed:", activeErr.message);
+    return "error";
+  }
+  if (active && active.provider !== "google_drive") return "other_provider";
+
+  const row = {
+    status: "active",
+    access_token: maybeEncryptStorageToken(input.accessToken),
+    refresh_token: maybeEncryptStorageToken(input.refreshToken),
+    access_token_expires_at: input.accessTokenExpiresAt,
+    refresh_token_fingerprint: storageTokenFingerprint(input.refreshToken),
+    account_label: input.accountEmail,
+    root_label: "Vylan",
+    provider_config: {
+      rootFolderId: input.rootFolderId,
+      rootLink: input.rootLink,
+    },
+    connected_by: input.connectedBy,
+    connected_at: new Date().toISOString(),
+    disconnected_at: null,
+    updated_at: new Date().toISOString(),
+  };
+
+  // Revive the newest google_drive row whatever its status (active row found
+  // above is necessarily it), else insert fresh.
+  const { data: existing } = await sb
+    .from("storage_connections")
+    .select("id")
+    .eq("firm_id", input.firmId)
+    .eq("provider", "google_drive")
+    .order("connected_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await sb
+      .from("storage_connections")
+      .update(row)
+      .eq("id", existing.id);
+    if (error) {
+      console.error("[filing] connection update failed:", error.message);
+      return "error";
+    }
+    return "ok";
+  }
+  const { error } = await sb
+    .from("storage_connections")
+    .insert({ firm_id: input.firmId, provider: "google_drive", ...row });
+  if (error) {
+    // 23505 = the one-active-per-firm partial unique index caught a racing
+    // connect of another provider.
+    console.error("[filing] connection insert failed:", error.message);
+    return error.code === "23505" ? "other_provider" : "error";
+  }
+  return "ok";
+}
+
+export type ActiveConnectionTokens = {
+  id: string;
+  provider: StorageProvider;
+  accessToken: string;
+  refreshToken: string;
+  accessTokenExpiresAt: string | null;
+  config: Record<string, unknown>;
+};
+
+/**
+ * The firm's ACTIVE connection with decrypted tokens (service-role — callers
+ * re-prove firm scope). "absent" = no usable connection (none active, or
+ * tokens undecryptable => reconnect needed); "read_error" = transient.
+ */
+export async function readActiveConnectionTokens(
+  firmId: string,
+): Promise<
+  | { kind: "ok"; conn: ActiveConnectionTokens }
+  | { kind: "absent" }
+  | { kind: "read_error" }
+> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("storage_connections")
+    .select(
+      "id, provider, access_token, refresh_token, access_token_expires_at, provider_config",
+    )
+    .eq("firm_id", firmId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (error) {
+    if (isFilingSchemaMissing(error)) return { kind: "absent" };
+    console.error("[filing] token read failed:", error.message);
+    return { kind: "read_error" };
+  }
+  if (!data || !data.access_token || !data.refresh_token) {
+    return { kind: "absent" };
+  }
+  const accessToken = decryptStorageToken(data.access_token as string);
+  const refreshToken = decryptStorageToken(data.refresh_token as string);
+  if (accessToken == null || refreshToken == null) return { kind: "absent" };
+  return {
+    kind: "ok",
+    conn: {
+      id: data.id as string,
+      provider: data.provider as StorageProvider,
+      accessToken,
+      refreshToken,
+      accessTokenExpiresAt:
+        (data.access_token_expires_at as string | null) ?? null,
+      config:
+        (data.provider_config as Record<string, unknown> | null) ?? {},
+    },
+  };
+}
+
+/**
+ * Persist refreshed tokens with optimistic concurrency: the row must still
+ * carry the fingerprint of the refresh token we refreshed FROM, so a
+ * concurrent refresh never gets clobbered. "stale" = someone else won.
+ */
+export async function updateStorageConnectionTokens(
+  firmId: string,
+  matchRefreshToken: string,
+  next: {
+    accessToken: string;
+    refreshToken: string;
+    accessTokenExpiresAt: string;
+  },
+): Promise<"ok" | "stale" | "error"> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("storage_connections")
+    .update({
+      access_token: maybeEncryptStorageToken(next.accessToken),
+      refresh_token: maybeEncryptStorageToken(next.refreshToken),
+      access_token_expires_at: next.accessTokenExpiresAt,
+      refresh_token_fingerprint: storageTokenFingerprint(next.refreshToken),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("firm_id", firmId)
+    .eq("status", "active")
+    .eq("refresh_token_fingerprint", storageTokenFingerprint(matchRefreshToken))
+    .select("id");
+  if (error) {
+    console.error("[filing] token update failed:", error.message);
+    return "error";
+  }
+  return (data?.length ?? 0) > 0 ? "ok" : "stale";
+}
+
+/** Flag the active connection as needing a reconnect (dead refresh token). */
+export async function markStorageConnectionError(firmId: string): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("storage_connections")
+    .update({ status: "error", updated_at: new Date().toISOString() })
+    .eq("firm_id", firmId)
+    .eq("status", "active");
+  if (error) console.error("[filing] mark error failed:", error.message);
+}
+
+/**
+ * Disconnect the firm's connection (owner action). Tokens are cleared from
+ * the row (the caller revokes them with Google first); the row itself is KEPT
+ * for ledger continuity. Returns the decrypted refresh token for revocation,
+ * or null when there was nothing to disconnect.
+ */
+export async function disconnectFirmStorageConnection(
+  firmId: string,
+): Promise<{ refreshToken: string | null } | null> {
+  const read = await readActiveConnectionTokens(firmId);
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("storage_connections")
+    .update({
+      status: "disconnected",
+      access_token: null,
+      refresh_token: null,
+      refresh_token_fingerprint: null,
+      disconnected_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .in("status", ["active", "error"])
+    .eq("firm_id", firmId)
+    .select("id");
+  if (error) {
+    if (isFilingSchemaMissing(error)) return null;
+    console.error("[filing] disconnect failed:", error.message);
+    return null;
+  }
+  if ((data?.length ?? 0) === 0) return null;
+  return {
+    refreshToken: read.kind === "ok" ? read.conn.refreshToken : null,
+  };
+}
+
+/**
+ * Display detail for the connected card: the root-folder link out to the
+ * provider. provider_config is deliberately not SELECT-granted to browsers,
+ * so this reads it with the service role AFTER the RLS-scoped display read
+ * has already proven the row belongs to the current firm.
+ */
+export async function getStorageConnectionRootLink(
+  connectionId: string,
+): Promise<string | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("storage_connections")
+    .select("provider_config")
+    .eq("id", connectionId)
+    .maybeSingle();
+  if (error || !data) return null;
+  const link = (data.provider_config as Record<string, unknown> | null)
+    ?.rootLink;
+  return typeof link === "string" ? link : null;
 }
 
 // ── Runs + ledger (service-role writers for the engine) ─────────────────────

@@ -3127,6 +3127,21 @@
     "error_name_empty": "Le nom de fichier ne peut pas être vide.",
     "error_unknown_token": "Jeton inconnu : {tokens}",
     "error_too_deep": "Limitez la structure de dossiers à 8 niveaux ou moins.",
-    "error_missing_client_token": "La structure de dossiers doit inclure '{client_name}' pour que chaque document soit classé sous le bon client."
+    "error_missing_client_token": "La structure de dossiers doit inclure '{client_name}' pour que chaque document soit classé sous le bon client.",
+    "state_reconnect": "Reconnexion requise",
+    "connected_as": "Connecté en tant que {email}",
+    "open_folder": "Ouvrir le dossier Vylan dans Drive",
+    "action_disconnect": "Déconnecter",
+    "action_reconnect": "Reconnecter",
+    "disconnect_title": "Déconnecter Google Drive ?",
+    "disconnect_body": "Vylan cessera de classer des documents dans votre Drive. Rien de déjà classé n'est supprimé, et vous pouvez reconnecter en tout temps.",
+    "cancel": "Annuler",
+    "toast_connected": "Google Drive connecté.",
+    "toast_disconnected": "Google Drive déconnecté.",
+    "toast_error_generic": "Échec de la connexion. Réessayez.",
+    "toast_error_denied": "Vous avez refusé l'autorisation Google.",
+    "toast_error_other_provider": "Un autre stockage est déjà connecté. Déconnectez-le d'abord.",
+    "toast_error_not_configured": "Google Drive n'est pas encore configuré sur cet environnement.",
+    "google_root_hint": "Vylan classe dans un dossier « Vylan » qu'il crée dans votre Drive. Vous pouvez déplacer ou renommer ce dossier n'importe où; Vylan continue d'y classer."
   }
 }
