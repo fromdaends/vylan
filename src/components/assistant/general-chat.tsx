@@ -215,7 +215,7 @@ export function GeneralChat({
       </div>
 
       {/* Input */}
-      <div className="border-t border-border bg-card px-4 pt-3 pb-4">
+      <div className="border-t border-border bg-card px-4 pt-3 pb-4 dark:bg-black">
         {empty && error && (
           <div className="mb-2.5">
             <Alert variant="destructive">

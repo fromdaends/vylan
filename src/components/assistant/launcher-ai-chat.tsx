@@ -22,7 +22,7 @@ export function LauncherAiChat({ locale }: { locale: "en" | "fr" }) {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -8 }}
           transition={{ duration: 0.18, ease: "easeOut" }}
-          className="flex h-full min-h-0 flex-col bg-card text-foreground"
+          className="flex h-full min-h-0 flex-col bg-card text-foreground dark:bg-black"
         >
           <GeneralChat
             locale={locale}

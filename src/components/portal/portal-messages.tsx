@@ -9,13 +9,23 @@
 // AI pipeline checks them. The composer carries a permanent nudge pointing
 // clients back to the checklist for anything file-shaped.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 import { ChevronLeft, FileUp, Send } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  MessageTimestamp,
+  shouldShowMessageTimestamp,
+} from "@/components/messages/message-timeline";
 import type { PortalMessage } from "@/lib/db/client-messages";
 
 const MAX_LENGTH = 4000;
@@ -47,15 +57,6 @@ export function PortalMessages({
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
-
-  const timeFormat = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale === "fr" ? "fr-CA" : "en-CA", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }),
-    [locale],
-  );
 
   const refresh = useCallback(async () => {
     try {
@@ -170,45 +171,43 @@ export function PortalMessages({
             </p>
           </div>
         ) : (
-          messages.map((m) => {
+          messages.map((m, index) => {
             const mine = m.sender === "client";
             return (
-              <div
-                key={m.id}
-                className={cn(
-                  "flex items-end gap-2",
-                  mine ? "flex-row-reverse" : "flex-row",
+              <Fragment key={m.id}>
+                {shouldShowMessageTimestamp(messages, index) && (
+                  <MessageTimestamp iso={m.created_at} locale={locale} />
                 )}
-              >
-                <AvatarInitials
-                  name={m.sender_name}
-                  size={28}
-                  color={mine ? "#0f766e" : "#475569"}
-                />
                 <div
                   className={cn(
-                    "max-w-[75%] space-y-1",
-                    mine ? "text-right" : "text-left",
+                    "flex items-end gap-2",
+                    mine ? "flex-row-reverse" : "flex-row",
                   )}
                 >
+                  <AvatarInitials
+                    name={m.sender_name}
+                    size={28}
+                    color={mine ? "#0f766e" : "#475569"}
+                  />
                   <div
                     className={cn(
-                      "inline-block whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-left text-sm",
-                      mine
-                        ? "rounded-br-sm bg-primary text-primary-foreground"
-                        : "rounded-bl-sm bg-muted text-foreground",
+                      "max-w-[75%]",
+                      mine ? "text-right" : "text-left",
                     )}
                   >
-                    {m.body}
+                    <div
+                      className={cn(
+                        "inline-block whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-left text-sm",
+                        mine
+                          ? "rounded-br-sm bg-primary text-primary-foreground"
+                          : "rounded-bl-sm bg-muted text-foreground",
+                      )}
+                    >
+                      {m.body}
+                    </div>
                   </div>
-                  <p className="text-[11px] leading-none text-muted-foreground">
-                    {m.sender_name} ·{" "}
-                    <time dateTime={m.created_at}>
-                      {timeFormat.format(new Date(m.created_at))}
-                    </time>
-                  </p>
                 </div>
-              </div>
+              </Fragment>
             );
           })
         )}

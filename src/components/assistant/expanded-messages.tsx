@@ -252,7 +252,7 @@ export function ExpandedMessages({
         { "--exp-w": width != null ? `${width}px` : "35vw" } as CSSProperties
       }
       className={cn(
-        "fixed inset-y-2 right-2 z-[45] w-[var(--exp-w)] flex-col overflow-hidden rounded-2xl border border-border bg-card text-foreground",
+        "fixed inset-y-2 right-2 z-[45] w-[var(--exp-w)] flex-col overflow-hidden rounded-2xl border border-border bg-card text-foreground dark:bg-black",
         "shadow-[-18px_0_48px_-28px_rgba(0,0,0,0.75),0_18px_50px_-30px_rgba(0,0,0,0.8)]",
         dragging ? "transition-none" : "transition-transform duration-300 ease-out",
         expanded ? "hidden sm:flex" : "hidden",

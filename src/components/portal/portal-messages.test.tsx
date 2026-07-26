@@ -66,14 +66,17 @@ describe("PortalMessages", () => {
     });
   });
 
-  it("renders the thread with sender names on both sides", () => {
-    renderPortalMessages({ initialMessages: sampleMessages });
+  it("renders the thread without repeating sender names under the bubbles", () => {
+    const { container } = renderPortalMessages({
+      initialMessages: sampleMessages,
+    });
     expect(
       screen.getByText("Hi Marie, could you confirm your address?"),
     ).toBeInTheDocument();
     expect(screen.getByText("Sure, it's 12 Main St.")).toBeInTheDocument();
-    expect(screen.getByText(/^Zach ·/)).toBeInTheDocument();
-    expect(screen.getByText(/^Marie Tremblay ·/)).toBeInTheDocument();
+    expect(screen.queryByText(/^Zach ·/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Marie Tremblay ·/)).not.toBeInTheDocument();
+    expect(container.querySelectorAll("time")).toHaveLength(2);
   });
 
   it("shows the no-attachments nudge without a navigation link", () => {

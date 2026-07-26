@@ -4,19 +4,29 @@
 // its own tab on the engagement page. Deliberately unmistakable from the AI
 // assistant panel: different place (in-page tab, not the right-edge panel),
 // different name ("Messages with {client}"), and human-to-human styling
-// (sender names + initials on every message, a "your client receives these
-// messages" caption, no AI iconography anywhere).
+// (initials on every message, a "your client receives these messages" caption,
+// no AI iconography anywhere).
 //
 // Near-live cadence (founder call): loads with the page, refreshes every few
 // seconds only while the tab is actually visible, and appends your own message
 // on send. Opening the tab stamps the firm's read pointer.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslations } from "next-intl";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
+import {
+  MessageTimestamp,
+  shouldShowMessageTimestamp,
+} from "@/components/messages/message-timeline";
 import { cn } from "@/lib/cn";
 import type { ClientMessageRow } from "@/lib/db/client-messages";
 
@@ -73,15 +83,6 @@ export function EngagementMessages({
   // The newest client message we've already stamped as read, so polls only
   // re-stamp when something actually new arrived.
   const lastReadClientAtRef = useRef<string | null>(null);
-
-  const timeFormat = useMemo(
-    () =>
-      new Intl.DateTimeFormat(locale === "fr" ? "fr-CA" : "en-CA", {
-        dateStyle: "medium",
-        timeStyle: "short",
-      }),
-    [locale],
-  );
 
   const newestClientAt = useCallback((list: ClientMessageRow[]) => {
     for (let i = list.length - 1; i >= 0; i--) {
@@ -224,8 +225,8 @@ export function EngagementMessages({
   // Full-height chat: a slim human banner up top, the thread filling every
   // pixel of space (no bordered box, no dead area), and the composer docked
   // at the bottom — an actual messaging surface, not a widget in a card. The
-  // human cues (banner "goes to your client", avatars + names on every
-  // bubble, "Seen") keep it unmistakable from the AI chat next door.
+  // human cues (banner "goes to your client", avatars, "Seen") keep it
+  // unmistakable from the AI chat next door.
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col">
       {/* Slim banner — the standing reminder that this is the CLIENT, not the
@@ -264,50 +265,48 @@ export function EngagementMessages({
             </p>
           </div>
         ) : (
-          messages.map((m) => {
+          messages.map((m, index) => {
             const mine = m.sender === "firm";
             return (
-              <div
-                key={m.id}
-                className={cn(
-                  "flex items-end gap-2",
-                  mine ? "flex-row-reverse" : "flex-row",
+              <Fragment key={m.id}>
+                {shouldShowMessageTimestamp(messages, index) && (
+                  <MessageTimestamp iso={m.created_at} locale={locale} />
                 )}
-              >
-                <AvatarInitials
-                  name={m.sender_name}
-                  size={28}
-                  color={mine ? "#475569" : "#0f766e"}
-                />
                 <div
                   className={cn(
-                    "max-w-[75%] space-y-1",
-                    mine ? "items-end text-right" : "items-start text-left",
+                    "flex items-end gap-2",
+                    mine ? "flex-row-reverse" : "flex-row",
                   )}
                 >
+                  <AvatarInitials
+                    name={m.sender_name}
+                    size={28}
+                    color={mine ? "#475569" : "#0f766e"}
+                  />
                   <div
                     className={cn(
-                      "inline-block whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-left text-sm",
-                      mine
-                        ? "rounded-br-sm bg-primary text-primary-foreground"
-                        : "rounded-bl-sm bg-muted text-foreground",
+                      "max-w-[75%]",
+                      mine ? "items-end text-right" : "items-start text-left",
                     )}
                   >
-                    {m.body}
-                  </div>
-                  <p className="text-[11px] leading-none text-muted-foreground">
-                    {m.sender_name} ·{" "}
-                    <time dateTime={m.created_at}>
-                      {timeFormat.format(new Date(m.created_at))}
-                    </time>
+                    <div
+                      className={cn(
+                        "inline-block whitespace-pre-wrap break-words rounded-2xl px-3.5 py-2 text-left text-sm",
+                        mine
+                          ? "rounded-br-sm bg-primary text-primary-foreground"
+                          : "rounded-bl-sm bg-muted text-foreground",
+                      )}
+                    >
+                      {m.body}
+                    </div>
                     {lastFirmSeen && m.id === lastFirmMessage?.id && (
-                      <span className="ml-1.5 font-medium text-muted-foreground/90">
-                        · {t("seen")}
-                      </span>
+                      <p className="mt-1 text-[11px] font-medium leading-none text-muted-foreground/90">
+                        {t("seen")}
+                      </p>
                     )}
-                  </p>
+                  </div>
                 </div>
-              </div>
+              </Fragment>
             );
           })
         )}
