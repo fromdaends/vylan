@@ -24,10 +24,12 @@ import {
 export function ProviderConnectButton({
   endpoint,
   label,
+  providerName,
 }: {
   /** POST endpoint returning { url } to hand the browser to. */
   endpoint: string;
   label: string;
+  providerName: string;
 }) {
   const t = useTranslations("Filing");
   const [pending, setPending] = useState(false);
@@ -46,7 +48,7 @@ export function ProviderConnectButton({
       }
       toast.error(
         json.error === "not_configured" || json.error === "encryption_required"
-          ? t("toast_error_not_configured")
+          ? t("not_configured_hint", { provider: providerName })
           : json.error === "other_provider"
             ? t("toast_error_other_provider")
             : t("toast_error_generic"),
@@ -160,7 +162,7 @@ export function FilingStatusToasts() {
     } else if (flag === "other_provider") {
       toast.error(t("toast_error_other_provider"));
     } else if (flag === "config") {
-      toast.error(t("toast_error_not_configured"));
+      toast.error(t("not_configured_hint", { provider }));
     } else {
       toast.error(t("toast_error_generic"));
     }
