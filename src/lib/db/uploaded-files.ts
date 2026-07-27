@@ -1,5 +1,8 @@
 import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
-import type { UsabilityVerdict } from "@/lib/ai/usability";
+import {
+  USABILITY_CONFIDENCE_THRESHOLD,
+  type UsabilityVerdict,
+} from "@/lib/ai/usability";
 import { recomputeItemStatus } from "@/lib/db/file-review";
 import { BUCKET } from "@/lib/storage";
 
@@ -82,6 +85,36 @@ export async function listUploadedFilesForEngagement(
   return (data ?? []) as UploadedFile[];
 }
 
+// What should happen to a duplicate that gets PROMOTED to be the real copy
+// (its original was deleted)?
+//
+// The old rule was "any system rejection loses its basis — reopen it". That
+// was too broad: a file auto-rejected for a REAL problem (a blacked-out
+// balance) also has reviewed_by null, so it was reopened too. The rejection
+// vanished from the client portal — the client was never asked for a clean
+// copy — while ai_rejected stayed true, so the accountant still saw the AI
+// saying "please upload an unaltered statement". Accountant told one thing,
+// client told nothing.
+//
+// So: reopen ONLY when the file has no independent reason to stay rejected.
+// When it does, it keeps its rejection and the client keeps being asked.
+export function resolvePromotedDuplicateReview(promoted: {
+  review_status: string | null;
+  reviewed_by: string | null;
+  ai_usability?: UsabilityVerdict | null;
+}): { reopen: boolean } {
+  // Not rejected, or an ACCOUNTANT rejected it — a human decision stands.
+  if (promoted.review_status !== "rejected" || promoted.reviewed_by != null) {
+    return { reopen: false };
+  }
+  const u = promoted.ai_usability;
+  const condemnedOnItsOwn =
+    u?.usable === false &&
+    (u?.confidence ?? 0) >= USABILITY_CONFIDENCE_THRESHOLD;
+  return { reopen: !condemnedOnItsOwn };
+}
+
+
 // PERMANENTLY delete one uploaded document: the storage object and the DB row
 // are erased outright — no soft-delete, no recycle bin (deliberate: this is
 // the accountant's "this should not exist" control, and the client portal
@@ -112,7 +145,7 @@ export async function deleteUploadedFilePermanently(fileId: string): Promise<{
   // Files marked as duplicates of the one being deleted, oldest first.
   const { data: dependents } = await sb
     .from("uploaded_files")
-    .select("id, request_item_id, review_status, reviewed_by")
+    .select("id, request_item_id, review_status, reviewed_by, ai_usability")
     .eq("duplicate_of_file_id", fileId)
     .order("uploaded_at", { ascending: true });
 
@@ -124,13 +157,26 @@ export async function deleteUploadedFilePermanently(fileId: string): Promise<{
       is_duplicate: false,
       duplicate_of_file_id: null,
     };
-    // A SYSTEM duplicate-reject (reviewed_by null) loses its basis once the
-    // original is gone — reopen the copy. An ACCOUNTANT's own rejection is a
-    // human decision and stays.
-    if (promoted.review_status === "rejected" && promoted.reviewed_by == null) {
+    // A duplicate-only rejection loses its basis once the original is gone, so
+    // the copy reopens. A file the AI condemned on its OWN merits keeps its
+    // rejection — otherwise the client stops being asked for a clean copy while
+    // the accountant is still told to expect one.
+    if (
+      resolvePromotedDuplicateReview({
+        review_status: promoted.review_status,
+        reviewed_by: promoted.reviewed_by,
+        ai_usability: (promoted as { ai_usability?: UsabilityVerdict | null })
+          .ai_usability,
+      }).reopen
+    ) {
       promotedPatch.review_status = "pending";
       promotedPatch.rejection_reason = null;
       promotedPatch.reviewed_at = null;
+      // Clear the AI flag alongside it. Leaving ai_rejected=true on a file whose
+      // review_status is "pending" is the impossible state that produced the
+      // split-brain: the accountant's badge reads ai_rejected, the portal reads
+      // the status, and the two told different stories.
+      promotedPatch.ai_rejected = false;
     }
     await sb.from("uploaded_files").update(promotedPatch).eq("id", promoted.id);
     itemsToRecompute.add(promoted.request_item_id);
