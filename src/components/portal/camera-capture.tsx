@@ -23,6 +23,7 @@ import {
   toGrayscale,
   computeMetrics,
   guidanceFor,
+  sharpnessFloorFor,
   type Gray,
   type Guidance,
 } from "@/lib/portal/frame-metrics";
@@ -53,6 +54,10 @@ const SMOOTHING_RESET_PX = 90;
 // Three frames ≈ 0.3s: long enough to ride out a single dropped detection,
 // short enough that a document leaving the frame doesn't leave a ghost.
 const MISS_GRACE_FRAMES = 3;
+// Per-frame decay on the running sharpness peak (~0.6%/frame, so it halves
+// over roughly 11 seconds at 10fps). Slow enough to hold a genuine focus
+// reference, quick enough to follow the client moving to a new document.
+const SHARPNESS_PEAK_DECAY = 0.994;
 
 type Shot = { file: File; url: string };
 
@@ -77,6 +82,7 @@ export function CameraCapture({
   const prevGrayRef = useRef<Gray | null>(null);
   const quadRef = useRef<Quad | null>(null);
   const shutterRef = useRef<ShutterState>(INITIAL_SHUTTER);
+  const peakSharpnessRef = useRef(0);
   const capturingRef = useRef(false);
 
   const [view, setView] = useState({ width: 0, height: 0 });
@@ -200,9 +206,13 @@ export function CameraCapture({
 
   // The scanning loop. Draws the visible part of the frame into a small hidden
   // canvas, then hands plain pixel buffers to the pure analysis modules.
+  // Deliberately keyed on [status, shot] ONLY. The preview size is read from a
+  // ref inside the loop instead of being a dependency, because on a phone it
+  // changes for all sorts of incidental reasons (browser chrome collapsing,
+  // rotation, a keyboard dismissing) and every restart used to wipe the
+  // shutter's run of good frames — so on a real device the photo never fired.
   useEffect(() => {
     if (status !== "ready" || shot) return;
-    if (view.width <= 0 || view.height <= 0) return;
 
     let raf = 0;
     let last = 0;
@@ -211,12 +221,6 @@ export function CameraCapture({
     const canvas =
       detectCanvasRef.current ?? document.createElement("canvas");
     detectCanvasRef.current = canvas;
-    const height = Math.max(
-      1,
-      Math.round((DETECT_WIDTH * view.height) / view.width),
-    );
-    canvas.width = DETECT_WIDTH;
-    canvas.height = height;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
     function tick(now: number) {
@@ -228,6 +232,22 @@ export function CameraCapture({
       const video = videoRef.current;
       // HAVE_CURRENT_DATA — anything less and getImageData reads black.
       if (!ctx || !video || video.readyState < 2) return;
+
+      const view = viewRef.current;
+      if (view.width <= 0 || view.height <= 0) return;
+
+      // Resize the analysis canvas in step with the preview rather than on
+      // effect setup, so a viewport change adjusts the next frame instead of
+      // restarting the loop.
+      const wanted = Math.max(
+        1,
+        Math.round((DETECT_WIDTH * view.height) / view.width),
+      );
+      if (canvas.width !== DETECT_WIDTH || canvas.height !== wanted) {
+        canvas.width = DETECT_WIDTH;
+        canvas.height = wanted;
+        prevGrayRef.current = null;
+      }
 
       // Draw the video the same way CSS paints it (object-fit: cover): take
       // the centre crop the client can actually see, not the whole sensor
@@ -279,6 +299,16 @@ export function CameraCapture({
       const metrics = computeMetrics(gray, prevGrayRef.current, areaFraction);
       prevGrayRef.current = gray;
 
+      // Judge focus against the sharpest frame this camera has managed on this
+      // scene, not against a constant. Variance of the Laplacian has no
+      // device-independent scale, and a fixed number set too high is exactly
+      // what stopped the shutter arming on a real phone. Decays slowly so a
+      // peak set by one lucky frame doesn't gate the rest of the session.
+      peakSharpnessRef.current = Math.max(
+        peakSharpnessRef.current * SHARPNESS_PEAK_DECAY,
+        metrics.sharpness,
+      );
+
       // All the frame-to-frame bookkeeping — how long the document has looked
       // good, how long it has been missing, whether to shoot — lives in a pure
       // reducer so it can actually be tested. This loop only does the parts
@@ -286,7 +316,9 @@ export function CameraCapture({
       const step = advanceShutter(shutterRef.current, {
         detected: smoothed !== null,
         guidanceFor: (documentPresent) =>
-          guidanceFor(metrics, documentPresent),
+          guidanceFor(metrics, documentPresent, {
+            minSharpness: sharpnessFloorFor(peakSharpnessRef.current),
+          }),
         graceFrames: MISS_GRACE_FRAMES,
         requiredFrames: READY_FRAMES_REQUIRED,
       });
@@ -311,14 +343,16 @@ export function CameraCapture({
       cancelled = true;
       cancelAnimationFrame(raf);
       prevGrayRef.current = null;
-      shutterRef.current = INITIAL_SHUTTER;
+      // NB: the shutter state deliberately survives a teardown. Resetting it
+      // here meant any incidental restart threw away the run of good frames.
     };
-  }, [status, shot, view, capture]);
+  }, [status, shot, capture]);
 
   function retake() {
     setShot(null);
     setCaptureError(null);
     shutterRef.current = INITIAL_SHUTTER;
+    peakSharpnessRef.current = 0;
     quadRef.current = null;
     setQuad(null);
     setGuidance("searching");
@@ -613,20 +647,28 @@ type Aperture = {
  * RL-1 and friends) are portrait — sized to the viewport so it stays a guide
  * rather than a hard boundary, since detection works anywhere in frame.
  */
+/** Room kept clear under the window for the coaching line. */
+const HINT_CLEARANCE = 64;
+
 export function apertureFor(view: { width: number; height: number }): Aperture {
-  const margin = Math.round(view.width * 0.1);
+  const margin = Math.round(view.width * 0.05);
   const width = Math.max(1, view.width - margin * 2);
-  // Capped well short of the full height so the window reads as a frame with
-  // room around it rather than a box pressed against the edges, and so the
-  // coaching line underneath never has to fight it for space.
-  const height = Math.max(1, Math.min(width * 1.294, view.height * 0.6));
-  return {
-    x: margin,
-    y: Math.max(0, Math.round((view.height - height) / 2 - view.height * 0.06)),
-    width,
-    height: Math.round(height),
-    r: 14,
-  };
+
+  // Documents are tall rectangles, so the window is too. Sizing it to letter
+  // proportions off the WIDTH left a near-square box that the client had to
+  // back away from to fit a page inside — so take whichever is taller, letter
+  // ratio or a generous share of the screen, and let the window be the tall
+  // shape the thing being photographed actually is.
+  const wanted = Math.max(width * 1.294, view.height * 0.74);
+  const room = Math.max(1, view.height - HINT_CLEARANCE - 24);
+  const height = Math.max(1, Math.round(Math.min(wanted, room)));
+
+  // Nudged above centre: the eye reads the frame as balanced when the gap
+  // below it (which carries the hint) is a little larger than the gap above.
+  const centred = Math.round((view.height - height) / 2 - view.height * 0.03);
+  const y = Math.max(12, Math.min(centred, view.height - height - HINT_CLEARANCE));
+
+  return { x: margin, y: Math.max(0, y), width, height, r: 14 };
 }
 
 function roundedRectPath({ x, y, width, height, r }: Aperture): string {

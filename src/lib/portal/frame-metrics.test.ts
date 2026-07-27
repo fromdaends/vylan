@@ -4,6 +4,7 @@ import {
   computeMetrics,
   guidanceFor,
   shouldAutoCapture,
+  sharpnessFloorFor,
   GUIDANCE_THRESHOLDS,
   type FrameMetrics,
   type Gray,
@@ -403,9 +404,12 @@ describe("guidanceFor", () => {
   });
 
   it("does not mutate the shared defaults when overriding", () => {
+    // Snapshot rather than literals: this test is about the defaults surviving
+    // an override, not about what they happen to be. Pinning the numbers here
+    // just makes retuning them look like a regression.
+    const before = { ...GUIDANCE_THRESHOLDS };
     guidanceFor(metrics(), true, { minLuminance: 999, minFill: 0.99 });
-    expect(GUIDANCE_THRESHOLDS.minLuminance).toBe(60);
-    expect(GUIDANCE_THRESHOLDS.minFill).toBe(0.25);
+    expect(GUIDANCE_THRESHOLDS).toEqual(before);
   });
 });
 
@@ -459,5 +463,48 @@ describe("end to end", () => {
     const m = computeMetrics(far, null, null);
     expect(m.fill).toBeCloseTo(4 / 256, 10);
     expect(guidanceFor(m, false)).toBe("too_far");
+  });
+});
+
+describe("sharpnessFloorFor", () => {
+  it("falls back to the absolute floor before anything sharp has been seen", () => {
+    expect(sharpnessFloorFor(0)).toBe(GUIDANCE_THRESHOLDS.minSharpness);
+    expect(sharpnessFloorFor(-5)).toBe(GUIDANCE_THRESHOLDS.minSharpness);
+  });
+
+  it("scales with the sharpest frame seen so far", () => {
+    // A phone whose pipeline reports big numbers gets a proportionally big
+    // threshold; one that reports small numbers is not held to the other's
+    // scale. This is the whole point of the relative measure.
+    expect(sharpnessFloorFor(1000)).toBeCloseTo(600, 6);
+    expect(sharpnessFloorFor(200)).toBeCloseTo(120, 6);
+  });
+
+  it("never drops below the absolute floor, so mush cannot promote itself", () => {
+    // A scene that has only ever been blurry has a low peak; without the floor
+    // its own blur would become the standard for "sharp".
+    expect(sharpnessFloorFor(5)).toBe(GUIDANCE_THRESHOLDS.minSharpness);
+    expect(sharpnessFloorFor(1)).toBe(GUIDANCE_THRESHOLDS.minSharpness);
+  });
+
+  it("honours an explicit floor and fraction", () => {
+    expect(sharpnessFloorFor(400, 10, 0.5)).toBeCloseTo(200, 6);
+    expect(sharpnessFloorFor(4, 10, 0.5)).toBe(10);
+  });
+
+  it("survives non-finite input rather than disabling the check", () => {
+    // A NaN threshold compares false against every `<`, which would silently
+    // turn the blur gate off and arm the shutter on a mushy frame.
+    expect(Number.isFinite(sharpnessFloorFor(NaN))).toBe(true);
+    expect(Number.isFinite(sharpnessFloorFor(Infinity, NaN))).toBe(true);
+    expect(sharpnessFloorFor(NaN)).toBe(GUIDANCE_THRESHOLDS.minSharpness);
+  });
+
+  it("lets a frame at the session peak pass the gate it produces", () => {
+    const peak = 340;
+    const floor = sharpnessFloorFor(peak);
+    expect(peak).toBeGreaterThanOrEqual(floor);
+    // ...and one at a third of the peak does not.
+    expect(peak / 3).toBeLessThan(floor);
   });
 });
