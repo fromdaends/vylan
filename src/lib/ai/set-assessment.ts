@@ -129,6 +129,13 @@ export type SetAssessment = {
   statements?: ExtractedStatement[];
   chain_findings?: ChainFinding[];
   chain_coverage?: ChainCoverage[];
+  /**
+   * Strict incompleteness (founder rule): the incomplete document's files were
+   * AUTO-REJECTED alongside the client ask, so a partial copy can never be
+   * casually approved (and, downstream, never filed — filing is approved-only).
+   * Optional: older assessments read as false.
+   */
+  auto_rejected_incomplete?: boolean;
 };
 
 // ---------------------------------------------------------------------------
@@ -472,6 +479,36 @@ export const DUPLICATE_AUTO_REJECT_CONFIDENCE = 0.9;
 
 // Fallback client ask when the model leaves client_request empty on an
 // incomplete set — generic but plain, so the client is never asked nothing.
+// Strict-completeness copy (founder rule): the ask must demand the COMPLETE
+// document, never just the missing page — the partial copy was auto-rejected,
+// so "send page 3" alone would strand the client in a reject loop (their new
+// single page would again form an incomplete set). Composed in CODE so the
+// instruction is always present regardless of what the model wrote.
+const RESEND_COMPLETE_SUFFIX_FR =
+  "Merci de renvoyer le document complet (toutes les pages), pas seulement la page manquante.";
+const RESEND_COMPLETE_SUFFIX_EN =
+  "Please re-send the complete document (all pages), not just the missing page.";
+
+/** The client ask used when the incomplete set is ALSO auto-rejected. */
+export function buildStrictIncompleteAsk(
+  modelAskFr: string,
+  modelAskEn: string,
+): { fr: string; en: string } {
+  const base_fr = modelAskFr.trim() || DEFAULT_MISSING_PAGE_ASK_FR;
+  const base_en = modelAskEn.trim() || DEFAULT_MISSING_PAGE_ASK_EN;
+  return {
+    fr: `${base_fr} ${RESEND_COMPLETE_SUFFIX_FR}`.trim(),
+    en: `${base_en} ${RESEND_COMPLETE_SUFFIX_EN}`.trim(),
+  };
+}
+
+// The per-file rejection reason shown on the auto-rejected partial copy —
+// mirrors the duplicate auto-reject's localized reason pattern.
+export const INCOMPLETE_REJECTION_REASON: Record<"fr" | "en", string> = {
+  fr: "Document incomplet — le document complet a été redemandé au client.",
+  en: "Incomplete document — the client was asked to re-send the complete document.",
+};
+
 export const DEFAULT_MISSING_PAGE_ASK_FR =
   "Il manque une ou des pages de ce document. Pourriez-vous les ajouter?";
 export const DEFAULT_MISSING_PAGE_ASK_EN =
@@ -950,6 +987,19 @@ ${pageFacts}`;
     ),
   };
 
+  // Strict incompleteness (founder rule): an opted-in confident incomplete set
+  // doesn't just ask the client — the partial copy is ALSO auto-rejected below,
+  // and the ask demands the COMPLETE document so the resend can't loop.
+  if (routing === "ask_client") {
+    const strictAsk = buildStrictIncompleteAsk(
+      assessment.client_request_fr,
+      assessment.client_request_en,
+    );
+    assessment.client_request_fr = strictAsk.fr;
+    assessment.client_request_en = strictAsk.en;
+    assessment.auto_rejected_incomplete = true;
+  }
+
   // Cross-statement arithmetic (balance chaining + period coverage). The model
   // only transcribed; every verdict here comes from code, so a finding is a
   // checked fact, not an opinion. Findings ride the stored assessment (the
@@ -1025,6 +1075,56 @@ ${pageFacts}`;
     });
     duplicatesFlagged += 1;
     if (decision === "auto_reject") duplicatesAutoRejected += 1;
+  }
+
+  // Strict incompleteness (founder rule): reject the incomplete document's
+  // still-active files so a partial copy can't be casually approved — and,
+  // downstream, can never be filed (filing is approved-only). System
+  // rejection: reviewed_by stays NULL, so a corrected re-upload supersedes it
+  // via the same machinery as the unusable-copy flow (duplicates of a
+  // rejected file are never dinged, and deleting the original reopens the
+  // copy). Files already set aside (rejected earlier, or just auto-rejected
+  // as duplicates above) are left untouched.
+  let incompleteAutoRejected = 0;
+  if (routing === "ask_client") {
+    const preparedIds = prepared.map((f) => f.file.id);
+    const { data: activeRows } = await sb
+      .from("uploaded_files")
+      .select("id, review_status, is_duplicate")
+      .in("id", preparedIds);
+    // An APPROVED file is a human decision — never clobbered, even inside an
+    // incomplete set (the .neq below also guards the read-write race).
+    const toReject = (activeRows ?? []).filter(
+      (f) =>
+        f.review_status !== "rejected" &&
+        f.review_status !== "approved" &&
+        !f.is_duplicate,
+    );
+    for (const f of toReject) {
+      const { data: updated } = await sb
+        .from("uploaded_files")
+        .update({
+          review_status: "rejected",
+          rejection_reason: INCOMPLETE_REJECTION_REASON[clientLocale],
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", f.id)
+        .neq("review_status", "approved")
+        .select("id");
+      incompleteAutoRejected += updated?.length ?? 0;
+    }
+    if (incompleteAutoRejected > 0) {
+      await sb.from("activity_log").insert({
+        firm_id: firmId,
+        engagement_id: item.engagement_id,
+        actor_type: "system",
+        action: "incomplete_set_auto_rejected",
+        metadata: {
+          request_item_id: itemId,
+          files_rejected: incompleteAutoRejected,
+        },
+      });
+    }
   }
 
   // Re-derive the item status now the verdict is in: a needs_client set keeps
