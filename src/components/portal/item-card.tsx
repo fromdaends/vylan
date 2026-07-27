@@ -783,35 +783,47 @@ export function ItemCard({
                       }
                     }}
                   />
+                  {/* Two paths, and only two: scan it here, or pick a file the
+                      client already has. Where a camera exists the scanner is
+                      the primary action — it is the one that crops, flattens
+                      and coaches, so it should not be competing with a
+                      same-weight Upload button beside it.
+
+                      Note the phone's own picker still lists "Take Photo or
+                      Video" on iOS. That entry belongs to Apple's sheet and no
+                      web page can remove it; the only accept value that drops
+                      it also drops the photo library, which would take away
+                      "upload from camera roll". */}
+                  {cameraSupported && (
+                    <Button onClick={() => setCameraOpen(true)} disabled={uploading}>
+                      {uploading ? (
+                        <Loader2 className="size-4 animate-spin" aria-hidden />
+                      ) : (
+                        <Camera className="size-4" aria-hidden />
+                      )}
+                      {uploading ? t("uploading") : t("scan")}
+                    </Button>
+                  )}
                   <Button
                     onClick={() => inputRef.current?.click()}
                     disabled={uploading}
-                    variant={uploadedCount > 0 ? "outline" : "default"}
+                    variant={
+                      cameraSupported || uploadedCount > 0 ? "outline" : "default"
+                    }
                   >
-                    {uploading ? (
+                    {uploading && !cameraSupported ? (
                       <Loader2 className="size-4 animate-spin" aria-hidden />
                     ) : (
                       <Upload className="size-4" aria-hidden />
                     )}
-                    {uploading
+                    {uploading && !cameraSupported
                       ? t("uploading")
-                      : uploadedCount > 0
-                        ? t("add_more")
-                        : t("upload")}
+                      : cameraSupported
+                        ? t("choose_file")
+                        : uploadedCount > 0
+                          ? t("add_more")
+                          : t("upload")}
                   </Button>
-                  {/* Only offered where a live camera can actually work — on a
-                      desktop, or over plain http on a LAN IP, there is no
-                      mediaDevices and a Scan button would always dead-end. */}
-                  {cameraSupported && (
-                    <Button
-                      variant="outline"
-                      onClick={() => setCameraOpen(true)}
-                      disabled={uploading}
-                    >
-                      <Camera className="size-4" aria-hidden />
-                      {t("scan")}
-                    </Button>
-                  )}
                 </>
               )}
               {ds !== "approved" &&

@@ -2713,7 +2713,8 @@
     "scan_hint_too_far": "Rapprochez-vous",
     "scan_hint_hold_steady": "Tenez bien immobile",
     "scan_hint_blurry": "Tenez immobile — c'est flou",
-    "scan_hint_ready": "Parfait"
+    "scan_hint_ready": "Parfait",
+    "choose_file": "Choisir un fichier"
   },
   "Integrations": {
     "index_title": "Intégrations",
