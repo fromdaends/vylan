@@ -176,19 +176,49 @@ export const GUIDANCE_THRESHOLDS: {
   // page in view lands comfortably above 60; below it the capture is
   // underexposed enough that text detail is lost to sensor noise.
   minLuminance: 60,
-  // Variance of the Laplacian. ~100 is the long-standing cut-off for full-size
-  // photos; we score a ~256px downscale, which throws away the fine text
-  // texture that pushes that number up, so relax it to 80.
-  minSharpness: 80,
-  // Mean absolute inter-frame difference. Hand-held jitter on a steady arm sits
-  // around 2-4; deliberate panning or reaching for the shutter is 10+. 6 splits
-  // them without punishing normal hand shake.
-  maxMotion: 6,
-  // Below a quarter of the frame the slip's text is too small at capture
-  // resolution for reliable extraction. Kept low rather than at the ideal ~0.5
-  // because the no-quad estimate above tends to over-report.
-  minFill: 0.25,
+  // ABSOLUTE floor on the variance of the Laplacian — a backstop against a
+  // genuinely mushy frame, not the real focus test. See sharpnessFloorFor:
+  // the working threshold is relative to the sharpest frame this session,
+  // because the absolute number depends on the phone's own denoising and
+  // sharpening and cannot be pinned to a constant. The original 80 was
+  // reasoned from full-size-photo advice and measured on nothing; on real
+  // hardware it sat above what a phone actually reports for a downscaled
+  // frame, so the shutter never armed.
+  minSharpness: 20,
+  // Mean absolute inter-frame difference. A phone held at arm's length carries
+  // more than the 2-4 a steady desk rig suggests once rolling shutter and the
+  // sensor's own noise are in the signal; 9 still separates holding still from
+  // panning or reaching for the button.
+  maxMotion: 9,
+  // Share of the frame the document covers. The capture crops to the detected
+  // corners, so a smaller document costs resolution rather than correctness —
+  // and nagging "move closer" at someone already framed inside the guide is
+  // worse than a slightly smaller scan.
+  minFill: 0.18,
 };
+
+/**
+ * The sharpness threshold to actually use, given the sharpest frame seen so
+ * far in this session.
+ *
+ * Variance of the Laplacian has no device-independent scale: it moves with
+ * sensor, lighting, how much denoising the phone's imaging pipeline applies,
+ * and the downscale size. Judging a frame against the best this camera has
+ * managed on this scene self-calibrates, where any fixed constant is either
+ * too strict on one phone (the shutter never fires) or too loose on another.
+ *
+ * `absoluteFloor` still applies, so a scene that has only ever been mush
+ * cannot promote its own mush to "sharp".
+ */
+export function sharpnessFloorFor(
+  peakSharpness: number,
+  absoluteFloor: number = GUIDANCE_THRESHOLDS.minSharpness,
+  fraction = 0.6,
+): number {
+  const floor = Number.isFinite(absoluteFloor) ? absoluteFloor : 0;
+  if (!Number.isFinite(peakSharpness) || peakSharpness <= 0) return floor;
+  return Math.max(floor, peakSharpness * fraction);
+}
 
 /**
  * Single highest-priority piece of advice. Priority order matters and must be:

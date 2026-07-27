@@ -207,10 +207,26 @@ describe("apertureFor — the framing window", () => {
   });
 
   it("leaves clear space below for the coaching line", () => {
-    // The hint is anchored 24px off the bottom of the stage; the window must
-    // not run into it.
+    // The hint is anchored near the bottom of the stage; the window must not
+    // run into it at any viewport.
+    for (const view of [phone, { width: 320, height: 560 }, { width: 430, height: 932 }]) {
+      const a = apertureFor(view);
+      expect(view.height - (a.y + a.height)).toBeGreaterThanOrEqual(60);
+    }
+  });
+
+  it("is tall, not near-square — a page must fit without backing the phone off", () => {
+    // The founder's actual complaint: a window at letter proportions off the
+    // WIDTH is squat on a tall phone screen, so the document only fits if you
+    // hold the camera far enough away that the text goes small.
     const a = apertureFor(phone);
-    expect(phone.height - (a.y + a.height)).toBeGreaterThan(48);
+    expect(a.height / a.width).toBeGreaterThan(1.5);
+    expect(a.height).toBeGreaterThan(phone.height * 0.6);
+  });
+
+  it("uses most of the width", () => {
+    const a = apertureFor(phone);
+    expect(a.width).toBeGreaterThan(phone.width * 0.85);
   });
 
   it("is portrait, matching the slips this collects", () => {
@@ -218,11 +234,11 @@ describe("apertureFor — the framing window", () => {
     expect(a.height).toBeGreaterThan(a.width);
   });
 
-  it("never exceeds its share of the height on a short screen", () => {
+  it("still fits on a short screen", () => {
     // Landscape, or a small phone in a browser with chrome eating the viewport.
     const squat = apertureFor({ width: 800, height: 360 });
-    expect(squat.height).toBeLessThanOrEqual(360 * 0.6 + 1);
     expect(squat.y).toBeGreaterThanOrEqual(0);
+    expect(squat.y + squat.height).toBeLessThanOrEqual(360 - 60);
   });
 
   it("stays valid at degenerate sizes rather than producing negatives", () => {
