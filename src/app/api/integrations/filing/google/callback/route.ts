@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
-import { saveGoogleConnection } from "@/lib/db/filing";
+import { saveStorageConnection } from "@/lib/db/filing";
 import {
   exchangeGoogleCode,
   isGoogleFilingConfigured,
@@ -75,14 +75,15 @@ export async function GET(request: Request) {
     // Create/find the root folder while the fresh access token is in hand.
     const root = await ensureRootFolder(tokens.accessToken, "Vylan");
 
-    const saved = await saveGoogleConnection({
+    const saved = await saveStorageConnection({
       firmId: firm.id,
+      provider: "google_drive",
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       accessTokenExpiresAt: tokens.accessTokenExpiresAt,
       accountEmail: tokens.accountEmail,
-      rootFolderId: root.folderId,
-      rootLink: root.link,
+      rootLabel: "Vylan",
+      providerConfig: { rootFolderId: root.folderId, rootLink: root.link },
       connectedBy: me.id,
     });
     if (saved === "other_provider") {

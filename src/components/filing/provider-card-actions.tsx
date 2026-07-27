@@ -1,9 +1,9 @@
 "use client";
 
-// Client-side actions for the Google Drive provider card: start OAuth,
-// disconnect (with confirmation), and turn the callback's ?google= status
-// flag into a toast. Owner-gated by the server routes; the buttons simply
-// aren't rendered for non-owners.
+// Client-side actions shared by the LIVE provider cards (Google Drive,
+// Microsoft): start OAuth, disconnect with confirmation, and turn the OAuth
+// callbacks' ?google= / ?microsoft= status flags into toasts. Owner-gated by
+// the server routes; the buttons simply aren't rendered for non-owners.
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "@/i18n/navigation";
@@ -21,11 +21,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-export function GoogleConnectButton({
-  variant = "default",
+export function ProviderConnectButton({
+  endpoint,
   label,
 }: {
-  variant?: "default" | "outline";
+  /** POST endpoint returning { url } to hand the browser to. */
+  endpoint: string;
   label: string;
 }) {
   const t = useTranslations("Filing");
@@ -34,15 +35,12 @@ export function GoogleConnectButton({
   async function connect() {
     setPending(true);
     try {
-      const res = await fetch("/api/integrations/filing/google/connect", {
-        method: "POST",
-      });
+      const res = await fetch(endpoint, { method: "POST" });
       const json = (await res.json().catch(() => ({}))) as {
         url?: string;
         error?: string;
       };
       if (res.ok && json.url) {
-        // Hand the browser to Google; the callback route brings us home.
         window.location.href = json.url;
         return;
       }
@@ -61,14 +59,20 @@ export function GoogleConnectButton({
   }
 
   return (
-    <Button variant={variant} size="sm" onClick={connect} disabled={pending}>
+    <Button size="sm" onClick={connect} disabled={pending}>
       {pending && <Loader2 className="animate-spin" />}
       {label}
     </Button>
   );
 }
 
-export function GoogleDisconnectButton() {
+export function ProviderDisconnectButton({
+  endpoint,
+  providerName,
+}: {
+  endpoint: string;
+  providerName: string;
+}) {
   const t = useTranslations("Filing");
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -77,12 +81,10 @@ export function GoogleDisconnectButton() {
   function disconnect() {
     startTransition(async () => {
       try {
-        const res = await fetch("/api/integrations/filing/google/disconnect", {
-          method: "POST",
-        });
+        const res = await fetch(endpoint, { method: "POST" });
         if (!res.ok) throw new Error(String(res.status));
         setOpen(false);
-        toast.success(t("toast_disconnected"));
+        toast.success(t("toast_disconnected_p", { provider: providerName }));
         router.refresh();
       } catch {
         toast.error(t("toast_error_generic"));
@@ -98,7 +100,9 @@ export function GoogleDisconnectButton() {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{t("disconnect_title")}</DialogTitle>
+            <DialogTitle>
+              {t("disconnect_title_p", { provider: providerName })}
+            </DialogTitle>
             <DialogDescription>{t("disconnect_body")}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -126,8 +130,10 @@ export function GoogleDisconnectButton() {
   );
 }
 
-// Turns the OAuth callback's ?google=<flag> into a one-time toast, then
-// strips the param so a refresh doesn't re-toast.
+// Turns the OAuth callbacks' ?google=<flag> / ?microsoft=<flag> into a
+// one-time toast, then strips the param so a refresh doesn't re-toast.
+// Microsoft's "choose" flag is deliberately NOT handled here — the
+// destination picker owns it (it auto-opens and clears the param itself).
 export function FilingStatusToasts() {
   const t = useTranslations("Filing");
   const router = useRouter();
@@ -135,11 +141,15 @@ export function FilingStatusToasts() {
   const fired = useRef(false);
 
   useEffect(() => {
-    const flag = params.get("google");
+    const google = params.get("google");
+    const microsoft = params.get("microsoft");
+    const flag = google ?? microsoft;
     if (!flag || fired.current) return;
+    if (microsoft === "choose") return; // the picker's cue, not a toast
     fired.current = true;
+    const provider = google ? "Google Drive" : "SharePoint / OneDrive";
     if (flag === "connected") {
-      toast.success(t("toast_connected"));
+      toast.success(t("toast_connected_p", { provider }));
     } else if (flag === "denied") {
       toast.error(t("toast_error_denied"));
     } else if (flag === "other_provider") {

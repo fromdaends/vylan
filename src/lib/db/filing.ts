@@ -271,21 +271,27 @@ import {
 } from "@/lib/filing/token-cipher";
 
 /**
- * Persist a Google Drive connection after OAuth. Revives the firm's most
- * recent google_drive row (any status) instead of inserting a new one, so the
+ * Persist a provider connection after OAuth. Revives the firm's most recent
+ * row for THAT provider (any status) instead of inserting a new one, so the
  * connection id — and with it the filed_documents idempotency history — stays
  * continuous across disconnect/error/reconnect cycles. Refuses when another
  * provider is actively connected (v1: one destination per firm; the partial
  * unique index is the DB-level backstop).
+ *
+ * root_label/config conventions: Google connects fully formed (root folder
+ * created in the callback). Microsoft connects with rootLabel null + a config
+ * WITHOUT driveId — the "choose where to file" state — and the destination
+ * picker completes it via updateStorageConnectionConfig.
  */
-export async function saveGoogleConnection(input: {
+export async function saveStorageConnection(input: {
   firmId: string;
+  provider: StorageProvider;
   accessToken: string;
   refreshToken: string;
   accessTokenExpiresAt: string;
   accountEmail: string | null;
-  rootFolderId: string;
-  rootLink: string | null;
+  rootLabel: string | null;
+  providerConfig: Record<string, unknown>;
   connectedBy: string;
 }): Promise<"ok" | "other_provider" | "error"> {
   const sb = getServiceRoleSupabase();
@@ -300,7 +306,7 @@ export async function saveGoogleConnection(input: {
     console.error("[filing] connection lookup failed:", activeErr.message);
     return "error";
   }
-  if (active && active.provider !== "google_drive") return "other_provider";
+  if (active && active.provider !== input.provider) return "other_provider";
 
   const row = {
     status: "active",
@@ -309,24 +315,21 @@ export async function saveGoogleConnection(input: {
     access_token_expires_at: input.accessTokenExpiresAt,
     refresh_token_fingerprint: storageTokenFingerprint(input.refreshToken),
     account_label: input.accountEmail,
-    root_label: "Vylan",
-    provider_config: {
-      rootFolderId: input.rootFolderId,
-      rootLink: input.rootLink,
-    },
+    root_label: input.rootLabel,
+    provider_config: input.providerConfig,
     connected_by: input.connectedBy,
     connected_at: new Date().toISOString(),
     disconnected_at: null,
     updated_at: new Date().toISOString(),
   };
 
-  // Revive the newest google_drive row whatever its status (active row found
-  // above is necessarily it), else insert fresh.
+  // Revive the newest row for this provider whatever its status (an active
+  // row found above is necessarily it), else insert fresh.
   const { data: existing } = await sb
     .from("storage_connections")
     .select("id")
     .eq("firm_id", input.firmId)
-    .eq("provider", "google_drive")
+    .eq("provider", input.provider)
     .order("connected_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -344,12 +347,54 @@ export async function saveGoogleConnection(input: {
   }
   const { error } = await sb
     .from("storage_connections")
-    .insert({ firm_id: input.firmId, provider: "google_drive", ...row });
+    .insert({ firm_id: input.firmId, provider: input.provider, ...row });
   if (error) {
     // 23505 = the one-active-per-firm partial unique index caught a racing
     // connect of another provider.
     console.error("[filing] connection insert failed:", error.message);
     return error.code === "23505" ? "other_provider" : "error";
+  }
+  return "ok";
+}
+
+/**
+ * Merge new keys into the ACTIVE connection's provider_config (and optionally
+ * root_label) — the destination picker's completion write. Merge, not
+ * replace, so token-adjacent config never gets dropped by a partial update.
+ */
+export async function updateStorageConnectionConfig(
+  firmId: string,
+  patch: {
+    config: Record<string, unknown>;
+    rootLabel?: string | null;
+  },
+): Promise<"ok" | "error"> {
+  const sb = getServiceRoleSupabase();
+  const { data, error: readErr } = await sb
+    .from("storage_connections")
+    .select("id, provider_config")
+    .eq("firm_id", firmId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (readErr || !data) {
+    console.error("[filing] config read failed:", readErr?.message);
+    return "error";
+  }
+  const merged = {
+    ...((data.provider_config as Record<string, unknown> | null) ?? {}),
+    ...patch.config,
+  };
+  const { error } = await sb
+    .from("storage_connections")
+    .update({
+      provider_config: merged,
+      ...(patch.rootLabel !== undefined ? { root_label: patch.rootLabel } : {}),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", data.id);
+  if (error) {
+    console.error("[filing] config update failed:", error.message);
+    return "error";
   }
   return "ok";
 }

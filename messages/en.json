@@ -3165,6 +3165,23 @@
     "toast_error_denied": "You declined the Google authorization.",
     "toast_error_other_provider": "Another storage is already connected. Disconnect it first.",
     "toast_error_not_configured": "Google Drive isn't set up on this environment yet.",
-    "google_root_hint": "Vylan files into a “Vylan” folder it creates in your Drive. You can move or rename that folder anywhere; Vylan keeps filing into it."
+    "google_root_hint": "Vylan files into a “Vylan” folder it creates in your Drive. You can move or rename that folder anywhere; Vylan keeps filing into it.",
+    "state_action_needed": "Choose where to file",
+    "choose_destination": "Choose where to file",
+    "open_folder_ms": "Open the Vylan folder",
+    "root_hint": "Vylan files into a “Vylan” folder it creates in your chosen storage. You can move or rename that folder; Vylan keeps filing into it.",
+    "hint_admin_consent": "Some workplaces require an IT administrator to approve new apps. If connecting fails with a permissions message, that's the reason.",
+    "disconnect_title_p": "Disconnect {provider}?",
+    "toast_connected_p": "{provider} connected.",
+    "toast_disconnected_p": "{provider} disconnected.",
+    "picker_title": "Where should Vylan file?",
+    "picker_body": "Documents will be filed into a “Vylan” folder created at the top of the place you pick.",
+    "picker_sites_label": "SharePoint sites",
+    "picker_libraries_title": "Pick a library in {site}",
+    "picker_loading": "Loading your storage…",
+    "picker_failed": "Couldn't load your OneDrive and SharePoint sites. Please try again.",
+    "picker_retry": "Try again",
+    "picker_no_destinations": "No OneDrive or SharePoint sites are available on this account.",
+    "picker_chosen_toast": "Filing destination set."
   }
 }

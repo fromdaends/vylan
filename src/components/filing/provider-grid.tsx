@@ -1,9 +1,10 @@
 // The four storage-provider connect cards on the Document filing page.
 //
-// Google Drive is LIVE (Phase 2): connect via OAuth, connected state with the
-// account + root-folder link, reconnect on error, disconnect with confirm.
-// Microsoft and Dropbox ship in later phases; SmartVault additionally pends
-// their API-access confirmation and reads "Coming soon".
+// Google Drive (Phase 2) and Microsoft SharePoint/OneDrive (Phase 3) are
+// LIVE. Microsoft's extra beat: after OAuth the owner must CHOOSE where to
+// file (OneDrive or a SharePoint library) — until then the card shows the
+// "Choose where to file" state (root_label null is that state's marker).
+// Dropbox ships later; SmartVault pends their API-access confirmation.
 
 import type { ReactNode } from "react";
 import { getTranslations } from "next-intl/server";
@@ -19,15 +20,15 @@ import {
   SmartVaultLogo,
 } from "./provider-logos";
 import {
-  GoogleConnectButton,
-  GoogleDisconnectButton,
-} from "./google-card-actions";
+  ProviderConnectButton,
+  ProviderDisconnectButton,
+} from "./provider-card-actions";
+import { MicrosoftDestinationPicker } from "./microsoft-picker";
 
 const PROVIDERS: Array<{
   key: StorageProvider;
   logo: ReactNode;
   tileClassName: string;
-  // live = has a working connector; the rest show why they can't connect yet.
   state: "live" | "next_update" | "coming_soon";
 }> = [
   {
@@ -40,7 +41,7 @@ const PROVIDERS: Array<{
     key: "microsoft",
     logo: <MicrosoftLogo className="h-6 w-6" />,
     tileClassName: "bg-[#00A4EF]/10 ring-[#00A4EF]/20",
-    state: "next_update",
+    state: "live",
   },
   {
     key: "dropbox",
@@ -56,21 +57,38 @@ const PROVIDERS: Array<{
   },
 ];
 
+// Per-provider wiring for the LIVE cards.
+const LIVE: Record<
+  "google_drive" | "microsoft",
+  { connectEndpoint: string; disconnectEndpoint: string; displayName: string }
+> = {
+  google_drive: {
+    connectEndpoint: "/api/integrations/filing/google/connect",
+    disconnectEndpoint: "/api/integrations/filing/google/disconnect",
+    displayName: "Google Drive",
+  },
+  microsoft: {
+    connectEndpoint: "/api/integrations/filing/microsoft/connect",
+    disconnectEndpoint: "/api/integrations/filing/microsoft/disconnect",
+    displayName: "SharePoint / OneDrive",
+  },
+};
+
 export async function ProviderGrid({
   connection,
   rootLink,
   isOwner,
-  googleConfigured,
+  configured,
 }: {
   connection: StorageConnectionDisplay | null;
   // Link out to the connected provider's root folder (service-role display
-  // read; null when not connected or the provider returned none).
+  // read; null when not connected or no destination chosen yet).
   rootLink: string | null;
   isOwner: boolean;
-  // Google credentials (and, in production, the token-encryption key) are in
-  // place on this deployment. False renders the card in a setup-pending state
-  // instead of an enabled button that can only error.
-  googleConfigured: boolean;
+  // Which live providers have credentials on this deployment (and, in
+  // production, the token-encryption key). Unconfigured = disabled button +
+  // plain note instead of a button that can only error.
+  configured: { google_drive: boolean; microsoft: boolean };
 }) {
   const t = await getTranslations("Filing");
 
@@ -78,8 +96,18 @@ export async function ProviderGrid({
     <div className="grid gap-4 sm:grid-cols-2">
       {PROVIDERS.map((p) => {
         const isThis = connection?.provider === p.key;
-        const connected = isThis && connection.status === "active";
+        const active = isThis && connection.status === "active";
         const needsReconnect = isThis && connection.status === "error";
+        // Microsoft between OAuth and the destination pick.
+        const needsDestination =
+          active && p.key === "microsoft" && !connection.rootLabel;
+        const connected = active && !needsDestination;
+        const live = p.state === "live" ? LIVE[p.key as "google_drive"] : null;
+        const isConfigured =
+          p.key === "google_drive" || p.key === "microsoft"
+            ? configured[p.key]
+            : false;
+
         return (
           <div
             key={p.key}
@@ -99,7 +127,7 @@ export async function ProviderGrid({
                   "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium",
                   connected
                     ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                    : needsReconnect
+                    : needsReconnect || needsDestination
                       ? "bg-warning/15 text-warning"
                       : "bg-secondary text-muted-foreground",
                 )}
@@ -112,11 +140,13 @@ export async function ProviderGrid({
                 )}
                 {connected
                   ? t("state_connected")
-                  : needsReconnect
-                    ? t("state_reconnect")
-                    : p.state === "coming_soon"
-                      ? t("state_coming_soon")
-                      : t("state_not_connected")}
+                  : needsDestination
+                    ? t("state_action_needed")
+                    : needsReconnect
+                      ? t("state_reconnect")
+                      : p.state === "coming_soon"
+                        ? t("state_coming_soon")
+                        : t("state_not_connected")}
               </span>
             </div>
 
@@ -132,6 +162,13 @@ export async function ProviderGrid({
                   {t("connected_as", { email: connection.accountLabel })}
                 </p>
               )}
+              {/* Where filing lands: "OneDrive · Vylan" / "Site · Documents ·
+                  Vylan" (Microsoft) — Google's is always just "Vylan". */}
+              {connected && p.key === "microsoft" && connection.rootLabel && (
+                <p className="text-xs text-muted-foreground">
+                  {connection.rootLabel}
+                </p>
+              )}
               {connected && rootLink && (
                 <a
                   href={rootLink}
@@ -139,15 +176,17 @@ export async function ProviderGrid({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 pt-0.5 text-xs font-medium text-foreground/80 underline-offset-2 hover:text-foreground hover:underline"
                 >
-                  {t("open_folder")}
+                  {p.key === "google_drive"
+                    ? t("open_folder")
+                    : t("open_folder_ms")}
                   <ExternalLink className="size-3" aria-hidden />
                 </a>
               )}
             </div>
 
             <div className="mt-5 flex items-center justify-between gap-3">
-              {p.state === "live" ? (
-                !googleConfigured && !connected ? (
+              {live ? (
+                !isConfigured && !active && !needsReconnect ? (
                   <>
                     <Button variant="outline" size="sm" disabled>
                       {t("action_connect")}
@@ -157,11 +196,17 @@ export async function ProviderGrid({
                     </p>
                   </>
                 ) : isOwner ? (
-                  <div className="flex items-center gap-2">
-                    {connected ? (
-                      <GoogleDisconnectButton />
-                    ) : (
-                      <GoogleConnectButton
+                  <div className="flex flex-wrap items-center gap-2">
+                    {needsDestination && <MicrosoftDestinationPicker />}
+                    {(connected || needsDestination) && (
+                      <ProviderDisconnectButton
+                        endpoint={live.disconnectEndpoint}
+                        providerName={live.displayName}
+                      />
+                    )}
+                    {!active && (
+                      <ProviderConnectButton
+                        endpoint={live.connectEndpoint}
                         label={
                           needsReconnect
                             ? t("action_reconnect")
@@ -188,6 +233,14 @@ export async function ProviderGrid({
                 </>
               )}
             </div>
+
+            {/* Microsoft-only honesty note: some workplaces make an IT admin
+                approve new apps before staff can connect. */}
+            {p.key === "microsoft" && !connected && (
+              <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                {t("hint_admin_consent")}
+              </p>
+            )}
           </div>
         );
       })}

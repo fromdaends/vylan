@@ -3165,6 +3165,23 @@
     "toast_error_denied": "Vous avez refusé l'autorisation Google.",
     "toast_error_other_provider": "Un autre stockage est déjà connecté. Déconnectez-le d'abord.",
     "toast_error_not_configured": "Google Drive n'est pas encore configuré sur cet environnement.",
-    "google_root_hint": "Vylan classe dans un dossier « Vylan » qu'il crée dans votre Drive. Vous pouvez déplacer ou renommer ce dossier n'importe où; Vylan continue d'y classer."
+    "google_root_hint": "Vylan classe dans un dossier « Vylan » qu'il crée dans votre Drive. Vous pouvez déplacer ou renommer ce dossier n'importe où; Vylan continue d'y classer.",
+    "state_action_needed": "Choisir l'emplacement",
+    "choose_destination": "Choisir l'emplacement",
+    "open_folder_ms": "Ouvrir le dossier Vylan",
+    "root_hint": "Vylan classe dans un dossier « Vylan » qu'il crée dans le stockage choisi. Vous pouvez déplacer ou renommer ce dossier; Vylan continue d'y classer.",
+    "hint_admin_consent": "Certains milieux de travail exigent qu'un administrateur TI approuve les nouvelles applications. Si la connexion échoue avec un message de permissions, c'est la raison.",
+    "disconnect_title_p": "Déconnecter {provider} ?",
+    "toast_connected_p": "{provider} connecté.",
+    "toast_disconnected_p": "{provider} déconnecté.",
+    "picker_title": "Où Vylan doit-il classer ?",
+    "picker_body": "Les documents seront classés dans un dossier « Vylan » créé au premier niveau de l'endroit choisi.",
+    "picker_sites_label": "Sites SharePoint",
+    "picker_libraries_title": "Choisissez une bibliothèque dans {site}",
+    "picker_loading": "Chargement de votre stockage…",
+    "picker_failed": "Impossible de charger votre OneDrive et vos sites SharePoint. Réessayez.",
+    "picker_retry": "Réessayer",
+    "picker_no_destinations": "Aucun OneDrive ni site SharePoint n'est accessible sur ce compte.",
+    "picker_chosen_toast": "Emplacement de classement défini."
   }
 }
