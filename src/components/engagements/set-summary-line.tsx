@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertTriangle, HelpCircle, Files } from "lucide-react";
+import { CheckCircle2, AlertTriangle, FileText } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { SetAssessment } from "@/lib/ai/set-assessment";
 
@@ -49,12 +49,20 @@ export function isMissingPageBlock(item: {
   );
 }
 
-const TONE = {
-  complete: { icon: CheckCircle2, color: "text-success" },
-  incomplete: { icon: AlertTriangle, color: "text-warning" },
-  unplaceable: { icon: HelpCircle, color: "text-warning" },
-  not_a_set: { icon: Files, color: "text-muted-foreground" },
-} as const;
+// The model returns its verdict as ONE sentence that often carries several
+// separate facts welded together with semicolons ("…the four-page statement is
+// present; File 2 is a duplicate copy of pages 1 to 3"). An accountant scanning
+// a checklist reads lines, not paragraphs, so split it back into its points.
+//
+// Splits on semicolons and on sentence boundaries (". " followed by a capital),
+// but NOT on the periods inside abbreviations, decimals, or dates — hence the
+// capital-letter requirement rather than a bare /\./.
+export function splitConclusionPoints(text: string): string[] {
+  return text
+    .split(/\s*;\s*|(?<=\.)\s+(?=[A-Z(])/)
+    .map((part) => part.trim().replace(/[;,]+$/, "").trim())
+    .filter((part) => part.length > 0);
+}
 
 export function SetSummaryLine({
   assessment,
@@ -65,16 +73,11 @@ export function SetSummaryLine({
   locale: "fr" | "en";
   className?: string;
 }) {
-  const tone = TONE[assessment.outcome] ?? TONE.not_a_set;
-  const Icon = tone.icon;
   const text =
     locale === "fr"
       ? assessment.conclusion_fr || assessment.conclusion_en
       : assessment.conclusion_en || assessment.conclusion_fr;
   if (!text) return null;
-  // Confidence as a compact percentage, matching the per-file "94%" the
-  // accountant already reads elsewhere. Shown only as supporting context.
-  const pct = Math.round(Math.max(0, Math.min(1, assessment.confidence)) * 100);
 
   // Cross-statement arithmetic results (statement-chain.ts). These are
   // CODE-verified facts — a balance that doesn't chain, a hole between
@@ -95,18 +98,48 @@ export function SetSummaryLine({
     locale === "fr" ? t.detail_fr || t.detail_en : t.detail_en || t.detail_fr;
   const hasRows = findings.length > 0 || coverage.length > 0;
 
+  // One line per fact, not one paragraph.
+  const points = splitConclusionPoints(text);
+  const heading = locale === "fr" ? "Résumé du document" : "Document summary";
+
+  // A bordered card in ONE fixed neutral colour — deliberately NOT tinted by
+  // the verdict (founder). A green box with a green tick reads as "this whole
+  // item is fine", which is a claim the summary shouldn't make: the set can be
+  // complete while a file inside it still needs review. The box is a container
+  // for information; the per-file rows and status badges carry the judgement.
   return (
-    <div className={cn("text-xs leading-relaxed", className)}>
-      {/* The model's own verdict. */}
-      <div className={cn("flex items-start gap-1.5", tone.color)}>
-        <Icon className="mt-px size-3.5 shrink-0" aria-hidden />
-        <span className="min-w-0 text-foreground/80">{text}</span>
-        <span className="shrink-0 tabular-nums text-muted-foreground">{pct}%</span>
+    <div
+      className={cn(
+        "rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed",
+        className,
+      )}
+    >
+      {/* Label only — no confidence score. */}
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-foreground/70">
+          {heading}
+        </span>
       </div>
 
-      {/* Checked-by-arithmetic rows, visually separated from the prose above. */}
+      {/* The model's verdict, split into its separate points — one fact per
+          line. Neutral markers throughout: these are observations, not
+          approvals. */}
+      <ul className="space-y-1">
+        {points.map((point, i) => (
+          <li key={`p-${i}`} className="flex items-start gap-1.5">
+            <span
+              className="mt-[7px] size-1 shrink-0 rounded-full bg-muted-foreground/60"
+              aria-hidden
+            />
+            <span className="min-w-0 text-foreground/80">{point}</span>
+          </li>
+        ))}
+      </ul>
+
+      {/* Checked-by-arithmetic rows, separated from the model's prose above. */}
       {hasRows && (
-        <div className="mt-1.5 space-y-1.5 border-t border-border/60 pt-1.5">
+        <div className="mt-2 space-y-1.5 border-t border-border/50 pt-2">
           {findings.map((f, i) => (
             <div key={`cf-${i}`} className="flex items-start gap-1.5">
               <AlertTriangle
