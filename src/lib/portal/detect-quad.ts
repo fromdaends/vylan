@@ -540,6 +540,18 @@ function detectQuadDirect(
   return quad;
 }
 
+/**
+ * The Sobel magnitude at or above which a pixel counts as an edge in THIS
+ * frame, or null when the frame has no gradient worth thresholding.
+ *
+ * Exported so a caller that wants to ask a second question of the same frame —
+ * "is there anything outside the quad I am about to keep?" — uses the
+ * detector's own adaptive threshold rather than a second, drifting copy of it.
+ */
+export function edgeThresholdFor(mag: Gray): number | null {
+  return edgeStats(mag).threshold;
+}
+
 /** Map a quad from the downscaled detection space back to full-resolution pixels. */
 export function scaleQuad(q: Quad, scaleX: number, scaleY: number): Quad {
   return [
