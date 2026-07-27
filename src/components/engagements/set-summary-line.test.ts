@@ -91,3 +91,13 @@ describe("splitConclusionPoints", () => {
     expect(splitConclusionPoints("   ")).toEqual([]);
   });
 });
+
+describe("auto-rejected incomplete row", () => {
+  it("shouldShowSetLine still shows the box for the strict-reject case", () => {
+    const a = {
+      outcome: "incomplete",
+      auto_rejected_incomplete: true,
+    } as SetAssessment;
+    expect(shouldShowSetLine(a, 1)).toBe(true);
+  });
+});

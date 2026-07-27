@@ -8,6 +8,8 @@ import {
   SET_INCOMPLETE_CONFIDENCE_BAR,
   DUPLICATE_AUTO_REJECT_CONFIDENCE,
   type SetAssessmentPage,
+  buildStrictIncompleteAsk,
+  INCOMPLETE_REJECTION_REASON,
 } from "./set-assessment";
 
 // These cover the PURE output-parsing layer (parseSetAssessment) and the
@@ -403,5 +405,33 @@ describe("computeFilesSignature", () => {
 
   it("represents a null hash as an empty segment", () => {
     expect(computeFilesSignature([{ id: "z", content_hash: null }])).toEqual(["z:"]);
+  });
+});
+
+describe("buildStrictIncompleteAsk", () => {
+  it("appends the re-send-complete instruction to the model's ask", () => {
+    const ask = buildStrictIncompleteAsk(
+      "Il manque la page 3 sur 4 de votre relevé bancaire. Pourriez-vous l'ajouter?",
+      "Page 3 of 4 of your bank statement is missing. Could you add it?",
+    );
+    expect(ask.fr).toContain("Il manque la page 3 sur 4");
+    expect(ask.fr).toContain("renvoyer le document complet");
+    expect(ask.en).toContain("Page 3 of 4");
+    expect(ask.en).toContain("re-send the complete document");
+  });
+
+  it("falls back to the generic ask when the model wrote nothing", () => {
+    const ask = buildStrictIncompleteAsk("", "  ");
+    expect(ask.fr).toContain("Il manque une ou des pages");
+    expect(ask.fr).toContain("renvoyer le document complet");
+    expect(ask.en).toContain("One or more pages");
+    expect(ask.en).toContain("re-send the complete document");
+  });
+});
+
+describe("INCOMPLETE_REJECTION_REASON", () => {
+  it("carries both languages, phrased for the file row", () => {
+    expect(INCOMPLETE_REJECTION_REASON.fr).toContain("incomplet");
+    expect(INCOMPLETE_REJECTION_REASON.en).toContain("Incomplete");
   });
 });

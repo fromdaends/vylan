@@ -96,7 +96,11 @@ export function SetSummaryLine({
     locale === "fr" ? t.label_fr || t.label_en : t.label_en || t.label_fr;
   const D = (t: { detail_en: string; detail_fr: string }) =>
     locale === "fr" ? t.detail_fr || t.detail_en : t.detail_en || t.detail_fr;
-  const hasRows = findings.length > 0 || coverage.length > 0;
+  // Strict incompleteness: the partial copy was auto-rejected and the client
+  // asked to re-send the complete document — say so, or the accountant sees
+  // rejected files appear "by themselves".
+  const autoRejected = assessment.auto_rejected_incomplete === true;
+  const hasRows = findings.length > 0 || coverage.length > 0 || autoRejected;
 
   // One line per fact, not one paragraph.
   const points = splitConclusionPoints(text);
@@ -148,6 +152,26 @@ export function SetSummaryLine({
       {/* Checked-by-arithmetic rows, separated from the model's prose above. */}
       {hasRows && (
         <div className="mt-2 space-y-1.5 border-t border-border/50 pt-2">
+          {autoRejected && (
+            <div className="flex items-start gap-1.5">
+              <AlertTriangle
+                className="mt-px size-3.5 shrink-0 text-warning"
+                aria-hidden
+              />
+              <div className="min-w-0">
+                <div className="font-medium text-warning">
+                  {locale === "fr"
+                    ? "Copie incomplète retournée au client"
+                    : "Incomplete copy sent back to the client"}
+                </div>
+                <div className="text-muted-foreground">
+                  {locale === "fr"
+                    ? "Les pages reçues ont été refusées automatiquement et le client a été invité à renvoyer le document complet."
+                    : "The received pages were rejected automatically and the client was asked to re-send the complete document."}
+                </div>
+              </div>
+            </div>
+          )}
           {findings.map((f, i) => (
             <div key={`cf-${i}`} className="flex items-start gap-1.5">
               <AlertTriangle
