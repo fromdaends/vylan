@@ -199,7 +199,7 @@ export async function ProviderGrid({
                       {t("action_connect")}
                     </Button>
                     <p className="text-[11px] leading-snug text-muted-foreground">
-                      {t("toast_error_not_configured")}
+                      {t("not_configured_hint", { provider: live.displayName })}
                     </p>
                   </>
                 ) : isOwner ? (
@@ -214,6 +214,7 @@ export async function ProviderGrid({
                     {!active && (
                       <ProviderConnectButton
                         endpoint={live.connectEndpoint}
+                        providerName={live.displayName}
                         label={
                           needsReconnect
                             ? t("action_reconnect")
