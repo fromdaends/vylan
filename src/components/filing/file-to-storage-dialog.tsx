@@ -71,7 +71,9 @@ export function FileToStorageDialog({
     status?.ok && status.connection
       ? status.connection.provider === "google_drive"
         ? "Google Drive"
-        : "SharePoint / OneDrive"
+        : status.connection.provider === "microsoft"
+          ? "SharePoint / OneDrive"
+          : "Dropbox"
       : "";
 
   const toFile =

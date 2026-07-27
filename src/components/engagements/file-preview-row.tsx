@@ -222,7 +222,7 @@ export function FilePreviewRow({
   // move that copy to the provider's trash — explicitly, per delete, default
   // off. null = still loading / not filed.
   const [filedProvider, setFiledProvider] = useState<
-    "google_drive" | "microsoft" | null
+    "google_drive" | "microsoft" | "dropbox" | null
   >(null);
   const [removeCopy, setRemoveCopy] = useState(false);
 
@@ -496,7 +496,9 @@ export function FilePreviewRow({
                     provider:
                       filedProvider === "google_drive"
                         ? "Google Drive"
-                        : "SharePoint / OneDrive",
+                        : filedProvider === "microsoft"
+                          ? "SharePoint / OneDrive"
+                          : "Dropbox",
                   })}
                 </p>
                 <p className="text-xs text-muted-foreground">

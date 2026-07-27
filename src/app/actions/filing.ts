@@ -213,7 +213,7 @@ export type FilingDialogStatus =
       ok: true;
       available: boolean;
       connection: {
-        provider: "google_drive" | "microsoft";
+        provider: "google_drive" | "microsoft" | "dropbox";
         rootLabel: string | null;
         needsDestination: boolean;
         needsReconnect: boolean;
@@ -292,7 +292,10 @@ export async function getFilingStatusAction(
     ok: true,
     available: settings.available,
     connection:
-      connection && (connection.provider === "google_drive" || connection.provider === "microsoft")
+      connection &&
+      (connection.provider === "google_drive" ||
+        connection.provider === "microsoft" ||
+        connection.provider === "dropbox")
         ? {
             provider: connection.provider,
             rootLabel: connection.rootLabel,

@@ -143,11 +143,16 @@ export function FilingStatusToasts() {
   useEffect(() => {
     const google = params.get("google");
     const microsoft = params.get("microsoft");
-    const flag = google ?? microsoft;
+    const dropbox = params.get("dropbox");
+    const flag = google ?? microsoft ?? dropbox;
     if (!flag || fired.current) return;
     if (microsoft === "choose") return; // the picker's cue, not a toast
     fired.current = true;
-    const provider = google ? "Google Drive" : "SharePoint / OneDrive";
+    const provider = google
+      ? "Google Drive"
+      : microsoft
+        ? "SharePoint / OneDrive"
+        : "Dropbox";
     if (flag === "connected") {
       toast.success(t("toast_connected_p", { provider }));
     } else if (flag === "denied") {

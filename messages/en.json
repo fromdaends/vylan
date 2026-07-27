@@ -3216,6 +3216,7 @@
     "skip_rejected": "You rejected this file.",
     "skip_duplicate": "Duplicate of another upload.",
     "skip_final_not_opted_in": "Final document — not opted in.",
-    "skip_no_bytes": "The file's contents are unavailable."
+    "skip_no_bytes": "The file's contents are unavailable.",
+    "open_folder_generic": "Open the Vylan folder"
   }
 }

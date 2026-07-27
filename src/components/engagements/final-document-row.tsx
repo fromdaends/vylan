@@ -93,7 +93,7 @@ function FinalDocumentDelete({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [filedProvider, setFiledProvider] = useState<
-    "google_drive" | "microsoft" | null
+    "google_drive" | "microsoft" | "dropbox" | null
   >(null);
   const [removeCopy, setRemoveCopy] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -122,7 +122,11 @@ function FinalDocumentDelete({
   }
 
   const providerName =
-    filedProvider === "google_drive" ? "Google Drive" : "SharePoint / OneDrive";
+    filedProvider === "google_drive"
+      ? "Google Drive"
+      : filedProvider === "microsoft"
+        ? "SharePoint / OneDrive"
+        : "Dropbox";
 
   return (
     <>
