@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shouldShowSetLine } from "./set-summary-line";
+import { shouldShowSetLine, splitConclusionPoints } from "./set-summary-line";
 import type { SetAssessment } from "@/lib/ai/set-assessment";
 
 // shouldShowSetLine only reads `.outcome`, so a minimal stub stands in for the
@@ -49,5 +49,45 @@ describe("shouldShowSetLine", () => {
       chain_coverage: [{ statements: 3 }],
     } as unknown as SetAssessment;
     expect(shouldShowSetLine(noFindings, 1)).toBe(false);
+  });
+});
+
+describe("splitConclusionPoints", () => {
+  it("splits the model's semicolon-welded verdict into separate points", () => {
+    expect(
+      splitConclusionPoints(
+        "The complete four-page Scotiabank statement for April 27 to May 26, 2026 is present; File 2 is a duplicate copy of pages 1 to 3.",
+      ),
+    ).toEqual([
+      "The complete four-page Scotiabank statement for April 27 to May 26, 2026 is present",
+      "File 2 is a duplicate copy of pages 1 to 3.",
+    ]);
+  });
+
+  it("splits on sentence boundaries too", () => {
+    expect(
+      splitConclusionPoints("Pages 1 to 4 are present. Page 3 is blurry."),
+    ).toEqual(["Pages 1 to 4 are present.", "Page 3 is blurry."]);
+  });
+
+  it("keeps a single-fact conclusion as one point", () => {
+    expect(splitConclusionPoints("All four pages are present.")).toEqual([
+      "All four pages are present.",
+    ]);
+  });
+
+  it("does NOT split inside decimals, dates or abbreviations", () => {
+    // A bare /\./ split would shatter "1,234.56", "no. 4" and "Jan. 2026".
+    expect(
+      splitConclusionPoints("The balance of 1,234.56 on p. 2 matches."),
+    ).toEqual(["The balance of 1,234.56 on p. 2 matches."]);
+  });
+
+  it("drops empty fragments and trailing separators", () => {
+    expect(splitConclusionPoints("One thing;; Another thing;")).toEqual([
+      "One thing",
+      "Another thing",
+    ]);
+    expect(splitConclusionPoints("   ")).toEqual([]);
   });
 });

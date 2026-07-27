@@ -1207,12 +1207,11 @@ async function ItemRow({
           </div>
           {aiEnabled &&
             shouldShowSetLine(item.ai_set_assessment, files.length) && (
-              <div className="mt-1.5 flex items-start gap-1">
-                <SetSummaryLine
-                  assessment={item.ai_set_assessment}
-                  locale={locale}
-                />
-              </div>
+              <SetSummaryLine
+                assessment={item.ai_set_assessment}
+                locale={locale}
+                className="mt-2"
+              />
             )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
