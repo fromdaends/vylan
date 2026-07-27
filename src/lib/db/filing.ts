@@ -557,6 +557,79 @@ export async function getStorageConnectionRootLink(
   return typeof link === "string" ? link : null;
 }
 
+// ── Filed-copy lookup + removal marking (delete-document flow) ──────────────
+
+export type FiledCopy = {
+  ledgerId: string;
+  connectionId: string;
+  providerFileId: string;
+  folderPath: string | null;
+  filedName: string | null;
+};
+
+/**
+ * The FILED ledger row for one document on THIS firm's connections, newest
+ * first (service-role; the caller has already firm-proved the file itself).
+ * Only rows with a provider file id count — without it there is nothing
+ * addressable to trash.
+ */
+export async function getFiledCopyForFile(
+  firmId: string,
+  source: FilingSource,
+  fileId: string,
+): Promise<FiledCopy | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("filed_documents")
+    .select("id, connection_id, provider_file_id, folder_path, filed_name")
+    .eq("firm_id", firmId)
+    .eq("source", source)
+    .eq("file_id", fileId)
+    .eq("status", "filed")
+    .not("provider_file_id", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    if (!isFilingSchemaMissing(error)) {
+      console.error("[filing] filed-copy lookup failed:", error.message);
+    }
+    return null;
+  }
+  if (!data) return null;
+  return {
+    ledgerId: data.id as string,
+    connectionId: data.connection_id as string,
+    providerFileId: data.provider_file_id as string,
+    folderPath: (data.folder_path as string | null) ?? null,
+    filedName: (data.filed_name as string | null) ?? null,
+  };
+}
+
+/**
+ * Settle a ledger row after its provider copy was moved to trash. Pre-0910
+ * (no 'removed' in the status check) this fails with a check violation —
+ * logged loudly, never thrown: the trash DID happen and the delete flow must
+ * finish.
+ */
+export async function markFiledCopyRemoved(
+  ledgerId: string,
+  removedBy: string | null,
+): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("filed_documents")
+    .update({
+      status: "removed",
+      removed_at: new Date().toISOString(),
+      removed_by: removedBy,
+    })
+    .eq("id", ledgerId);
+  if (error) {
+    console.error("[filing] mark removed failed:", error.message);
+  }
+}
+
 // ── Runs + ledger (service-role writers for the engine) ─────────────────────
 
 // The engine's FilingLedger, bound to one run. connection/firm/engagement/

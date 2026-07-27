@@ -22,7 +22,10 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteFileAction } from "@/app/actions/files";
+import {
+  deleteFileAction,
+  getFiledCopyInfoAction,
+} from "@/app/actions/files";
 import { formatBytes, type AppLocale } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import {
@@ -33,6 +36,7 @@ import {
 import type { UploadedFile } from "@/lib/db/uploaded-files";
 import type { DocType } from "@/lib/db/templates";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -213,16 +217,40 @@ export function FilePreviewRow({
     [file.id, displayName, isImage],
   );
 
+  // Filed-copy state for the delete dialog (founder decision 2026-07-27):
+  // when Vylan filed this document to the firm's storage, deleting may ALSO
+  // move that copy to the provider's trash — explicitly, per delete, default
+  // off. null = still loading / not filed.
+  const [filedProvider, setFiledProvider] = useState<
+    "google_drive" | "microsoft" | null
+  >(null);
+  const [removeCopy, setRemoveCopy] = useState(false);
+
+  function openDeleteDialog(open: boolean) {
+    setConfirmDeleteOpen(open);
+    if (open) {
+      setRemoveCopy(false);
+      setFiledProvider(null);
+      void getFiledCopyInfoAction("checklist", file.id).then((info) => {
+        if (info.filed) setFiledProvider(info.provider);
+      });
+    }
+  }
+
   function confirmDelete() {
     if (deleting) return;
     setDeleting(true);
     setDeleteFailed(false);
     const fd = new FormData();
     fd.append("id", file.id);
+    if (removeCopy && filedProvider) fd.append("remove_filed_copy", "1");
     startTransition(async () => {
       try {
         const res = await deleteFileAction(fd);
         if (!res?.ok) throw new Error(res?.error ?? "delete_failed");
+        if (res.storageCopy === "failed") {
+          toast.error(t("file_delete_storage_failed"));
+        }
         setConfirmDeleteOpen(false);
         // The action revalidated the page; refresh drops this row from the
         // server-rendered list (and the portal stops serving the file too).
@@ -450,7 +478,7 @@ export function FilePreviewRow({
           hideTrigger
         />
       )}
-      <Dialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+      <Dialog open={confirmDeleteOpen} onOpenChange={openDeleteDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{t("file_delete_confirm_title")}</DialogTitle>
@@ -458,6 +486,35 @@ export function FilePreviewRow({
               {t("file_delete_confirm_body", { name: displayName })}
             </DialogDescription>
           </DialogHeader>
+          {/* Vylan filed this document to the firm's storage — offer to move
+              that copy to the provider's trash too. Default OFF. */}
+          {filedProvider && (
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 p-3">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">
+                  {t("file_delete_storage_label", {
+                    provider:
+                      filedProvider === "google_drive"
+                        ? "Google Drive"
+                        : "SharePoint / OneDrive",
+                  })}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {t("file_delete_storage_hint")}
+                </p>
+              </div>
+              <Switch
+                checked={removeCopy}
+                onCheckedChange={setRemoveCopy}
+                aria-label={t("file_delete_storage_label", {
+                  provider:
+                    filedProvider === "google_drive"
+                      ? "Google Drive"
+                      : "SharePoint / OneDrive",
+                })}
+              />
+            </div>
+          )}
           {deleteFailed && (
             <p className="text-sm text-destructive">{t("file_delete_failed")}</p>
           )}

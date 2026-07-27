@@ -6,6 +6,12 @@ import { deleteUploadedFilePermanently } from "@/lib/db/uploaded-files";
 import { scheduleSetAssessment } from "@/lib/ai/set-assessment";
 import { logUserActivity } from "@/lib/db/activity";
 import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentFirm } from "@/lib/db/firms";
+import {
+  getFiledCopyForFile,
+  getFirmStorageConnection,
+} from "@/lib/db/filing";
+import { removeFiledCopy } from "@/lib/filing/remove";
 
 // Per-FILE accountant decisions from the Preview overlay. The item-level
 // actions in items.ts still exist (engagement checklist) and now fan out to
@@ -16,6 +22,8 @@ export type FileActionState = {
   ok?: boolean;
   error?: string;
   fieldErrors?: Record<string, string>;
+  // Outcome of the optional "also remove the filed copy" step.
+  storageCopy?: "trashed" | "already_gone" | "failed";
 } | null;
 
 // Scope a file to the caller's firm (file -> request_item -> engagement) so the
@@ -84,6 +92,42 @@ export async function approveFileAction(formData: FormData) {
 // service-role (uploaded_files has no authenticated DELETE policy) — storage
 // object + DB row erased, duplicate pointers re-homed, item status
 // recomputed, so the document also disappears from the client portal.
+// Does this document have a copy Vylan FILED to the firm's storage (on the
+// active connection)? Drives the delete dialog's "also remove from
+// {provider}" question. The RLS-scoped context lookup is the authorization.
+export async function getFiledCopyInfoAction(
+  source: "checklist" | "final",
+  fileId: string,
+): Promise<{ filed: boolean; provider: "google_drive" | "microsoft" | null }> {
+  const firm = await getCurrentFirm();
+  if (!firm || typeof fileId !== "string" || !fileId) {
+    return { filed: false, provider: null };
+  }
+  if (source === "checklist") {
+    const ctx = await getFileContext(fileId);
+    if (!ctx || ctx.firmId !== firm.id) return { filed: false, provider: null };
+  } else {
+    const sb = await getServerSupabase();
+    const { data } = await sb
+      .from("final_documents")
+      .select("id")
+      .eq("id", fileId)
+      .maybeSingle();
+    if (!data) return { filed: false, provider: null };
+  }
+  const copy = await getFiledCopyForFile(firm.id, source, fileId);
+  if (!copy) return { filed: false, provider: null };
+  // Provider name for the dialog label (RLS display read).
+  const connection = await getFirmStorageConnection();
+  const provider =
+    connection?.id === copy.connectionId &&
+    (connection.provider === "google_drive" ||
+      connection.provider === "microsoft")
+      ? connection.provider
+      : null;
+  return { filed: provider !== null, provider };
+}
+
 export async function deleteFileAction(
   formData: FormData,
 ): Promise<FileActionState> {
@@ -95,8 +139,24 @@ export async function deleteFileAction(
   const ctx = await getFileContext(id);
   if (!ctx) return { error: "not_found" };
 
+  // Founder decision (2026-07-27): the delete dialog may also ask to remove
+  // the copy Vylan FILED to the firm's storage. Runs BEFORE the row delete
+  // (the ledger lookup wants the live context) but never blocks it — the
+  // Vylan delete is the primary intent; the storage outcome is reported.
+  let storageCopy: "trashed" | "already_gone" | "failed" | undefined;
+  if (formData.get("remove_filed_copy") === "1") {
+    const removed = await removeFiledCopy({
+      firmId: ctx.firmId,
+      userId: auth.user.id,
+      source: "checklist",
+      fileId: id,
+    });
+    if (removed.ok) storageCopy = removed.outcome;
+    else if (removed.reason !== "not_filed") storageCopy = "failed";
+  }
+
   const result = await deleteUploadedFilePermanently(id);
-  if (!result.ok) return { error: "delete_failed" };
+  if (!result.ok) return { error: "delete_failed", storageCopy };
 
   // The set changed — re-run the group review so its summary (and any
   // missing-page / duplicate verdict) reflects the remaining files instead of
@@ -109,7 +169,7 @@ export async function deleteFileAction(
     file_id: id,
   });
   revalidate(ctx.engagementId);
-  return { ok: true };
+  return { ok: true, storageCopy };
 }
 
 // Per-file reject moved to the stable URL endpoint POST /api/files/[id]/reject

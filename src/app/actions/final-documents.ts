@@ -3,6 +3,7 @@
 import { nanoid } from "nanoid";
 import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/db/users";
+import { removeFiledCopy } from "@/lib/filing/remove";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getEngagement } from "@/lib/db/engagements";
 import {
@@ -120,6 +121,18 @@ export async function deleteFinalDocumentAction(formData: FormData) {
   const id = formData.get("id");
   const engagementId = formData.get("engagement_id");
   if (typeof id !== "string" || !UUID_RE.test(id)) return;
+
+  // Optional filed-copy removal (founder decision) — before the row goes,
+  // never blocking it. Outcome is best-effort here (the form flow has no
+  // return channel); the activity log records the removal.
+  if (formData.get("remove_filed_copy") === "1") {
+    await removeFiledCopy({
+      firmId: firm.id,
+      userId: user.id,
+      source: "final",
+      fileId: id,
+    });
+  }
 
   const deleted = await deleteFinalDocument(id);
   if (!deleted) return; // not found / not this firm (RLS)

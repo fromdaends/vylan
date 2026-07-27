@@ -1,8 +1,10 @@
 // Microsoft Graph connector (SharePoint document libraries + OneDrive) — the
 // second real StorageConnector.
 //
-// Like every connector: thin, and incapable of damage — NO delete, NO move,
-// NO overwrite call exists. The engine owns selection/templates/idempotency.
+// Like every connector: thin, near-incapable of damage — no move, no rename,
+// no overwrite, no permanent delete. The one sanctioned exception is
+// trashFileById (recycle bin, recoverable; user-confirmed delete flow only).
+// The engine owns selection/templates/idempotency.
 //
 // Graph realities handled here:
 //   * One connector serves BOTH OneDrive and SharePoint: everything is
@@ -185,6 +187,28 @@ export const microsoftConnector: StorageConnector = {
   async fileExists(ctx, folderId, name) {
     const drive = driveId(ctx);
     return (await getByPath(ctx, drive, folderId, [name])) !== null;
+  },
+
+  async trashFileById(ctx, providerFileId) {
+    // Graph DELETE moves the item to the site/OneDrive RECYCLE BIN (recoverable),
+    // not a permanent delete. 404 = already gone — the goal state holds.
+    const drive = driveId(ctx);
+    const res = await graphFetch(
+      ctx,
+      `/drives/${drive}/items/${encodeURIComponent(providerFileId)}`,
+      { method: "DELETE" },
+    );
+    if (res.status === 404) return "missing";
+    if (!res.ok && res.status !== 204) {
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: { message?: string };
+      };
+      throw new MicrosoftGraphApiError(
+        `graph: trash failed: ${json.error?.message ?? `http ${res.status}`}`,
+        res.status,
+      );
+    }
+    return "trashed";
   },
 
   async uploadFile(ctx, folderId, name, bytes, mimeType): Promise<UploadResult> {

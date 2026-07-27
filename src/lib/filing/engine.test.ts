@@ -448,3 +448,25 @@ describe("runFiling", () => {
     expect(store.allByPath().size).toBe(0);
   });
 });
+
+describe("mock trashFileById", () => {
+  it("removes exactly the identified file, missing when unknown", async () => {
+    const store = new MockStorage();
+    const ledger = new MemoryLedger();
+    const doc = candidate();
+    const connector = createMockConnector(store);
+    await runFiling(
+      { connector, ctx: { accessToken: "t", config: {} }, ledger, downloadBytes: async () => new Uint8Array(1) },
+      makeInput([{ doc, tokenContext: tokenCtx() }]),
+    );
+    const [path, file] = [...store.allByPath().entries()][0];
+    expect(path).toContain("T4 - 2024");
+    expect(
+      await connector.trashFileById({ accessToken: "t", config: {} }, file.providerFileId),
+    ).toBe("trashed");
+    expect(store.allByPath().size).toBe(0);
+    expect(
+      await connector.trashFileById({ accessToken: "t", config: {} }, "nope"),
+    ).toBe("missing");
+  });
+});
