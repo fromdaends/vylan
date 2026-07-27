@@ -70,6 +70,63 @@ const MAX_HULL_VERTICES = 400;
 // A frame smaller than this cannot hold a document outline worth tracing.
 const MIN_FRAME_SIDE = 24;
 
+/* --------------------------------------- local contrast normalisation tuning ---
+ * See normaliseLocalContrast for the reasoning behind each of these.
+ */
+
+// Side of the box window used for the local mean/spread, as a fraction of the
+// shorter frame side. A quarter of the frame is wide enough that a window
+// straddling the paper boundary still contains a healthy amount of both sides
+// (so the measured spread really is the step), and small enough that a lighting
+// ramp across the frame is flattened rather than preserved. An eighth also
+// works but detects fewer of the faint cases, because the spread estimate is
+// noisier and the halo around each edge is tighter.
+const NORM_WINDOW_FRACTION = 0.25;
+// Output spread we rescale a neighbourhood to, in grey levels.
+const NORM_TARGET_SPREAD = 48;
+// Divide-by-nothing guard, in grey levels. A neighbourhood whose spread is
+// below this is treated as flat: blank paper, an empty wall, or pure sensor
+// noise. Without the floor those regions get multiplied by an unbounded gain
+// and the frame fills with fake edges. With it, the gain saturates at
+// NORM_TARGET_SPREAD / NORM_MIN_SPREAD (6x here), so flat stays flat-ish.
+const NORM_MIN_SPREAD = 8;
+// Radius of the box smoothing applied to the pixel BEFORE it is compared with
+// its neighbourhood. This is not cosmetic — it is the reason the pass works at
+// all. See the note in normaliseLocalContrast. Held in pixels, not scaled to
+// the frame, because it targets per-pixel sensor noise, which does not get
+// bigger when the frame does.
+const NORM_SMOOTH_RADIUS = 2;
+// How much bigger than the smoothing box the neighbourhood box has to be before
+// the normalised frame is worth detecting on. The pass compares a pixel
+// smoothed over one box against the mean over another, and that comparison only
+// means "how far is this pixel from its surroundings" while the second box is
+// much the larger of the two. As they converge, the two boxes average nearly
+// the same pixels, the difference between them stops measuring the surroundings
+// and starts measuring the noise inside a handful of pixels, and the divisor —
+// a spread estimated from a window that small — is too unreliable to hold the
+// gain down. Measured: on frames whose shorter side is under ~48px the pass
+// then finds quads in pure sensor noise that the direct pass correctly
+// rejected. NORM_WINDOW_FRACTION ties the window to the frame, so this ratio is
+// really a minimum frame size: 4 * 2 / (0.25 / 2) = a shorter side of 64px.
+const NORM_MIN_WINDOW_RATIO = 4;
+// The normalising pass only runs on a frame with no strong edge anywhere in it.
+// "Strong" is the Sobel magnitude at the top NORM_TRIGGER_FRACTION of pixels —
+// a small percentile rather than the single maximum, so one hot pixel or a
+// speck of dust cannot speak for the whole frame.
+//
+// 64 is a sharp 16-grey-level step. Measured on the fixtures, the separation is
+// not close: a faint page reads 31 here, a noise field 25, a vignette 29, while
+// a placemat, a plate, a page overflowing the frame, or ANY hard-edged object
+// in shot reads 255.
+//
+// 0.25% of the frame (48 pixels at 160x120) is deliberately small. At 1% a dark
+// object the size of a stamp did not register, the pass ran anyway, and its
+// halo bridged the gap to the page and dragged a corner 20px out — a visibly
+// wrong outline. Small clutter has to be able to veto the pass, and the cost of
+// vetoing is only that we show no outline.
+const NORM_TRIGGER_MAGNITUDE = 64;
+const NORM_TRIGGER_FRACTION = 0.0025;
+
 /* ------------------------------------------------------------ public API --- */
 
 /** Sobel magnitude map, same dimensions as input. Values clamped to 0..255. */
@@ -109,10 +166,164 @@ export function sobelMagnitude(gray: Gray): Gray {
 }
 
 /**
+ * Local contrast normalisation. Rescales each pixel against its own
+ * neighbourhood so a faint paper/table boundary becomes a strong gradient,
+ * without amplifying noise in flat regions.
+ *
+ * out = 128 + TARGET * (smoothed(p) - localMean(p)) / max(localSpread(p), FLOOR)
+ *
+ * Both the mean and the spread come from summed-area tables, so the window
+ * costs the same whether it is 5px or 50px across: two O(n) prefix passes and
+ * four array reads per pixel. A per-pixel window loop would be O(n * window^2),
+ * which at 640x480 with a 60px window is ~1e9 reads per frame — unusable in a
+ * 10fps loop. The squared-value table is what makes the spread O(1) too.
+ *
+ * `windowFraction` is the window SIDE as a fraction of the shorter frame side.
+ *
+ * Three things here are deliberate and each one is load-bearing:
+ *
+ * 1. The FLOOR on the divisor. In a genuinely flat region — blank paper, an
+ *    empty wall — the local spread is the sensor noise and nothing else.
+ *    Dividing by it would rescale that noise to full contrast and manufacture
+ *    a field of edges out of nothing. The floor caps the gain instead, so flat
+ *    regions come out flat.
+ *
+ * 2. Comparing the SMOOTHED pixel, not the raw pixel, against the local mean.
+ *    This is the part that actually fixes white-on-white, and it is worth being
+ *    explicit about why, because the obvious version does not work. The
+ *    detector's threshold is a percentile (keep the strongest ~8% of pixels),
+ *    and a percentile is blind to gain: multiply the whole frame by six and
+ *    exactly the same pixels are selected. So a plain normalise-and-amplify
+ *    clears the MIN_EDGE_MAGNITUDE floor and changes nothing else — measured,
+ *    not assumed. What loses the faint boundary is that the top 8% of a noisy
+ *    frame is *filled by noise*, and the only way to win is to improve the
+ *    ratio: a 2px box smooth suppresses uncorrelated per-pixel noise while a
+ *    paper boundary, being a long coherent step, keeps its amplitude and only
+ *    spreads over a few pixels. The cost is corner precision — a smoothed
+ *    corner is a rounded corner, worth about a pixel of extra error.
+ *
+ * 3. Centring on 128. The output is a Uint8ClampedArray, and an edge has a
+ *    bright and a dark side; anchoring at either end would clip one of them.
+ */
+// Half the neighbourhood side, at least 1 so the window is never a single pixel
+// (a window of one has zero spread and the output would be a flat 128). Shared
+// with the caller's well-conditioning gate so the two cannot drift apart.
+function normWindowRadius(w: number, h: number, windowFraction?: number): number {
+  const fraction =
+    Number.isFinite(windowFraction) && (windowFraction as number) > 0
+      ? Math.min(1, Math.max(0.02, windowFraction as number))
+      : NORM_WINDOW_FRACTION;
+  return Math.max(1, Math.round((Math.min(w, h) * fraction) / 2));
+}
+
+export function normaliseLocalContrast(gray: Gray, windowFraction?: number): Gray {
+  const w = Math.max(0, gray.width | 0);
+  const h = Math.max(0, gray.height | 0);
+  const n = w * h;
+  const out = new Uint8ClampedArray(n);
+  // Malformed frame: a flat map is safer than reading undefined into NaN.
+  if (n === 0 || gray.data.length < n) return { data: out, width: w, height: h };
+
+  const src = gray.data;
+  const radius = normWindowRadius(w, h, windowFraction);
+  const smoothRadius = Math.min(NORM_SMOOTH_RADIUS, radius);
+
+  // Summed-area tables, padded by one row/column of zeros so the four-corner
+  // lookup needs no bounds special-casing. Values are integers well inside the
+  // exact range of a double (max sum 255 * 640 * 480 ~ 7.8e7, max squared sum
+  // ~2.0e10), so these carry no rounding drift.
+  const iw = w + 1;
+  const sum = new Float64Array(iw * (h + 1));
+  const sumSq = new Float64Array(iw * (h + 1));
+  for (let y = 0; y < h; y++) {
+    const row = y * w;
+    const above = y * iw;
+    const here = (y + 1) * iw;
+    let rowSum = 0;
+    let rowSumSq = 0;
+    for (let x = 0; x < w; x++) {
+      const v = src[row + x];
+      rowSum += v;
+      rowSumSq += v * v;
+      sum[here + x + 1] = sum[above + x + 1] + rowSum;
+      sumSq[here + x + 1] = sumSq[above + x + 1] + rowSumSq;
+    }
+  }
+
+  for (let y = 0; y < h; y++) {
+    const y0 = y - radius < 0 ? 0 : y - radius;
+    const y1 = y + radius > h - 1 ? h - 1 : y + radius;
+    const sy0 = y - smoothRadius < 0 ? 0 : y - smoothRadius;
+    const sy1 = y + smoothRadius > h - 1 ? h - 1 : y + smoothRadius;
+    for (let x = 0; x < w; x++) {
+      const x0 = x - radius < 0 ? 0 : x - radius;
+      const x1 = x + radius > w - 1 ? w - 1 : x + radius;
+      const area = (x1 - x0 + 1) * (y1 - y0 + 1);
+      const tl = y0 * iw + x0;
+      const tr = y0 * iw + x1 + 1;
+      const bl = (y1 + 1) * iw + x0;
+      const br = (y1 + 1) * iw + x1 + 1;
+      const total = sum[br] - sum[tr] - sum[bl] + sum[tl];
+      const totalSq = sumSq[br] - sumSq[tr] - sumSq[bl] + sumSq[tl];
+      const mean = total / area;
+      // E[x^2] - E[x]^2 can go very slightly negative on a constant window
+      // through floating point; clamp before the square root.
+      const variance = totalSq / area - mean * mean;
+      const spread = Math.sqrt(variance > 0 ? variance : 0);
+
+      const sx0 = x - smoothRadius < 0 ? 0 : x - smoothRadius;
+      const sx1 = x + smoothRadius > w - 1 ? w - 1 : x + smoothRadius;
+      const sArea = (sx1 - sx0 + 1) * (sy1 - sy0 + 1);
+      const sTotal =
+        sum[(sy1 + 1) * iw + sx1 + 1] -
+        sum[sy0 * iw + sx1 + 1] -
+        sum[(sy1 + 1) * iw + sx0] +
+        sum[sy0 * iw + sx0];
+      const centre = sTotal / sArea;
+
+      const divisor = spread > NORM_MIN_SPREAD ? spread : NORM_MIN_SPREAD;
+      // Uint8ClampedArray clamps on store; round explicitly so the result does
+      // not depend on the engine's half-to-even behaviour.
+      out[y * w + x] = Math.round(128 + (NORM_TARGET_SPREAD * (centre - mean)) / divisor);
+    }
+  }
+  return { data: out, width: w, height: h };
+}
+
+/**
  * Find the most likely document quad in a downscaled grayscale frame.
  * Returns null when nothing convincing is found — returning null is ALWAYS
  * better than returning a wrong quad, because a wrong quad makes the on-screen
  * outline jump around and destroys trust in the feature.
+ *
+ * Two passes. First the frame as given. Then, ONLY IF that found nothing AND
+ * the frame contains no strong edge anywhere, the frame put through
+ * normaliseLocalContrast. Adaptive, with both halves of the condition doing
+ * real work:
+ *
+ * - "found nothing" means a frame that already works cannot regress: it never
+ *   reaches the second pass, so every previously detected quad comes back bit
+ *   for bit. Always-on normalisation would instead run every working detection
+ *   through an amplifier it does not need.
+ * - "no strong edge anywhere" is what keeps the amplifier out of frames that
+ *   were rejected for a REASON. A placemat, a plate, a page running off the
+ *   edge of the frame and a page with one side missing are all rejected by
+ *   checks that look at structure, and re-running them amplified just gives the
+ *   same structure a second chance to slip through — measured: three of those
+ *   four rejections flip to a false positive without this half of the gate.
+ *   Those frames have plenty of contrast; the amplifier is for the frames that
+ *   have none.
+ *
+ * There is a third condition, on the frame rather than on its content: the
+ * normalising window has to be much wider than the smoothing box inside it, or
+ * the pass is comparing a pixel against itself and amplifies noise into
+ * structure. See NORM_MIN_WINDOW_RATIO. In practice that rules out frames
+ * whose shorter side is under 64px; the detection frame the camera UI builds is
+ * 256 wide, so this only fires for small callers.
+ *
+ * The cost is that a genuinely blank frame pays for both passes. Frames with
+ * real edges in them — which is most of them, including every frame where the
+ * user is actually pointing at something — pay for one.
  */
 export function detectQuad(gray: Gray, opts?: DetectOptions): Quad | null {
   const w = gray.width | 0;
@@ -121,12 +332,37 @@ export function detectQuad(gray: Gray, opts?: DetectOptions): Quad | null {
   if (w < MIN_FRAME_SIDE || h < MIN_FRAME_SIDE || gray.data.length < n) {
     return null;
   }
+  const stats: PassStats = { strongMagnitude: 0 };
+  const direct = detectQuadDirect(gray, opts, stats);
+  if (direct !== null) return direct;
+  if (stats.strongMagnitude >= NORM_TRIGGER_MAGNITUDE) return null;
+  // The frame has to be big enough for the normalising window to mean anything.
+  if (normWindowRadius(w, h) < NORM_MIN_WINDOW_RATIO * NORM_SMOOTH_RADIUS) return null;
+  return detectQuadDirect(normaliseLocalContrast(gray), opts);
+}
+
+// Filled in by the direct pass so detectQuad can decide whether normalising is
+// worth trying, without paying for a second Sobel just to measure the frame.
+type PassStats = { strongMagnitude: number };
+
+// The pipeline itself, over whatever frame it is handed. Callers go through
+// detectQuad, which decides whether that frame needs normalising first.
+function detectQuadDirect(
+  gray: Gray,
+  opts?: DetectOptions,
+  stats?: PassStats,
+): Quad | null {
+  const w = gray.width | 0;
+  const h = gray.height | 0;
+  const n = w * h;
 
   const minAreaFraction = clamp01(opts?.minAreaFraction ?? 0.12);
   const maxCornerCosine = clamp01(opts?.maxCornerCosine ?? 0.35);
 
   const mag = sobelMagnitude(gray);
-  const threshold = edgeThreshold(mag);
+  const edges = edgeStats(mag);
+  if (stats) stats.strongMagnitude = edges.strongMagnitude;
+  const threshold = edges.threshold;
   if (threshold === null) return null;
 
   const edge = new Uint8Array(n);
@@ -254,7 +490,10 @@ function clamp01(v: number): number {
 // gradient magnitude (a smooth ramp) can never fit inside the budget, so the
 // threshold walks past its single histogram bin and the edge map comes out
 // empty — exactly the "no document here" answer we want.
-function edgeThreshold(mag: Gray): number | null {
+// Also reports `strongMagnitude`: the magnitude at the top NORM_TRIGGER_FRACTION
+// of pixels, i.e. "how strong is the strongest real structure in this frame".
+// It rides along here because the histogram is already built.
+function edgeStats(mag: Gray): { threshold: number | null; strongMagnitude: number } {
   const n = mag.width * mag.height;
   const hist = new Int32Array(256);
   let maxMag = 0;
@@ -263,7 +502,21 @@ function edgeThreshold(mag: Gray): number | null {
     hist[v]++;
     if (v > maxMag) maxMag = v;
   }
-  if (maxMag < MIN_EDGE_MAGNITUDE) return null;
+
+  // Walk down from the top until we have covered the strongest
+  // NORM_TRIGGER_FRACTION of pixels (0.25%).
+  const strongCount = Math.max(1, Math.floor(n * NORM_TRIGGER_FRACTION));
+  let seen = 0;
+  let strongMagnitude = 0;
+  for (let v = 255; v >= 0; v--) {
+    seen += hist[v];
+    if (seen >= strongCount) {
+      strongMagnitude = v;
+      break;
+    }
+  }
+
+  if (maxMag < MIN_EDGE_MAGNITUDE) return { threshold: null, strongMagnitude };
 
   const budget = Math.max(
     Math.floor(n * EDGE_BUDGET_FRACTION),
@@ -282,7 +535,7 @@ function edgeThreshold(mag: Gray): number | null {
   // A threshold above the strongest pixel in the frame is not a bug: it means
   // no level of thresholding isolates a boundary here, the caller finds an empty
   // edge map, and the answer is "no document".
-  return Math.max(t, MIN_EDGE_MAGNITUDE);
+  return { threshold: Math.max(t, MIN_EDGE_MAGNITUDE), strongMagnitude };
 }
 
 // Largest 8-connected component of the edge map, as pixel indices. Iterative

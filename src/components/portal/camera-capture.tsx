@@ -91,6 +91,11 @@ export function CameraCapture({
   }, [start, stop]);
 
   // Attach the stream. srcObject can't be set declaratively.
+  //
+  // `shot` is a dependency even though it is unused below: taking a photo
+  // swaps the <video> out for the still, and going back via Retake mounts a
+  // BRAND NEW element. Keyed on `stream` alone this effect would not re-run,
+  // nothing would attach to the new element, and Retake would show black.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) return;
@@ -113,7 +118,7 @@ export function CameraCapture({
         /* nothing left to detach */
       }
     };
-  }, [stream]);
+  }, [stream, shot]);
 
   // Track the on-screen preview size: every coordinate the scanner produces is
   // in this space, and it changes on rotate.
