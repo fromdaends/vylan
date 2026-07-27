@@ -78,6 +78,7 @@ export function CameraCapture({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const detectCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const prevGrayRef = useRef<Gray | null>(null);
   const quadRef = useRef<Quad | null>(null);
@@ -86,6 +87,8 @@ export function CameraCapture({
   const capturingRef = useRef(false);
 
   const [view, setView] = useState({ width: 0, height: 0 });
+  // How far down the stage the top controls reach, measured on mount/resize.
+  const [controlsBottom, setControlsBottom] = useState(0);
   const [quad, setQuad] = useState<Quad | null>(null);
   const [guidance, setGuidance] = useState<Guidance>("searching");
   const [shot, setShot] = useState<Shot | null>(null);
@@ -137,12 +140,23 @@ export function CameraCapture({
     // Only publish a genuinely new size: ResizeObserver fires liberally, and a
     // fresh object with identical numbers would still restart the scanning
     // effect (and with it the auto-shutter's streak).
-    const measure = () =>
+    const measure = () => {
       setView((prev) =>
         prev.width === el.clientWidth && prev.height === el.clientHeight
           ? prev
           : { width: el.clientWidth, height: el.clientHeight },
       );
+      // Where the top controls actually end, measured rather than derived.
+      // They sit below env(safe-area-inset-top), which differs per device and
+      // cannot be computed here — and on a notched iPhone the frame's top
+      // corners ended up underneath them.
+      const stageTop = el.getBoundingClientRect().top;
+      const bottom = closeRef.current?.getBoundingClientRect().bottom;
+      if (typeof bottom === "number") {
+        const next = Math.max(0, Math.round(bottom - stageTop));
+        setControlsBottom((prev) => (prev === next ? prev : next));
+      }
+    };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(measure);
@@ -407,7 +421,12 @@ export function CameraCapture({
         )}
 
         {!shot && !failed && (
-          <ScanOverlay view={view} quad={quad} ready={guidance === "ready"} />
+          <ScanOverlay
+            view={view}
+            quad={quad}
+            ready={guidance === "ready"}
+            topInset={controlsBottom}
+          />
         )}
 
         {status === "starting" && (
@@ -443,6 +462,7 @@ export function CameraCapture({
         {/* Close, and torch where the device has one. White discs so they read
             the same over a bright document or a dark table. */}
         <button
+          ref={closeRef}
           type="button"
           onClick={onClose}
           aria-label={t("scan_close")}
@@ -542,13 +562,15 @@ function ScanOverlay({
   view,
   quad,
   ready,
+  topInset,
 }: {
   view: { width: number; height: number };
   quad: Quad | null;
   ready: boolean;
+  topInset: number;
 }) {
   if (view.width <= 0 || view.height <= 0) return null;
-  const a = apertureFor(view);
+  const a = apertureFor(view, { top: topInset });
   const arm = Math.round(Math.min(a.width, a.height) * 0.11);
 
   // Outer rect + inner rounded rect as one evenodd path: the inner subpath is
@@ -649,10 +671,25 @@ type Aperture = {
  */
 /** Room kept clear under the window for the coaching line. */
 const HINT_CLEARANCE = 64;
+/** Gap between the top controls and the window's top edge. */
+const CONTROL_GAP = 12;
 
-export function apertureFor(view: { width: number; height: number }): Aperture {
+export function apertureFor(
+  view: { width: number; height: number },
+  /**
+   * `top` is how far down the stage the close/torch buttons reach, measured by
+   * the caller. It varies with the device's safe-area inset, so it cannot be a
+   * constant — on a notched iPhone the window's top corners rendered
+   * underneath the buttons.
+   */
+  insets: { top?: number } = {},
+): Aperture {
   const margin = Math.round(view.width * 0.05);
   const width = Math.max(1, view.width - margin * 2);
+
+  const topClearance =
+    Math.max(0, Number.isFinite(insets.top) ? (insets.top as number) : 0) +
+    CONTROL_GAP;
 
   // Documents are tall rectangles, so the window is too. Sizing it to letter
   // proportions off the WIDTH left a near-square box that the client had to
@@ -660,13 +697,14 @@ export function apertureFor(view: { width: number; height: number }): Aperture {
   // ratio or a generous share of the screen, and let the window be the tall
   // shape the thing being photographed actually is.
   const wanted = Math.max(width * 1.294, view.height * 0.74);
-  const room = Math.max(1, view.height - HINT_CLEARANCE - 24);
+  const room = Math.max(1, view.height - topClearance - HINT_CLEARANCE);
   const height = Math.max(1, Math.round(Math.min(wanted, room)));
 
   // Nudged above centre: the eye reads the frame as balanced when the gap
   // below it (which carries the hint) is a little larger than the gap above.
   const centred = Math.round((view.height - height) / 2 - view.height * 0.03);
-  const y = Math.max(12, Math.min(centred, view.height - height - HINT_CLEARANCE));
+  const lowest = view.height - height - HINT_CLEARANCE;
+  const y = Math.max(topClearance, Math.min(centred, Math.max(topClearance, lowest)));
 
   return { x: margin, y: Math.max(0, y), width, height, r: 14 };
 }
