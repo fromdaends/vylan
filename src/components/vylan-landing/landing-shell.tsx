@@ -124,24 +124,31 @@ export function LandingShell({
           w.style.transform = "none";
         }
       });
+      // Each word's RESTING state is written inline here, to the value its
+      // animation ends on — never left to the animation to arrive at. A
+      // running animation outranks inline styles for its whole duration and
+      // its `forwards` fill lands on the same value, so the motion is
+      // unchanged; but when the animation never runs (reduced motion, a
+      // battery saver, a browser that drops it) these inline values are all
+      // that is left, and exactly one word is at opacity 1. Deriving the
+      // resting state from the animation instead is what used to paint the
+      // outgoing word on top of the incoming one.
       if (incoming) {
         incoming.classList.remove(...REEL_CLASSES);
         void incoming.offsetWidth;
-        incoming.style.opacity = "";
-        incoming.style.filter = "";
-        incoming.style.transform = "";
-        if (prev < 0) {
-          incoming.style.opacity = "1";
-        } else {
+        incoming.style.opacity = "1";
+        incoming.style.filter = "none";
+        incoming.style.transform = "none";
+        if (prev >= 0) {
           incoming.classList.add(dir < 0 ? "vy-in-rev" : "vy-in");
         }
       }
       if (outgoing) {
         outgoing.classList.remove(...REEL_CLASSES);
         void outgoing.offsetWidth;
-        outgoing.style.opacity = "";
-        outgoing.style.filter = "";
-        outgoing.style.transform = "";
+        outgoing.style.opacity = "0";
+        outgoing.style.filter = "none";
+        outgoing.style.transform = "none";
         outgoing.classList.add(dir < 0 ? "vy-out-rev" : "vy-out");
       }
       if (prev >= 0 && subPrefixRef.current) {
@@ -217,9 +224,11 @@ export function LandingShell({
                   brand.classList.remove(...REEL_CLASSES);
                   void brand.offsetWidth;
                   brand.style.transition = "none";
-                  brand.style.opacity = "";
-                  brand.style.filter = "";
-                  brand.style.transform = "";
+                  // Same rule as setWord: the dissolve's END state, written
+                  // inline, so "vylan" still clears when the animation is off.
+                  brand.style.opacity = "0";
+                  brand.style.filter = "none";
+                  brand.style.transform = "none";
                   brand.classList.add("vy-brand-out");
                 }, HOLD_BRAND),
               );
