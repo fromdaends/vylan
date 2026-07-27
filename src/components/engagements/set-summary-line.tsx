@@ -100,7 +100,13 @@ export function SetSummaryLine({
 
   // One line per fact, not one paragraph.
   const points = splitConclusionPoints(text);
-  const heading = locale === "fr" ? "Résumé du document" : "Document summary";
+  // Named for the QUESTION this block answers — "do these files, together, add
+  // up to the complete document?" — not for one of its answers. It covers
+  // missing pages, duplicates, files that can't be placed, and (for statements)
+  // missing months or balances that don't chain, so anything narrower like
+  // "Missing pages" would be wrong the moment it reports a duplicate.
+  const heading =
+    locale === "fr" ? "Contrôle d’intégralité" : "Completeness check";
 
   // A bordered card in ONE fixed neutral colour — deliberately NOT tinted by
   // the verdict (founder). A green box with a green tick reads as "this whole
