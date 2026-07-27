@@ -10,8 +10,9 @@ import {
 } from "@/lib/db/filing";
 import { ProviderGrid } from "@/components/filing/provider-grid";
 import { FilingSettingsForm } from "@/components/filing/filing-settings-form";
-import { FilingStatusToasts } from "@/components/filing/google-card-actions";
+import { FilingStatusToasts } from "@/components/filing/provider-card-actions";
 import { isGoogleFilingConfigured } from "@/lib/filing/google/oauth";
+import { isMicrosoftFilingConfigured } from "@/lib/filing/microsoft/oauth";
 import { isStorageTokenEncryptionConfigured } from "@/lib/filing/token-cipher";
 
 // Live connection + settings state — never serve a cached "Not connected".
@@ -77,17 +78,22 @@ export default async function FilingPage({
             connection={connection}
             rootLink={rootLink}
             isOwner={user?.role === "owner"}
-            googleConfigured={
-              isGoogleFilingConfigured() &&
-              (process.env.NODE_ENV !== "production" ||
-                isStorageTokenEncryptionConfigured())
-            }
+            configured={{
+              google_drive:
+                isGoogleFilingConfigured() &&
+                (process.env.NODE_ENV !== "production" ||
+                  isStorageTokenEncryptionConfigured()),
+              microsoft:
+                isMicrosoftFilingConfigured() &&
+                (process.env.NODE_ENV !== "production" ||
+                  isStorageTokenEncryptionConfigured()),
+            }}
           />
         </div>
         {/* Where files land: the app-created "Vylan" folder the firm can move
-            anywhere in their Drive. */}
+            anywhere in their chosen storage. */}
         <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-          {t("google_root_hint")}
+          {t("root_hint")}
         </p>
         {/* Data-residency honesty: Vylan hosts in Canada; the firm's storage
             may not be. One plain sentence, the founder's call. */}

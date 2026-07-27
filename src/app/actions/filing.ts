@@ -4,7 +4,19 @@
 // Connecting providers and running the filing engine arrive in later phases.
 
 import { getCurrentUser } from "@/lib/db/users";
-import { saveFirmFilingSettings } from "@/lib/db/filing";
+import { getCurrentFirm } from "@/lib/db/firms";
+import {
+  saveFirmFilingSettings,
+  updateStorageConnectionConfig,
+} from "@/lib/db/filing";
+import { acquireMicrosoftConnectorContext } from "@/lib/filing/microsoft/connection";
+import {
+  ensureMicrosoftRootFolder,
+  listMicrosoftDestinations,
+  listSiteLibraries,
+  type MicrosoftDestinationList,
+  type MicrosoftLibrary,
+} from "@/lib/filing/connectors/microsoft";
 import {
   validateFolderTemplate,
   validateNameTemplate,
@@ -85,4 +97,97 @@ export async function saveFilingSettingsAction(
   if (saved === "unavailable") return { ok: false, error: "unavailable" };
   if (saved === "error") return { ok: false, error: "save_failed" };
   return { ok: true };
+}
+
+// ── Microsoft destination picker (Phase 3) ──────────────────────────────────
+//
+// Unlike Google (one auto-created folder), Microsoft needs a real choice:
+// the owner's OneDrive OR a SharePoint site + document library. These two
+// actions power the picker dialog; choose completes the connection (drive id
+// into provider_config, root_label set, "Vylan" root folder created).
+
+
+export type MicrosoftDestinationsState =
+  | { ok: true; destinations: MicrosoftDestinationList }
+  | { ok: false; error: "no_session" | "owner_only" | "not_connected" | "load_failed" };
+
+export async function listMicrosoftDestinationsAction(): Promise<MicrosoftDestinationsState> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  const acquired = await acquireMicrosoftConnectorContext(firm.id);
+  if (acquired.kind !== "ok") return { ok: false, error: "not_connected" };
+  try {
+    return { ok: true, destinations: await listMicrosoftDestinations(acquired.ctx) };
+  } catch (e) {
+    console.error("[filing] destinations list failed:", (e as Error).message);
+    return { ok: false, error: "load_failed" };
+  }
+}
+
+export type MicrosoftLibrariesState =
+  | { ok: true; libraries: MicrosoftLibrary[] }
+  | { ok: false; error: "no_session" | "owner_only" | "not_connected" | "load_failed" };
+
+export async function listMicrosoftSiteLibrariesAction(
+  siteId: string,
+): Promise<MicrosoftLibrariesState> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  if (typeof siteId !== "string" || !siteId) {
+    return { ok: false, error: "load_failed" };
+  }
+  const acquired = await acquireMicrosoftConnectorContext(firm.id);
+  if (acquired.kind !== "ok") return { ok: false, error: "not_connected" };
+  try {
+    return { ok: true, libraries: await listSiteLibraries(acquired.ctx, siteId) };
+  } catch (e) {
+    console.error("[filing] libraries list failed:", (e as Error).message);
+    return { ok: false, error: "load_failed" };
+  }
+}
+
+export type ChooseMicrosoftDestinationState =
+  | { ok: true }
+  | {
+      ok: false;
+      error: "no_session" | "owner_only" | "not_connected" | "choose_failed";
+    };
+
+export async function chooseMicrosoftDestinationAction(input: {
+  driveId: string;
+  // Human breadcrumb for the card, e.g. "OneDrive" or "Accounting · Documents".
+  label: string;
+}): Promise<ChooseMicrosoftDestinationState> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  const driveId = typeof input.driveId === "string" ? input.driveId.trim() : "";
+  const label =
+    typeof input.label === "string" && input.label.trim()
+      ? input.label.trim().slice(0, 120)
+      : "OneDrive";
+  if (!driveId) return { ok: false, error: "choose_failed" };
+  const acquired = await acquireMicrosoftConnectorContext(firm.id);
+  if (acquired.kind !== "ok") return { ok: false, error: "not_connected" };
+
+  try {
+    // Create (or find) the Vylan root in the chosen drive FIRST — if this
+    // fails, the connection stays in "choose where to file" and can retry.
+    const root = await ensureMicrosoftRootFolder(acquired.ctx, driveId, "Vylan");
+    const saved = await updateStorageConnectionConfig(firm.id, {
+      config: {
+        driveId,
+        rootFolderId: root.folderId,
+        rootLink: root.link,
+      },
+      rootLabel: `${label} · Vylan`,
+    });
+    if (saved !== "ok") return { ok: false, error: "choose_failed" };
+    return { ok: true };
+  } catch (e) {
+    console.error("[filing] destination choose failed:", (e as Error).message);
+    return { ok: false, error: "choose_failed" };
+  }
 }
