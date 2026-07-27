@@ -6,6 +6,8 @@ import { notFound } from "next/navigation";
 import { Analytics } from "@vercel/analytics/next";
 import { routing } from "@/i18n/routing";
 import { brand } from "@/lib/brand";
+import { siteUrl } from "@/lib/site-url";
+import { socialMetadata } from "@/lib/og/metadata";
 import { ThemeProvider } from "@/components/theme/theme-provider";
 
 const inter = Inter({
@@ -36,9 +38,21 @@ export async function generateMetadata({
   const tagline = hasLocale(routing.locales, locale)
     ? brand.tagline[locale]
     : brand.tagline[routing.defaultLocale];
+  const title = `${brand.name}: ${tagline}`;
   return {
-    title: `${brand.name}: ${tagline}`,
+    // metadataBase turns every relative metadata url — crucially the generated
+    // opengraph-image — into an absolute one. Social crawlers fetch og:image
+    // from their own servers, so a relative "/opengraph-image" is simply
+    // dropped and the link renders as a bare blue text link with no picture.
+    // Without this line the rest of the card setup does nothing.
+    metadataBase: new URL(siteUrl()),
+    title,
     description: tagline,
+    // Site-wide share-card defaults. Pages that want their own headline on the
+    // card call socialMetadata() themselves; everything else inherits these, so
+    // any public vylan.app url previews rather than only the ones we remembered
+    // to annotate.
+    ...socialMetadata({ locale, title, description: tagline }),
   };
 }
 

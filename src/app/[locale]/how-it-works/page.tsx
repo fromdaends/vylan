@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
+import { socialMetadata } from "@/lib/og/metadata";
 import {
   schibsted,
   poppins,
@@ -21,7 +22,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "VylanHowItWorks" });
-  return { title: t("meta_title") };
+  const title = t("meta_title");
+  return {
+    title,
+    ...socialMetadata({ locale, title, path: "/how-it-works" }),
+  };
 }
 
 export default async function HowItWorksPage({

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { getPathname, Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
+import { socialMetadata } from "@/lib/og/metadata";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { schibsted } from "@/components/vylan-landing/fonts";
 import {
@@ -20,7 +21,16 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Vylan" });
-  return { title: t("meta_title"), description: t("meta_description") };
+  const title = t("meta_title");
+  const description = t("meta_description");
+  return {
+    title,
+    description,
+    // The landing page is the url that actually gets shared, so its card
+    // carries the marketing title/description rather than the layout's
+    // generic site-wide pair.
+    ...socialMetadata({ locale, title, description }),
+  };
 }
 
 export default async function Home({
