@@ -22,6 +22,7 @@
 // own errors and logs.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { enqueueJob } from "@/lib/db/jobs";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
 import { cancelEngagementReminders } from "@/lib/reminders";
@@ -252,6 +253,17 @@ async function completeLifecycle(
     return;
   }
   await cancelEngagementReminders(row.id);
+  // Cloud-storage filing (0900): queue the auto-file pass, mirroring
+  // completeEngagementAction. Best-effort; the worker re-checks everything.
+  try {
+    await enqueueJob({
+      kind: "file_to_storage",
+      payload: { engagementId: row.id },
+      runAfter: new Date(),
+    });
+  } catch (e) {
+    console.error("[stage-sync] filing enqueue failed:", e);
+  }
   await logServiceRoleActivity(row.firm_id, row.id, "complete_engagement", {
     auto: true,
     reason: "stage_completed",

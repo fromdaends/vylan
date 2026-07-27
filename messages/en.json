@@ -1964,7 +1964,8 @@
     },
     "builder_tax_year_label": "Tax year",
     "builder_tax_year_hint": "Used to file and check documents. Optional.",
-    "builder_tax_year_none": "None"
+    "builder_tax_year_none": "None",
+    "file_to_storage_menu": "File to storage"
   },
   "Attention": {
     "metric_active": "Active",
@@ -3182,6 +3183,34 @@
     "picker_failed": "Couldn't load your OneDrive and SharePoint sites. Please try again.",
     "picker_retry": "Try again",
     "picker_no_destinations": "No OneDrive or SharePoint sites are available on this account.",
-    "picker_chosen_toast": "Filing destination set."
+    "picker_chosen_toast": "Filing destination set.",
+    "dialog_title": "File to storage",
+    "dialog_body": "Send this engagement's approved documents to your connected storage, organized by your folder structure and naming.",
+    "dialog_loading": "Checking what's ready…",
+    "dialog_not_connected": "No storage is connected yet. Connect Google Drive or SharePoint/OneDrive first.",
+    "dialog_go_connect": "Open Document filing",
+    "dialog_needs_reconnect": "The {provider} connection needs to be reconnected before filing can run.",
+    "dialog_needs_destination": "Choose where Microsoft filing should go first (OneDrive or a SharePoint library).",
+    "dialog_summary": "{count, plural, =0 {No documents are ready to file.} one {# document will be filed to {provider}} other {# documents will be filed to {provider}}}",
+    "dialog_exclusions": "Rejected and duplicate files never leave Vylan ({rejected} here). Documents awaiting approval ({notApproved}) are skipped until approved.",
+    "dialog_finals_label": "{count, plural, one {Also file # final document} other {Also file # final documents}}",
+    "dialog_finals_hint": "Your deliverables to the client. They stay in Vylan unless you opt this engagement in.",
+    "dialog_last_run": "Last run {date}: {filed} filed · {skipped} skipped · {failed} failed.",
+    "dialog_run": "{count, plural, one {File # document} other {File # documents}}",
+    "dialog_nothing_to_file": "Nothing to file yet",
+    "dialog_run_failed": "The run couldn't start. Nothing was lost — try again in a moment.",
+    "dialog_retry": "Try again",
+    "dialog_retry_failures": "{count, plural, one {Retry # failure} other {Retry # failures}}",
+    "result_headline": "{filed} filed · {skipped} skipped · {failed} failed",
+    "result_filed_label": "Filed",
+    "result_skipped_label": "Skipped",
+    "result_failed_label": "Failed",
+    "result_open_file": "Open in your storage",
+    "skip_already_filed": "Already filed earlier — never filed twice.",
+    "skip_not_approved": "Not approved yet.",
+    "skip_rejected": "You rejected this file.",
+    "skip_duplicate": "Duplicate of another upload.",
+    "skip_final_not_opted_in": "Final document — not opted in.",
+    "skip_no_bytes": "The file's contents are unavailable."
   }
 }

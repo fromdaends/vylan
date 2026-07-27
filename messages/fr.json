@@ -1964,7 +1964,8 @@
     },
     "builder_tax_year_label": "Année d'imposition",
     "builder_tax_year_hint": "Utilisée pour classer et vérifier les documents. Facultatif.",
-    "builder_tax_year_none": "Aucune"
+    "builder_tax_year_none": "Aucune",
+    "file_to_storage_menu": "Classer vers le stockage"
   },
   "Attention": {
     "metric_active": "Actifs",
@@ -3182,6 +3183,34 @@
     "picker_failed": "Impossible de charger votre OneDrive et vos sites SharePoint. Réessayez.",
     "picker_retry": "Réessayer",
     "picker_no_destinations": "Aucun OneDrive ni site SharePoint n'est accessible sur ce compte.",
-    "picker_chosen_toast": "Emplacement de classement défini."
+    "picker_chosen_toast": "Emplacement de classement défini.",
+    "dialog_title": "Classer vers le stockage",
+    "dialog_body": "Envoyez les documents approuvés de ce dossier vers votre stockage connecté, organisés selon votre structure de dossiers et votre nommage.",
+    "dialog_loading": "Vérification de ce qui est prêt…",
+    "dialog_not_connected": "Aucun stockage n'est connecté. Connectez d'abord Google Drive ou SharePoint/OneDrive.",
+    "dialog_go_connect": "Ouvrir Classement de documents",
+    "dialog_needs_reconnect": "La connexion {provider} doit être reconnectée avant de pouvoir classer.",
+    "dialog_needs_destination": "Choisissez d'abord l'emplacement Microsoft (OneDrive ou une bibliothèque SharePoint).",
+    "dialog_summary": "{count, plural, =0 {Aucun document prêt à classer.} one {# document sera classé vers {provider}} other {# documents seront classés vers {provider}}}",
+    "dialog_exclusions": "Les fichiers refusés et les doublons ne quittent jamais Vylan ({rejected} ici). Les documents en attente d'approbation ({notApproved}) sont ignorés jusqu'à leur approbation.",
+    "dialog_finals_label": "{count, plural, one {Classer aussi # document final} other {Classer aussi # documents finaux}}",
+    "dialog_finals_hint": "Vos livrables au client. Ils restent dans Vylan sauf si vous activez ce dossier.",
+    "dialog_last_run": "Dernière exécution {date} : {filed} classés · {skipped} ignorés · {failed} échoués.",
+    "dialog_run": "{count, plural, one {Classer # document} other {Classer # documents}}",
+    "dialog_nothing_to_file": "Rien à classer pour l'instant",
+    "dialog_run_failed": "L'exécution n'a pas pu démarrer. Rien n'est perdu — réessayez dans un instant.",
+    "dialog_retry": "Réessayer",
+    "dialog_retry_failures": "{count, plural, one {Réessayer # échec} other {Réessayer # échecs}}",
+    "result_headline": "{filed} classés · {skipped} ignorés · {failed} échoués",
+    "result_filed_label": "Classés",
+    "result_skipped_label": "Ignorés",
+    "result_failed_label": "Échoués",
+    "result_open_file": "Ouvrir dans votre stockage",
+    "skip_already_filed": "Déjà classé auparavant — jamais classé deux fois.",
+    "skip_not_approved": "Pas encore approuvé.",
+    "skip_rejected": "Vous avez refusé ce fichier.",
+    "skip_duplicate": "Doublon d'un autre téléversement.",
+    "skip_final_not_opted_in": "Document final — non activé.",
+    "skip_no_bytes": "Le contenu du fichier est indisponible."
   }
 }

@@ -565,6 +565,18 @@ export async function completeEngagementAction(formData: FormData) {
     } catch (e) {
       console.error("[completeEngagementAction] invoice dispatch failed:", e);
     }
+    // Cloud-storage filing (0900): queue the auto-file pass. Best-effort —
+    // the worker no-ops when auto-file is off or nothing is connected, and
+    // the ledger makes re-runs double-file-proof.
+    try {
+      await enqueueJob({
+        kind: "file_to_storage",
+        payload: { engagementId: id },
+        runAfter: new Date(),
+      });
+    } catch (e) {
+      console.error("[completeEngagementAction] filing enqueue failed:", e);
+    }
   }
   // AFTER the invoice dispatch, so the resolver sees any invoice it just raised:
   // "invoice on completion" makes the work owed, and the stage settles honestly
@@ -584,6 +596,15 @@ export async function reopenEngagementAction(formData: FormData) {
     await cancelScheduledInvoice(id);
   } catch (e) {
     console.error("[reopenEngagementAction] cancel invoice failed:", e);
+  }
+  // ...and any queued auto-filing — reopened work shouldn't file moments later.
+  try {
+    await cancelPendingJobs(
+      "file_to_storage",
+      (p) => p.engagementId === id,
+    );
+  } catch (e) {
+    console.error("[reopenEngagementAction] cancel filing job failed:", e);
   }
   const engagement = await getEngagement(id);
   if (engagement) {
