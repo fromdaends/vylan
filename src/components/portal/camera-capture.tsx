@@ -88,12 +88,24 @@ export function CameraCapture({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) return;
-    video.srcObject = stream;
+    try {
+      video.srcObject = stream;
+    } catch {
+      // Some engines type-check this setter strictly. Throwing out of an
+      // effect would unmount the whole overlay and strand the client, so a
+      // failure here just means no preview — the error card still shows.
+      return;
+    }
     // Autoplay is unreliable on iOS even when muted; kick it explicitly and
-    // swallow the AbortError that a fast close produces.
-    void video.play().catch(() => undefined);
+    // swallow the AbortError that a fast close produces. Optional-called
+    // because the test DOM's video element has no play().
+    void video.play?.()?.catch?.(() => undefined);
     return () => {
-      video.srcObject = null;
+      try {
+        video.srcObject = null;
+      } catch {
+        /* nothing left to detach */
+      }
     };
   }, [stream]);
 

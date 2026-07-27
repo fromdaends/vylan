@@ -106,16 +106,18 @@ describe("useCameraStream", () => {
 
   it("asks for the rear camera", async () => {
     const { stream } = fakeStream();
-    const getUserMedia = vi.fn(() => Promise.resolve(stream));
+    const getUserMedia = vi.fn((_c: MediaStreamConstraints) =>
+      Promise.resolve(stream),
+    );
     stubMediaDevices(getUserMedia);
     const { result } = renderHook(() => useCameraStream());
     act(() => result.current.start());
     await waitFor(() => expect(result.current.status).toBe("ready"));
-    const constraints = getUserMedia.mock.calls[0]?.[0] as MediaStreamConstraints;
+    const constraints = getUserMedia.mock.calls[0]![0];
     expect(constraints.audio).toBe(false);
-    expect(
-      (constraints.video as MediaTrackConstraints).facingMode,
-    ).toEqual({ ideal: "environment" });
+    expect((constraints.video as MediaTrackConstraints).facingMode).toEqual({
+      ideal: "environment",
+    });
   });
 
   it("surfaces a denial as denied + camera_denied", async () => {

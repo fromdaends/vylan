@@ -1,0 +1,197 @@
+import { describe, it, expect, vi, afterEach } from "vitest";
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from "@testing-library/react";
+import { NextIntlClientProvider } from "next-intl";
+import { CameraCapture } from "./camera-capture";
+import en from "../../../messages/en.json";
+
+// The analysis loop is inert here on purpose: happy-dom's canvas.getContext()
+// returns null, so every pixel path short-circuits. That is exactly why the
+// maths lives in pure modules with their own tests — what is worth asserting
+// in the component is control flow, permissions and teardown.
+
+function fakeTrack() {
+  return {
+    stop: vi.fn(),
+    getCapabilities: () => ({}),
+    applyConstraints: () => Promise.resolve(),
+  };
+}
+
+function stubCamera(
+  impl?: (c: MediaStreamConstraints) => Promise<MediaStream>,
+) {
+  const track = fakeTrack();
+  const stream = {
+    getTracks: () => [track],
+    getVideoTracks: () => [track],
+  } as unknown as MediaStream;
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    writable: true,
+    value: { getUserMedia: impl ?? (() => Promise.resolve(stream)) },
+  });
+  return { track, stream };
+}
+
+function removeCamera() {
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    writable: true,
+    value: undefined,
+  });
+}
+
+function renderCamera() {
+  const onClose = vi.fn();
+  const onCapture = vi.fn();
+  const onChooseFile = vi.fn();
+  const utils = render(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <CameraCapture
+        onClose={onClose}
+        onCapture={onCapture}
+        onChooseFile={onChooseFile}
+      />
+    </NextIntlClientProvider>,
+  );
+  return { ...utils, onClose, onCapture, onChooseFile };
+}
+
+afterEach(() => {
+  cleanup();
+  removeCamera();
+  vi.unstubAllGlobals();
+});
+
+describe("CameraCapture", () => {
+  it("renders through a portal on <body>, not inside the checklist row", async () => {
+    stubCamera();
+    const { container } = renderCamera();
+    // Same trap the lightbox documents: the row's entrance animation leaves a
+    // transform behind, which would make it a containing block and trap a
+    // `fixed` overlay inside it.
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it("locks background scroll while open and restores it on close", async () => {
+    stubCamera();
+    const { unmount } = renderCamera();
+    expect(document.body.style.overflow).toBe("hidden");
+    unmount();
+    expect(document.body.style.overflow).not.toBe("hidden");
+  });
+
+  it("closes on Escape", async () => {
+    stubCamera();
+    const { onClose } = renderCamera();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes from the close button", async () => {
+    stubCamera();
+    const { onClose } = renderCamera();
+    fireEvent.click(screen.getByLabelText(en.Portal.scan_close));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases the camera when it unmounts — the light must not stay on", async () => {
+    const { track } = stubCamera();
+    const { unmount } = renderCamera();
+    await waitFor(() =>
+      expect(screen.getByLabelText(en.Portal.scan_capture)).toBeTruthy(),
+    );
+    unmount();
+    expect(track.stop).toHaveBeenCalled();
+  });
+
+  it("keeps the shutter disabled until the stream is actually live", async () => {
+    let resolveIt: (s: MediaStream) => void = () => undefined;
+    stubCamera(
+      () =>
+        new Promise<MediaStream>((r) => {
+          resolveIt = r;
+        }),
+    );
+    renderCamera();
+    const shutter = screen.getByLabelText(
+      en.Portal.scan_capture,
+    ) as HTMLButtonElement;
+    expect(shutter.disabled).toBe(true);
+
+    const track = fakeTrack();
+    resolveIt({
+      getTracks: () => [track],
+      getVideoTracks: () => [track],
+    } as unknown as MediaStream);
+    await waitFor(() => expect(shutter.disabled).toBe(false));
+  });
+
+  describe("when the camera cannot be used", () => {
+    it("explains a denial and never dead-ends", async () => {
+      stubCamera(() => Promise.reject({ name: "NotAllowedError" }));
+      const { onChooseFile, onClose } = renderCamera();
+
+      await waitFor(() =>
+        expect(screen.getByText(en.Portal.errors.camera_denied)).toBeTruthy(),
+      );
+      // A denial is the one case where we also explain how to undo it.
+      expect(screen.getByText(en.Portal.scan_denied_help)).toBeTruthy();
+
+      // Two routes back to the ordinary picker (the inline link and the
+      // control-bar button); either must hand off and close.
+      const escapes = screen.getAllByText(en.Portal.scan_choose_file);
+      expect(escapes.length).toBeGreaterThan(0);
+      fireEvent.click(escapes[0]!);
+      expect(onChooseFile).toHaveBeenCalledTimes(1);
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it("distinguishes a camera that is missing from one that is busy", async () => {
+      stubCamera(() => Promise.reject({ name: "NotFoundError" }));
+      renderCamera();
+      await waitFor(() =>
+        expect(
+          screen.getByText(en.Portal.errors.camera_not_found),
+        ).toBeTruthy(),
+      );
+      cleanup();
+
+      stubCamera(() => Promise.reject({ name: "NotReadableError" }));
+      renderCamera();
+      await waitFor(() =>
+        expect(screen.getByText(en.Portal.errors.camera_busy)).toBeTruthy(),
+      );
+    });
+
+    it("reports a Permissions-Policy block as unsupported, not as a denial", async () => {
+      // If the /r/* header rule ever regresses, getUserMedia throws
+      // SecurityError with no prompt shown — telling the client they denied
+      // something they were never asked would be a lie.
+      stubCamera(() => Promise.reject({ name: "SecurityError" }));
+      renderCamera();
+      await waitFor(() =>
+        expect(
+          screen.getByText(en.Portal.errors.camera_unsupported),
+        ).toBeTruthy(),
+      );
+      expect(screen.queryByText(en.Portal.scan_denied_help)).toBeNull();
+    });
+
+    it("hides the live guidance when there is no stream to guide", async () => {
+      stubCamera(() => Promise.reject({ name: "NotAllowedError" }));
+      renderCamera();
+      await waitFor(() =>
+        expect(screen.getByText(en.Portal.errors.camera_denied)).toBeTruthy(),
+      );
+      expect(screen.queryByText(en.Portal.scan_hint_searching)).toBeNull();
+    });
+  });
+});

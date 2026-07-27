@@ -216,8 +216,15 @@ export async function captureVideoFrameRectified(
   out.height = warped.height;
   const octx = out.getContext("2d");
   if (!octx) throw new Error("capture_unsupported");
+  // Uint8ClampedArray.from rather than passing warped.data straight in: the
+  // buffer type the maths produces is not narrowed to ArrayBuffer, and ImageData
+  // refuses a possibly-shared buffer. One copy per capture is free at this size.
   octx.putImageData(
-    new ImageData(warped.data, warped.width, warped.height),
+    new ImageData(
+      Uint8ClampedArray.from(warped.data),
+      warped.width,
+      warped.height,
+    ),
     0,
     0,
   );
