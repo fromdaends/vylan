@@ -2035,7 +2035,7 @@
     "status_low_confidence": "Low confidence",
     "status_wrong_type": "Wrong document",
     "status_auto_rejected": "Auto-rejected",
-    "status_escalated": "Needs review",
+    "status_escalated": "Client asked {count}× — needs you",
     "status_flagged": "Flag for review",
     "status_analyzing": "Reading…",
     "status_not_analyzed": "Not analyzed",

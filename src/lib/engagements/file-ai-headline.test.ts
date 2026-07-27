@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { deriveFileAi, pickAiHeadline, type FileAiInput } from "./file-ai-headline";
+import { AUTO_REJECT_STRIKE_LIMIT } from "@/lib/ai/usability";
 
 const base = {
   analyzed: true,
@@ -56,13 +57,13 @@ describe("pickAiHeadline", () => {
     ).toEqual({ kind: "auto_rejected", tone: "warn" });
   });
 
-  it("escalates after two strikes on an auto-rejected file", () => {
+  it("escalates only once the router's strike limit is reached", () => {
     expect(
       pickAiHeadline({
         ...base,
         usable: false,
         aiRejected: true,
-        rejectionCount: 2,
+        rejectionCount: AUTO_REJECT_STRIKE_LIMIT,
       }),
     ).toEqual({ kind: "escalated", tone: "bad" });
   });
@@ -256,13 +257,25 @@ describe("deriveFileAi", () => {
     expect(v.summaryEn).toContain("Not a T4");
   });
 
-  it("escalates after two strikes", () => {
+  it("escalates only at the router's strike limit", () => {
     const v = deriveFileAi(
       file({ ai_usability: { usable: false }, ai_rejected: true }),
-      { ...ctx, rejectionCount: 2 },
+      { ...ctx, rejectionCount: AUTO_REJECT_STRIKE_LIMIT },
       NOW,
     );
     expect(v.headline.kind).toBe("escalated");
+  });
+
+  // Strikes below the limit were auto-rejected AND the client was emailed, so
+  // they must not read as "escalated" — that word means the client will not be
+  // asked again and the accountant has to act.
+  it("does not escalate below the limit, however many strikes", () => {
+    const v = deriveFileAi(
+      file({ ai_usability: { usable: false }, ai_rejected: true }),
+      { ...ctx, rejectionCount: AUTO_REJECT_STRIKE_LIMIT - 1 },
+      NOW,
+    );
+    expect(v.headline.kind).toBe("auto_rejected");
   });
 
   it("shows nothing when an unanalyzed file was already decided", () => {

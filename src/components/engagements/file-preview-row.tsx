@@ -344,7 +344,16 @@ export function FilePreviewRow({
         return "";
     }
   })();
-  const aiStatusLabel = showAi ? tAi(`status_${aiView!.headline.kind}`) : "";
+  // "Escalated" is the one status whose MEANING depends on a number: the
+  // client has already been asked the maximum number of times, which is why it
+  // landed on the accountant instead of going back to them. Saying only "Needs
+  // review" hid that, so the accountant had no way to know the client had been
+  // chased 5 times and would not be chased again.
+  const aiStatusLabel = showAi
+    ? aiView!.headline.kind === "escalated"
+      ? tAi("status_escalated", { count: rejectionCount })
+      : tAi(`status_${aiView!.headline.kind}`)
+    : "";
   const aiKind = aiView?.headline.kind;
   // Clean reads keep their "type · year" inline in the chip. Anything that
   // needs the accountant's eye (wrong document, or a usability problem) puts the
