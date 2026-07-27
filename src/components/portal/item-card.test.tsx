@@ -193,3 +193,68 @@ describe("ItemCard — the AI's missing-page ask on the client portal", () => {
     expect(screen.getByText(en.Portal.status_na)).toBeInTheDocument();
   });
 });
+
+describe("ItemCard — the two upload paths", () => {
+  function setCamera(available: boolean) {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      writable: true,
+      value: available ? { getUserMedia: () => Promise.resolve({}) } : undefined,
+    });
+  }
+
+  afterEach(() => setCamera(false));
+
+  it("offers exactly two ways in when the device has a camera", () => {
+    setCamera(true);
+    renderCard("pending");
+    // Scan (ours, which crops and flattens) and a plain file picker. No third
+    // "take a photo" path of our own.
+    expect(screen.getByRole("button", { name: en.Portal.scan })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: en.Portal.choose_file }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: en.Portal.upload }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("makes scanning the primary action, not an equal alternative", () => {
+    setCamera(true);
+    renderCard("pending");
+    const scan = screen.getByRole("button", { name: en.Portal.scan });
+    const choose = screen.getByRole("button", { name: en.Portal.choose_file });
+    // The scanner is the one that coaches, crops and flattens, so it carries
+    // the filled treatment and the picker is the outline one.
+    expect(choose.className).toContain("border");
+    expect(scan.className).not.toEqual(choose.className);
+  });
+
+  it("falls back to a single plain upload where there is no camera", () => {
+    // Desktop, or a phone on plain http over a LAN IP: a Scan button there
+    // would always dead-end, so it is not rendered at all.
+    setCamera(false);
+    renderCard("pending");
+    expect(
+      screen.queryByRole("button", { name: en.Portal.scan }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: en.Portal.add_more }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the file picker open to existing photos and documents", () => {
+    setCamera(true);
+    const { container } = renderCard("pending");
+    const input = container.querySelector('input[type="file"]');
+    expect(input).not.toBeNull();
+    const accept = input!.getAttribute("accept") ?? "";
+    // Camera-roll photos and saved documents both have to remain reachable —
+    // this is the "upload an existing file" half of the feature.
+    expect(accept).toContain("image/jpeg");
+    expect(accept).toContain("image/heic");
+    expect(accept).toContain("application/pdf");
+    // And we never force the OS camera on them.
+    expect(input!.hasAttribute("capture")).toBe(false);
+  });
+});
