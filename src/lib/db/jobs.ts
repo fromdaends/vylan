@@ -42,7 +42,12 @@ export type JobKind =
   // Xero reference-list cache sync (migration 0780). Per client: refreshes the
   // cached accounts/contacts/tax rates/items off the request path. Payload:
   // { firmId, clientId }. Mirrors 'sync_quickbooks'.
-  | "sync_xero";
+  | "sync_xero"
+  // Cloud-storage filing (migration 0900): auto-file an engagement's approved
+  // documents when it completes. Payload: { engagementId }. The worker
+  // re-checks still-complete + auto-file-on + connected, and the filed_documents
+  // ledger makes re-runs idempotent (a retried job can never double-file).
+  | "file_to_storage";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {

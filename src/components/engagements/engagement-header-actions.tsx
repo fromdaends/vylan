@@ -7,6 +7,7 @@ import {
   Bell,
   Check,
   Download,
+  FolderUp,
   History,
   Link as LinkIcon,
   Loader2,
@@ -28,6 +29,7 @@ import {
 } from "./invoice-options-dialog";
 import type { InvoiceBuilderConfig } from "./invoice-builder";
 import { ReminderAutomationDialog } from "./reminder-automation-dialog";
+import { FileToStorageDialog } from "@/components/filing/file-to-storage-dialog";
 import {
   RepeatDialog,
   type EngagementRepeatInfo,
@@ -293,6 +295,20 @@ export function EngagementMoreMenu({
             </DropdownMenuItem>
           )}
 
+          {/* File to storage — the on-demand filing run (Document filing).
+              Shown whenever the engagement is live-ish; the dialog itself
+              explains not-connected / nothing-approved states. */}
+          {status !== "cancelled" && (
+            <FileToStorageDialog
+              engagementId={engagementId}
+              trigger={
+                <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                  <FolderUp />
+                  {t("file_to_storage_menu")}
+                </DropdownMenuItem>
+              }
+            />
+          )}
           {hasUploads && <DropdownMenuSeparator />}
           {hasUploads && (
             <DropdownMenuItem

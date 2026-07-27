@@ -26,6 +26,7 @@ import { processNotifyAssignmentJob } from "@/lib/team/assignment-notify";
 import { processSyncQuickbooksJob } from "@/lib/quickbooks/sync";
 import { processSyncXeroJob } from "@/lib/xero/sync";
 import { sendEngagementInvoice } from "@/lib/invoices/send";
+import { runAutoFiling } from "@/lib/filing/runner";
 import {
   backfillContentHashes,
   type BackfillResult,
@@ -224,6 +225,19 @@ async function runJob(
       );
       if (!result.ok && result.reason === "save_failed") {
         await markJobFailed(job.id, `invoice:${result.reason}`);
+        return { id: job.id, kind: job.kind, ok: false, detail: result };
+      }
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: result.ok, detail: result };
+    }
+    if (job.kind === "file_to_storage") {
+      // Auto-file on completion. Quiet no-op when auto-file is off / nothing
+      // is connected / the engagement reopened; the ledger's partial unique
+      // index makes any retry double-file-proof. Only transient failures
+      // retry — human-actionable states surface in the on-demand dialog.
+      const result = await runAutoFiling(String(job.payload.engagementId ?? ""));
+      if (!result.ok && result.transient) {
+        await markJobFailed(job.id, `filing:${result.reason}`);
         return { id: job.id, kind: job.kind, ok: false, detail: result };
       }
       await markJobDone(job.id);
