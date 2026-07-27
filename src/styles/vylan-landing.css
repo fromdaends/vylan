@@ -287,10 +287,16 @@
   .vy-subprefix.vy-pf-fwd,
   .vy-subprefix.vy-pf-rev { animation: none; }
   .vy-reel-mask { transition: none; }
+  /* Kill the motion ONLY. These used to force opacity:1 as well, which
+     pinned the outgoing word on screen at full strength underneath the
+     incoming one — the hero read "with remmiaindielrs." for everyone with
+     reduced motion. LandingShell writes each word's resting opacity inline
+     (exactly one word at 1), so with the animation off the words simply
+     swap instantly, which is what reduced motion should do anyway. */
   .vy-reel-word.vy-out,
   .vy-reel-word.vy-in,
   .vy-reel-word.vy-out-rev,
-  .vy-reel-word.vy-in-rev { animation: none; opacity: 1; }
+  .vy-reel-word.vy-in-rev { animation: none; }
   .vy-reel-word.vy-ai-glitch { animation: none; }
   .vy-reel-word.vy-brand-out { animation: none; opacity: 0; }
 }
