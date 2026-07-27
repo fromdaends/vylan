@@ -46,6 +46,19 @@ describe("isIntegrationsSectionActive", () => {
     expect(isIntegrationsSectionActive("/quickbooks/drafts")).toBe(false);
   });
 
+  it("does NOT light on Document filing (its own top-level tab)", () => {
+    // Document filing keeps its /integrations/filing URL but is a top-level tab,
+    // so the Integrations section must stay unlit — otherwise both rows light.
+    expect(isIntegrationsSectionActive("/integrations/filing")).toBe(false);
+    expect(isIntegrationsSectionActive("/integrations/filing/callback")).toBe(
+      false,
+    );
+    // ...while the top-level tab itself does light on those paths.
+    expect(isNavItemActive("/integrations/filing", "/integrations/filing")).toBe(
+      true,
+    );
+  });
+
   it("stays off on unrelated routes", () => {
     expect(isIntegrationsSectionActive("/engagements")).toBe(false);
     expect(isIntegrationsSectionActive("/dashboard")).toBe(false);

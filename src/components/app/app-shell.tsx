@@ -125,28 +125,17 @@ const ENGAGEMENT_SUBNAV: {
 // The Integrations sub-items, in nav order. Each carries its product's OFFICIAL
 // brand logo (not a line icon) — a deliberate, small departure so the marks read
 // as the real tools. Brand NAMES are not localized. QuickBooks is the existing
-// live surface (/quickbooks/drafts); Sage 50 is the new file-export page. The
-// Document filing is a Vylan-native feature (no brand mark) — a folder-up
-// glyph in the filing feature's amber, shaped like the brand-logo components
-// so the subnav can treat every entry the same.
-function FilingGlyph({
-  className,
-  "aria-hidden": ariaHidden = true,
-}: {
-  className?: string;
-  "aria-hidden"?: boolean;
-}) {
-  return (
-    <FolderUp
-      className={cn("text-icon-amber", className)}
-      aria-hidden={ariaHidden}
-    />
-  );
-}
-
+// live surface (/quickbooks/drafts); Sage 50 is the new file-export page.
+//
+// Document filing used to live here as a fourth sub-item. It's a TOP-LEVEL tab
+// now (founder): it's a Vylan-native feature rather than a third-party
+// connection, and burying it a level down made it the least discoverable thing
+// in the sidebar. It is deliberately NOT listed in both places — two rows
+// pointing at one route would both try to light up.
+//
 // `root` is what the sidebar highlights against (QuickBooks lives under a
-// different URL root than the hub index). `name` null = localized via
-// labels.integrationsFiling (brand names stay hardcoded, they don't translate).
+// different URL root than the hub index). `name` null = localized (brand names
+// stay hardcoded, they don't translate).
 const INTEGRATION_SUBNAV: {
   key: string;
   name: string | null;
@@ -154,13 +143,6 @@ const INTEGRATION_SUBNAV: {
   root: string;
   Logo: typeof QuickbooksLogo;
 }[] = [
-  {
-    key: "filing",
-    name: null,
-    href: "/integrations/filing",
-    root: "/integrations/filing",
-    Logo: FilingGlyph,
-  },
   {
     key: "quickbooks",
     name: "QuickBooks",
@@ -835,6 +817,20 @@ function SidebarBody({
             badges={engagementBadges}
             collapsed={collapsed}
             bookkeepingConnected={quickbooksConnected || xeroConnected}
+          />
+          {/* Document filing — its own top-level tab (founder), promoted out of
+              the Integrations sub-list where it was the least discoverable thing
+              in the sidebar. Sits here rather than up in primaryNav so it groups
+              with Integrations: everything above is the WORK, these last two are
+              where the finished documents go. Cyan, since Templates already owns
+              the filing feature's amber. Desktop only — the mobile tab bar stays
+              at its deliberate three tabs + Account. */}
+          <NavLink
+            href="/integrations/filing"
+            icon={FolderUp}
+            label={labels.integrationsFiling}
+            collapsed={collapsed}
+            color="text-icon-cyan"
           />
           {/* Integrations hub — an expandable section mirroring Engagements:
               the label links to the /integrations index, the chevron reveals the
