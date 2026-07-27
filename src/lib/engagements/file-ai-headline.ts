@@ -33,6 +33,7 @@ export type AiHeadline = { kind: AiHeadlineKind; tone: AiHeadlineTone };
 
 import { matchDocument } from "@/lib/ai/matching";
 import type { DocType } from "@/lib/db/templates";
+import { AUTO_REJECT_STRIKE_LIMIT } from "@/lib/ai/usability";
 
 // 15 min: past this an un-run analysis is treated as "never ran", not in-flight.
 const ANALYSIS_FRESH_MS = 15 * 60 * 1000;
@@ -229,7 +230,11 @@ export function pickAiHeadline(p: {
   // A readability/usability problem outranks the type read — a file the client
   // needs to re-send shouldn't also wear a "looks like a T4" verdict.
   if (p.usable === false) {
-    if (p.rejectionCount >= 2 && p.aiRejected) {
+    // "escalated" must mean what the ROUTER actually did: stop bouncing the
+    // document back to the client and hand it to the accountant. That happens
+    // at AUTO_REJECT_STRIKE_LIMIT, not at 2 — the old number meant strikes 2-4
+    // read as "escalated" while the client was still being asked each time.
+    if (p.rejectionCount >= AUTO_REJECT_STRIKE_LIMIT && p.aiRejected) {
       return { kind: "escalated", tone: "bad" };
     }
     if (p.aiRejected) return { kind: "auto_rejected", tone: "warn" };

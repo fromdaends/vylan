@@ -2035,7 +2035,7 @@
     "status_low_confidence": "Confiance faible",
     "status_wrong_type": "Mauvais document",
     "status_auto_rejected": "Rejeté automatiquement",
-    "status_escalated": "À revoir",
+    "status_escalated": "Client relancé {count}× — à vous",
     "status_flagged": "À vérifier",
     "status_analyzing": "Lecture…",
     "status_not_analyzed": "Non analysé",
