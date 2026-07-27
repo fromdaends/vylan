@@ -338,10 +338,16 @@ export function CameraCapture({
       role="dialog"
       aria-modal="true"
       aria-label={t("scan_title")}
-      className="fixed inset-0 z-[70] flex flex-col bg-black text-white"
+      className="fixed inset-0 z-[70] flex flex-col bg-white"
     >
-      {/* Stage — camera preview or the captured shot. */}
-      <div ref={stageRef} className="relative min-h-0 flex-1 overflow-hidden">
+      {/* Stage — camera preview, or the captured shot on white. */}
+      <div
+        ref={stageRef}
+        className={cn(
+          "relative min-h-0 flex-1 overflow-hidden",
+          shot || failed ? "bg-white" : "bg-neutral-900",
+        )}
+      >
         {!shot && (
           <video
             ref={videoRef}
@@ -356,12 +362,14 @@ export function CameraCapture({
         )}
 
         {shot && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={shot.url}
-            alt={t("scan_review_alt")}
-            className="absolute inset-0 size-full object-contain"
-          />
+          <div className="absolute inset-0 flex items-center justify-center p-5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={shot.url}
+              alt={t("scan_review_alt")}
+              className="max-h-full max-w-full rounded-lg object-contain shadow-[0_1px_3px_rgba(0,0,0,0.10),0_8px_24px_rgba(0,0,0,0.08)]"
+            />
+          </div>
         )}
 
         {!shot && !failed && (
@@ -370,24 +378,20 @@ export function CameraCapture({
 
         {status === "starting" && (
           <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="size-8 animate-spin text-white/70" aria-hidden />
+            <Loader2 className="size-7 animate-spin text-white/60" aria-hidden />
           </div>
         )}
 
         {failed && <CameraUnavailable code={camera.error ?? "camera_failed"} />}
 
-        {/* Live coaching. aria-live so a screen-reader user hears the same
-            guidance a sighted client reads. */}
+        {/* One line of coaching, sitting on the dimmed area just below the
+            frame. aria-live so a screen-reader user hears what a sighted
+            client reads. */}
         {!shot && !failed && status === "ready" && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-4">
+          <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center px-8">
             <p
               aria-live="polite"
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-sm font-medium backdrop-blur-sm transition-colors",
-                guidance === "ready"
-                  ? "bg-emerald-500/90 text-white"
-                  : "bg-black/60 text-white/90",
-              )}
+              className="text-center text-[15px] font-medium leading-snug text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.7)]"
             >
               {t(`scan_hint_${guidance}`)}
             </p>
@@ -395,54 +399,57 @@ export function CameraCapture({
         )}
 
         {captureError && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-16 flex justify-center px-4">
-            <p className="rounded-full bg-red-500/90 px-3.5 py-1.5 text-sm font-medium">
+          <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center px-6">
+            <p className="rounded-full bg-red-600 px-3.5 py-1.5 text-[13px] font-medium text-white shadow-sm">
               {t("errors.capture_failed")}
             </p>
           </div>
         )}
 
-        {/* Close: top-right, clear of the notch. */}
+        {/* Close, and torch where the device has one. White discs so they read
+            the same over a bright document or a dark table. */}
         <button
           type="button"
           onClick={onClose}
           aria-label={t("scan_close")}
-          className="absolute right-3 top-3 inline-flex size-10 items-center justify-center rounded-full bg-black/50 text-white backdrop-blur-sm transition-colors hover:bg-black/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-          style={{ top: "calc(env(safe-area-inset-top, 0px) + 0.75rem)" }}
+          className="absolute right-4 inline-flex size-11 cursor-pointer items-center justify-center rounded-full bg-white/95 text-neutral-800 shadow-sm ring-1 ring-black/5 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
+          style={{ top: "calc(env(safe-area-inset-top, 0px) + 1rem)" }}
         >
-          <X className="size-5" aria-hidden />
+          <X className="size-[18px]" aria-hidden />
         </button>
 
-        {camera.torchSupported && !shot && (
+        {camera.torchSupported && !shot && !failed && (
           <button
             type="button"
             onClick={camera.toggleTorch}
             aria-label={t("scan_torch")}
             aria-pressed={camera.torchOn}
             className={cn(
-              "absolute left-3 inline-flex size-10 items-center justify-center rounded-full backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white",
+              "absolute left-4 inline-flex size-11 cursor-pointer items-center justify-center rounded-full shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2",
               camera.torchOn
-                ? "bg-white text-black"
-                : "bg-black/50 text-white hover:bg-black/70",
+                ? "bg-[#1050ed] text-white"
+                : "bg-white/95 text-neutral-800 hover:bg-white",
             )}
-            style={{ top: "calc(env(safe-area-inset-top, 0px) + 0.75rem)" }}
+            style={{ top: "calc(env(safe-area-inset-top, 0px) + 1rem)" }}
           >
-            <Flashlight className="size-5" aria-hidden />
+            <Flashlight className="size-[18px]" aria-hidden />
           </button>
         )}
       </div>
 
-      {/* Controls */}
+      {/* Controls — a plain white bar, one focal point. */}
       <div
-        className="flex shrink-0 items-center justify-center gap-6 bg-black px-6 py-5"
+        className="flex shrink-0 items-center justify-center gap-3 border-t border-neutral-200/80 bg-white px-6 pt-5"
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.25rem)" }}
       >
         {shot ? (
           <>
+            {/* Retake sizes to its label and the primary takes the rest, so
+                "Use this photo" stays on one line at 375px. */}
             <button
               type="button"
               onClick={retake}
-              className="inline-flex items-center gap-2 rounded-full border border-white/25 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full border border-neutral-300 px-5 py-3 text-[15px] font-medium text-neutral-800 transition-colors hover:bg-neutral-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
             >
               <RotateCcw className="size-4" aria-hidden />
               {t("scan_retake")}
@@ -450,7 +457,7 @@ export function CameraCapture({
             <button
               type="button"
               onClick={useShot}
-              className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              className="inline-flex flex-1 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#1050ed] px-5 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
             >
               <Check className="size-4" aria-hidden />
               {t("scan_use")}
@@ -463,7 +470,7 @@ export function CameraCapture({
               onChooseFile();
               onClose();
             }}
-            className="inline-flex items-center gap-2 rounded-full bg-white px-6 py-2.5 text-sm font-semibold text-black transition-colors hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#1050ed] px-6 py-3 text-[15px] font-semibold text-white transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
           >
             <ImageUp className="size-4" aria-hidden />
             {t("scan_choose_file")}
@@ -474,12 +481,12 @@ export function CameraCapture({
             onClick={() => void capture()}
             disabled={status !== "ready" || busy}
             aria-label={t("scan_capture")}
-            className="inline-flex size-16 items-center justify-center rounded-full border-4 border-white/80 bg-white/15 backdrop-blur-sm transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-40 motion-safe:active:scale-95"
+            className="inline-flex size-16 cursor-pointer items-center justify-center rounded-full bg-[#1050ed] text-white shadow-sm transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2 disabled:cursor-default disabled:bg-neutral-200 disabled:text-neutral-400 disabled:shadow-none motion-safe:active:scale-95"
           >
             {busy ? (
-              <Loader2 className="size-7 animate-spin text-white" aria-hidden />
+              <Loader2 className="size-6 animate-spin" aria-hidden />
             ) : (
-              <Camera className="size-7 text-white" aria-hidden />
+              <Camera className="size-6" aria-hidden />
             )}
           </button>
         )}
@@ -507,16 +514,19 @@ function ScanOverlay({
   ready: boolean;
 }) {
   if (view.width <= 0 || view.height <= 0) return null;
-  const inset = Math.round(Math.min(view.width, view.height) * 0.08);
-  const arm = Math.round(Math.min(view.width, view.height) * 0.07);
-  const right = view.width - inset;
-  const bottom = view.height - inset;
+  const a = apertureFor(view);
+  const arm = Math.round(Math.min(a.width, a.height) * 0.11);
+
+  // Outer rect + inner rounded rect as one evenodd path: the inner subpath is
+  // punched out, dimming everything except the document window. Cheaper and
+  // crisper than four positioned divs, and it scales with the viewport.
+  const scrim = `M0 0 H${view.width} V${view.height} H0 Z ${roundedRectPath(a)}`;
 
   const corners = [
-    `M ${inset} ${inset + arm} L ${inset} ${inset} L ${inset + arm} ${inset}`,
-    `M ${right - arm} ${inset} L ${right} ${inset} L ${right} ${inset + arm}`,
-    `M ${right} ${bottom - arm} L ${right} ${bottom} L ${right - arm} ${bottom}`,
-    `M ${inset + arm} ${bottom} L ${inset} ${bottom} L ${inset} ${bottom - arm}`,
+    `M ${a.x} ${a.y + arm} V ${a.y + a.r} A ${a.r} ${a.r} 0 0 1 ${a.x + a.r} ${a.y} H ${a.x + arm}`,
+    `M ${a.x + a.width - arm} ${a.y} H ${a.x + a.width - a.r} A ${a.r} ${a.r} 0 0 1 ${a.x + a.width} ${a.y + a.r} V ${a.y + arm}`,
+    `M ${a.x + a.width} ${a.y + a.height - arm} V ${a.y + a.height - a.r} A ${a.r} ${a.r} 0 0 1 ${a.x + a.width - a.r} ${a.y + a.height} H ${a.x + a.width - arm}`,
+    `M ${a.x + arm} ${a.y + a.height} H ${a.x + a.r} A ${a.r} ${a.r} 0 0 1 ${a.x} ${a.y + a.height - a.r} V ${a.y + a.height - arm}`,
   ];
 
   return (
@@ -526,13 +536,16 @@ function ScanOverlay({
       preserveAspectRatio="none"
       aria-hidden
     >
-      {/* Brackets fade back once the document itself is outlined — two
-          competing frames on screen at once reads as clutter. */}
+      <path d={scrim} fillRule="evenodd" fill="rgba(0,0,0,0.5)" />
+
+      {/* Thin brackets marking where to put the document. They step back once
+          the document itself is outlined — two competing frames reads as
+          clutter. */}
       <g
         className="transition-opacity duration-300"
-        opacity={quad ? 0.25 : 0.8}
+        opacity={quad ? 0.2 : 0.9}
         stroke="white"
-        strokeWidth={3}
+        strokeWidth={2}
         strokeLinecap="round"
         strokeLinejoin="round"
         fill="none"
@@ -542,13 +555,17 @@ function ScanOverlay({
         ))}
       </g>
 
+      {/* Brand blue rather than white: the thing being outlined is a sheet of
+          white paper, so a white stroke all but disappears against it. */}
       {quad && (
         <polygon
           points={quad.map((p) => `${p.x},${p.y}`).join(" ")}
-          className="transition-[fill,stroke] duration-200"
-          fill={ready ? "rgba(16,185,129,0.18)" : "rgba(255,255,255,0.10)"}
-          stroke={ready ? "rgb(16,185,129)" : "rgba(255,255,255,0.9)"}
-          strokeWidth={3}
+          className="transition-[fill,stroke,stroke-width] duration-200"
+          // Barely-there fill on lock, none before it: a strong wash over the
+          // page hides the very thing the client is checking.
+          fill={ready ? "rgba(16,80,237,0.08)" : "none"}
+          stroke={ready ? "#1050ed" : "rgba(16,80,237,0.85)"}
+          strokeWidth={ready ? 3.5 : 2.5}
           strokeLinejoin="round"
         />
       )}
@@ -564,16 +581,68 @@ function ScanOverlay({
 function CameraUnavailable({ code }: { code: CameraErrorCode }) {
   const t = useTranslations("Portal");
   return (
-    <div className="absolute inset-0 flex items-center justify-center p-6">
-      <div className="max-w-sm space-y-3 text-center">
-        <Camera className="mx-auto size-8 text-white/50" aria-hidden />
-        <p className="text-sm text-white/90">{t(`errors.${code}`)}</p>
+    <div className="absolute inset-0 flex items-center justify-center p-8">
+      <div className="max-w-xs space-y-2.5 text-center">
+        <Camera className="mx-auto size-7 text-neutral-400" aria-hidden />
+        <p className="text-[15px] font-medium text-neutral-900">
+          {t(`errors.${code}`)}
+        </p>
         {code === "camera_denied" && (
-          <p className="text-xs text-white/60">{t("scan_denied_help")}</p>
+          <p className="text-[13px] leading-relaxed text-neutral-500">
+            {t("scan_denied_help")}
+          </p>
         )}
       </div>
     </div>
   );
+}
+
+// --- framing geometry -------------------------------------------------------
+
+type Aperture = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  r: number;
+};
+
+/**
+ * The clear window in the scrim: where we're asking the client to put the
+ * document. Portrait letter proportions, because the slips this collects (T4,
+ * RL-1 and friends) are portrait — sized to the viewport so it stays a guide
+ * rather than a hard boundary, since detection works anywhere in frame.
+ */
+export function apertureFor(view: { width: number; height: number }): Aperture {
+  const margin = Math.round(view.width * 0.1);
+  const width = Math.max(1, view.width - margin * 2);
+  // Capped well short of the full height so the window reads as a frame with
+  // room around it rather than a box pressed against the edges, and so the
+  // coaching line underneath never has to fight it for space.
+  const height = Math.max(1, Math.min(width * 1.294, view.height * 0.6));
+  return {
+    x: margin,
+    y: Math.max(0, Math.round((view.height - height) / 2 - view.height * 0.06)),
+    width,
+    height: Math.round(height),
+    r: 14,
+  };
+}
+
+function roundedRectPath({ x, y, width, height, r }: Aperture): string {
+  const rad = Math.min(r, width / 2, height / 2);
+  return [
+    `M ${x + rad} ${y}`,
+    `H ${x + width - rad}`,
+    `A ${rad} ${rad} 0 0 1 ${x + width} ${y + rad}`,
+    `V ${y + height - rad}`,
+    `A ${rad} ${rad} 0 0 1 ${x + width - rad} ${y + height}`,
+    `H ${x + rad}`,
+    `A ${rad} ${rad} 0 0 1 ${x} ${y + height - rad}`,
+    `V ${y + rad}`,
+    `A ${rad} ${rad} 0 0 1 ${x + rad} ${y}`,
+    "Z",
+  ].join(" ");
 }
 
 // --- coordinate helpers -----------------------------------------------------

@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { CameraCapture } from "./camera-capture";
+import { CameraCapture, apertureFor } from "./camera-capture";
 import en from "../../../messages/en.json";
 
 // The analysis loop is inert here on purpose: happy-dom's canvas.getContext()
@@ -192,5 +192,57 @@ describe("CameraCapture", () => {
       );
       expect(screen.queryByText(en.Portal.scan_hint_searching)).toBeNull();
     });
+  });
+});
+
+describe("apertureFor — the framing window", () => {
+  const phone = { width: 375, height: 708 };
+
+  it("sits inside the viewport with room on every side", () => {
+    const a = apertureFor(phone);
+    expect(a.x).toBeGreaterThan(0);
+    expect(a.y).toBeGreaterThan(0);
+    expect(a.x + a.width).toBeLessThan(phone.width);
+    expect(a.y + a.height).toBeLessThan(phone.height);
+  });
+
+  it("leaves clear space below for the coaching line", () => {
+    // The hint is anchored 24px off the bottom of the stage; the window must
+    // not run into it.
+    const a = apertureFor(phone);
+    expect(phone.height - (a.y + a.height)).toBeGreaterThan(48);
+  });
+
+  it("is portrait, matching the slips this collects", () => {
+    const a = apertureFor(phone);
+    expect(a.height).toBeGreaterThan(a.width);
+  });
+
+  it("never exceeds its share of the height on a short screen", () => {
+    // Landscape, or a small phone in a browser with chrome eating the viewport.
+    const squat = apertureFor({ width: 800, height: 360 });
+    expect(squat.height).toBeLessThanOrEqual(360 * 0.6 + 1);
+    expect(squat.y).toBeGreaterThanOrEqual(0);
+  });
+
+  it("stays valid at degenerate sizes rather than producing negatives", () => {
+    for (const view of [
+      { width: 0, height: 0 },
+      { width: 1, height: 1 },
+      { width: 320, height: 0 },
+    ]) {
+      const a = apertureFor(view);
+      expect(a.width).toBeGreaterThanOrEqual(1);
+      expect(a.height).toBeGreaterThanOrEqual(1);
+      expect(a.y).toBeGreaterThanOrEqual(0);
+      expect(Number.isNaN(a.x + a.y + a.width + a.height)).toBe(false);
+    }
+  });
+
+  it("scales with the viewport", () => {
+    const small = apertureFor({ width: 320, height: 600 });
+    const large = apertureFor({ width: 430, height: 900 });
+    expect(large.width).toBeGreaterThan(small.width);
+    expect(large.height).toBeGreaterThan(small.height);
   });
 });
