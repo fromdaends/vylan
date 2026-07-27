@@ -3,6 +3,7 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { getPathname } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
+import { socialMetadata } from "@/lib/og/metadata";
 import { Mail, Phone, MapPin } from "lucide-react";
 import { schibsted } from "@/components/vylan-landing/fonts";
 import { BirdVideo } from "@/components/vylan-landing/bird-video";
@@ -22,7 +23,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params;
   const t = await getTranslations({ locale, namespace: "Vylan" });
-  return { title: `${t("contact_title")}: Vylan` };
+  const title = `${t("contact_title")}: Vylan`;
+  return {
+    title,
+    ...socialMetadata({ locale, title, path: "/contact" }),
+  };
 }
 
 // Standalone Contact page. Reuses the manifesto's page chrome (dark canvas +
