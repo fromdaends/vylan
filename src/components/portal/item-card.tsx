@@ -39,6 +39,7 @@ import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
 import type { PortalFile } from "@/lib/db/portal";
 import { PortalImageLightbox } from "./portal-image-lightbox";
 import { isCameraSupported } from "./use-camera-stream";
+import { enhancePickedImage } from "@/lib/portal/enhance-image";
 
 // The scanner pulls in the edge-detection and perspective maths, which nobody
 // who only ever taps "Upload" should have to download. Loaded the first time a
@@ -420,20 +421,33 @@ export function ItemCard({
   // builds its File in memory). Everything downstream — the size check, the
   // chunked-with-legacy-fallback upload, the optimistic patch and the AI
   // verdict poll — is shared, so a scan is treated exactly like a pick.
-  async function uploadFiles(files: FileList | File[]) {
+  async function uploadFiles(
+    files: FileList | File[],
+    opts: { enhance?: boolean } = {},
+  ) {
     setError(null);
     setAiRejection(null);
     setAiConfirmed(false);
     // Cancel any prior poll — the new upload is what we care about now.
     pollAbortRef.current?.abort();
     setChecking(false);
-    for (const file of Array.from(files)) {
-      if (file.size > MAX_UPLOAD_BYTES) {
+    for (const picked of Array.from(files)) {
+      // Size is judged on what the client actually chose, before any of our
+      // processing, so the "larger than 25 MB" message matches the file they
+      // can see in their library. `continue`, not `break`: one bad file must
+      // not swallow the rest of the selection. A client who picks five photos
+      // and whose second one is oversize used to get one generic error and
+      // three files that were never attempted and never mentioned.
+      if (picked.size > MAX_UPLOAD_BYTES) {
         setError("too_large");
-        break;
+        continue;
       }
       setUploading(true);
       try {
+        // Trim and flatten a picked photo where we can. Returns the original
+        // untouched on any doubt — a PDF, an existing flat scan, a failed
+        // decode — so this can never make a client's file worse.
+        const file = opts.enhance ? await enhancePickedImage(picked) : picked;
         const body = (await chunkedUpload(file)) ?? (await legacyUpload(file));
         // Always count the upload — the file IS saved server-side. The
         // verdict only governs whether we surface a "try again" message
@@ -455,7 +469,7 @@ export function ItemCard({
         }
       } catch (e) {
         setError((e as Error).message);
-        break;
+        continue;
       } finally {
         setUploading(false);
       }
@@ -540,7 +554,9 @@ export function ItemCard({
     e.preventDefault();
     setDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      uploadFiles(e.dataTransfer.files);
+      // Same treatment as the picker: a dropped photo of a slip gets trimmed
+      // and flattened, a dropped PDF or existing scan is left alone.
+      uploadFiles(e.dataTransfer.files, { enhance: true });
     }
   }
 
@@ -779,7 +795,13 @@ export function ItemCard({
                     hidden
                     onChange={(e) => {
                       if (e.target.files && e.target.files.length > 0) {
-                        uploadFiles(e.target.files);
+                        // `enhance` only on this path. Apple's picker always
+                        // offers "Take Photo or Video" and no web page can
+                        // remove it, so a picked file can still be a raw skewed
+                        // photo — we trim and flatten it the way the scanner
+                        // would. The scanner's own output is already rectified
+                        // and must not go through it twice.
+                        uploadFiles(e.target.files, { enhance: true });
                       }
                     }}
                   />

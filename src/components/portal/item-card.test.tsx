@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, cleanup, screen } from "@testing-library/react";
+import { render, cleanup, screen, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "../../../messages/en.json";
 import { pollIntervalFor, isReviewSettled, ItemCard } from "./item-card";
@@ -149,7 +149,11 @@ const FILE: PortalFile = {
   url: null,
 };
 
-function renderCard(status: RequestItemStatus, file: Partial<PortalFile> = {}) {
+function renderCard(
+  status: RequestItemStatus,
+  file: Partial<PortalFile> = {},
+  onUploaded: (f: { id: string; name: string; mime: string }) => void = vi.fn(),
+) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
       <ItemCard
@@ -160,7 +164,7 @@ function renderCard(status: RequestItemStatus, file: Partial<PortalFile> = {}) {
         files={[{ ...FILE, ...file }]}
         rejection={null}
         autoRequestMissingPages
-        onUploaded={vi.fn()}
+        onUploaded={onUploaded}
         onStatusChange={vi.fn()}
       />
     </NextIntlClientProvider>,
@@ -241,6 +245,48 @@ describe("ItemCard — the two upload paths", () => {
     expect(
       screen.getByRole("button", { name: en.Portal.add_more }),
     ).toBeInTheDocument();
+  });
+
+  // The client picks several files at once and one of them is bad. Every file
+  // AFTER the bad one used to be silently dropped: the loop `break`ed, the
+  // client saw one generic error, and nothing told them which file failed or
+  // that three more had never been attempted. They believed everything was sent.
+  it("keeps uploading the rest of a selection after one file fails", async () => {
+    const uploaded: string[] = [];
+    // A PDF never touches the image path, so this exercises the loop itself.
+    const sized = (name: string, bytes: number) => {
+      const f = new File(["x"], name, { type: "application/pdf" });
+      Object.defineProperty(f, "size", { value: bytes });
+      return f;
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) =>
+        new Response(
+          JSON.stringify({
+            file_id: `id-${String(url).includes("complete") ? "done" : "part"}`,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    const { container } = renderCard("pending", {}, (f) => uploaded.push(f.name));
+    const input = container.querySelector('input[type="file"]');
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: [
+        sized("first.pdf", 1_000),
+        sized("too-big.pdf", 26 * 1024 * 1024), // over the 25 MB cap
+        sized("third.pdf", 1_000),
+        sized("fourth.pdf", 1_000),
+      ],
+    });
+    fireEvent.change(input!);
+
+    await waitFor(() => expect(uploaded.length).toBe(3));
+    expect(uploaded).toEqual(["first.pdf", "third.pdf", "fourth.pdf"]);
+    vi.unstubAllGlobals();
   });
 
   it("keeps the file picker open to existing photos and documents", () => {
