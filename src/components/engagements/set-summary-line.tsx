@@ -108,21 +108,23 @@ export function SetSummaryLine({
   const heading =
     locale === "fr" ? "Contrôle d’intégralité" : "Completeness check";
 
-  // A bordered card in ONE fixed neutral colour — deliberately NOT tinted by
-  // the verdict (founder). A green box with a green tick reads as "this whole
-  // item is fine", which is a claim the summary shouldn't make: the set can be
-  // complete while a file inside it still needs review. The box is a container
-  // for information; the per-file rows and status badges carry the judgement.
+  // A bordered card in ONE fixed BRAND-BLUE tint — deliberately NOT tinted by
+  // the verdict (founder). Blue makes the block stand out on a long checklist
+  // while staying neutral about the outcome: a green box with a green tick
+  // reads as "this whole item is fine", which is a claim the summary shouldn't
+  // make (the set can be complete while a file inside it still needs review).
+  // The box is a container for information; the per-file rows and status badge
+  // carry the judgement.
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs leading-relaxed",
+        "rounded-lg border border-accent/30 bg-accent-subtle px-3 py-2 text-xs leading-relaxed",
         className,
       )}
     >
       {/* Label only — no confidence score. */}
       <div className="mb-1.5 flex items-center gap-1.5">
-        <FileText className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+        <FileText className="size-3.5 shrink-0 text-accent" aria-hidden />
         <span className="text-[11px] font-semibold uppercase tracking-wide text-foreground/70">
           {heading}
         </span>
@@ -135,7 +137,7 @@ export function SetSummaryLine({
         {points.map((point, i) => (
           <li key={`p-${i}`} className="flex items-start gap-1.5">
             <span
-              className="mt-[7px] size-1 shrink-0 rounded-full bg-muted-foreground/60"
+              className="mt-[7px] size-1 shrink-0 rounded-full bg-accent/70"
               aria-hidden
             />
             <span className="min-w-0 text-foreground/80">{point}</span>
