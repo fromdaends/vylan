@@ -8,6 +8,7 @@ import {
   type ComponentType,
 } from "react";
 import { useTranslations } from "next-intl";
+import { usePathname } from "@/i18n/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronDown,
@@ -24,6 +25,7 @@ import { TeamChatTab } from "@/components/assistant/team-chat-tab";
 import { ExpandedMessages } from "@/components/assistant/expanded-messages";
 import {
   closeChat,
+  collapseMessages,
   expandMessages,
   getChatLauncherServerSnapshot,
   getChatLauncherState,
@@ -33,6 +35,14 @@ import {
   setChatMode,
   subscribeChatLauncher,
 } from "@/components/assistant/chat-launcher-store";
+
+// Routes that own the bottom-right corner themselves. The launcher is fixed
+// there, so on the engagement builder it sat right on top of "Create and send"
+// — a primary action you do NOT want anyone fat-fingering. On these pages the
+// launcher is removed outright rather than nudged, since moving it would just
+// shift the collision onto something else. Locale-stripped paths (next-intl's
+// usePathname), so /en/... and /fr/... both match.
+const LAUNCHER_HIDDEN_ON: readonly RegExp[] = [/^\/engagements\/new(\/|$)/];
 
 // The global chat launcher, built on the SignWell pattern (founder spec): a
 // bottom-right button that pops a compact panel ABOVE itself. The button stays
@@ -64,6 +74,8 @@ export function ChatLauncher({
     getChatLauncherState,
     getChatLauncherServerSnapshot,
   );
+  const pathname = usePathname();
+  const hidden = LAUNCHER_HIDDEN_ON.some((re) => re.test(pathname));
 
   const popupRef = useRef<HTMLDivElement | null>(null);
   const fabRef = useRef<HTMLButtonElement | null>(null);
@@ -133,7 +145,20 @@ export function ChatLauncher({
     };
   }, []);
 
+  // Navigating INTO a hidden route while the popup is open would otherwise
+  // leave it "open" in the store and pop it back up on the next page.
+  useEffect(() => {
+    if (!hidden) return;
+    if (open) closeChat();
+    // The docked sidebar is a separate surface with its own flag, so closing
+    // the popup alone would leave it pinned to the page.
+    if (expanded) collapseMessages();
+  }, [hidden, open, expanded]);
+
   const badge = messagesUnread > 0;
+
+  // After every hook, so the rules of hooks hold on the routes that hide it.
+  if (hidden) return null;
 
   return (
     <>
