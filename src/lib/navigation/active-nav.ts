@@ -21,6 +21,12 @@ export function isNavItemActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(href + "/");
 }
 
+// Routes that live under /integrations in the URL but are their OWN top-level
+// sidebar tab, so the Integrations section must stay unlit there (otherwise two
+// rows light at once). Document filing is a Vylan-native feature promoted out of
+// the sub-list; its URL was left alone so existing links keep working.
+const INTEGRATIONS_EXCLUDED_ROOTS = ["/integrations/filing"];
+
 // The Integrations section lives under the /integrations hub (its index, the
 // Sage export at /integrations/sage, and the per-product connect pages
 // /integrations/quickbooks and /integrations/xero). The sidebar's expandable
@@ -29,8 +35,11 @@ export function isNavItemActive(pathname: string, href: string): boolean {
 // top-level "Bookkeeping" tab now (a shared QuickBooks+Xero surface), which lights
 // via isNavItemActive on its own href — so /quickbooks is deliberately excluded
 // here to avoid both the Bookkeeping tab and the Integrations section lighting at
-// once.
+// once. Document filing is excluded for the same reason.
 export function isIntegrationsSectionActive(pathname: string): boolean {
+  if (INTEGRATIONS_EXCLUDED_ROOTS.some((r) => isNavItemActive(pathname, r))) {
+    return false;
+  }
   return isNavItemActive(pathname, "/integrations");
 }
 
@@ -53,13 +62,12 @@ export function isIntegrationSubItemVisible(
   // owner to connect from a client's page — so it's DISCOVERABLE instead of hidden
   // (the founder's call). An unknown/future integration falls back to the
   // connection flag rather than assuming it should show.
+  // ("filing" is no longer a sub-item — Document filing is its own top-level
+  // tab now, so it never reaches this predicate.)
   return (
     key === "quickbooks" ||
     key === "sage" ||
     key === "xero" ||
-    // Document filing: always listed — connect state lives on its page, and
-    // like Sage/QuickBooks the feature must be discoverable before connecting.
-    key === "filing" ||
     quickbooksConnected
   );
 }
