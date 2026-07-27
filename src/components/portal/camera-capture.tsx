@@ -23,10 +23,14 @@ import {
   toGrayscale,
   computeMetrics,
   guidanceFor,
-  shouldAutoCapture,
   type Gray,
   type Guidance,
 } from "@/lib/portal/frame-metrics";
+import {
+  advanceShutter,
+  INITIAL_SHUTTER,
+  type ShutterState,
+} from "@/lib/portal/auto-shutter";
 import { detectQuad, smoothQuad, quadArea } from "@/lib/portal/detect-quad";
 import type { Quad } from "@/lib/portal/rectify";
 
@@ -72,8 +76,7 @@ export function CameraCapture({
   const detectCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const prevGrayRef = useRef<Gray | null>(null);
   const quadRef = useRef<Quad | null>(null);
-  const readyStreakRef = useRef(0);
-  const missStreakRef = useRef(0);
+  const shutterRef = useRef<ShutterState>(INITIAL_SHUTTER);
   const capturingRef = useRef(false);
 
   const [view, setView] = useState({ width: 0, height: 0 });
@@ -276,36 +279,31 @@ export function CameraCapture({
       const metrics = computeMetrics(gray, prevGrayRef.current, areaFraction);
       prevGrayRef.current = gray;
 
-      // Detection drops the odd frame even on a document sitting perfectly
-      // still. Clearing the outline on every miss makes it strobe, so a short
-      // grace period holds the last one — but a miss ALWAYS resets the
-      // auto-shutter, so the photo only ever fires on frames where the
-      // document was genuinely seen.
-      if (smoothed) {
-        missStreakRef.current = 0;
-      } else {
-        missStreakRef.current += 1;
-        readyStreakRef.current = 0;
-      }
-      const withinGrace = missStreakRef.current <= MISS_GRACE_FRAMES;
+      // All the frame-to-frame bookkeeping — how long the document has looked
+      // good, how long it has been missing, whether to shoot — lives in a pure
+      // reducer so it can actually be tested. This loop only does the parts
+      // that need a canvas.
+      const step = advanceShutter(shutterRef.current, {
+        detected: smoothed !== null,
+        guidanceFor: (documentPresent) =>
+          guidanceFor(metrics, documentPresent),
+        graceFrames: MISS_GRACE_FRAMES,
+        requiredFrames: READY_FRAMES_REQUIRED,
+      });
+      shutterRef.current = step.state;
 
-      const next = guidanceFor(metrics, smoothed !== null || withinGrace);
-      setGuidance((g) => (g === next ? g : next));
+      setGuidance((g) => (g === step.guidance ? g : step.guidance));
 
-      if (smoothed) {
+      if (step.outline === "update" && smoothed) {
         const inView = scaleToView(smoothed, view, canvas);
         quadRef.current = inView;
         setQuad(inView);
-        readyStreakRef.current =
-          next === "ready" ? readyStreakRef.current + 1 : 0;
-      } else if (!withinGrace) {
+      } else if (step.outline === "clear") {
         quadRef.current = null;
         setQuad(null);
       }
-      if (shouldAutoCapture(readyStreakRef.current, READY_FRAMES_REQUIRED)) {
-        readyStreakRef.current = 0;
-        void capture();
-      }
+
+      if (step.fire) void capture();
     }
 
     raf = requestAnimationFrame(tick);
@@ -313,16 +311,14 @@ export function CameraCapture({
       cancelled = true;
       cancelAnimationFrame(raf);
       prevGrayRef.current = null;
-      readyStreakRef.current = 0;
-      missStreakRef.current = 0;
+      shutterRef.current = INITIAL_SHUTTER;
     };
   }, [status, shot, view, capture]);
 
   function retake() {
     setShot(null);
     setCaptureError(null);
-    readyStreakRef.current = 0;
-    missStreakRef.current = 0;
+    shutterRef.current = INITIAL_SHUTTER;
     quadRef.current = null;
     setQuad(null);
     setGuidance("searching");

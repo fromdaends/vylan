@@ -196,6 +196,102 @@ const PAGE_TRUTH: Point[] = [
   { x: 30, y: 99 },
 ];
 
+/**
+ * A soft-edged filled ellipse: a plate, a bowl, a circular shadow, a pool of
+ * lamp light. `soft` is the half-width of the brightness ramp at the rim, in
+ * pixels, so soft=2 is a china plate in focus and soft=6 is the edge of a
+ * shadow. `step` is signed, so a negative step darkens (a shadow) and a
+ * positive one brightens (a plate on a dark table, a pool of light).
+ */
+function softEllipse(
+  width: number,
+  height: number,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  base: number,
+  step: number,
+  soft: number,
+): Gray {
+  const g = makeGray(width, height, base);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      // Distance to the rim, measured in pixels along the radius.
+      const nx = (x - cx) / rx;
+      const ny = (y - cy) / ry;
+      const inset = (1 - Math.hypot(nx, ny)) * Math.min(rx, ry);
+      const t = Math.max(0, Math.min(1, (inset + soft) / (2 * soft)));
+      g.data[y * width + x] = Math.round(base + step * t);
+    }
+  }
+  return g;
+}
+
+/** Convenience: a circular one. */
+function softCircle(
+  cx: number,
+  cy: number,
+  r: number,
+  base: number,
+  step: number,
+  soft: number,
+): Gray {
+  return softEllipse(160, 120, cx, cy, r, r, base, step, soft);
+}
+
+/**
+ * A page with rounded corners and/or bowed sides — a real sheet of paper rather
+ * than a mathematical rectangle. `round` is the corner radius in pixels;
+ * `bow` is how far the middle of each side bulges outward, also in pixels.
+ * Drawn rotated by `angle` about the frame centre.
+ */
+function realisticPage(opts: {
+  base: number;
+  step: number;
+  hw?: number;
+  hh?: number;
+  angle?: number;
+  round?: number;
+  bow?: number;
+  blur?: boolean;
+  noise?: number;
+  seed?: number;
+}): Gray {
+  const hw = opts.hw ?? 46;
+  const hh = opts.hh ?? 36;
+  const angle = opts.angle ?? 0;
+  const round = opts.round ?? 0;
+  const bow = opts.bow ?? 0;
+  const g = makeGray(160, 120, opts.base);
+  const cx = 80;
+  const cy = 60;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  for (let y = 0; y < 120; y++) {
+    for (let x = 0; x < 160; x++) {
+      const dx = x - cx;
+      const dy = y - cy;
+      const u = dx * cos + dy * sin;
+      const v = -dx * sin + dy * cos;
+      // Each half-extent bulges by `bow` at the middle of its side, parabolically.
+      const hwv = hw + bow * Math.max(0, 1 - (v / hh) * (v / hh));
+      const hhu = hh + bow * Math.max(0, 1 - (u / hw) * (u / hw));
+      let inside = Math.abs(u) <= hwv && Math.abs(v) <= hhu;
+      if (inside && round > 0) {
+        const ou = Math.abs(u) - (hwv - round);
+        const ov = Math.abs(v) - (hhu - round);
+        if (ou > 0 && ov > 0 && Math.hypot(ou, ov) > round) inside = false;
+      }
+      if (inside) g.data[y * 160 + x] = opts.base + opts.step;
+    }
+  }
+  let out = g;
+  if (opts.blur) out = blur3(out);
+  if (opts.noise) addNoise(out, opts.noise, opts.seed ?? 1);
+  return out;
+}
+
 /** Deterministic per-pixel noise — no Math.random, so failures are reproducible. */
 function fillNoise(g: Gray): void {
   for (let i = 0; i < g.data.length; i++) {
@@ -1056,6 +1152,52 @@ describe("detectQuad on a white page on a light table", () => {
     }
   });
 
+  it("keeps the faint-page gains exactly: the straightness check costs nothing here", () => {
+    // The trade the straightness check must NOT make silently. The faint page
+    // is the whole reason the amplified pass exists, and the amplified pass is
+    // where the plate false positive lived, so it would have been easy to buy
+    // the plate rejection with faint-page sensitivity.
+    //
+    // These counts were measured on the code BEFORE the straightness check and
+    // are unchanged after it — every cell of the grid, eight seeds each. If a
+    // future tolerance change costs sensitivity, this is where it shows up as a
+    // number rather than as a vague "still works".
+    const rate = (step: number, sd: number): number => {
+      let found = 0;
+      for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        if (detectQuad(whiteOnWhite(step, sd, true, seed)) !== null) found++;
+      }
+      return found;
+    };
+    // step 7: solid at every noise level tested.
+    expect(rate(7, 0)).toBe(8);
+    expect(rate(7, 1)).toBe(8);
+    expect(rate(7, 2)).toBe(8);
+    expect(rate(7, 3)).toBe(8);
+    // step 5: solid to sd 2, falls off at 3.
+    expect(rate(5, 0)).toBe(8);
+    expect(rate(5, 1)).toBe(8);
+    expect(rate(5, 2)).toBe(8);
+    expect(rate(5, 3)).toBe(1);
+    // step 4: solid to sd 1, a coin flip at 2, gone at 3.
+    expect(rate(4, 0)).toBe(8);
+    expect(rate(4, 1)).toBe(8);
+    expect(rate(4, 2)).toBe(3);
+    expect(rate(4, 3)).toBe(0);
+  });
+
+  it("keeps the faint-page ACCURACY, not just the detection", () => {
+    // A check that quietly moved a corner would pass the counts above. Corner
+    // error is pinned separately, at the same tolerance the pre-check tests use.
+    for (const step of [7, 5, 4]) {
+      for (const seed of [1, 2, 3]) {
+        const q = detectQuad(whiteOnWhite(step, step >= 5 ? 2 : 1, true, seed));
+        expect(q).not.toBeNull();
+        expectCornersNear(q as Quad, PAGE_TRUTH, 5);
+      }
+    }
+  });
+
   it("KNOWN LIMITATION: one strong edge in frame switches the faint pass off", () => {
     // The normalising pass only runs on frames with no strong edge anywhere, so
     // a faint page next to something high-contrast — a dark phone on the table,
@@ -1191,6 +1333,162 @@ describe("detectQuad does not invent a page out of nothing", () => {
     addNoise(flat, 3, 2);
     expect(detectQuad(flat)).toBeNull();
     expect(detectQuad(flat)).toBeNull();
+  });
+
+  it("returns null for a soft-edged plate on a plain surface", () => {
+    // THE DEFECT. A plate has no hard edge, so the frame passes the
+    // no-strong-edge gate and the amplifier runs; the amplifier makes the rim
+    // a strong ring; the max-area-quad search inscribes a square in that ring;
+    // and area, convexity, 90-degree corners and edge support are ALL satisfied
+    // by that square, because a circle's arc really does sit under the sides
+    // near the corners. Before the straightness check this returned an outline
+    // on 22 of a 72-case sweep.
+    //
+    // A wrong outline here is worse than no outline: the client's kitchen table
+    // is the deployment environment, and an outline that latches onto a dinner
+    // plate both destroys trust and can trigger an automatic capture of the
+    // wrong thing.
+    for (const r of [30, 34, 38, 44, 50]) {
+      for (const step of [20, 24, 28, 30]) {
+        for (const soft of [2, 3, 4, 6]) {
+          for (const seed of [1, 2, 3]) {
+            const g = softCircle(80, 60, r, 210, step, soft);
+            addNoise(g, 1, seed);
+            expect(detectQuad(g)).toBeNull();
+          }
+        }
+      }
+    }
+  });
+
+  it("returns null for a dark round object on a light surface, too", () => {
+    // Polarity does not matter to the detector, so it must not matter to the
+    // rejection either: a dark bowl on a pale table is the same false positive.
+    for (const r of [32, 40, 48]) {
+      for (const step of [-20, -26, -30]) {
+        for (const seed of [1, 2, 3]) {
+          const g = softCircle(80, 60, r, 235, step, 3);
+          addNoise(g, 1, seed);
+          expect(detectQuad(g)).toBeNull();
+        }
+      }
+    }
+  });
+
+  it("returns null for a soft circular shadow", () => {
+    // A shadow has no rim at all — just a smooth sigmoid falloff — which makes
+    // it the softest version of the same shape, and the version the amplifier
+    // is most eager to help.
+    for (const r of [30, 40, 50]) {
+      for (const depth of [20, 25, 30]) {
+        for (const seed of [1, 2, 3]) {
+          const g = makeGray(160, 120, 230);
+          for (let y = 0; y < 120; y++) {
+            for (let x = 0; x < 160; x++) {
+              const d = Math.hypot(x - 80, y - 60);
+              g.data[y * 160 + x] = Math.round(230 - depth / (1 + Math.exp((d - r) / 3)));
+            }
+          }
+          addNoise(g, 1, seed);
+          expect(detectQuad(g)).toBeNull();
+        }
+      }
+    }
+  });
+
+  it("returns null for an elliptical pool of lamp light", () => {
+    // Not a circle: an ellipse, including one nearly as wide as it is tall and
+    // one much wider. The straightness test must not be secretly a circle
+    // detector — it measures curvature, and every convex curve has some.
+    for (const [rx, ry] of [
+      [55, 38],
+      [48, 44],
+      [60, 34],
+    ] as Array<[number, number]>) {
+      for (const step of [20, 25, 30]) {
+        for (const seed of [1, 2, 3]) {
+          const g = softEllipse(160, 120, 80, 60, rx, ry, 195, step, 5);
+          addNoise(g, 1, seed);
+          expect(detectQuad(g)).toBeNull();
+        }
+      }
+    }
+  });
+
+  it("still finds a page with rounded corners", () => {
+    // The straightness rule must not become a rectangle-purity rule. Real paper
+    // has a corner radius, and the amplifier's own smoothing rounds it further.
+    // Sampling stops at 20% and 80% along each side precisely so a rounded
+    // corner is never mistaken for a bowed side.
+    for (const round of [4, 8, 12, 16]) {
+      const hard = realisticPage({ base: 25, step: 200, round });
+      expect(detectQuad(hard)).not.toBeNull();
+      const faint = realisticPage({ base: 243, step: 7, round, blur: true, noise: 2 });
+      expect(detectQuad(faint)).not.toBeNull();
+    }
+  });
+
+  it("still finds a gently curled page", () => {
+    // A sheet that is not lying perfectly flat bows its sides outward. 5px on a
+    // ~90px side is a visible curl, and it measures about a third of the bow a
+    // round object produces, which is the headroom the tolerance is built on.
+    for (const bow of [2, 3, 4, 5]) {
+      const hard = realisticPage({ base: 25, step: 200, bow });
+      expect(detectQuad(hard)).not.toBeNull();
+      const faint = realisticPage({ base: 243, step: 7, bow, blur: true, noise: 2 });
+      expect(detectQuad(faint)).not.toBeNull();
+    }
+  });
+
+  it("straightness is rotation invariant", () => {
+    // Measured in each side's own frame — a chord parameter and a normal — so
+    // there is nothing axis-aligned about it. Swept rather than spot-checked,
+    // because an accidental axis dependence would show up at some angles only.
+    for (const deg of [-40, -27, -17, -9, 0, 9, 17, 27, 40]) {
+      const angle = (deg * Math.PI) / 180;
+      const truth = rotatedCorners(80, 60, 46, 36, angle);
+      const hard = detectQuad(realisticPage({ base: 25, step: 200, angle }));
+      expect(hard).not.toBeNull();
+      expectCornersNear(hard as Quad, truth, 3);
+      // ...and on the amplified path, where the boundary is a fat ring.
+      const faint = detectQuad(
+        realisticPage({ base: 243, step: 7, angle, blur: true, noise: 2 }),
+      );
+      expect(faint).not.toBeNull();
+      expectCornersNear(faint as Quad, truth, 5);
+    }
+  });
+
+  it("a rotated page with rounded corners and a curl is still a page", () => {
+    // All three tolerances at once, which is what an actual hand-held photo of
+    // an actual sheet of paper looks like.
+    for (const deg of [-25, 0, 18]) {
+      const angle = (deg * Math.PI) / 180;
+      const g = realisticPage({
+        base: 243,
+        step: 7,
+        angle,
+        round: 8,
+        bow: 3,
+        blur: true,
+        noise: 2,
+      });
+      expect(detectQuad(g)).not.toBeNull();
+    }
+  });
+
+  it("KNOWN LIMITATION: a hard-edged plate was already rejected, and still is", () => {
+    // The pre-existing plate fixture higher up covers the hard-edged case, which
+    // the support check alone handles. Pinned here alongside the soft one so the
+    // two rejection mechanisms stay visibly distinct: support rejects a thin
+    // crisp rim, straightness rejects a fat soft one.
+    const g = makeGray(160, 120, 20);
+    for (let y = 0; y < 120; y++) {
+      for (let x = 0; x < 160; x++) {
+        if (Math.hypot(x - 80, y - 60) <= 50) g.data[y * 160 + x] = 230;
+      }
+    }
+    expect(detectQuad(g)).toBeNull();
   });
 
   it("stays inside the frame budget on the worst case: 640x480, both passes", () => {

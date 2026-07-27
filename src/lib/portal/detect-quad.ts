@@ -20,6 +20,15 @@ import { orderCorners, type Point, type Quad } from "./rectify";
 // because the corners on that side would be guesses. Small gaps survive; a
 // wholly missing side does not, and that is the intended trade.
 //
+// Support is necessary but NOT sufficient, and the gap between the two is a
+// dinner plate. The support check asks "is there an edge pixel near this side",
+// and the arc of a large round object says yes: a plate, a bowl, a circular
+// shadow, a pool of lamp light all get a quad inscribed in their rim by a
+// candidate generator whose job is to maximise area. So there is a second,
+// independent question — are the sides STRAIGHT? — answered by hasStraightSides
+// below. A rectangle's boundary lies on the chord between two adjacent corners;
+// a curve's bows away from it.
+//
 // Known weakness of the hull: clutter *connected to* the document pulls a corner
 // outward (a pen lying across the page edge joins the same component), and the
 // support check cannot see that because the pen supplies real edge pixels.
@@ -58,6 +67,111 @@ const MIN_SIDE_FRACTION = 0.02;
 const SUPPORT_RADIUS = 2;
 const MIN_TOTAL_SUPPORT = 0.55;
 const MIN_SIDE_SUPPORT = 0.2;
+
+/* ------------------------------------------------ side-straightness tuning ---
+ * See hasStraightSides for the reasoning behind the measurement itself; these
+ * are the numbers it is judged against, and they come from sweeps rather than
+ * from taste.
+ *
+ * The check runs on BOTH passes, and that was decided by measurement rather
+ * than by caution. The obviously safe scoping is "amplified pass only" — that
+ * is where the plate was reported, and the direct pass is already pinned by
+ * three dozen fixtures. Measured, that scoping is simply worse: on a 960-case
+ * sweep of soft round objects (radius 28-55, contrast 18-30 grey levels, four
+ * edge softnesses, bright-on-dark and dark-on-bright, three noise seeds) the
+ * direct pass produces plenty of the false positives on its own, because a soft
+ * rim still clears MIN_EDGE_MAGNITUDE and the direct pass then inscribes the
+ * same square in the same ring. Amplified-only leaves most of them standing;
+ * on both passes the sweep goes 270/960 -> 0/960, and soft circular shadows and
+ * elliptical pools of lamp light go 22/54 -> 0/54.
+ *
+ * Read that 0/960 as "0 for these fixtures", not as "no round object survives":
+ * an independent generator over the SAME parameter box, differing only in using
+ * a smoothstep rim ramp instead of a linear one, still gets 16/1680 through. The
+ * honest summary of the check's power is in the note above
+ * STRAIGHT_MAX_BOW_FRACTION.
+ *
+ * The cost of the wider scoping, measured the same way: none that shows. A
+ * 432-case document sweep (six contrast/noise regimes from a 200-level step to
+ * a 5-level one, four rotations, corner roundings to r=12, curls to 5px,
+ * perspective taper) returns byte-identical output before and after, corner
+ * coordinates included. So does a separate 52-case sweep that adds -30..+30
+ * rotations, r=16 rounding, 640x480 and the small-frame case. A guard with no
+ * measured cost belongs on every path, not only the one where the bug was
+ * noticed.
+ */
+
+// Where along each side to sample, as a chord parameter. Stopping well short of
+// the corners is deliberate twice over: every shape meets its own chord AT its
+// corners, so the ends carry no signal, and a real document's corner is rounded
+// — by the paper, by the lens, and by the smoothing inside the amplifier — so
+// sampling into it would read the rounding as a bow.
+const STRAIGHT_T0 = 0.2;
+const STRAIGHT_T1 = 0.8;
+// Odd and >= 5, so there is a middle sample and a flank sample at each end.
+const STRAIGHT_SAMPLES = 9;
+// How far either side of the chord to look for the boundary, as a fraction of
+// the side length. A quad inscribed in a circle bows by ~0.207 of its side
+// length at mid-side, so the band has to be comfortably wider than that or the
+// bow falls outside the search and reads as "no boundary" instead of as a bow.
+const STRAIGHT_BAND_FRACTION = 0.35;
+const STRAIGHT_BAND_MIN = 6;
+// A side may bow by this fraction of its own length before it stops being
+// straight. Measured, in units of the side's own length (the statistic is the
+// mid-side silhouette minus the silhouette at t = 0.2 and 0.8, so it reads
+// about 0.36 of the physical mid-side deviation — that factor applies to both
+// columns and cancels):
+//
+//   soft round object, r=30..46      0.055 .. 0.076   <- must be rejected
+//   page with a 5px curl             0.011 .. 0.033   <- must be kept
+//   page with r=12 rounded corners  -0.006 .. 0.004
+//   page rotated 27 and -17 deg     -0.010 .. 0.000
+//   page, plain, high or faint      -0.007 .. 0.003
+//
+// 0.05 sits between them: 1.5x above the worst genuine page and 1.1x below the
+// smallest false positive IN THAT SWEEP. In the underlying geometry the margin
+// is the honest one: a circle's mid-side deviation is 0.207 of the side, a 5px
+// curl on a 90px page is 0.055 of it, and the threshold is the geometric middle
+// of those two.
+//
+// That 1.1x is not a safety margin, and the round-object column above is NOT a
+// floor — it is the range of one sweep. An independent sweep with a smoothstep
+// (rather than linear) rim ramp puts round objects below the threshold at both
+// ends of the size range:
+//
+//   filled circle, 256x341, r=80, contrast 45, rim softness 22
+//     -> worst side 0.0448, DETECTED (a 134x125 square inscribed in the rim)
+//   filled circle, 160x120, r=31..37, contrast 16..55
+//     -> worst side 0.047 .. 0.053, DETECTED on ~1% of that grid
+//
+// So the check removes the large majority of round objects but not all of them:
+// measured on a 10800-case independent sweep (three frame sizes, radius from
+// the area floor up, contrast 10..55, ten rim softnesses, both polarities),
+// 890 false positives before the check and 97 after. At the 256-wide frame the
+// camera actually uses it is 62/3840 before and 6/3840 after.
+//
+// Retuning does NOT close the gap for free, and this was measured rather than
+// assumed. Lowering STRAIGHT_MIN_BOW to 2 clears the short-side survivors but
+// leaves every 256-wide one standing (those are governed by the fraction, not
+// the floor) and costs 363 of 13500 small-frame pages. Lowering the fraction to
+// 0.04 starts costing pages in the main sweep as well. The residual is
+// therefore a known limitation of a local straightness measure, not a tuning
+// oversight — but the numbers above, not the 1.1x, are what a future tolerance
+// change has to respect.
+const STRAIGHT_MAX_BOW_FRACTION = 0.05;
+// ...but never less than this many pixels, because the measurement is quantised
+// — a pixel mask walked in half-pixel steps — and the shortest side the detector
+// can emit is ~48px (the area floor), where the fractional allowance would be
+// 2.4px. Documents measure at most 2.5px of bow anywhere in the sweep, so it
+// buys real headroom for a small page.
+//
+// It is not free, though, and the cost lands exactly where the floor bites: a
+// circle small enough to have ~50px sides measures 2.5-2.8px of bow, i.e. under
+// this floor but over the 0.05 fraction it overrides, so the floor is what lets
+// those through. Dropping it to 2 removes them and costs 363 of 13500 pages on
+// small frames (sides down to ~26px), which is the wrong trade for a detector
+// whose production frame is 256 wide. See the note above STRAIGHT_MAX_BOW_FRACTION.
+const STRAIGHT_MIN_BOW = 3;
 // Vertex budget handed to the max-area-quad search (its cost is O(n^4)).
 const MAX_POLY_VERTICES = 24;
 // Hull vertices this close to the chord through their neighbours are
@@ -421,6 +535,7 @@ function detectQuadDirect(
   }
 
   if (!isSupported(quad, mask, w, h)) return null;
+  if (!hasStraightSides(quad, mask, w, h)) return null;
 
   return quad;
 }
@@ -719,11 +834,18 @@ function cornerCosine(prev: Point, corner: Point, next: Point): number {
   return (ax * bx + ay * by) / (la * lb);
 }
 
-function hasEdgeNear(mask: Uint8Array, w: number, h: number, x: number, y: number): boolean {
-  const x0 = clampInt(Math.round(x) - SUPPORT_RADIUS, 0, w - 1);
-  const x1 = clampInt(Math.round(x) + SUPPORT_RADIUS, 0, w - 1);
-  const y0 = clampInt(Math.round(y) - SUPPORT_RADIUS, 0, h - 1);
-  const y1 = clampInt(Math.round(y) + SUPPORT_RADIUS, 0, h - 1);
+function hasEdgeNear(
+  mask: Uint8Array,
+  w: number,
+  h: number,
+  x: number,
+  y: number,
+  radius: number = SUPPORT_RADIUS,
+): boolean {
+  const x0 = clampInt(Math.round(x) - radius, 0, w - 1);
+  const x1 = clampInt(Math.round(x) + radius, 0, w - 1);
+  const y0 = clampInt(Math.round(y) - radius, 0, h - 1);
+  const y1 = clampInt(Math.round(y) + radius, 0, h - 1);
   for (let yy = y0; yy <= y1; yy++) {
     const row = yy * w;
     for (let xx = x0; xx <= x1; xx++) if (mask[row + xx] === 1) return true;
@@ -755,4 +877,135 @@ function isSupported(q: Quad, mask: Uint8Array, w: number, h: number): boolean {
     total += samples;
   }
   return total > 0 && hits / total >= MIN_TOTAL_SUPPORT;
+}
+
+// Signed distance from (x, y) to the OUTERMOST edge pixel of the component
+// along the line through (nx, ny) — positive on the (nx, ny) side. Null when
+// the whole band is empty. The walk starts at the far end of the band and
+// returns the first hit, so what it finds is the component's silhouette rather
+// than the near surface of a thick boundary; see hasStraightSides for why that
+// distinction is the whole measurement. Half-pixel steps because the mask is a
+// pixel grid and a whole-pixel walk along a diagonal normal skips cells. Uses
+// the support check's own lookup, at radius 0: this measures a distance, and a
+// 5x5 probe would smear every offset by 2px in both directions.
+function outerBoundaryOffset(
+  mask: Uint8Array,
+  w: number,
+  h: number,
+  x: number,
+  y: number,
+  nx: number,
+  ny: number,
+  band: number,
+): number | null {
+  for (let d = band; d >= -band; d -= 0.5) {
+    if (hasEdgeNear(mask, w, h, x + nx * d, y + ny * d, 0)) return d;
+  }
+  return null;
+}
+
+// Median of up to three values, ignoring the ones that could not be measured.
+// Null when nothing was measured.
+function median3(a: number | null, b: number | null, c: number | null): number | null {
+  const vs: number[] = [];
+  if (a !== null) vs.push(a);
+  if (b !== null) vs.push(b);
+  if (c !== null) vs.push(c);
+  if (vs.length === 0) return null;
+  vs.sort((p, r) => p - r);
+  return vs[vs.length >> 1];
+}
+
+/**
+ * Are the candidate's sides STRAIGHT, or do they bow?
+ *
+ * This is a different question from support, and the difference is the whole
+ * point of the check. isSupported asks "is there an edge pixel within 2px of
+ * this side", and the arc of a large round object answers YES over enough of
+ * its length to pass: a plate, a bowl, a circular shadow, a pool of lamp light.
+ * Each of those then gets a quadrilateral inscribed in its rim by a candidate
+ * generator whose whole job is to maximise area, and every remaining check —
+ * area, convexity, 90-degree corners, support — is satisfied by that square.
+ *
+ * The discriminator is geometric and does not assume the shape is a circle. A
+ * rectangle's boundary lies ON the chord between two adjacent corners. A convex
+ * curve's boundary bows AWAY from it, and for a quad inscribed in a circle the
+ * bow at mid-side is ~0.207 of the side length: a fifth of the side, not a
+ * rounding error.
+ *
+ * Method, per side:
+ *
+ *  1. Take the outward normal (away from the quad's centre).
+ *  2. At each of nine sample points along the side, find the component's OUTER
+ *     SILHOUETTE along that normal — the furthest-out edge pixel within the
+ *     band, signed, positive meaning outside the chord.
+ *  3. Score the middle of the side against its own ends:
+ *
+ *       bow = median(silhouette at t = 0.425, 0.5, 0.575)
+ *             - mean(silhouette at t = 0.2, 0.8)
+ *
+ * Both of those choices were forced by measurement, and the naive version of
+ * each fails:
+ *
+ * - NEAREST edge pixel instead of the outer silhouette saturates. The
+ *   thresholded boundary is a ring, and a soft-rimmed object's ring is thick;
+ *   once it is thicker than the sagitta it covers the chord along the entire
+ *   side and the bow measures as ~0. Measured: nearest-hit leaves 57 of 960
+ *   soft round objects detected, all of them at the soft end. The silhouette
+ *   does not saturate, because a thick ring's OUTER surface still follows the
+ *   arc.
+ * - Scoring against the chord (i.e. against zero) instead of against the ends
+ *   does not separate the classes at all. A page whose corners are rounded, or
+ *   whose corner estimate is a pixel out, carries a standing offset along a
+ *   perfectly straight side; measured raw offsets of a real page and of a plate
+ *   overlap. Curvature is what distinguishes them: a standing offset cancels,
+ *   an arch that rises in the middle and returns to nothing at both ends does
+ *   not.
+ *
+ * Median in the middle rather than mean, so one sample landing on a speck of
+ * texture cannot condemn a real page. Everything is expressed in the side's own
+ * frame — a chord parameter and a normal — so the measure is rotation invariant
+ * by construction, and the allowance is a fraction of the side, so it is scale
+ * invariant too.
+ *
+ * A side whose middle or whose ends cannot be measured at all abstains rather
+ * than failing: "this side has no boundary under it" is isSupported's question,
+ * and it has already been asked.
+ */
+function hasStraightSides(q: Quad, mask: Uint8Array, w: number, h: number): boolean {
+  const cx = (q[0].x + q[1].x + q[2].x + q[3].x) / 4;
+  const cy = (q[0].y + q[1].y + q[2].y + q[3].y) / 4;
+  for (let i = 0; i < 4; i++) {
+    const a = q[i];
+    const b = q[(i + 1) % 4];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const len = Math.hypot(dx, dy);
+    if (len === 0) return false;
+    // Unit normal, flipped to point away from the quad's centre so that a
+    // positive offset always means "outside the candidate".
+    let nx = -dy / len;
+    let ny = dx / len;
+    if (nx * ((a.x + b.x) / 2 - cx) + ny * ((a.y + b.y) / 2 - cy) < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    const band = Math.max(STRAIGHT_BAND_MIN, STRAIGHT_BAND_FRACTION * len);
+
+    const devs: Array<number | null> = new Array(STRAIGHT_SAMPLES);
+    for (let s = 0; s < STRAIGHT_SAMPLES; s++) {
+      const t = STRAIGHT_T0 + ((STRAIGHT_T1 - STRAIGHT_T0) * s) / (STRAIGHT_SAMPLES - 1);
+      devs[s] = outerBoundaryOffset(mask, w, h, a.x + dx * t, a.y + dy * t, nx, ny, band);
+    }
+
+    const mid = STRAIGHT_SAMPLES >> 1;
+    const centre = median3(devs[mid - 1], devs[mid], devs[mid + 1]);
+    const head = devs[0];
+    const tail = devs[STRAIGHT_SAMPLES - 1];
+    if (centre === null || head === null || tail === null) continue;
+
+    const bow = centre - (head + tail) / 2;
+    if (bow > Math.max(STRAIGHT_MIN_BOW, STRAIGHT_MAX_BOW_FRACTION * len)) return false;
+  }
+  return true;
 }
