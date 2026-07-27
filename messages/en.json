@@ -1965,7 +1965,12 @@
     "builder_tax_year_label": "Tax year",
     "builder_tax_year_hint": "Used to file and check documents. Optional.",
     "builder_tax_year_none": "None",
-    "file_to_storage_menu": "File to storage"
+    "file_to_storage_menu": "File to storage",
+    "file_delete_storage_label": "Also remove the filed copy from {provider}",
+    "file_delete_storage_hint": "Moves the copy Vylan filed into the storage's trash, where it can be recovered. Off = the filed copy stays.",
+    "file_delete_storage_failed": "Deleted here, but the copy in your storage couldn't be removed. It may already be gone.",
+    "final_delete_confirm_title": "Delete this final document?",
+    "final_delete_confirm_body": "“{name}” will be removed from Vylan and from the client's portal."
   },
   "Attention": {
     "metric_active": "Active",

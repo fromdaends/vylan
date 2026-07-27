@@ -1965,7 +1965,12 @@
     "builder_tax_year_label": "Année d'imposition",
     "builder_tax_year_hint": "Utilisée pour classer et vérifier les documents. Facultatif.",
     "builder_tax_year_none": "Aucune",
-    "file_to_storage_menu": "Classer vers le stockage"
+    "file_to_storage_menu": "Classer vers le stockage",
+    "file_delete_storage_label": "Supprimer aussi la copie classée dans {provider}",
+    "file_delete_storage_hint": "Déplace la copie classée par Vylan vers la corbeille du stockage, où elle peut être récupérée. Désactivé = la copie classée reste en place.",
+    "file_delete_storage_failed": "Supprimé ici, mais la copie dans votre stockage n'a pas pu être retirée. Elle est peut-être déjà partie.",
+    "final_delete_confirm_title": "Supprimer ce document final ?",
+    "final_delete_confirm_body": "« {name} » sera retiré de Vylan et du portail du client."
   },
   "Attention": {
     "metric_active": "Actifs",

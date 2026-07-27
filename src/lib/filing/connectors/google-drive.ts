@@ -2,8 +2,10 @@
 //
 // Thin by design: the ENGINE owns selection, templates, naming, idempotency,
 // and reporting; this adapter only knows how Drive spells "make this folder
-// chain", "does this name exist here", and "add this file". Like the
-// interface it implements, it has NO delete, NO move, NO overwrite call.
+// chain", "does this name exist here", "add this file" — and, the interface's
+// one sanctioned exception, "move this Vylan-filed file to Drive's TRASH"
+// (recoverable; used only by the user-confirmed delete flow). No move, no
+// rename, no overwrite, no permanent delete.
 //
 // Drive realities handled here:
 //   * drive.file scope: Vylan sees only what it created — the folder walk
@@ -205,6 +207,29 @@ export const googleDriveConnector: StorageConnector = {
 
   async fileExists(ctx, folderId, name) {
     return (await findChild(ctx, folderId, name, false)) !== null;
+  },
+
+  async trashFileById(ctx, providerFileId) {
+    // TRASH, never delete: files.update {trashed:true} is recoverable from
+    // Drive's trash for ~30 days. 404 = already gone — the goal state holds.
+    const res = await driveFetch(
+      ctx,
+      `${API}/files/${encodeURIComponent(providerFileId)}?supportsAllDrives=true`,
+      {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ trashed: true }),
+      },
+    );
+    if (res.status === 404) return "missing";
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new GoogleDriveApiError(
+        `drive: trash failed: ${detail.slice(0, 200)}`,
+        res.status,
+      );
+    }
+    return "trashed";
   },
 
   async uploadFile(ctx, folderId, name, bytes, mimeType): Promise<UploadResult> {

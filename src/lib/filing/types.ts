@@ -2,11 +2,15 @@
 //
 // ONE engine, many connectors: the engine owns document selection, folder
 // templates, naming, idempotency, and reporting; a connector is a thin adapter
-// over one provider's API. The interface is deliberately incapable of damage:
-// there is NO delete, NO move, NO rename, NO overwrite method — a connector
-// can only resolve/create folders and ADD files. Collision behavior is
-// "throw, never replace" (StorageConflictError), and the engine responds by
-// picking a new name.
+// over one provider's API. The interface is deliberately near-incapable of
+// damage: NO move, NO rename, NO overwrite method — a connector can only
+// resolve/create folders and ADD files. Collision behavior is "throw, never
+// replace" (StorageConflictError), and the engine responds by picking a new
+// name. The single exception (founder decision, 2026-07-27): trashFileById —
+// move ONE file to the provider's own trash/recycle bin (recoverable, never a
+// permanent delete), used exclusively by the delete-document flow for
+// ledger-verified Vylan-filed copies with an explicit per-delete user
+// confirmation. The ENGINE never calls it.
 
 export type StorageProvider =
   | "google_drive"
@@ -71,6 +75,17 @@ export interface StorageConnector {
     bytes: Uint8Array,
     mimeType: string | null,
   ): Promise<UploadResult>;
+
+  /**
+   * Move ONE file to the provider's own trash / recycle bin, by the provider
+   * file id recorded in Vylan's ledger when Vylan filed it. NEVER a permanent
+   * delete. "missing" = the file is already gone at the provider (treated as
+   * success by callers — the goal state holds).
+   */
+  trashFileById(
+    ctx: ConnectorContext,
+    providerFileId: string,
+  ): Promise<"trashed" | "missing">;
 }
 
 // ── Documents the engine files ──────────────────────────────────────────────

@@ -76,6 +76,18 @@ export function createMockConnector(store: MockStorage): StorageConnector {
       return store.files.get(folderId)?.has(name) ?? false;
     },
 
+    async trashFileById(_ctx, providerFileId) {
+      for (const files of store.files.values()) {
+        for (const [name, f] of files) {
+          if (f.providerFileId === providerFileId) {
+            files.delete(name);
+            return "trashed";
+          }
+        }
+      }
+      return "missing";
+    },
+
     async uploadFile(_ctx, folderId, name, bytes, mimeType) {
       store.uploadAttempts += 1;
       if (store.failNames.has(name)) {
