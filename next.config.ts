@@ -42,6 +42,27 @@ const tokenRouteHeaders = [
   { key: "Referrer-Policy", value: "no-referrer" },
 ];
 
+// The client portal PAGE (/r/<token>) — and nothing else on the site — may ask
+// for the camera, so a client can photograph a slip in place instead of hunting
+// through the OS file sheet (see components/portal/camera-capture.tsx).
+//
+// Permissions-Policy is a per-key last-write-wins list, so this rule has to
+// RESTATE the whole value: naming only `camera` here would drop the site-wide
+// microphone/geolocation/interest-cohort denials on this route. They stay shut.
+//
+// `camera=(self)` grants only our own origin — a cross-origin iframe embedded
+// in this page still cannot reach the camera. And it only lets the page *ask*:
+// the browser's own permission prompt is still what actually decides, every
+// time. Deliberately NOT applied to /api/portal/* or /invite/*, which share
+// tokenRouteHeaders but have no camera surface.
+const portalPageHeaders = [
+  ...tokenRouteHeaders,
+  {
+    key: "Permissions-Policy",
+    value: "camera=(self), microphone=(), geolocation=(), interest-cohort=()",
+  },
+];
+
 // The portal API additionally gets Cross-Origin-Resource-Policy so a leaked
 // file URL cannot be hotlinked — <img>/<embed> of a client's document from any
 // other origin is refused by the browser itself. Everything that legitimately
@@ -96,7 +117,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/r/:path*",
-        headers: tokenRouteHeaders,
+        headers: portalPageHeaders,
       },
       {
         source: "/api/portal/:path*",

@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import {
   Upload,
+  Camera,
   Check,
   CheckCircle2,
   FileCheck2,
@@ -30,6 +32,15 @@ import {
 import type { RequestItem, RequestItemStatus } from "@/lib/db/request-items";
 import type { PortalFile } from "@/lib/db/portal";
 import { PortalImageLightbox } from "./portal-image-lightbox";
+import { isCameraSupported } from "./use-camera-stream";
+
+// The scanner pulls in the edge-detection and perspective maths, which nobody
+// who only ever taps "Upload" should have to download. Loaded the first time a
+// client opens it; ssr:false because it is camera-only from the first render.
+const CameraCapture = dynamic(
+  () => import("./camera-capture").then((m) => m.CameraCapture),
+  { ssr: false },
+);
 
 // Shape returned by /api/portal/upload-status once the background classifier
 // has written its verdict to the uploaded_files row.
@@ -156,6 +167,14 @@ export function ItemCard({
   const [dragging, setDragging] = useState(false);
   // Which uploaded photo (if any) is open in the full-screen enlarge view.
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  // Live camera scanner. Support is resolved after mount because it depends on
+  // browser APIs that don't exist during SSR — deciding at render time would
+  // hydrate a "Scan" button on the server and then contradict it on the client.
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraSupported, setCameraSupported] = useState(false);
+  useEffect(() => {
+    setCameraSupported(isCameraSupported());
+  }, []);
   // The files the client can preview (oldest-first): photos show a real
   // thumbnail, PDFs a first-page view on tap. Both are tappable tiles and
   // appear in the enlarge view. Drives the tiles + the lightbox.
@@ -384,7 +403,11 @@ export function ItemCard({
     return (await res.json().catch(() => null)) as UploadResponse;
   }
 
-  async function uploadFiles(files: FileList) {
+  // Accepts a FileList (the file input) or a plain array (the camera, which
+  // builds its File in memory). Everything downstream — the size check, the
+  // chunked-with-legacy-fallback upload, the optimistic patch and the AI
+  // verdict poll — is shared, so a scan is treated exactly like a pick.
+  async function uploadFiles(files: FileList | File[]) {
     setError(null);
     setAiRejection(null);
     setAiConfirmed(false);
@@ -704,6 +727,16 @@ export function ItemCard({
             />
           )}
 
+          {cameraOpen && (
+            <CameraCapture
+              onClose={() => setCameraOpen(false)}
+              onCapture={(file) => uploadFiles([file])}
+              // Whenever the camera can't be used, the client lands back on the
+              // ordinary file picker rather than on a dead end.
+              onChooseFile={() => inputRef.current?.click()}
+            />
+          )}
+
           {error && <ErrorLine error={error} />}
 
           <div className="mt-3.5 flex items-end justify-between gap-2">
@@ -753,6 +786,19 @@ export function ItemCard({
                         ? t("add_more")
                         : t("upload")}
                   </Button>
+                  {/* Only offered where a live camera can actually work — on a
+                      desktop, or over plain http on a LAN IP, there is no
+                      mediaDevices and a Scan button would always dead-end. */}
+                  {cameraSupported && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setCameraOpen(true)}
+                      disabled={uploading}
+                    >
+                      <Camera className="size-4" aria-hidden />
+                      {t("scan")}
+                    </Button>
+                  )}
                 </>
               )}
               {ds !== "approved" &&
