@@ -4,9 +4,23 @@
     {
       "name": "vylan-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true
+    },
+    {
+      "name": "xero-local",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/tylerjette/relai-xero",
+        "run",
+        "dev"
+      ],
+      "port": 3000
     }
   ]
 }
