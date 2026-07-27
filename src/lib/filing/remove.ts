@@ -20,6 +20,8 @@ import { googleDriveConnector } from "./connectors/google-drive";
 import { microsoftConnector } from "./connectors/microsoft";
 import { acquireGoogleConnectorContext } from "./google/connection";
 import { acquireMicrosoftConnectorContext } from "./microsoft/connection";
+import { acquireDropboxConnectorContext } from "./dropbox/connection";
+import { dropboxConnector } from "./connectors/dropbox";
 import type { FilingSource } from "./types";
 
 export type RemoveFiledCopyResult =
@@ -60,6 +62,15 @@ export async function removeFiledCopy(input: {
         return { ok: false, reason: "reconnect_required" };
       }
       outcome = await microsoftConnector.trashFileById(
+        acquired.ctx,
+        copy.providerFileId,
+      );
+    } else if (read.conn.provider === "dropbox") {
+      const acquired = await acquireDropboxConnectorContext(input.firmId);
+      if (acquired.kind !== "ok") {
+        return { ok: false, reason: "reconnect_required" };
+      }
+      outcome = await dropboxConnector.trashFileById(
         acquired.ctx,
         copy.providerFileId,
       );

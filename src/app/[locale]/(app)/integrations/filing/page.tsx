@@ -13,6 +13,7 @@ import { FilingSettingsForm } from "@/components/filing/filing-settings-form";
 import { FilingStatusToasts } from "@/components/filing/provider-card-actions";
 import { isGoogleFilingConfigured } from "@/lib/filing/google/oauth";
 import { isMicrosoftFilingConfigured } from "@/lib/filing/microsoft/oauth";
+import { isDropboxFilingConfigured } from "@/lib/filing/dropbox/oauth";
 import { isStorageTokenEncryptionConfigured } from "@/lib/filing/token-cipher";
 
 // Live connection + settings state — never serve a cached "Not connected".
@@ -85,6 +86,10 @@ export default async function FilingPage({
                   isStorageTokenEncryptionConfigured()),
               microsoft:
                 isMicrosoftFilingConfigured() &&
+                (process.env.NODE_ENV !== "production" ||
+                  isStorageTokenEncryptionConfigured()),
+              dropbox:
+                isDropboxFilingConfigured() &&
                 (process.env.NODE_ENV !== "production" ||
                   isStorageTokenEncryptionConfigured()),
             }}

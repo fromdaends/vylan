@@ -26,6 +26,8 @@ import { googleDriveConnector } from "./connectors/google-drive";
 import { microsoftConnector } from "./connectors/microsoft";
 import { acquireGoogleConnectorContext } from "./google/connection";
 import { acquireMicrosoftConnectorContext } from "./microsoft/connection";
+import { acquireDropboxConnectorContext } from "./dropbox/connection";
+import { dropboxConnector } from "./connectors/dropbox";
 import { validateFolderTemplate, validateNameTemplate } from "./template";
 import { resolveYear, type FilingLanguage, type FilingTokenContext } from "./tokens";
 import type {
@@ -243,6 +245,13 @@ export async function runEngagementFiling(input: {
     if (typeof ctx.config.driveId !== "string") {
       return { ok: false, error: "needs_destination" };
     }
+  } else if (provider === "dropbox") {
+    const acquired = await acquireDropboxConnectorContext(input.firmId);
+    if (acquired.kind === "dead") return { ok: false, error: "reconnect_required" };
+    if (acquired.kind !== "ok") return { ok: false, error: "run_failed" };
+    connector = dropboxConnector;
+    ctx = acquired.ctx;
+    // App-folder access: the root is the app folder itself — nothing to check.
   } else {
     // A provider without a connector yet can't have connected — defensive.
     return { ok: false, error: "no_connection" };

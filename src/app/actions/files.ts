@@ -98,7 +98,10 @@ export async function approveFileAction(formData: FormData) {
 export async function getFiledCopyInfoAction(
   source: "checklist" | "final",
   fileId: string,
-): Promise<{ filed: boolean; provider: "google_drive" | "microsoft" | null }> {
+): Promise<{
+  filed: boolean;
+  provider: "google_drive" | "microsoft" | "dropbox" | null;
+}> {
   const firm = await getCurrentFirm();
   if (!firm || typeof fileId !== "string" || !fileId) {
     return { filed: false, provider: null };
@@ -122,7 +125,8 @@ export async function getFiledCopyInfoAction(
   const provider =
     connection?.id === copy.connectionId &&
     (connection.provider === "google_drive" ||
-      connection.provider === "microsoft")
+      connection.provider === "microsoft" ||
+      connection.provider === "dropbox")
       ? connection.provider
       : null;
   return { filed: provider !== null, provider };

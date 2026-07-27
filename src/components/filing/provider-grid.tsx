@@ -47,7 +47,7 @@ const PROVIDERS: Array<{
     key: "dropbox",
     logo: <DropboxLogo className="h-7 w-7" />,
     tileClassName: "bg-[#0061FF]/10 ring-[#0061FF]/20",
-    state: "next_update",
+    state: "live",
   },
   {
     key: "smartvault",
@@ -59,7 +59,7 @@ const PROVIDERS: Array<{
 
 // Per-provider wiring for the LIVE cards.
 const LIVE: Record<
-  "google_drive" | "microsoft",
+  "google_drive" | "microsoft" | "dropbox",
   { connectEndpoint: string; disconnectEndpoint: string; displayName: string }
 > = {
   google_drive: {
@@ -71,6 +71,11 @@ const LIVE: Record<
     connectEndpoint: "/api/integrations/filing/microsoft/connect",
     disconnectEndpoint: "/api/integrations/filing/microsoft/disconnect",
     displayName: "SharePoint / OneDrive",
+  },
+  dropbox: {
+    connectEndpoint: "/api/integrations/filing/dropbox/connect",
+    disconnectEndpoint: "/api/integrations/filing/dropbox/disconnect",
+    displayName: "Dropbox",
   },
 };
 
@@ -88,7 +93,7 @@ export async function ProviderGrid({
   // Which live providers have credentials on this deployment (and, in
   // production, the token-encryption key). Unconfigured = disabled button +
   // plain note instead of a button that can only error.
-  configured: { google_drive: boolean; microsoft: boolean };
+  configured: { google_drive: boolean; microsoft: boolean; dropbox: boolean };
 }) {
   const t = await getTranslations("Filing");
 
@@ -104,7 +109,9 @@ export async function ProviderGrid({
         const connected = active && !needsDestination;
         const live = p.state === "live" ? LIVE[p.key as "google_drive"] : null;
         const isConfigured =
-          p.key === "google_drive" || p.key === "microsoft"
+          p.key === "google_drive" ||
+          p.key === "microsoft" ||
+          p.key === "dropbox"
             ? configured[p.key]
             : false;
 
@@ -178,7 +185,7 @@ export async function ProviderGrid({
                 >
                   {p.key === "google_drive"
                     ? t("open_folder")
-                    : t("open_folder_ms")}
+                    : t("open_folder_generic")}
                   <ExternalLink className="size-3" aria-hidden />
                 </a>
               )}

@@ -3216,6 +3216,7 @@
     "skip_rejected": "Vous avez refusé ce fichier.",
     "skip_duplicate": "Doublon d'un autre téléversement.",
     "skip_final_not_opted_in": "Document final — non activé.",
-    "skip_no_bytes": "Le contenu du fichier est indisponible."
+    "skip_no_bytes": "Le contenu du fichier est indisponible.",
+    "open_folder_generic": "Ouvrir le dossier Vylan"
   }
 }
