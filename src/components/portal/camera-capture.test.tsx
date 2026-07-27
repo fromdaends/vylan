@@ -262,3 +262,50 @@ describe("apertureFor — the framing window", () => {
     expect(large.height).toBeGreaterThan(small.height);
   });
 });
+
+describe("apertureFor — clearing the top controls", () => {
+  // A notched iPhone: safe-area inset plus the 16px offset and the 44px button
+  // put the bottom of the close/torch controls ~110px down the stage.
+  const notched = { width: 393, height: 760 };
+  const CONTROLS = 110;
+
+  it("starts below the controls instead of underneath them", () => {
+    const a = apertureFor(notched, { top: CONTROLS });
+    expect(a.y).toBeGreaterThanOrEqual(CONTROLS);
+  });
+
+  it("keeps a visible gap, not just a touching edge", () => {
+    const a = apertureFor(notched, { top: CONTROLS });
+    expect(a.y - CONTROLS).toBeGreaterThanOrEqual(8);
+  });
+
+  it("still leaves room for the coaching line once the top is reserved", () => {
+    const a = apertureFor(notched, { top: CONTROLS });
+    expect(notched.height - (a.y + a.height)).toBeGreaterThanOrEqual(60);
+  });
+
+  it("shrinks the window rather than overflowing when both ends are reserved", () => {
+    const a = apertureFor(notched, { top: CONTROLS });
+    expect(a.y + a.height).toBeLessThanOrEqual(notched.height);
+    expect(a.height).toBeGreaterThan(0);
+  });
+
+  it("survives an absurd inset without producing a negative window", () => {
+    const a = apertureFor(notched, { top: 10_000 });
+    expect(a.height).toBeGreaterThanOrEqual(1);
+    expect(a.y).toBeGreaterThanOrEqual(0);
+    expect(Number.isNaN(a.y + a.height)).toBe(false);
+  });
+
+  it("ignores a non-finite inset rather than producing NaN geometry", () => {
+    for (const top of [NaN, Infinity, -50]) {
+      const a = apertureFor(notched, { top });
+      expect(Number.isNaN(a.x + a.y + a.width + a.height)).toBe(false);
+      expect(a.y).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("behaves as before when nothing is reserved", () => {
+    expect(apertureFor(notched)).toEqual(apertureFor(notched, { top: 0 }));
+  });
+});
