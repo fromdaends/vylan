@@ -25,17 +25,48 @@ import { brand } from "@/lib/brand";
  *   4. https://vylan.app — the canonical domain, from the brand module.
  */
 export function siteUrl(env: NodeJS.ProcessEnv = process.env): string {
-  const explicit = env.APP_URL?.trim();
-  if (explicit) return stripTrailingSlash(explicit);
+  const candidates = [
+    env.APP_URL,
+    env.VERCEL_ENV === "production" && env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : undefined,
+    env.VERCEL_URL ? `https://${env.VERCEL_URL}` : undefined,
+    `https://${brand.domain}`,
+  ];
 
-  if (env.VERCEL_ENV === "production" && env.VERCEL_PROJECT_PRODUCTION_URL) {
-    return `https://${stripTrailingSlash(env.VERCEL_PROJECT_PRODUCTION_URL)}`;
+  for (const candidate of candidates) {
+    const parsed = parseOrigin(candidate);
+    if (parsed) return parsed;
   }
 
-  const deployment = env.VERCEL_URL?.trim();
-  if (deployment) return `https://${stripTrailingSlash(deployment)}`;
-
+  // Unreachable: brand.domain is a constant and always parses. Present so the
+  // function is total rather than relying on that staying true.
   return `https://${brand.domain}`;
+}
+
+/**
+ * Returns the normalised origin, or null if the value isn't a usable absolute
+ * url.
+ *
+ * THE VALIDATION MATTERS MORE THAN IT LOOKS. The caller feeds this straight
+ * into `new URL()` for metadataBase, which runs on every page render — so a
+ * misconfigured APP_URL (say "vylan.app", with the scheme forgotten) would not
+ * merely break the share card, it would throw inside generateMetadata and 500
+ * the entire site. Everywhere else APP_URL is read it goes through zod's
+ * `.url()` in lib/env.ts; this path bypasses that on purpose (it must not
+ * inherit env.ts's localhost default), so it has to do its own checking and
+ * fall through to the next candidate instead of propagating a bad value.
+ */
+function parseOrigin(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return stripTrailingSlash(url.origin);
+  } catch {
+    return null;
+  }
 }
 
 function stripTrailingSlash(value: string): string {

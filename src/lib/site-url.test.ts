@@ -62,4 +62,43 @@ describe("siteUrl", () => {
   it("ignores a blank APP_URL rather than producing a relative url", () => {
     expect(siteUrl(env({ APP_URL: "   " }))).toBe("https://vylan.app");
   });
+
+  // The caller feeds this into `new URL()` for metadataBase on every page
+  // render, so a bad value must never be handed onward — it would throw inside
+  // generateMetadata and 500 the whole site, not just break the card.
+  it.each([
+    ["scheme forgotten", "vylan.app"],
+    ["not a url at all", "replace-me"],
+    ["a path", "/vylan"],
+    ["a non-http scheme", "ftp://vylan.app"],
+    ["javascript:", "javascript:alert(1)"],
+  ])("falls through a malformed APP_URL (%s)", (_label, value) => {
+    const resolved = siteUrl(env({ APP_URL: value }));
+    expect(resolved).toBe("https://vylan.app");
+    expect(() => new URL(resolved)).not.toThrow();
+  });
+
+  it("falls through a malformed APP_URL to Vercel rather than straight to the default", () => {
+    expect(
+      siteUrl(
+        env({
+          APP_URL: "vylan.app",
+          VERCEL_ENV: "production",
+          VERCEL_PROJECT_PRODUCTION_URL: "vylan-prod.vercel.app",
+        }),
+      ),
+    ).toBe("https://vylan-prod.vercel.app");
+  });
+
+  it("reduces a url with a path to its bare origin", () => {
+    expect(siteUrl(env({ APP_URL: "https://vylan.app/some/path" }))).toBe(
+      "https://vylan.app",
+    );
+  });
+
+  it("always returns something new URL() accepts", () => {
+    for (const e of [{}, { APP_URL: "" }, { APP_URL: "nonsense" }]) {
+      expect(() => new URL(siteUrl(env(e)))).not.toThrow();
+    }
+  });
 });
