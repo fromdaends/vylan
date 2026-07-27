@@ -58,6 +58,28 @@ function fillRotatedRect(
   }
 }
 
+/**
+ * Fill a convex polygon given in TL..BL winding order. Point-in-polygon by
+ * consistent cross-product sign, which is exact for a convex outline and needs
+ * no scanline bookkeeping.
+ */
+function fillConvexPolygon(g: Gray, pts: Point[], value: number): void {
+  for (let y = 0; y < g.height; y++) {
+    for (let x = 0; x < g.width; x++) {
+      let inside = true;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % pts.length];
+        if ((b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x) < 0) {
+          inside = false;
+          break;
+        }
+      }
+      if (inside) g.data[y * g.width + x] = value;
+    }
+  }
+}
+
 /** True corners of that rectangle, in TL, TR, BR, BL order. */
 function rotatedCorners(
   cx: number,
@@ -78,6 +100,30 @@ function rotatedCorners(
     x: cx + u * cos - v * sin,
     y: cy + u * sin + v * cos,
   }));
+}
+
+/**
+ * A bright page on a dark table whose edges ramp over `blur` pixels either side
+ * of the boundary, the way a real (slightly out-of-focus) camera frame looks.
+ */
+function softEdgedPage(
+  width: number,
+  height: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  blur: number,
+): Gray {
+  const g = makeGray(width, height, 30);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const inset = Math.min(x - x0, x1 - x, y - y0, y1 - y);
+      const t = Math.max(0, Math.min(1, (inset + blur) / (2 * blur)));
+      g.data[y * width + x] = Math.round(30 + t * 200);
+    }
+  }
+  return g;
 }
 
 /** Deterministic per-pixel noise — no Math.random, so failures are reproducible. */
@@ -139,6 +185,26 @@ describe("sobelMagnitude", () => {
     expect(mag.data[4 * 8 + 4]).toBe(40);
     expect(mag.data[1 * 8 + 4]).toBe(0);
     expect(mag.data[6 * 8 + 4]).toBe(0);
+  });
+
+  it("replicates the border rather than wrapping it", () => {
+    // The outermost row/column has no real neighbour on one side. Replicating
+    // the edge pixel makes those rows read as flat; wrapping to the opposite
+    // side of the frame would instead paint a phantom rectangle around the
+    // whole picture, and that phantom is a big connected component the
+    // detector would happily hull. The flat-field tests above cannot see the
+    // difference, because wrapping a uniform frame still reads the same value.
+    const g = makeGray(8, 8, 0);
+    fillRect(g, 0, 4, 7, 7, 10); // dark top half, bright bottom half
+    const mag = sobelMagnitude(g);
+    expect(mag.data[0 * 8 + 4]).toBe(0); // top row: no edge from the bottom row
+    expect(mag.data[7 * 8 + 4]).toBe(0); // bottom row: no edge from the top row
+
+    const v = makeGray(8, 8, 0);
+    fillRect(v, 4, 0, 7, 7, 10); // dark left half, bright right half
+    const vmag = sobelMagnitude(v);
+    expect(vmag.data[4 * 8 + 0]).toBe(0); // left column
+    expect(vmag.data[4 * 8 + 7]).toBe(0); // right column
   });
 
   it("clamps a full-range step to 255", () => {
@@ -410,6 +476,44 @@ describe("detectQuad", () => {
     );
   });
 
+  it("finds a page with soft, out-of-focus edges", () => {
+    // Real camera edges ramp over a few pixels rather than stepping. The Sobel
+    // ring is then wider and weaker than the synthetic step cases above.
+    const g = softEdgedPage(160, 120, 30, 20, 129, 99, 2);
+    const q = detectQuad(g);
+    expect(q).not.toBeNull();
+    expectCornersNear(
+      q as Quad,
+      [
+        { x: 30, y: 20 },
+        { x: 129, y: 20 },
+        { x: 129, y: 99 },
+        { x: 30, y: 99 },
+      ],
+      3,
+    );
+  });
+
+  it("finds a page that nearly fills a very small detection frame", () => {
+    // 48x36 is an aggressive downscale: the page outline is a far larger share
+    // of the frame than the percentile edge budget alone would allow, so the
+    // budget has to scale with the frame perimeter or the outline thresholds
+    // away to nothing.
+    const g = softEdgedPage(48, 36, 6, 4, 42, 32, 2);
+    const q = detectQuad(g);
+    expect(q).not.toBeNull();
+    expectCornersNear(
+      q as Quad,
+      [
+        { x: 6, y: 4 },
+        { x: 42, y: 4 },
+        { x: 42, y: 32 },
+        { x: 6, y: 32 },
+      ],
+      2.5,
+    );
+  });
+
   it("returns null for uniform noise", () => {
     const g = makeGray(160, 120);
     fillNoise(g);
@@ -460,10 +564,51 @@ describe("detectQuad", () => {
     expect(detectQuad(g, { maxCornerCosine: 0.85 })).not.toBeNull();
   });
 
+  it("rejects a quad whose only bad corner is too OBTUSE", () => {
+    // The corner rule compares |cos|, and the abs is load-bearing: without it
+    // only over-acute corners are caught, because an over-obtuse corner has a
+    // NEGATIVE cosine. The 45-degree parallelogram above cannot show this — it
+    // has acute corners too, so it is rejected either way.
+    //
+    // Interior angles here are 120, 80, 80, 80 (they sum to 360, so this is a
+    // realisable convex quad). Only the 120-degree corner is out of range, and
+    // its cosine is -0.5, i.e. invisible to an unsigned comparison. Built from
+    // exterior turns of 60, 100, 100, 100 degrees with the sides solved for
+    // closure, then shifted into the frame.
+    const corners: Point[] = [
+      { x: 50, y: 25 },
+      { x: 124.23, y: 25 },
+      { x: 106.87, y: 123.48 },
+      { x: 12.9, y: 89.28 },
+    ];
+    const g = makeGray(200, 160, 25);
+    fillConvexPolygon(g, corners, 225);
+
+    expect(detectQuad(g)).toBeNull();
+    // Relaxing past |cos 120| = 0.5 finds it, which proves the rejection was
+    // the corner rule and not a failure to see the shape at all.
+    const relaxed = detectQuad(g, { maxCornerCosine: 0.6 });
+    expect(relaxed).not.toBeNull();
+    expectCornersNear(relaxed as Quad, corners, 2.5);
+  });
+
   it("returns null for frames too small to hold a document", () => {
     expect(detectQuad({ data: new Uint8ClampedArray(0), width: 0, height: 0 })).toBeNull();
     expect(detectQuad(makeGray(1, 1, 255))).toBeNull();
     expect(detectQuad(makeGray(8, 8, 0))).toBeNull();
+    // Even a picture-perfect rectangle is refused below the minimum frame size:
+    // at 16px across, one pixel of corner error is 6% of the page.
+    const tiny = makeGray(16, 16, 20);
+    fillRect(tiny, 3, 3, 12, 12, 230);
+    expect(detectQuad(tiny)).toBeNull();
+  });
+
+  it("returns null when the page bleeds past the edge of the frame", () => {
+    // Its corners are outside the picture, so any outline we drew would be
+    // pinned to the frame border rather than to the paper.
+    const g = makeGray(160, 120, 20);
+    fillRect(g, 1, 1, 158, 118, 230);
+    expect(detectQuad(g)).toBeNull();
   });
 
   it("returns null when the buffer is shorter than width * height", () => {
@@ -497,6 +642,36 @@ describe("detectQuad", () => {
     expect(detectQuad(g)).toBeNull();
   });
 
+  it("returns null for a large densely textured patch (a placemat, not a page)", () => {
+    // 3px tiled checkerboard. Its edge map is a dense connected mesh whose hull
+    // is a convincing page-shaped rectangle with near-perfect support, so every
+    // other check passes it — only the edge-density guard rejects it.
+    const g = makeGray(160, 120, 20);
+    for (let y = 15; y < 110; y++) {
+      for (let x = 15; x < 145; x++) {
+        const tile = (Math.floor(x / 3) + Math.floor(y / 3)) % 2 === 0;
+        g.data[y * 160 + x] = tile ? 230 : 20;
+      }
+    }
+    expect(detectQuad(g)).toBeNull();
+  });
+
+  it("returns null when one whole side of the page has no contrast", () => {
+    // The page fades into the table on the right, so that edge produces no
+    // gradient at all. The hull still spans about the right shape, but the right
+    // side of the candidate rests on nothing, which makes those two corners
+    // guesses — better to show no outline than one with an invented edge.
+    const g = makeGray(160, 120, 20);
+    for (let y = 20; y <= 99; y++) {
+      for (let x = 30; x <= 129; x++) {
+        // Full contrast on the left, fading to the table value by the right edge.
+        const t = Math.max(0, Math.min(1, (110 - x) / 40));
+        g.data[y * 160 + x] = Math.round(20 + t * 210);
+      }
+    }
+    expect(detectQuad(g)).toBeNull();
+  });
+
   it("returns null for a large round object (a plate, not a page)", () => {
     // The max-area quad inscribed in a circle is a square with 90-degree
     // corners and plenty of area, so only the edge-support check can reject it:
@@ -512,8 +687,11 @@ describe("detectQuad", () => {
 
   it("ignores clutter that is smaller than the page", () => {
     const g = makeGray(200, 160, 20);
+    // The clutter is drawn ABOVE the page on purpose: raster scan order reaches
+    // it first, so passing this requires actually comparing component sizes
+    // rather than keeping whichever component turns up first.
+    fillRect(g, 5, 5, 25, 20, 200); // a small bright object near the top-left
     fillRect(g, 40, 30, 149, 119, 230); // the page
-    fillRect(g, 5, 140, 25, 155, 200); // a small bright object in the corner
     const q = detectQuad(g);
     expect(q).not.toBeNull();
     expectCornersNear(

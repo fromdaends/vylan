@@ -145,11 +145,10 @@ describe("CameraCapture", () => {
       // A denial is the one case where we also explain how to undo it.
       expect(screen.getByText(en.Portal.scan_denied_help)).toBeTruthy();
 
-      // Two routes back to the ordinary picker (the inline link and the
-      // control-bar button); either must hand off and close.
-      const escapes = screen.getAllByText(en.Portal.scan_choose_file);
-      expect(escapes.length).toBeGreaterThan(0);
-      fireEvent.click(escapes[0]!);
+      // Exactly one way back to the ordinary picker — offered twice reads as
+      // two different options. It must hand off AND close.
+      const escape = screen.getByText(en.Portal.scan_choose_file);
+      fireEvent.click(escape);
       expect(onChooseFile).toHaveBeenCalledTimes(1);
       expect(onClose).toHaveBeenCalledTimes(1);
     });

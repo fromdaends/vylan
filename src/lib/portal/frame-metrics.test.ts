@@ -287,6 +287,14 @@ describe("computeMetrics — degenerate buffers", () => {
     expect(computeMetrics(cur, shortPrev, 1).motion).toBe(0);
   });
 
+  it("returns a fresh object each time, so a caller cannot poison later frames", () => {
+    const empty: Gray = { data: new Uint8ClampedArray(0), width: 0, height: 0 };
+    const first = computeMetrics(empty, null, null);
+    expect(computeMetrics(empty, null, null)).not.toBe(first);
+    first.fill = 0.99;
+    expect(computeMetrics(empty, null, null).fill).toBe(0);
+  });
+
   it("never produces a NaN metric on a realistic frame", () => {
     const g = makeGray(8, 8, (x, y) => (x * 31 + y * 17) % 256);
     const m = computeMetrics(g, makeGray(8, 8, () => 100), null);
@@ -368,6 +376,30 @@ describe("guidanceFor", () => {
   it("keeps the defaults for thresholds the caller did not override", () => {
     const dimAndSoft = metrics({ luminance: 20, sharpness: 3 });
     expect(guidanceFor(dimAndSoft, true, { minLuminance: 10 })).toBe("blurry");
+  });
+
+  it("keeps the default when an override is explicitly undefined", () => {
+    // A caller forwarding an optional prop must not silently switch the check
+    // off — an undefined threshold compares false and would report "ready".
+    const dark = metrics({ luminance: 20 });
+    expect(guidanceFor(dark, true, { minLuminance: undefined })).toBe("too_dark");
+    const tiny = metrics({ fill: 0.01 });
+    expect(guidanceFor(tiny, true, { minFill: undefined })).toBe("too_far");
+    const soft = metrics({ sharpness: 1 });
+    expect(guidanceFor(soft, true, { minSharpness: undefined })).toBe("blurry");
+    const shaky = metrics({ motion: 50 });
+    expect(guidanceFor(shaky, true, { maxMotion: undefined })).toBe("hold_steady");
+  });
+
+  it("ignores a NaN threshold rather than disabling the check", () => {
+    expect(guidanceFor(metrics({ luminance: 20 }), true, { minLuminance: NaN })).toBe(
+      "too_dark",
+    );
+  });
+
+  it("still applies a legitimate zero override", () => {
+    // 0 is falsy but a real threshold: it must replace the default.
+    expect(guidanceFor(metrics({ luminance: 0 }), true, { minLuminance: 0 })).toBe("ready");
   });
 
   it("does not mutate the shared defaults when overriding", () => {

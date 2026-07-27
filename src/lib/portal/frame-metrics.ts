@@ -63,7 +63,9 @@ export function computeMetrics(
   const n = width * height;
   // Degenerate or malformed buffer: report "nothing good yet" rather than
   // letting NaN reach the coaching pill.
-  if (width <= 0 || height <= 0 || data.length < n) return EMPTY_METRICS;
+  // Copied, not shared: handing the same object to every caller would let one
+  // of them mutate the module constant for everyone else.
+  if (width <= 0 || height <= 0 || data.length < n) return { ...EMPTY_METRICS };
 
   const prevData =
     prev && prev.width === width && prev.height === height && prev.data.length >= n
@@ -200,7 +202,19 @@ export function guidanceFor(
   hasDocument: boolean,
   thresholds?: Partial<typeof GUIDANCE_THRESHOLDS>,
 ): Guidance {
-  const t = { ...GUIDANCE_THRESHOLDS, ...thresholds };
+  // Merge one key at a time rather than spreading. Every check below is a
+  // `<`/`>` against the threshold, so an `undefined` or NaN threshold compares
+  // false and silently *disables* that check — which fails toward "ready" and
+  // an unwanted auto-shutter. A caller forwarding an optional value
+  // (`{ minFill: props.minFill }`) is type-legal and would hit exactly that,
+  // so ignore anything that is not a real number and keep the default.
+  const t = { ...GUIDANCE_THRESHOLDS };
+  if (thresholds) {
+    for (const key of Object.keys(t) as (keyof typeof t)[]) {
+      const v = thresholds[key];
+      if (typeof v === "number" && Number.isFinite(v)) t[key] = v;
+    }
+  }
 
   // Darkness first: every other measure is derived from a signal the sensor
   // barely captured, so fixing the light fixes the rest.

@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
@@ -41,6 +47,11 @@ const CameraCapture = dynamic(
   () => import("./camera-capture").then((m) => m.CameraCapture),
   { ssr: false },
 );
+
+// Camera availability can't change within a page view, so there is nothing to
+// subscribe to — a stable no-op unsubscribe keeps useSyncExternalStore from
+// resubscribing on every render.
+const subscribeNever = () => () => {};
 
 // Shape returned by /api/portal/upload-status once the background classifier
 // has written its verdict to the uploaded_files row.
@@ -167,14 +178,16 @@ export function ItemCard({
   const [dragging, setDragging] = useState(false);
   // Which uploaded photo (if any) is open in the full-screen enlarge view.
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  // Live camera scanner. Support is resolved after mount because it depends on
-  // browser APIs that don't exist during SSR — deciding at render time would
-  // hydrate a "Scan" button on the server and then contradict it on the client.
+  // Live camera scanner. Whether a camera is available is a browser fact that
+  // does not exist during SSR, so it is read through useSyncExternalStore with
+  // a `false` server snapshot: the server renders no Scan button and the client
+  // adds one on hydration, instead of the two disagreeing.
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [cameraSupported, setCameraSupported] = useState(false);
-  useEffect(() => {
-    setCameraSupported(isCameraSupported());
-  }, []);
+  const cameraSupported = useSyncExternalStore(
+    subscribeNever,
+    isCameraSupported,
+    () => false,
+  );
   // The files the client can preview (oldest-first): photos show a real
   // thumbnail, PDFs a first-page view on tap. Both are tappable tiles and
   // appear in the enlarge view. Drives the tiles + the lightbox.

@@ -1,5 +1,5 @@
 import type { Gray } from "./frame-metrics";
-import type { Point, Quad } from "./rectify";
+import { orderCorners, type Point, type Quad } from "./rectify";
 
 // Finds the four corners of a document in a downscaled camera frame so the UI
 // can draw an outline over the paper and then flatten it. Pure functions over
@@ -12,14 +12,17 @@ import type { Point, Quad } from "./rectify";
 //
 // Why convex hull + max-area quad instead of the classic contour-trace +
 // Douglas-Peucker: a thresholded Sobel map is thin and frequently BROKEN (a
-// shadow or a low-contrast side leaves a gap). Boundary tracing wanders off
-// down the wrong side of a broken stroke and the simplified polygon is then
-// garbage. A hull degrades gracefully instead — if one side of the document is
-// missing from the edge map entirely, the hull of the surviving three sides
-// still spans the paper and the corners land close to the truth. The cost is
-// that the hull is fooled by clutter *connected to* the document (a pen lying
-// across the edge pulls a corner outward), which the support check below only
-// partly mitigates.
+// shadow or a low-contrast side leaves a gap). Boundary tracing wanders off down
+// the wrong side of a broken stroke and the simplified polygon is then garbage,
+// whereas a hull with a gap in it is still roughly the right shape. Note that
+// "still roughly right" is NOT the same as "returned": the support check below
+// deliberately rejects a candidate whose side has no edge pixels under it,
+// because the corners on that side would be guesses. Small gaps survive; a
+// wholly missing side does not, and that is the intended trade.
+//
+// Known weakness of the hull: clutter *connected to* the document pulls a corner
+// outward (a pen lying across the page edge joins the same component), and the
+// support check cannot see that because the pen supplies real edge pixels.
 
 export type DetectOptions = {
   /** Ignore quads smaller than this fraction of the frame. Default 0.12. */
@@ -46,9 +49,6 @@ const EDGE_BUDGET_PERIMETER_MULTIPLE = 6;
 // A step of ~4 grey levels produces a magnitude of 16, so this is already close
 // to the limit of what is detectable at all.
 const MIN_EDGE_MAGNITUDE = 16;
-// If this much of the frame survives thresholding there is no clean boundary in
-// it (uniform noise, a smooth gradient, motion blur) — better to show nothing.
-const MAX_EDGE_DENSITY = 0.35;
 // A quad this close to the whole frame is the frame itself, not paper on a table.
 const MAX_AREA_FRACTION = 0.98;
 // Degenerate-sliver guard, as a fraction of the shorter frame side.
@@ -61,7 +61,9 @@ const MIN_SIDE_SUPPORT = 0.2;
 // Vertex budget handed to the max-area-quad search (its cost is O(n^4)).
 const MAX_POLY_VERTICES = 24;
 // Hull vertices this close to the chord through their neighbours are
-// rasterisation staircase, not corners.
+// rasterisation staircase, not corners. Dropping them is a cost optimisation
+// rather than a correctness one — the quad search below is O(n^4), so trimming
+// a hull from 24 vertices to 6 is roughly a 700x saving per frame.
 const COLLINEAR_EPSILON = 1;
 // Guard against pathological hulls before the O(n^2) decimation.
 const MAX_HULL_VERTICES = 400;
@@ -135,9 +137,10 @@ export function detectQuad(gray: Gray, opts?: DetectOptions): Quad | null {
       edgeCount++;
     }
   }
-  // Nothing to trace, or so much of the frame is "edge" that no boundary can be
-  // distinguished from the rest.
-  if (edgeCount < 16 || edgeCount > MAX_EDGE_DENSITY * n) return null;
+  // Nothing survived thresholding, so there is no boundary to trace. Dense
+  // high-frequency texture (a woven placemat, printed halftone) lands here: no
+  // threshold isolates a boundary, so the budget walks past the whole histogram.
+  if (edgeCount < 16) return null;
 
   const comp = largestComponent(edge, w, h);
   if (comp === null || comp.length < 16) return null;
@@ -161,7 +164,10 @@ export function detectQuad(gray: Gray, opts?: DetectOptions): Quad | null {
   const corners = maxAreaQuad(poly);
   if (corners === null) return null;
 
-  const quad = orderQuadCorners(corners);
+  // Deliberately reuse rectify's ordering rather than rolling our own: the quad
+  // we emit is fed straight back into rectify, so a second implementation of
+  // "which corner is top-left" is a convention drift waiting to happen.
+  const quad = orderCorners(corners);
   if (quad === null) return null;
 
   const area = quadArea(quad);
@@ -273,11 +279,10 @@ function edgeThreshold(mag: Gray): number | null {
     }
     t = v;
   }
-  t = Math.max(t, MIN_EDGE_MAGNITUDE);
-  // If the budget pushed us past the strongest pixel in the frame, fall back to
-  // keeping only that strongest level rather than returning an empty map; the
-  // density and shape checks downstream will throw it out if it is junk.
-  return t > maxMag ? maxMag : t;
+  // A threshold above the strongest pixel in the frame is not a bug: it means
+  // no level of thresholding isolates a boundary here, the caller finds an empty
+  // edge map, and the answer is "no document".
+  return Math.max(t, MIN_EDGE_MAGNITUDE);
 }
 
 // Largest 8-connected component of the edge map, as pixel indices. Iterative
@@ -430,44 +435,10 @@ function maxAreaQuad(poly: readonly Point[]): Point[] | null {
   return bestArea > 0 ? best : null;
 }
 
-// Put four corners into the fixed TL, TR, BR, BL order. Sorting by angle about
-// the centroid (rather than by x+y / x-y extremes) keeps the order correct for
-// quads with strong perspective, where two corners can share a "most top-left"
-// score.
-function orderQuadCorners(pts: readonly Point[]): Quad | null {
-  if (pts.length !== 4) return null;
-  let cx = 0;
-  let cy = 0;
-  for (const p of pts) {
-    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return null;
-    cx += p.x / 4;
-    cy += p.y / 4;
-  }
-  const byAngle = pts
-    .slice()
-    .sort((p, q) => Math.atan2(p.y - cy, p.x - cx) - Math.atan2(q.y - cy, q.x - cx));
-  // Screen coordinates put y downward, so TL->TR->BR->BL has a positive
-  // shoelace sum. Flip the winding if the sort produced the mirror.
-  let sum = 0;
-  for (let i = 0; i < 4; i++) {
-    const a = byAngle[i];
-    const b = byAngle[(i + 1) % 4];
-    sum += a.x * b.y - b.x * a.y;
-  }
-  if (sum < 0) byAngle.reverse();
-  let start = 0;
-  for (let i = 1; i < 4; i++) {
-    const s = byAngle[i].x + byAngle[i].y;
-    if (s < byAngle[start].x + byAngle[start].y) start = i;
-  }
-  return [
-    byAngle[start],
-    byAngle[(start + 1) % 4],
-    byAngle[(start + 2) % 4],
-    byAngle[(start + 3) % 4],
-  ];
-}
-
+// Postcondition, not a filter: four vertices taken in order from a convex hull
+// are always convex, so this cannot currently fire. It is kept because it is the
+// one check standing between a future change to the candidate generator and a
+// bow-tie quad reaching the UI, which would render as a visibly broken outline.
 function isConvex(q: Quad): boolean {
   let sign = 0;
   for (let i = 0; i < 4; i++) {

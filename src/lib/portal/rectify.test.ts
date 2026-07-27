@@ -524,6 +524,109 @@ describe("warpToRect", () => {
     }
   });
 
+  it("flattens a GENUINE perspective quad, not just a parallelogram", () => {
+    // Every other warp case here is a rectangle or a parallelogram, and both
+    // are affine: h[6] and h[7] solve to exactly 0, so the perspective divide
+    // in the inner loop never changes a sample. This quad is a real page shot
+    // from an angle (narrow top, wide bottom), where it does.
+    const quad: Quad = [
+      { x: 70, y: 20 },
+      { x: 186, y: 20 },
+      { x: 240, y: 230 },
+      { x: 16, y: 230 },
+    ];
+    const W = 192;
+    const H = 192;
+    const rect: Quad = [
+      { x: 0, y: 0 },
+      { x: W, y: 0 },
+      { x: W, y: H },
+      { x: 0, y: H },
+    ];
+    // Guard: if a future edit made this quad affine the test would silently
+    // stop testing the thing it exists to test.
+    const fwd = solveHomography(rect, quad)!;
+    expect(Math.abs(fwd[6]) + Math.abs(fwd[7])).toBeGreaterThan(1e-3);
+
+    // Under ANY projective map the intersection of the quad's diagonals is the
+    // image of the rectangle's centre, while the average of the four corners is
+    // not. Marking both and checking where each lands is what separates a true
+    // perspective warp from an affine one: drop the perspective divide and the
+    // corner average is what ends up in the middle instead.
+    const cross = (a: Point, b: Point, c: Point, d: Point): Point => {
+      const den = (a.x - b.x) * (c.y - d.y) - (a.y - b.y) * (c.x - d.x);
+      const p = a.x * b.y - a.y * b.x;
+      const q = c.x * d.y - c.y * d.x;
+      return {
+        x: (p * (c.x - d.x) - (a.x - b.x) * q) / den,
+        y: (p * (c.y - d.y) - (a.y - b.y) * q) / den,
+      };
+    };
+    const diagonal = cross(quad[0], quad[2], quad[1], quad[3]);
+    const cornerAvg: Point = {
+      x: (quad[0].x + quad[1].x + quad[2].x + quad[3].x) / 4,
+      y: (quad[0].y + quad[1].y + quad[2].y + quad[3].y) / 4,
+    };
+
+    const src = makeRgba(256, 256, [15, 15, 15, 255]);
+    fillQuad(src, quad, [235, 235, 230, 255]);
+    const disc = (c: Point, r: number, px: Px) => {
+      for (let y = 0; y < src.height; y++) {
+        for (let x = 0; x < src.width; x++) {
+          if (Math.hypot(x + 0.5 - c.x, y + 0.5 - c.y) <= r) setPx(src, x, y, px);
+        }
+      }
+    };
+    disc(diagonal, 3, [20, 30, 220, 255]);
+    disc(cornerAvg, 3, [20, 200, 40, 255]);
+
+    const out = warpToRect(src, quad, { width: W, height: H });
+    expect(out.width).toBe(W);
+    expect(out.height).toBe(H);
+    const centroid = (pick: (p: Px) => boolean) => {
+      let n = 0;
+      let sx = 0;
+      let sy = 0;
+      for (let y = 0; y < out.height; y++) {
+        for (let x = 0; x < out.width; x++) {
+          if (pick(getPx(out, x, y))) {
+            n++;
+            sx += x + 0.5;
+            sy += y + 0.5;
+          }
+        }
+      }
+      return { n, x: sx / n, y: sy / n };
+    };
+    const blue = centroid(([r, g, b]) => b > 150 && r < 120 && g < 120);
+    const green = centroid(([r, g, b]) => g > 150 && r < 120 && b < 120);
+    expect(blue.n).toBeGreaterThan(8);
+    expect(green.n).toBeGreaterThan(8);
+
+    // The diagonal intersection lands dead centre...
+    expect(Math.hypot(blue.x - W / 2, blue.y - H / 2)).toBeLessThan(2);
+    // ...and the corner average clearly does not.
+    expect(Math.hypot(green.x - W / 2, green.y - H / 2)).toBeGreaterThan(8);
+
+    // The page interior is still flat pale, so the warp is not just smearing.
+    for (const [x, y] of [
+      [8, 8],
+      [W - 8, 8],
+      [8, H - 8],
+      [W - 8, H - 8],
+    ]) {
+      const [r, g, b, a] = getPx(out, x, y);
+      expect({ x, y, r: r > 200, g: g > 200, b: b > 200, a }).toEqual({
+        x,
+        y,
+        r: true,
+        g: true,
+        b: true,
+        a: 255,
+      });
+    }
+  });
+
   it("respects the TL,TR,BR,BL corner contract (a rotated quad rotates the output)", () => {
     // Left half red, right half blue.
     const src = makeRgba(4, 4);
