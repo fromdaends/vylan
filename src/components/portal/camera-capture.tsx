@@ -17,15 +17,20 @@ import { useCameraStream, type CameraErrorCode } from "./use-camera-stream";
 import {
   captureVideoFrame,
   captureVideoFrameRectified,
+  coverSourceRect,
 } from "@/lib/portal/capture-frame";
 import {
   toGrayscale,
   computeMetrics,
   guidanceFor,
-  shouldAutoCapture,
   type Gray,
   type Guidance,
 } from "@/lib/portal/frame-metrics";
+import {
+  advanceShutter,
+  INITIAL_SHUTTER,
+  type ShutterState,
+} from "@/lib/portal/auto-shutter";
 import { detectQuad, smoothQuad, quadArea } from "@/lib/portal/detect-quad";
 import type { Quad } from "@/lib/portal/rectify";
 
@@ -44,6 +49,10 @@ const READY_FRAMES_REQUIRED = 6;
 // snap instead of easing — that's the client moving to a different document.
 const SMOOTHING_ALPHA = 0.35;
 const SMOOTHING_RESET_PX = 90;
+// How many consecutive misses the outline survives before it disappears.
+// Three frames ≈ 0.3s: long enough to ride out a single dropped detection,
+// short enough that a document leaving the frame doesn't leave a ghost.
+const MISS_GRACE_FRAMES = 3;
 
 type Shot = { file: File; url: string };
 
@@ -67,7 +76,7 @@ export function CameraCapture({
   const detectCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const prevGrayRef = useRef<Gray | null>(null);
   const quadRef = useRef<Quad | null>(null);
-  const readyStreakRef = useRef(0);
+  const shutterRef = useRef<ShutterState>(INITIAL_SHUTTER);
   const capturingRef = useRef(false);
 
   const [view, setView] = useState({ width: 0, height: 0 });
@@ -85,6 +94,11 @@ export function CameraCapture({
   }, [start, stop]);
 
   // Attach the stream. srcObject can't be set declaratively.
+  //
+  // `shot` is a dependency even though it is unused below: taking a photo
+  // swaps the <video> out for the still, and going back via Retake mounts a
+  // BRAND NEW element. Keyed on `stream` alone this effect would not re-run,
+  // nothing would attach to the new element, and Retake would show black.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !stream) return;
@@ -107,15 +121,22 @@ export function CameraCapture({
         /* nothing left to detach */
       }
     };
-  }, [stream]);
+  }, [stream, shot]);
 
   // Track the on-screen preview size: every coordinate the scanner produces is
   // in this space, and it changes on rotate.
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
+    // Only publish a genuinely new size: ResizeObserver fires liberally, and a
+    // fresh object with identical numbers would still restart the scanning
+    // effect (and with it the auto-shutter's streak).
     const measure = () =>
-      setView({ width: el.clientWidth, height: el.clientHeight });
+      setView((prev) =>
+        prev.width === el.clientWidth && prev.height === el.clientHeight
+          ? prev
+          : { width: el.clientWidth, height: el.clientHeight },
+      );
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(measure);
@@ -146,6 +167,15 @@ export function CameraCapture({
     return () => URL.revokeObjectURL(shot.url);
   }, [shot]);
 
+  // Read through a ref so `capture` keeps a stable identity: it is a dependency
+  // of the scanning effect, and re-creating it would tear the loop down and
+  // reset the auto-shutter's run of good frames every time the preview is
+  // remeasured.
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
   const capture = useCallback(async () => {
     const video = videoRef.current;
     if (!video || capturingRef.current) return;
@@ -153,11 +183,12 @@ export function CameraCapture({
     setBusy(true);
     setCaptureError(null);
     try {
+      const size = viewRef.current;
       const q = quadRef.current;
       const file =
-        q && view.width > 0
-          ? await captureVideoFrameRectified(video, q, view)
-          : await captureVideoFrame(video, { view });
+        q && size.width > 0
+          ? await captureVideoFrameRectified(video, q, size)
+          : await captureVideoFrame(video, { view: size });
       setShot({ file, url: URL.createObjectURL(file) });
     } catch {
       setCaptureError("capture_failed");
@@ -165,7 +196,7 @@ export function CameraCapture({
       capturingRef.current = false;
       setBusy(false);
     }
-  }, [view]);
+  }, []);
 
   // The scanning loop. Draws the visible part of the frame into a small hidden
   // canvas, then hands plain pixel buffers to the pure analysis modules.
@@ -198,10 +229,27 @@ export function CameraCapture({
       // HAVE_CURRENT_DATA — anything less and getImageData reads black.
       if (!ctx || !video || video.readyState < 2) return;
 
-      // Draw the video the same way CSS paints it (object-fit: cover), so
-      // detection space and preview space are the same coordinate system.
+      // Draw the video the same way CSS paints it (object-fit: cover): take
+      // the centre crop the client can actually see, not the whole sensor
+      // frame. Squashing the full frame in here instead makes detection space
+      // a DIFFERENT coordinate system from preview space, and the outline
+      // lands somewhere other than the document it found.
+      const src = coverSourceRect(
+        { width: video.videoWidth, height: video.videoHeight },
+        view,
+      );
       try {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(
+          video,
+          src.x,
+          src.y,
+          src.width,
+          src.height,
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        );
       } catch {
         return;
       }
@@ -231,20 +279,31 @@ export function CameraCapture({
       const metrics = computeMetrics(gray, prevGrayRef.current, areaFraction);
       prevGrayRef.current = gray;
 
-      const next = guidanceFor(metrics, smoothed !== null);
-      setGuidance((g) => (g === next ? g : next));
+      // All the frame-to-frame bookkeeping — how long the document has looked
+      // good, how long it has been missing, whether to shoot — lives in a pure
+      // reducer so it can actually be tested. This loop only does the parts
+      // that need a canvas.
+      const step = advanceShutter(shutterRef.current, {
+        detected: smoothed !== null,
+        guidanceFor: (documentPresent) =>
+          guidanceFor(metrics, documentPresent),
+        graceFrames: MISS_GRACE_FRAMES,
+        requiredFrames: READY_FRAMES_REQUIRED,
+      });
+      shutterRef.current = step.state;
 
-      const inView = smoothed
-        ? scaleToView(smoothed, view, canvas)
-        : null;
-      quadRef.current = inView;
-      setQuad(inView);
+      setGuidance((g) => (g === step.guidance ? g : step.guidance));
 
-      readyStreakRef.current = next === "ready" ? readyStreakRef.current + 1 : 0;
-      if (shouldAutoCapture(readyStreakRef.current, READY_FRAMES_REQUIRED)) {
-        readyStreakRef.current = 0;
-        void capture();
+      if (step.outline === "update" && smoothed) {
+        const inView = scaleToView(smoothed, view, canvas);
+        quadRef.current = inView;
+        setQuad(inView);
+      } else if (step.outline === "clear") {
+        quadRef.current = null;
+        setQuad(null);
       }
+
+      if (step.fire) void capture();
     }
 
     raf = requestAnimationFrame(tick);
@@ -252,14 +311,14 @@ export function CameraCapture({
       cancelled = true;
       cancelAnimationFrame(raf);
       prevGrayRef.current = null;
-      readyStreakRef.current = 0;
+      shutterRef.current = INITIAL_SHUTTER;
     };
   }, [status, shot, view, capture]);
 
   function retake() {
     setShot(null);
     setCaptureError(null);
-    readyStreakRef.current = 0;
+    shutterRef.current = INITIAL_SHUTTER;
     quadRef.current = null;
     setQuad(null);
     setGuidance("searching");
@@ -315,15 +374,7 @@ export function CameraCapture({
           </div>
         )}
 
-        {failed && (
-          <CameraUnavailable
-            code={camera.error ?? "camera_failed"}
-            onChooseFile={() => {
-              onChooseFile();
-              onClose();
-            }}
-          />
-        )}
+        {failed && <CameraUnavailable code={camera.error ?? "camera_failed"} />}
 
         {/* Live coaching. aria-live so a screen-reader user hears the same
             guidance a sighted client reads. */}
@@ -505,14 +556,12 @@ function ScanOverlay({
   );
 }
 
-/** Shown whenever the camera can't be used — never a dead end. */
-function CameraUnavailable({
-  code,
-  onChooseFile,
-}: {
-  code: CameraErrorCode;
-  onChooseFile: () => void;
-}) {
+/**
+ * Shown whenever the camera can't be used. Explains what happened and, for a
+ * denial, how to undo it — the way back to the ordinary file picker lives in
+ * the control bar below, so it is not repeated here.
+ */
+function CameraUnavailable({ code }: { code: CameraErrorCode }) {
   const t = useTranslations("Portal");
   return (
     <div className="absolute inset-0 flex items-center justify-center p-6">
@@ -522,13 +571,6 @@ function CameraUnavailable({
         {code === "camera_denied" && (
           <p className="text-xs text-white/60">{t("scan_denied_help")}</p>
         )}
-        <button
-          type="button"
-          onClick={onChooseFile}
-          className="mt-1 text-sm font-medium text-white underline underline-offset-4 transition-colors hover:text-white/80"
-        >
-          {t("scan_choose_file")}
-        </button>
       </div>
     </div>
   );

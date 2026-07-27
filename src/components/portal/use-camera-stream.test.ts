@@ -106,8 +106,8 @@ describe("useCameraStream", () => {
 
   it("asks for the rear camera", async () => {
     const { stream } = fakeStream();
-    const getUserMedia = vi.fn((_c: MediaStreamConstraints) =>
-      Promise.resolve(stream),
+    const getUserMedia = vi.fn<(c: MediaStreamConstraints) => Promise<MediaStream>>(
+      () => Promise.resolve(stream),
     );
     stubMediaDevices(getUserMedia);
     const { result } = renderHook(() => useCameraStream());
