@@ -15,13 +15,11 @@ import {
   Maximize2,
   MessagesSquare,
   Sparkles,
-  Users2,
   type LucideProps,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { ClientMessagesTab } from "@/components/assistant/client-messages-tab";
 import { LauncherAiChat } from "@/components/assistant/launcher-ai-chat";
-import { TeamChatTab } from "@/components/assistant/team-chat-tab";
 import { ExpandedMessages } from "@/components/assistant/expanded-messages";
 import {
   closeChat,
@@ -69,7 +67,7 @@ export function ChatLauncher({
   firstName?: string;
 }) {
   const t = useTranslations("Assistant");
-  const { open, mode, expanded, teamChatAvailable } = useSyncExternalStore(
+  const { open, mode, expanded } = useSyncExternalStore(
     subscribeChatLauncher,
     getChatLauncherState,
     getChatLauncherServerSnapshot,
@@ -275,16 +273,6 @@ export function ChatLauncher({
                 icon={Sparkles}
                 label={t("tab_ai_chat")}
               />
-              {/* Team chat — NOT a permanent mode. Only present while the Team
-                  page is open (that page publishes teamChatAvailable). */}
-              {teamChatAvailable && (
-                <ModeTab
-                  active={mode === "team"}
-                  onClick={() => setChatMode("team")}
-                  icon={Users2}
-                  label={t("tab_team")}
-                />
-              )}
             </div>
             {/* Expand lives quietly in the corner so the toggle stays centred. */}
             {mode === "messages" && (
@@ -351,18 +339,6 @@ export function ChatLauncher({
           >
             <LauncherAiChat locale={locale} />
           </div>
-          {/* Mounted only while available, so it loads the firm thread on
-              demand and tears down when you leave the Team page. */}
-          {teamChatAvailable && (
-            <div
-              className={cn(
-                "absolute inset-0 flex min-h-0 flex-col",
-                mode !== "team" && "hidden",
-              )}
-            >
-              <TeamChatTab locale={locale} active={open && mode === "team"} />
-            </div>
-          )}
         </div>
       </motion.div>
 
