@@ -1070,7 +1070,9 @@
     "trial_card_expired_title": "Your free trial has ended",
     "trial_card_expired_body": "Your data is safe. Book a meeting to talk pricing and reactivate your account.",
     "trial_card_cta_book": "Book a meeting",
-    "nav_notifications": "Notifications"
+    "nav_notifications": "Notifications",
+    "auto_approve_drafts_label": "Approve bookkeeping drafts automatically",
+    "auto_approve_drafts_help": "Once you've coded the same supplier the same way three times, Vylan stops asking and approves it for you. Only expenses, only when every field came from your own past choices, and never for a possible duplicate. Nothing is sent to your accounting software — you still post."
   },
   "Audit": {
     "title": "Security audit log",

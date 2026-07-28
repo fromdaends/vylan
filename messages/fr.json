@@ -1070,7 +1070,9 @@
     "trial_card_expired_title": "Votre essai gratuit est terminé",
     "trial_card_expired_body": "Vos données sont en sécurité. Réservez un appel pour discuter des tarifs et réactiver votre compte.",
     "trial_card_cta_book": "Réserver un appel",
-    "nav_notifications": "Notifications"
+    "nav_notifications": "Notifications",
+    "auto_approve_drafts_label": "Approuver automatiquement les brouillons comptables",
+    "auto_approve_drafts_help": "Une fois que vous avez codé le même fournisseur de la même façon trois fois, Vylan cesse de demander et approuve à votre place. Seulement les dépenses, seulement quand chaque champ provient de vos choix passés, et jamais pour un doublon possible. Rien n'est envoyé à votre logiciel comptable — c'est toujours vous qui publiez."
   },
   "Audit": {
     "title": "Journal d'audit",

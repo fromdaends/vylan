@@ -48,6 +48,10 @@ export type Firm = {
   // SEPARATE from auto_reject_unusable_docs (migration 0270): when ON, an
   // exact-duplicate upload is auto-rejected; when OFF it is only flagged.
   auto_reject_duplicates: boolean;
+  // 1000: may the system approve a bookkeeping draft with nobody looking?
+  // Optional so a pre-1000 read (the column absent) is simply undefined, which
+  // every caller treats as OFF — the safe default for unattended approval.
+  auto_approve_bookkeeping_drafts?: boolean;
   // SEPARATE again (migration 0330): when ON, a confidently-missing page in a
   // multi-page document makes Vylan auto-ask the client to send it; when OFF the
   // missing page is only flagged for the accountant. May be undefined at runtime
@@ -145,6 +149,7 @@ export async function updateCurrentFirm(
       | "onboarded_at"
       | "auto_reject_unusable_docs"
       | "auto_reject_duplicates"
+      | "auto_approve_bookkeeping_drafts"
       | "auto_request_missing_pages"
       | "include_quebec_forms"
       | "default_invoice_auto_mode"
