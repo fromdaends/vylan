@@ -22,6 +22,7 @@ export type DocType =
   | "bank_statement" | "credit_card_statement" | "receipt" | "invoice"
   | "gst_hst_qst" | "rental" | "trial_balance" | "gl_export" | "financials"
   | "shareholder_loan" | "payroll_summary" | "capital_asset" | "inventory"
+  | "processor_statement"
   | "other";
 
 export type TemplateItem = {

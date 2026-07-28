@@ -168,9 +168,23 @@ export async function POST(
 
   // Feature 3 — LEARN from this correction (best-effort; never blocks the save).
   // Each concrete pick (vendor/customer, expense account, tax code, split line
-  // account) is remembered per firm, keyed by the normalized source name/tax, so
-  // the next matching document auto-picks the same QuickBooks entity. Degrades to
-  // a no-op before migration 0490 (recordLearnedMapping swallows a missing table).
+  // account) is remembered per CLIENT, keyed by the normalized source name/tax,
+  // so the next matching document auto-picks the same entity. Degrades to a
+  // no-op before migration 0490 (recordLearnedMapping swallows a missing table).
+  //
+  // clientId IS LOAD-BEARING — do not drop it. 0710 made the mappings table
+  // (firm_id, client_id, signal_type, source_key) and every READER passes a real
+  // client uuid (the classify worker at ai/process.ts, the engagement page).
+  // Omitting it here wrote every mapping to the firm-level client_id IS NULL
+  // namespace, which those readers filter out with .eq("client_id", uuid) — the
+  // row was stored, the query succeeded with zero rows, and nothing was ever
+  // recalled. Silent on both sides: the write is best-effort and the empty read
+  // is indistinguishable from "nothing learned yet".
+  //
+  // It also kept every client of a firm colliding on ONE row per (signal, key) —
+  // the unique index is NULLS NOT DISTINCT — so one client's "Home Depot →
+  // Repairs" overwrote another's "Home Depot → COGS". Passing the real client id
+  // is what 0710's per-client promise depends on.
   if (draft.suggestion) {
     try {
       const writes = learnedWritesFromResolve(patch, draft.suggestion);
@@ -178,6 +192,7 @@ export async function POST(
         writes.map((w) =>
           recordLearnedMapping({
             firmId: draft.firmId,
+            clientId: draft.clientId,
             signalType: w.signalType,
             sourceKey: w.sourceKey,
             sourceSample: w.sourceSample,

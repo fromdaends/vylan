@@ -79,13 +79,26 @@ export function learnedWritesFromResolve(
     });
   }
 
-  // Split line accounts -> keyed by each line's description. The client sends the
-  // FULL lineAccounts map; only the concrete (non-null) picks teach anything.
+  // Split line accounts -> keyed by each line's description.
+  //
+  // NON-NULL IS NOT THE SAME AS CHOSEN. The split UI seeds its per-line state
+  // from the EFFECTIVE accounts (draft-resolve.ts effectiveLines falls back to
+  // the AI's own fuzzy match for any untouched line), and editing ONE line
+  // posts the FULL map so the server's shallow replace keeps the others. So a
+  // one-line correction arrives carrying the AI's guesses for every other line,
+  // and learning those would harden a guess into a remembered "correction" —
+  // exactly what this module's contract says it never does.
+  //
+  // A line therefore teaches only when its pick DIFFERS from what the AI
+  // suggested for that same line. A deliberate re-pick of the AI's own
+  // suggestion is skipped, which matches how the other signals behave (a
+  // confirmation teaches nothing; only a correction does).
   if (has(patch, "lineAccounts") && patch.lineAccounts) {
     for (const [idx, ref] of Object.entries(patch.lineAccounts)) {
       if (!ref) continue;
       const line = suggestion.lines?.[Number(idx)];
       if (!line) continue;
+      if (line.account.match && line.account.match.id === ref.id) continue;
       const key = learnKeyForName(line.description);
       if (key) {
         writes.push({

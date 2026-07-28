@@ -83,8 +83,14 @@ export async function regenerateDraftAction(
     learned = await readFirmLearnedMappings(clientId);
   } else {
     cached = await readCachedQuickbooksLists();
-    // Feature 3: apply the firm's remembered corrections (RLS read; {} pre-0490).
-    learned = await readFirmLearnedMappings();
+    // Feature 3: apply this CLIENT's remembered corrections (RLS read; {}
+    // pre-0490). Scoped to the client to match where the resolve route writes
+    // them and what the classify worker reads — this branch used to read the
+    // firm-level (client_id IS NULL) namespace, which was the only reader that
+    // lined up with the old unscoped write, so clicking Refresh was the one
+    // place learning appeared to work. `clientId ?? undefined` keeps the
+    // firm-level read for a legacy engagement with no client.
+    learned = await readFirmLearnedMappings(clientId ?? undefined);
   }
   if (!cached) return { ok: false, error: "no_lists" };
 

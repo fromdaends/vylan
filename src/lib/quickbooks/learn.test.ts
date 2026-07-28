@@ -136,6 +136,57 @@ describe("learnedWritesFromResolve", () => {
     ]);
   });
 
+  // Regression guard: the split UI seeds every line from the AI's own match and
+  // posts the FULL map when one line is edited, so an untouched line arrives
+  // non-null carrying a guess. Learning it would harden a guess into a
+  // remembered "correction" — the exact thing this module promises not to do.
+  // Descriptions here deliberately match account names so the matcher DOES
+  // produce a per-line suggestion (the splitSuggestion fixture above matches
+  // nothing, which is why it never exercised this path).
+  const matchedSplit = buildTransactionSuggestion(
+    extraction({
+      subtotal: 100,
+      line_items: [
+        { description: "Supplies", amount: 60 },
+        { description: "Fuel", amount: 40 },
+      ],
+    }),
+    lists,
+  );
+
+  it("does NOT learn a line left on the AI's own suggested account", () => {
+    const aiPick = matchedSplit.lines![0].account.match!;
+    expect(aiPick.id).toBe("a1"); // fixture sanity: the matcher really matched
+    expect(
+      learnedWritesFromResolve(
+        { lineAccounts: { "0": { id: aiPick.id, name: aiPick.name } } },
+        matchedSplit,
+      ),
+    ).toEqual([]);
+  });
+
+  it("learns only the edited line when the full map is posted", () => {
+    const untouched = matchedSplit.lines![1].account.match!;
+    const writes = learnedWritesFromResolve(
+      {
+        lineAccounts: {
+          // Line 0 genuinely changed away from the AI's "a1" pick...
+          "0": { id: "a2", name: "Fuel" },
+          // ...line 1 is the AI's own guess riding along untouched.
+          "1": { id: untouched.id, name: untouched.name },
+        },
+      },
+      matchedSplit,
+    );
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toEqual({
+      signalType: "line_account",
+      sourceKey: "supplies",
+      sourceSample: "Supplies",
+      target: { id: "a2", name: "Fuel" },
+    });
+  });
+
   it("ignores a line index that isn't in the suggestion", () => {
     const patch: Partial<ResolvedEntry> = {
       lineAccounts: { "9": { id: "a2", name: "Fuel" } },

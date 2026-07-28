@@ -198,4 +198,44 @@ describe("buildFirmConversations", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.unreadCount).toBe(0);
   });
+
+  // Archiving a client stamps clients.archived_at and nothing else — their
+  // engagements stay live — so the inbox has to check the CLIENT's stamp or an
+  // archived client keeps a row and keeps feeding the unread badge.
+  describe("archived clients", () => {
+    const archived = engagements.map((e) =>
+      e.id === "e-live" ? { ...e, clientArchivedAt: "2026-07-05T00:00:00Z" } : e,
+    );
+
+    it("drops an archived client's conversation, messages and all", () => {
+      const rows = buildFirmConversations(archived, threads, messages);
+      expect(rows.map((r) => r.engagementId)).not.toContain("e-live");
+      // Everyone else is untouched.
+      expect(rows.map((r) => r.engagementId)).toEqual(["e-complete", "e-silent"]);
+    });
+
+    it("takes the archived client's unread out of the badge total", () => {
+      const before = buildFirmConversations(engagements, threads, messages);
+      const after = buildFirmConversations(archived, threads, messages);
+      const total = (rows: { unreadCount: number }[]) =>
+        rows.reduce((n, r) => n + r.unreadCount, 0);
+      expect(total(before)).toBe(2);
+      expect(total(after)).toBe(1);
+    });
+
+    it("brings the conversation back when the client is restored", () => {
+      const restored = archived.map((e) =>
+        e.id === "e-live" ? { ...e, clientArchivedAt: null } : e,
+      );
+      const rows = buildFirmConversations(restored, threads, messages);
+      expect(rows.map((r) => r.engagementId)).toContain("e-live");
+    });
+
+    it("treats a missing stamp as not archived, never hiding a live thread", () => {
+      // Undefined is what an older caller (or a read that didn't return the
+      // column) produces — it must fail OPEN.
+      const rows = buildFirmConversations(engagements, threads, messages);
+      expect(rows.map((r) => r.engagementId)).toContain("e-live");
+    });
+  });
 });
