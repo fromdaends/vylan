@@ -1,8 +1,8 @@
 // Gather what the auto-approve decision needs, and apply it.
 //
 // The decision itself is pure and lives in auto-approve.ts. This is the I/O
-// half: read the firm's opt-in, the duplicate flag and the confirmation counts,
-// ask, and flip the status if the answer is yes.
+// half: read the firm's opt-in and the duplicate flag, ask, and flip the status
+// if the answer is yes.
 //
 // Best-effort throughout. Unattended approval is a convenience; failing to
 // evaluate it must never fail the classification that triggered it, and every
@@ -10,31 +10,8 @@
 
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { setDraftStatus } from "@/lib/db/quickbooks-suggestions";
-import { readLearnedConfirmations } from "@/lib/db/quickbooks-learned";
 import { decideAutoApprove } from "@/lib/quickbooks/auto-approve";
-import { learnKeyForName, taxLearnKey } from "@/lib/quickbooks/suggest";
-import type {
-  TransactionSuggestion,
-  LearnSignal,
-} from "@/lib/quickbooks/suggest";
-
-// The mappings this draft leaned on, as (signal, key) pairs — built with the
-// SAME key helpers the write side uses, so a lookup can never silently miss.
-function signalsUsedBy(
-  s: TransactionSuggestion,
-): Array<{ signalType: LearnSignal; sourceKey: string }> {
-  const out: Array<{ signalType: LearnSignal; sourceKey: string }> = [];
-  const partyKey = learnKeyForName(s.partySource ?? null);
-  if (partyKey && s.partyKind) {
-    out.push({ signalType: s.partyKind, sourceKey: partyKey });
-    out.push({ signalType: "expense_account", sourceKey: partyKey });
-  }
-  if (s.taxTotal != null) {
-    const taxKey = taxLearnKey(s.taxSource ?? null, s.direction);
-    if (taxKey) out.push({ signalType: "tax", sourceKey: taxKey });
-  }
-  return out;
-}
+import type { TransactionSuggestion } from "@/lib/quickbooks/suggest";
 
 export async function maybeAutoApproveDraft(input: {
   firmId: string;
@@ -69,20 +46,12 @@ export async function maybeAutoApproveDraft(input: {
       (fileRow as { possible_duplicate_of_file_id?: string | null } | null)
         ?.possible_duplicate_of_file_id != null;
 
-    const timesConfirmed = await readLearnedConfirmations(
-      input.firmId,
-      input.clientId ?? undefined,
-      signalsUsedBy(input.suggestion),
-    );
-
     const decision = decideAutoApprove({
       enabled,
       suggestion: input.suggestion,
       // A freshly built draft has no accountant overrides yet — the whole point
       // is that nobody has touched it.
       resolved: null,
-      learnedFields: input.suggestion.learnedFields ?? [],
-      timesConfirmed,
       possibleDuplicate,
     });
     if (!decision.approve) return false;

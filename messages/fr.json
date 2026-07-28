@@ -1072,7 +1072,7 @@
     "trial_card_cta_book": "Réserver un appel",
     "nav_notifications": "Notifications",
     "auto_approve_drafts_label": "Approuver automatiquement les brouillons comptables",
-    "auto_approve_drafts_help": "Une fois que vous avez codé le même fournisseur de la même façon trois fois, Vylan cesse de demander et approuve à votre place. Seulement les dépenses, seulement quand chaque champ provient de vos choix passés, et jamais pour un doublon possible. Rien n'est envoyé à votre logiciel comptable — c'est toujours vous qui publiez."
+    "auto_approve_drafts_help": "Quand chaque champ correspond à quelque chose qui existe déjà dans votre logiciel comptable — le client, le compte, le taux de taxe — Vylan approuve le brouillon au lieu de vous demander de confirmer ce qu'il sait déjà. Tout ce dont il n'est pas certain vous revient, et un doublon possible aussi, toujours. Rien n'est envoyé à votre logiciel comptable; c'est toujours vous qui publiez."
   },
   "Audit": {
     "title": "Journal d'audit",

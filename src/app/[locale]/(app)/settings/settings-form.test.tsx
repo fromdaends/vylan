@@ -278,8 +278,10 @@ describe("auto-approve toggle", () => {
     ).not.toBeChecked();
     // The help text must state the LIMITS, not just say "automatic" — a firm
     // handing over a judgement deserves to see how narrow the handover is.
-    expect(screen.getByText(/three times/)).toBeInTheDocument();
-    expect(screen.getByText(/never for a possible duplicate/)).toBeInTheDocument();
+    // The help text must state the LIMITS, not just say "automatic" — a firm
+    // handing over a judgement deserves to see how narrow the handover is.
+    expect(screen.getByText(/unsure about still comes to you/)).toBeInTheDocument();
+    expect(screen.getByText(/possible duplicate always does/)).toBeInTheDocument();
   });
 
   it("reflects the on state", () => {

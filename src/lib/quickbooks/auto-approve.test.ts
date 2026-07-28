@@ -1,22 +1,35 @@
 import { describe, it, expect } from "vitest";
 import {
   decideAutoApprove,
-  AUTO_APPROVE_MIN_CONFIRMATIONS,
+  AUTO_APPROVE_MIN_CONFIDENCE,
   type AutoApproveInput,
 } from "./auto-approve";
 import type { TransactionSuggestion } from "./suggest";
 
-// A draft that is complete and fully remembered — the ONLY shape that should
-// ever go through unattended. Every test below breaks exactly one thing.
-function suggestion(over: Partial<TransactionSuggestion> = {}) {
+// A confidently matched field. 1.0 is what an EXACT name match scores — the
+// whole point being that this needs no prior teaching.
+const sure = (id: string, name: string, confidence = 1) => ({
+  match: { id, name, active: true },
+  confidence,
+  candidates: [],
+});
+// A fuzzy guess: the matcher picked something but is not sure.
+const guess = (id: string, name: string) => ({
+  match: { id, name, active: true },
+  confidence: 0.82,
+  candidates: [],
+});
+const none = { match: null, confidence: 0, candidates: [] };
+
+function expense(over: Partial<TransactionSuggestion> = {}) {
   return {
     direction: "expense",
     partyKind: "vendor",
-    party: { match: { id: "v1", name: "Home Depot" }, confidence: 0.99, candidates: [] },
-    account: { match: { id: "a1", name: "Supplies" }, confidence: 0.99, candidates: [] },
-    taxCode: { match: { id: "t1", name: "GST" }, confidence: 0.99, candidates: [] },
-    item: { match: null, confidence: 0, candidates: [] },
-    paymentAccount: { match: null, confidence: 0, candidates: [] },
+    party: sure("v1", "Home Depot"),
+    account: sure("a1", "Supplies"),
+    taxCode: sure("t1", "GST"),
+    item: none,
+    paymentAccount: none,
     amount: 114.98,
     subtotal: 100,
     taxTotal: 14.98,
@@ -31,21 +44,39 @@ function suggestion(over: Partial<TransactionSuggestion> = {}) {
   } as unknown as TransactionSuggestion;
 }
 
-function input(over: Partial<AutoApproveInput> = {}): AutoApproveInput {
-  return {
-    enabled: true,
-    suggestion: suggestion(),
-    resolved: null,
-    learnedFields: ["vendor", "expense_account", "tax"],
-    timesConfirmed: AUTO_APPROVE_MIN_CONFIRMATIONS,
-    possibleDuplicate: false,
+function income(over: Partial<TransactionSuggestion> = {}) {
+  return expense({
+    direction: "income",
+    partyKind: "customer",
+    party: sure("c1", "Eastside Club"),
+    item: sure("i1", "Development work"),
+    account: none,
+    partySource: "Eastside Club",
     ...over,
-  };
+  });
 }
 
+const input = (over: Partial<AutoApproveInput> = {}): AutoApproveInput => ({
+  enabled: true,
+  suggestion: expense(),
+  resolved: null,
+  possibleDuplicate: false,
+  ...over,
+});
+
 describe("decideAutoApprove", () => {
-  it("approves a complete, fully-remembered, repeatedly-confirmed expense", () => {
+  // THE HEADLINE. No prior teaching, nothing learned — the names simply match
+  // what is already in the client's books, so there is nothing to ask about.
+  it("approves a first-ever document whose fields all match exactly", () => {
     expect(decideAutoApprove(input())).toEqual({ approve: true });
+  });
+
+  // The founder's case: an invoice whose customer already exists in Xero under
+  // that exact name should not sit there asking "pick a customer".
+  it("approves income when the customer already exists by name", () => {
+    expect(decideAutoApprove(input({ suggestion: income() }))).toEqual({
+      approve: true,
+    });
   });
 
   it("is OFF unless the firm turned it on", () => {
@@ -55,119 +86,171 @@ describe("decideAutoApprove", () => {
     });
   });
 
-  // Auto-approving a suspected duplicate is how the same invoice gets paid
-  // twice. Dext never auto-publishes one either.
-  it("never auto-approves a suspected duplicate, however good the rest is", () => {
+  it("never auto-approves a suspected duplicate, however confident", () => {
     expect(decideAutoApprove(input({ possibleDuplicate: true }))).toEqual({
       approve: false,
       reason: "possible_duplicate",
     });
   });
 
+  it("refuses when we cannot tell money in from money out", () => {
+    expect(
+      decideAutoApprove(input({ suggestion: expense({ direction: "unknown" }) })),
+    ).toEqual({ approve: false, reason: "unknown_direction" });
+  });
+
+  describe("a guess is not a match", () => {
+    it("refuses a fuzzily-matched vendor", () => {
+      expect(
+        decideAutoApprove(
+          input({ suggestion: expense({ party: guess("v9", "Home Depo") }) }),
+        ),
+      ).toEqual({ approve: false, reason: "not_confident" });
+    });
+
+    it("refuses a fuzzily-matched expense account", () => {
+      expect(
+        decideAutoApprove(
+          input({ suggestion: expense({ account: guess("a9", "Sundries") }) }),
+        ),
+      ).toEqual({ approve: false, reason: "not_confident" });
+    });
+
+    it("refuses a fuzzily-matched tax code when the document showed tax", () => {
+      expect(
+        decideAutoApprove(
+          input({ suggestion: expense({ taxCode: guess("t9", "GST-ish") }) }),
+        ),
+      ).toEqual({ approve: false, reason: "not_confident" });
+    });
+
+    it("refuses a fuzzily-matched product on income", () => {
+      expect(
+        decideAutoApprove(
+          input({ suggestion: income({ item: guess("i9", "Consulting") }) }),
+        ),
+      ).toEqual({ approve: false, reason: "not_confident" });
+    });
+  });
+
+  // A learned mapping scores exactly at the bar, so teaching still unlocks the
+  // fields that were never going to match by name.
+  it("accepts a learned mapping (0.99), the value the bar is set to", () => {
+    expect(AUTO_APPROVE_MIN_CONFIDENCE).toBe(0.99);
+    expect(
+      decideAutoApprove(
+        input({
+          suggestion: expense({ account: sure("a1", "Supplies", 0.99) }),
+        }),
+      ),
+    ).toEqual({ approve: true });
+  });
+
+  it("rejects just below the bar", () => {
+    expect(
+      decideAutoApprove(
+        input({ suggestion: expense({ account: sure("a1", "Supplies", 0.98) }) }),
+      ),
+    ).toEqual({ approve: false, reason: "not_confident" });
+  });
+
+  // The accountant's own pick outranks whatever the AI thought.
+  it("treats a field the accountant chose by hand as settled", () => {
+    expect(
+      decideAutoApprove(
+        input({
+          suggestion: expense({ account: guess("a9", "Sundries") }),
+          resolved: { account: { id: "a1", name: "Supplies" } } as never,
+        }),
+      ),
+    ).toEqual({ approve: true });
+  });
+
+  it("does not need a tax code when the document showed no tax", () => {
+    expect(
+      decideAutoApprove(
+        input({ suggestion: expense({ taxTotal: null, taxCode: none }) }),
+      ),
+    ).toEqual({ approve: true });
+  });
+
   it("refuses anything still missing input", () => {
-    const incomplete = suggestion({
-      account: { match: null, confidence: 0, candidates: [] },
-    } as never);
-    expect(decideAutoApprove(input({ suggestion: incomplete }))).toEqual({
-      approve: false,
-      reason: "needs_input",
-    });
+    expect(
+      decideAutoApprove(input({ suggestion: expense({ account: none }) })),
+    ).toEqual({ approve: false, reason: "needs_input" });
   });
 
-  // An income draft posts against a product/service item, and items are not a
-  // thing we learn — so "every field came from memory" can never be true, and
-  // approving one unattended would be approving a guess.
-  it("refuses income entirely", () => {
-    const income = suggestion({ direction: "income", partyKind: "customer" });
-    expect(decideAutoApprove(input({ suggestion: income }))).toEqual({
-      approve: false,
-      reason: "not_expense",
-    });
-  });
-
-  describe("every required field must come from MEMORY, not a guess", () => {
-    it("refuses when the vendor was only fuzzy-matched", () => {
-      expect(
-        decideAutoApprove(
-          input({ learnedFields: ["expense_account", "tax"] }),
-        ),
-      ).toEqual({ approve: false, reason: "not_all_learned" });
-    });
-
-    it("refuses when the account was only fuzzy-matched", () => {
-      expect(
-        decideAutoApprove(input({ learnedFields: ["vendor", "tax"] })),
-      ).toEqual({ approve: false, reason: "not_all_learned" });
-    });
-
-    it("refuses when the document HAS tax but the tax code was guessed", () => {
-      expect(
-        decideAutoApprove(
-          input({ learnedFields: ["vendor", "expense_account"] }),
-        ),
-      ).toEqual({ approve: false, reason: "not_all_learned" });
-    });
-
-    // A document with no tax has no tax code to remember, so requiring one
-    // would block every zero-rated receipt forever.
-    it("does not require a remembered tax code when there is no tax", () => {
-      const noTax = suggestion({ taxTotal: null, taxCode: { match: null, confidence: 0, candidates: [] } } as never);
+  describe("paid documents need the bank account", () => {
+    // suggestPaymentAccount only ever returns a match when the client's books
+    // hold exactly ONE usable account, so a non-null match is a certainty even
+    // though it scores 0.6 — judging it by the number would block every paid
+    // receipt forever.
+    it("accepts the single-candidate bank account despite its low score", () => {
       expect(
         decideAutoApprove(
           input({
-            suggestion: noTax,
-            learnedFields: ["vendor", "expense_account"],
+            suggestion: expense({
+              paid: true,
+              paymentAccount: sure("b1", "Chequing", 0.6),
+            }),
           }),
         ),
       ).toEqual({ approve: true });
     });
 
-    it("matches the party kind — a customer mapping does not satisfy a vendor draft", () => {
+    it("refuses a paid document with no bank account at all", () => {
       expect(
         decideAutoApprove(
-          input({ learnedFields: ["customer", "expense_account", "tax"] }),
+          input({ suggestion: expense({ paid: true, paymentAccount: none }) }),
         ),
-      ).toEqual({ approve: false, reason: "not_all_learned" });
+      ).toEqual({ approve: false, reason: "needs_input" });
     });
   });
 
-  describe("confirmation threshold", () => {
-    it("refuses below the threshold", () => {
-      for (let n = 0; n < AUTO_APPROVE_MIN_CONFIRMATIONS; n++) {
-        expect(decideAutoApprove(input({ timesConfirmed: n }))).toEqual({
-          approve: false,
-          reason: "not_confirmed_enough",
-        });
-      }
-    });
+  describe("split expenses", () => {
+    const split = (lineConf: number) =>
+      expense({
+        lines: [
+          { description: "Paper", amount: 60, account: sure("a1", "Supplies") },
+          {
+            description: "Diesel",
+            amount: 40,
+            account: sure("a2", "Fuel", lineConf),
+          },
+        ],
+      } as never);
 
-    it("approves at and above the threshold", () => {
+    it("approves when every line account is settled", () => {
       expect(
         decideAutoApprove(
-          input({ timesConfirmed: AUTO_APPROVE_MIN_CONFIRMATIONS }),
+          input({
+            suggestion: split(1),
+            resolved: { split: true } as never,
+          }),
         ),
       ).toEqual({ approve: true });
-      expect(decideAutoApprove(input({ timesConfirmed: 99 }))).toEqual({
-        approve: true,
-      });
     });
 
-    // One sighting is how an early mistake becomes permanent and invisible.
-    it("is more than one, deliberately", () => {
-      expect(AUTO_APPROVE_MIN_CONFIRMATIONS).toBeGreaterThan(1);
+    // A draft is only as settled as its least-settled line.
+    it("refuses when ONE line account was guessed", () => {
+      expect(
+        decideAutoApprove(
+          input({
+            suggestion: split(0.8),
+            resolved: { split: true } as never,
+          }),
+        ),
+      ).toEqual({ approve: false, reason: "not_confident" });
     });
   });
 
-  // Ordering matters for the reason reported back: a disabled firm should read
-  // as disabled, not as some downstream failure.
   it("reports 'disabled' ahead of every other veto", () => {
     expect(
       decideAutoApprove(
         input({
           enabled: false,
           possibleDuplicate: true,
-          timesConfirmed: 0,
-          learnedFields: [],
+          suggestion: expense({ party: none }),
         }),
       ),
     ).toEqual({ approve: false, reason: "disabled" });

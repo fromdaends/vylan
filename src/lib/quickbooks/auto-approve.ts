@@ -1,33 +1,50 @@
 // Should this draft approve itself?
 //
-// The point of the whole bookkeeping flow is that the accountant stops touching
-// documents the system already knows how to code. Hubdoc's autosync and Dext's
-// supplier rules both do this; ours can do it better, because we do not ask
-// anyone to configure a rule — the system only auto-approves what it has
-// already watched a human approve, the same way, several times.
+// The goal is plug and play: if the customer printed on the invoice already
+// exists in the client's books under that exact name, nobody should have to
+// confirm that. The system should only ask when it is genuinely unsure.
 //
-// EVERYTHING HERE IS A REASON TO SAY NO. This is the one place in the product
-// that acts on a client's books with nobody looking, so every condition is a
-// veto and the default answer is "ask the human". Getting a false negative
-// costs one click; a false positive puts a wrong number in real books and
-// nobody finds out until the return.
+// SO THE GATE IS CONFIDENCE, NOT MEMORY. An earlier version of this required
+// every field to have come from a remembered correction, which meant the FIRST
+// document from a supplier could never go through however perfectly it matched
+// — you had to teach it three times first. That is backwards: an exact name
+// match is not a weaker signal than a remembered one, it is a stronger one.
 //
-// PURE — no I/O, fully unit-tested. The caller gathers the inputs.
+// The matcher already grades itself, and the grades separate cleanly:
+//
+//   1.00  exact name match, or an exact tax-token-set match
+//   0.99  a mapping the accountant confirmed before (the learned overlay)
+//   <0.99 a fuzzy guess — and pickConfident additionally refuses anything
+//         within 0.05 of the runner-up, so a close call is already null
+//
+// Everything at or above 0.99 is "we are sure"; everything below is a guess.
+// Learning still matters enormously — it is what pulls the ambiguous fields
+// (which expense account? which of two similar tax rates?) up to 0.99 — but it
+// is no longer a prerequisite for the fields that were never ambiguous.
+//
+// EVERY CONDITION BELOW IS A VETO and the default is "ask the human". This is
+// the one place in the product that acts on a client's books with nobody
+// looking: a false negative costs one click, a false positive puts a wrong
+// number in real books that nobody finds until the return.
+//
+// PURE — no I/O, fully unit-tested.
 
 import { canApproveDraft } from "@/lib/quickbooks/draft-status";
+import {
+  effectiveSplit,
+  effectiveExpenseMode,
+  effectiveIncomeMode,
+} from "@/lib/quickbooks/draft-resolve";
 import type {
+  MatchField,
   TransactionSuggestion,
   ResolvedEntry,
 } from "@/lib/quickbooks/suggest";
 
-// How many times a supplier must have been coded the SAME way, by a human,
-// before the system will do it unattended.
-//
-// Three, not one: the first approval teaches the mapping, the second shows it
-// was not a one-off, the third makes it a habit. One would auto-approve
-// everything from a supplier after a single sighting, which is exactly how an
-// early mistake becomes permanent and invisible.
-export const AUTO_APPROVE_MIN_CONFIRMATIONS = 3;
+// The line between "sure" and "guessing". Set exactly at the learned-overlay
+// value so both an exact match (1.0) and a confirmed mapping (0.99) clear it,
+// and every fuzzy match falls short.
+export const AUTO_APPROVE_MIN_CONFIDENCE = 0.99;
 
 export type AutoApproveInput = {
   // The firm turned this on. Off by default — nobody gets unattended approval
@@ -35,10 +52,6 @@ export type AutoApproveInput = {
   enabled: boolean;
   suggestion: TransactionSuggestion;
   resolved: ResolvedEntry | null;
-  // Which fields were filled from MEMORY rather than fuzzy-guessed.
-  learnedFields: readonly string[];
-  // Lowest confirmation count among the mappings this draft leaned on.
-  timesConfirmed: number;
   // The near-duplicate flag. Dext never auto-publishes a suspected duplicate
   // and neither do we: auto-approving one is how the same invoice gets paid
   // twice.
@@ -53,56 +66,84 @@ export type AutoApproveVeto =
   | "disabled"
   | "possible_duplicate"
   | "needs_input"
-  | "not_expense"
-  | "not_all_learned"
-  | "not_confirmed_enough";
+  | "unknown_direction"
+  | "not_confident";
 
-// The fields that must have come from memory before this draft can go through
-// unattended. Tax only counts when the document actually showed tax.
-function requiredLearnedFields(s: TransactionSuggestion): string[] {
-  const required = [s.partyKind ?? "vendor", "expense_account"];
-  if (s.taxTotal != null) required.push("tax");
-  return required;
+// Is this field settled, or is the system guessing? A field the accountant has
+// already chosen by hand counts as settled whatever the AI thought.
+function settled(field: MatchField | undefined, chosen: boolean): boolean {
+  if (chosen) return true;
+  if (!field?.match) return false;
+  return field.confidence >= AUTO_APPROVE_MIN_CONFIDENCE;
 }
 
 export function decideAutoApprove(
   input: AutoApproveInput,
 ): AutoApproveDecision {
-  const { suggestion: s } = input;
+  const s = input.suggestion;
+  const r = input.resolved;
 
   if (!input.enabled) return { approve: false, reason: "disabled" };
 
-  // Checked early and on its own: a suspected duplicate is never auto-approved
-  // no matter how well the rest of it scores.
+  // Checked early and alone: a suspected duplicate is never auto-approved no
+  // matter how confidently every field matched.
   if (input.possibleDuplicate) {
     return { approve: false, reason: "possible_duplicate" };
   }
 
-  // EXPENSES ONLY, deliberately. An income draft's posting target is the
-  // product/service item, and items are not something we learn — so an income
-  // draft can never satisfy "every field came from memory", and pretending
-  // otherwise would auto-approve a guess. Income stays with the human until
-  // item learning exists.
-  if (s.direction !== "expense") {
-    return { approve: false, reason: "not_expense" };
+  // We could not tell money-in from money-out. Nothing downstream is
+  // meaningful, so there is nothing to be confident about.
+  if (s.direction !== "expense" && s.direction !== "income") {
+    return { approve: false, reason: "unknown_direction" };
   }
 
-  // Complete by exactly the same rule the Approve button uses — never a
-  // parallel, looser definition of "ready".
-  if (!canApproveDraft(s, input.resolved)) {
+  // Complete by exactly the rule the Approve button uses — never a parallel,
+  // looser definition of "ready".
+  if (!canApproveDraft(s, r)) {
     return { approve: false, reason: "needs_input" };
   }
 
-  // Every field that matters came from memory, not from a fuzzy name match.
-  // This is the difference between "the system recognised this" and "the system
-  // had a guess" — only the first is safe to act on unattended.
-  const learned = new Set(input.learnedFields);
-  if (!requiredLearnedFields(s).every((f) => learned.has(f))) {
-    return { approve: false, reason: "not_all_learned" };
+  // The other party. An exact name match here is the commonest reason a draft
+  // should sail through untouched.
+  if (!settled(s.party, r?.party != null)) {
+    return { approve: false, reason: "not_confident" };
   }
 
-  if (input.timesConfirmed < AUTO_APPROVE_MIN_CONFIRMATIONS) {
-    return { approve: false, reason: "not_confirmed_enough" };
+  if (s.direction === "income") {
+    // The line posts against a product/service.
+    if (!settled(s.item, r?.item != null)) {
+      return { approve: false, reason: "not_confident" };
+    }
+  } else if (effectiveSplit(s, r)) {
+    // A SPLIT expense is only as settled as its least-settled line — one
+    // guessed line account is a guessed draft.
+    const lines = s.lines ?? [];
+    const allLinesSettled = lines.every((l, i) =>
+      settled(l.account, r?.lineAccounts?.[String(i)] != null),
+    );
+    if (!allLinesSettled) return { approve: false, reason: "not_confident" };
+  } else if (!settled(s.account, r?.account != null)) {
+    return { approve: false, reason: "not_confident" };
+  }
+
+  // Tax only matters when the document actually showed some.
+  if (s.taxTotal != null && !settled(s.taxCode, r?.taxCode != null)) {
+    return { approve: false, reason: "not_confident" };
+  }
+
+  // A PAID document moves money through a specific bank account.
+  //
+  // Special-cased on purpose: suggestPaymentAccount only ever returns a match
+  // when the client's books hold exactly ONE usable account, so a non-null
+  // match here is a certainty ("there is only one it could be") even though it
+  // scores 0.6. Judging it by the confidence number would block every paid
+  // receipt from ever going through untouched.
+  const isPaid =
+    s.direction === "income"
+      ? effectiveIncomeMode(s, r) === "salesreceipt"
+      : effectiveExpenseMode(s, r) === "purchase";
+  if (isPaid && !s.paymentAccount?.match && r?.paymentAccount == null) {
+    return { approve: false, reason: "not_confident" };
   }
 
   return { approve: true };

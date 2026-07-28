@@ -1072,7 +1072,7 @@
     "trial_card_cta_book": "Book a meeting",
     "nav_notifications": "Notifications",
     "auto_approve_drafts_label": "Approve bookkeeping drafts automatically",
-    "auto_approve_drafts_help": "Once you've coded the same supplier the same way three times, Vylan stops asking and approves it for you. Only expenses, only when every field came from your own past choices, and never for a possible duplicate. Nothing is sent to your accounting software — you still post."
+    "auto_approve_drafts_help": "When every field matches something already in your accounting software — the customer, the account, the tax rate — Vylan approves the draft instead of asking you to confirm what it already knows. Anything it's unsure about still comes to you, and a possible duplicate always does. Nothing is sent to your accounting software; you still post."
   },
   "Audit": {
     "title": "Security audit log",
