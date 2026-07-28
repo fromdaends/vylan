@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
+  Repeat,
   BookOpen,
   Plug,
   ListChecks,
@@ -111,6 +112,20 @@ export function buildSearchRegistry(
       href: "/clients",
       primary: true,
       keywords: "clients customers contacts clientele client",
+    },
+    {
+      // Repeating work. The command palette is how this is reached on a phone —
+      // the mobile tab bar stays at its deliberate three tabs + Account, so
+      // there is no fourth tab for it.
+      id: "repeating",
+      label: t.app("nav_repeating"),
+      group: "go",
+      icon: Repeat,
+      color: "text-icon-indigo",
+      href: "/repeating",
+      primary: true,
+      keywords:
+        "repeating recurring schedule series monthly quarterly yearly automatic recurrent recurrence echeancier calendrier automatique horaire",
     },
     {
       id: "engagements",
