@@ -3,6 +3,7 @@ import {
   nameTokens,
   nameScore,
   taxTokensFrom,
+  taxLearnKey,
   matchTaxCode,
   suggestAccount,
   suggestItem,
@@ -732,12 +733,28 @@ describe("buildTransactionSuggestion — learned overlay", () => {
   });
 
   it("a remembered tax code wins over token matching", () => {
-    // GST+QST token-matches t2; the firm remembered t1 -> t1 wins.
+    // GST+QST token-matches t2; the firm remembered t1 -> t1 wins. The key is
+    // built with taxLearnKey (the same helper learn.ts writes with) so a change
+    // to the key shape can never silently orphan the lookup again.
     const learned: LearnedMappings = {
-      tax: { "GST+QST": { id: "t1", name: "GST" } },
+      tax: { [taxLearnKey("GST+QST", "expense")!]: { id: "t1", name: "GST" } },
     };
     const s = buildTransactionSuggestion(extraction(), lists, learned);
     expect(s.taxCode.match?.id).toBe("t1");
+  });
+
+  // The reason direction is in the key: a purchase's remembered rate must not
+  // be reused on a sale, or approving one silently re-codes the other.
+  it("does NOT reuse a purchase's remembered tax code on a sale", () => {
+    const learned: LearnedMappings = {
+      tax: { [taxLearnKey("GST+QST", "expense")!]: { id: "t1", name: "GST" } },
+    };
+    const s = buildTransactionSuggestion(
+      extraction({ direction: "income", vendor_name: null, customer_name: "Acme" }),
+      lists,
+      learned,
+    );
+    expect(s.taxCode.match?.id).not.toBe("t1");
   });
 
   it("remembers a per-line account keyed by the line description", () => {
@@ -759,5 +776,59 @@ describe("buildTransactionSuggestion — learned overlay", () => {
     expect(s.notes.some((n) => n.includes("Filled in from choices"))).toBe(
       true,
     );
+  });
+});
+
+// The bug this exists for: on a client carrying both "GST/RST on Purchases" and
+// "GST on Income", the token matcher scored them identically, so which one got
+// picked was a coin flip — and a purchases rate on a sale puts the tax in the
+// wrong box on the client's return.
+describe("matchTaxCode — direction filtering", () => {
+  const purchaseRate = {
+    id: "p1",
+    name: "GST on Purchases",
+    active: true,
+    canApplyToRevenue: false,
+    canApplyToExpenses: true,
+  };
+  const salesRate = {
+    id: "s1",
+    name: "GST on Income",
+    active: true,
+    canApplyToRevenue: true,
+    canApplyToExpenses: false,
+  };
+  const both = [purchaseRate, salesRate];
+  const gst = [{ type: "GST", amount: 5, rate: 5 }];
+
+  it("picks the sales rate on an income document", () => {
+    expect(matchTaxCode(gst, both, "income").match?.id).toBe("s1");
+  });
+
+  it("picks the purchase rate on an expense document", () => {
+    expect(matchTaxCode(gst, both, "expense").match?.id).toBe("p1");
+  });
+
+  it("never even offers the excluded rate as a candidate", () => {
+    const ids = matchTaxCode(gst, both, "income").candidates.map((c) => c.id);
+    expect(ids).not.toContain("p1");
+  });
+
+  it("keeps every rate when the direction is unknown", () => {
+    expect(matchTaxCode(gst, both, "unknown").candidates).toHaveLength(2);
+  });
+
+  // QuickBooks codes carry no flags; undefined must mean "keep", never "hide".
+  it("keeps rates with no flags at all (QuickBooks, or a pre-sync Xero row)", () => {
+    const plain = [{ id: "q1", name: "GST", active: true }];
+    expect(matchTaxCode(gst, plain, "income").match?.id).toBe("q1");
+    expect(matchTaxCode(gst, plain, "expense").match?.id).toBe("q1");
+  });
+
+  // A client whose rates are all flagged one way is better served by a
+  // correctable suggestion than by an empty picker that blocks the draft.
+  it("falls back to the unfiltered list rather than returning nothing", () => {
+    const onlyPurchase = [purchaseRate];
+    expect(matchTaxCode(gst, onlyPurchase, "income").match?.id).toBe("p1");
   });
 });

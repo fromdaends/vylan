@@ -105,18 +105,31 @@ describe("learnedWritesFromResolve", () => {
     expect(learnedWritesFromResolve(patch, incomeSuggestion)).toEqual([]);
   });
 
-  it("learns a tax code keyed by the canonical tax set", () => {
+  // The key carries DIRECTION: a sale and a purchase with the same taxes need
+  // different rates ("GST on Income" vs "GST on Purchases"), and one shared key
+  // meant whichever was confirmed last silently re-coded the other.
+  it("learns a tax code keyed by the canonical tax set AND direction", () => {
     const patch: Partial<ResolvedEntry> = {
       taxCode: { id: "t2", name: "GST/QST QC" },
     };
     expect(learnedWritesFromResolve(patch, expenseSuggestion)).toEqual([
       {
         signalType: "tax",
-        sourceKey: "GST+QST",
+        sourceKey: "GST+QST|expense",
         sourceSample: "GST+QST",
         target: { id: "t2", name: "GST/QST QC" },
       },
     ]);
+  });
+
+  it("keys a sale's tax separately from a purchase's", () => {
+    const patch: Partial<ResolvedEntry> = {
+      taxCode: { id: "t2", name: "GST/QST QC" },
+    };
+    const income = learnedWritesFromResolve(patch, incomeSuggestion);
+    expect(income.find((w) => w.signalType === "tax")?.sourceKey).toBe(
+      "GST+QST|income",
+    );
   });
 
   it("learns per-line accounts keyed by each line description, skipping nulls", () => {

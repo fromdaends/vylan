@@ -54,7 +54,10 @@ async function readRowsWith(
   const [acc, con, tax, items] = await Promise.all([
     read("xero_accounts", "xero_id, code, name, account_type, active"),
     read("xero_contacts", "xero_id, name, is_supplier, is_customer, active"),
-    read("xero_tax_rates", "xero_id, name, active"),
+    read(
+      "xero_tax_rates",
+      "xero_id, name, active, can_apply_to_revenue, can_apply_to_expenses",
+    ),
     read("xero_items", "xero_id, code, name, income_account_code, active"),
   ]);
   for (const r of [acc, con, tax, items]) {
@@ -89,6 +92,10 @@ async function readRowsWith(
     xeroId: String(r.xero_id ?? ""),
     name: (r.name as string | null) ?? "",
     active: r.active !== false,
+    // Absent (pre-0980 row) means "no opinion" -> true, so an un-resynced
+    // client keeps seeing every rate rather than an empty picker.
+    canApplyToRevenue: r.can_apply_to_revenue !== false,
+    canApplyToExpenses: r.can_apply_to_expenses !== false,
   }));
   const itemRows: XeroItemRow[] = (
     (items.data as Array<Record<string, unknown>> | null) ?? []
@@ -225,7 +232,12 @@ function recordFor(
     const i = row as XeroItemRow;
     return { ...base, code: i.code, income_account_code: i.incomeAccountCode };
   }
-  return base; // taxRates
+  const t = row as XeroTaxRateRow;
+  return {
+    ...base,
+    can_apply_to_revenue: t.canApplyToRevenue,
+    can_apply_to_expenses: t.canApplyToExpenses,
+  };
 }
 
 // Replace a client's cached rows for one entity: upsert fresh rows (stamped with

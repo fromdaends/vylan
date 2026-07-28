@@ -431,6 +431,11 @@ export type XeroRawTaxRate = {
   TaxType?: string; // the code put on lines (e.g. CAN007)
   Name?: string;
   Status?: string; // ACTIVE, DELETED, ARCHIVED, PENDING
+  // Which side of the books this rate may be used on. This is the signal that
+  // stops a "GST/RST on Purchases" rate being suggested for a sales invoice —
+  // the names are close enough that the token matcher scores them identically.
+  CanApplyToRevenue?: boolean;
+  CanApplyToExpenses?: boolean;
 };
 export type XeroRawItem = {
   ItemID?: string;

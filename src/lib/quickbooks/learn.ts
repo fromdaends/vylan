@@ -14,6 +14,7 @@
 import { effectiveMapping } from "@/lib/quickbooks/draft-resolve";
 import {
   learnKeyForName,
+  taxLearnKey,
   type LearnSignal,
   type ResolvedEntry,
   type TransactionSuggestion,
@@ -70,11 +71,17 @@ export function learnedWritesFromResolve(
     }
   }
 
-  // Tax code -> keyed by the document's canonical tax-token set (e.g. "GST+QST").
-  if (has(patch, "taxCode") && patch.taxCode && suggestion.taxSource) {
+  // Tax code -> keyed by the document's canonical tax-token set (e.g. "GST+QST")
+  // AND its DIRECTION. Without the direction in the key, a sale and a purchase
+  // carrying the same taxes share one remembered rate, so approving an invoice
+  // coded "GST/RST on Purchases" would then auto-fill that purchases rate on
+  // every expense receipt for the client too — tax in the wrong box on the
+  // return. Sales and purchases now remember separately.
+  const taxKey = taxLearnKey(suggestion.taxSource ?? null, suggestion.direction);
+  if (has(patch, "taxCode") && patch.taxCode && suggestion.taxSource && taxKey) {
     writes.push({
       signalType: "tax",
-      sourceKey: suggestion.taxSource,
+      sourceKey: taxKey,
       sourceSample: suggestion.taxSource,
       target: { id: patch.taxCode.id, name: patch.taxCode.name },
     });
@@ -171,10 +178,11 @@ export function learnedWritesFromApproval(
     }
   }
 
-  if (eff.taxCode && suggestion.taxSource) {
+  const taxKey = taxLearnKey(suggestion.taxSource ?? null, suggestion.direction);
+  if (eff.taxCode && suggestion.taxSource && taxKey) {
     writes.push({
       signalType: "tax",
-      sourceKey: suggestion.taxSource,
+      sourceKey: taxKey,
       sourceSample: suggestion.taxSource,
       target: { id: eff.taxCode.id, name: eff.taxCode.name },
     });
