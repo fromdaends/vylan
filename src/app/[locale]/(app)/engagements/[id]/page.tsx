@@ -59,6 +59,12 @@ import {
   PayoutBreakdownCard,
   payoutCardData,
 } from "@/components/engagements/payout-breakdown-card";
+import { PayoutJournalSection } from "@/components/engagements/payout-journal-section";
+import {
+  ensurePayoutJournalDraft,
+  getPayoutJournalsForEngagement,
+  type PayoutJournalDraft,
+} from "@/lib/db/payout-journal";
 import { QuickbooksDraftsSummary } from "@/components/engagements/quickbooks-drafts-summary";
 import {
   getSuggestionsForEngagement,
@@ -446,6 +452,32 @@ export default async function EngagementDetailPage({
       provider: bookkeepingProvider ?? "quickbooks",
     });
     if (created > 0) suggestionsByFile = await getSuggestionsForEngagement(id);
+  }
+  // Payout journal drafts (migration 1010), one per processor-statement
+  // upload. Created lazily below for any payout that was read but has no draft
+  // yet — the same self-heal shape as the transaction backfill above, and just
+  // as cheap (no AI call, pure DB).
+  let payoutJournals = bookkeepingConnected
+    ? await getPayoutJournalsForEngagement(id)
+    : new Map<string, PayoutJournalDraft>();
+  if (bookkeepingConnected) {
+    let createdJournals = 0;
+    for (const u of uploads) {
+      if (payoutJournals.has(u.id)) continue;
+      const card = payoutCardData(u.ai_extracted_fields);
+      if (!card) continue;
+      const made = await ensurePayoutJournalDraft({
+        firmId: engagement.firm_id,
+        uploadedFileId: u.id,
+        engagementId: id,
+        provider: bookkeepingProvider ?? "quickbooks",
+        figures: card.figures,
+      });
+      if (made) createdJournals += 1;
+    }
+    if (createdJournals > 0) {
+      payoutJournals = await getPayoutJournalsForEngagement(id);
+    }
   }
   // Only the drafts whose CARD is actually shown feed the engagement roll-up —
   // a draft's card appears once its document is approved (or it's posted), so
@@ -1120,6 +1152,7 @@ export default async function EngagementDetailPage({
                     item={item}
                     files={filesByItem.get(item.id) ?? []}
                     suggestionsByFile={suggestionsByFile}
+                    payoutJournals={payoutJournals}
                     qboOptions={qboOptions}
                     draftProvider={bookkeepingProvider ?? "quickbooks"}
                     reviewerNameById={reviewerNameById}
@@ -1202,6 +1235,7 @@ async function ItemRow({
   item,
   files,
   suggestionsByFile,
+  payoutJournals,
   qboOptions,
   draftProvider,
   reviewerNameById,
@@ -1230,6 +1264,7 @@ async function ItemRow({
   // Bookkeeping drafts keyed by uploaded file id (empty when the client isn't
   // connected to QuickBooks/Xero or the migration isn't applied).
   suggestionsByFile: Map<string, StoredDraft>;
+  payoutJournals: Map<string, PayoutJournalDraft>;
   // The cached bookkeeping lists the draft cells pick from (QuickBooks or Xero).
   qboOptions: DraftCardOptions;
   // Which product this client is connected to — drives the card's branding +
@@ -1417,6 +1452,9 @@ async function ItemRow({
                 // as soon as it's read, regardless of review state — it is a
                 // reading of the document, not a pending action like a draft.
                 const payoutCard = payoutCardData(f.ai_extracted_fields);
+                // The journal half only appears for a firm with a bookkeeping
+                // connection (there are no accounts to map otherwise).
+                const journal = payoutJournals.get(f.id);
                 // Nothing to show (no draft, no payout, comments off) → no
                 // footer, exactly as before.
                 if (!showDraft && !payoutCard && !commentsEnabled) {
@@ -1425,7 +1463,24 @@ async function ItemRow({
                 return (
                   <>
                     {payoutCard && (
-                      <PayoutBreakdownCard data={payoutCard} locale={locale} />
+                      <PayoutBreakdownCard
+                        data={payoutCard}
+                        locale={locale}
+                        journalSlot={
+                          journal && qboOptions.accounts.length > 0 ? (
+                            <PayoutJournalSection
+                              engagementId={engagementId}
+                              uploadedFileId={f.id}
+                              figures={payoutCard.figures}
+                              mapping={journal.mapping}
+                              status={journal.status}
+                              accounts={qboOptions.accounts}
+                              locale={locale}
+                              postedLink={journal.postedLink}
+                            />
+                          ) : undefined
+                        }
+                      />
                     )}
                     {showDraft && d && (
                       <QuickbooksDraftCard

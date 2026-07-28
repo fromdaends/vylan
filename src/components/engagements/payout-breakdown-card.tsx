@@ -107,9 +107,14 @@ function periodLabel(
 export function PayoutBreakdownCard({
   data,
   locale,
+  journalSlot,
 }: {
   data: PayoutCardData;
   locale: AppLocale;
+  // The journal-entry half (account mapping + the balanced entry). Rendered
+  // by the page when the firm has a bookkeeping connection; omitted otherwise
+  // so a firm without QuickBooks/Xero just sees the verified split.
+  journalSlot?: React.ReactNode;
 }) {
   const lines = buildPayoutSplit(data.figures);
   if (lines.length === 0) return null;
@@ -208,6 +213,8 @@ export function PayoutBreakdownCard({
           <p className={cn("text-xs text-muted-foreground")}>{data.note}</p>
         )}
       </div>
+
+      {journalSlot}
     </div>
   );
 }
