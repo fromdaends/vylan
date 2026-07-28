@@ -1021,3 +1021,78 @@ function hasStraightSides(q: Quad, mask: Uint8Array, w: number, h: number): bool
   }
   return true;
 }
+
+// ---------------------------------------------------------------------------
+// Outline stability — kills the border snapping back and forth.
+// ---------------------------------------------------------------------------
+
+/** Largest corner-to-corner distance between two quads. */
+function maxCornerDistance(a: Quad, b: Quad): number {
+  let worst = 0;
+  for (let i = 0; i < 4; i++) {
+    const d = Math.hypot(a[i].x - b[i].x, a[i].y - b[i].y);
+    if (d > worst) worst = d;
+  }
+  return worst;
+}
+
+export type QuadStability = {
+  /** The quad the outline is actually showing. */
+  shown: Quad | null;
+  /** A far-away detection waiting to prove it is real, and for how long. */
+  candidate: Quad | null;
+  candidateRuns: number;
+};
+
+export const INITIAL_QUAD_STABILITY: QuadStability = {
+  shown: null,
+  candidate: null,
+  candidateRuns: 0,
+};
+
+/**
+ * Temporal hysteresis on top of smoothQuad, because easing alone cannot fix
+ * ALTERNATION. On a real phone the detector sometimes flips between two rival
+ * readings of the same scene (page vs page-plus-shadow, or two corner
+ * placements), and an ease-or-snap rule faithfully chases every flip — which
+ * the founder saw as the border "snapping back and forth".
+ *
+ * The rule here: a detection NEAR the shown outline glides it (smoothQuad); a
+ * detection FAR from it is treated as a claim, not a fact — the outline holds
+ * still until the new position repeats for `adoptAfter` consecutive frames.
+ * A one-frame outlier moves nothing. A genuine repositioning is adopted after
+ * ~3 frames, which at 20fps is invisible. And an A/B/A/B alternation never
+ * accumulates a run, so the outline simply stays put on A.
+ */
+export function stabiliseQuad(
+  prev: QuadStability,
+  next: Quad | null,
+  opts: { alpha: number; jumpDistance: number; adoptAfter: number },
+): QuadStability {
+  // No detection this frame: hold what is shown (the caller's grace window
+  // decides when it disappears) and forget any half-proven candidate.
+  if (!next) return { shown: prev.shown, candidate: null, candidateRuns: 0 };
+
+  const { shown } = prev;
+  if (!shown) return { shown: next, candidate: null, candidateRuns: 0 };
+
+  if (maxCornerDistance(shown, next) <= opts.jumpDistance) {
+    // Same position, small drift — glide. Infinity disables smoothQuad's own
+    // snap; this function owns the far-jump policy now.
+    return {
+      shown: smoothQuad(shown, next, opts.alpha, Number.POSITIVE_INFINITY),
+      candidate: null,
+      candidateRuns: 0,
+    };
+  }
+
+  const sameCandidate =
+    prev.candidate !== null &&
+    maxCornerDistance(prev.candidate, next) <= opts.jumpDistance;
+  const candidateRuns = sameCandidate ? prev.candidateRuns + 1 : 1;
+
+  if (candidateRuns >= opts.adoptAfter) {
+    return { shown: next, candidate: null, candidateRuns: 0 };
+  }
+  return { shown, candidate: next, candidateRuns };
+}
