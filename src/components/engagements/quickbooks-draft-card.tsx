@@ -477,7 +477,7 @@ export async function QuickbooksDraftCard({
           is required. Provider-neutral labels; shown for both providers so income
           drafts stay reviewable/approvable on Xero too (posting is Phase 4). */}
       {v.direction === "income" && (
-        <div className="px-3 pt-1.5">
+        <div className="grid grid-cols-1 gap-1.5 px-3 pt-1.5 sm:grid-cols-2">
           <QuickbooksPaidToggle
             key={`paid-${incomeMode}`}
             fileId={fileId}
@@ -486,6 +486,26 @@ export async function QuickbooksDraftCard({
             paidLabel={t("record_as_salesreceipt")}
             disabled={!isDraft}
           />
+          {/* A PAID sale needs the bank account it was deposited TO — the
+              mirror of a paid expense's "paid from", and the same stored field.
+              Pre-filled automatically when the client's books have exactly one
+              bank account, so most of the time there is nothing to choose. */}
+          {incomeMode === "salesreceipt" && (
+            <QuickbooksEditableField
+              key={`depositAccount-${eff.paymentAccount?.id ?? "none"}`}
+              fileId={fileId}
+              field="paymentAccount"
+              label={t("field_deposited_to")}
+              options={options.paymentAccounts}
+              initial={eff.paymentAccount}
+              choosePrompt={t("choose_deposited_to")}
+              disabled={!isDraft}
+              suggested={candidateOptions(
+                suggestion.paymentAccount,
+                options.paymentAccounts,
+              )}
+            />
+          )}
         </div>
       )}
 
@@ -528,13 +548,12 @@ export async function QuickbooksDraftCard({
       </div>
 
       {/* Stage 5: posting row — Post (approved) / Posted + Undo. Live for
-          QuickBooks (all directions) and for Xero EXPENSES (Phase 4b: Bill /
-          Spend). Xero INCOME posting is still deferred — a Xero income draft
-          keeps the muted "coming soon" note (Xero's Receive needs a deposit bank
-          account we don't collect for income yet). Everything above (review /
-          approve / dismiss / edit) is provider-neutral. */}
+          QuickBooks and for Xero in BOTH directions: expenses post a Bill or
+          Spend, income an ACCREC invoice (unpaid) or a Receive bank transaction
+          (paid). Only an UNKNOWN-direction Xero draft still can't post — there
+          is no basis for choosing between money in and money out. */}
       {(status === "approved" || status === "posted") &&
-        (isXero && v.direction !== "expense" ? (
+        (isXero && v.direction === "unknown" ? (
           <div className="border-t border-border/40 px-3 py-2">
             <p className="text-[11px] text-muted-foreground">
               {t("xero_posting_soon")}

@@ -631,15 +631,20 @@ export function suggestPaymentAccount(
   paymentMethod: string | null,
   accounts: QbAccount[] | null | undefined,
 ): MatchField {
-  if (direction === "income" || paid !== true || !accounts) {
+  // Both directions need one: a PAID EXPENSE needs the account it was paid
+  // FROM, a PAID SALE the account it was deposited TO. Same question, same
+  // shape, so the same field carries it — only the label differs in the UI.
+  if (paid !== true || !accounts) {
     return { match: null, confidence: 0, candidates: [] };
   }
   const payable = accounts.filter((a) => isPaymentAccountType(a.accountType));
   if (payable.length === 0)
     return { match: null, confidence: 0, candidates: [] };
 
-  // Narrow by the payment method's hint, but never to nothing.
-  const card = looksLikeCard(paymentMethod);
+  // Narrow by the payment method's hint, but never to nothing. Money RECEIVED
+  // lands in a bank account, never on a credit card, so the card hint is only
+  // consulted for expenses.
+  const card = direction !== "income" && looksLikeCard(paymentMethod);
   const preferred = payable.filter((a) =>
     card
       ? (a.accountType ?? "").toLowerCase() === "credit card"

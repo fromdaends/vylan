@@ -370,3 +370,35 @@ describe("effectivePublishStatus (Xero 'Publish as')", () => {
     ).toBe("AUTHORISED");
   });
 });
+
+// Xero income posting: a PAID sale is a bank transaction, so it needs the
+// account the money landed in — without it the post would fail at Xero rather
+// than being caught while the accountant is still looking at the draft.
+describe("draftNeedsInput — paid income needs a deposit account", () => {
+  const income = (over: Record<string, unknown> = {}) =>
+    ({
+      ...sugg({}),
+      direction: "income" as const,
+      item: { match: { id: "i1", name: "Consulting" }, candidates: [] },
+      taxTotal: null,
+      ...over,
+    }) as never;
+
+  it("blocks a paid sale with no deposit account", () => {
+    expect(draftNeedsInput(income({ paid: true }), null)).toBe(true);
+  });
+
+  it("passes once the deposit account is chosen", () => {
+    expect(
+      draftNeedsInput(income({ paid: true }), {
+        paymentAccount: { id: "bank1", name: "Chequing" },
+      } as never),
+    ).toBe(false);
+  });
+
+  // An UNPAID sale is an ACCREC invoice — no bank account is involved at all,
+  // which is why this half could ship with no extra input from the accountant.
+  it("does NOT ask for one on an unpaid sale", () => {
+    expect(draftNeedsInput(income({ paid: false }), null)).toBe(false);
+  });
+});

@@ -40,6 +40,8 @@ import {
 import {
   buildXeroBillPayload,
   buildXeroSpendPayload,
+  buildXeroInvoicePayload,
+  buildXeroReceivePayload,
   xeroPostingReference,
   xeroUndoStatusFor,
   resolveXeroTaxApplication,
@@ -50,11 +52,13 @@ import {
 import {
   checkBillPostable,
   checkPurchasePostable,
+  checkInvoicePostable,
 } from "@/lib/quickbooks/post-transaction";
 import {
   effectiveMapping,
   effectiveDate,
   effectiveExpenseMode,
+  effectiveIncomeMode,
   effectivePublishStatus,
   effectiveSplit,
   effectiveLines,
@@ -97,8 +101,20 @@ function xeroEndpointForDraft(draft: {
   resolved: unknown;
 }): XeroTxnEndpoint {
   const s = draft.suggestion;
+  if (!s) return "Invoices";
+  // PAID either way is a bank transaction (SPEND out / RECEIVE in); UNPAID
+  // either way is an invoice (ACCPAY owed by us / ACCREC owed to us). Undo
+  // reads this to choose between deleting a bank transaction and voiding or
+  // deleting an invoice, so income must be handled here or an undone sales
+  // receipt would be sent to the wrong endpoint entirely.
+  if (s.direction === "income") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return effectiveIncomeMode(s as any, draft.resolved as any) ===
+      "salesreceipt"
+      ? "BankTransactions" // RECEIVE
+      : "Invoices"; // ACCREC
+  }
   if (
-    s &&
     s.direction === "expense" &&
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     effectiveExpenseMode(s as any, draft.resolved as any) === "purchase"
@@ -143,17 +159,20 @@ export async function postApprovedXeroDraft(
 
   const s = draft.suggestion;
 
-  // Income posting to Xero is deferred (RECEIVE needs a deposit bank account we
-  // don't collect for income). The card keeps income Xero drafts on the
-  // "coming soon" note; this guard is the server-side backstop.
-  if (s.direction !== "expense") {
+  // Income posts too now: an UNPAID sale is an ACCREC invoice (no bank account
+  // involved at all), a PAID sale a RECEIVE bank transaction against the
+  // account it was deposited to. Only an UNKNOWN direction is unpostable —
+  // we have no basis for choosing between a bill and an invoice.
+  if (s.direction !== "expense" && s.direction !== "income") {
     return {
       kind: "not_postable",
       ...base,
       problems: ["not_expense"],
-      detail: "Posting income to Xero is coming soon.",
+      detail:
+        "We couldn't tell whether this is money in or money out. Set the direction first.",
     };
   }
+  const isIncome = s.direction === "income";
 
   const eff = effectiveMapping(s, draft.resolved);
   const effDate = effectiveDate(s, draft.resolved);
@@ -247,7 +266,72 @@ export async function postApprovedXeroDraft(
   let endpoint: XeroTxnEndpoint;
   let payload: Record<string, unknown>;
 
-  if (isPurchase) {
+  if (isIncome) {
+    // ── INCOME ────────────────────────────────────────────────────────────
+    // Unpaid  -> ACCREC invoice   (the customer owes; no bank account needed)
+    // Paid    -> RECEIVE bank txn (deposited to a bank account)
+    const isSalesReceipt =
+      effectiveIncomeMode(s, draft.resolved) === "salesreceipt";
+    const problems = checkInvoicePostable({
+      direction: s.direction,
+      party: eff.party,
+      item: eff.item,
+      amount: s.amount,
+      lists,
+    });
+    if (problems.length > 0 || !eff.party || !eff.item || s.amount == null) {
+      return { kind: "not_postable", ...base, problems };
+    }
+    // Xero income lines reference an item by CODE (it carries the sales
+    // account), with the income account as a fallback so an item that has no
+    // code still produces a valid line. At least one must resolve.
+    const itemCode = pctx?.itemCodeById.get(eff.item.id) ?? null;
+    const incomeAccountCode =
+      pctx?.itemIncomeAccountCodeById.get(eff.item.id) ?? null;
+    if (!itemCode && !incomeAccountCode) {
+      return {
+        kind: "not_postable",
+        ...base,
+        problems: ["missing_item"],
+        detail:
+          "That product or service has no code and no income account in Xero.",
+      };
+    }
+    const incomeCommon = {
+      contactId: eff.party.id,
+      itemCode,
+      accountCode: incomeAccountCode,
+      amount: s.amount,
+      date: effDate,
+      description: lineDescription,
+      reference,
+      tax,
+    };
+    if (isSalesReceipt) {
+      // A deposit account is required and has no sensible default we could
+      // invent — draftNeedsInput already blocks approval without one, so this
+      // is the server-side backstop.
+      if (!eff.paymentAccount) {
+        return {
+          kind: "not_postable",
+          ...base,
+          problems: ["missing_account"],
+          detail: "Choose the bank account this was deposited to.",
+        };
+      }
+      endpoint = "BankTransactions";
+      payload = buildXeroReceivePayload({
+        ...incomeCommon,
+        bankAccountId: eff.paymentAccount.id,
+      });
+    } else {
+      endpoint = "Invoices";
+      payload = buildXeroInvoicePayload({
+        ...incomeCommon,
+        status: publishStatus,
+      });
+    }
+  } else if (isPurchase) {
     // Paid expense → SPEND bank transaction. Needs the paid-from bank account.
     const problems = checkPurchasePostable({
       direction: s.direction,
@@ -361,7 +445,7 @@ export async function postApprovedXeroDraft(
     postedRealmId: ctx.tenantId, // the Xero org (tenant) it posted under
     // What undo needs to retract this correctly (VOIDED vs DELETED). A SPEND is
     // always AUTHORISED; only the bill path can be a draft.
-    postedStatus: isPurchase ? "AUTHORISED" : publishStatus,
+    postedStatus: endpoint === "Invoices" ? publishStatus : "AUTHORISED",
   });
   if (recorded === "conflict") return { kind: "conflict", ...base };
   if (recorded !== "ok") {

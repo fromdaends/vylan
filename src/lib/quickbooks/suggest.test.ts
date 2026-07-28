@@ -480,16 +480,27 @@ describe("suggestPaymentAccount", () => {
     { id: "bank1", name: "Chequing", accountType: "Bank", active: true },
     { id: "exp1", name: "Supplies", accountType: "Expense", active: true },
   ];
-  it("returns nothing for income, unpaid, or unknown-paid", () => {
-    expect(
-      suggestPaymentAccount("income", true, "Visa", payAccts).match,
-    ).toBeNull();
+  it("returns nothing when the document is unpaid or unknown-paid", () => {
     expect(
       suggestPaymentAccount("expense", false, "Visa", payAccts).match,
     ).toBeNull();
     expect(
       suggestPaymentAccount("expense", null, "Visa", payAccts).match,
     ).toBeNull();
+  });
+
+  // A PAID SALE needs the account the money was deposited TO — the mirror of a
+  // paid expense's "paid from", carried by the same field.
+  it("suggests a deposit account for a PAID sale", () => {
+    const m = suggestPaymentAccount("income", true, null, payAccts);
+    expect(m.match?.id).toBe("bank1");
+  });
+
+  // Money received lands in a bank account, never on a credit card, so the
+  // card hint from the payment method is ignored for income.
+  it("ignores a card hint on income and still picks the bank account", () => {
+    const m = suggestPaymentAccount("income", true, "Visa ...4127", payAccts);
+    expect(m.match?.id).toBe("bank1");
   });
   it("confidently picks the single credit-card account for a card payment", () => {
     const m = suggestPaymentAccount("expense", true, "Visa ...4127", payAccts);

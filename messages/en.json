@@ -2927,7 +2927,7 @@
     "draft_title_xero": "Xero draft",
     "draft_kicker": "QuickBooks",
     "draft_kicker_xero": "Xero",
-    "xero_posting_soon": "Posting to Xero is coming soon — you can review and approve now.",
+    "xero_posting_soon": "We couldn't tell whether this is money in or money out. Set the direction before posting.",
     "draft_badge": "Draft",
     "readiness": "Match readiness: {pct}%",
     "draft_readonly_hint": "Suggested mapping for your review. Nothing is sent to QuickBooks yet.",
@@ -3100,7 +3100,9 @@
     "xero_status_submitted": "Awaiting approval",
     "xero_status_authorised": "Awaiting payment",
     "xero_status_hint": "How this bill lands in Xero. “Awaiting approval” suits firms using an approval workflow.",
-    "xero_status_na_spend": "Paid expenses always post as a completed bank transaction — Xero has no draft or approval state for those."
+    "xero_status_na_spend": "Paid expenses always post as a completed bank transaction — Xero has no draft or approval state for those.",
+    "field_deposited_to": "Deposited to",
+    "choose_deposited_to": "Choose the account it was deposited to"
   },
   "ClientMessages": {
     "thread_title": "Messages with your client",
