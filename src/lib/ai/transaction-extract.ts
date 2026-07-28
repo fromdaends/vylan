@@ -87,8 +87,10 @@ export type TransactionExtraction = {
   // EXPENSE line items (pre-tax), for splitting a receipt across accounts. Empty
   // for income or when only a single total is legible.
   line_items: TransactionLineItem[];
-  // EXPENSE payment status: true = already paid (a POS receipt -> a QuickBooks
-  // Purchase), false = an unpaid bill (-> a QuickBooks Bill), null = unclear.
+  // Has the money already changed hands? BOTH directions: an expense receipt
+  // that was paid posts a Purchase/Spend rather than a Bill, and a sales
+  // receipt posts a SalesReceipt/Receive rather than an Invoice. null = the
+  // document shows neither a tender line nor an amount still owed.
   paid: boolean | null;
   payment_method: string | null; // e.g. "Visa", "Cash"; null when not shown
   confidence: number; // 0..1, how sure the extraction is overall
@@ -201,7 +203,7 @@ const TRANSACTION_TOOL = {
       paid: {
         type: ["boolean", "null"],
         description:
-          "For an EXPENSE: was this ALREADY PAID? true when the document is a paid receipt — it shows a tender/payment line (a card 'Visa …1234', 'Cash', 'Interac', 'Approved', 'PAID', a change-due line, a point-of-sale receipt). false when it is an UNPAID bill/invoice that shows a balance/amount due, payment terms ('Net 30'), or a due date. null when you genuinely can't tell (or for income).",
+          "Has the money already changed hands? true when the document shows a TENDER line — a card ('Visa …1234'), 'Cash', 'Interac', 'Approved', 'PAID'/'PAID IN FULL', a change-due line, a point-of-sale receipt, or 'thank you for your payment'. false when it shows money STILL OWED — a balance/amount due, 'Total due', payment terms ('Net 30'), or a due date. THIS APPLIES TO INCOME TOO: a sales invoice with a due date or terms is NOT paid (false), while a sales receipt with a tender line IS (true). Remittance instructions telling the customer HOW to pay ('remit to', bank/EFT details, 'make cheques payable to') mean the opposite of paid — they are a request for payment, so those are false, not true. Use null only when the document genuinely shows neither.",
       },
       payment_method: {
         type: ["string", "null"],

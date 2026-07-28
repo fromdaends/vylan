@@ -572,12 +572,47 @@ export function suggestItem(
   direction: TransactionExtraction["direction"],
   accountId: string | null,
   items: QbItem[] | null | undefined,
+  // What the document actually CALLS the thing sold — its line descriptions.
+  // Checked before the account bridge, because a name printed on the invoice
+  // that exactly equals an item name is a far stronger signal than "this is the
+  // only item on that income account".
+  lineDescriptions: readonly (string | null | undefined)[] = [],
 ): MatchField {
   if (direction !== "income" || !items || items.length === 0) {
     return { match: null, confidence: 0, candidates: [] };
   }
   const sellable = items.filter((i) => isSellableItem(i.itemType));
   const pool = sellable.length > 0 ? sellable : items;
+
+  // NAME MATCH FIRST. An invoice that says "Development work — per hour rate"
+  // against a Xero item called exactly that should need no help; deriving the
+  // item only from the income account meant such a document still had to be
+  // filled in by hand, because the account had never been matched either.
+  //
+  // Exact only (nameScore === 1, after normalization), and only when exactly
+  // ONE active sellable item matches: an invoice line is a specific thing, and
+  // a fuzzy near-name is how the wrong product ends up on a client's invoice.
+  for (const desc of lineDescriptions) {
+    if (!desc) continue;
+    const exact = pool.filter(
+      (i) => i.active && isSellableItem(i.itemType) && nameScore(desc, i.name) === 1,
+    );
+    if (exact.length === 1) {
+      const m = exact[0]!;
+      return {
+        match: { id: m.id, name: m.name, active: m.active },
+        confidence: 1,
+        candidates: toCandidates(
+          pool.map((i) => ({
+            id: i.id,
+            name: i.name,
+            active: i.active,
+            score: nameScore(desc, i.name),
+          })),
+        ),
+      };
+    }
+  }
 
   const forAccount = accountId
     ? pool.filter((i) => i.incomeAccountId === accountId)
@@ -825,7 +860,12 @@ export function buildTransactionSuggestion(
 
   // Income lines post to a product/service ITEM (not an account). Derive it from
   // the matched income account. Empty for expense/unknown.
-  const item = suggestItem(direction, account.match?.id ?? null, lists.items);
+  const item = suggestItem(
+    direction,
+    account.match?.id ?? null,
+    lists.items,
+    (extraction.line_items ?? []).map((l) => l.description),
+  );
   if (direction === "income") {
     if (item.match && !item.match.active) {
       notes.push(`Item "${item.match.name}" is archived in ${providerLabel}.`);
