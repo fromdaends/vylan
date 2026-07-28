@@ -1164,6 +1164,16 @@ a.vy-contact-card:hover {
   --wwd-cyan: #74d0ff;
   --wwd-mint: #63e2a8;
   --wwd-violet: #b69cff;
+  --wwd-gold: #ffd98e; /* auto-filing */
+}
+
+/* Ambient light-trail art (components in vylan-landing/wwd-waves.tsx). One
+   motif threaded through every section; each instance is positioned by its own
+   `wwd-wave-*` rule below. Decorative only — never interactive, never animated. */
+.wwd-wave {
+  position: absolute;
+  height: auto;
+  pointer-events: none;
 }
 
 /* fixed atmospheric backdrop (soft top light, deep bottom) over the blue */
@@ -1718,11 +1728,28 @@ a.vy-contact-card:hover {
 }
 
 /* ---------- TRUST & SECURITY ---------- */
+/* Trust sits on a CREAM panel, not the blue — the design's one light surface,
+   placed exactly where the page stops selling and starts reassuring. Full-bleed
+   like the filing band (the inner layout carries the 1200px column), and every
+   accent hue is re-picked for light: the mint/cyan/violet/coral tuned for the
+   blue page would be invisible here. Ink is #0F173F. */
 .wwd-trust {
-  padding: 80px 7vw 110px;
-  max-width: 1200px;
+  max-width: none;
+  overflow: hidden;
+  margin-top: 30px;
+  padding: 96px 7vw 110px;
+  background: #f4f2ec;
+  color: #0f173f;
+  border-top: 1px solid rgba(15, 23, 63, 0.08);
+  border-bottom: 1px solid rgba(15, 23, 63, 0.08);
+}
+.wwd-trust .wwd-eyebrow {
+  color: rgba(16, 80, 237, 0.85);
 }
 .wwd-trust-layout {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
   display: grid;
   grid-template-columns: 0.82fr 1.18fr;
   gap: clamp(40px, 6vw, 90px);
@@ -1733,7 +1760,7 @@ a.vy-contact-card:hover {
   max-width: 340px;
   font-size: 17px;
   line-height: 1.55;
-  color: rgba(255, 255, 255, 0.74);
+  color: rgba(15, 23, 63, 0.72);
   font-weight: 500;
 }
 .wwd-trust-rows {
@@ -1745,10 +1772,10 @@ a.vy-contact-card:hover {
   grid-template-columns: 54px 1fr;
   gap: 22px;
   padding: 30px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  border-top: 1px solid rgba(15, 23, 63, 0.16);
 }
 .wwd-trust-row:last-child {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  border-bottom: 1px solid rgba(15, 23, 63, 0.16);
 }
 .wwd-trust-icon {
   flex: none;
@@ -1765,20 +1792,20 @@ a.vy-contact-card:hover {
   height: 24px;
 }
 .wwd-trust-row:nth-child(1) .wwd-trust-icon {
-  background: rgba(99, 226, 168, 0.12);
-  border-color: rgba(99, 226, 168, 0.4);
+  background: rgba(14, 157, 104, 0.09);
+  border-color: rgba(14, 157, 104, 0.35);
 }
 .wwd-trust-row:nth-child(2) .wwd-trust-icon {
-  background: rgba(116, 208, 255, 0.12);
-  border-color: rgba(116, 208, 255, 0.4);
+  background: rgba(11, 127, 190, 0.09);
+  border-color: rgba(11, 127, 190, 0.35);
 }
 .wwd-trust-row:nth-child(3) .wwd-trust-icon {
-  background: rgba(182, 156, 255, 0.12);
-  border-color: rgba(182, 156, 255, 0.4);
+  background: rgba(110, 79, 208, 0.09);
+  border-color: rgba(110, 79, 208, 0.35);
 }
 .wwd-trust-row:nth-child(4) .wwd-trust-icon {
-  background: rgba(255, 142, 114, 0.12);
-  border-color: rgba(255, 142, 114, 0.4);
+  background: rgba(217, 91, 54, 0.09);
+  border-color: rgba(217, 91, 54, 0.35);
 }
 .wwd-trust-row-body {
   padding-top: 2px;
@@ -1806,19 +1833,19 @@ a.vy-contact-card:hover {
   white-space: nowrap;
 }
 .wwd-trust-row:nth-child(1) .wwd-trust-badge {
-  color: var(--wwd-mint);
-  border-color: rgba(99, 226, 168, 0.45);
+  color: #0b7a50;
+  border-color: rgba(14, 157, 104, 0.45);
 }
 .wwd-trust-row:nth-child(2) .wwd-trust-badge {
-  color: var(--wwd-cyan);
-  border-color: rgba(116, 208, 255, 0.45);
+  color: #085e8f;
+  border-color: rgba(11, 127, 190, 0.45);
 }
 .wwd-trust-text {
   margin-top: 10px;
   max-width: 520px;
   font-size: 16px;
   line-height: 1.55;
-  color: rgba(255, 255, 255, 0.76);
+  color: rgba(15, 23, 63, 0.75);
   font-weight: 500;
 }
 
@@ -1832,9 +1859,30 @@ a.vy-contact-card:hover {
   z-index: 1;
   padding: 10px 0 80px;
 }
-.wwd-integrations-label {
+.wwd-integrations-head {
   text-align: center;
   padding: 0 7vw;
+}
+.wwd-integrations-label {
+  text-align: center;
+}
+/* "See the help center for more detail" — the belt names the tools, this is
+   where a visitor finds out what each connection actually does. */
+.wwd-integrations-help {
+  display: inline-block;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-color: rgba(255, 255, 255, 0.4);
+  transition: color 0.25s ease, text-decoration-color 0.25s ease;
+}
+.wwd-integrations-help:hover,
+.wwd-integrations-help:focus-visible {
+  color: #fff;
+  text-decoration-color: #fff;
 }
 .wwd-marquee {
   margin-top: 30px;
@@ -1913,6 +1961,254 @@ a.vy-contact-card:hover {
 @keyframes wwd-marquee {
   to {
     transform: translateX(-50%);
+  }
+}
+
+/* ---------- wave placement ----------
+   `left: calc(50% - 50vw)` breaks each trail out of its section's 1200px
+   column so the light appears to pass behind the content and continue off
+   both edges. Safe because .vy-wwd clips horizontally. */
+.wwd-wave-hero {
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 0;
+  opacity: 0.7;
+}
+.wwd-wave-problem {
+  top: -50px;
+  left: calc(50% - 50vw);
+  width: min(58vw, 780px);
+  z-index: -1;
+  opacity: 0.55;
+}
+.wwd-wave-wf {
+  top: -20px;
+  right: calc(50% - 50vw);
+  width: min(52vw, 820px);
+  z-index: -1;
+  opacity: 0.5;
+}
+.wwd-wave-filing {
+  top: -30px;
+  right: -60px;
+  width: min(64vw, 860px);
+  opacity: 0.88;
+}
+.wwd-wave-pay {
+  top: 30px;
+  left: calc(50% - 50vw);
+  width: 100vw;
+  z-index: -1;
+  opacity: 0.5;
+}
+.wwd-wave-trust {
+  bottom: -70px;
+  left: calc(50% - 50vw);
+  width: min(62vw, 880px);
+  z-index: 0;
+  opacity: 0.8;
+}
+.wwd-wave-close {
+  top: 50%;
+  left: calc(50% - 50vw);
+  transform: translateY(-50%);
+  width: 100vw;
+  z-index: 0;
+  opacity: 0.65;
+}
+
+/* ---------- AUTO-FILING ----------
+   The only near-black band on the page. Full-bleed (no .wwd-section wrapper)
+   with its own 1200px inner grid, so the dark edge runs to both sides of the
+   viewport and the section reads as a different surface, not a card.
+   Gold is its accent — used nowhere else on the page. */
+.wwd-eyebrow-gold {
+  color: rgba(255, 217, 142, 0.9);
+}
+.wwd-filing {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  margin-top: 40px;
+  background: #070e2a;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 110px 7vw;
+}
+.wwd-filing-inner {
+  position: relative;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 0.95fr 1.05fr;
+  gap: clamp(44px, 7vw, 96px);
+  align-items: center;
+}
+.wwd-filing-body {
+  margin-top: 22px;
+  max-width: 520px;
+  font-size: clamp(17px, 1.55vw, 21px);
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.82);
+  font-weight: 500;
+}
+.wwd-filing-rules {
+  display: flex;
+  flex-direction: column;
+  margin-top: 32px;
+  max-width: 520px;
+}
+.wwd-filing-rule {
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+  padding: 16px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.28);
+}
+/* The first rule gets the heavy rule-off, matching the tree's header line
+   across the gutter; the last closes the stack. */
+.wwd-filing-rule:first-child {
+  border-top: 2px solid rgba(255, 255, 255, 0.9);
+}
+.wwd-filing-rule:last-child {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.28);
+}
+.wwd-filing-rule-num {
+  flex: none;
+  font-family: var(--font-jetbrains-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wwd-gold);
+}
+.wwd-filing-rule-text {
+  font-size: 15.5px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.84);
+  font-weight: 500;
+}
+.wwd-filing-rule-text strong {
+  font-weight: 700;
+  color: #fff;
+}
+
+/* The tree mock. Monospace end-to-end: the whole point of the section is that
+   the file has a real filename, and a proportional face hides that. */
+.wwd-filing-tree {
+  min-width: 0;
+  font-family: var(--font-jetbrains-mono), ui-monospace, Menlo, monospace;
+}
+.wwd-filing-tree-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+}
+.wwd-filing-tree-named {
+  color: rgba(255, 217, 142, 0.9);
+}
+/* --wwd-depth is the row's level in the tree, set inline from its index. */
+.wwd-filing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0 10px calc(var(--wwd-depth, 0) * 26px);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+.wwd-filing-row:first-of-type {
+  border-top: 0;
+}
+.wwd-filing-row svg {
+  flex: none;
+}
+.wwd-filing-file {
+  gap: 12px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  align-items: flex-start;
+}
+.wwd-filing-file-body {
+  min-width: 0;
+}
+.wwd-filing-file-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.wwd-filing-file-name {
+  font-size: 14px;
+  color: var(--wwd-mint);
+  overflow-wrap: anywhere;
+}
+.wwd-filing-file-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-schibsted), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(99, 226, 168, 0.9);
+  white-space: nowrap;
+}
+.wwd-filing-file-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--wwd-mint);
+  animation: wwd-pulse 1.8s ease-in-out infinite;
+}
+.wwd-filing-file-was {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+}
+.wwd-filing-file-old {
+  text-decoration: line-through;
+}
+.wwd-filing-into {
+  display: grid;
+  grid-template-columns: auto 1fr 1fr 1fr;
+  align-items: center;
+  gap: clamp(16px, 2.2vw, 28px);
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 2px solid rgba(255, 255, 255, 0.9);
+}
+.wwd-filing-into-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+.wwd-filing-provider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+.wwd-filing-provider-name {
+  font-family: var(--font-schibsted), system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+@keyframes wwd-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(99, 226, 168, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 7px rgba(99, 226, 168, 0);
   }
 }
 
@@ -2073,6 +2369,31 @@ a.vy-contact-card:hover {
     grid-template-columns: 1fr;
     gap: 12px;
   }
+  /* Auto-filing: copy above, tree below. The tree keeps its monospace and its
+     indents — it is the evidence, and shrinking it to fit would defeat it. */
+  .wwd-filing {
+    padding: 80px 24px;
+  }
+  .wwd-filing-inner {
+    grid-template-columns: 1fr;
+    gap: 44px;
+  }
+  /* The trail is sized against a wide two-column band; on one column it lands
+     over the copy and hurts contrast on the near-black panel. */
+  .wwd-wave-filing {
+    display: none;
+  }
+  .wwd-filing-into {
+    grid-template-columns: 1fr 1fr;
+    justify-items: start;
+    row-gap: 16px;
+  }
+  .wwd-filing-into-label {
+    grid-column: 1 / -1;
+  }
+  .wwd-filing-provider {
+    justify-content: flex-start;
+  }
 }
 @media (max-width: 560px) {
   .wwd-hero-title {
@@ -2099,6 +2420,7 @@ a.vy-contact-card:hover {
   .vy-wwd .wwd-close-aura,
   .vy-wwd .wwd-hero-aura,
   .vy-wwd .wwd-cue,
+  .vy-wwd .wwd-filing-file-dot,
   .vy-wwd .wwd-marquee-row {
     animation: none;
   }

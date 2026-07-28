@@ -105,6 +105,39 @@ export default async function HowItWorksPage({
       ],
     },
     integrationsLabel: t("integrations_label"),
+    integrationsHelp: t("integrations_help"),
+    // "Auto-filing". The folder tree is deliberately a sample, not a live
+    // read: it shows the SHAPE a firm sets up (client → year → category) and
+    // one document that has just been renamed into it.
+    filing: {
+      eyebrow: t("filing_eyebrow"),
+      title: t("filing_title"),
+      body: t("filing_body"),
+      rules: [
+        { title: t("filing_rule1_title"), body: t("filing_rule1_body") },
+        { title: t("filing_rule2_title"), body: t("filing_rule2_body") },
+        { title: t("filing_rule3_title"), body: t("filing_rule3_body") },
+      ],
+      treeYours: t("filing_tree_yours"),
+      treeNamed: t("filing_tree_named"),
+      folders: [
+        t("filing_folder_1"),
+        t("filing_folder_2"),
+        t("filing_folder_3"),
+        t("filing_folder_4"),
+      ],
+      fileName: t("filing_file_name"),
+      fileBadge: t("filing_file_badge"),
+      fileWas: t("filing_file_was"),
+      fileWasName: t("filing_file_was_name"),
+      into: t("filing_into"),
+      // Order matters: the logos in the shell are indexed against this list.
+      providers: [
+        t("filing_provider_google"),
+        t("filing_provider_dropbox"),
+        t("filing_provider_microsoft"),
+      ],
+    },
     payEyebrow: t("pay_eyebrow"),
     payTitlePre: t("pay_title_pre"),
     payTitleWord: t("pay_title_word"),
@@ -190,7 +223,7 @@ export default async function HowItWorksPage({
       {/* centred brand + shared slide-down menu (opens on hover) */}
       <VylanMenu s={menu} helpHref={helpHref} />
 
-      <HowItWorksShell s={strings} />
+      <HowItWorksShell s={strings} helpHref={helpHref} />
 
       {/* FORM — same lead form as the landing page; every "Book a demo"
           button on this page smooth-scrolls here. */}
