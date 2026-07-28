@@ -13,6 +13,9 @@ import {
   applyDuplicateDecision,
   DUPLICATE_REASON,
   type DuplicateCandidate,
+  isFieldDuplicate,
+  findFieldDuplicateOriginalId,
+  type FieldDuplicateDoc,
 } from "./duplicates";
 import { BACKFILL_FAILED_SENTINEL } from "@/lib/files/backfill-content-hash";
 
@@ -193,5 +196,124 @@ describe("applyDuplicateDecision", () => {
       (u) => u.table === "uploaded_files",
     );
     expect(fileUpdate?.values.rejection_reason).toBe(DUPLICATE_REASON.fr);
+  });
+});
+
+describe("near-duplicate detection (Dext rules)", () => {
+  const doc = (over: Partial<FieldDuplicateDoc> = {}): FieldDuplicateDoc => ({
+    id: "f1",
+    supplier: "Boréal Traiteur",
+    total: 114.98,
+    documentNumber: "INV-2041",
+    documentDate: "2026-06-14",
+    uploadedAt: "2026-06-15T10:00:00Z",
+    ...over,
+  });
+
+  it("matches the same invoice re-uploaded as a different file", () => {
+    expect(isFieldDuplicate(doc(), doc({ id: "f2" }))).toBe(true);
+  });
+
+  // The point of Dext's split: an invoice's date is ambiguous (issue / due /
+  // service period) but its number is its identity.
+  it("ignores the date when both documents are numbered", () => {
+    expect(
+      isFieldDuplicate(doc(), doc({ id: "f2", documentDate: "2026-06-30" })),
+    ).toBe(true);
+  });
+
+  it("is not a duplicate when the numbers differ", () => {
+    expect(
+      isFieldDuplicate(doc(), doc({ id: "f2", documentNumber: "INV-2042" })),
+    ).toBe(false);
+  });
+
+  it("survives punctuation, suffix and ACCENT drift in the supplier", () => {
+    // Two reads of the same Quebec supplier routinely differ by an accent.
+    expect(
+      isFieldDuplicate(
+        doc({ supplier: "Boréal Traiteur Inc." }),
+        doc({ id: "f2", supplier: "boreal traiteur" }),
+      ),
+    ).toBe(true);
+    expect(
+      isFieldDuplicate(
+        doc({ supplier: "Central Copiers Inc." }),
+        doc({ id: "f2", supplier: "  central copiers, ltd " }),
+      ),
+    ).toBe(true);
+  });
+
+  it("compares money in cents, not floats", () => {
+    expect(isFieldDuplicate(doc({ total: 114.98 }), doc({ id: "f2", total: 114.98 }))).toBe(true);
+    expect(isFieldDuplicate(doc({ total: 114.98 }), doc({ id: "f2", total: 114.99 }))).toBe(false);
+  });
+
+  describe("receipts with no document number", () => {
+    const r = (over: Partial<FieldDuplicateDoc> = {}) =>
+      doc({ documentNumber: null, ...over });
+
+    it("falls back to supplier + date + total", () => {
+      expect(isFieldDuplicate(r(), r({ id: "f2" }))).toBe(true);
+    });
+
+    it("is not a duplicate on a different date", () => {
+      expect(
+        isFieldDuplicate(r(), r({ id: "f2", documentDate: "2026-06-15" })),
+      ).toBe(false);
+    });
+  });
+
+  // The monthly-retainer false positive: same supplier, same amount, but one
+  // document printed a number and the other didn't. Not enough to call it.
+  it("does not match a numbered document against an unnumbered one", () => {
+    expect(
+      isFieldDuplicate(doc(), doc({ id: "f2", documentNumber: null })),
+    ).toBe(false);
+  });
+
+  // Dext is explicit that missing key fields mean no match. Guessing here would
+  // flag unrelated documents at each other.
+  it("never matches without a supplier or without an amount", () => {
+    expect(isFieldDuplicate(doc({ supplier: null }), doc({ id: "f2" }))).toBe(false);
+    expect(isFieldDuplicate(doc({ total: null }), doc({ id: "f2" }))).toBe(false);
+  });
+
+  it("ignores a document number too short to be an identity", () => {
+    // "1" on both would otherwise collide across unrelated documents; with no
+    // usable number on either side it falls back to the date, which matches.
+    expect(
+      isFieldDuplicate(
+        doc({ documentNumber: "1" }),
+        doc({ id: "f2", documentNumber: "1" }),
+      ),
+    ).toBe(true);
+    expect(
+      isFieldDuplicate(
+        doc({ documentNumber: "1" }),
+        doc({ id: "f2", documentNumber: "1", documentDate: "2026-07-01" }),
+      ),
+    ).toBe(false);
+  });
+
+  describe("findFieldDuplicateOriginalId", () => {
+    it("returns the EARLIEST match and never the document itself", () => {
+      const self = doc({ id: "self", uploadedAt: "2026-06-20T10:00:00Z" });
+      expect(
+        findFieldDuplicateOriginalId(self, [
+          self,
+          doc({ id: "later", uploadedAt: "2026-06-18T10:00:00Z" }),
+          doc({ id: "earliest", uploadedAt: "2026-06-01T10:00:00Z" }),
+        ]),
+      ).toBe("earliest");
+    });
+
+    it("returns null when nothing matches", () => {
+      expect(
+        findFieldDuplicateOriginalId(doc(), [
+          doc({ id: "other", documentNumber: "INV-9999" }),
+        ]),
+      ).toBeNull();
+    });
   });
 });

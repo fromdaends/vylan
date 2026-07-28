@@ -88,8 +88,9 @@ export async function readLearnedMappingsForFirm(
 
 // Upsert one learned mapping (service-role — the table has no authenticated write
 // grant). One remembered target per (firm, signal, key); a re-correction replaces
-// it (last write wins). times_confirmed / created_at are omitted so the insert
-// takes their defaults and a conflicting update leaves them untouched. Best-effort:
+// it (last write wins). times_confirmed counts re-confirmations of the SAME
+// target and resets when the answer changes; created_at is omitted so the
+// insert takes its default and a conflicting update leaves it untouched. Best-effort:
 // a missing table (pre-0490) or error is swallowed so it never breaks the resolve
 // request that triggered the learning.
 export async function recordLearnedMapping(input: {
@@ -104,6 +105,40 @@ export async function recordLearnedMapping(input: {
   const sb = getServiceRoleSupabase();
   // undefined/null both mean the firm-level mapping (client_id NULL).
   const clientValue = input.clientId ?? null;
+  // How many times a human has confirmed THIS mapping. 0490 created the column
+  // and left it unused ("reserved"); auto-approve needs it, because a mapping
+  // seen once is a sighting and a mapping seen three times is a habit.
+  //
+  // Read-then-write rather than a SQL expression: PostgREST upsert cannot
+  // increment in place, and losing the odd count to a race is harmless for a
+  // confidence counter (it delays unattended approval by one document, which
+  // is the safe direction to be wrong in).
+  let nextConfirmed = 1;
+  {
+    // CLIENT-SCOPED, like every other read here — reading the count off another
+    // client's row would let one client's habit unlock unattended approval for
+    // a different one.
+    const { data: prior } = await withClientScope(
+      sb
+        .from("quickbooks_learned_mappings")
+        .select("times_confirmed, target_qbo_id")
+        .eq("firm_id", input.firmId)
+        .eq("signal_type", input.signalType)
+        .eq("source_key", input.sourceKey),
+      clientValue,
+    )
+      .limit(1)
+      .maybeSingle();
+    const row = prior as
+      | { times_confirmed: number | null; target_qbo_id: string | null }
+      | null;
+    // Only a re-confirmation of the SAME target counts. Changing the answer
+    // resets the count to 1 — the accountant just corrected us, so the new
+    // mapping has been confirmed exactly once and must earn trust again.
+    if (row && row.target_qbo_id === input.target.id) {
+      nextConfirmed = (row.times_confirmed ?? 1) + 1;
+    }
+  }
   const run = async (useClientId: boolean): Promise<{ schemaMiss: boolean }> => {
     const onConflict = useClientId
       ? "firm_id,client_id,signal_type,source_key"
@@ -117,6 +152,7 @@ export async function recordLearnedMapping(input: {
         source_sample: input.sourceSample.slice(0, 300),
         target_qbo_id: input.target.id,
         target_qbo_name: input.target.name,
+        times_confirmed: nextConfirmed,
         reviewed_by: input.reviewerId,
         updated_at: new Date().toISOString(),
       },

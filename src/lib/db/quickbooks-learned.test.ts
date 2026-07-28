@@ -48,6 +48,15 @@ function makeClient() {
           else table.push({ ...row });
           return Promise.resolve({ error: null });
         },
+        // recordLearnedMapping reads the prior row to increment
+        // times_confirmed, so the fake has to support the read shape too.
+        limit(_n: number) {
+          return builder;
+        },
+        maybeSingle() {
+          const rows = table.filter((r) => filters.every((f) => f(r)));
+          return Promise.resolve({ data: rows[0] ?? null, error: null });
+        },
         then(resolve: (v: { data: Row[]; error: null }) => unknown) {
           const data = table.filter((r) => filters.every((f) => f(r)));
           return Promise.resolve(resolve({ data, error: null }));
@@ -137,5 +146,42 @@ describe("learn loop — write then read", () => {
     await learn(CLIENT_A, "acct-repairs");
     const other = await readLearnedMappingsForFirm("firm-2", CLIENT_A);
     expect(other).toEqual({});
+  });
+});
+
+// times_confirmed is what gates unattended approval, so its counting rules are
+// safety-critical: a mapping seen once is a sighting, seen three times a habit.
+describe("times_confirmed", () => {
+  const row = () => table[0] as { times_confirmed?: number };
+
+  it("starts at 1 and increments on each re-confirmation", async () => {
+    await learn(CLIENT_A, "acct-repairs");
+    expect(row().times_confirmed).toBe(1);
+    await learn(CLIENT_A, "acct-repairs");
+    expect(row().times_confirmed).toBe(2);
+    await learn(CLIENT_A, "acct-repairs");
+    expect(row().times_confirmed).toBe(3);
+  });
+
+  // Changing the answer means the accountant just corrected us. The NEW mapping
+  // has been confirmed exactly once and has to earn trust from scratch —
+  // otherwise a correction would inherit the old answer's credibility and be
+  // auto-approved immediately.
+  it("resets to 1 when the accountant changes the answer", async () => {
+    await learn(CLIENT_A, "acct-repairs");
+    await learn(CLIENT_A, "acct-repairs");
+    expect(row().times_confirmed).toBe(2);
+    await learn(CLIENT_A, "acct-utilities");
+    expect(row().times_confirmed).toBe(1);
+  });
+
+  it("counts per client, not per firm", async () => {
+    await learn(CLIENT_A, "acct-repairs");
+    await learn(CLIENT_A, "acct-repairs");
+    await learn(CLIENT_B, "acct-repairs");
+    const a = table.find((r) => r.client_id === CLIENT_A) as { times_confirmed?: number };
+    const b = table.find((r) => r.client_id === CLIENT_B) as { times_confirmed?: number };
+    expect(a.times_confirmed).toBe(2);
+    expect(b.times_confirmed).toBe(1);
   });
 });

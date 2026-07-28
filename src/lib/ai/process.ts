@@ -31,8 +31,11 @@ import {
   type TransactionExtraction,
 } from "./transaction-extract";
 import { readCachedQuickbooksListsForFirm } from "@/lib/db/quickbooks-cache";
+import { listsAreSynced } from "@/lib/quickbooks/read";
 import { readCachedXeroListsForFirm } from "@/lib/db/xero-cache";
 import { readLearnedMappingsForFirm } from "@/lib/db/quickbooks-learned";
+import { flagNearDuplicate } from "@/lib/duplicates";
+import { maybeAutoApproveDraft } from "@/lib/quickbooks/auto-approve-apply";
 import { resolveBookkeepingProvider } from "@/lib/bookkeeping/provider";
 import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import {
@@ -284,6 +287,20 @@ export async function processClassifyJob(
     })
     .eq("id", file.id);
 
+  // NEAR-DUPLICATE CHECK (0990). The upload-time hash check only catches a
+  // byte-identical re-upload; this runs now, once the AI has actually READ the
+  // document, and compares the fields Dext compares — supplier + total +
+  // document number for a numbered document, supplier + date + total for a
+  // receipt. That is what catches the same invoice photographed AND emailed.
+  //
+  // FLAGS ONLY. Unlike the hash check it is probabilistic (a monthly retainer
+  // genuinely repeats supplier and amount), so it writes a separate softer
+  // column and never rejects, never sets the file aside, and never touches the
+  // checklist. Fully best-effort and its own write, exactly like auto-naming
+  // below: a missing column (0990 not applied) leaves the feature off and the
+  // classification above still lands.
+  await flagNearDuplicate(sb, file.id, file.engagement_id, transaction);
+
   // Auto-name (migration 0280): give the file a clean, human name (e.g.
   // "T4 - 2024 - Hydro-Quebec.pdf") so the accountant isn't staring at
   // "IMG_2931.pdf". EVERY classified file gets one — wrong or unidentifiable
@@ -343,7 +360,15 @@ export async function processClassifyJob(
             : await readCachedQuickbooksListsForFirm(limitFirmId, limitClientId);
         // Only (re)write when we have lists to map against; a transient empty
         // cache must not wipe a previously-good draft.
-        if (cached) {
+        //
+        // listsAreSynced, NOT a bare `if (cached)`: the readers turn zero rows
+        // into EMPTY ARRAYS rather than null, so the object is truthy even when
+        // nothing has synced. Building a draft then produces one with every
+        // field unmatched, which reads to the accountant as "the AI failed"
+        // rather than "the client's lists have not arrived yet" — and it is
+        // routine, because disconnecting a client purges the cache and the
+        // re-sync is a background job.
+        if (listsAreSynced(cached)) {
           // Feature 3: consult the client's remembered corrections before fuzzy
           // matching (service-role read; {} pre-0490, so no behavior change).
           // The learned table is per-client and a client has ONE provider, so the
@@ -364,6 +389,19 @@ export async function processClassifyJob(
             engagementId: file.engagement_id,
             suggestion,
             provider,
+          });
+          // AUTO-APPROVE (1000). If the firm opted in and this draft was coded
+          // entirely from mappings a human has confirmed repeatedly on this
+          // same supplier, the Approve click carries no information — so skip
+          // it. Every condition in decideAutoApprove is a veto and the default
+          // is "ask the human"; a false negative costs one click, a false
+          // positive puts a wrong number in a client's books unattended.
+          // Best-effort: this can never fail the classification.
+          await maybeAutoApproveDraft({
+            firmId: limitFirmId,
+            clientId: limitClientId,
+            fileId: file.id,
+            suggestion,
           });
         }
       } else {

@@ -312,6 +312,9 @@ export default async function SettingsPage({
         currentTimezone={firm.timezone}
         autoRejectUnusableDocs={firm.auto_reject_unusable_docs}
         autoRejectDuplicates={firm.auto_reject_duplicates}
+        // Pre-1000 the column is absent, which reads as OFF — the safe default
+        // for a setting that lets the system sign off without a human.
+        autoApproveDrafts={firm.auto_approve_bookkeeping_drafts === true}
         autoRequestMissingPages={firm.auto_request_missing_pages}
         includeQuebecForms={firm.include_quebec_forms ?? true}
         invoiceDefaultMode={firm.default_invoice_auto_mode ?? "off"}

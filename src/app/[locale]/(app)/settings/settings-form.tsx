@@ -117,6 +117,7 @@ export function SettingsShell({
   currentTimezone,
   autoRejectUnusableDocs,
   autoRejectDuplicates,
+  autoApproveDrafts,
   autoRequestMissingPages,
   includeQuebecForms,
   invoiceDefaultMode,
@@ -147,6 +148,7 @@ export function SettingsShell({
   currentTimezone: string;
   autoRejectUnusableDocs: boolean;
   autoRejectDuplicates: boolean;
+  autoApproveDrafts: boolean;
   autoRequestMissingPages: boolean;
   includeQuebecForms: boolean;
   // Firm-wide default invoice automation (owner-only, migration 0590).
@@ -405,6 +407,7 @@ export function SettingsShell({
           <DocumentsSection
             autoRejectUnusableDocs={autoRejectUnusableDocs}
             autoRejectDuplicates={autoRejectDuplicates}
+            autoApproveDrafts={autoApproveDrafts}
             autoRequestMissingPages={autoRequestMissingPages}
             includeQuebecForms={includeQuebecForms}
             aiUsage={aiUsage}
@@ -790,6 +793,7 @@ function TimezoneSection({
 function DocumentsSection({
   autoRejectUnusableDocs,
   autoRejectDuplicates,
+  autoApproveDrafts,
   autoRequestMissingPages,
   includeQuebecForms,
   aiUsage,
@@ -798,6 +802,7 @@ function DocumentsSection({
 }: {
   autoRejectUnusableDocs: boolean;
   autoRejectDuplicates: boolean;
+  autoApproveDrafts: boolean;
   autoRequestMissingPages: boolean;
   includeQuebecForms: boolean;
   aiUsage: AiUsage;
@@ -809,6 +814,8 @@ function DocumentsSection({
   // SEPARATE toggle from the unusable-docs one above: auto-reject exact-duplicate
   // re-uploads. Optimistic save via its own POST route; revert on failure.
   const [dupEnabled, setDupEnabled] = useState(autoRejectDuplicates);
+  const [autoApproveEnabled, setAutoApproveEnabled] = useState(autoApproveDrafts);
+  const [autoApproveError, setAutoApproveError] = useState<string | null>(null);
   const [dupError, setDupError] = useState<string | null>(null);
   // SEPARATE again: auto-ask the client for a confidently-missing page in a
   // multi-page document. Same optimistic-save-and-revert pattern, own POST route.
@@ -840,6 +847,26 @@ function DocumentsSection({
       console.error("[onToggle] auto-reject-duplicates save failed:", e);
       setDupError(t("save_failed"));
       setDupEnabled(!next);
+    }
+  }
+
+  async function onAutoApproveToggle(next: boolean) {
+    setAutoApproveError(null);
+    setAutoApproveEnabled(next);
+    try {
+      const res = await fetch("/api/firm/auto-approve-drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!res.ok) {
+        setAutoApproveError(t("save_failed"));
+        setAutoApproveEnabled(!next);
+      }
+    } catch (e) {
+      console.error("[onToggle] auto-approve-drafts save failed:", e);
+      setAutoApproveError(t("save_failed"));
+      setAutoApproveEnabled(!next);
     }
   }
 
@@ -1013,6 +1040,30 @@ function DocumentsSection({
         />
       </div>
       {dupError && <p className="mt-2 text-xs text-destructive">{dupError}</p>}
+
+      {/* Unattended approval of bookkeeping drafts. The safety rules live in
+          lib/quickbooks/auto-approve.ts and are deliberately strict — the help
+          text below states them plainly, because a firm turning this on is
+          handing over a judgement and deserves to know exactly how narrow the
+          handover is. */}
+      <div className="mt-3 flex max-w-xl items-start justify-between gap-4 rounded-lg border border-border/50 px-4 py-3">
+        <div className="space-y-1">
+          <div className="text-sm font-medium">
+            {t("auto_approve_drafts_label")}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {t("auto_approve_drafts_help")}
+          </p>
+        </div>
+        <Switch
+          checked={autoApproveEnabled}
+          onCheckedChange={onAutoApproveToggle}
+          ariaLabel={t("auto_approve_drafts_label")}
+        />
+      </div>
+      {autoApproveError && (
+        <p className="mt-2 text-xs text-destructive">{autoApproveError}</p>
+      )}
 
       {/* Separate setting: auto-ask the client for a confidently-missing page in
           a multi-page document (set-aware analysis). */}

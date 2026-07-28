@@ -1070,7 +1070,9 @@
     "trial_card_expired_title": "Your free trial has ended",
     "trial_card_expired_body": "Your data is safe. Book a meeting to talk pricing and reactivate your account.",
     "trial_card_cta_book": "Book a meeting",
-    "nav_notifications": "Notifications"
+    "nav_notifications": "Notifications",
+    "auto_approve_drafts_label": "Approve bookkeeping drafts automatically",
+    "auto_approve_drafts_help": "When every field matches something already in your accounting software — the customer, the account, the tax rate — Vylan approves the draft instead of asking you to confirm what it already knows. Anything it's unsure about still comes to you, and a possible duplicate always does. Nothing is sent to your accounting software; you still post."
   },
   "Audit": {
     "title": "Security audit log",

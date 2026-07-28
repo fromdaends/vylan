@@ -83,6 +83,7 @@ function renderShell(
         }}
         autoRejectUnusableDocs={false}
         autoRejectDuplicates={false}
+        autoApproveDrafts={false}
         autoRequestMissingPages={false}
         includeQuebecForms={true}
         invoiceDefaultMode="off"
@@ -264,5 +265,29 @@ describe("SettingsShell — AI usage card (Documents tab)", () => {
     expect(screen.queryByText(/resets/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument();
     expect(screen.queryByText(/used this month/)).not.toBeInTheDocument();
+  });
+});
+
+// The toggle that hands over a judgement — it must actually be on the page,
+// and its help text must state the limits rather than just say "automatic".
+describe("auto-approve toggle", () => {
+  it("renders with its label and reflects the off state", () => {
+    renderShell({ autoApproveDrafts: false, initialSection: "documents" });
+    expect(
+      screen.getByLabelText("Approve bookkeeping drafts automatically"),
+    ).not.toBeChecked();
+    // The help text must state the LIMITS, not just say "automatic" — a firm
+    // handing over a judgement deserves to see how narrow the handover is.
+    // The help text must state the LIMITS, not just say "automatic" — a firm
+    // handing over a judgement deserves to see how narrow the handover is.
+    expect(screen.getByText(/unsure about still comes to you/)).toBeInTheDocument();
+    expect(screen.getByText(/possible duplicate always does/)).toBeInTheDocument();
+  });
+
+  it("reflects the on state", () => {
+    renderShell({ autoApproveDrafts: true, initialSection: "documents" });
+    expect(
+      screen.getByLabelText("Approve bookkeeping drafts automatically"),
+    ).toBeChecked();
   });
 });
