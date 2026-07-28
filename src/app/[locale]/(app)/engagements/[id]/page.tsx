@@ -95,6 +95,7 @@ import { engagementMatchesSeries } from "@/lib/recurring/sync";
 import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { SeriesSyncPrompt } from "@/components/engagements/series-sync-prompt";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
+import { getLatestHandoffNote } from "@/lib/db/activity";
 import { EngagementContributors } from "@/components/engagements/engagement-contributors";
 import {
   listEngagementContributors,
@@ -585,6 +586,26 @@ export default async function EngagementDetailPage({
   const contributors = teamEnabled
     ? await listEngagementContributors(engagement.id)
     : [];
+  // The handoff note from the last reassignment. Team-mode only, and only
+  // fetched when there IS an assignee — the note is instructions for the person
+  // holding the work, so on an unassigned engagement it has no audience.
+  // reviewerNameById already holds every firm user, deactivated included, so a
+  // note written by someone who has since left still shows their name.
+  const handoffRaw =
+    teamEnabled && engagement.assigned_user_id
+      ? await getLatestHandoffNote(engagement.id)
+      : null;
+  const handoff = handoffRaw
+    ? {
+        note: handoffRaw.note,
+        from:
+          (handoffRaw.actorId
+            ? reviewerNameById.get(handoffRaw.actorId)
+            : null) ?? null,
+        at: formatDate(handoffRaw.at, locale, "medium"),
+      }
+    : null;
+
   const contributorDisplay = contributors.map((c) => ({
     userId: c.userId,
     name: reviewerNameById.get(c.userId) ?? t("contributor_unknown"),
@@ -789,6 +810,7 @@ export default async function EngagementDetailPage({
                 assigneeName={assignee ? userDisplayLabel(assignee) : null}
                 assigneeDeactivated={!!assignee?.deactivated_at}
                 members={activeMembers}
+                handoff={handoff}
               />
             </div>
           )}

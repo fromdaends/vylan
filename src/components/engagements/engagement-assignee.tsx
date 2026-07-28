@@ -9,6 +9,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -36,12 +37,18 @@ export function EngagementAssignee({
   assigneeName,
   assigneeDeactivated,
   members,
+  handoff,
 }: {
   engagementId: string;
   assigneeId: string | null;
   assigneeName: string | null;
   assigneeDeactivated: boolean;
   members: { id: string; name: string }[];
+  // The note left by whoever last handed this over. Rendered right under the
+  // assignee because that is the only place it is ever looked for — until now
+  // it lived only in the activity feed and the notification, so once the
+  // notification was read the instructions were effectively lost.
+  handoff?: { note: string; from: string | null; at: string } | null;
 }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
@@ -60,6 +67,18 @@ export function EngagementAssignee({
     if (memberId === assigneeId) return;
     setNote("");
     setTarget({ id: memberId, name: memberName });
+  }
+
+  // Clearing the assignee skips the note dialog: a handoff note is addressed to
+  // the person taking the work over, and there isn't one.
+  function unassign() {
+    if (assigneeId === null) return;
+    setOptimisticName(null);
+    setTarget(null);
+    startTransition(async () => {
+      const res = await reassignEngagementAction(engagementId, null);
+      if (res.ok) router.refresh();
+    });
   }
 
   function confirmAssign() {
@@ -137,9 +156,42 @@ export function EngagementAssignee({
                 )}
               </DropdownMenuItem>
             ))}
+            {assigneeId !== null && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    unassign();
+                  }}
+                  className="gap-2"
+                >
+                  <span className="inline-flex size-5 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <UserRound className="size-3" />
+                  </span>
+                  <span className="flex-1 truncate">{t("unassign")}</span>
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Hidden while an optimistic reassignment is in flight: the note belongs
+          to the PREVIOUS handoff, and showing it next to a new assignee's name
+          reads as instructions for them. It returns on refresh if still current. */}
+      {handoff && !optimisticName && (
+        <div className="w-fit max-w-prose rounded-md border border-border/50 bg-muted/30 px-2.5 py-1.5">
+          <p className="text-xs leading-relaxed text-foreground">
+            {handoff.note}
+          </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {handoff.from
+              ? t("handoff_from", { name: handoff.from, date: handoff.at })
+              : t("handoff_at", { date: handoff.at })}
+          </p>
+        </div>
+      )}
 
       {assigneeDeactivated && !optimisticName && (
         <div className="inline-flex w-fit items-center gap-1.5 rounded-md bg-warning/10 px-2 py-1 text-xs text-warning">
