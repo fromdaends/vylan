@@ -5,6 +5,7 @@ import {
   guidanceFor,
   shouldAutoCapture,
   sharpnessFloorFor,
+  normaliseMotion,
   GUIDANCE_THRESHOLDS,
   type FrameMetrics,
   type Gray,
@@ -506,5 +507,70 @@ describe("sharpnessFloorFor", () => {
     expect(peak).toBeGreaterThanOrEqual(floor);
     // ...and one at a third of the peak does not.
     expect(peak / 3).toBeLessThan(floor);
+  });
+});
+
+describe("normaliseMotion", () => {
+  it("leaves a reading at the reference interval unchanged", () => {
+    expect(normaliseMotion(6, 100, 100)).toBeCloseTo(6, 6);
+  });
+
+  it("reports the same steadiness at any frame rate", () => {
+    // The bug this exists for: motion is a difference between CONSECUTIVE
+    // frames, so a hand moving at a constant speed produces twice the raw
+    // reading at 10fps as at 20fps. Judged against a fixed threshold, the
+    // slower loop reported "hold steady" for a hand the faster loop called
+    // still — and the shutter never armed.
+    const speed = 0.08; // grey levels per millisecond
+    // Exact across the whole unclamped range, 25ms to 400ms — which spans
+    // every rate the loop could plausibly run at.
+    const reference = normaliseMotion(speed * 100, 100);
+    for (const dt of [25, 40, 50, 100, 200, 400]) {
+      expect(normaliseMotion(speed * dt, dt)).toBeCloseTo(reference, 4);
+    }
+    // Below the floor the clamp deliberately takes over, so the reading is
+    // UNDER-reported rather than multiplied toward infinity. Failing toward
+    // "steady" is the safe direction: it can delay the shutter, never fire it
+    // on a moving frame.
+    const belowFloor = normaliseMotion(speed * 10, 10);
+    expect(belowFloor).toBeLessThan(reference);
+    expect(belowFloor).toBeGreaterThan(0);
+  });
+
+  it("still ranks a fast hand above a slow one", () => {
+    expect(normaliseMotion(20, 50)).toBeGreaterThan(normaliseMotion(4, 50));
+  });
+
+  it("clamps an implausibly short interval instead of exploding", () => {
+    // Two analyses inside one paint would otherwise multiply the reading 25x
+    // and report a motionless frame as movement.
+    expect(normaliseMotion(4, 1)).toBeLessThanOrEqual(4 * 4);
+    expect(Number.isFinite(normaliseMotion(4, 0.0001))).toBe(true);
+  });
+
+  it("clamps a very long interval too", () => {
+    // A backgrounded tab resuming: the frames are seconds apart and the whole
+    // scene changed, but that is not a reason to report near-zero motion.
+    expect(normaliseMotion(40, 10_000)).toBeGreaterThanOrEqual(40 / 4);
+  });
+
+  it("survives non-finite input", () => {
+    for (const [m, e] of [
+      [NaN, 100],
+      [10, NaN],
+      [Infinity, 100],
+      [10, Infinity],
+      [-5, 100],
+      [10, -50],
+    ]) {
+      const v = normaliseMotion(m, e);
+      expect(Number.isNaN(v)).toBe(false);
+      expect(v).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("reports zero for a motionless frame at any interval", () => {
+    expect(normaliseMotion(0, 50)).toBe(0);
+    expect(normaliseMotion(0, 500)).toBe(0);
   });
 });
