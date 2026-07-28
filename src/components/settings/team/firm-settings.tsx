@@ -65,12 +65,14 @@ export function TeamSettings({
   const [signoff, setSignoff] = useState(requireReviewSignoff);
 
   // Shared optimistic runner: flip local state now, call the action, revert +
-  // toast on failure. `onEnabled` fires a success toast only when turning ON.
+  // toast on failure. `onSuccess` receives the new value, so a toggle whose
+  // OFF direction also does something (privacy, which un-privates in bulk) can
+  // confirm that too — silence there reads as "nothing happened".
   function run(
     setLocal: (v: boolean) => void,
     next: boolean,
     call: () => Promise<{ ok: boolean; error?: string }>,
-    onEnabled?: () => void,
+    onSuccess?: (next: boolean) => void,
   ) {
     if (pending) return;
     setLocal(next);
@@ -78,7 +80,7 @@ export function TeamSettings({
       const res = await call();
       if (res.ok) {
         router.refresh();
-        if (next) onEnabled?.();
+        onSuccess?.(next);
       } else {
         setLocal(!next);
         toast.error(
@@ -99,8 +101,12 @@ export function TeamSettings({
         checked={priv}
         disabled={pending}
         onToggle={(next) =>
-          run(setPriv, next, () => setClientsPrivateDefault(next), () =>
-            toast.success(t("firm_private_default_enabled")),
+          run(setPriv, next, () => setClientsPrivateDefault(next), (on) =>
+            toast.success(
+              on
+                ? t("firm_private_default_enabled")
+                : t("firm_private_default_disabled"),
+            ),
           )
         }
       />
