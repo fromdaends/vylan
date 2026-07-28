@@ -64,11 +64,16 @@ const ANALYSIS_INTERVAL_MS = 50;
 // half a second rules out a swing-past without demanding a surgeon's hands.
 const DETECTED_MS_REQUIRED = 500;
 // Corner easing per analysed frame.
-const SMOOTHING_ALPHA = 0.35;
+const SMOOTHING_ALPHA = 0.22;
 // A detection whose corners land further than this (preview px) from the shown
 // outline is a CLAIM, not a fact — it must persist before the outline moves.
 const QUAD_JUMP_PX = 48;
 const QUAD_ADOPT_FRAMES = 3;
+// Corner movement below this (preview px) is noise, not the document moving.
+// The detector reports a corner a pixel either side of the truth frame to
+// frame; without a floor that redraws the outline 20x a second forever, which
+// is what still read as "a bit buggy" after the big jumps were handled.
+const QUAD_DEAD_ZONE_PX = 2.5;
 // How long the OUTLINE survives a detection dropout before it disappears.
 const MISS_GRACE_MS = 400;
 // How long the shutter's CREDIT survives one. Much longer than the outline on
@@ -124,6 +129,8 @@ export function CameraCapture({
   const quadRef = useRef<Quad | null>(null);
   const shutterRef = useRef<ShutterState>(INITIAL_SHUTTER);
   const stabilityRef = useRef<QuadStability>(INITIAL_QUAD_STABILITY);
+  // The last quad actually pushed to React, by identity — see the dead zone.
+  const lastShownRef = useRef<Quad | null>(null);
   // Rolling share of recent frames with a detection — purely for ?scan=debug,
   // where it turns "the border was buggy" into a number.
   const dutyRef = useRef(0);
@@ -381,6 +388,7 @@ export function CameraCapture({
         alpha: SMOOTHING_ALPHA,
         jumpDistance: (QUAD_JUMP_PX * canvas.width) / view.width,
         adoptAfter: QUAD_ADOPT_FRAMES,
+        deadZone: (QUAD_DEAD_ZONE_PX * canvas.width) / view.width,
       });
       const smoothed = stabilityRef.current.shown;
 
@@ -455,11 +463,18 @@ export function CameraCapture({
       setGuidance((g) => (g === step.guidance ? g : step.guidance));
 
       if (step.outline === "update" && smoothed) {
-        const inView = scaleToView(smoothed, view, canvas);
-        quadRef.current = inView;
-        setQuad(inView);
+        // `stabiliseQuad` returns the SAME object when the change was inside
+        // the dead zone, so identity is a reliable "nothing moved" signal —
+        // skip the state update and the outline simply stays put.
+        if (smoothed !== lastShownRef.current) {
+          lastShownRef.current = smoothed;
+          const inView = scaleToView(smoothed, view, canvas);
+          quadRef.current = inView;
+          setQuad(inView);
+        }
       } else if (step.outline === "clear") {
         quadRef.current = null;
+        lastShownRef.current = null;
         setQuad(null);
         stabilityRef.current = INITIAL_QUAD_STABILITY;
       }

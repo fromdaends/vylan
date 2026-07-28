@@ -1067,7 +1067,21 @@ export const INITIAL_QUAD_STABILITY: QuadStability = {
 export function stabiliseQuad(
   prev: QuadStability,
   next: Quad | null,
-  opts: { alpha: number; jumpDistance: number; adoptAfter: number },
+  opts: {
+    alpha: number;
+    jumpDistance: number;
+    adoptAfter: number;
+    /**
+     * Corner movement below this is treated as noise and IGNORED entirely —
+     * `shown` is returned by reference, so the caller can skip its re-render.
+     *
+     * Easing alone cannot fix sub-pixel churn: at 20fps, a detector that
+     * reports the same corner one pixel left, then one right, redraws the
+     * outline 20 times a second forever. That is the residual "buggy" look
+     * once the big jumps are handled.
+     */
+    deadZone?: number;
+  },
 ): QuadStability {
   // No detection this frame: hold what is shown (the caller's grace window
   // decides when it disappears) and forget any half-proven candidate.
@@ -1076,7 +1090,19 @@ export function stabiliseQuad(
   const { shown } = prev;
   if (!shown) return { shown: next, candidate: null, candidateRuns: 0 };
 
-  if (maxCornerDistance(shown, next) <= opts.jumpDistance) {
+  const drift = maxCornerDistance(shown, next);
+
+  // Noise floor: hold completely still rather than chasing a jitter of a pixel
+  // or two. Returning `prev` unchanged keeps object identity, which is what
+  // lets the caller avoid a re-render.
+  const deadZone = opts.deadZone ?? 0;
+  if (drift <= deadZone) {
+    return prev.candidate === null
+      ? prev
+      : { shown, candidate: null, candidateRuns: 0 };
+  }
+
+  if (drift <= opts.jumpDistance) {
     // Same position, small drift — glide. Infinity disables smoothQuad's own
     // snap; this function owns the far-jump policy now.
     return {
