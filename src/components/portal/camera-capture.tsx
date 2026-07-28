@@ -53,22 +53,18 @@ const DETECT_WIDTH = 256;
 // assumption this was expensive; it is not, and the slower loop made both the
 // outline and the motion reading worse.
 const ANALYSIS_INTERVAL_MS = 50;
-// Accumulated good time before the shutter fires itself. Half a second is long
-// enough not to fire mid-wobble and short enough to feel instant — and stated
-// in TIME, so changing the loop's speed no longer retunes the shutter.
-const READY_MS_REQUIRED = 500;
+// Accumulated DETECTION time before the shutter fires itself. Detection is the
+// only gate (founder: "even if the camera is shaky it still takes a picture");
+// 600ms rules out a swing-past without demanding a surgeon's hands.
+const DETECTED_MS_REQUIRED = 600;
 // Corner easing per frame, and the jump distance (in preview px) past which we
 // snap instead of easing — that's the client moving to a different document.
 const SMOOTHING_ALPHA = 0.35;
-// Per-DISPLAY-frame easing for the drawn outline (separate from SMOOTHING_ALPHA,
-// which eases the detected quad per ANALYSED frame). 0.22 reaches a new
-// position in about 8 frames — smooth without feeling laggy behind the paper.
-const OUTLINE_EASE = 0.22;
 const SMOOTHING_RESET_PX = 90;
-// How long the outline survives after the document is lost: long enough to
-// ride out a dropped detection, short enough that a document leaving the frame
-// doesn't leave a ghost.
-const MISS_GRACE_MS = 300;
+// How long the outline AND the shutter's credit survive a detection dropout.
+// Shake blurs the frame, blur drops detection for a few frames — that must
+// pause progress, not erase it.
+const MISS_GRACE_MS = 350;
 // Per-frame decay on the running sharpness peak (~0.6%/frame, so it halves
 // over roughly 11 seconds at 10fps). Slow enough to hold a genuine focus
 // reference, quick enough to follow the client moving to a new document.
@@ -365,7 +361,7 @@ export function CameraCapture({
           }),
         elapsedMs,
         graceMs: MISS_GRACE_MS,
-        requiredReadyMs: READY_MS_REQUIRED,
+        requiredDetectedMs: DETECTED_MS_REQUIRED,
       });
       shutterRef.current = step.state;
 
@@ -622,53 +618,6 @@ function ScanOverlay({
   ready: boolean;
   topInset: number;
 }) {
-  const polyRef = useRef<SVGPolygonElement>(null);
-  const targetRef = useRef<Quad | null>(null);
-  const shownRef = useRef<Quad | null>(null);
-
-  useEffect(() => {
-    targetRef.current = quad;
-  }, [quad]);
-
-  // Glide the outline toward the newest detection on every animation frame.
-  useEffect(() => {
-    const reduced =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-
-    let raf = 0;
-    const step = () => {
-      raf = requestAnimationFrame(step);
-      const poly = polyRef.current;
-      if (!poly) return;
-
-      const target = targetRef.current;
-      if (!target) {
-        shownRef.current = null;
-        poly.setAttribute("opacity", "0");
-        return;
-      }
-
-      const shown = shownRef.current;
-      // Snap on first sight, on a big jump (a different document — easing
-      // across that reads as the outline sliding off the page), and whenever
-      // the client asked for reduced motion.
-      const next =
-        !shown || reduced || quadDistance(shown, target) > SMOOTHING_RESET_PX
-          ? target
-          : lerpQuad(shown, target, OUTLINE_EASE);
-      shownRef.current = next;
-      poly.setAttribute(
-        "points",
-        next.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" "),
-      );
-      poly.setAttribute("opacity", "1");
-    };
-
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
   if (view.width <= 0 || view.height <= 0) return null;
   const a = apertureFor(view, { top: topInset });
   const arm = Math.round(Math.min(a.width, a.height) * 0.11);
@@ -712,24 +661,26 @@ function ScanOverlay({
       </g>
 
       {/* Brand blue rather than white: the thing being outlined is a sheet of
-          white paper, so a white stroke all but disappears against it. */}
-      {/* No `points` here on purpose — they are written every animation frame
-          by the effect above. Detection only produces a new quad ~20x a second,
-          and drawing it only at that rate is what made the outline look
-          jagged; interpolating between detections lets it glide at whatever
-          rate the display runs at. Keeping React out of the per-frame path
-          also avoids re-rendering the tree 60 times a second. */}
-      <polygon
-        ref={polyRef}
-        opacity={0}
-        className="transition-[fill,stroke,stroke-width] duration-200"
-        // Barely-there fill on lock, none before it: a strong wash over the
-        // page hides the very thing the client is checking.
-        fill={ready ? "rgba(16,80,237,0.08)" : "none"}
-        stroke={ready ? "#1050ed" : "rgba(16,80,237,0.85)"}
-        strokeWidth={ready ? 3.5 : 2.5}
-        strokeLinejoin="round"
-      />
+          white paper, so a white stroke all but disappears against it.
+
+          Rendered the PLAIN way — React writes `points` on every detection
+          (~20x a second, eased by smoothQuad). A fancier version interpolated
+          the outline imperatively at display rate; it looked lovely in the
+          test browser and the border VANISHED on the founder's iPhone. This is
+          the exact mechanism from the build they saw working, kept dumb on
+          purpose. Reliability > silk. */}
+      {quad && (
+        <polygon
+          points={quad.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")}
+          className="transition-[fill,stroke,stroke-width] duration-200"
+          // Barely-there fill on lock, none before it: a strong wash over the
+          // page hides the very thing the client is checking.
+          fill={ready ? "rgba(16,80,237,0.08)" : "none"}
+          stroke={ready ? "#1050ed" : "rgba(16,80,237,0.85)"}
+          strokeWidth={ready ? 3.5 : 2.5}
+          strokeLinejoin="round"
+        />
+      )}
     </svg>
   );
 }
@@ -755,23 +706,7 @@ function useSearchDebugFlag(): boolean {
 
 const subscribeNever = () => () => {};
 
-/** Ease each corner toward its target. */
-function lerpQuad(from: Quad, to: Quad, t: number): Quad {
-  return from.map((p, i) => ({
-    x: p.x + (to[i].x - p.x) * t,
-    y: p.y + (to[i].y - p.y) * t,
-  })) as unknown as Quad;
-}
 
-/** Largest corner-to-corner distance between two quads. */
-function quadDistance(a: Quad, b: Quad): number {
-  let worst = 0;
-  for (let i = 0; i < 4; i++) {
-    const d = Math.hypot(a[i].x - b[i].x, a[i].y - b[i].y);
-    if (d > worst) worst = d;
-  }
-  return worst;
-}
 
 /**
  * Shown whenever the camera can't be used. Explains what happened and, for a
