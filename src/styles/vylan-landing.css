@@ -287,18 +287,51 @@
   .vy-subprefix.vy-pf-fwd,
   .vy-subprefix.vy-pf-rev { animation: none; }
   .vy-reel-mask { transition: none; }
-  /* Kill the motion ONLY. These used to force opacity:1 as well, which
-     pinned the outgoing word on screen at full strength underneath the
-     incoming one — the hero read "with remmiaindielrs." for everyone with
-     reduced motion. LandingShell writes each word's resting opacity inline
-     (exactly one word at 1), so with the animation off the words simply
-     swap instantly, which is what reduced motion should do anyway. */
+  /* Reduced motion means no MOVEMENT — it does not mean no cross-fade. The
+     vestibular trigger here is the drift and the 120px blur, not the opacity
+     ramp, so the word still fades; it just stops flying in from off to the
+     side. Cutting the animation outright (as this block did) left a hard
+     jump-cut, which is what the founder noticed after the double-word fix.
+
+     These rules previously forced opacity:1 as well, which pinned the
+     outgoing word on screen underneath the incoming one — the hero read
+     "with remmiaindielrs." for every visitor with reduced motion. They no
+     longer touch opacity: LandingShell writes each word's resting opacity
+     inline (exactly one word at 1), so even if these fades never run, only
+     one word can be visible.
+
+     `!important` is deliberate and is aimed at ONE declaration: the global
+     `animation-duration: 0.01ms !important` reset at the bottom of
+     globals.css, which would otherwise crush these fades back to a jump-cut.
+     Same origin and both important, so the more specific selector wins. */
+  @keyframes vyReduceOut {
+    from { opacity: 1; }
+    to   { opacity: 0; }
+  }
+  @keyframes vyReduceIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
   .vy-reel-word.vy-out,
+  .vy-reel-word.vy-out-rev {
+    animation: vyReduceOut 0.3s ease forwards !important;
+    filter: none;
+    transform: none;
+  }
   .vy-reel-word.vy-in,
-  .vy-reel-word.vy-out-rev,
-  .vy-reel-word.vy-in-rev { animation: none; }
+  .vy-reel-word.vy-in-rev {
+    animation: vyReduceIn 0.3s ease forwards !important;
+    filter: none;
+    transform: none;
+  }
   .vy-reel-word.vy-ai-glitch { animation: none; }
-  .vy-reel-word.vy-brand-out { animation: none; opacity: 0; }
+  /* The finale dissolves rather than vanishing, for the same reason — but
+     without vyBrandOut's upward drift and blur. */
+  .vy-reel-word.vy-brand-out {
+    animation: vyReduceOut 0.42s ease forwards !important;
+    filter: none;
+    transform: none;
+  }
 }
 
 .vy-cta-row {
