@@ -181,6 +181,27 @@ describe("RepeatingView", () => {
     expect(screen.queryByText(/only visible to owners/)).toBeNull();
   });
 
+  it("shows NO toolbar when the firm has no schedules at all", () => {
+    // Chips reading zero, a "who it goes to" picker over nobody and a search
+    // box over nothing is chrome for data that doesn't exist — it's what made
+    // the empty screen look unfinished.
+    mount([]);
+    expect(screen.queryByRole("tab", { name: /All/ })).toBeNull();
+    expect(screen.queryByPlaceholderText("Search schedules or clients")).toBeNull();
+    expect(screen.getByText("No repeating work yet")).toBeTruthy();
+  });
+
+  it("KEEPS the toolbar when a filter empties the list, so you can get back", () => {
+    // The distinction that matters: no rows at all vs. no rows right now.
+    // Hiding the controls here would strand you with no way to clear the search.
+    mount([row()]);
+    const search = screen.getByPlaceholderText("Search schedules or clients");
+    fireEvent.change(search, { target: { value: "zzzznomatch" } });
+    expect(screen.getByPlaceholderText("Search schedules or clients")).toBeTruthy();
+    expect(screen.getByRole("tab", { name: /All/ })).toBeTruthy();
+    expect(screen.getByText("No schedule matches that.")).toBeTruthy();
+  });
+
   it("gives every row an actions menu, labelled by schedule", () => {
     // The menu CONTENTS aren't asserted here — Radix renders them in a portal
     // on real pointer events, which happy-dom doesn't drive. The decision
