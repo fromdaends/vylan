@@ -41,6 +41,11 @@ import {
   type ShutterState,
 } from "@/lib/portal/auto-shutter";
 import {
+  advanceHint,
+  INITIAL_HINT,
+  type HintState,
+} from "@/lib/portal/hint-visibility";
+import {
   detectQuad,
   quadArea,
   stabiliseQuad,
@@ -74,6 +79,12 @@ const QUAD_ADOPT_FRAMES = 3;
 // frame; without a floor that redraws the outline 20x a second forever, which
 // is what still read as "a bit buggy" after the big jumps were handled.
 const QUAD_DEAD_ZONE_PX = 2.5;
+// Coaching text: hold before speaking, speak briefly, then stay quiet about
+// the same thing for a good while. "Looks good" is never spoken at all — the
+// outline and the ring say it without words.
+const HINT_SETTLE_MS = 500;
+const HINT_LINGER_MS = 1800;
+const HINT_COOLDOWN_MS = 6000;
 // How long the OUTLINE survives a detection dropout before it disappears.
 const MISS_GRACE_MS = 400;
 // How long the shutter's CREDIT survives one. Much longer than the outline on
@@ -152,6 +163,9 @@ export function CameraCapture({
   const [controlsBottom, setControlsBottom] = useState(0);
   const [quad, setQuad] = useState<Quad | null>(null);
   const [guidance, setGuidance] = useState<Guidance>("searching");
+  // What the client is actually being told right now — null most of the time.
+  const [hint, setHint] = useState<Guidance | null>(null);
+  const hintRef = useRef<HintState>(INITIAL_HINT);
   const [shot, setShot] = useState<Shot | null>(null);
   const [busy, setBusy] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
@@ -462,6 +476,16 @@ export function CameraCapture({
 
       setGuidance((g) => (g === step.guidance ? g : step.guidance));
 
+      const hintStep = advanceHint(hintRef.current, {
+        guidance: step.guidance,
+        elapsedMs,
+        settleMs: HINT_SETTLE_MS,
+        lingerMs: HINT_LINGER_MS,
+        cooldownMs: HINT_COOLDOWN_MS,
+      });
+      hintRef.current = hintStep.state;
+      setHint((h) => (h === hintStep.visible ? h : hintStep.visible));
+
       if (step.outline === "update" && smoothed) {
         // `stabiliseQuad` returns the SAME object when the change was inside
         // the dead zone, so identity is a reliable "nothing moved" signal —
@@ -500,6 +524,8 @@ export function CameraCapture({
     setShot(null);
     setCaptureError(null);
     shutterRef.current = INITIAL_SHUTTER;
+    hintRef.current = INITIAL_HINT;
+    setHint(null);
     peakSharpnessRef.current = 0;
     setProgress(0);
     quadRef.current = null;
@@ -572,16 +598,20 @@ export function CameraCapture({
 
         {failed && <CameraUnavailable code={camera.error ?? "camera_failed"} />}
 
-        {/* One line of coaching, sitting on the dimmed area just below the
-            frame. aria-live so a screen-reader user hears what a sighted
-            client reads. */}
+        {/* Coaching, when there is genuinely something to say. It fades in,
+            sits for a moment and fades out — advice you have already read is
+            noise. Kept mounted so the fade-out can play; aria-live still
+            announces it once, and only when it appears. */}
         {!shot && !failed && status === "ready" && (
           <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center px-8">
             <p
               aria-live="polite"
-              className="text-center text-[15px] font-medium leading-snug text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.7)]"
+              className={cn(
+                "text-center text-[13px] font-normal leading-snug text-white/75 [text-shadow:0_1px_3px_rgba(0,0,0,0.6)] transition-opacity duration-500",
+                hint ? "opacity-100" : "opacity-0",
+              )}
             >
-              {t(`scan_hint_${guidance}`)}
+              {hint ? t(`scan_hint_${hint}`) : "\u00a0"}
             </p>
           </div>
         )}
