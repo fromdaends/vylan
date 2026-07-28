@@ -10,6 +10,7 @@ const GRACE_MS = 350;
 const CREDIT_HOLD_MS = 1500;
 const REQUIRED_MS = 600;
 const REQUIRED_STEADY_MS = 4000;
+const MOVE_TOLERANCE_MS = 900;
 
 type Frame = {
   detected: boolean;
@@ -31,6 +32,7 @@ function run(frames: Frame[], dt = 50) {
       creditHoldMs: CREDIT_HOLD_MS,
       requiredDetectedMs: REQUIRED_MS,
       steady: f.steady ?? false,
+      movementToleranceMs: MOVE_TOLERANCE_MS,
       requiredSteadyMs: REQUIRED_STEADY_MS,
     });
     state = step.state;
@@ -159,6 +161,7 @@ describe("advanceShutter — firing cadence", () => {
         creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs,
         steady: false,
+        movementToleranceMs: MOVE_TOLERANCE_MS,
         requiredSteadyMs: REQUIRED_STEADY_MS,
       });
       expect(step.fire).toBe(false);
@@ -204,7 +207,7 @@ describe("advanceShutter — hostile timing", () => {
     // A backgrounded tab or a paused debugger can hand us seconds; crediting
     // all of it would fire on a frame nobody was looking at.
     const step = advanceShutter(
-      { detectedMs: 400, missMs: 0, steadyMs: 0 },
+      { detectedMs: 400, missMs: 0, movingMs: 0, steadyMs: 0 },
       {
         detected: true,
         guidanceFor: () => "ready",
@@ -213,6 +216,7 @@ describe("advanceShutter — hostile timing", () => {
         creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs: REQUIRED_MS,
         steady: false,
+        movementToleranceMs: MOVE_TOLERANCE_MS,
         requiredSteadyMs: REQUIRED_STEADY_MS,
       },
     );
@@ -222,7 +226,7 @@ describe("advanceShutter — hostile timing", () => {
   it("ignores a non-finite or negative interval rather than corrupting state", () => {
     for (const elapsedMs of [NaN, Infinity, -100, 0]) {
       const step = advanceShutter(
-        { detectedMs: 200, missMs: 0, steadyMs: 0 },
+        { detectedMs: 200, missMs: 0, movingMs: 0, steadyMs: 0 },
         {
           detected: true,
           guidanceFor: () => "ready",
@@ -231,6 +235,7 @@ describe("advanceShutter — hostile timing", () => {
           creditHoldMs: CREDIT_HOLD_MS,
           requiredDetectedMs: REQUIRED_MS,
           steady: false,
+          movementToleranceMs: MOVE_TOLERANCE_MS,
           requiredSteadyMs: REQUIRED_STEADY_MS,
         },
       );
@@ -240,7 +245,7 @@ describe("advanceShutter — hostile timing", () => {
   });
 
   it("does not mutate the state it is given", () => {
-    const prev: ShutterState = { detectedMs: 120, missMs: 40, steadyMs: 0 };
+    const prev: ShutterState = { detectedMs: 120, missMs: 40, movingMs: 0, steadyMs: 0 };
     const snapshot = { ...prev };
     advanceShutter(prev, {
       detected: true,
@@ -250,6 +255,7 @@ describe("advanceShutter — hostile timing", () => {
       creditHoldMs: CREDIT_HOLD_MS,
       requiredDetectedMs: REQUIRED_MS,
       steady: false,
+      movementToleranceMs: MOVE_TOLERANCE_MS,
       requiredSteadyMs: REQUIRED_STEADY_MS,
     });
     expect(prev).toEqual(snapshot);
@@ -283,17 +289,44 @@ describe("advanceShutter — the safety net when the detector never finds it", (
     expect(steps[fired]!.fireMode).toBe("document");
   });
 
-  it("does not fire on a moving frame, however long the client waits", () => {
-    // Waving the phone around must never trip the net.
+  it("does not fire while the phone is genuinely being swept around", () => {
+    // Sustained gross movement — well past the tolerance window — must never
+    // trip the net, however long it goes on.
     const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
-    expect(run(times(200, moving)).some((s) => s.fire)).toBe(false);
+    expect(run(times(400, moving)).some((s) => s.fire)).toBe(false);
   });
 
-  it("restarts the steady clock the moment the frame moves", () => {
+  it("a wobble PAUSES the ring instead of resetting it", () => {
+    // The founder's report: "it resets at the slightest, slightest movement…
+    // physically impossible to take a picture automatically." A single
+    // non-steady frame must cost nothing but that frame.
     const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
     const steps = run([...times(40, steadyMiss), moving, ...times(10, steadyMiss)]);
-    expect(steps.some((s) => s.fire)).toBe(false);
-    expect(steps.at(-1)!.state.steadyMs).toBe(500);
+    // 40 frames of progress survived the wobble and kept building.
+    expect(steps.at(-1)!.state.steadyMs).toBe(2500);
+  });
+
+  it("still reaches the shutter through repeated hand wobble", () => {
+    // Every fourth frame exceeds the movement threshold — a normal hand, and
+    // the case the founder could not get past. Progress only pauses on those
+    // frames, so it still banks the required steady time and fires.
+    const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
+    const wobbly = Array.from({ length: 160 }, (_, i) =>
+      i % 4 === 3 ? moving : steadyMiss,
+    );
+    const steps = run(wobbly);
+    const firedAt = steps.findIndex((s) => s.fire);
+    expect(firedAt).toBeGreaterThan(-1);
+    // A quarter of the frames are wobbles, so it costs ~4/3 of the ideal
+    // wall-clock — about 5.3s rather than 4s. Slower, never impossible.
+    expect(firedAt * 50).toBeLessThan(6000);
+  });
+
+  it("wipes the progress only once movement PERSISTS", () => {
+    const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
+    // 20 consecutive moving frames = 1000ms > the 900ms tolerance.
+    const steps = run([...times(40, steadyMiss), ...times(20, moving)]);
+    expect(steps.at(-1)!.state.steadyMs).toBe(0);
   });
 
   it("reports progress from whichever route is nearer", () => {

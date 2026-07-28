@@ -26,6 +26,8 @@ export type ShutterState = {
   detectedMs: number;
   /** Milliseconds since a document was last seen. */
   missMs: number;
+  /** Milliseconds of continuous gross movement, for the tolerance window. */
+  movingMs: number;
   /**
    * Milliseconds the frame has been held steady, DETECTED OR NOT.
    *
@@ -42,6 +44,7 @@ export type ShutterState = {
 export const INITIAL_SHUTTER: ShutterState = {
   detectedMs: 0,
   missMs: 0,
+  movingMs: 0,
   steadyMs: 0,
 };
 
@@ -104,10 +107,23 @@ export function advanceShutter(
     /** Accumulated detection time before the shutter fires. */
     requiredDetectedMs: number;
     /**
-     * Is the frame steady enough to be worth photographing at all? The caller
-     * decides (motion below threshold); this reducer only accumulates it.
+     * Is the frame free of GROSS movement — someone sweeping the phone across
+     * the room, not someone holding it in their hand? The caller decides; this
+     * reducer only accumulates it.
      */
     steady: boolean;
+    /**
+     * How long gross movement must persist before it wipes the accumulated
+     * steady time.
+     *
+     * This exists because the first version reset to zero on a SINGLE
+     * non-steady frame, which made the ring "reset at the slightest, slightest
+     * movement" and the automatic photo physically impossible to reach by
+     * hand. Brief movement now only pauses the count — the same tolerance the
+     * detection credit already had, which this path should have had from the
+     * start.
+     */
+    movementToleranceMs: number;
     /**
      * Accumulated steady time before the safety net fires an UNCROPPED photo.
      * Deliberately several times requiredDetectedMs so the detector always
@@ -134,8 +150,19 @@ export function advanceShutter(
   const requiredSteady =
     input.requiredSteadyMs > 0 ? input.requiredSteadyMs : Infinity;
 
-  // Steadiness accrues regardless of detection; wobble resets it.
-  const steadyMs = steady ? prev.steadyMs + elapsed : 0;
+  // Steadiness accrues regardless of detection. Movement PAUSES it and only
+  // wipes it once the movement has persisted — a hand wobble must not undo
+  // seconds of progress.
+  const movingMs = steady ? 0 : prev.movingMs + elapsed;
+  const tolerance =
+    Number.isFinite(input.movementToleranceMs) && input.movementToleranceMs > 0
+      ? input.movementToleranceMs
+      : 0;
+  const steadyMs = steady
+    ? prev.steadyMs + elapsed
+    : movingMs > tolerance
+      ? 0
+      : prev.steadyMs;
   const steadyReady = steadyMs >= requiredSteady;
 
   if (detected) {
@@ -154,6 +181,7 @@ export function advanceShutter(
       state: {
         detectedMs: fire ? 0 : detectedMs,
         missMs: 0,
+        movingMs,
         steadyMs: fire ? 0 : steadyMs,
       },
       outline: "update",
@@ -175,6 +203,7 @@ export function advanceShutter(
     state: {
       detectedMs,
       missMs,
+      movingMs,
       steadyMs: steadyReady ? 0 : steadyMs,
     },
     outline: withinGrace ? "hold" : "clear",
