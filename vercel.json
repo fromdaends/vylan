@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/spawn-recurrences",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/engagement-attention",
+      "schedule": "0 5 * * *"
     }
   ]
 }

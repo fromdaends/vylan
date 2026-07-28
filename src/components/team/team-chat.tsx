@@ -42,6 +42,7 @@ export function TeamChat({
   initialMessages,
   initialLastReadAt = null,
   notActivated,
+  hideHeader = false,
   locale,
 }: {
   currentUserId: string;
@@ -49,6 +50,9 @@ export function TeamChat({
   initialLastReadAt?: string | null;
   // Migration 0870 not applied yet — show the quiet gated state.
   notActivated: boolean;
+  // The host already shows its own header (the inbox's back row carries the
+  // firm identity + the team-only hint), so skip the built-in one.
+  hideHeader?: boolean;
   locale: "fr" | "en";
 }) {
   const t = useTranslations("TeamChat");
@@ -184,14 +188,16 @@ export function TeamChat({
 
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 border-b border-border px-4 py-2.5">
-        <p className="text-[13px] font-semibold leading-tight text-foreground">
-          {t("thread_title")}
-        </p>
-        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-          {t("team_only")}
-        </p>
-      </div>
+      {!hideHeader && (
+        <div className="shrink-0 border-b border-border px-4 py-2.5">
+          <p className="text-[13px] font-semibold leading-tight text-foreground">
+            {t("thread_title")}
+          </p>
+          <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+            {t("team_only")}
+          </p>
+        </div>
+      )}
 
       <div
         ref={listRef}

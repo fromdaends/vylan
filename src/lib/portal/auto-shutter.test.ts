@@ -6,8 +6,9 @@ import {
 } from "./auto-shutter";
 import type { Guidance } from "./frame-metrics";
 
-const GRACE_MS = 300;
-const REQUIRED_MS = 500;
+const GRACE_MS = 350;
+const CREDIT_HOLD_MS = 1500;
+const REQUIRED_MS = 600;
 
 type Frame = { detected: boolean; guidance: Guidance; dt?: number };
 
@@ -20,7 +21,8 @@ function run(frames: Frame[], dt = 50) {
       guidanceFor: () => f.guidance,
       elapsedMs: f.dt ?? dt,
       graceMs: GRACE_MS,
-      requiredReadyMs: REQUIRED_MS,
+      creditHoldMs: CREDIT_HOLD_MS,
+      requiredDetectedMs: REQUIRED_MS,
     });
     state = step.state;
     return step;
@@ -28,115 +30,140 @@ function run(frames: Frame[], dt = 50) {
 }
 
 const good: Frame = { detected: true, guidance: "ready" };
-const framedButOff: Frame = { detected: true, guidance: "too_far" };
-const wobble: Frame = { detected: true, guidance: "hold_steady" };
+// Detected, but every quality hint failing — a shaky hand in a dim kitchen.
+const shaky: Frame = { detected: true, guidance: "hold_steady" };
+const dark: Frame = { detected: true, guidance: "too_dark" };
+const blurry: Frame = { detected: true, guidance: "blurry" };
 const miss: Frame = { detected: false, guidance: "searching" };
 
 function times(n: number, f: Frame): Frame[] {
   return Array.from({ length: n }, () => f);
 }
 
-describe("advanceShutter — firing on accumulated good time", () => {
-  it("fires once the required good time has accrued, not before", () => {
-    // 500ms required, 50ms frames -> the 10th good frame.
-    const steps = run(times(10, good));
-    expect(steps.slice(0, 9).some((s) => s.fire)).toBe(false);
-    expect(steps[9]!.fire).toBe(true);
+describe("advanceShutter — detection is the ONLY gate", () => {
+  it("fires for a shaky hand: quality hints must not block the shutter", () => {
+    // The founder's requirement, verbatim: "once there's a document detected
+    // in the frame, even if the camera is shaky it still takes a picture."
+    // Guidance says hold_steady on EVERY frame here; it must fire anyway.
+    const steps = run(times(20, shaky));
+    expect(steps.some((s) => s.fire)).toBe(true);
+    // 600ms at 50ms/frame = the 12th frame.
+    expect(steps.findIndex((s) => s.fire)).toBe(11);
+  });
+
+  it("fires in the dark and fires when blurry — advice never gates", () => {
+    expect(run(times(20, dark)).some((s) => s.fire)).toBe(true);
+    expect(run(times(20, blurry)).some((s) => s.fire)).toBe(true);
   });
 
   it("fires after the same REAL time regardless of frame rate", () => {
-    // This is the whole reason the reducer counts milliseconds. Counting
-    // frames meant changing the loop's speed silently retuned the shutter.
     const slow = run(times(20, good), 100).findIndex((s) => s.fire);
     const fast = run(times(40, good), 25).findIndex((s) => s.fire);
-    expect((slow + 1) * 100).toBe(500);
-    expect((fast + 1) * 25).toBe(500);
+    expect((slow + 1) * 100).toBe(REQUIRED_MS);
+    expect((fast + 1) * 25).toBe(REQUIRED_MS);
   });
 
-  it("survives a single marginal frame instead of starting over", () => {
-    // The bug that stopped it firing on a real phone: four metrics flickering
-    // around their thresholds meant one bad frame wiped the whole run, and a
-    // hand-held client never strung together six clean ones.
-    const steps = run([...times(9, good), wobble, ...times(3, good)]);
-    expect(steps.some((s) => s.fire)).toBe(true);
+  it("never fires without a document", () => {
+    expect(run(times(60, miss)).some((s) => s.fire)).toBe(false);
   });
 
-  it("costs more than it earned, so nearly-steady never creeps to the line", () => {
-    // Alternating good/bad must NOT accumulate: the drain is 1.5x the gain.
-    const steps = run(times(40, good).flatMap((g) => [g, wobble]));
-    expect(steps.some((s) => s.fire)).toBe(false);
-  });
-
-  it("never fires while the document is framed but not yet good", () => {
-    expect(run(times(40, framedButOff)).some((s) => s.fire)).toBe(false);
-  });
-
-  it("never fires when no document was found at all", () => {
-    expect(run(times(40, miss)).some((s) => s.fire)).toBe(false);
-  });
-
-  it("spends the credit on firing, so it does not burst", () => {
-    const fires = run(times(30, good)).filter((s) => s.fire).length;
-    // 30 frames x 50ms = 1500ms of good time; at 500ms a shot with a reset
-    // after each, that is exactly 3 — not 21.
-    expect(fires).toBe(3);
-  });
-
-  it("drains faster when the document is lost than when it is merely off", () => {
-    const afterWobble = run([...times(8, good), wobble]).at(-1)!.state.readyMs;
-    const afterMiss = run([...times(8, good), miss]).at(-1)!.state.readyMs;
-    expect(afterMiss).toBeLessThan(afterWobble);
-  });
-
-  it("never lets credit go negative", () => {
-    const steps = run(times(20, miss));
-    expect(steps.every((s) => s.state.readyMs >= 0)).toBe(true);
+  it("does not fire on a swing-past", () => {
+    // A camera sweeping across a document sees it briefly, loses it for
+    // longer than the credit-hold window, sees another. No single run reaches
+    // the requirement, so nothing fires.
+    const sweep = [
+      ...times(4, good), // 200ms
+      ...times(32, miss), // 1600ms > credit hold, credit resets
+      ...times(4, good),
+      ...times(32, miss),
+      ...times(4, good),
+    ];
+    expect(run(sweep).some((s) => s.fire)).toBe(false);
   });
 });
 
-describe("advanceShutter — progress", () => {
-  it("climbs from 0 to 1 as the good time accrues", () => {
-    const steps = run(times(10, good));
-    expect(steps[0]!.progress).toBeCloseTo(0.1, 5);
-    expect(steps[4]!.progress).toBeCloseTo(0.5, 5);
-    expect(steps[9]!.progress).toBe(1);
+describe("advanceShutter — shake dropouts do not restart the count", () => {
+  it("holds the credit through a short dropout and still fires", () => {
+    // Shake blurs the frame and detection drops for a moment. The credit must
+    // HOLD through the grace window — draining here was exactly what made a
+    // shaky hand unable to fire.
+    const steps = run([
+      ...times(8, shaky), // 400ms of credit
+      ...times(4, miss), // 200ms dropout, inside the 350ms grace
+      ...times(8, shaky), // credit resumes at 400ms
+    ]);
+    expect(steps.some((s) => s.fire)).toBe(true);
+    // Fires on the 4th frame after the dropout: 400 + 200 = 600ms of credit.
+    expect(steps.findIndex((s) => s.fire)).toBe(15);
   });
 
-  it("stays within 0..1 even on a nonsense requirement", () => {
-    const step = advanceShutter(INITIAL_SHUTTER, {
-      detected: true,
-      guidanceFor: () => "ready",
-      elapsedMs: 50,
-      graceMs: GRACE_MS,
-      requiredReadyMs: 0,
-    });
-    expect(step.progress).toBeGreaterThanOrEqual(0);
-    expect(step.progress).toBeLessThanOrEqual(1);
-    // A zero requirement must not mean "fire immediately".
-    expect(step.fire).toBe(false);
+  it("keeps the credit frozen, not accruing, during the dropout", () => {
+    const steps = run([...times(8, good), ...times(4, miss)]);
+    expect(steps.at(-1)!.state.detectedMs).toBe(400);
+  });
+
+  it("keeps the credit through a dropout LONGER than the outline's grace", () => {
+    // The founder's 17-second capture: on a real phone the detector flickers
+    // with the document in frame the whole time. 450ms of misses clears the
+    // OUTLINE (grace 350) but must not touch the credit (hold 1500).
+    const steps = run([...times(8, good), ...times(9, miss), good]);
+    expect(steps.at(-2)!.outline).toBe("clear");
+    expect(steps.at(-1)!.state.detectedMs).toBe(450);
+  });
+
+  it("fires within seconds under flickering detection — the 17s regression", () => {
+    // 200ms seen / 400ms lost, repeating: a duty cycle far worse than a
+    // steady hand. Credit must accumulate across the dropouts and fire on
+    // the third burst, ~1.6s in — not restart forever.
+    const flicker = Array.from({ length: 6 }, () => [
+      ...times(4, good),
+      ...times(8, miss),
+    ]).flat();
+    const steps = run(flicker);
+    const firedAt = steps.findIndex((s) => s.fire);
+    expect(firedAt).toBeGreaterThan(-1);
+    expect(firedAt * 50).toBeLessThanOrEqual(2000);
+  });
+
+  it("starts over once the document is genuinely gone", () => {
+    const steps = run([...times(8, good), ...times(31, miss), good]);
+    // 1550ms of misses exceeds the 1500ms credit hold: start over.
+    expect(steps.at(-1)!.state.detectedMs).toBe(50);
+  });
+});
+
+describe("advanceShutter — firing cadence", () => {
+  it("spends the credit on firing, so it does not burst", () => {
+    const fires = run(times(36, good)).filter((s) => s.fire).length;
+    // 36 frames x 50ms = 1800ms; at 600ms a shot with a reset after each,
+    // that is exactly 3 — not 25.
+    expect(fires).toBe(3);
+  });
+
+  it("a zero or negative requirement never means fire-immediately", () => {
+    for (const requiredDetectedMs of [0, -100]) {
+      const step = advanceShutter(INITIAL_SHUTTER, {
+        detected: true,
+        guidanceFor: () => "ready",
+        elapsedMs: 50,
+        graceMs: GRACE_MS,
+        creditHoldMs: CREDIT_HOLD_MS,
+        requiredDetectedMs,
+      });
+      expect(step.fire).toBe(false);
+    }
   });
 });
 
 describe("advanceShutter — outline persistence", () => {
-  it("holds the outline through a short gap then clears it", () => {
-    const steps = run([good, ...times(8, miss)]);
+  it("holds the outline through the grace window then clears it", () => {
+    const steps = run([good, ...times(12, miss)]);
     expect(steps[1]!.outline).toBe("hold");
     expect(steps.at(-1)!.outline).toBe("clear");
-  });
-
-  it("holds for the grace period in real time, not in frames", () => {
-    // Both rates must clear on the first tick PAST the grace window — so the
-    // elapsed time at that tick sits within one interval of it, whatever the
-    // loop's speed. (Counting frames instead gave 2x the hold at half the rate.)
-    for (const dt of [25, 50, 100]) {
-      const idx = run([good, ...times(40, miss)], dt).findIndex(
-        (s) => s.outline === "clear",
-      );
-      expect(idx).toBeGreaterThan(0);
-      const elapsed = idx * dt;
-      expect(elapsed).toBeGreaterThan(GRACE_MS);
-      expect(elapsed).toBeLessThanOrEqual(GRACE_MS + dt);
-    }
+    // The clear lands on the first tick past the window, in real time.
+    const idx = steps.findIndex((s) => s.outline === "clear");
+    expect(idx * 50).toBeGreaterThan(GRACE_MS);
+    expect(idx * 50).toBeLessThanOrEqual(GRACE_MS + 50 * 2);
   });
 
   it("resets the miss clock as soon as the document reappears", () => {
@@ -146,55 +173,67 @@ describe("advanceShutter — outline persistence", () => {
   });
 
   it("clears immediately when there was never anything to hold", () => {
-    const steps = run(times(10, miss));
+    const steps = run(times(12, miss));
     expect(steps.at(-1)!.outline).toBe("clear");
     expect(steps.at(-1)!.documentPresent).toBe(false);
   });
 });
 
+describe("advanceShutter — progress", () => {
+  it("climbs from 0 to 1 as detection time accrues", () => {
+    const steps = run(times(12, good));
+    expect(steps[0]!.progress).toBeCloseTo(50 / 600, 5);
+    expect(steps[5]!.progress).toBeCloseTo(300 / 600, 5);
+    expect(steps[11]!.progress).toBe(1);
+  });
+});
+
 describe("advanceShutter — hostile timing", () => {
   it("treats a huge gap as one ordinary step", () => {
-    // A backgrounded tab, a stalled decode or a paused debugger can hand us
-    // seconds. Crediting all of it would fire on a frame nobody was looking at.
+    // A backgrounded tab or a paused debugger can hand us seconds; crediting
+    // all of it would fire on a frame nobody was looking at.
     const step = advanceShutter(
-      { readyMs: 400, missMs: 0 },
+      { detectedMs: 400, missMs: 0 },
       {
         detected: true,
         guidanceFor: () => "ready",
         elapsedMs: 30_000,
         graceMs: GRACE_MS,
-        requiredReadyMs: REQUIRED_MS,
+        creditHoldMs: CREDIT_HOLD_MS,
+        requiredDetectedMs: REQUIRED_MS,
       },
     );
-    expect(step.state.readyMs).toBeLessThanOrEqual(400 + 250);
+    expect(step.state.detectedMs).toBeLessThanOrEqual(400 + 250);
   });
 
   it("ignores a non-finite or negative interval rather than corrupting state", () => {
     for (const elapsedMs of [NaN, Infinity, -100, 0]) {
       const step = advanceShutter(
-        { readyMs: 200, missMs: 0 },
+        { detectedMs: 200, missMs: 0 },
         {
           detected: true,
           guidanceFor: () => "ready",
           elapsedMs,
           graceMs: GRACE_MS,
-          requiredReadyMs: REQUIRED_MS,
+          creditHoldMs: CREDIT_HOLD_MS,
+          requiredDetectedMs: REQUIRED_MS,
         },
       );
-      expect(Number.isFinite(step.state.readyMs)).toBe(true);
-      expect(step.state.readyMs).toBe(200);
+      expect(Number.isFinite(step.state.detectedMs)).toBe(true);
+      expect(step.state.detectedMs).toBe(200);
     }
   });
 
   it("does not mutate the state it is given", () => {
-    const prev: ShutterState = { readyMs: 120, missMs: 40 };
+    const prev: ShutterState = { detectedMs: 120, missMs: 40 };
     const snapshot = { ...prev };
     advanceShutter(prev, {
       detected: true,
       guidanceFor: () => "ready",
       elapsedMs: 50,
       graceMs: GRACE_MS,
-      requiredReadyMs: REQUIRED_MS,
+      creditHoldMs: CREDIT_HOLD_MS,
+      requiredDetectedMs: REQUIRED_MS,
     });
     expect(prev).toEqual(snapshot);
   });

@@ -13,7 +13,12 @@ import { ChevronsRight, Loader2, MessagesSquare } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/button";
 import { EngagementMessages } from "@/components/engagements/engagement-messages";
-import { ConversationRow } from "@/components/assistant/client-messages-tab";
+import {
+  ConversationRow,
+  TEAM_CONVERSATION_ID,
+  TeamConversationRow,
+} from "@/components/assistant/client-messages-tab";
+import { TeamThread } from "@/components/assistant/team-thread";
 import {
   clampPanelWidth,
   clearStoredPanelWidth,
@@ -30,6 +35,7 @@ import {
   subscribeChatLauncher,
 } from "@/components/assistant/chat-launcher-store";
 import type { FirmConversation } from "@/lib/db/client-messages";
+import type { TeamConversation } from "@/lib/db/team-messages";
 
 // The "Expand" surface: messaging as a docked, drag-to-resize sidebar with the
 // Instagram-DM two-pane layout (thread list left, active conversation right).
@@ -49,6 +55,7 @@ export function ExpandedMessages({
   onUnreadTotal?: (total: number) => void;
 }) {
   const t = useTranslations("Assistant");
+  const tTeam = useTranslations("TeamChat");
   const { expanded } = useSyncExternalStore(
     subscribeChatLauncher,
     getChatLauncherState,
@@ -58,6 +65,7 @@ export function ExpandedMessages({
   const [conversations, setConversations] = useState<FirmConversation[] | null>(
     null,
   );
+  const [team, setTeam] = useState<TeamConversation | null>(null);
   const [failed, setFailed] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -68,9 +76,13 @@ export function ExpandedMessages({
         setFailed(true);
         return;
       }
-      const data = (await res.json()) as { conversations?: FirmConversation[] };
+      const data = (await res.json()) as {
+        conversations?: FirmConversation[];
+        team?: TeamConversation | null;
+      };
       if (Array.isArray(data.conversations)) {
         setConversations(data.conversations);
+        setTeam(data.team ?? null);
         setFailed(false);
       }
     } catch {
@@ -93,9 +105,12 @@ export function ExpandedMessages({
 
   // Keep the shared FAB / popup badge in step with what we loaded.
   useEffect(() => {
-    if (!conversations) return;
-    onUnreadTotal?.(conversations.reduce((n, c) => n + c.unreadCount, 0));
-  }, [conversations, onUnreadTotal]);
+    if (!conversations && !team) return;
+    onUnreadTotal?.(
+      (conversations ?? []).reduce((n, c) => n + c.unreadCount, 0) +
+        (team?.unreadCount ?? 0),
+    );
+  }, [conversations, team, onUnreadTotal]);
 
   // On a viewport that's too narrow for a docked sidebar, collapse back to the
   // popup (the Expand control is desktop-only, so this only fires on resize).
@@ -232,6 +247,10 @@ export function ExpandedMessages({
 
   const openConversation = useCallback((id: string) => {
     setOpenId(id);
+    if (id === TEAM_CONVERSATION_ID) {
+      setTeam((prev) => (prev ? { ...prev, unreadCount: 0 } : prev));
+      return;
+    }
     setConversations((prev) =>
       prev
         ? prev.map((c) => (c.engagementId === id ? { ...c, unreadCount: 0 } : c))
@@ -337,44 +356,77 @@ export function ExpandedMessages({
                   {t("retry")}
                 </Button>
               </div>
-            ) : conversations && conversations.length === 0 ? (
-              <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-                <MessagesSquare
-                  className="size-6 text-muted-foreground/60"
-                  aria-hidden
-                />
-                <p className="text-sm font-medium text-foreground">
-                  {t("messages_inbox_empty")}
-                </p>
-              </div>
             ) : (
-              <ul className="divide-y divide-border/60">
-                {(conversations ?? []).map((c) => (
-                  <li
-                    key={c.engagementId}
+              <>
+                {team && (
+                  <div
                     className={cn(
-                      c.engagementId === openId && "bg-muted/60",
+                      "border-b border-border/60",
+                      openId === TEAM_CONVERSATION_ID && "bg-muted/60",
                     )}
                   >
-                    <ConversationRow
-                      conversation={c}
+                    <TeamConversationRow
+                      team={team}
                       locale={locale}
-                      onOpen={() => openConversation(c.engagementId)}
+                      onOpen={() => openConversation(TEAM_CONVERSATION_ID)}
+                      subtitle={tTeam("thread_title")}
                       youPrefix={t("messages_preview_you")}
                       noMessages={t("messages_no_messages_yet")}
                       unreadLabel={(n) =>
                         t("messages_unread_count", { count: n })
                       }
                     />
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                )}
+                {conversations && conversations.length === 0 ? (
+                  <div
+                    className={cn(
+                      "flex flex-col items-center justify-center gap-2 px-6 text-center",
+                      team ? "py-16" : "h-full",
+                    )}
+                  >
+                    <MessagesSquare
+                      className="size-6 text-muted-foreground/60"
+                      aria-hidden
+                    />
+                    <p className="text-sm font-medium text-foreground">
+                      {t("messages_inbox_empty")}
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-border/60">
+                    {(conversations ?? []).map((c) => (
+                      <li
+                        key={c.engagementId}
+                        className={cn(
+                          c.engagementId === openId && "bg-muted/60",
+                        )}
+                      >
+                        <ConversationRow
+                          conversation={c}
+                          locale={locale}
+                          onOpen={() => openConversation(c.engagementId)}
+                          youPrefix={t("messages_preview_you")}
+                          noMessages={t("messages_no_messages_yet")}
+                          unreadLabel={(n) =>
+                            t("messages_unread_count", { count: n })
+                          }
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </div>
         </div>
 
         <div className="min-w-0 flex-1">
-          {openId ? (
+          {openId === TEAM_CONVERSATION_ID ? (
+            // TeamThread keeps its built-in header here — in the two-pane
+            // layout it plays the same role as EngagementMessages' header.
+            <TeamThread locale={locale} active={expanded} />
+          ) : openId ? (
             <EngagementMessages
               key={openId}
               engagementId={openId}

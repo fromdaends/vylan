@@ -8,20 +8,30 @@
 // the client's name leads, the engagement is the subtitle. Opening a row hosts
 // the existing EngagementMessages thread (which fetches + stamps the firm read
 // pointer on visibility), so this component only owns the list ⇆ thread nav.
+//
+// When the firm has a team, the firm's internal team chat is PINNED at the top
+// of the inbox as its own conversation — the firm's name + logo lead the row
+// like a client would, and opening it hosts the shared TeamChat thread.
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ChevronLeft, Loader2, MessagesSquare } from "lucide-react";
+import { ChevronLeft, Loader2, MessagesSquare, Pin } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { EngagementMessages } from "@/components/engagements/engagement-messages";
+import { TeamThread } from "@/components/assistant/team-thread";
 import type { FirmConversation } from "@/lib/db/client-messages";
+import type { TeamConversation } from "@/lib/db/team-messages";
 
 // Inbox refresh while the panel is open. A touch slower than an open thread —
 // this is a heavier list query and runs on every panel-open, whereas the open
 // conversation (EngagementMessages) polls every few seconds for the live feel.
 const POLL_MS = 10_000;
+
+// The pinned team conversation's slot in `openId`. Engagement ids are UUIDs,
+// so this sentinel can never collide with a real conversation.
+export const TEAM_CONVERSATION_ID = "__team__";
 
 // Deterministic avatar tints so the list reads like a real inbox (different
 // people, different colors) without storing anything. All chosen to sit well
@@ -75,9 +85,11 @@ export function ClientMessagesTab({
   onUnreadTotal?: (total: number) => void;
 }) {
   const t = useTranslations("Assistant");
+  const tTeam = useTranslations("TeamChat");
   const [conversations, setConversations] = useState<FirmConversation[] | null>(
     null,
   );
+  const [team, setTeam] = useState<TeamConversation | null>(null);
   const [failed, setFailed] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
 
@@ -88,9 +100,13 @@ export function ClientMessagesTab({
         setFailed(true);
         return;
       }
-      const data = (await res.json()) as { conversations?: FirmConversation[] };
+      const data = (await res.json()) as {
+        conversations?: FirmConversation[];
+        team?: TeamConversation | null;
+      };
       if (Array.isArray(data.conversations)) {
         setConversations(data.conversations);
+        setTeam(data.team ?? null);
         setFailed(false);
       }
     } catch {
@@ -120,17 +136,23 @@ export function ClientMessagesTab({
     };
   }, [active, load]);
 
-  // Keep the parent's badge in step with the loaded inbox.
+  // Keep the parent's badge in step with the loaded inbox (team included).
   useEffect(() => {
-    if (!conversations) return;
-    const total = conversations.reduce((n, c) => n + c.unreadCount, 0);
+    if (!conversations && !team) return;
+    const total =
+      (conversations ?? []).reduce((n, c) => n + c.unreadCount, 0) +
+      (team?.unreadCount ?? 0);
     onUnreadTotal?.(total);
-  }, [conversations, onUnreadTotal]);
+  }, [conversations, team, onUnreadTotal]);
 
   const openConversation = useCallback((id: string) => {
     setOpenId(id);
     // Opening a thread marks it read — clear its unread optimistically so the
     // badge drops immediately (the next inbox load confirms it).
+    if (id === TEAM_CONVERSATION_ID) {
+      setTeam((prev) => (prev ? { ...prev, unreadCount: 0 } : prev));
+      return;
+    }
     setConversations((prev) =>
       prev
         ? prev.map((c) =>
@@ -144,6 +166,45 @@ export function ClientMessagesTab({
     setOpenId(null);
     void load();
   }, [load]);
+
+  // --- Team thread view ---------------------------------------------------
+  if (openId === TEAM_CONVERSATION_ID) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        {/* Same slim back row as a client thread, but carrying the firm's
+            identity + the team-only reassurance (TeamChat's own header is
+            hidden — this row replaces it). */}
+        <div className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-1.5">
+          <button
+            type="button"
+            onClick={backToInbox}
+            aria-label={t("messages_back_to_inbox")}
+            title={t("messages_back_to_inbox")}
+            className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+          </button>
+          <AvatarInitials
+            src={team?.logoUrl}
+            name={team?.firmName ?? tTeam("thread_title")}
+            size={26}
+            color="#4f46e5"
+          />
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-medium leading-tight text-foreground">
+              {team?.firmName ?? tTeam("thread_title")}
+            </p>
+            <p className="truncate text-[10px] leading-tight text-muted-foreground">
+              {tTeam("team_only")}
+            </p>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1">
+          <TeamThread locale={locale} active={active} hideHeader />
+        </div>
+      </div>
+    );
+  }
 
   // --- Thread view --------------------------------------------------------
   if (openId) {
@@ -216,34 +277,58 @@ export function ClientMessagesTab({
               {t("retry")}
             </Button>
           </div>
-        ) : conversations && conversations.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center">
-            <MessagesSquare
-              className="size-6 text-muted-foreground/60"
-              aria-hidden
-            />
-            <p className="text-sm font-medium text-foreground">
-              {t("messages_inbox_empty")}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {t("messages_inbox_empty_hint")}
-            </p>
-          </div>
         ) : (
-          <ul className="divide-y divide-border/60">
-            {(conversations ?? []).map((c) => (
-              <li key={c.engagementId}>
-                <ConversationRow
-                  conversation={c}
+          <>
+            {team && (
+              <div className="border-b border-border/60">
+                <TeamConversationRow
+                  team={team}
                   locale={locale}
-                  onOpen={() => openConversation(c.engagementId)}
+                  onOpen={() => openConversation(TEAM_CONVERSATION_ID)}
+                  subtitle={tTeam("thread_title")}
                   youPrefix={t("messages_preview_you")}
                   noMessages={t("messages_no_messages_yet")}
                   unreadLabel={(n) => t("messages_unread_count", { count: n })}
                 />
-              </li>
-            ))}
-          </ul>
+              </div>
+            )}
+            {conversations && conversations.length === 0 ? (
+              <div
+                className={cn(
+                  "flex flex-col items-center justify-center gap-2 px-6 text-center",
+                  team ? "py-16" : "h-full",
+                )}
+              >
+                <MessagesSquare
+                  className="size-6 text-muted-foreground/60"
+                  aria-hidden
+                />
+                <p className="text-sm font-medium text-foreground">
+                  {t("messages_inbox_empty")}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {t("messages_inbox_empty_hint")}
+                </p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-border/60">
+                {(conversations ?? []).map((c) => (
+                  <li key={c.engagementId}>
+                    <ConversationRow
+                      conversation={c}
+                      locale={locale}
+                      onOpen={() => openConversation(c.engagementId)}
+                      youPrefix={t("messages_preview_you")}
+                      noMessages={t("messages_no_messages_yet")}
+                      unreadLabel={(n) =>
+                        t("messages_unread_count", { count: n })
+                      }
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -318,6 +403,91 @@ export function ConversationRow({
           className="size-2.5 shrink-0 rounded-full bg-accent"
           role="img"
           aria-label={unreadLabel(c.unreadCount)}
+        />
+      )}
+    </button>
+  );
+}
+
+// The pinned team-chat row: same anatomy as a client conversation (avatar,
+// name, preview, time, unread dot), but the firm's own identity leads and a
+// small pin marks it as the fixture it is. Shared by the popup inbox and the
+// expanded sidebar's list.
+export function TeamConversationRow({
+  team,
+  locale,
+  onOpen,
+  subtitle,
+  youPrefix,
+  noMessages,
+  unreadLabel,
+}: {
+  team: TeamConversation;
+  locale: "fr" | "en";
+  onOpen: () => void;
+  // The "Team chat" line under the firm name (mirrors the engagement subtitle
+  // on client rows).
+  subtitle: string;
+  youPrefix: string;
+  noMessages: string;
+  unreadLabel: (n: number) => string;
+}) {
+  const unread = team.unreadCount > 0;
+  const preview = team.lastMessage
+    ? (team.lastMessage.mine
+        ? youPrefix
+        : `${team.lastMessage.senderName}: `) +
+      team.lastMessage.body.replace(/\s+/g, " ").trim()
+    : noMessages;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+    >
+      <AvatarInitials
+        src={team.logoUrl}
+        name={team.firmName}
+        size={46}
+        color="#4f46e5"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-2">
+          <span
+            className={cn(
+              "truncate text-sm",
+              unread
+                ? "font-semibold text-foreground"
+                : "font-medium text-foreground/90",
+            )}
+          >
+            {team.firmName}
+          </span>
+          <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground">
+            <Pin className="size-3 rotate-45" aria-hidden />
+            {team.lastMessage
+              ? formatRelative(team.lastMessage.createdAt, locale)
+              : null}
+          </span>
+        </span>
+        <span
+          className={cn(
+            "mt-0.5 block truncate text-xs",
+            unread ? "text-foreground/80" : "text-muted-foreground",
+          )}
+        >
+          {preview}
+        </span>
+        <span className="mt-0.5 block truncate text-[11px] text-muted-foreground/70">
+          {subtitle}
+        </span>
+      </span>
+      {unread && (
+        <span
+          className="size-2.5 shrink-0 rounded-full bg-accent"
+          role="img"
+          aria-label={unreadLabel(team.unreadCount)}
         />
       )}
     </button>
