@@ -17,6 +17,7 @@ import {
   toCustomer,
   toTaxCode,
   toItem,
+  listsAreSynced,
 } from "./read";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
 import { quickbooksQuery, QuickbooksError } from "@/lib/quickbooks/client";
@@ -254,5 +255,46 @@ describe("readQuickbooksLists rate-limit handling", () => {
     await vi.runAllTimersAsync();
     const r = await p;
     expect(r.ok && r.data.customers).toBeNull();
+  });
+});
+
+// Regression guard: the cache readers turn zero rows into EMPTY ARRAYS, not
+// null, so a bare truthiness check passes on an unsynced client and a draft is
+// built that matches nothing — every field amber, which reads as "the AI
+// failed" rather than "the lists haven't arrived yet".
+describe("listsAreSynced", () => {
+  const full = {
+    accounts: [{ id: "a1", name: "Supplies", accountType: "Expense", active: true }],
+    vendors: [],
+    customers: [],
+    taxCodes: [],
+    items: [],
+  };
+
+  it("is false for a null cache", () => {
+    expect(listsAreSynced(null)).toBe(false);
+  });
+
+  // THE BUG: truthy object, nothing in it.
+  it("is false for an object of empty arrays", () => {
+    expect(
+      listsAreSynced({
+        accounts: [],
+        vendors: [],
+        customers: [],
+        taxCodes: [],
+        items: [],
+      }),
+    ).toBe(false);
+  });
+
+  it("is false when accounts is null", () => {
+    expect(listsAreSynced({ ...full, accounts: null })).toBe(false);
+  });
+
+  // Accounts are the signal: every organisation has a chart of accounts from
+  // day one, but a genuinely new client can have zero contacts and zero items.
+  it("is true on accounts alone, even with no contacts or items", () => {
+    expect(listsAreSynced(full)).toBe(true);
   });
 });

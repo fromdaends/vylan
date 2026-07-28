@@ -31,6 +31,7 @@ import {
   type TransactionExtraction,
 } from "./transaction-extract";
 import { readCachedQuickbooksListsForFirm } from "@/lib/db/quickbooks-cache";
+import { listsAreSynced } from "@/lib/quickbooks/read";
 import { readCachedXeroListsForFirm } from "@/lib/db/xero-cache";
 import { readLearnedMappingsForFirm } from "@/lib/db/quickbooks-learned";
 import { flagNearDuplicate } from "@/lib/duplicates";
@@ -358,7 +359,15 @@ export async function processClassifyJob(
             : await readCachedQuickbooksListsForFirm(limitFirmId, limitClientId);
         // Only (re)write when we have lists to map against; a transient empty
         // cache must not wipe a previously-good draft.
-        if (cached) {
+        //
+        // listsAreSynced, NOT a bare `if (cached)`: the readers turn zero rows
+        // into EMPTY ARRAYS rather than null, so the object is truthy even when
+        // nothing has synced. Building a draft then produces one with every
+        // field unmatched, which reads to the accountant as "the AI failed"
+        // rather than "the client's lists have not arrived yet" — and it is
+        // routine, because disconnecting a client purges the cache and the
+        // re-sync is a background job.
+        if (listsAreSynced(cached)) {
           // Feature 3: consult the client's remembered corrections before fuzzy
           // matching (service-role read; {} pre-0490, so no behavior change).
           // The learned table is per-client and a client has ONE provider, so the

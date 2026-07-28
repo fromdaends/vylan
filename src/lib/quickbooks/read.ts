@@ -208,3 +208,23 @@ export async function readQuickbooksLists(
   const items = await safeRead(ctx, "Item", toItem);
   return { ok: true, data: { accounts, vendors, customers, taxCodes, items } };
 }
+
+// Has this client's reference cache actually been populated yet?
+//
+// The cache readers return zero rows as EMPTY ARRAYS, not null, so a
+// `if (cached)` guard passes with nothing in it and a draft gets built that
+// matches nothing — every field amber, reading to the accountant as "the AI
+// failed" when the truth is "we had no lists to match against yet". That is
+// exactly what happens in the window after a disconnect/reconnect (disconnect
+// purges the cache) or before a new client's first sync job runs.
+//
+// ACCOUNTS is the signal, not contacts: every accounting organisation has a
+// chart of accounts from the day it is created, whereas a genuinely new client
+// can legitimately have zero contacts and zero items. So no accounts means the
+// sync has not landed, not that the books are empty.
+export function listsAreSynced(
+  lists: QuickbooksLists | null,
+): lists is QuickbooksLists {
+  if (!lists) return false;
+  return (lists.accounts?.length ?? 0) > 0;
+}
