@@ -908,6 +908,12 @@ type Aperture = {
 const HINT_CLEARANCE = 64;
 /** Gap between the top controls and the window's top edge. */
 const CONTROL_GAP = 12;
+/**
+ * Share of the camera frame the guide asks the client to fill, and the guide's
+ * own aspect ratio. The share is the load-bearing one — see apertureFor.
+ */
+const APERTURE_FRAME_SHARE = 0.34;
+const APERTURE_RATIO = 1.4;
 
 export function apertureFor(
   view: { width: number; height: number },
@@ -920,20 +926,44 @@ export function apertureFor(
   insets: { top?: number } = {},
 ): Aperture {
   const margin = Math.round(view.width * 0.05);
-  const width = Math.max(1, view.width - margin * 2);
+  const maxWidth = Math.max(1, view.width - margin * 2);
 
   const topClearance =
     Math.max(0, Number.isFinite(insets.top) ? (insets.top as number) : 0) +
     CONTROL_GAP;
 
-  // Documents are tall rectangles, so the window is too. Sizing it to letter
-  // proportions off the WIDTH left a near-square box that the client had to
-  // back away from to fit a page inside — so take whichever is taller, letter
-  // ratio or a generous share of the screen, and let the window be the tall
-  // shape the thing being photographed actually is.
-  const wanted = Math.max(width * 1.294, view.height * 0.74);
+  // Documents are tall rectangles, so the window is too — but its SIZE is not
+  // a taste decision, it is set by what the detector can actually see.
+  //
+  // Measured: the detector finds the document 100% of the time while the page
+  // (tilted) still fits entirely inside the camera frame, and 0% the moment
+  // one corner crosses the edge. It cannot locate a corner that is not in the
+  // picture. Hit rate against page-area-as-a-share-of-frame:
+  //
+  //     share   0deg   6deg   14deg   25deg
+  //     0.25    100%   100%    100%    100%
+  //     0.35    100%   100%    100%     78%
+  //     0.45    100%   100%     19%      0%
+  //     0.65    100%     0%      0%      0%
+  //
+  // A window at two thirds of the screen therefore INSTRUCTS the client into
+  // the dead zone: they fill it, tilt a few degrees as anyone does hand-held,
+  // a corner leaves the frame and detection stops. That is what produced "the
+  // outline only got detected about ten percent of the time" — and, earlier,
+  // "you have to move the camera far back", which was the same constraint felt
+  // from the other side.
+  //
+  // So the window targets a page occupying ~1/3 of the frame, which holds
+  // ~100% detection through a normal hand's tilt and leaves real margin.
+  const targetArea = view.width * view.height * APERTURE_FRAME_SHARE;
+  const wanted = Math.min(
+    Math.sqrt(targetArea * APERTURE_RATIO),
+    // Never wider than the margins allow, whatever the share works out to.
+    maxWidth * APERTURE_RATIO,
+  );
   const room = Math.max(1, view.height - topClearance - HINT_CLEARANCE);
   const height = Math.max(1, Math.round(Math.min(wanted, room)));
+  const width = Math.max(1, Math.round(Math.min(height / APERTURE_RATIO, maxWidth)));
 
   // Nudged above centre: the eye reads the frame as balanced when the gap
   // below it (which carries the hint) is a little larger than the gap above.
@@ -941,7 +971,13 @@ export function apertureFor(
   const lowest = view.height - height - HINT_CLEARANCE;
   const y = Math.max(topClearance, Math.min(centred, Math.max(topClearance, lowest)));
 
-  return { x: margin, y: Math.max(0, y), width, height, r: 14 };
+  return {
+    x: Math.round((view.width - width) / 2),
+    y: Math.max(0, y),
+    width,
+    height,
+    r: 14,
+  };
 }
 
 function roundedRectPath({ x, y, width, height, r }: Aperture): string {

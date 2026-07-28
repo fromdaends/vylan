@@ -215,18 +215,50 @@ describe("apertureFor — the framing window", () => {
     }
   });
 
-  it("is tall, not near-square — a page must fit without backing the phone off", () => {
-    // The founder's actual complaint: a window at letter proportions off the
-    // WIDTH is squat on a tall phone screen, so the document only fits if you
-    // hold the camera far enough away that the text goes small.
+  it("is tall, not near-square", () => {
+    // A squat window on a tall phone screen reads as "hold it further away".
     const a = apertureFor(phone);
-    expect(a.height / a.width).toBeGreaterThan(1.5);
-    expect(a.height).toBeGreaterThan(phone.height * 0.6);
+    expect(a.height / a.width).toBeGreaterThan(1.3);
   });
 
-  it("uses most of the width", () => {
+  it("asks for a share of the frame the detector can actually see", () => {
+    // THE load-bearing property, and it is measured, not taste. The detector
+    // finds the page 100% of the time while a TILTED page still fits inside
+    // the camera frame, and 0% once a corner crosses the edge — it cannot
+    // locate a corner that is not in the picture. Measured hit rate by the
+    // page's share of the frame:
+    //
+    //     share   0deg   6deg   14deg   25deg
+    //     0.25    100%   100%    100%    100%
+    //     0.35    100%   100%    100%     78%
+    //     0.45    100%   100%     19%      0%
+    //     0.65    100%     0%      0%      0%
+    //
+    // A window at two thirds of the screen instructs the client straight into
+    // the dead zone. Anything at or under ~0.38 keeps a normal hand's tilt in
+    // the 100% band.
+    for (const view of [phone, { width: 393, height: 760 }, { width: 430, height: 932 }]) {
+      const a = apertureFor(view);
+      const share = (a.width * a.height) / (view.width * view.height);
+      expect(share).toBeLessThanOrEqual(0.38);
+      // ...and not so small that it reads as a stamp.
+      expect(share).toBeGreaterThan(0.22);
+    }
+  });
+
+  it("leaves real margin on both sides for a tilted page", () => {
+    // The margin IS the feature: it is the room a rotated corner needs.
     const a = apertureFor(phone);
-    expect(a.width).toBeGreaterThan(phone.width * 0.85);
+    expect(a.x).toBeGreaterThan(phone.width * 0.1);
+    expect(a.x + a.width).toBeLessThan(phone.width * 0.9);
+  });
+
+  it("stays centred horizontally", () => {
+    // Margins equal to within a pixel — an odd leftover cannot be split evenly.
+    const a = apertureFor(phone);
+    const left = a.x;
+    const right = phone.width - (a.x + a.width);
+    expect(Math.abs(left - right)).toBeLessThanOrEqual(1);
   });
 
   it("is portrait, matching the slips this collects", () => {
