@@ -1,9 +1,11 @@
-// Team Wave 3 — file comments + @mentions (migration 0800). Firm-internal
-// comments on an uploaded document. Authenticated (RLS firm-scoped) reads +
-// writes; the client never touches this. Everything degrades gracefully
-// (isMissingFileCommentsSchema) before 0800 is applied to prod (dev uses remote
-// Supabase). Author name is denormalized at write time so the thread survives a
-// teammate's removal.
+// Team Wave 3 — comments + @mentions (migration 0800, targets widened by
+// 0930). Firm-internal comments on an uploaded FILE, a CHECKLIST ITEM
+// (request_item_id), or the ENGAGEMENT itself (both targets null) — one table
+// so RLS, mentions and author plumbing stay shared. Authenticated (RLS
+// firm-scoped) reads + writes; the client never touches this. Everything
+// degrades gracefully (isMissingFileCommentsSchema) before the SQL is applied
+// (dev uses remote Supabase). Author name is denormalized at write time so the
+// thread survives a teammate's removal.
 
 import { getServerSupabase } from "@/lib/supabase/server";
 import { userDisplayLabel } from "@/lib/db/users";
@@ -11,13 +13,19 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type FileComment = {
   id: string;
-  uploadedFileId: string;
+  // At most one of these is set; both null = a comment on the engagement.
+  uploadedFileId: string | null;
+  requestItemId: string | null;
   authorUserId: string | null;
   authorName: string;
   body: string;
   mentions: string[];
   createdAt: string;
 };
+
+// Every read/write returns the same row shape (0930 adds request_item_id).
+const COMMENT_SELECT =
+  "id, uploaded_file_id, request_item_id, author_user_id, author_name, body, mentions, created_at";
 
 // Missing TABLE (PGRST205 / 42P01) or COLUMN (PGRST204 / 42703) — degrade to
 // "not activated yet" until 0800 lands. Match on codes ONLY (repo rule).
@@ -35,7 +43,8 @@ export function isMissingFileCommentsSchema(
 function toComment(row: Record<string, unknown>): FileComment {
   return {
     id: String(row.id),
-    uploadedFileId: String(row.uploaded_file_id ?? ""),
+    uploadedFileId: (row.uploaded_file_id as string | null) ?? null,
+    requestItemId: (row.request_item_id as string | null) ?? null,
     authorUserId: (row.author_user_id as string | null) ?? null,
     authorName: (row.author_name as string | null) ?? "",
     body: (row.body as string | null) ?? "",
@@ -88,9 +97,7 @@ export async function listFileComments(
   const sb = await getServerSupabase();
   const { data, error } = await sb
     .from("file_comments")
-    .select(
-      "id, uploaded_file_id, author_user_id, author_name, body, mentions, created_at",
-    )
+    .select(COMMENT_SELECT)
     .eq("uploaded_file_id", uploadedFileId)
     .order("created_at", { ascending: true });
   if (error) {
@@ -105,63 +112,61 @@ export async function listFileComments(
   return applyLiveAuthorNames(sb, comments);
 }
 
-// All comments for a set of files in ONE query, grouped by file (oldest first
-// within each). For the engagement page, which renders a thread under every
-// file. Empty map pre-0800 / on error.
-export async function listCommentsForFiles(
-  uploadedFileIds: string[],
-): Promise<Map<string, FileComment[]>> {
-  const out = new Map<string, FileComment[]>();
-  if (uploadedFileIds.length === 0) return out;
+// Every comment on the engagement, split by target for the page: per-file
+// threads, per-checklist-item threads, and the engagement-level thread
+// (oldest first within each). Empty pre-0930 / on error.
+export type EngagementComments = {
+  byFile: Map<string, FileComment[]>;
+  byItem: Map<string, FileComment[]>;
+  engagement: FileComment[];
+};
+
+// PURE: split a flat, already-sorted comment list by target. Exported for
+// unit tests.
+export function groupEngagementComments(
+  flat: FileComment[],
+): EngagementComments {
+  const out: EngagementComments = {
+    byFile: new Map(),
+    byItem: new Map(),
+    engagement: [],
+  };
+  for (const c of flat) {
+    if (c.uploadedFileId) {
+      const arr = out.byFile.get(c.uploadedFileId) ?? [];
+      arr.push(c);
+      out.byFile.set(c.uploadedFileId, arr);
+    } else if (c.requestItemId) {
+      const arr = out.byItem.get(c.requestItemId) ?? [];
+      arr.push(c);
+      out.byItem.set(c.requestItemId, arr);
+    } else {
+      out.engagement.push(c);
+    }
+  }
+  return out;
+}
+
+export async function listCommentsForEngagement(
+  engagementId: string,
+): Promise<EngagementComments> {
   const sb = await getServerSupabase();
   const { data, error } = await sb
     .from("file_comments")
-    .select(
-      "id, uploaded_file_id, author_user_id, author_name, body, mentions, created_at",
-    )
-    .in("uploaded_file_id", uploadedFileIds)
+    .select(COMMENT_SELECT)
+    .eq("engagement_id", engagementId)
     .order("created_at", { ascending: true });
   if (error) {
     if (!isMissingFileCommentsSchema(error)) {
-      console.error("[file-comments] listCommentsForFiles failed:", error);
+      console.error("[file-comments] listCommentsForEngagement failed:", error);
     }
-    return out;
+    return groupEngagementComments([]);
   }
   const flat = await applyLiveAuthorNames(
     sb,
     ((data as Array<Record<string, unknown>> | null) ?? []).map(toComment),
   );
-  for (const c of flat) {
-    const arr = out.get(c.uploadedFileId) ?? [];
-    arr.push(c);
-    out.set(c.uploadedFileId, arr);
-  }
-  return out;
-}
-
-// Comment count per file, for the badge on the engagement's file rows. Empty
-// map pre-0800 / on error (the badge just doesn't show).
-export async function countFileComments(
-  uploadedFileIds: string[],
-): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
-  if (uploadedFileIds.length === 0) return out;
-  const sb = await getServerSupabase();
-  const { data, error } = await sb
-    .from("file_comments")
-    .select("uploaded_file_id")
-    .in("uploaded_file_id", uploadedFileIds);
-  if (error) {
-    if (!isMissingFileCommentsSchema(error)) {
-      console.error("[file-comments] countFileComments failed:", error);
-    }
-    return out;
-  }
-  for (const r of (data as Array<Record<string, unknown>> | null) ?? []) {
-    const id = String(r.uploaded_file_id ?? "");
-    out.set(id, (out.get(id) ?? 0) + 1);
-  }
-  return out;
+  return groupEngagementComments(flat);
 }
 
 export type InsertFileCommentResult =
@@ -169,12 +174,14 @@ export type InsertFileCommentResult =
   | { ok: false; error: "schema" | "failed" };
 
 // Insert a comment as the current user (RLS enforces firm + self-authorship +
-// engagement containment). `mentions` should already be sanitized to real firm
-// member ids by the caller.
+// engagement containment). Target: a file, a checklist item, or (neither) the
+// engagement itself — the DB CHECK rejects both at once. `mentions` should
+// already be sanitized to real firm member ids by the caller.
 export async function insertFileComment(input: {
   firmId: string;
   engagementId: string;
-  uploadedFileId: string;
+  uploadedFileId?: string | null;
+  requestItemId?: string | null;
   authorUserId: string;
   authorName: string;
   body: string;
@@ -186,15 +193,14 @@ export async function insertFileComment(input: {
     .insert({
       firm_id: input.firmId,
       engagement_id: input.engagementId,
-      uploaded_file_id: input.uploadedFileId,
+      uploaded_file_id: input.uploadedFileId ?? null,
+      request_item_id: input.requestItemId ?? null,
       author_user_id: input.authorUserId,
       author_name: input.authorName,
       body: input.body,
       mentions: input.mentions,
     })
-    .select(
-      "id, uploaded_file_id, author_user_id, author_name, body, mentions, created_at",
-    )
+    .select(COMMENT_SELECT)
     .single();
   if (error) {
     if (isMissingFileCommentsSchema(error)) return { ok: false, error: "schema" };

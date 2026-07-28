@@ -1,10 +1,14 @@
 "use server";
 
-// Team Wave 3 — file comment actions. Firm members post short comments on an
-// uploaded document and @mention teammates (who get an in-app notification via
-// an activity_log row the Home feed reads). RLS enforces firm + self-authorship;
-// this validates the body, sanitizes mentions to real members, and fans out the
-// notification.
+// Team Wave 3 — comment actions (targets widened by 0930). Firm members post
+// short comments on an uploaded document, a checklist item, or the engagement
+// itself, and @mention teammates (who get an in-app notification via an
+// activity_log row the Home feed reads). RLS enforces firm + self-authorship;
+// this validates the body + target, sanitizes mentions to real members, and
+// fans out the notification.
+//
+// DEPLOY-SKEW: uploadedFileId stays optional-but-accepted in its old shape, so
+// a stale tab posting a file comment against the new server still works.
 
 import { clientName, emitInternalMention } from "@/lib/notifications/emit";
 import { getServerSupabase } from "@/lib/supabase/server";
@@ -31,13 +35,18 @@ export type AddFileCommentResult =
 
 export async function addFileCommentAction(input: {
   engagementId: string;
-  uploadedFileId: string;
+  // At most one of these; neither = a comment on the engagement itself.
+  uploadedFileId?: string | null;
+  requestItemId?: string | null;
   body: string;
   mentions: string[];
 }): Promise<AddFileCommentResult> {
   const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
   if (!user || !firm) return { ok: false, error: "no_session" };
 
+  if (input.uploadedFileId && input.requestItemId) {
+    return { ok: false, error: "bad_target" };
+  }
   const body = (input.body ?? "").trim();
   if (body.length === 0) return { ok: false, error: "empty" };
   if (body.length > 4000) return { ok: false, error: "too_long" };
@@ -52,7 +61,8 @@ export async function addFileCommentAction(input: {
   const res = await insertFileComment({
     firmId: firm.id,
     engagementId: input.engagementId,
-    uploadedFileId: input.uploadedFileId,
+    uploadedFileId: input.uploadedFileId ?? null,
+    requestItemId: input.requestItemId ?? null,
     authorUserId: user.id,
     authorName: userDisplayLabel(user),
     body,
@@ -71,7 +81,8 @@ export async function addFileCommentAction(input: {
   if (mentions.length > 0) {
     try {
       await logUserActivity(firm.id, input.engagementId, "file_comment_mention", {
-        file_id: input.uploadedFileId,
+        file_id: input.uploadedFileId ?? null,
+        request_item_id: input.requestItemId ?? null,
         mentioned_user_ids: mentions,
         author_id: user.id,
       });

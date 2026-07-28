@@ -1618,6 +1618,7 @@
     "xero_encryption_required": "Xero isn't ready for live connections yet."
   },
   "Engagements": {
+    "add_comment": "Add a comment",
     "title": "Engagements",
     "assigned_to": "Assigned to",
     "unassigned": "Unassigned",

@@ -15,12 +15,17 @@ import {
   FileText,
   Loader2,
   Maximize2,
+  MessageSquare,
   MoreVertical,
   RotateCcw,
   Sparkles,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
+import {
+  commentKeyForFile,
+  openCommentComposer,
+} from "@/components/engagements/comment-thread";
 import { toast } from "sonner";
 import {
   deleteFileAction,
@@ -148,6 +153,7 @@ export function FilePreviewRow({
   rejectionCount,
   hideAi = false,
   reviewAction,
+  commentable,
   footer,
 }: {
   file: UploadedFile;
@@ -171,6 +177,9 @@ export function FilePreviewRow({
   reviewAction?:
     | { kind: "reject"; itemId: string; itemLabel: string; fileId: string }
     | { kind: "reopen"; fileId: string };
+  // Team mode: right-click offers "Add a comment", which opens the composer in
+  // this file's CommentThread (rendered by the page in `footer`).
+  commentable?: boolean;
   // Optional content rendered at the bottom of the row, inside the same <li>
   // (e.g. the QuickBooks draft card). Kept inside the li so the list markup
   // stays valid and the content reads as belonging to this file.
@@ -463,6 +472,14 @@ export function FilePreviewRow({
                 {t("file_undo_reject")}
               </DropdownMenuItem>
             )}
+            {commentable && (
+              <DropdownMenuItem
+                onSelect={() => openCommentComposer(commentKeyForFile(file.id))}
+              >
+                <MessageSquare />
+                {t("add_comment")}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               variant="destructive"
@@ -635,6 +652,14 @@ export function FilePreviewRow({
           <ContextMenuItem disabled={reopening} onSelect={reopenFile}>
             <RotateCcw className={cn(reopening && "animate-spin")} />
             {t("file_undo_reject")}
+          </ContextMenuItem>
+        )}
+        {commentable && (
+          <ContextMenuItem
+            onSelect={() => openCommentComposer(commentKeyForFile(file.id))}
+          >
+            <MessageSquare />
+            {t("add_comment")}
           </ContextMenuItem>
         )}
         <ContextMenuSeparator />
