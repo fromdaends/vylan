@@ -148,123 +148,129 @@ export function NotificationRow({
   // count when several occurrences collapsed into this row.
   const contextBits = [item.engagementTitle, item.clientName].filter(Boolean);
 
-  const body = (
-    <div
-      className={cn(
-        "group relative flex items-start gap-3 rounded-lg pr-1 transition-colors",
-        compact ? "px-2 py-2.5" : "px-2 py-3.5",
-        unread ? "bg-primary/[0.04]" : "hover:bg-secondary/40",
-        pending && "opacity-60",
-      )}
-    >
-      {/* Unread accent bar in brand blue — the "blue thing next to it". */}
-      {unread && (
-        <span
-          aria-hidden
-          className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-primary"
-        />
-      )}
-      <span
-        className={cn(
-          "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-          tone,
-        )}
-        aria-hidden
-      >
-        <Icon className="h-4 w-4" />
-      </span>
-
-      <div className="min-w-0 flex-1">
-        <div
-          className={cn(
-            "text-sm leading-snug",
-            unread ? "font-semibold" : "font-medium",
-          )}
-        >
-          {t(item.labelKey as never)}
-          {item.count > 1 && (
-            <span className="ml-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
-              {item.count}
-            </span>
-          )}
-        </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-          {contextBits.map((bit, i) => (
-            <span key={i} className="truncate max-w-[16rem]">
-              {i > 0 && <span aria-hidden className="mr-2">·</span>}
-              {bit}
-            </span>
-          ))}
-          {contextBits.length > 0 && <span aria-hidden>·</span>}
-          <span>{formatRelative(item.createdAt, locale)}</span>
-        </div>
-        {item.note && (
-          <div className="mt-1 line-clamp-2 text-xs italic text-muted-foreground/90">
-            &ldquo;{item.note}&rdquo;
-          </div>
-        )}
-      </div>
-
-      {/* Explicit affordance. Right-click works too, but a menu that ONLY
-          opens on right-click is invisible on touch and to anyone who never
-          tries it. */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={t("row_actions")}
-            onClick={(e) => {
-              // The row is a link; the menu button must not navigate.
-              e.preventDefault();
-              e.stopPropagation();
-            }}
-            className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 opacity-0 transition-opacity hover:bg-secondary hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
-          >
-            <MoreHorizontal className="h-4 w-4" aria-hidden />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44">
-          <DropdownMenuItem
-            onSelect={(e) => {
-              e.preventDefault();
-              toggleRead();
-            }}
-          >
-            {unread ? t("mark_read") : t("mark_unread")}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            variant="destructive"
-            onSelect={(e) => {
-              e.preventDefault();
-              remove();
-            }}
-          >
-            <Trash2 className="h-4 w-4" aria-hidden />
-            {t("delete")}
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <Link
-          href={item.href}
-          className="block"
-          // Opening a notification marks it read, which is what every inbox
-          // does and what makes the badge trustworthy.
-          onClick={() => {
-            if (unread) {
-              onChanged?.(item.id, "read");
-              void setNotificationReadAction({ id: item.id, read: true });
-            }
-          }}
+        <div
+          className={cn(
+            "group relative flex items-start gap-3 rounded-lg pr-1 transition-colors",
+            compact ? "px-2 py-2.5" : "px-2 py-3.5",
+            unread ? "bg-primary/[0.04]" : "hover:bg-secondary/40",
+            pending && "opacity-60",
+          )}
         >
-          {body}
-        </Link>
+          {/* Unread accent bar in brand blue — the "blue thing next to it". */}
+          {unread && (
+            <span
+              aria-hidden
+              className="absolute inset-y-1.5 left-0 w-[3px] rounded-full bg-primary"
+            />
+          )}
+
+          {/*
+            The link and the ⋯ menu are SIBLINGS, deliberately.
+
+            Nesting the button inside the Link (the obvious layout) is invalid
+            HTML — interactive content inside an anchor — and breaks the menu
+            outright: stopping the anchor navigating needs preventDefault, but
+            Radix's asChild trigger composes handlers with
+            checkForDefaultPrevented, so a preventDefault in the child skips
+            Radix's own onClick and the menu never opens.
+          */}
+          <Link
+            href={item.href}
+            className="flex min-w-0 flex-1 items-start gap-3"
+            // Opening a notification marks it read, which is what every inbox
+            // does and what makes the badge trustworthy.
+            onClick={() => {
+              if (unread) {
+                onChanged?.(item.id, "read");
+                void setNotificationReadAction({ id: item.id, read: true });
+              }
+            }}
+          >
+            <span
+              className={cn(
+                "mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+                tone,
+              )}
+              aria-hidden
+            >
+              <Icon className="h-4 w-4" />
+            </span>
+
+            <div className="min-w-0 flex-1">
+              <div
+                className={cn(
+                  "text-sm leading-snug",
+                  unread ? "font-semibold" : "font-medium",
+                )}
+              >
+                {t(item.labelKey as never)}
+                {item.count > 1 && (
+                  <span className="ml-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
+                    {item.count}
+                  </span>
+                )}
+              </div>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                {contextBits.map((bit, i) => (
+                  <span key={i} className="max-w-[16rem] truncate">
+                    {i > 0 && (
+                      <span aria-hidden className="mr-2">
+                        ·
+                      </span>
+                    )}
+                    {bit}
+                  </span>
+                ))}
+                {contextBits.length > 0 && <span aria-hidden>·</span>}
+                <span>{formatRelative(item.createdAt, locale)}</span>
+              </div>
+              {item.note && (
+                <div className="mt-1 line-clamp-2 text-xs italic text-muted-foreground/90">
+                  &ldquo;{item.note}&rdquo;
+                </div>
+              )}
+            </div>
+          </Link>
+
+          {/* Explicit affordance. Right-click works too, but a menu that ONLY
+              opens on right-click is invisible on touch and to anyone who never
+              thinks to try it. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={t("row_actions")}
+                className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground/50 opacity-0 transition-opacity hover:bg-secondary hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+              >
+                <MoreHorizontal className="h-4 w-4" aria-hidden />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  toggleRead();
+                }}
+              >
+                {unread ? t("mark_read") : t("mark_unread")}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  remove();
+                }}
+              >
+                <Trash2 className="h-4 w-4" aria-hidden />
+                {t("delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-44">
         <ContextMenuItem
