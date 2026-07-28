@@ -4,42 +4,31 @@
 // runs under the test DOM (no canvas) nor reliably in a headless browser (a
 // hidden page has rAF paused entirely).
 //
-// This is measured in MILLISECONDS, not frames, and that is the point. The
-// first version required N consecutive good frames, which had two failures on a
-// real phone:
+// THE SHUTTER FIRES ON SUSTAINED DETECTION AND NOTHING ELSE.
 //
-//   * Frame-rate coupling. "Six frames" means 0.6s at 10fps and 0.3s at 20fps,
-//     so tuning the loop's speed silently retuned the shutter.
-//   * All-or-nothing. Four separate conditions all had to hold on the SAME
-//     frame, and ONE marginal reading reset the count to zero. Hand-held, with
-//     four metrics flickering around their thresholds, a run of six was
-//     genuinely hard to hit — so the shutter never fired.
+// Earlier versions also gated firing on light, motion, focus and fill, judged
+// against thresholds that proved untunable from a desk: three rounds on a real
+// phone ended with the founder's "I shouldn't have to have the hands of a
+// surgeon" — which is the requirement, verbatim. So if the scanner can SEE a
+// document, and has kept seeing it for long enough to rule out a swing-past,
+// it shoots. Shake included. A slightly soft capture is recoverable — the
+// review screen offers Retake and the server-side AI rejects genuinely
+// unusable files with a reason — whereas a shutter that never fires is not.
+// The quality metrics still exist, but only as on-screen ADVICE.
 //
-// Confidence now ACCUMULATES while the frame looks good and DRAINS while it
-// does not, so a single marginal frame costs progress instead of erasing it.
+// Measured in MILLISECONDS, not frames: counting frames coupled the shutter to
+// the loop's speed, so tuning one silently retuned the other.
 
 import { type Guidance } from "./frame-metrics";
 
 export type ShutterState = {
-  /** Milliseconds of accumulated "this frame is worth shooting" credit. */
-  readyMs: number;
+  /** Milliseconds of accumulated detection credit. */
+  detectedMs: number;
   /** Milliseconds since a document was last seen. */
   missMs: number;
 };
 
-export const INITIAL_SHUTTER: ShutterState = { readyMs: 0, missMs: 0 };
-
-/**
- * How fast credit drains, as a multiple of real time.
- *
- * Draining faster than it fills means a client who is mostly-but-not-quite
- * steady never creeps up to the threshold; draining too fast reproduces the
- * all-or-nothing bug. 1.5x costs a marginal frame more than it earned without
- * wiping the run.
- */
-const DRAIN_FRAMED = 1.5;
-/** Losing the document entirely is a stronger signal, so it drains faster. */
-const DRAIN_LOST = 2.5;
+export const INITIAL_SHUTTER: ShutterState = { detectedMs: 0, missMs: 0 };
 
 /** What the caller should do with the outline this frame. */
 export type OutlineAction =
@@ -59,7 +48,7 @@ export type ShutterStep = {
    * good" and "Point at your document" on a single dropped frame.
    */
   documentPresent: boolean;
-  /** The guidance to show for this frame. */
+  /** The guidance to show for this frame — ADVICE only, it gates nothing. */
   guidance: Guidance;
   /** 0..1, for a progress ring or a debug readout. */
   progress: number;
@@ -75,65 +64,59 @@ export function advanceShutter(
     /**
      * Produces the guidance for this frame. Taken as a function because
      * whether a document counts as "present" depends on the grace window this
-     * reducer owns, and guidance in turn decides whether credit accrues — so
-     * the two have to be resolved together rather than by the caller.
+     * reducer owns. The result is shown to the client; it does NOT gate the
+     * shutter.
      */
     guidanceFor: (documentPresent: boolean) => Guidance;
     /** Real time since the previous analysed frame. */
     elapsedMs: number;
-    /** How long the outline survives after the document is lost. */
+    /** How long the outline (and the credit) survives a detection dropout. */
     graceMs: number;
-    /** Accumulated good time before the shutter fires. */
-    requiredReadyMs: number;
+    /** Accumulated detection time before the shutter fires. */
+    requiredDetectedMs: number;
   },
 ): ShutterStep {
-  const { detected, guidanceFor, graceMs, requiredReadyMs } = input;
+  const { detected, guidanceFor, graceMs, requiredDetectedMs } = input;
   // A hidden tab, a stalled decode or a debugger pause can hand us a gap of
-  // several seconds; crediting or draining all of it would either fire on a
-  // frame nobody was looking at or wipe a good run. Treat a long gap as one
-  // ordinary step.
+  // several seconds; crediting all of it would fire on a frame nobody was
+  // looking at. Treat a long gap as one ordinary step.
   const elapsed =
     Number.isFinite(input.elapsedMs) && input.elapsedMs > 0
       ? Math.min(input.elapsedMs, 250)
       : 0;
 
-  const required = requiredReadyMs > 0 ? requiredReadyMs : Infinity;
+  const required = requiredDetectedMs > 0 ? requiredDetectedMs : Infinity;
 
-  if (!detected) {
-    const missMs = prev.missMs + elapsed;
-    const documentPresent = missMs <= graceMs;
+  if (detected) {
+    const detectedMs = prev.detectedMs + elapsed;
+    const fire = detectedMs >= required;
     return {
-      state: {
-        readyMs: Math.max(0, prev.readyMs - elapsed * DRAIN_LOST),
-        missMs,
-      },
-      outline: documentPresent ? "hold" : "clear",
-      documentPresent,
-      guidance: guidanceFor(documentPresent),
-      progress: clamp01(
-        Math.max(0, prev.readyMs - elapsed * DRAIN_LOST) / required,
-      ),
-      fire: false,
+      // Firing spends the credit: without this the next frame fires again
+      // immediately and the client gets a burst of near-identical photos,
+      // each its own upload and its own AI check.
+      state: { detectedMs: fire ? 0 : detectedMs, missMs: 0 },
+      outline: "update",
+      documentPresent: true,
+      guidance: guidanceFor(true),
+      progress: fire ? 1 : clamp01(detectedMs / required),
+      fire,
     };
   }
 
-  const guidance = guidanceFor(true);
-  const readyMs =
-    guidance === "ready"
-      ? prev.readyMs + elapsed
-      : Math.max(0, prev.readyMs - elapsed * DRAIN_FRAMED);
-
-  const fire = readyMs >= required;
+  const missMs = prev.missMs + elapsed;
+  const withinGrace = missMs <= graceMs;
+  // Within the grace window the credit HOLDS rather than draining. Shake blurs
+  // the frame, blur drops detection for a few frames, and draining on every
+  // dropout is precisely what made a shaky hand unable to fire — the founder's
+  // complaint. Past the window the document is genuinely gone: start over.
+  const detectedMs = withinGrace ? prev.detectedMs : 0;
   return {
-    // Firing spends the credit: without this the next frame fires again
-    // immediately and the client gets a burst of near-identical photos, each
-    // its own upload and its own AI check.
-    state: { readyMs: fire ? 0 : readyMs, missMs: 0 },
-    outline: "update",
-    documentPresent: true,
-    guidance,
-    progress: fire ? 1 : clamp01(readyMs / required),
-    fire,
+    state: { detectedMs, missMs },
+    outline: withinGrace ? "hold" : "clear",
+    documentPresent: withinGrace,
+    guidance: guidanceFor(withinGrace),
+    progress: clamp01(detectedMs / required),
+    fire: false,
   };
 }
 
