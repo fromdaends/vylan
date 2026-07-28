@@ -365,6 +365,12 @@ export const DOC_TYPE_LABELS: Record<DocType, DocTypeMeta> = {
     group: "bookkeeping",
     ai: "fiscal year-end inventory count/valuation.",
   },
+  processor_statement: {
+    en: "Payment processor statements",
+    fr: "Relevés de processeur de paiement",
+    group: "bookkeeping",
+    ai: "Payout/settlement statement from a PAYMENT PROCESSOR (Stripe, Square, PayPal, Shopify Payments, Moneris, Clover, Helcim). Shows a period's gross sales, refunds, processing fees and the NET amount deposited to the bank — the deposit the bank feed shows as one lump sum. NOT a bank or credit-card statement (those list many unrelated transactions with a running balance).",
+  },
 
   // ── Other ───────────────────────────────────────────────────────────────
   other: {

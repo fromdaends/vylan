@@ -20,6 +20,12 @@ import {
 import { shouldActOnUsability } from "./usability";
 import { expectedYearFromTitle } from "./matching";
 import {
+  extractPayout,
+  shouldExtractPayout,
+  type PayoutExtraction,
+} from "./processor-payout";
+import { reconcilePayout } from "./payout-reconcile";
+import {
   extractTransaction,
   shouldExtractTransaction,
   type TransactionExtraction,
@@ -208,6 +214,34 @@ export async function processClassifyJob(
     }
   }
 
+  // Payment-processor payout split. A Stripe/Square/PayPal statement is the one
+  // bookkeeping document a bank feed genuinely cannot handle: the feed shows a
+  // single net deposit while the books need gross sales, refunds and fees
+  // separated. Gated on the DOC TYPE only (not on a bookkeeping connection):
+  // the reconciliation is useful to any firm, and the trigger is already narrow
+  // enough that this never fires off-target. Best-effort — any failure leaves
+  // payout null and the core classification is untouched.
+  let payout: {
+    extraction: PayoutExtraction;
+    reconciliation: ReturnType<typeof reconcilePayout>;
+  } | null = null;
+  const ranPayoutPass = shouldExtractPayout(
+    expectedDocType,
+    result.document_type,
+  );
+  if (ranPayoutPass) {
+    try {
+      const extraction = await extractPayout({ fileBytes: bytes, mimeType });
+      if (extraction) {
+        // The model transcribed; CODE decides whether the split holds.
+        payout = { extraction, reconciliation: reconcilePayout(extraction) };
+      }
+    } catch (err) {
+      console.warn("[classify] payout extract failed:", err);
+      payout = null;
+    }
+  }
+
   // ai_rejected is intentionally NOT set here. Phase 3's routing logic
   // decides whether the system actually auto-rejects this upload based
   // on the firm's auto_reject_unusable_docs flag + the strike counter.
@@ -242,6 +276,9 @@ export async function processClassifyJob(
         // Stage 3 (Phase 1): transaction-grade fields for receipts/invoices at
         // QuickBooks-connected firms (null otherwise). Feeds the Phase-2 mapper.
         transaction,
+        // Payment-processor payout: the transcribed figures PLUS the code-side
+        // reconciliation verdict (null for every other document type).
+        payout,
       },
       ai_usability: result.usability,
     })
