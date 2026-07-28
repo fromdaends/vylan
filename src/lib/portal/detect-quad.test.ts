@@ -1588,3 +1588,47 @@ describe("stabiliseQuad — the outline must not snap back and forth", () => {
     expect(s.candidateRuns).toBe(1);
   });
 });
+
+describe("stabiliseQuad — the noise floor", () => {
+  const sq = (x: number, y: number, s = 100): Quad =>
+    [
+      { x, y },
+      { x: x + s, y },
+      { x: x + s, y: y + s },
+      { x, y: y + s },
+    ] as unknown as Quad;
+  const OPTS = { alpha: 0.5, jumpDistance: 40, adoptAfter: 3, deadZone: 2 };
+
+  it("ignores a jitter of a pixel or two entirely", () => {
+    // At 20fps a detector reporting the same corner 1px left then 1px right
+    // redraws the outline 20 times a second forever — the residual jitter once
+    // the big jumps are handled.
+    let s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(100, 100), OPTS);
+    const settled = s.shown;
+    for (let i = 0; i < 20; i++) {
+      s = stabiliseQuad(s, sq(100 + (i % 2 ? 1 : -1), 100), OPTS);
+      // Identity preserved: the caller can skip the re-render entirely.
+      expect(s.shown).toBe(settled);
+    }
+  });
+
+  it("still follows movement just past the floor", () => {
+    let s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(100, 100), OPTS);
+    s = stabiliseQuad(s, sq(110, 100), OPTS);
+    expect(s.shown![0].x).toBeGreaterThan(100);
+  });
+
+  it("keeps the far-jump rule working through the dead zone", () => {
+    let s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(0, 0), OPTS);
+    s = stabiliseQuad(s, sq(300, 300), OPTS);
+    expect(s.shown![0].x).toBe(0); // still a claim, not adopted
+    expect(s.candidateRuns).toBe(1);
+  });
+
+  it("behaves exactly as before when no dead zone is given", () => {
+    const noDead = { alpha: 0.5, jumpDistance: 40, adoptAfter: 3 };
+    let s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(100, 100), noDead);
+    s = stabiliseQuad(s, sq(101, 100), noDead);
+    expect(s.shown![0].x).toBeCloseTo(100.5, 5);
+  });
+});

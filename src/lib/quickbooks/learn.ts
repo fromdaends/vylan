@@ -11,6 +11,7 @@
 // KEY is recomputed with the SAME learnKeyForName / taxSource the matcher uses, so
 // a write and a later lookup line up by construction.
 
+import { effectiveMapping } from "@/lib/quickbooks/draft-resolve";
 import {
   learnKeyForName,
   type LearnSignal,
@@ -109,6 +110,74 @@ export function learnedWritesFromResolve(
         });
       }
     }
+  }
+
+  return writes;
+}
+
+// What an APPROVAL teaches.
+//
+// learnedWritesFromResolve only fires on a genuine CORRECTION — a field the
+// accountant actively changed. That left the commonest case teaching nothing:
+// the AI guesses right, the accountant approves, and the next document from the
+// same supplier is guessed from scratch again. Hubdoc closes this with a "save
+// configuration" tick on the first document from a supplier; approving IS our
+// equivalent of that tick, so approval records the EFFECTIVE values — the
+// accountant's own picks where they made them, the AI's match where they looked
+// at it and let it stand.
+//
+// This is a deliberate widening of "we learn ONLY genuine picks": approving a
+// draft is itself the genuine pick. The cost is that approving without reading
+// carefully teaches whatever was on screen — an accepted trade, since that
+// draft was about to be posted to the real books anyway.
+//
+// SPLIT LINES ARE DELIBERATELY EXCLUDED. A line the accountant actually chose
+// is already learned by the resolve path, and the rest of the map is seeded
+// from the AI's own guesses (see the note on the lineAccounts branch above) —
+// they are not on screen the way the header fields are, so an approval is not
+// evidence anyone looked at them.
+export function learnedWritesFromApproval(
+  suggestion: TransactionSuggestion,
+  resolved: ResolvedEntry | null,
+): LearnedWrite[] {
+  const writes: LearnedWrite[] = [];
+  const partySource = suggestion.partySource ?? null;
+  const eff = effectiveMapping(suggestion, resolved);
+
+  if (eff.party && suggestion.partyKind && partySource) {
+    const key = learnKeyForName(partySource);
+    if (key) {
+      writes.push({
+        signalType: suggestion.partyKind,
+        sourceKey: key,
+        sourceSample: partySource,
+        target: { id: eff.party.id, name: eff.party.name },
+      });
+    }
+  }
+
+  // Same expenses-only gate as the resolve path: on an income draft the account
+  // isn't the posting target (the item is), and an unknown direction is too
+  // ambiguous to generalize from.
+  if (eff.account && suggestion.direction === "expense" && partySource) {
+    const key = learnKeyForName(partySource);
+    if (key) {
+      writes.push({
+        signalType: "expense_account",
+        sourceKey: key,
+        sourceSample: partySource,
+        target: { id: eff.account.id, name: eff.account.name },
+      });
+    }
+  }
+
+  if (eff.taxCode && suggestion.taxSource) {
+    writes.push({
+      signalType: "tax",
+      sourceKey: suggestion.taxSource,
+      sourceSample: suggestion.taxSource,
+      target: { id: eff.taxCode.id, name: eff.taxCode.name },
+    });
   }
 
   return writes;

@@ -15,6 +15,8 @@ import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getDraftForFile, setDraftStatus } from "@/lib/db/quickbooks-suggestions";
 import { logUserActivity } from "@/lib/db/activity";
+import { recordLearnedMapping } from "@/lib/db/quickbooks-learned";
+import { learnedWritesFromApproval } from "@/lib/quickbooks/learn";
 import {
   isDraftStatus,
   canTransitionDraft,
@@ -112,6 +114,36 @@ export async function POST(
   // resolve/route.ts). revalidatePath is synchronous and won't throw.
   for (const loc of LOCALES) {
     revalidatePath(`/${loc}/engagements/${draft.engagementId}`);
+  }
+
+  // APPROVING TEACHES. Until now only a correction was remembered, so the
+  // commonest case — the AI guessed right and the accountant just approved —
+  // taught nothing and the next document from that supplier was guessed from
+  // scratch. Approving records the effective vendor / expense account / tax so
+  // the memory builds from the FIRST document, not only from mistakes.
+  //
+  // clientId is load-bearing (see the resolve route): the readers filter on it,
+  // so omitting it writes where nothing looks. Best-effort — learning must
+  // never fail an approval that already applied.
+  if (target === "approved" && draft.suggestion) {
+    try {
+      const writes = learnedWritesFromApproval(draft.suggestion, draft.resolved);
+      await Promise.all(
+        writes.map((w) =>
+          recordLearnedMapping({
+            firmId: draft.firmId,
+            clientId: draft.clientId,
+            signalType: w.signalType,
+            sourceKey: w.sourceKey,
+            sourceSample: w.sourceSample,
+            target: w.target,
+            reviewerId: auth.user.id,
+          }),
+        ),
+      );
+    } catch (err) {
+      console.warn("[quickbooks] learn-from-approval failed:", err);
+    }
   }
 
   // Audit trail (best-effort: a failure here must not fail an applied status).
