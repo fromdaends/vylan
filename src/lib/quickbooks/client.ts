@@ -668,6 +668,59 @@ const NAME_KIND_RESPONSE_KEY: Record<QboNameKind, string> = {
   customer: "Customer",
 };
 
+// CREATE a JournalEntry (the payout split). The payload builder owns the line
+// shapes — every line carries an explicit PostingType and a positive Amount.
+// Returns the new entry's QuickBooks id. Throws a typed QuickbooksError.
+export async function quickbooksCreateJournalEntry(
+  ctx: {
+    accessToken: string;
+    realmId: string;
+    environment?: QuickbooksEnvironment;
+  },
+  payload: Record<string, unknown>,
+): Promise<{ id: string }> {
+  const url =
+    `${quickbooksApiBaseUrl(ctx.environment)}/v3/company/${encodeURIComponent(ctx.realmId)}` +
+    `/journalentry?minorversion=${QBO_MINORVERSION}`;
+  const res = await fetchQboWithRetry(
+    () =>
+      fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${ctx.accessToken}`,
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+        signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+      }),
+    "create journalentry",
+  );
+  const json = (await res.json().catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  if (!res.ok) {
+    throw new QuickbooksError(
+      "write_failed",
+      `QuickBooks journal entry create failed (${res.status}): ${
+        extractFault(json) ?? "unknown error"
+      }`,
+      res.status,
+    );
+  }
+  const entry = json?.JournalEntry as Record<string, unknown> | undefined;
+  const id = entry?.Id;
+  if (typeof id !== "string" || !id) {
+    throw new QuickbooksError(
+      "write_failed",
+      "QuickBooks journal entry create returned no Id",
+    );
+  }
+  return { id };
+}
+
 // CREATE a Vendor or Customer from just a display name. Returns the new {id, name}
 // (QuickBooks may normalize the stored DisplayName). Throws a typed QuickbooksError
 // on any failure; a duplicate name surfaces as QBO code 6240 in the message so the

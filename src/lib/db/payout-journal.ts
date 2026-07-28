@@ -210,3 +210,81 @@ export async function setPayoutJournalStatus(input: {
   }
   return "ok";
 }
+
+/** Record a successful post. Idempotency is enforced by the caller reading
+ * status first; this is the write that makes it permanent. */
+export async function recordPayoutJournalPosted(input: {
+  firmId: string;
+  uploadedFileId: string;
+  postedRef: string;
+  postedLink: string | null;
+  userId: string | null;
+}): Promise<"ok" | "error"> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("payout_journal_drafts")
+    .update({
+      status: "posted",
+      posted_ref: input.postedRef,
+      posted_link: input.postedLink,
+      posted_by: input.userId,
+      posted_at: new Date().toISOString(),
+      post_error: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("firm_id", input.firmId)
+    .eq("uploaded_file_id", input.uploadedFileId);
+  if (error) {
+    console.error("[payout-journal] posted write failed:", error.message);
+    return "error";
+  }
+  return "ok";
+}
+
+/** Record a FAILED post attempt so the accountant sees why. Leaves the status
+ * at 'approved' so a retry is possible. */
+export async function recordPayoutJournalPostError(input: {
+  firmId: string;
+  uploadedFileId: string;
+  error: string;
+}): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("payout_journal_drafts")
+    .update({
+      post_error: input.error.slice(0, 500),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("firm_id", input.firmId)
+    .eq("uploaded_file_id", input.uploadedFileId);
+  if (error) {
+    console.error("[payout-journal] error write failed:", error.message);
+  }
+}
+
+/** One draft with the scope fields the post path needs. */
+export async function getPayoutJournalForFile(
+  uploadedFileId: string,
+): Promise<(PayoutJournalDraft & { firmId: string; clientId: string }) | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("payout_journal_drafts")
+    .select(`${SELECT}, firm_id, engagements(client_id)`)
+    .eq("uploaded_file_id", uploadedFileId)
+    .maybeSingle();
+  if (error || !data) {
+    if (error && !isPayoutJournalSchemaMissing(error)) {
+      console.error("[payout-journal] file read failed:", error.message);
+    }
+    return null;
+  }
+  const row = data as Record<string, unknown>;
+  const eng = row.engagements as { client_id?: unknown } | null;
+  const clientId = typeof eng?.client_id === "string" ? eng.client_id : "";
+  if (!clientId) return null;
+  return {
+    ...rowToDraft(row),
+    firmId: row.firm_id as string,
+    clientId,
+  };
+}

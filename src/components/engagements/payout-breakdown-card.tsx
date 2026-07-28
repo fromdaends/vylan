@@ -26,6 +26,8 @@ export type PayoutCardData = {
   processor: string | null;
   periodStart: string | null;
   periodEnd: string | null;
+  /** Arrival/deposit date, when the statement printed one. Dates the entry. */
+  payoutDate: string | null;
   currency: string | null;
   findings: PayoutFinding[];
   reconciles: boolean;
@@ -79,6 +81,7 @@ export function payoutCardData(
     processor: str(e.processor),
     periodStart: str(e.periodStart),
     periodEnd: str(e.periodEnd),
+    payoutDate: str(e.payoutDate),
     currency: str(e.currency),
     findings: Array.isArray(r.findings) ? (r.findings as PayoutFinding[]) : [],
     reconciles: r.reconciles === true,

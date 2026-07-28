@@ -1477,6 +1477,13 @@ async function ItemRow({
                               accounts={qboOptions.accounts}
                               locale={locale}
                               postedLink={journal.postedLink}
+                              postedRef={journal.postedRef}
+                              postError={journal.postError}
+                              processor={payoutCard.processor}
+                              periodStart={payoutCard.periodStart}
+                              periodEnd={payoutCard.periodEnd}
+                              payoutDate={payoutCard.payoutDate}
+                              provider={journal.provider}
                             />
                           ) : undefined
                         }

@@ -295,3 +295,33 @@ export async function purgeXeroCache(
 
 // Re-export for the sync module (which writes each read list per entity).
 export type { XeroReadRows };
+
+/**
+ * Xero AccountID -> AccountCode for one client, from the cached account list.
+ *
+ * Manual journals address lines by CODE, while Vylan's unified account list
+ * (and therefore a saved payout mapping) carries the AccountID. This bridges
+ * the two at post time. Accounts with no code — some bank accounts genuinely
+ * have none — are simply absent, and the payload builder refuses rather than
+ * posting a partial journal.
+ */
+export async function readXeroAccountCodes(
+  clientId: string,
+): Promise<Map<string, string>> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("xero_accounts")
+    .select("xero_id, code")
+    .eq("client_id", clientId);
+  if (error) {
+    console.error("[xero] account code read failed:", error.message);
+    return new Map();
+  }
+  const out = new Map<string, string>();
+  for (const row of data ?? []) {
+    const id = row.xero_id as string | null;
+    const code = (row.code as string | null)?.trim();
+    if (id && code) out.set(id, code);
+  }
+  return out;
+}
