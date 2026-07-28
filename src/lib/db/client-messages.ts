@@ -360,6 +360,12 @@ const CONVERSATION_LIVE_STATUSES = new Set(["sent", "in_progress"]);
 // a thread (history to show); draft/other engagements without a thread are left
 // out. Rows sort by most recent activity, so live-but-silent engagements fall
 // below the ones with real messages.
+//
+// ARCHIVED CLIENTS ARE EXCLUDED. Archiving a client stamps clients.archived_at
+// and nothing else — it deliberately does NOT archive that client's engagements
+// — so filtering on the engagement's own flags (which is all this did) left
+// every archived client's conversations sitting in the inbox and still feeding
+// the unread badge. Restoring the client brings them straight back.
 export function buildFirmConversations(
   engagements: {
     id: string;
@@ -367,6 +373,11 @@ export function buildFirmConversations(
     status: string;
     clientName: string | null;
     createdAt: string;
+    // Optional so callers that predate this (and any environment where the
+    // column doesn't come back) keep working. Undefined therefore has to mean
+    // "not archived": failing OPEN shows a conversation that could have been
+    // hidden, while failing closed would silently swallow live client threads.
+    clientArchivedAt?: string | null;
   }[],
   threads: { engagement_id: string; firm_last_read_at: string | null }[],
   // Newest-first, as the DB returns them.
@@ -409,6 +420,9 @@ export function buildFirmConversations(
 
   const rows: FirmConversation[] = [];
   for (const e of engagements) {
+    // An archived client is off the board entirely — history included. Checked
+    // before the thread test so even a conversation with real messages goes.
+    if (e.clientArchivedAt) continue;
     const hasThread = readAtByEng.has(e.id);
     if (!hasThread && !CONVERSATION_LIVE_STATUSES.has(e.status)) continue;
     const last = lastByEng.get(e.id) ?? null;
@@ -454,10 +468,12 @@ export async function listFirmConversations(
   }[];
 
   // Active-scope engagements (same lifecycle scope as the board/selector) with
-  // the client display name.
+  // the client's display name and archive stamp. The `.is()` filters below are
+  // the ENGAGEMENT's own flags; archiving a CLIENT never sets those, so the
+  // client's stamp comes back here and buildFirmConversations drops its rows.
   const engRes = await sb
     .from("engagements")
-    .select("id, title, status, created_at, clients(display_name)")
+    .select("id, title, status, created_at, clients(display_name, archived_at)")
     .is("deleted_at", null)
     .is("archived_at", null)
     .order("created_at", { ascending: false })
@@ -468,21 +484,27 @@ export async function listFirmConversations(
     title: string;
     status: string;
     created_at: string;
-    clients: { display_name: string | null } | null;
+    clients: { display_name: string | null; archived_at: string | null } | null;
   };
   const engagements = ((engRes.data ?? []) as unknown as EngRow[]).map((e) => ({
     id: e.id,
     title: e.title,
     status: e.status,
     clientName: e.clients?.display_name ?? null,
+    clientArchivedAt: e.clients?.archived_at ?? null,
     createdAt: e.created_at,
   }));
 
-  // Only pull messages for engagements we'll actually show (threaded or live).
+  // Only pull messages for engagements we'll actually show (threaded or live,
+  // and not belonging to an archived client). Excluding the archived ones here
+  // matters beyond saving a read: this query is capped, so their history would
+  // otherwise eat room that a live conversation's last message needs.
   const threadEngIds = new Set(threads.map((t) => t.engagement_id));
   const relevantIds = engagements
     .filter(
-      (e) => threadEngIds.has(e.id) || CONVERSATION_LIVE_STATUSES.has(e.status),
+      (e) =>
+        !e.clientArchivedAt &&
+        (threadEngIds.has(e.id) || CONVERSATION_LIVE_STATUSES.has(e.status)),
     )
     .map((e) => e.id);
   if (relevantIds.length === 0) return [];
