@@ -50,11 +50,13 @@ export default async function DashboardPage({
       getCurrentFirm(),
       listActiveFirmUsers(),
       listTemplates(),
-      // The compact bell panel owns scrolling, so supply every recent event
-      // instead of truncating the feed behind a separate "View all" route.
-      // The feed is a nice-to-have glance — never let it crash the whole
+      // ONLY "While you were away" reads this now — the bell moved to the
+      // stored notifications table. That banner shows what changed since this
+      // device last looked, so it needs a recent window, not the 1000 rows the
+      // old scrolling bell panel asked for.
+      // The banner is a nice-to-have glance — never let it crash the whole
       // Overview. On any failure it degrades to empty (and logs for follow-up).
-      listHomeNotifications(1000, viewer).catch((e) => {
+      listHomeNotifications(60, viewer).catch((e) => {
         console.error("[dashboard] home notifications failed:", e);
         return [];
       }),
