@@ -809,6 +809,20 @@ function SidebarBody({
               color={item.color}
             />
           ))}
+          {/* Document filing — its own top-level tab (founder), promoted out of
+              the Integrations sub-list where it was the least discoverable thing
+              in the sidebar. Sits ABOVE Engagements (founder), so the plain
+              links stay together and the two expandable sections (Engagements,
+              Integrations) sit below them. Cyan, since Templates directly above
+              already owns the filing feature's amber. Desktop only — the mobile
+              tab bar stays at its deliberate three tabs + Account. */}
+          <NavLink
+            href="/integrations/filing"
+            icon={FolderUp}
+            label={labels.integrationsFiling}
+            collapsed={collapsed}
+            color="text-icon-cyan"
+          />
           {/* Engagements is an expandable section (Active / Ready / Drafts /
               Completed / Archived / Cancelled / Recently deleted) rather than a
               plain link. Inserted after the primary destinations. */}
@@ -817,20 +831,6 @@ function SidebarBody({
             badges={engagementBadges}
             collapsed={collapsed}
             bookkeepingConnected={quickbooksConnected || xeroConnected}
-          />
-          {/* Document filing — its own top-level tab (founder), promoted out of
-              the Integrations sub-list where it was the least discoverable thing
-              in the sidebar. Sits here rather than up in primaryNav so it groups
-              with Integrations: everything above is the WORK, these last two are
-              where the finished documents go. Cyan, since Templates already owns
-              the filing feature's amber. Desktop only — the mobile tab bar stays
-              at its deliberate three tabs + Account. */}
-          <NavLink
-            href="/integrations/filing"
-            icon={FolderUp}
-            label={labels.integrationsFiling}
-            collapsed={collapsed}
-            color="text-icon-cyan"
           />
           {/* Integrations hub — an expandable section mirroring Engagements:
               the label links to the /integrations index, the chevron reveals the
