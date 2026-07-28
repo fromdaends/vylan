@@ -47,6 +47,7 @@ import {
 } from "@/lib/quickbooks/payout-journal";
 import type { PayoutFigures } from "@/lib/ai/payout-reconcile";
 import {
+  postPayoutJournalAction,
   setPayoutJournalAccountAction,
   setPayoutJournalStatusAction,
 } from "@/app/actions/payout-journal";
@@ -60,6 +61,14 @@ export type PayoutJournalProps = {
   accounts: { id: string; name: string }[];
   locale: AppLocale;
   postedLink: string | null;
+  postedRef: string | null;
+  postError: string | null;
+  // Memo + date inputs for the ledger entry, from the stored extraction.
+  processor: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  payoutDate: string | null;
+  provider: "quickbooks" | "xero";
 };
 
 // Every role the accountant can map, with the copy for each. Optional roles
@@ -198,6 +207,13 @@ export function PayoutJournalSection({
   accounts,
   locale,
   postedLink,
+  postedRef,
+  postError,
+  processor,
+  periodStart,
+  periodEnd,
+  payoutDate,
+  provider,
 }: PayoutJournalProps) {
   const router = useRouter();
   const fr = locale === "fr";
@@ -265,6 +281,41 @@ export function PayoutJournalSection({
       router.refresh();
     });
   }
+
+  function post() {
+    startSaving(async () => {
+      const res = await postPayoutJournalAction({
+        engagementId,
+        uploadedFileId,
+        processor,
+        periodStart,
+        periodEnd,
+        payoutDate,
+      });
+      if (res.ok) {
+        toast.success(
+          fr ? "Écriture comptabilisée." : "Entry posted to the ledger.",
+        );
+        router.refresh();
+        return;
+      }
+      toast.error(
+        res.error === "missing_account_codes"
+          ? fr
+            ? `Ces comptes n'ont pas de code Xero : ${(res.accountNames ?? []).join(", ")}`
+            : `These accounts have no Xero code: ${(res.accountNames ?? []).join(", ")}`
+          : res.error === "not_connected"
+            ? fr
+              ? "La connexion comptable doit être rétablie."
+              : "The bookkeeping connection needs reconnecting."
+            : res.message ||
+              (fr ? "La comptabilisation a échoué." : "Posting failed."),
+      );
+      router.refresh();
+    });
+  }
+
+  const ledgerName = provider === "xero" ? "Xero" : "QuickBooks";
 
   return (
     <div className="mt-2.5 border-t border-border/50 pt-2.5">
@@ -373,15 +424,20 @@ export function PayoutJournalSection({
                 {fr ? "Voir dans le grand livre" : "View in the ledger"}
               </a>
             ) : status === "approved" ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setStatus("draft")}
-                disabled={saving}
-              >
-                {saving && <Loader2 className="animate-spin" />}
-                {fr ? "Rouvrir" : "Reopen"}
-              </Button>
+              <span className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setStatus("draft")}
+                  disabled={saving}
+                >
+                  {fr ? "Rouvrir" : "Reopen"}
+                </Button>
+                <Button size="sm" onClick={post} disabled={saving}>
+                  {saving && <Loader2 className="animate-spin" />}
+                  {fr ? `Comptabiliser dans ${ledgerName}` : `Post to ${ledgerName}`}
+                </Button>
+              </span>
             ) : (
               <Button
                 size="sm"
@@ -393,11 +449,17 @@ export function PayoutJournalSection({
               </Button>
             )}
           </div>
-          {status === "approved" && (
+          {status === "posted" && postedRef && (
             <p className="mt-1.5 text-[11px] text-muted-foreground">
               {fr
-                ? "Prête à être comptabilisée. La comptabilisation automatique arrive dans une prochaine mise à jour."
-                : "Ready to post. Posting to the ledger arrives in a coming update."}
+                ? `Écriture ${ledgerName} nº ${postedRef}.`
+                : `${ledgerName} entry #${postedRef}.`}
+            </p>
+          )}
+          {status === "approved" && postError && (
+            <p className="mt-1.5 text-[11px] text-warning">
+              {fr ? "Dernière tentative : " : "Last attempt: "}
+              {postError}
             </p>
           )}
         </>

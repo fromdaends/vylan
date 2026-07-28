@@ -15,6 +15,7 @@ import {
   savePayoutJournalMapping,
   setPayoutJournalStatus,
 } from "@/lib/db/payout-journal";
+import { postPayoutJournal } from "@/lib/quickbooks/post-payout-journal";
 import type {
   AccountRef,
   PayoutRole,
@@ -121,4 +122,68 @@ export async function setPayoutJournalStatusAction(input: {
   }
   revalidatePath(`/engagements/${input.engagementId}`);
   return { ok: true };
+}
+
+export type PostPayoutJournalState = {
+  ok: boolean;
+  /** Machine key the card maps to localized copy. */
+  error?:
+    | "no_session"
+    | "not_found"
+    | "not_approved"
+    | "not_connected"
+    | "not_buildable"
+    | "missing_account_codes"
+    | "post_failed";
+  accountNames?: string[];
+  message?: string;
+};
+
+/** Post an approved payout journal entry into the client's ledger. */
+export async function postPayoutJournalAction(input: {
+  engagementId: string;
+  uploadedFileId: string;
+  processor: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  payoutDate: string | null;
+}): Promise<PostPayoutJournalState> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+  const engagement = await getEngagement(input.engagementId).catch(() => null);
+  if (!engagement || engagement.firm_id !== firm.id) {
+    return { ok: false, error: "not_found" };
+  }
+
+  const outcome = await postPayoutJournal({
+    uploadedFileId: input.uploadedFileId,
+    firmId: firm.id,
+    userId: user.id,
+    processor: input.processor,
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    payoutDate: input.payoutDate,
+  });
+
+  revalidatePath(`/engagements/${input.engagementId}`);
+
+  switch (outcome.kind) {
+    case "posted":
+    // An already-posted entry is a success from the user's point of view:
+    // the journal they wanted in the ledger is in the ledger.
+    case "already_posted":
+      return { ok: true };
+    case "missing_account_codes":
+      return {
+        ok: false,
+        error: "missing_account_codes",
+        accountNames: outcome.accountNames,
+      };
+    case "post_failed":
+      return { ok: false, error: "post_failed", message: outcome.message };
+    case "not_buildable":
+      return { ok: false, error: "not_buildable" };
+    default:
+      return { ok: false, error: outcome.kind };
+  }
 }

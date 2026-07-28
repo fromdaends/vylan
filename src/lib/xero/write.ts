@@ -93,6 +93,31 @@ export async function xeroCreateInvoice(
   return out;
 }
 
+// Create a Xero ManualJournal (the payout split). Xero requires Narration and
+// at least two lines, and reads DIRECTION from the sign of LineAmount
+// (positive debit, negative credit) — the payload builder owns that.
+export async function xeroCreateManualJournal(
+  ctx: XeroReadContext,
+  journal: Record<string, unknown>,
+  idempotencyKey?: string,
+): Promise<XeroCreatedTxn> {
+  const json = await xeroPostJson(
+    ctx,
+    "ManualJournals",
+    { ManualJournals: [journal] },
+    idempotencyKey,
+  );
+  const created = (json.ManualJournals as Record<string, unknown>[] | undefined)?.[0];
+  const out = readCreated(created, "ManualJournalID");
+  if (!out.id) {
+    throw new XeroError(
+      "request_failed",
+      "Xero ManualJournals create returned no ManualJournalID",
+    );
+  }
+  return out;
+}
+
 // Create a Xero BankTransaction (SPEND paid-expense / RECEIVE paid-income).
 export async function xeroCreateBankTransaction(
   ctx: XeroReadContext,
