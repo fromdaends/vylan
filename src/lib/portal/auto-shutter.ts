@@ -26,9 +26,27 @@ export type ShutterState = {
   detectedMs: number;
   /** Milliseconds since a document was last seen. */
   missMs: number;
+  /**
+   * Milliseconds the frame has been held steady, DETECTED OR NOT.
+   *
+   * The safety net. If the detector cannot find the client's document — white
+   * paper on a pale table, a hand over one edge, a scene it simply loses — no
+   * amount of shutter logic produces a photo, and the client is left holding a
+   * phone that does nothing. After seven rounds of that, holding the camera
+   * still is enough on its own: we take the frame uncropped rather than take
+   * nothing.
+   */
+  steadyMs: number;
 };
 
-export const INITIAL_SHUTTER: ShutterState = { detectedMs: 0, missMs: 0 };
+export const INITIAL_SHUTTER: ShutterState = {
+  detectedMs: 0,
+  missMs: 0,
+  steadyMs: 0,
+};
+
+/** Which route reached the shutter — the caller crops only for "document". */
+export type FireMode = "document" | "frame";
 
 /** What the caller should do with the outline this frame. */
 export type OutlineAction =
@@ -50,10 +68,12 @@ export type ShutterStep = {
   documentPresent: boolean;
   /** The guidance to show for this frame — ADVICE only, it gates nothing. */
   guidance: Guidance;
-  /** 0..1, for a progress ring or a debug readout. */
+  /** 0..1 — drives the ring around the shutter button. */
   progress: number;
   /** Fire the shutter now. */
   fire: boolean;
+  /** Set when `fire` is true: whether a document was found to crop to. */
+  fireMode: FireMode | null;
 };
 
 export function advanceShutter(
@@ -83,9 +103,20 @@ export function advanceShutter(
     creditHoldMs: number;
     /** Accumulated detection time before the shutter fires. */
     requiredDetectedMs: number;
+    /**
+     * Is the frame steady enough to be worth photographing at all? The caller
+     * decides (motion below threshold); this reducer only accumulates it.
+     */
+    steady: boolean;
+    /**
+     * Accumulated steady time before the safety net fires an UNCROPPED photo.
+     * Deliberately several times requiredDetectedMs so the detector always
+     * gets first refusal — this is the floor, not the happy path.
+     */
+    requiredSteadyMs: number;
   },
 ): ShutterStep {
-  const { detected, guidanceFor, graceMs, requiredDetectedMs } = input;
+  const { detected, guidanceFor, graceMs, requiredDetectedMs, steady } = input;
   // Credit must never die before the outline does.
   const creditHoldMs = Math.max(
     graceMs,
@@ -100,20 +131,37 @@ export function advanceShutter(
       : 0;
 
   const required = requiredDetectedMs > 0 ? requiredDetectedMs : Infinity;
+  const requiredSteady =
+    input.requiredSteadyMs > 0 ? input.requiredSteadyMs : Infinity;
+
+  // Steadiness accrues regardless of detection; wobble resets it.
+  const steadyMs = steady ? prev.steadyMs + elapsed : 0;
+  const steadyReady = steadyMs >= requiredSteady;
 
   if (detected) {
     const detectedMs = prev.detectedMs + elapsed;
-    const fire = detectedMs >= required;
+    const fire = detectedMs >= required || steadyReady;
+    // Prefer the cropped route whenever detection got us there.
+    const fireMode: FireMode | null = !fire
+      ? null
+      : detectedMs >= required
+        ? "document"
+        : "frame";
     return {
       // Firing spends the credit: without this the next frame fires again
       // immediately and the client gets a burst of near-identical photos,
       // each its own upload and its own AI check.
-      state: { detectedMs: fire ? 0 : detectedMs, missMs: 0 },
+      state: {
+        detectedMs: fire ? 0 : detectedMs,
+        missMs: 0,
+        steadyMs: fire ? 0 : steadyMs,
+      },
       outline: "update",
       documentPresent: true,
       guidance: guidanceFor(true),
-      progress: fire ? 1 : clamp01(detectedMs / required),
+      progress: fire ? 1 : clamp01(Math.max(detectedMs / required, steadyMs / requiredSteady)),
       fire,
+      fireMode,
     };
   }
 
@@ -124,12 +172,21 @@ export function advanceShutter(
   // plainly a different attempt, not a flicker.
   const detectedMs = missMs <= creditHoldMs ? prev.detectedMs : 0;
   return {
-    state: { detectedMs, missMs },
+    state: {
+      detectedMs,
+      missMs,
+      steadyMs: steadyReady ? 0 : steadyMs,
+    },
     outline: withinGrace ? "hold" : "clear",
     documentPresent: withinGrace,
     guidance: guidanceFor(withinGrace),
-    progress: clamp01(detectedMs / required),
-    fire: false,
+    progress: steadyReady
+      ? 1
+      : clamp01(Math.max(detectedMs / required, steadyMs / requiredSteady)),
+    // The safety net: no document found, but the client has held the camera
+    // still long enough that an uncropped photo beats no photo at all.
+    fire: steadyReady,
+    fireMode: steadyReady ? "frame" : null,
   };
 }
 

@@ -77,6 +77,14 @@ const MISS_GRACE_MS = 400;
 // and credit dying with the outline turned a one-second capture into
 // seventeen. The border may blink; the client's progress must not.
 const CREDIT_HOLD_MS = 1500;
+// The safety net: if the detector never finds the document, holding the camera
+// still for this long takes an UNCROPPED photo anyway. Deliberately several
+// times DETECTED_MS_REQUIRED so detection always gets first refusal — this is
+// the floor, not the happy path.
+const STEADY_MS_REQUIRED = 4000;
+// What counts as "held still" for the net. Generous: the point is to catch a
+// client holding a phone normally, not to demand a tripod.
+const STEADY_MOTION_MAX = 14;
 // Per-frame decay on the running sharpness peak (~0.6%/frame, so it halves
 // over roughly 11 seconds at 10fps). Slow enough to hold a genuine focus
 // reference, quick enough to follow the client moving to a new document.
@@ -131,6 +139,9 @@ export function CameraCapture({
   const [shot, setShot] = useState<Shot | null>(null);
   const [busy, setBusy] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
+  // 0..1 toward the next automatic photo. Always visible — the client should
+  // never be looking at a screen that gives no sign anything is happening.
+  const [progress, setProgress] = useState(0);
 
   // The overlay only ever mounts in response to the client tapping "Scan", so
   // asking here is still inside the gesture that authorised it.
@@ -233,7 +244,7 @@ export function CameraCapture({
     viewRef.current = view;
   }, [view]);
 
-  const capture = useCallback(async () => {
+  const capture = useCallback(async (useDocumentCrop = true) => {
     const video = videoRef.current;
     if (!video || capturingRef.current) return;
     capturingRef.current = true;
@@ -241,7 +252,9 @@ export function CameraCapture({
     setCaptureError(null);
     try {
       const size = viewRef.current;
-      const q = quadRef.current;
+      // Only crop when the DOCUMENT route reached the shutter. The safety net
+      // fires without a trustworthy quad, so it must take the plain frame.
+      const q = useDocumentCrop ? quadRef.current : null;
       let file: File | null = null;
 
       // Try the cropped-and-flattened capture, but NEVER let its failure mean
@@ -391,6 +404,10 @@ export function CameraCapture({
         motion: normaliseMotion(metrics.motion, elapsedMs),
       };
 
+      // Steadiness for the safety net, judged on the rate-normalised motion so
+      // it means the same thing at any loop speed.
+      const steady = judged.motion <= STEADY_MOTION_MAX;
+
       const step = advanceShutter(shutterRef.current, {
         // Raw detection presence, not the stabilised outline — the outline
         // deliberately persists through dropouts, and crediting that would
@@ -404,6 +421,8 @@ export function CameraCapture({
         graceMs: MISS_GRACE_MS,
         creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs: DETECTED_MS_REQUIRED,
+        steady,
+        requiredSteadyMs: STEADY_MS_REQUIRED,
       });
       shutterRef.current = step.state;
 
@@ -435,7 +454,11 @@ export function CameraCapture({
         stabilityRef.current = INITIAL_QUAD_STABILITY;
       }
 
-      if (step.fire) void capture();
+      // Drive the ring. Written straight to state at ~20fps; it is one number
+      // and the ring is a single SVG circle.
+      setProgress((p) => (Math.abs(p - step.progress) < 0.01 ? p : step.progress));
+
+      if (step.fire) void capture(step.fireMode === "document");
     }
 
     raf = requestAnimationFrame(tick);
@@ -453,6 +476,7 @@ export function CameraCapture({
     setCaptureError(null);
     shutterRef.current = INITIAL_SHUTTER;
     peakSharpnessRef.current = 0;
+    setProgress(0);
     quadRef.current = null;
     setQuad(null);
     setGuidance("searching");
@@ -623,19 +647,26 @@ export function CameraCapture({
             {t("scan_choose_file")}
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={() => void capture()}
-            disabled={status !== "ready" || busy}
-            aria-label={t("scan_capture")}
-            className="inline-flex size-16 cursor-pointer items-center justify-center rounded-full bg-[#1050ed] text-white shadow-sm transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2 disabled:cursor-default disabled:bg-neutral-200 disabled:text-neutral-400 disabled:shadow-none motion-safe:active:scale-95"
-          >
-            {busy ? (
-              <Loader2 className="size-6 animate-spin" aria-hidden />
-            ) : (
-              <Camera className="size-6" aria-hidden />
-            )}
-          </button>
+          <div className="relative inline-flex size-[76px] items-center justify-center">
+            {/* The ring. Fills as the scanner works toward taking the photo, so
+                the client is never looking at a screen that gives no sign
+                anything is happening — and, when it stalls, WHERE it stalled
+                is visible without a debug flag. */}
+            <ShutterRing progress={status === "ready" && !busy ? progress : 0} />
+            <button
+              type="button"
+              onClick={() => void capture()}
+              disabled={status !== "ready" || busy}
+              aria-label={t("scan_capture")}
+              className="inline-flex size-16 cursor-pointer items-center justify-center rounded-full bg-[#1050ed] text-white shadow-sm transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2 disabled:cursor-default disabled:bg-neutral-200 disabled:text-neutral-400 disabled:shadow-none motion-safe:active:scale-95"
+            >
+              {busy ? (
+                <Loader2 className="size-6 animate-spin" aria-hidden />
+              ) : (
+                <Camera className="size-6" aria-hidden />
+              )}
+            </button>
+          </div>
         )}
       </div>
     </div>
@@ -649,6 +680,47 @@ export function CameraCapture({
 }
 
 // ---------------------------------------------------------------------------
+
+/**
+ * Progress toward the automatic photo, drawn as a ring around the shutter.
+ *
+ * Deliberately plain SVG with a stroke-dashoffset — no library, no per-frame
+ * JavaScript. The CSS transition carries it smoothly between the ~20 updates a
+ * second the scanner produces.
+ */
+function ShutterRing({ progress }: { progress: number }) {
+  const R = 34;
+  const C = 2 * Math.PI * R;
+  const p = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 size-full -rotate-90"
+      viewBox="0 0 76 76"
+      aria-hidden
+    >
+      <circle
+        cx="38"
+        cy="38"
+        r={R}
+        fill="none"
+        stroke="rgba(16,80,237,0.18)"
+        strokeWidth={4}
+      />
+      <circle
+        cx="38"
+        cy="38"
+        r={R}
+        fill="none"
+        stroke="#1050ed"
+        strokeWidth={4}
+        strokeLinecap="round"
+        strokeDasharray={C}
+        strokeDashoffset={C * (1 - p)}
+        className="motion-safe:transition-[stroke-dashoffset] motion-safe:duration-100"
+      />
+    </svg>
+  );
+}
 
 /** Corner brackets plus the live document outline. */
 function ScanOverlay({
