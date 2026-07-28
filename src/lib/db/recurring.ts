@@ -75,7 +75,7 @@ export async function getRecurringSeries(
 
 // Every series in the caller's firm, for the /repeating screen. RLS-scoped, so
 // a staff member's list is silently shorter than an owner's (private clients
-// and — since 0950 — private source engagements are filtered out in the DB).
+// and — since 0960 — private source engagements are filtered out in the DB).
 //
 // select("*") deliberately, NOT a named column list: naming assigned_user_id
 // would 42703 on a database where 0940 hasn't been applied, taking the whole
@@ -102,7 +102,7 @@ export async function listRecurringSeries(): Promise<RecurringSeries[]> {
 // already loaded the series through getRecurringSeries (RLS-scoped) — see the
 // authorizeSeries prologue in app/actions/recurring.ts. This function does not
 // re-check, and the service role is never used here on purpose: the write goes
-// through the caller's own session so recurring_series_update (0950) applies.
+// through the caller's own session so recurring_series_update (0960) applies.
 //
 // Returns false — never throws — when 0940 isn't applied, so the UI can say
 // "not switched on yet" instead of showing a 500.

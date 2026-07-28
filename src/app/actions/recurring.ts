@@ -212,7 +212,7 @@ async function authorizeSeriesControl(input: {
 //
 // SECURITY-CRITICAL: this prologue loads the series through the RLS-SCOPED
 // getRecurringSeries and bails on null. That is what stops a staff member
-// acting on a private client's series by guessing its id. Migration 0950 now
+// acting on a private client's series by guessing its id. Migration 0960 now
 // closes the same hole at the database layer, but the app must not depend on a
 // migration having been applied — both belts, one pair of trousers.
 async function authorizeSeries(

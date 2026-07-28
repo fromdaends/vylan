@@ -1,4 +1,4 @@
--- 0950_recurring_series_privacy.sql
+-- 0960_recurring_series_privacy.sql
 --
 -- Close two privacy gaps on recurring_series before anything lists them.
 --
@@ -78,4 +78,4 @@ create policy recurring_series_update on public.recurring_series
 -- it points at is independently gated by engagements_all (0850).
 
 comment on policy recurring_series_select on public.recurring_series is
-  'Firm-scoped. Staff additionally cannot see a series whose CLIENT is private (0810) or whose SOURCE ENGAGEMENT is private (0850/0950) — the latter matters because the series copies the engagement title verbatim.';
+  'Firm-scoped. Staff additionally cannot see a series whose CLIENT is private (0810) or whose SOURCE ENGAGEMENT is private (0850/0960) — the latter matters because the series copies the engagement title verbatim.';
