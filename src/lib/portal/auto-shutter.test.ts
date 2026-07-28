@@ -9,8 +9,15 @@ import type { Guidance } from "./frame-metrics";
 const GRACE_MS = 350;
 const CREDIT_HOLD_MS = 1500;
 const REQUIRED_MS = 600;
+const REQUIRED_STEADY_MS = 4000;
 
-type Frame = { detected: boolean; guidance: Guidance; dt?: number };
+type Frame = {
+  detected: boolean;
+  guidance: Guidance;
+  dt?: number;
+  /** Defaults to false so existing cases exercise the detection path only. */
+  steady?: boolean;
+};
 
 /** Run a sequence of frames at a given interval and collect every step. */
 function run(frames: Frame[], dt = 50) {
@@ -23,6 +30,8 @@ function run(frames: Frame[], dt = 50) {
       graceMs: GRACE_MS,
       creditHoldMs: CREDIT_HOLD_MS,
       requiredDetectedMs: REQUIRED_MS,
+      steady: f.steady ?? false,
+      requiredSteadyMs: REQUIRED_STEADY_MS,
     });
     state = step.state;
     return step;
@@ -149,6 +158,8 @@ describe("advanceShutter — firing cadence", () => {
         graceMs: GRACE_MS,
         creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs,
+        steady: false,
+        requiredSteadyMs: REQUIRED_STEADY_MS,
       });
       expect(step.fire).toBe(false);
     }
@@ -193,7 +204,7 @@ describe("advanceShutter — hostile timing", () => {
     // A backgrounded tab or a paused debugger can hand us seconds; crediting
     // all of it would fire on a frame nobody was looking at.
     const step = advanceShutter(
-      { detectedMs: 400, missMs: 0 },
+      { detectedMs: 400, missMs: 0, steadyMs: 0 },
       {
         detected: true,
         guidanceFor: () => "ready",
@@ -201,6 +212,8 @@ describe("advanceShutter — hostile timing", () => {
         graceMs: GRACE_MS,
         creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs: REQUIRED_MS,
+        steady: false,
+        requiredSteadyMs: REQUIRED_STEADY_MS,
       },
     );
     expect(step.state.detectedMs).toBeLessThanOrEqual(400 + 250);
@@ -209,7 +222,7 @@ describe("advanceShutter — hostile timing", () => {
   it("ignores a non-finite or negative interval rather than corrupting state", () => {
     for (const elapsedMs of [NaN, Infinity, -100, 0]) {
       const step = advanceShutter(
-        { detectedMs: 200, missMs: 0 },
+        { detectedMs: 200, missMs: 0, steadyMs: 0 },
         {
           detected: true,
           guidanceFor: () => "ready",
@@ -217,6 +230,8 @@ describe("advanceShutter — hostile timing", () => {
           graceMs: GRACE_MS,
           creditHoldMs: CREDIT_HOLD_MS,
           requiredDetectedMs: REQUIRED_MS,
+          steady: false,
+          requiredSteadyMs: REQUIRED_STEADY_MS,
         },
       );
       expect(Number.isFinite(step.state.detectedMs)).toBe(true);
@@ -225,7 +240,7 @@ describe("advanceShutter — hostile timing", () => {
   });
 
   it("does not mutate the state it is given", () => {
-    const prev: ShutterState = { detectedMs: 120, missMs: 40 };
+    const prev: ShutterState = { detectedMs: 120, missMs: 40, steadyMs: 0 };
     const snapshot = { ...prev };
     advanceShutter(prev, {
       detected: true,
@@ -234,7 +249,65 @@ describe("advanceShutter — hostile timing", () => {
       graceMs: GRACE_MS,
       creditHoldMs: CREDIT_HOLD_MS,
       requiredDetectedMs: REQUIRED_MS,
+      steady: false,
+      requiredSteadyMs: REQUIRED_STEADY_MS,
     });
     expect(prev).toEqual(snapshot);
+  });
+});
+
+
+describe("advanceShutter — the safety net when the detector never finds it", () => {
+  const steadyMiss: Frame = {
+    detected: false,
+    guidance: "searching",
+    steady: true,
+  };
+
+  it("still takes a photo when nothing is ever detected", () => {
+    // The scenario seven rounds of tuning could not fix: the detector simply
+    // does not see this client's document. Holding the camera still must
+    // still produce a picture rather than a phone that does nothing.
+    const steps = run(times(120, steadyMiss));
+    const fired = steps.findIndex((s) => s.fire);
+    expect(fired).toBeGreaterThan(-1);
+    expect((fired + 1) * 50).toBe(REQUIRED_STEADY_MS);
+    expect(steps[fired]!.fireMode).toBe("frame");
+  });
+
+  it("gives the detector first refusal — the cropped route wins when available", () => {
+    const steps = run(times(40, { ...good, steady: true }));
+    const fired = steps.findIndex((s) => s.fire);
+    // 600ms of detection beats 4000ms of steadiness by a mile.
+    expect((fired + 1) * 50).toBe(REQUIRED_MS);
+    expect(steps[fired]!.fireMode).toBe("document");
+  });
+
+  it("does not fire on a moving frame, however long the client waits", () => {
+    // Waving the phone around must never trip the net.
+    const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
+    expect(run(times(200, moving)).some((s) => s.fire)).toBe(false);
+  });
+
+  it("restarts the steady clock the moment the frame moves", () => {
+    const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
+    const steps = run([...times(40, steadyMiss), moving, ...times(10, steadyMiss)]);
+    expect(steps.some((s) => s.fire)).toBe(false);
+    expect(steps.at(-1)!.state.steadyMs).toBe(500);
+  });
+
+  it("reports progress from whichever route is nearer", () => {
+    // With no detection, the ring must still climb — the client needs to see
+    // that something is happening.
+    const steps = run(times(40, steadyMiss));
+    expect(steps[0]!.progress).toBeGreaterThan(0);
+    expect(steps[39]!.progress).toBeGreaterThan(steps[19]!.progress);
+    expect(steps.every((s) => s.progress >= 0 && s.progress <= 1)).toBe(true);
+  });
+
+  it("spends the steady credit on firing, so the net does not burst either", () => {
+    const fires = run(times(240, steadyMiss)).filter((s) => s.fire).length;
+    // 12000ms of steady time at a 4000ms threshold = exactly 3.
+    expect(fires).toBe(3);
   });
 });
