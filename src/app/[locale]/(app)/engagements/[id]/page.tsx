@@ -27,11 +27,16 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate, formatCurrency } from "@/lib/format";
 import { EngagementTabs } from "@/components/engagements/engagement-tabs";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
+import { CommentThread } from "@/components/engagements/comment-thread";
+// The key builders MUST come from the plain comment-keys module, NOT from
+// comment-thread ("use client"): this page is a Server Component and CALLS
+// them — through the client module they'd be client references, and calling
+// one on the server 500s the whole page at request time (invisible to tsc
+// and next build; the repo's known RSC function-prop class, cf. #796).
 import {
-  CommentThread,
   commentKeyForItem,
   commentKeyForEngagement,
-} from "@/components/engagements/comment-thread";
+} from "@/components/engagements/comment-keys";
 import { OpenCommentComposerOnLoad } from "@/components/engagements/open-comment-composer-on-load";
 import {
   listCommentsForEngagement,
