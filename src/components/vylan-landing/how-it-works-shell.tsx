@@ -20,11 +20,19 @@
 // behind `prefers-reduced-motion` and a `.wwd-js` class, so with motion
 // reduced (or JS off) every word is shown immediately, fully legible.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type CSSProperties } from "react";
 import {
   WorkflowAutomation,
   type WorkflowAutomationStrings,
 } from "./workflow-automation";
+import {
+  WaveClose,
+  WaveFiling,
+  WaveHero,
+  WavePay,
+  WaveProblem,
+  WaveTrust,
+} from "./wwd-waves";
 
 type HowItWorksStrings = {
   heroEyebrow: string;
@@ -43,6 +51,25 @@ type HowItWorksStrings = {
   // section's worth of strings, and it owns its own component.
   workflow: WorkflowAutomationStrings;
   integrationsLabel: string;
+  integrationsHelp: string;
+  // "Auto-filing": the dark band. `folders` is the sample tree read top-down —
+  // each entry is one level deeper than the last, so the indent is positional
+  // and a translator can rename a folder without touching the layout.
+  filing: {
+    eyebrow: string;
+    title: string;
+    body: string;
+    rules: { title: string; body: string }[];
+    treeYours: string;
+    treeNamed: string;
+    folders: string[];
+    fileName: string;
+    fileBadge: string;
+    fileWas: string;
+    fileWasName: string;
+    into: string;
+    providers: string[];
+  };
   payEyebrow: string;
   payTitlePre: string;
   payTitleWord: string;
@@ -150,11 +177,70 @@ function IconGlobe({ stroke }: { stroke: string }) {
   );
 }
 
+// --- Auto-filing: tree glyphs + the three storage wordmarks ---
+
+function IconFolder({ stroke }: { stroke: string }) {
+  return (
+    <svg width="15" height="13" viewBox="0 0 16 14" fill="none" stroke={stroke} strokeWidth="1.4" aria-hidden="true">
+      <path d="M1 2h5l1.5 2H15v9H1z" />
+    </svg>
+  );
+}
+function IconFile() {
+  return (
+    <svg width="14" height="16" viewBox="0 0 14 17" fill="none" stroke="var(--wwd-mint)" strokeWidth="1.4" aria-hidden="true">
+      <path d="M1 1h8l4 4v11H1z" />
+      <path d="M9 1v4h4" />
+    </svg>
+  );
+}
+// Brand marks, drawn rather than loaded: the page ships no third-party image
+// requests, and at 17px a path is sharper than a downscaled PNG.
+function LogoGoogleDrive() {
+  return (
+    <svg width="17" height="15" viewBox="0 0 87.3 78" aria-hidden="true">
+      <path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066DA" />
+      <path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0-1.2 4.5h27.5z" fill="#00AC47" />
+      <path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 7.65-13.25c.8-1.4 1.2-2.95 1.2-4.5h-27.5l5.85 11.5z" fill="#EA4335" />
+      <path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832D" />
+      <path d="m59.8 53h-32.3l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.8c1.6 0 3.15-.45 4.5-1.2z" fill="#2684FC" />
+      <path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8 16.15 28h27.45c0-1.55-.4-3.1-1.2-4.5z" fill="#FFBA00" />
+    </svg>
+  );
+}
+function LogoDropbox() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M6 1.807 0 5.629l6 3.822 6.001-3.822L6 1.807zM18 1.807l-6 3.822 6 3.822 6-3.822-6-3.822zM0 13.274l6 3.822 6.001-3.822L6 9.452l-6 3.822zM18 9.452l-6 3.822 6 3.822 6-3.822-6-3.822zM6 18.371l6.001 3.822 6-3.822-6-3.822L6 18.371z"
+        fill="#0061FF"
+      />
+    </svg>
+  );
+}
+function LogoMicrosoft() {
+  return (
+    <svg width="20" height="13" viewBox="0 0 24 16" aria-hidden="true">
+      <path d="M18.5 15.5h-12a5.5 5.5 0 0 1-.9-10.93A7 7 0 0 1 19 5.9a4.85 4.85 0 0 1-.5 9.6z" fill="#0078D4" />
+    </svg>
+  );
+}
+
+const FILING_LOGOS = [
+  <LogoGoogleDrive key="google" />,
+  <LogoDropbox key="dropbox" />,
+  <LogoMicrosoft key="microsoft" />,
+];
+
+// The trust band is the page's one LIGHT surface (cream #F4F2EC), so these
+// four are the only icons on the page not tuned for the blue: the page's
+// mint/cyan/violet/coral wash out on cream, and these are their dark twins
+// from the design.
 const TRUST_ICONS = [
-  <IconSignature key="sig" stroke="var(--wwd-mint)" />,
-  <IconShield key="shield" stroke="var(--wwd-cyan)" />,
-  <IconGlobe key="globe" stroke="var(--wwd-violet)" />,
-  <IconCircleCheck key="check" stroke="var(--wwd-coral)" />,
+  <IconSignature key="sig" stroke="#0E9D68" />,
+  <IconShield key="shield" stroke="#0B7FBE" />,
+  <IconGlobe key="globe" stroke="#6E4FD0" />,
+  <IconCircleCheck key="check" stroke="#D95B36" />,
 ];
 const PAY_ICONS = [
   <IconDoc key="doc" stroke="var(--wwd-cyan)" />,
@@ -185,7 +271,14 @@ function MarqueeSet() {
   );
 }
 
-export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
+export function HowItWorksShell({
+  s,
+  helpHref,
+}: {
+  s: HowItWorksStrings;
+  /** Locale-prefixed /help, resolved on the server (same value the menu gets). */
+  helpHref: string;
+}) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -291,6 +384,7 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
       {/* ---------- HERO: Kinetic (the founder's chosen variant) ---------- */}
       <section className="wwd-hero" aria-label={s.heroEyebrow}>
         <div className="wwd-grid" aria-hidden="true" />
+        <WaveHero />
         <div className="wwd-hero-inner">
           <div className="wwd-eyebrow wwd-load" style={{ animationDelay: "0.05s" }}>
             {s.heroEyebrow}
@@ -322,6 +416,7 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
 
       {/* ---------- THE PROBLEM ---------- */}
       <section className="wwd-section wwd-problem">
+        <WaveProblem />
         <div className="wwd-eyebrow" data-reveal>
           {s.problemEyebrow}
         </div>
@@ -377,8 +472,22 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
 
       {/* ---------- INTEGRATIONS MARQUEE ---------- */}
       <section className="wwd-integrations" aria-label={s.integrationsLabel}>
-        <div className="wwd-eyebrow wwd-integrations-label" data-reveal>
-          {s.integrationsLabel}
+        <div className="wwd-integrations-head" data-reveal>
+          <div className="wwd-eyebrow wwd-integrations-label">
+            {s.integrationsLabel}
+          </div>
+          {/* The design hardcodes /help-center; the real help centre is the
+              locale-prefixed /help, resolved on the server. Opens in a new tab
+              like every other help link on the marketing pages, so a visitor
+              part-way down this page doesn't lose their place. */}
+          <a
+            className="wwd-integrations-help"
+            href={helpHref}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {s.integrationsHelp}
+          </a>
         </div>
         <div className="wwd-marquee" data-reveal data-reveal-delay="120">
           <div className="wwd-marquee-row">
@@ -389,8 +498,111 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
         </div>
       </section>
 
+      {/* ---------- AUTO-FILING (dark band) ----------
+          Where the design puts it: after the integrations belt (which names
+          the storage you already have) and before the money. It is the only
+          section on a near-black panel, which is the point — it reads as the
+          quiet thing happening underneath the rest of the page. */}
+      <section className="wwd-filing" aria-labelledby="wwd-filing-title">
+        <WaveFiling />
+        <div className="wwd-filing-inner">
+          <div className="wwd-filing-left">
+            <div data-reveal>
+              <div className="wwd-eyebrow wwd-eyebrow-gold">
+                {s.filing.eyebrow}
+              </div>
+              <h2 className="wwd-h2" id="wwd-filing-title">
+                {s.filing.title}
+              </h2>
+              <p className="wwd-filing-body">{s.filing.body}</p>
+            </div>
+            <div className="wwd-filing-rules" data-reveal data-reveal-delay="140">
+              {s.filing.rules.map((rule, i) => (
+                <div className="wwd-filing-rule" key={i}>
+                  <span className="wwd-filing-rule-num" aria-hidden="true">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <p className="wwd-filing-rule-text">
+                    <strong>{rule.title}</strong> {rule.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* The mock: a firm's own folder tree with one freshly filed
+              document at the bottom. Monospace throughout, so the renamed
+              file reads as a filename rather than as prose. */}
+          <div className="wwd-filing-tree">
+            <div
+              className="wwd-filing-tree-head"
+              data-reveal
+              data-reveal-delay="120"
+            >
+              <span>{s.filing.treeYours}</span>
+              <span className="wwd-filing-tree-named">{s.filing.treeNamed}</span>
+            </div>
+            {s.filing.folders.map((folder, i) => (
+              <div
+                className="wwd-filing-row"
+                key={i}
+                style={{ "--wwd-depth": i } as CSSProperties}
+                data-reveal
+                data-reveal-delay={`${160 + i * 80}`}
+              >
+                <IconFolder
+                  stroke={
+                    i === s.filing.folders.length - 1
+                      ? "var(--wwd-gold)"
+                      : "rgba(255,255,255,.55)"
+                  }
+                />
+                {folder}
+              </div>
+            ))}
+            <div
+              className="wwd-filing-row wwd-filing-file"
+              style={
+                { "--wwd-depth": s.filing.folders.length } as CSSProperties
+              }
+              data-reveal
+              data-reveal-delay="520"
+            >
+              <IconFile />
+              <div className="wwd-filing-file-body">
+                <div className="wwd-filing-file-line">
+                  <span className="wwd-filing-file-name">
+                    {s.filing.fileName}
+                  </span>
+                  <span className="wwd-filing-file-badge">
+                    <span className="wwd-filing-file-dot" aria-hidden="true" />
+                    {s.filing.fileBadge}
+                  </span>
+                </div>
+                <div className="wwd-filing-file-was">
+                  {s.filing.fileWas}{" "}
+                  <span className="wwd-filing-file-old">
+                    {s.filing.fileWasName}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="wwd-filing-into" data-reveal data-reveal-delay="600">
+              <span className="wwd-filing-into-label">{s.filing.into}</span>
+              {s.filing.providers.map((name, i) => (
+                <span className="wwd-filing-provider" key={name}>
+                  {FILING_LOGOS[i]}
+                  <span className="wwd-filing-provider-name">{name}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ---------- PAYMENT PIPELINE ---------- */}
       <section className="wwd-section wwd-pay">
+        <WavePay />
         <div className="wwd-pay-head" data-reveal>
           <div className="wwd-eyebrow wwd-eyebrow-cyan">{s.payEyebrow}</div>
           <h2 className="wwd-h2 wwd-center">
@@ -489,6 +701,7 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
 
       {/* ---------- TRUST & SECURITY ---------- */}
       <section className="wwd-section wwd-trust">
+        <WaveTrust />
         <div className="wwd-trust-layout">
           <div className="wwd-trust-head" data-reveal>
             <div className="wwd-eyebrow">{s.trustEyebrow}</div>
@@ -521,6 +734,7 @@ export function HowItWorksShell({ s }: { s: HowItWorksStrings }) {
 
       {/* ---------- CLOSING ---------- */}
       <section className="wwd-close">
+        <WaveClose />
         <div className="wwd-close-aura" aria-hidden="true" />
         <h2 className="wwd-close-title" data-reveal>
           {lines(s.closeTitle).map((line, i, arr) => (

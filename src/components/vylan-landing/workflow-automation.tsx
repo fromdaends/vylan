@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { WaveWorkflow } from "./wwd-waves";
 
 // The "Workflow automation" section of the What we do / how it works page — a
 // live, playable miniature of the engagement-stage board.
@@ -140,6 +141,7 @@ export function WorkflowAutomation({ s }: { s: WorkflowAutomationStrings }) {
 
   return (
     <section className="wwd-section wwd-wf" aria-labelledby="wwd-wf-title">
+      <WaveWorkflow />
       <div className="wwd-wf-head" data-reveal>
         <div className="wwd-eyebrow wwd-eyebrow-violet">{s.eyebrow}</div>
         <h2 className="wwd-h2" id="wwd-wf-title">
