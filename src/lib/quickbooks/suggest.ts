@@ -151,6 +151,12 @@ export type TransactionSuggestion = {
   // stored suggestions (pre-reference) deserialize cleanly.
   reference?: string | null;
   currency: string | null;
+  // Which fields were filled from a REMEMBERED correction rather than fuzzy
+  // matching. The card already says so in prose; this is the structured form,
+  // and it is what auto-approve keys off — "the system recognised this" is a
+  // very different claim from "the system had a guess", and only the first is
+  // safe to act on unattended. Optional so older stored suggestions deserialize.
+  learnedFields?: LearnSignal[];
   // The RAW source signals this draft was built from, kept so the resolve route
   // can learn from a correction without re-reading the extraction (Feature 3):
   // partySource = the vendor/customer name read off the document; taxSource = the
@@ -962,6 +968,18 @@ export function buildTransactionSuggestion(
     reference: extraction.document_number ?? null,
     currency: extraction.currency,
     partySource: partyQuery,
+    // Structured record of what came from memory. Built from the SAME
+    // learnedMatch results the notes above report, so the note and the flag can
+    // never disagree.
+    learnedFields: [
+      ...(partyLearned && partyKind ? [partyKind] : []),
+      ...(accountLearned ? (["expense_account"] as const) : []),
+      ...(taxLearned ? (["tax"] as const) : []),
+      ...(anyLineLearned ? (["line_account"] as const) : []),
+      ...(extraction.paid === true && paymentLearned
+        ? (["payment_account"] as const)
+        : []),
+    ],
     taxSource: learnKeyForTaxes(extraction.taxes),
     overallConfidence: overallReadiness(extraction, party),
     notes,

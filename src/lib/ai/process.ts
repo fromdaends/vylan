@@ -35,6 +35,7 @@ import { listsAreSynced } from "@/lib/quickbooks/read";
 import { readCachedXeroListsForFirm } from "@/lib/db/xero-cache";
 import { readLearnedMappingsForFirm } from "@/lib/db/quickbooks-learned";
 import { flagNearDuplicate } from "@/lib/duplicates";
+import { maybeAutoApproveDraft } from "@/lib/quickbooks/auto-approve-apply";
 import { resolveBookkeepingProvider } from "@/lib/bookkeeping/provider";
 import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import {
@@ -388,6 +389,19 @@ export async function processClassifyJob(
             engagementId: file.engagement_id,
             suggestion,
             provider,
+          });
+          // AUTO-APPROVE (1000). If the firm opted in and this draft was coded
+          // entirely from mappings a human has confirmed repeatedly on this
+          // same supplier, the Approve click carries no information — so skip
+          // it. Every condition in decideAutoApprove is a veto and the default
+          // is "ask the human"; a false negative costs one click, a false
+          // positive puts a wrong number in a client's books unattended.
+          // Best-effort: this can never fail the classification.
+          await maybeAutoApproveDraft({
+            firmId: limitFirmId,
+            clientId: limitClientId,
+            fileId: file.id,
+            suggestion,
           });
         }
       } else {
