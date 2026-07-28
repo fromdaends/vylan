@@ -18,7 +18,20 @@ const CLIENT = "11111111-1111-1111-1111-111111111111";
 const ENGAGEMENT = "eng-1";
 const FILE = "file-1";
 
-const recordLearnedMapping = vi.fn(() => Promise.resolve());
+// Typed so the assertions below see the argument shape (an untyped vi.fn()
+// infers a zero-length tuple and every mock.calls[0] access fails to compile).
+type LearnCall = {
+  firmId: string;
+  clientId?: string | null;
+  signalType: string;
+  sourceKey: string;
+  sourceSample: string;
+  target: { id: string; name: string };
+  reviewerId: string | null;
+};
+const recordLearnedMapping = vi.fn<(input: LearnCall) => Promise<void>>(() =>
+  Promise.resolve(),
+);
 
 // A draft whose vendor the AI matched, so both routes have something to learn.
 const draft = {

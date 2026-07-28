@@ -22,10 +22,10 @@ const table: Row[] = [];
 // A minimal PostgREST-shaped query builder over `table`.
 function makeClient() {
   return {
-    from(_name: string) {
+    from() {
       const filters: Array<(r: Row) => boolean> = [];
       const builder = {
-        select(_cols: string) {
+        select() {
           return builder;
         },
         eq(col: string, val: unknown) {
