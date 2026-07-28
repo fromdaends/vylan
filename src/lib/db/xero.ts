@@ -162,7 +162,9 @@ export type UpsertXeroConnectionResult =
   | { ok: true }
   // The Xero organisation is already linked to a DIFFERENT client row (the
   // tenant_id unique index) — the caller surfaces "already connected" instead
-  // of clobbering the other client's connection.
+  // of clobbering the other client's connection. Since 0950 that index is
+  // PARTIAL (`where is_demo = false`), so this can only happen for a REAL
+  // organisation; Xero's Demo Company may back any number of clients.
   | { ok: false; reason: "tenant_in_use" }
   | { ok: false; reason: "migration_pending" }
   | { ok: false; reason: "error" };
@@ -198,7 +200,8 @@ export async function upsertClientXeroConnection(
   );
   if (!error) return { ok: true };
   // 23505 on the tenant unique index = this org is already another client's
-  // connection (very real with one Demo Company during testing).
+  // connection. Since 0950 the index is partial (real orgs only), so testing
+  // against the one Demo Company no longer trips this.
   if (
     error.code === "23505" ||
     /xero_connections_tenant_idx|duplicate key/i.test(error.message ?? "")
