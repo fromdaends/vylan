@@ -94,7 +94,13 @@ export type LearnSignal =
   | "customer"
   | "expense_account"
   | "line_account"
-  | "tax";
+  | "tax"
+  // The bank account this client's money moves through — "paid from" on an
+  // expense, "deposited to" on a sale. Keyed by DIRECTION, not by any name off
+  // the document: it is a property of the client's books, not of the paper, and
+  // it is the same account almost every time. Remembering it is what stops the
+  // accountant re-picking it on every single receipt.
+  | "payment_account";
 export type LearnedRef = { id: string; name: string };
 export type LearnedMappings = Partial<
   Record<LearnSignal, Record<string, LearnedRef>>
@@ -852,16 +858,33 @@ export function buildTransactionSuggestion(
   // EXPENSE payment: a paid receipt posts a QuickBooks Purchase (against a
   // bank/credit-card account); an unpaid bill posts a Bill (as before). Suggest
   // the "paid from" account when we can; flag when the accountant must choose it.
-  const paymentAccount = suggestPaymentAccount(
+  // A remembered account for this client + direction beats the heuristic: the
+  // heuristic can only be confident when the books hold exactly ONE candidate,
+  // which is rarely true, so without this the accountant re-picks the same
+  // account on every paid document forever.
+  const paymentLearned = learnedMatch(
+    "payment_account",
     direction,
-    extraction.paid,
-    extraction.payment_method,
+    learned,
     lists.accounts,
   );
-  if (direction !== "income" && extraction.paid === true) {
-    if (!paymentAccount.match) {
-      notes.push("This looks paid — choose the account it was paid from.");
-    }
+  const paymentAccount = overlayLearned(
+    suggestPaymentAccount(
+      direction,
+      extraction.paid,
+      extraction.payment_method,
+      lists.accounts,
+    ),
+    // Only when the document is actually PAID — an unpaid bill or invoice
+    // touches no bank account, and pre-filling one there would be noise.
+    extraction.paid === true ? paymentLearned : null,
+  );
+  if (extraction.paid === true && !paymentAccount.match) {
+    notes.push(
+      direction === "income"
+        ? "This looks paid — choose the account it was deposited to."
+        : "This looks paid — choose the account it was paid from.",
+    );
   }
 
   // Per-line splits (expenses only, only when the lines reconcile to the
@@ -886,7 +909,13 @@ export function buildTransactionSuggestion(
         lists.accounts,
       ) != null,
   );
-  if (partyLearned || accountLearned || taxLearned || anyLineLearned) {
+  if (
+    partyLearned ||
+    accountLearned ||
+    taxLearned ||
+    anyLineLearned ||
+    (extraction.paid === true && paymentLearned)
+  ) {
     notes.push(
       "Filled in from choices you've made before — change any field if it's off.",
     );

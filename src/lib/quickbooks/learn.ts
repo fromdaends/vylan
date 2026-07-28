@@ -71,6 +71,22 @@ export function learnedWritesFromResolve(
     }
   }
 
+  // Bank account -> keyed by DIRECTION alone. Unlike every other signal this is
+  // not read off the document: it is which of the client's accounts their money
+  // moves through, and it is the same one almost every time. Learning it is
+  // what stops the accountant re-picking it on every paid receipt.
+  if (has(patch, "paymentAccount") && patch.paymentAccount) {
+    writes.push({
+      signalType: "payment_account",
+      sourceKey: suggestion.direction,
+      sourceSample: suggestion.direction,
+      target: {
+        id: patch.paymentAccount.id,
+        name: patch.paymentAccount.name,
+      },
+    });
+  }
+
   // Tax code -> keyed by the document's canonical tax-token set (e.g. "GST+QST")
   // AND its DIRECTION. Without the direction in the key, a sale and a purchase
   // carrying the same taxes share one remembered rate, so approving an invoice
@@ -179,6 +195,15 @@ export function learnedWritesFromApproval(
   }
 
   const taxKey = taxLearnKey(suggestion.taxSource ?? null, suggestion.direction);
+  if (eff.paymentAccount) {
+    writes.push({
+      signalType: "payment_account",
+      sourceKey: suggestion.direction,
+      sourceSample: suggestion.direction,
+      target: { id: eff.paymentAccount.id, name: eff.paymentAccount.name },
+    });
+  }
+
   if (eff.taxCode && suggestion.taxSource && taxKey) {
     writes.push({
       signalType: "tax",

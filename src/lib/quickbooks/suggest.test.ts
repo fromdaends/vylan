@@ -843,3 +843,56 @@ describe("matchTaxCode — direction filtering", () => {
     expect(matchTaxCode(gst, onlyPurchase, "income").match?.id).toBe("p1");
   });
 });
+
+// Reduce-the-work: the accountant should pick their bank account once, not on
+// every paid receipt. suggestPaymentAccount can only be confident when the
+// books hold exactly ONE candidate, which is rarely true.
+describe("remembered bank account", () => {
+  const accts = [
+    { id: "bank1", name: "Chequing", accountType: "Bank", active: true },
+    { id: "bank2", name: "Savings", accountType: "Bank", active: true },
+    { id: "exp1", name: "Supplies", accountType: "Expense", active: true },
+  ];
+  const withAccts = { ...lists, accounts: accts };
+
+  it("fills in the remembered account on a PAID document", () => {
+    const s = buildTransactionSuggestion(
+      extraction({ paid: true }),
+      withAccts,
+      { payment_account: { expense: { id: "bank2", name: "Savings" } } },
+    );
+    expect(s.paymentAccount?.match?.id).toBe("bank2");
+  });
+
+  // Two candidates and nothing remembered -> the heuristic stays silent rather
+  // than guessing which bank account the client used.
+  it("stays unset when nothing is remembered and there is a choice", () => {
+    const s = buildTransactionSuggestion(extraction({ paid: true }), withAccts);
+    expect(s.paymentAccount?.match).toBeNull();
+  });
+
+  // An unpaid bill touches no bank account; pre-filling one would be noise.
+  it("does not fill one in on an UNPAID document", () => {
+    const s = buildTransactionSuggestion(
+      extraction({ paid: false }),
+      withAccts,
+      { payment_account: { expense: { id: "bank2", name: "Savings" } } },
+    );
+    expect(s.paymentAccount?.match).toBeNull();
+  });
+
+  // Expense and income remember separately — "paid from" is not "deposited to".
+  it("does not reuse an expense's account on a sale", () => {
+    const s = buildTransactionSuggestion(
+      extraction({
+        direction: "income",
+        vendor_name: null,
+        customer_name: "Acme",
+        paid: true,
+      }),
+      withAccts,
+      { payment_account: { expense: { id: "bank2", name: "Savings" } } },
+    );
+    expect(s.paymentAccount?.match).toBeNull();
+  });
+});
