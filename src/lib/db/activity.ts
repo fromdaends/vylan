@@ -35,6 +35,47 @@ export async function listActivityForEngagement(
 // row stays forever. Returns the ISO timestamp, or null if no waive is logged.
 // RLS-scoped to the caller's firm, same as listActivityForEngagement. Degrades
 // to null on any read error so the header never hard-fails.
+// The handoff note from the most recent reassignment, with who wrote it and
+// when.
+//
+// WHY THIS EXISTS: the note an accountant writes when passing work over ("vehicle
+// log still missing, meals capped at 50%") was only ever stored in activity_log
+// metadata and pushed into the assignee's notification. It was never rendered on
+// the engagement, so the moment that notification was read the instructions were
+// effectively gone — the person doing the work had nowhere to look them up.
+//
+// Only the LATEST matters: an earlier handoff's note describes a state of the
+// work that has since moved on.
+// Returns the writer's user id rather than a name: activity_log has no name
+// column (actor_id is plain text), and every caller already holds the firm
+// roster, so mapping id -> name there costs nothing and avoids a join here.
+// Hits activity_log_engagement_idx (engagement_id, created_at desc).
+export async function getLatestHandoffNote(engagementId: string): Promise<{
+  note: string;
+  actorId: string | null;
+  at: string;
+} | null> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("activity_log")
+    .select("metadata, created_at, actor_id")
+    .eq("engagement_id", engagementId)
+    .eq("action", "engagement_reassigned")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return null;
+  const row = data as {
+    metadata: Record<string, unknown> | null;
+    created_at: string;
+    actor_id: string | null;
+  };
+  const note = row.metadata?.note;
+  // A reassignment without a note is the common case — not an error.
+  if (typeof note !== "string" || !note.trim()) return null;
+  return { note: note.trim(), actorId: row.actor_id, at: row.created_at };
+}
+
 export async function getLatestInvoiceWaivedAt(
   engagementId: string,
 ): Promise<string | null> {

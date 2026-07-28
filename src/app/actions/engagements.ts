@@ -729,9 +729,12 @@ export async function setEngagementPrivacyAction(
   return { ok: true };
 }
 
+// assigneeId null = UNASSIGN. Before this there was no way to take work off
+// someone without handing it to somebody else, so a job whose owner had left
+// the topic (or the firm) had to be parked on an unrelated teammate.
 export async function reassignEngagementAction(
   engagementId: string,
-  assigneeId: string,
+  assigneeId: string | null,
   note?: string,
 ): Promise<{
   ok: boolean;
@@ -753,21 +756,25 @@ export async function reassignEngagementAction(
   }
 
   const sb = await getServerSupabase();
-  // Target must be an ACTIVE member of the SAME firm.
-  const { data: target } = await sb
-    .from("users")
-    .select("id, firm_id, deactivated_at")
-    .eq("id", assigneeId)
-    .maybeSingle();
-  if (!target || target.firm_id !== firm.id || target.deactivated_at) {
-    return { ok: false, error: "invalid_assignee" };
+  // Target must be an ACTIVE member of the SAME firm — unless we're clearing
+  // the assignee, where there is no target to validate.
+  if (assigneeId !== null) {
+    const { data: target } = await sb
+      .from("users")
+      .select("id, firm_id, deactivated_at")
+      .eq("id", assigneeId)
+      .maybeSingle();
+    if (!target || target.firm_id !== firm.id || target.deactivated_at) {
+      return { ok: false, error: "invalid_assignee" };
+    }
   }
 
   const { error } = await sb
     .from("engagements")
     .update({
       assigned_user_id: assigneeId,
-      assigned_at: new Date().toISOString(),
+      // Null the timestamp too: "assigned at 3pm to nobody" is not a fact.
+      assigned_at: assigneeId === null ? null : new Date().toISOString(),
     })
     .eq("id", engagementId)
     .eq("firm_id", firm.id);
@@ -777,16 +784,21 @@ export async function reassignEngagementAction(
   }
 
   const handoffNote = normalizeHandoffNote(note);
-  await logUserActivity(firm.id, engagementId, "engagement_reassigned", {
-    to_user_id: assigneeId,
-    ...(handoffNote ? { note: handoffNote } : {}),
-  });
+  await logUserActivity(
+    firm.id,
+    engagementId,
+    assigneeId === null ? "engagement_unassigned" : "engagement_reassigned",
+    {
+      ...(assigneeId === null ? {} : { to_user_id: assigneeId }),
+      ...(handoffNote ? { note: handoffNote } : {}),
+    },
+  );
 
   // In-app notification, instantly. suppressEmail because the delayed
   // notify_assignment job below already owns the EMAIL for this event and is
   // smarter about it (it waits 2h and skips anyone who has been active since).
   // Without suppressEmail the assignee would be emailed twice.
-  if (user.id !== assigneeId) {
+  if (assigneeId !== null && user.id !== assigneeId) {
     const { data: engRow } = await sb
       .from("engagements")
       .select("title, client_id")
@@ -818,7 +830,11 @@ export async function reassignEngagementAction(
   // engagement (a re-reassignment changes who should be emailed). Best-effort:
   // never fail the reassignment on a queue hiccup. The in-app notification is
   // instant + independent of this (and always shows).
-  if (user.id !== assigneeId && firm.notify_on_assignment !== false) {
+  if (
+    assigneeId !== null &&
+    user.id !== assigneeId &&
+    firm.notify_on_assignment !== false
+  ) {
     try {
       await cancelPendingJobs(
         "notify_assignment",

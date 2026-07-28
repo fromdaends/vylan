@@ -1134,7 +1134,8 @@
     "action_recurrence_paused": "A mis un horaire récurrent en pause",
     "action_recurrence_resumed": "A repris un horaire récurrent",
     "action_recurrence_ended": "A arrêté un horaire récurrent",
-    "action_series_reassigned": "A changé l'attribution d'un horaire récurrent"
+    "action_series_reassigned": "A changé l'attribution d'un horaire récurrent",
+    "action_engagement_unassigned": "A retiré un engagement à quelqu'un"
   },
   "Notifications": {
     "title": "Nouveautés",
@@ -2091,7 +2092,10 @@
     "file_delete_storage_hint": "Déplace la copie classée par Vylan vers la corbeille du stockage, où elle peut être récupérée. Désactivé = la copie classée reste en place.",
     "file_delete_storage_failed": "Supprimé ici, mais la copie dans votre stockage n'a pas pu être retirée. Elle est peut-être déjà partie.",
     "final_delete_confirm_title": "Supprimer ce document final ?",
-    "final_delete_confirm_body": "« {name} » sera retiré de Vylan et du portail du client."
+    "final_delete_confirm_body": "« {name} » sera retiré de Vylan et du portail du client.",
+    "unassign": "Le retirer",
+    "handoff_from": "Confié par {name} · {date}",
+    "handoff_at": "Confié le {date}"
   },
   "Attention": {
     "metric_active": "Actifs",
