@@ -9,6 +9,7 @@ import {
 import { NextIntlClientProvider } from "next-intl";
 import { ClientMessagesTab } from "./client-messages-tab";
 import type { FirmConversation } from "@/lib/db/client-messages";
+import type { TeamConversation } from "@/lib/db/team-messages";
 import en from "../../../messages/en.json";
 
 // The opened-thread view hosts EngagementMessages (its own fetch + observers).
@@ -17,6 +18,11 @@ vi.mock("@/components/engagements/engagement-messages", () => ({
   EngagementMessages: ({ engagementId }: { engagementId: string }) => (
     <div data-testid="thread">Thread {engagementId}</div>
   ),
+}));
+
+// Same for the pinned team conversation's thread (its own fetch + poll).
+vi.mock("@/components/assistant/team-thread", () => ({
+  TeamThread: () => <div data-testid="team-thread">Team thread</div>,
 }));
 
 const fetchMock = vi.fn();
@@ -50,6 +56,18 @@ const conversations: FirmConversation[] = [
   },
 ];
 
+const team: TeamConversation = {
+  firmName: "Jette Comptables",
+  logoUrl: null,
+  unreadCount: 3,
+  lastMessage: {
+    body: "Standup at 9",
+    senderName: "Zach",
+    mine: false,
+    createdAt: "2026-07-03T08:00:00Z",
+  },
+};
+
 function renderTab(
   overrides: Partial<Parameters<typeof ClientMessagesTab>[0]> = {},
 ) {
@@ -65,7 +83,7 @@ beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockResolvedValue({
     ok: true,
-    json: async () => ({ conversations }),
+    json: async () => ({ conversations, team: null }),
   });
 });
 
@@ -115,7 +133,7 @@ describe("ClientMessagesTab (inbox)", () => {
   it("shows an empty state when there are no conversations", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({ conversations: [] }),
+      json: async () => ({ conversations: [], team: null }),
     });
     renderTab();
     await waitFor(() =>
@@ -123,5 +141,94 @@ describe("ClientMessagesTab (inbox)", () => {
         screen.getByText(en.Assistant.messages_inbox_empty),
       ).toBeInTheDocument(),
     );
+  });
+});
+
+describe("ClientMessagesTab (pinned team chat)", () => {
+  beforeEach(() => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ conversations, team }),
+    });
+  });
+
+  it("pins the firm's team conversation above the client list", async () => {
+    renderTab();
+    await waitFor(() =>
+      expect(screen.getByText("Jette Comptables")).toBeInTheDocument(),
+    );
+    // Preview leads with the teammate's name; the subtitle says what it is.
+    expect(screen.getByText("Zach: Standup at 9")).toBeInTheDocument();
+    expect(screen.getByText(en.TeamChat.thread_title)).toBeInTheDocument();
+    // The team row renders before every client row.
+    const buttons = screen.getAllByRole("button");
+    const teamIdx = buttons.findIndex((b) =>
+      b.textContent?.includes("Jette Comptables"),
+    );
+    const clientIdx = buttons.findIndex((b) =>
+      b.textContent?.includes("Acme Corp"),
+    );
+    expect(teamIdx).toBeGreaterThanOrEqual(0);
+    expect(teamIdx).toBeLessThan(clientIdx);
+  });
+
+  it("counts team unread into the reported total", async () => {
+    const onUnreadTotal = vi.fn();
+    renderTab({ onUnreadTotal });
+    // 2 client + 3 team.
+    await waitFor(() => expect(onUnreadTotal).toHaveBeenCalledWith(5));
+    expect(
+      screen.getByRole("img", { name: /3 unread/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the team thread with the firm identity in the header", async () => {
+    renderTab();
+    await waitFor(() =>
+      expect(screen.getByText("Jette Comptables")).toBeInTheDocument(),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /Jette Comptables/ }),
+    );
+    expect(screen.getByTestId("team-thread")).toBeInTheDocument();
+    // The back row carries the firm name + the team-only reassurance.
+    expect(screen.getByText("Jette Comptables")).toBeInTheDocument();
+    expect(screen.getByText(en.TeamChat.team_only)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: en.Assistant.messages_back_to_inbox,
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Acme Corp")).toBeInTheDocument(),
+    );
+    expect(screen.queryByTestId("team-thread")).not.toBeInTheDocument();
+  });
+
+  it("shows the pinned row even when there are no client conversations", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ conversations: [], team }),
+    });
+    renderTab();
+    await waitFor(() =>
+      expect(screen.getByText("Jette Comptables")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(en.Assistant.messages_inbox_empty),
+    ).toBeInTheDocument();
+  });
+
+  it("hides the pinned row for a firm without a team", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ conversations, team: null }),
+    });
+    renderTab();
+    await waitFor(() =>
+      expect(screen.getByText("Acme Corp")).toBeInTheDocument(),
+    );
+    expect(screen.queryByText("Jette Comptables")).not.toBeInTheDocument();
   });
 });

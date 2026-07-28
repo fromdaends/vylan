@@ -1,11 +1,11 @@
 "use client";
 
-// The Team-chat view inside the bottom-right chat launcher. Only mounted while
-// the Team page is open (the launcher gates it on teamChatAvailable), so it
-// loads the firm's thread on demand and tears down when you leave the page.
+// The team-chat thread as hosted by the Messages inbox — behind the pinned
+// team conversation row in the compact popup and the expanded sidebar.
 //
-// Thin wrapper: fetches the thread + who "me" is once, then hands off to the
-// shared <TeamChat> thread component (bubbles, composer, poll).
+// Thin wrapper: fetches the thread + who "me" is once (the first time it's
+// actually shown), then hands off to the shared <TeamChat> thread component
+// (bubbles, composer, poll, read-stamping).
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -18,12 +18,16 @@ type LoadState =
   | { status: "error" }
   | { status: "ready"; messages: TeamMessageRow[]; currentUserId: string };
 
-export function TeamChatTab({
+export function TeamThread({
   locale,
   active,
+  hideHeader = false,
 }: {
   locale: "fr" | "en";
   active: boolean;
+  // Forwarded to TeamChat — the popup's back row already carries the firm
+  // identity + team-only hint, so the built-in header would double up there.
+  hideHeader?: boolean;
 }) {
   const t = useTranslations("TeamChat");
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -35,7 +39,9 @@ export function TeamChatTab({
     (async () => {
       try {
         const res = await fetch("/api/team/messages");
-        if (res.status === 503) {
+        // 503 = migration 0870 not applied yet; 403 = the firm isn't a team
+        // (shouldn't be reachable — the pinned row is gated the same way).
+        if (res.status === 503 || res.status === 403) {
           if (!cancelled) setState({ status: "not_ready" });
           return;
         }
@@ -81,6 +87,7 @@ export function TeamChatTab({
       currentUserId={state.currentUserId}
       initialMessages={state.messages}
       notActivated={false}
+      hideHeader={hideHeader}
       locale={locale}
     />
   );

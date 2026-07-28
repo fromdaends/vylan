@@ -153,6 +153,85 @@ export async function getTeamLastReadAt(
   return (res.data as { last_read_at: string } | null)?.last_read_at ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Inbox summary — the pinned "team" conversation in the accountant's Messages
+// inbox (firm name + logo lead the row like a client would; the API route adds
+// that identity from the firm row, this layer owns the message-derived half).
+// ---------------------------------------------------------------------------
+
+export type TeamChatSummary = {
+  lastMessage: {
+    body: string;
+    senderName: string;
+    // The viewer wrote it — the preview gets the "You: " prefix client-side.
+    mine: boolean;
+    createdAt: string;
+  } | null;
+  // Messages from someone else newer than the viewer's read stamp.
+  unreadCount: number;
+};
+
+// What the conversations API returns for the pinned row: the summary plus the
+// firm's display identity (name + signed logo URL).
+export type TeamConversation = TeamChatSummary & {
+  firmName: string;
+  logoUrl: string | null;
+};
+
+// PURE: fold the recent messages (newest-first, as the DB returns them) + the
+// viewer's read stamp into the inbox summary. Exported for unit tests.
+export function buildTeamChatSummary(
+  messages: Pick<
+    TeamMessageRow,
+    "sender_user_id" | "sender_name" | "body" | "created_at"
+  >[],
+  lastReadAt: string | null,
+  myUserId: string,
+): TeamChatSummary {
+  const newest = messages[0] ?? null;
+  return {
+    lastMessage: newest
+      ? {
+          body: newest.body,
+          senderName: newest.sender_name,
+          mine: newest.sender_user_id === myUserId,
+          createdAt: newest.created_at,
+        }
+      : null,
+    unreadCount: countTeamUnreadForUser(messages, lastReadAt, myUserId),
+  };
+}
+
+// The viewer's team-chat inbox summary. Two reads (recent messages + their
+// read stamp) folded by buildTeamChatSummary, plus a single-id name lookup so
+// the preview shows the author's CURRENT name (same live-name rule as
+// listTeamMessages, resolved for just the one message the row displays).
+export async function getTeamChatSummary(
+  sb: SupabaseClient,
+  userId: string,
+): Promise<TeamChatSummary | TeamChatSchemaMissing> {
+  const res = await sb
+    .from("team_messages")
+    .select("id, sender_user_id, sender_name, body, created_at")
+    .order("created_at", { ascending: false })
+    .limit(TEAM_MESSAGE_PAGE_SIZE);
+  if (res.error) {
+    if (isTeamChatSchemaMissing(res.error)) return TEAM_CHAT_SCHEMA_MISSING;
+    throw res.error;
+  }
+  const messages = (res.data ?? []) as TeamMessageRow[];
+
+  const lastReadAt = await getTeamLastReadAt(sb, userId);
+  if (lastReadAt === TEAM_CHAT_SCHEMA_MISSING) return TEAM_CHAT_SCHEMA_MISSING;
+
+  const summary = buildTeamChatSummary(messages, lastReadAt, userId);
+  if (summary.lastMessage && messages[0]) {
+    const [named] = await applyLiveSenderNames(sb, [messages[0]]);
+    if (named) summary.lastMessage.senderName = named.sender_name;
+  }
+  return summary;
+}
+
 // Stamp "this user has seen the thread as of now" (upsert their pointer row).
 export async function markTeamReadByUser(
   sb: SupabaseClient,
