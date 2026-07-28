@@ -210,6 +210,29 @@ export const GUIDANCE_THRESHOLDS: {
  * `absoluteFloor` still applies, so a scene that has only ever been mush
  * cannot promote its own mush to "sharp".
  */
+/**
+ * Motion rescaled to a fixed time base.
+ *
+ * `computeMetrics` reports the mean absolute difference between THIS frame and
+ * the previous one, so the number scales with how long ago that frame was: the
+ * same steady hand reads twice as high at 10fps as at 20fps. Left raw, the
+ * maxMotion threshold silently means something different every time the loop's
+ * speed changes — so it is normalised to a per-100ms basis before it is judged,
+ * and the threshold keeps one meaning regardless of frame rate.
+ */
+export function normaliseMotion(
+  motion: number,
+  elapsedMs: number,
+  referenceMs = 100,
+): number {
+  if (!Number.isFinite(motion) || motion <= 0) return 0;
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) return motion;
+  // Clamp the interval before dividing: a 4ms gap (two analyses in one paint)
+  // would otherwise multiply the reading 25x and report a still hand as motion.
+  const interval = Math.min(Math.max(elapsedMs, referenceMs / 4), referenceMs * 4);
+  return motion * (referenceMs / interval);
+}
+
 export function sharpnessFloorFor(
   peakSharpness: number,
   absoluteFloor: number = GUIDANCE_THRESHOLDS.minSharpness,
