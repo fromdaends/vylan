@@ -18,6 +18,7 @@ import {
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
 import { fetchCompanyProfile } from "@/lib/quickbooks/client";
 import { enqueueJob, cancelPendingJobs } from "@/lib/db/jobs";
+import { rebuildMissingDraftsForClient } from "@/lib/quickbooks/draft-backfill";
 
 // Best-effort self-heal: populate company_country for a connection that predates
 // the tax-line feature (or pre-0470), so posting can decide whether to send the
@@ -199,7 +200,22 @@ export async function processSyncQuickbooksJob(
   const clientId =
     typeof payload.clientId === "string" ? payload.clientId : null;
   try {
-    return await syncQuickbooksLists(firmId, clientId);
+    const result = await syncQuickbooksLists(firmId, clientId);
+    // Same repair pass as the Xero sync: a document read while this client's
+    // lists were still empty got no draft, and nothing went back for it.
+    // Per-client only — a legacy firm-level sync (clientId null) has no single
+    // client to repair. Best-effort; never allowed to fail the sync.
+    if (result.ok && clientId) {
+      const back = await rebuildMissingDraftsForClient(
+        firmId,
+        clientId,
+        "quickbooks",
+      );
+      if (back.rebuilt > 0) {
+        return { ok: true, detail: `${result.detail}+${back.detail}` };
+      }
+    }
+    return result;
   } catch (e) {
     return { ok: false, detail: (e as Error).message ?? String(e) };
   }

@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/xero-cache";
 import { isMissingXeroSchema } from "@/lib/db/xero";
 import { enqueueJob, cancelPendingJobs } from "@/lib/db/jobs";
+import { rebuildMissingDraftsForClient } from "@/lib/quickbooks/draft-backfill";
 
 export type XeroSyncResult = { ok: boolean; detail: string };
 
@@ -117,7 +118,19 @@ export async function processSyncXeroJob(
   const clientId = typeof payload.clientId === "string" ? payload.clientId : null;
   if (!firmId || !clientId) return { ok: false, detail: "no_firm_or_client_id" };
   try {
-    return await syncXeroLists(firmId, clientId);
+    const result = await syncXeroLists(firmId, clientId);
+    // The lists just landed — close the loop on any document that was read
+    // while they were still empty and therefore got no draft. Disconnecting a
+    // client purges the cache, so that window is routine, and without this the
+    // accountant has to notice a missing draft and press Refresh to get one.
+    // Best-effort by construction; never allowed to fail the sync.
+    if (result.ok) {
+      const back = await rebuildMissingDraftsForClient(firmId, clientId, "xero");
+      if (back.rebuilt > 0) {
+        return { ok: true, detail: `${result.detail}+${back.detail}` };
+      }
+    }
+    return result;
   } catch (e) {
     return { ok: false, detail: (e as Error).message ?? String(e) };
   }
