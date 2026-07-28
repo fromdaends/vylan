@@ -20,6 +20,7 @@ import type {
   QbNamed,
   QbAccount,
   QbItem,
+  QbTaxCode,
   QuickbooksLists,
 } from "@/lib/quickbooks/read";
 import type {
@@ -93,7 +94,13 @@ export type LearnSignal =
   | "customer"
   | "expense_account"
   | "line_account"
-  | "tax";
+  | "tax"
+  // The bank account this client's money moves through — "paid from" on an
+  // expense, "deposited to" on a sale. Keyed by DIRECTION, not by any name off
+  // the document: it is a property of the client's books, not of the paper, and
+  // it is the same account almost every time. Remembering it is what stops the
+  // accountant re-picking it on every single receipt.
+  | "payment_account";
 export type LearnedRef = { id: string; name: string };
 export type LearnedMappings = Partial<
   Record<LearnSignal, Record<string, LearnedRef>>
@@ -406,13 +413,51 @@ export function taxTokensFrom(text: string): Set<string> {
 // equal the document's: a GST-only receipt matches the "GST" code (not the
 // combined "GST/QST"), and a Quebec GST+QST receipt matches "GST/QST" (or French
 // "TPS/TVQ"). Partial overlaps surface as candidates, never as a confident pick.
+// The learned-mapping key for a tax pick: the canonical tax-token set PLUS the
+// document's direction.
+//
+// Direction is in the key because a sale and a purchase with identical taxes
+// need DIFFERENT rates ("GST on Income" vs "GST on Purchases"), and a single
+// shared key meant whichever was confirmed last silently re-coded the other.
+// "unknown" keeps the bare token set, which is also exactly what every mapping
+// learned before this existed used — so old rows still resolve for
+// unknown-direction documents instead of being orphaned.
+export function taxLearnKey(
+  taxSource: string | null,
+  direction: "expense" | "income" | "unknown",
+): string | null {
+  if (!taxSource) return null; // no taxes on the document -> nothing to key
+  return direction === "unknown" ? taxSource : `${taxSource}|${direction}`;
+}
+
 export function matchTaxCode(
   taxes: TransactionTaxLine[],
-  taxCodes: QbNamed[] | null,
+  taxCodes: QbTaxCode[] | null,
+  // Which side of the books this document is. A SALE must never be offered a
+  // purchases-only rate and vice versa: the names are similar enough that the
+  // token matcher scored them identically, so on a client carrying both
+  // variants the pick was a coin flip -- and a purchases rate on a sale puts
+  // the tax in the wrong box on the client's return. "unknown" keeps every
+  // rate (we have no basis to exclude any).
+  direction: "expense" | "income" | "unknown" = "unknown",
 ): MatchField {
   if (!taxCodes || taxCodes.length === 0 || taxes.length === 0) {
     return { match: null, confidence: 0, candidates: [] };
   }
+  // Filter BEFORE scoring, so an excluded rate can't even surface as a
+  // candidate the accountant might pick by hand. A rate with the flag absent
+  // (every QuickBooks code, and any Xero row cached before we stored them)
+  // passes -- unknown must never mean "hide it".
+  const usable = taxCodes.filter((c) => {
+    if (direction === "income") return c.canApplyToRevenue !== false;
+    if (direction === "expense") return c.canApplyToExpenses !== false;
+    return true;
+  });
+  // If the filter emptied the list, fall back to the unfiltered set rather than
+  // returning nothing: a client whose rates are all flagged one way is better
+  // served by a wrong-ish suggestion they can correct than by an empty picker
+  // that blocks the draft entirely.
+  const pool = usable.length > 0 ? usable : taxCodes;
   // Canonical tax tokens the document actually shows (junk labels contribute
   // nothing and so don't pollute the denominator).
   const wanted = new Set<string>();
@@ -420,7 +465,7 @@ export function matchTaxCode(
     for (const tok of taxTokensFrom(t.type)) wanted.add(tok);
   if (wanted.size === 0) return { match: null, confidence: 0, candidates: [] };
 
-  const sorted = taxCodes
+  const sorted = pool
     .map((c) => {
       const codeToks = taxTokensFrom(c.name);
       let inter = 0;
@@ -592,15 +637,20 @@ export function suggestPaymentAccount(
   paymentMethod: string | null,
   accounts: QbAccount[] | null | undefined,
 ): MatchField {
-  if (direction === "income" || paid !== true || !accounts) {
+  // Both directions need one: a PAID EXPENSE needs the account it was paid
+  // FROM, a PAID SALE the account it was deposited TO. Same question, same
+  // shape, so the same field carries it — only the label differs in the UI.
+  if (paid !== true || !accounts) {
     return { match: null, confidence: 0, candidates: [] };
   }
   const payable = accounts.filter((a) => isPaymentAccountType(a.accountType));
   if (payable.length === 0)
     return { match: null, confidence: 0, candidates: [] };
 
-  // Narrow by the payment method's hint, but never to nothing.
-  const card = looksLikeCard(paymentMethod);
+  // Narrow by the payment method's hint, but never to nothing. Money RECEIVED
+  // lands in a bank account, never on a credit card, so the card hint is only
+  // consulted for expenses.
+  const card = direction !== "income" && looksLikeCard(paymentMethod);
   const preferred = payable.filter((a) =>
     card
       ? (a.accountType ?? "").toLowerCase() === "credit card"
@@ -779,14 +829,18 @@ export function buildTransactionSuggestion(
   }
 
   // A remembered tax code for this document's tax set wins over token matching.
+  // MUST use the same key builder the write side uses (learn.ts) — a write and
+  // a read that compute the key differently is exactly how this feature was
+  // silently dead before: the row is stored, the lookup succeeds with zero
+  // rows, and "nothing remembered" is indistinguishable from "nothing learned".
   const taxLearned = learnedMatch(
     "tax",
-    learnKeyForTaxes(extraction.taxes),
+    taxLearnKey(learnKeyForTaxes(extraction.taxes), direction),
     learned,
     lists.taxCodes,
   );
   const taxCode = overlayLearned(
-    matchTaxCode(extraction.taxes, lists.taxCodes),
+    matchTaxCode(extraction.taxes, lists.taxCodes, direction),
     taxLearned,
   );
   if (extraction.taxes.length > 0 && lists.taxCodes === null) {
@@ -804,16 +858,33 @@ export function buildTransactionSuggestion(
   // EXPENSE payment: a paid receipt posts a QuickBooks Purchase (against a
   // bank/credit-card account); an unpaid bill posts a Bill (as before). Suggest
   // the "paid from" account when we can; flag when the accountant must choose it.
-  const paymentAccount = suggestPaymentAccount(
+  // A remembered account for this client + direction beats the heuristic: the
+  // heuristic can only be confident when the books hold exactly ONE candidate,
+  // which is rarely true, so without this the accountant re-picks the same
+  // account on every paid document forever.
+  const paymentLearned = learnedMatch(
+    "payment_account",
     direction,
-    extraction.paid,
-    extraction.payment_method,
+    learned,
     lists.accounts,
   );
-  if (direction !== "income" && extraction.paid === true) {
-    if (!paymentAccount.match) {
-      notes.push("This looks paid — choose the account it was paid from.");
-    }
+  const paymentAccount = overlayLearned(
+    suggestPaymentAccount(
+      direction,
+      extraction.paid,
+      extraction.payment_method,
+      lists.accounts,
+    ),
+    // Only when the document is actually PAID — an unpaid bill or invoice
+    // touches no bank account, and pre-filling one there would be noise.
+    extraction.paid === true ? paymentLearned : null,
+  );
+  if (extraction.paid === true && !paymentAccount.match) {
+    notes.push(
+      direction === "income"
+        ? "This looks paid — choose the account it was deposited to."
+        : "This looks paid — choose the account it was paid from.",
+    );
   }
 
   // Per-line splits (expenses only, only when the lines reconcile to the
@@ -838,7 +909,13 @@ export function buildTransactionSuggestion(
         lists.accounts,
       ) != null,
   );
-  if (partyLearned || accountLearned || taxLearned || anyLineLearned) {
+  if (
+    partyLearned ||
+    accountLearned ||
+    taxLearned ||
+    anyLineLearned ||
+    (extraction.paid === true && paymentLearned)
+  ) {
     notes.push(
       "Filled in from choices you've made before — change any field if it's off.",
     );

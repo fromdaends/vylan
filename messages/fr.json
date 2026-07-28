@@ -2931,7 +2931,7 @@
     "draft_title_xero": "Brouillon Xero",
     "draft_kicker": "QuickBooks",
     "draft_kicker_xero": "Xero",
-    "xero_posting_soon": "La publication vers Xero arrive bientôt — vous pouvez déjà réviser et approuver.",
+    "xero_posting_soon": "Nous n'avons pas pu déterminer s'il s'agit d'une entrée ou d'une sortie d'argent. Précisez le sens avant de publier.",
     "draft_badge": "Brouillon",
     "readiness": "Degré de correspondance : {pct} %",
     "draft_readonly_hint": "Correspondance suggérée à vérifier. Rien n’est encore envoyé à QuickBooks.",
@@ -3104,7 +3104,9 @@
     "xero_status_submitted": "En attente d’approbation",
     "xero_status_authorised": "En attente de paiement",
     "xero_status_hint": "Comment cette facture arrive dans Xero. « En attente d’approbation » convient aux cabinets qui utilisent un flux d’approbation.",
-    "xero_status_na_spend": "Les dépenses payées sont toujours publiées comme transaction bancaire complétée — Xero n’a pas d’état brouillon ou d’approbation pour celles-ci."
+    "xero_status_na_spend": "Les dépenses payées sont toujours publiées comme transaction bancaire complétée — Xero n’a pas d’état brouillon ou d’approbation pour celles-ci.",
+    "field_deposited_to": "Déposé dans",
+    "choose_deposited_to": "Choisissez le compte où le dépôt a été fait"
   },
   "ClientMessages": {
     "thread_title": "Messages avec votre client",

@@ -162,7 +162,14 @@ export function draftNeedsInput(
   // card account it was paid from.
   let mappingMissing: boolean;
   if (suggestion.direction === "income") {
-    mappingMissing = eff.item == null;
+    // A PAID sale (SalesReceipt / Xero RECEIVE) also needs the bank account the
+    // money was deposited TO — the mirror of a paid expense's "paid from".
+    // Without it the transaction cannot be posted at all, so it belongs here
+    // rather than surfacing as a post-time failure.
+    const isSalesReceipt =
+      effectiveIncomeMode(suggestion, resolved) === "salesreceipt";
+    mappingMissing =
+      eff.item == null || (isSalesReceipt && eff.paymentAccount == null);
   } else {
     const isPurchase =
       effectiveExpenseMode(suggestion, resolved) === "purchase";

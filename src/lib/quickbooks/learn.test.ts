@@ -105,18 +105,31 @@ describe("learnedWritesFromResolve", () => {
     expect(learnedWritesFromResolve(patch, incomeSuggestion)).toEqual([]);
   });
 
-  it("learns a tax code keyed by the canonical tax set", () => {
+  // The key carries DIRECTION: a sale and a purchase with the same taxes need
+  // different rates ("GST on Income" vs "GST on Purchases"), and one shared key
+  // meant whichever was confirmed last silently re-coded the other.
+  it("learns a tax code keyed by the canonical tax set AND direction", () => {
     const patch: Partial<ResolvedEntry> = {
       taxCode: { id: "t2", name: "GST/QST QC" },
     };
     expect(learnedWritesFromResolve(patch, expenseSuggestion)).toEqual([
       {
         signalType: "tax",
-        sourceKey: "GST+QST",
+        sourceKey: "GST+QST|expense",
         sourceSample: "GST+QST",
         target: { id: "t2", name: "GST/QST QC" },
       },
     ]);
+  });
+
+  it("keys a sale's tax separately from a purchase's", () => {
+    const patch: Partial<ResolvedEntry> = {
+      taxCode: { id: "t2", name: "GST/QST QC" },
+    };
+    const income = learnedWritesFromResolve(patch, incomeSuggestion);
+    expect(income.find((w) => w.signalType === "tax")?.sourceKey).toBe(
+      "GST+QST|income",
+    );
   });
 
   it("learns per-line accounts keyed by each line description, skipping nulls", () => {
@@ -203,13 +216,37 @@ describe("learnedWritesFromResolve", () => {
     ).toEqual([]);
   });
 
-  it("does not learn from fields absent in the patch", () => {
-    // A paymentAccount pick alone carries no learnable signal (v1 scope).
+  // The bank account IS learnable now, and keyed by direction alone: it is a
+  // property of the client's books rather than of the document, and it is the
+  // same account almost every time. Without this the accountant re-picks it on
+  // every paid receipt forever.
+  it("learns the bank account keyed by direction", () => {
     expect(
       learnedWritesFromResolve(
-        { paymentAccount: { id: "a1", name: "Supplies" } },
+        { paymentAccount: { id: "bank1", name: "Chequing" } },
         expenseSuggestion,
       ),
+    ).toEqual([
+      {
+        signalType: "payment_account",
+        sourceKey: "expense",
+        sourceSample: "expense",
+        target: { id: "bank1", name: "Chequing" },
+      },
+    ]);
+  });
+
+  it("keeps a sale's deposit account separate from an expense's paid-from", () => {
+    const w = learnedWritesFromResolve(
+      { paymentAccount: { id: "bank1", name: "Chequing" } },
+      incomeSuggestion,
+    );
+    expect(w[0]?.sourceKey).toBe("income");
+  });
+
+  it("teaches nothing when the bank account is cleared", () => {
+    expect(
+      learnedWritesFromResolve({ paymentAccount: null }, expenseSuggestion),
     ).toEqual([]);
   });
 

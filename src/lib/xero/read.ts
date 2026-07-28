@@ -28,6 +28,7 @@ import type {
   QuickbooksLists,
   QbAccount,
   QbNamed,
+  QbTaxCode,
   QbItem,
 } from "@/lib/quickbooks/read";
 
@@ -51,6 +52,9 @@ export type XeroTaxRateRow = {
   xeroId: string;
   name: string;
   active: boolean;
+  // Xero's own answer to "may this rate be used on a sale / on a purchase".
+  canApplyToRevenue: boolean;
+  canApplyToExpenses: boolean;
 };
 export type XeroItemRow = {
   xeroId: string;
@@ -110,6 +114,11 @@ export function toXeroTaxRateRow(r: XeroRawTaxRate): XeroTaxRateRow {
     name: (r.Name ?? "").trim(),
     // DELETED/ARCHIVED tax rates can't be used on new lines; PENDING/ACTIVE can.
     active: ["ACTIVE", "PENDING"].includes((r.Status ?? "ACTIVE").toUpperCase()),
+    // Absent (an older org, or a field Xero didn't return) means "no opinion" —
+    // default TRUE so an unknown rate is still offered rather than silently
+    // hidden. Only an explicit false excludes it.
+    canApplyToRevenue: r.CanApplyToRevenue !== false,
+    canApplyToExpenses: r.CanApplyToExpenses !== false,
   };
 }
 export function toXeroItemRow(r: XeroRawItem): XeroItemRow {
@@ -151,8 +160,17 @@ export function xeroRowsToLists(input: {
   const customers: QbNamed[] | null = input.contacts
     ? input.contacts.filter((c) => c.isCustomer || !c.isSupplier).map(asNamed)
     : null;
-  const taxCodes: QbNamed[] | null = input.taxRates
-    ? input.taxRates.map((t) => ({ id: t.xeroId, name: t.name, active: t.active }))
+  // Carry Xero's revenue/expense flags into the shared shape so the matcher can
+  // refuse to offer a purchases rate on a sale (QuickBooks has no equivalent, so
+  // the fields are optional there and absent means "no opinion").
+  const taxCodes: QbTaxCode[] | null = input.taxRates
+    ? input.taxRates.map((t) => ({
+        id: t.xeroId,
+        name: t.name,
+        active: t.active,
+        canApplyToRevenue: t.canApplyToRevenue,
+        canApplyToExpenses: t.canApplyToExpenses,
+      }))
     : null;
   // Bridge an item's income account from Xero's CODE space to the AccountID
   // (GUID) space the matcher compares against: suggestItem matches

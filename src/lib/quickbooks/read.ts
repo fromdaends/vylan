@@ -18,6 +18,14 @@ import { quickbooksQuery, QuickbooksError } from "@/lib/quickbooks/client";
 // One name + status, shared by vendors/customers/tax codes.
 export type QbNamed = { id: string; name: string; active: boolean };
 export type QbAccount = QbNamed & { accountType: string | null };
+// A tax code, plus (XERO ONLY) which side of the books it may be used on. Xero
+// publishes CanApplyToRevenue / CanApplyToExpenses on every rate; QuickBooks has
+// no equivalent, so both are OPTIONAL and `undefined` means "no opinion, keep
+// it" — that is what preserves QuickBooks' behaviour untouched.
+export type QbTaxCode = QbNamed & {
+  canApplyToRevenue?: boolean;
+  canApplyToExpenses?: boolean;
+};
 // A product/service Item. itemType = QBO Type (Service/NonInventory/…);
 // incomeAccountId = the item's income account (so a draft mapped to an income
 // account can be matched to its item). Used for income posting (Invoice lines
@@ -32,7 +40,7 @@ export type QuickbooksLists = {
   accounts: QbAccount[] | null;
   vendors: QbNamed[] | null;
   customers: QbNamed[] | null;
-  taxCodes: QbNamed[] | null;
+  taxCodes: QbTaxCode[] | null;
   // Optional + added later (0460): older readers/constructors omit it. null =
   // couldn't load / not synced yet.
   items?: QbItem[] | null;

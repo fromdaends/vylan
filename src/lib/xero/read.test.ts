@@ -56,9 +56,26 @@ describe("row mappers", () => {
     ).toEqual({ xeroId: "A1", code: "200", name: "Sales", accountType: "Income", active: false });
   });
   it("tax rate keys on TaxType; DELETED → inactive", () => {
-    expect(toXeroTaxRateRow({ TaxType: "CAN007", Name: "ON HST on Purchases", Status: "ACTIVE" })).toEqual(
-      { xeroId: "CAN007", name: "ON HST on Purchases", active: true },
-    );
+    expect(
+      toXeroTaxRateRow({
+        TaxType: "CAN007",
+        Name: "ON HST on Purchases",
+        Status: "ACTIVE",
+        CanApplyToRevenue: false,
+        CanApplyToExpenses: true,
+      }),
+    ).toEqual({
+      xeroId: "CAN007",
+      name: "ON HST on Purchases",
+      active: true,
+      canApplyToRevenue: false,
+      canApplyToExpenses: true,
+    });
+    // Flags absent = "no opinion" = usable either way, so an older org's rates
+    // are never silently hidden from the picker.
+    expect(
+      toXeroTaxRateRow({ TaxType: "X", Name: "GST", Status: "ACTIVE" }),
+    ).toMatchObject({ canApplyToRevenue: true, canApplyToExpenses: true });
     expect(toXeroTaxRateRow({ TaxType: "OLD", Name: "x", Status: "DELETED" }).active).toBe(false);
   });
   it("item bridges income account by code", () => {
