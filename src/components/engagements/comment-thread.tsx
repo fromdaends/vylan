@@ -33,15 +33,17 @@ export type CommentTarget =
 
 const OPEN_EVENT = "vylan:comments:add";
 
-export function commentKeyForFile(fileId: string): string {
-  return `file:${fileId}`;
-}
-export function commentKeyForItem(itemId: string): string {
-  return `item:${itemId}`;
-}
-export function commentKeyForEngagement(engagementId: string): string {
-  return `eng:${engagementId}`;
-}
+// The key builders live in comment-keys.ts (a PLAIN module): the engagement
+// page is a Server Component and must be able to CALL them — defined here in
+// a "use client" file they'd become client references and throw at request
+// time. Re-exported for the client-side consumers (menus) already importing
+// them from this module.
+import {
+  commentKeyForFile,
+  commentKeyForItem,
+  commentKeyForEngagement,
+} from "@/components/engagements/comment-keys";
+export { commentKeyForFile, commentKeyForItem, commentKeyForEngagement };
 
 // Ask the matching CommentThread to open its composer (from a context menu
 // item, a "..." menu entry, or the ?comment=1 deep link).
