@@ -6,6 +6,13 @@
 //
 // THE SHUTTER FIRES ON SUSTAINED DETECTION AND NOTHING ELSE.
 //
+// A "held the camera still for N seconds" fallback lived here briefly, added
+// when the detector was failing and a client could be left holding a phone
+// that did nothing. It photographed a blank wall, which is worse than doing
+// nothing — a timer cannot tell a document from a wall, only the detector can.
+// Removed on the founder's call: "it shouldn't be a timer. It should still
+// detect a photo, and once the photo is in frame, then it goes off."
+//
 // Earlier versions also gated firing on light, motion, focus and fill, judged
 // against thresholds that proved untunable from a desk: three rounds on a real
 // phone ended with the founder's "I shouldn't have to have the hands of a
@@ -26,30 +33,9 @@ export type ShutterState = {
   detectedMs: number;
   /** Milliseconds since a document was last seen. */
   missMs: number;
-  /** Milliseconds of continuous gross movement, for the tolerance window. */
-  movingMs: number;
-  /**
-   * Milliseconds the frame has been held steady, DETECTED OR NOT.
-   *
-   * The safety net. If the detector cannot find the client's document — white
-   * paper on a pale table, a hand over one edge, a scene it simply loses — no
-   * amount of shutter logic produces a photo, and the client is left holding a
-   * phone that does nothing. After seven rounds of that, holding the camera
-   * still is enough on its own: we take the frame uncropped rather than take
-   * nothing.
-   */
-  steadyMs: number;
 };
 
-export const INITIAL_SHUTTER: ShutterState = {
-  detectedMs: 0,
-  missMs: 0,
-  movingMs: 0,
-  steadyMs: 0,
-};
-
-/** Which route reached the shutter — the caller crops only for "document". */
-export type FireMode = "document" | "frame";
+export const INITIAL_SHUTTER: ShutterState = { detectedMs: 0, missMs: 0 };
 
 /** What the caller should do with the outline this frame. */
 export type OutlineAction =
@@ -75,8 +61,6 @@ export type ShutterStep = {
   progress: number;
   /** Fire the shutter now. */
   fire: boolean;
-  /** Set when `fire` is true: whether a document was found to crop to. */
-  fireMode: FireMode | null;
 };
 
 export function advanceShutter(
@@ -106,33 +90,9 @@ export function advanceShutter(
     creditHoldMs: number;
     /** Accumulated detection time before the shutter fires. */
     requiredDetectedMs: number;
-    /**
-     * Is the frame free of GROSS movement — someone sweeping the phone across
-     * the room, not someone holding it in their hand? The caller decides; this
-     * reducer only accumulates it.
-     */
-    steady: boolean;
-    /**
-     * How long gross movement must persist before it wipes the accumulated
-     * steady time.
-     *
-     * This exists because the first version reset to zero on a SINGLE
-     * non-steady frame, which made the ring "reset at the slightest, slightest
-     * movement" and the automatic photo physically impossible to reach by
-     * hand. Brief movement now only pauses the count — the same tolerance the
-     * detection credit already had, which this path should have had from the
-     * start.
-     */
-    movementToleranceMs: number;
-    /**
-     * Accumulated steady time before the safety net fires an UNCROPPED photo.
-     * Deliberately several times requiredDetectedMs so the detector always
-     * gets first refusal — this is the floor, not the happy path.
-     */
-    requiredSteadyMs: number;
   },
 ): ShutterStep {
-  const { detected, guidanceFor, graceMs, requiredDetectedMs, steady } = input;
+  const { detected, guidanceFor, graceMs, requiredDetectedMs } = input;
   // Credit must never die before the outline does.
   const creditHoldMs = Math.max(
     graceMs,
@@ -147,33 +107,9 @@ export function advanceShutter(
       : 0;
 
   const required = requiredDetectedMs > 0 ? requiredDetectedMs : Infinity;
-  const requiredSteady =
-    input.requiredSteadyMs > 0 ? input.requiredSteadyMs : Infinity;
-
-  // Steadiness accrues regardless of detection. Movement PAUSES it and only
-  // wipes it once the movement has persisted — a hand wobble must not undo
-  // seconds of progress.
-  const movingMs = steady ? 0 : prev.movingMs + elapsed;
-  const tolerance =
-    Number.isFinite(input.movementToleranceMs) && input.movementToleranceMs > 0
-      ? input.movementToleranceMs
-      : 0;
-  const steadyMs = steady
-    ? prev.steadyMs + elapsed
-    : movingMs > tolerance
-      ? 0
-      : prev.steadyMs;
-  const steadyReady = steadyMs >= requiredSteady;
-
   if (detected) {
     const detectedMs = prev.detectedMs + elapsed;
-    const fire = detectedMs >= required || steadyReady;
-    // Prefer the cropped route whenever detection got us there.
-    const fireMode: FireMode | null = !fire
-      ? null
-      : detectedMs >= required
-        ? "document"
-        : "frame";
+    const fire = detectedMs >= required;
     return {
       // Firing spends the credit: without this the next frame fires again
       // immediately and the client gets a burst of near-identical photos,
@@ -181,15 +117,12 @@ export function advanceShutter(
       state: {
         detectedMs: fire ? 0 : detectedMs,
         missMs: 0,
-        movingMs,
-        steadyMs: fire ? 0 : steadyMs,
       },
       outline: "update",
       documentPresent: true,
       guidance: guidanceFor(true),
-      progress: fire ? 1 : clamp01(Math.max(detectedMs / required, steadyMs / requiredSteady)),
+      progress: fire ? 1 : clamp01(detectedMs / required),
       fire,
-      fireMode,
     };
   }
 
@@ -200,22 +133,15 @@ export function advanceShutter(
   // plainly a different attempt, not a flicker.
   const detectedMs = missMs <= creditHoldMs ? prev.detectedMs : 0;
   return {
-    state: {
-      detectedMs,
-      missMs,
-      movingMs,
-      steadyMs: steadyReady ? 0 : steadyMs,
-    },
+    state: { detectedMs, missMs },
     outline: withinGrace ? "hold" : "clear",
     documentPresent: withinGrace,
     guidance: guidanceFor(withinGrace),
-    progress: steadyReady
-      ? 1
-      : clamp01(Math.max(detectedMs / required, steadyMs / requiredSteady)),
-    // The safety net: no document found, but the client has held the camera
-    // still long enough that an uncropped photo beats no photo at all.
-    fire: steadyReady,
-    fireMode: steadyReady ? "frame" : null,
+    // No document, no progress. The ring sitting at empty while the camera
+    // points at a wall is the honest reading — and it is what tells the
+    // client to aim at their document rather than wait.
+    progress: clamp01(detectedMs / required),
+    fire: false,
   };
 }
 
