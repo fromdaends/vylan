@@ -115,9 +115,12 @@ describe("useCameraStream", () => {
     await waitFor(() => expect(result.current.status).toBe("ready"));
     const constraints = getUserMedia.mock.calls[0]![0];
     expect(constraints.audio).toBe(false);
-    expect((constraints.video as MediaTrackConstraints).facingMode).toEqual({
-      ideal: "environment",
-    });
+    const video = constraints.video as MediaTrackConstraints;
+    expect(video.facingMode).toEqual({ ideal: "environment" });
+    // Deliberately NOT 4K. The capture path reads the frame back out of a
+    // canvas, and asking for more pixels than the 2048px output can use is
+    // what pushed iOS past its canvas budget — the shutter fired into nothing.
+    expect((video.width as { ideal: number }).ideal).toBeLessThanOrEqual(2560);
   });
 
   it("surfaces a denial as denied + camera_denied", async () => {

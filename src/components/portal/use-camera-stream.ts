@@ -127,14 +127,18 @@ export function useCameraStream(): UseCameraStream {
       try {
         const media = await navigator.mediaDevices.getUserMedia({
           // `ideal`, not `exact`: a laptop with only a front camera should
-          // still work rather than throwing OverconstrainedError. Asking for a
-          // high ideal width gets the sharpest stream the device will give —
-          // text legibility is the whole point — and the browser silently
-          // clamps it to whatever the hardware actually has.
+          // still work rather than throwing OverconstrainedError, and the
+          // browser clamps to whatever the hardware actually has.
+          //
+          // 2560 rather than 3840: the capture is capped at
+          // MAX_CAPTURE_DIMENSION (2048) on the long edge, so 4K buys no
+          // legibility — it only makes every frame the capture path reads back
+          // 2.2x larger, which is what pushed iOS past its canvas budget and
+          // made the shutter fire into nothing.
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 3840 },
-            height: { ideal: 2160 },
+            width: { ideal: 2560 },
+            height: { ideal: 1440 },
           },
           audio: false,
         });
