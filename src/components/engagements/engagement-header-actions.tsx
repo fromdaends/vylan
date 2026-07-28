@@ -88,6 +88,7 @@ export function EngagementMoreMenu({
   repeatInvoiceSummary,
   repeatSeriesOutOfSync,
   privacy,
+  commentable,
 }: {
   engagementId: string;
   // The engagement's client id — the Activity item deep-links to the firm

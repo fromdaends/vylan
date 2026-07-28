@@ -373,7 +373,7 @@ export default async function EngagementDetailPage({
   // the engagement itself. One load for the whole page, only in team mode (a
   // firm-team feature). Empty pre-migration / non-team, so no thread renders.
   const engagementComments: EngagementComments = teamEnabled
-    ? await listCommentsForEngagement(engagementId)
+    ? await listCommentsForEngagement(id)
     : groupEngagementComments([]);
   const commentsByFile = engagementComments.byFile;
   // Resolve a reviewer id -> display name for the QuickBooks draft cards
