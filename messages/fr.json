@@ -1504,6 +1504,7 @@
     "xero_encryption_required": "Xero n'est pas encore prêt pour les connexions réelles."
   },
   "Engagements": {
+    "add_comment": "Ajouter un commentaire",
     "title": "Engagements",
     "assigned_to": "Assigné à",
     "unassigned": "Non assigné",
