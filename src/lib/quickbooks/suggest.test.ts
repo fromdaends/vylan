@@ -896,3 +896,85 @@ describe("remembered bank account", () => {
     expect(s.paymentAccount?.match).toBeNull();
   });
 });
+
+// An invoice that names the thing it sold should not make the accountant go
+// find that product in a dropdown. Deriving the item only from the income
+// account meant exactly that: the account had never been matched either, so
+// nothing could be matched at all.
+describe("suggestItem — name matching", () => {
+  const items = [
+    {
+      id: "i1",
+      name: "Development work - per hour rate",
+      itemType: "Service",
+      incomeAccountId: "acc-sales",
+      active: true,
+    },
+    {
+      id: "i2",
+      name: "Consulting",
+      itemType: "Service",
+      incomeAccountId: "acc-sales",
+      active: true,
+    },
+  ];
+
+  it("matches an item by the invoice line's own wording", () => {
+    const m = suggestItem("income", null, items, [
+      "Development work — per hour rate",
+    ]);
+    expect(m.match?.id).toBe("i1");
+    expect(m.confidence).toBe(1);
+  });
+
+  it("needs no income account to do it", () => {
+    // The account bridge would have produced nothing here (two items share the
+    // account, and no account was matched anyway).
+    expect(suggestItem("income", null, items, []).match).toBeNull();
+    expect(
+      suggestItem("income", null, items, ["Consulting"]).match?.id,
+    ).toBe("i2");
+  });
+
+  // A near-name is how the wrong product ends up on a client's invoice.
+  it("does NOT match a merely similar description", () => {
+    expect(
+      suggestItem("income", null, items, ["Development work, hourly"]).match,
+    ).toBeNull();
+  });
+
+  it("refuses when two items share the exact same name", () => {
+    const dup = [
+      { ...items[0]!, id: "x1" },
+      { ...items[0]!, id: "x2" },
+    ];
+    expect(
+      suggestItem("income", null, dup, ["Development work - per hour rate"])
+        .match,
+    ).toBeNull();
+  });
+
+  it("ignores an archived item of that name", () => {
+    const archived = [{ ...items[0]!, active: false }];
+    expect(
+      suggestItem("income", null, archived, [
+        "Development work - per hour rate",
+      ]).match,
+    ).toBeNull();
+  });
+
+  // The account bridge still works when the wording matches nothing.
+  it("falls back to the income-account bridge", () => {
+    const one = [items[0]!];
+    const m = suggestItem("income", "acc-sales", one, ["something else"]);
+    expect(m.match?.id).toBe("i1");
+    expect(m.confidence).toBe(0.9);
+  });
+
+  it("stays empty for expenses", () => {
+    expect(
+      suggestItem("expense", null, items, ["Development work - per hour rate"])
+        .match,
+    ).toBeNull();
+  });
+});
