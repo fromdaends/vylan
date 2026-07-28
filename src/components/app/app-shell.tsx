@@ -35,7 +35,6 @@ import {
   FileText,
   Folder,
   FolderUp,
-  Repeat,
   Gauge,
   HelpCircle,
   BookOpen,
@@ -84,8 +83,6 @@ type Labels = {
   // Localized name of the "Document filing" integrations sub-item (the other
   // sub-items are brand names and need no translation).
   integrationsFiling: string;
-  // "Repeating work" — the firm-wide list of recurring schedules.
-  repeating: string;
   settings: string;
   firm: string;
   logout: string;
@@ -820,20 +817,6 @@ function SidebarBody({
             badges={engagementBadges}
             collapsed={collapsed}
             bookkeepingConnected={quickbooksConnected || xeroConnected}
-          />
-          {/* Repeating work — the schedules that MANUFACTURE engagements, as
-              opposed to the engagements themselves. Deliberately a top-level
-              row rather than a seventh Engagements sub-item: those six are
-              lifecycle slices of one object, and a schedule is a different
-              thing. It also follows the Document filing precedent — burying
-              that a level down made it the least discoverable thing in the
-              sidebar. Indigo: the only icon hue not already spoken for. */}
-          <NavLink
-            href="/repeating"
-            icon={Repeat}
-            label={labels.repeating}
-            collapsed={collapsed}
-            color="text-icon-indigo"
           />
           {/* Document filing — its own top-level tab (founder), promoted out of
               the Integrations sub-list where it was the least discoverable thing

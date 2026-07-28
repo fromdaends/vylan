@@ -32,10 +32,6 @@ describe("Repeating namespace parity", () => {
     }
   });
 
-  it("carries the sidebar label in both languages", () => {
-    expect(en.App.nav_repeating).toBeTruthy();
-    expect(fr.App.nav_repeating).toBeTruthy();
-  });
 });
 
 describe("Repeating interpolated copy", () => {

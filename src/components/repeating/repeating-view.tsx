@@ -199,6 +199,24 @@ export function RepeatingView({
 
   return (
     <div className="space-y-5">
+      {/* Heads itself the way the sibling blocks in Settings > Automation do
+          (icon + text-sm title + text-xs hint), so it reads as one of them
+          rather than a page bolted into a settings tab. The list further down is
+          deliberately NOT max-w-xl like those blocks — it's a table, and
+          constraining it would crush four columns into a third of the width. */}
+      <div className="flex items-start gap-2">
+        <Repeat
+          className="mt-0.5 size-4 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <div>
+          <h2 className="text-sm font-semibold">{t("title")}</h2>
+          <p className="mt-1 max-w-xl text-xs text-muted-foreground">
+            {t("subtitle")}
+          </p>
+        </div>
+      </div>
+
       {/* Filter chips double as the count display — the number worth seeing is
           also the way to narrow to it, instead of stacking a stats row and a
           filter row on top of each other. */}
@@ -282,12 +300,7 @@ export function RepeatingView({
         </div>
       </div>
 
-      <section className="border-l-2 border-accent/40 pl-4 sm:pl-5">
-        <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
-          <Repeat className="h-4 w-4 text-accent" aria-hidden="true" />
-          {t("list_heading")}
-        </h2>
-
+      <section>
         {visible.length === 0 ? (
           <EmptyState
             hasAny={rows.length > 0}

@@ -114,15 +114,14 @@ export function buildSearchRegistry(
       keywords: "clients customers contacts clientele client",
     },
     {
-      // Repeating work. The command palette is how this is reached on a phone —
-      // the mobile tab bar stays at its deliberate three tabs + Account, so
-      // there is no fourth tab for it.
+      // Repeating schedules live in Settings > Automation, which is not
+      // otherwise findable by typing "recurring" — hence the keyword blob.
       id: "repeating",
-      label: t.app("nav_repeating"),
+      label: t.set("nav_automation"),
       group: "go",
       icon: Repeat,
       color: "text-icon-indigo",
-      href: "/repeating",
+      href: "/settings?tab=automation",
       primary: true,
       keywords:
         "repeating recurring schedule series monthly quarterly yearly automatic recurrent recurrence echeancier calendrier automatique horaire",

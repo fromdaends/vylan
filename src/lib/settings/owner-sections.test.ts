@@ -16,10 +16,13 @@ const ALL: SettingsSectionId[] = [
 ];
 
 describe("isOwnerOnlySettingsSection", () => {
-  it("payments + documents + automation are owner-only", () => {
+  it("payments + documents are owner-only", () => {
     expect(isOwnerOnlySettingsSection("payments")).toBe(true);
     expect(isOwnerOnlySettingsSection("documents")).toBe(true);
-    expect(isOwnerOnlySettingsSection("automation")).toBe(true);
+    // "automation" is NOT owner-only: it holds the repeating-schedule
+    // list, which every member sees. The invoice/reminder defaults
+    // inside it stay owner-gated in settings-form.
+    expect(isOwnerOnlySettingsSection("automation")).toBe(false);
   });
   it("account / security / appearance / general are not", () => {
     for (const id of ["account", "security", "appearance", "general"]) {

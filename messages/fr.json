@@ -1421,8 +1421,7 @@
     "metric_drafts": "Brouillons",
     "metric_completed": "Complétés",
     "recent_engagements": "Engagements récents",
-    "nav_integrations_filing": "Classement",
-    "nav_repeating": "Travail récurrent"
+    "nav_integrations_filing": "Classement"
   },
   "TeamChat": {
     "page_title": "Clavardage d'équipe",
@@ -3345,7 +3344,6 @@
   "Repeating": {
     "title": "Travail récurrent",
     "subtitle": "Des horaires qui créent des mandats pour vous et écrivent au client, tout seuls. Tout ce qui roule dans votre cabinet est listé ici.",
-    "list_heading": "Horaires",
     "filter_label": "Filtrer les horaires",
     "filter_all": "Tous",
     "filter_running": "Actifs",

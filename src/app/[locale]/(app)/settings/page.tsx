@@ -25,6 +25,13 @@ import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
 import { getFirmReminderDefault } from "@/lib/reminder-defaults";
 import { loadNotificationSettingsBundle } from "@/lib/db/notification-settings";
+import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { listClients } from "@/lib/db/clients";
+import { listRecurringSeries } from "@/lib/db/recurring";
+import { buildRepeatingRows } from "@/lib/recurring/list";
+import { localToday } from "@/lib/recurring/schedule";
+import { hasActiveTeam } from "@/lib/team/mode";
+import { RepeatingView } from "@/components/repeating/repeating-view";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +116,64 @@ export default async function SettingsPage({
       locale={locale}
     />
   ) : null;
+
+  // Repeating schedules — rendered here (server) and handed to the client shell
+  // as a slot, like billingSlot. Every member sees this block, unlike the
+  // automation DEFAULTS beside it: staff receive the engagements these
+  // schedules create, so hiding the schedule while showing its output is the
+  // worse failure. Row-level privacy is enforced by RLS, so a staff member's
+  // list is simply shorter than an owner's.
+  //
+  // includeArchived is required, not incidental: an archived client is exactly
+  // what flags a schedule, so excluding them would hide the rows this list
+  // exists to surface.
+  const [repeatingSeries, repeatingClients, firmMembers] = await Promise.all([
+    listRecurringSeries(),
+    listClients({ includeArchived: true }),
+    listFirmUsers(),
+  ]);
+  const repeatingRows = buildRepeatingRows({
+    series: repeatingSeries,
+    clientsById: new Map(
+      repeatingClients.map((c) => [
+        c.id,
+        { id: c.id, display_name: c.display_name, archived_at: c.archived_at },
+      ]),
+    ),
+    usersById: new Map(
+      firmMembers.map((m) => [
+        m.id,
+        {
+          id: m.id,
+          name: userDisplayLabel(m),
+          role: m.role,
+          deactivated: m.deactivated_at != null,
+        },
+      ]),
+    ),
+  });
+  const repeatingActiveMembers = firmMembers.filter(
+    (m) => m.deactivated_at == null,
+  );
+  const repeatingSlot = (
+    <RepeatingView
+      rows={repeatingRows}
+      locale={locale}
+      // The firm's own calendar day — the same clock the spawner uses, so
+      // "in 4 days" can never disagree with when work actually appears.
+      today={localToday(firm.timezone)}
+      currentUserId={user.id}
+      isOwner={isOwner}
+      teamEnabled={hasActiveTeam({
+        teamEnabled: firm.team_enabled === true,
+        activeMemberCount: repeatingActiveMembers.length,
+      })}
+      members={repeatingActiveMembers.map((m) => ({
+        id: m.id,
+        name: userDisplayLabel(m),
+      }))}
+    />
+  );
 
   // Stripe Connect status for the owner-only "Get paid by clients" block in the
   // Payments section. The connect_* fields may be undefined until migration 0370
@@ -255,6 +320,7 @@ export default async function SettingsPage({
         aiUsage={aiUsage}
         isOwner={isOwner}
         billingSlot={billingSlot}
+        repeatingSlot={repeatingSlot}
         connect={connect}
         paypal={paypal}
         quickbooks={quickbooks}

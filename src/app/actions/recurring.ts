@@ -230,10 +230,11 @@ async function authorizeSeries(
   return { firmId: firm.id, series, firmTimezone: firm.timezone };
 }
 
-// Every list action revalidates the whole layout rather than one engagement
-// path — the row may have no engagement, and the counts in the stat strip
-// change too.
-const REPEATING_PATH = "/repeating";
+// Every list action revalidates the page that HOSTS the schedule list rather
+// than one engagement path — the row may have no engagement at all, and the
+// filter counts above the list change too. The list lives in
+// Settings > Automation (founder's placement), not at its own route.
+const REPEATING_PATH = "/settings";
 
 export type SeriesReassignResult =
   | { ok: true }

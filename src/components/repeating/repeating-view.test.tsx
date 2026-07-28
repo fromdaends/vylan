@@ -19,7 +19,7 @@ vi.mock("@/app/actions/recurring", () => ({
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn(), refresh: vi.fn(), push: vi.fn() }),
-  usePathname: () => "/repeating",
+  usePathname: () => "/settings",
   useSearchParams: () => new URLSearchParams(),
 }));
 // next-intl's navigation module uses a bare "next/navigation" specifier that

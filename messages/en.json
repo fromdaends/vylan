@@ -1421,8 +1421,7 @@
     "metric_drafts": "Drafts",
     "metric_completed": "Completed",
     "recent_engagements": "Recent engagements",
-    "nav_integrations_filing": "Document filing",
-    "nav_repeating": "Repeating work"
+    "nav_integrations_filing": "Document filing"
   },
   "TeamChat": {
     "page_title": "Team chat",
@@ -3345,7 +3344,6 @@
   "Repeating": {
     "title": "Repeating work",
     "subtitle": "Schedules that create engagements for you and email the client, on their own. Everything running in your firm is listed here.",
-    "list_heading": "Schedules",
     "filter_label": "Filter schedules",
     "filter_all": "All",
     "filter_running": "Running",

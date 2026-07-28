@@ -147,7 +147,6 @@ export default async function AppLayout({
         integrations: t("nav_integrations"),
         integrationsToggle: t("nav_integrations_toggle"),
         integrationsFiling: t("nav_integrations_filing"),
-        repeating: t("nav_repeating"),
         engagementViews: {
           active: tEng("view_active_label"),
           ready: tEng("view_ready_label"),
