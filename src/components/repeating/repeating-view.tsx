@@ -135,6 +135,9 @@ export function RepeatingView({
   }, [rows, query, scope, currentUserId]);
 
   const counts = useMemo(() => countsFor(scoped), [scoped]);
+  // Does this firm have ANY schedule, before any filter? Drives whether the
+  // toolbar exists at all.
+  const hasAny = rows.length > 0;
   const visible = useMemo(
     () => sortRows(scoped.filter((r) => matchesStatusFilter(r, status))),
     [scoped, status],
@@ -219,7 +222,15 @@ export function RepeatingView({
 
       {/* Filter chips double as the count display — the number worth seeing is
           also the way to narrow to it, instead of stacking a stats row and a
-          filter row on top of each other. */}
+          filter row on top of each other.
+
+          HIDDEN ENTIRELY when the firm has no schedules at all: chips that all
+          read zero, a "who it goes to" picker over nobody and a search box over
+          nothing are chrome for data that doesn't exist. They come back the
+          moment there is one row. Note this keys off `rows`, not the filtered
+          `visible` — filtering down to nothing must KEEP the controls, or you
+          can't get back. */}
+      {hasAny && (
       <div
         role="tablist"
         aria-label={t("filter_label")}
@@ -260,6 +271,9 @@ export function RepeatingView({
         })}
       </div>
 
+      )}
+
+      {hasAny && (
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {teamEnabled && (
           <Select
@@ -299,6 +313,7 @@ export function RepeatingView({
           />
         </div>
       </div>
+      )}
 
       <section>
         {visible.length === 0 ? (
