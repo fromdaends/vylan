@@ -27,6 +27,7 @@ import {
   sendEmail,
 } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
+import { wantsEmailFor } from "@/lib/notifications/notify";
 
 // 5 minutes after the LAST message of a burst (founder-approved Phase 0
 // plan). Long enough to absorb rapid follow-ups, short enough that an
@@ -251,6 +252,25 @@ export async function processNotifyFirmMessagesJob(
     .select("display_name")
     .eq("id", engagement.client_id)
     .single();
+
+  // The Notifications tab's Email switch for "Client replied" governs THIS
+  // email — this debounced job is the event's only email path (the send route
+  // writes the in-app row with suppressEmail). Without this check the switch
+  // would appear to work and do nothing. users.email is unique, so resolving
+  // the contact back to a user id is exact; unresolvable means we fail open and
+  // send, which is the safe direction for a client waiting on an answer.
+  const { data: contactUser } = await sb
+    .from("users")
+    .select("id")
+    .eq("email", contact.email)
+    .maybeSingle();
+  const contactUserId = (contactUser as { id: string } | null)?.id ?? null;
+  if (
+    contactUserId &&
+    !(await wantsEmailFor(sb, contactUserId, "message.client_replied"))
+  ) {
+    return { skipped: "email_pref_off" };
+  }
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const url = `${appUrl}/${contact.locale}/engagements/${engagementId}`;

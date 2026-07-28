@@ -1,5 +1,11 @@
 "use server";
 
+import { notify } from "@/lib/notifications/notify";
+import {
+  clientName,
+  emitEngagementCompleted,
+  userName,
+} from "@/lib/notifications/emit";
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -557,6 +563,20 @@ export async function completeEngagementAction(formData: FormData) {
   const engagement = await getEngagement(id);
   if (engagement) {
     await logUserActivity(engagement.firm_id, id, "complete_engagement", {});
+    // Tell the rest of the firm. The actor rule means the person who just
+    // clicked Complete is not notified about their own click.
+    const notifySb = await getServerSupabase();
+    await emitEngagementCompleted(
+      notifySb,
+      {
+        firmId: engagement.firm_id,
+        engagementId: id,
+        engagementTitle: engagement.title,
+        clientId: engagement.client_id,
+        clientName: await clientName(notifySb, engagement.client_id),
+      },
+      { actorId: me?.id ?? null },
+    );
     // Invoice automation: send now, schedule for later, or nothing, per the
     // engagement's choice. Best-effort — a hiccup here must never block the
     // completion the accountant just did.
@@ -761,6 +781,36 @@ export async function reassignEngagementAction(
     to_user_id: assigneeId,
     ...(handoffNote ? { note: handoffNote } : {}),
   });
+
+  // In-app notification, instantly. suppressEmail because the delayed
+  // notify_assignment job below already owns the EMAIL for this event and is
+  // smarter about it (it waits 2h and skips anyone who has been active since).
+  // Without suppressEmail the assignee would be emailed twice.
+  if (user.id !== assigneeId) {
+    const { data: engRow } = await sb
+      .from("engagements")
+      .select("title, client_id")
+      .eq("id", engagementId)
+      .maybeSingle();
+    const eng = engRow as { title: string; client_id: string } | null;
+    await notify({
+      firmId: firm.id,
+      eventKey: "engagement.assigned_to_you",
+      entity: { type: "engagement", id: engagementId },
+      actorId: user.id,
+      engagementId,
+      clientId: eng?.client_id ?? null,
+      recipients: [assigneeId],
+      suppressEmail: true,
+      payload: {
+        engagement_title: eng?.title ?? null,
+        client_name: await clientName(sb, eng?.client_id ?? null),
+        actor_name: await userName(sb, user.id),
+        note: handoffNote ?? null,
+        href: `/engagements/${engagementId}`,
+      },
+    });
+  }
 
   // Schedule the delayed catch-up EMAIL — only when SOMEONE ELSE assigned the
   // work (never self-assignment) AND the firm hasn't turned assignment emails

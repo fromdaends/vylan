@@ -1,3 +1,5 @@
+import { formatCurrency } from "@/lib/format";
+import { emitBillingPaymentFailed } from "@/lib/notifications/emit";
 import { NextResponse, type NextRequest } from "next/server";
 import type Stripe from "stripe";
 import { stripe, isStripeConfigured } from "@/lib/stripe";
@@ -68,6 +70,9 @@ export async function POST(request: NextRequest) {
         break;
       case "invoice.paid":
         await handleInvoicePaid(event.data.object as Stripe.Invoice);
+        break;
+      case "invoice.payment_failed":
+        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
         break;
     }
   } catch (e) {
@@ -465,4 +470,42 @@ async function handleInvoicePaid(invoice: Stripe.Invoice) {
       );
     }
   }
+}
+
+// The firm's OWN Vylan subscription charge failed. Distinct from
+// payment.failed, which is a CLIENT failing to pay the firm.
+//
+// This event did not exist before: the webhook handled invoice.paid but never
+// invoice.payment_failed, so a firm's card silently declining ended in a
+// cancelled account with no warning at any point. It is locked on in the
+// catalog and bypasses quiet hours, the weekend pause and the email master
+// switch for exactly that reason.
+async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
+  // Only SUBSCRIPTION invoices — a failed one-off is not "your account is
+  // about to be cancelled", which is what this notification claims.
+  if (!isSubscriptionInvoice(invoice)) return;
+
+  const customerId =
+    typeof invoice.customer === "string"
+      ? invoice.customer
+      : (invoice.customer?.id ?? null);
+  const metaFirmId = (invoice.metadata?.firm_id ?? null) as string | null;
+  // Same resolver the paid path uses: the stripe_customer_id link is the only
+  // forge-proof one, and it refuses to re-link a firm that already has a
+  // different customer id.
+  const firm = await resolveFirmByCustomer(customerId, metaFirmId);
+  if (!firm) {
+    console.warn("[billing/webhook] failed invoice for unknown customer", {
+      customerId,
+      metaFirmId,
+    });
+    return;
+  }
+
+  const dueCents =
+    typeof invoice.amount_due === "number" ? invoice.amount_due : null;
+  await emitBillingPaymentFailed(getServiceRoleSupabase(), {
+    firmId: firm.id,
+    amount: dueCents != null ? formatCurrency(dueCents / 100, "en") : null,
+  });
 }

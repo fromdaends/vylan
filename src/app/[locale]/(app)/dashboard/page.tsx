@@ -17,8 +17,9 @@ import {
 import { EngagementsWorklist } from "@/components/dashboard/engagements-worklist";
 import { OverviewStatsStrip } from "@/components/dashboard/overview-stats-strip";
 import { localizedTemplateName } from "@/lib/templates/builtin-names";
-import { WhatsNewFeed } from "@/components/inbox/whats-new-feed";
-import { WhatsNewBell } from "@/components/inbox/whats-new-bell";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { listFeed, unreadCount } from "@/lib/notifications/feed";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { WhileYouWereAway } from "@/components/dashboard/while-you-were-away";
 import { NeedsAttention } from "@/components/dashboard/needs-attention";
 import { hasActiveTeam } from "@/lib/team/mode";
@@ -58,6 +59,19 @@ export default async function DashboardPage({
         return [];
       }),
     ]);
+  // The BELL reads the stored notifications table (real read/unread state,
+  // deletable). "While you were away" below deliberately still reads the
+  // DERIVED feed: it is a since-you-last-looked banner keyed off localStorage,
+  // needs no read state, and keeping it derived means the dashboard still shows
+  // recent history on the day this ships, when the stored table is still empty.
+  const supabase = await getServerSupabase();
+  const [feedItems, feedUnread] = user
+    ? await Promise.all([
+        listFeed(supabase, { userId: user.id, limit: 20 }),
+        unreadCount(supabase, user.id),
+      ])
+    : [[], 0];
+
   const teamEnabled = hasActiveTeam({
     teamEnabled: firm?.team_enabled === true,
     activeMemberCount: activeMembers.length,
@@ -110,9 +124,12 @@ export default async function DashboardPage({
         firstName={firstName}
         subtitle={subtitle}
         bell={
-          <WhatsNewBell count={notifications.length}>
-            <WhatsNewFeed notifications={notifications} locale={locale} />
-          </WhatsNewBell>
+          <NotificationBell
+            locale={locale}
+            timezone={firm?.timezone ?? "America/Toronto"}
+            initialItems={feedItems}
+            initialUnread={feedUnread}
+          />
         }
       />
 

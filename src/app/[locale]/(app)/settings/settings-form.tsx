@@ -21,6 +21,7 @@ import {
   UserCog,
   Users,
   Zap,
+  Bell,
 } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
@@ -56,6 +57,8 @@ import { PaymentsInvoicingSection } from "@/components/settings/payments-invoici
 import type { FirmInvoiceSettings } from "@/lib/db/invoice-settings";
 import { PaymentsInvoiceDefaults } from "@/components/settings/payments-invoice-defaults";
 import { ReminderAutomationDefaults } from "@/components/settings/reminder-automation-defaults";
+import { NotificationsSection } from "@/components/settings/notifications-section";
+import type { NotificationSettingsBundle } from "@/lib/db/notification-settings";
 import { PaymentsList } from "@/components/payments/payments-list";
 import type { PaymentsListRow } from "@/lib/db/payment-requests";
 import type { ReminderSettings } from "@/lib/reminder-settings";
@@ -69,6 +72,7 @@ type SectionId =
   | "account"
   | "security"
   | "general"
+  | "notifications"
   | "team"
   | "payments"
   | "automation"
@@ -100,6 +104,7 @@ const SECTION_IDS: SectionId[] = [
   "account",
   "security",
   "general",
+  "notifications",
   "team",
   "payments",
   "automation",
@@ -133,6 +138,8 @@ export function SettingsShell({
   firmLogoUrl,
   email,
   mfaEnabled,
+  notifications,
+  focusEventKey,
   initialSection,
 }: {
   currentLocale: "fr" | "en";
@@ -184,6 +191,12 @@ export function SettingsShell({
   firmLogoUrl: string | null;
   email: string;
   mfaEnabled: boolean;
+  // The signed-in user's own notification preferences. Not owner-gated: every
+  // teammate has their own, unlike the firm-wide tabs around it.
+  notifications: NotificationSettingsBundle;
+  // From ?event=<key> on the "turn off this type of email" link in a
+  // notification email — highlights that row and opens its category.
+  focusEventKey?: string | null;
   // Deep-link target (?tab=account from the avatar menu + the old /firm
   // redirect). Falls back to Account.
   initialSection?: string;
@@ -211,6 +224,7 @@ export function SettingsShell({
     { id: "account", label: t("nav_account"), icon: UserCog },
     { id: "security", label: t("nav_security"), icon: ShieldCheck },
     { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
+    { id: "notifications", label: t("nav_notifications"), icon: Bell },
     { id: "team", label: t("nav_team"), icon: Users },
     { id: "payments", label: t("nav_payments"), icon: Wallet },
     { id: "automation", label: t("nav_automation"), icon: Zap },
@@ -327,6 +341,16 @@ export function SettingsShell({
             )}
             {billingSlot}
           </div>
+        )}
+        {section === "notifications" && (
+          <NotificationsSection
+            isOwner={isOwner}
+            initialSettings={notifications.settings}
+            initialPreferences={notifications.preferences}
+            mutes={notifications.mutes}
+            schemaReady={notifications.schemaReady}
+            focusEventKey={focusEventKey}
+          />
         )}
         {section === "automation" && isOwner && (
           // Everything that runs WITHOUT the accountant doing it by hand

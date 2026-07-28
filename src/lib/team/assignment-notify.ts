@@ -6,6 +6,7 @@
 
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { sendEmail, buildTeamAssignmentEmail } from "@/lib/email";
+import { wantsEmailFor } from "@/lib/notifications/notify";
 
 // If the assignee hasn't been back in the app within this window, email them.
 // Long enough that an active teammate sees the in-app notification first.
@@ -113,6 +114,15 @@ export async function processNotifyAssignmentJob(
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
+  // The Notifications tab's Email switch for "Assigned to you" governs THIS
+  // email — this job is the event's only email path (the emitter writes the
+  // in-app row with suppressEmail). Without this check the switch would appear
+  // to work and change nothing. Fails open on error, so a lookup blip never
+  // silently swallows an assignment email.
+  if (!(await wantsEmailFor(sb, assigneeId, "engagement.assigned_to_you"))) {
+    return { skipped: "email_pref_off" };
+  }
+
   const firmName = (firmResp.data?.name as string) ?? "";
   const assigner = assignerResp.data;
   const locale = assignee?.locale === "fr" ? "fr" : "en";

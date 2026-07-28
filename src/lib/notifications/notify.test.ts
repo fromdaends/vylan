@@ -347,6 +347,42 @@ describe("notify", () => {
     expect(rows.map((r) => r.user_id)).toEqual(["u2"]);
   });
 
+  it("suppressEmail writes the in-app row but queues no email", () => {
+    // Used where a call site already owns a smarter email path (engagement
+    // assignment, client replies). Without it the recipient is emailed twice.
+    return notify({
+      firmId: "f1",
+      eventKey: "document.request_complete", // email defaults ON
+      entity: { type: "engagement", id: "e1" },
+      suppressEmail: true,
+      now: NOW,
+    }).then((res) => {
+      expect(res.delivered).toBe(2);
+      expect(res.emailsQueued).toBe(0);
+      expect(enqueueJob).not.toHaveBeenCalled();
+    });
+  });
+
+  it("suppressEmail also stops the email on a BUNDLED occurrence", () => {
+    // The bundle branch has its own separate email-queueing path; missing it
+    // there would leak an email on the second and later occurrences only,
+    // which is exactly the kind of bug that survives a demo.
+    setBundleTarget(
+      existingRow({ event_key: "message.client_replied", email_sent_at: null }),
+    );
+    return notify({
+      firmId: "f1",
+      eventKey: "message.client_replied",
+      entity: { type: "engagement", id: "e1" },
+      suppressEmail: true,
+      now: NOW,
+    }).then((res) => {
+      expect(res.bundled).toBe(2);
+      expect(res.emailsQueued).toBe(0);
+      expect(enqueueJob).not.toHaveBeenCalled();
+    });
+  });
+
   // ── The two invariants ────────────────────────────────────────────────────
   it("no-ops instead of throwing when the migration is not applied yet", async () => {
     loadFirmRecipients.mockResolvedValue(SCHEMA_MISSING);

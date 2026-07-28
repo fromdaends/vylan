@@ -64,6 +64,23 @@ function renderShell(
       <SettingsShell
         currentLocale="en"
         currentTimezone="America/Toronto"
+        notifications={{
+          settings: {
+            emailEnabled: true,
+            scope: "all_firm",
+            emailMode: "instant",
+            dailyDigestTime: "08:00",
+            timezone: "America/Toronto",
+            quietHoursEnabled: false,
+            quietHoursStart: "20:00",
+            quietHoursEnd: "07:00",
+            pauseWeekends: false,
+            emailDetailLevel: "full",
+          },
+          preferences: [],
+          mutes: [],
+          schemaReady: true,
+        }}
         autoRejectUnusableDocs={false}
         autoRejectDuplicates={false}
         autoRequestMissingPages={false}

@@ -60,6 +60,13 @@ export type NotifyInput = {
   // signatures, and so `assigned_only` can be evaluated. Pass whatever is known.
   engagementId?: string | null;
   clientId?: string | null;
+  // "This call site already owns its own email path — write the in-app row
+  // only." Used by engagement assignment, where a pre-existing job already
+  // sends a smarter email (it waits 2h and skips anyone who has been active in
+  // the app since). Without this the assignee would be emailed twice about the
+  // same thing. The per-event Email switch still governs that job — see
+  // wantsEmailFor() below, which the job calls before sending.
+  suppressEmail?: boolean;
   // Test seam only — production always uses the real clock.
   now?: Date;
 };
@@ -174,7 +181,7 @@ async function runNotify(input: NotifyInput): Promise<NotifyResult> {
           // Only re-queue an email if none has gone out for this row yet.
           // Otherwise every extra upload would re-email about the same unread
           // notification, which is exactly what bundling exists to prevent.
-          if (r.email && bumpedRow.email_sent_at == null) {
+          if (r.email && !input.suppressEmail && bumpedRow.email_sent_at == null) {
             // Cancel the pending job first so a burst collapses to one email
             // rather than one per upload (same trick client-messages uses).
             await cancelPendingJobs(
@@ -212,7 +219,7 @@ async function runNotify(input: NotifyInput): Promise<NotifyResult> {
     const byUser = new Map(inserted.map((row) => [row.user_id, row.id]));
     for (let i = 0; i < recipients.length; i++) {
       const id = byUser.get(recipients[i].userId);
-      if (id && recipients[i].email) {
+      if (id && recipients[i].email && !input.suppressEmail) {
         emailTargets.push({ notificationId: id, recipientIndex: i });
       }
     }
@@ -287,4 +294,48 @@ async function getEngagementAssignees(
   const assigned = (data as { assigned_user_id: string | null } | null)
     ?.assigned_user_id;
   return assigned ? new Set([assigned]) : new Set();
+}
+
+/**
+ * Does this user want EMAIL for this event?
+ *
+ * Exported for call sites that own their own email path (today: the delayed
+ * assignment catch-up). Without this, the Email switch on the settings page
+ * would silently do nothing for those events — the switch would be a lie.
+ *
+ * Fails OPEN (returns true) on any error or when the schema is not applied:
+ * losing an email someone expected is worse than sending one they could have
+ * turned off, and this only runs for events that already emailed before.
+ */
+export async function wantsEmailFor(
+  sb: SupabaseClient,
+  userId: string,
+  eventKey: string,
+): Promise<boolean> {
+  const event = getNotificationEvent(eventKey);
+  if (!event) return true;
+  if (!event.canDisable) return true;
+  try {
+    const [{ data: settings }, { data: pref }] = await Promise.all([
+      sb
+        .from("notification_settings")
+        .select("email_enabled")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      sb
+        .from("notification_preferences")
+        .select("email")
+        .eq("user_id", userId)
+        .eq("event_key", eventKey)
+        .maybeSingle(),
+    ]);
+    const masterOn =
+      (settings as { email_enabled: boolean } | null)?.email_enabled ?? true;
+    if (!masterOn) return false;
+    return (
+      (pref as { email: boolean } | null)?.email ?? event.defaultEmail
+    );
+  } catch {
+    return true;
+  }
 }

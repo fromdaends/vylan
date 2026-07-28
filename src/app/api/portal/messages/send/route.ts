@@ -9,6 +9,8 @@
 //     server-side backstop behind the disabled composer
 //   * TEXT ONLY by design: no attachment fields exist anywhere in this flow.
 
+import { notify } from "@/lib/notifications/notify";
+import { clientName } from "@/lib/notifications/emit";
 import { NextResponse, type NextRequest } from "next/server";
 import { findEngagementForToken, logActivity } from "@/lib/db/portal";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
@@ -98,6 +100,28 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     console.error("[portal messages] notify scheduling failed:", e);
   }
+  // In-app notification for the firm. suppressEmail because
+  // scheduleFirmMessageNotification above already owns the EMAIL for this
+  // event, debounced so a burst of client replies is one email rather than
+  // one per message. The per-event Email switch governs that job via
+  // wantsEmailFor, so the setting is still real.
+  await notify({
+    firmId: engagement.firm_id,
+    eventKey: "message.client_replied",
+    entity: { type: "engagement", id: engagement.id },
+    engagementId: engagement.id,
+    clientId: engagement.client_id,
+    suppressEmail: true,
+    payload: {
+      // The portal's engagement row is a narrow projection without the title;
+      // the feed falls back to the client name, which is the more useful line
+      // here anyway.
+      engagement_title: null,
+      client_name: await clientName(sb, engagement.client_id),
+      count: 1,
+      href: `/engagements/${engagement.id}?panel=messages`,
+    },
+  });
 
   return NextResponse.json({ ok: true, message: toPortalMessage(message) });
 }

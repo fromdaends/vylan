@@ -13,6 +13,7 @@
 //     here; the worker calls this exactly once per usable=false
 //     classification.
 
+import { clientName, emitAiOutcome } from "@/lib/notifications/emit";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { enqueueJob } from "@/lib/db/jobs";
 import { recomputeItemStatus } from "@/lib/db/file-review";
@@ -151,6 +152,8 @@ async function autoRejectAndNotify(
     },
   });
 
+  await emitAiOutcomeForFile(ctx, "rejected");
+
   return { decision: ctx.decision, jobQueued: true };
 }
 
@@ -185,6 +188,8 @@ async function escalateToAccountant(
     },
   });
 
+  await emitAiOutcomeForFile(ctx, "escalated");
+
   return { decision: ctx.decision, jobQueued: false };
 }
 
@@ -213,12 +218,57 @@ async function queueForAccountant(
     },
   });
 
+  await emitAiOutcomeForFile(ctx, "flagged");
+
   return { decision: ctx.decision, jobQueued: false };
 }
 
 // ─────────────────────────────────────────────────────────────────────
 // Small helpers
 // ─────────────────────────────────────────────────────────────────────
+
+// Raise the firm-facing notification for an AI outcome. Runs AFTER the activity
+// log row, so the feed can never show a verdict the log does not have. Every
+// lookup is best-effort: notify() never throws, and a missing name only makes
+// the notification less specific.
+async function emitAiOutcomeForFile(
+  ctx: DispatcherContext,
+  outcome: "flagged" | "rejected" | "escalated",
+): Promise<void> {
+  const { supabase, fileId, engagementId, firmId } = ctx;
+  try {
+    const { data: eng } = await supabase
+      .from("engagements")
+      .select("title, client_id")
+      .eq("id", engagementId)
+      .maybeSingle();
+    const engagement = eng as { title: string; client_id: string } | null;
+    const { data: file } = await supabase
+      .from("uploaded_files")
+      .select("original_filename")
+      .eq("id", fileId)
+      .maybeSingle();
+    await emitAiOutcome(
+      supabase,
+      {
+        firmId,
+        engagementId,
+        engagementTitle: engagement?.title ?? null,
+        clientId: engagement?.client_id ?? null,
+        clientName: await clientName(supabase, engagement?.client_id ?? null),
+      },
+      {
+        outcome,
+        documentName:
+          (file as { original_filename: string | null } | null)
+            ?.original_filename ?? null,
+        fileId,
+      },
+    );
+  } catch (err) {
+    console.error("[ai/router] notification failed:", err);
+  }
+}
 
 function pickClientLocaleSummary(
   verdict: UsabilityVerdict,

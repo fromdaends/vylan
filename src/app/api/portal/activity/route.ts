@@ -13,6 +13,11 @@
 // sections, views/downloads a final document) as actor_type "client", so the
 // accountant's Activity feed + the /settings/audit log show the full picture.
 
+import { getServiceRoleSupabase } from "@/lib/supabase/server";
+import {
+  clientName,
+  emitClientPortalFirstOpened,
+} from "@/lib/notifications/emit";
 import { NextResponse, type NextRequest } from "next/server";
 import { findEngagementForToken, logActivity } from "@/lib/db/portal";
 import {
@@ -86,5 +91,49 @@ export async function POST(request: NextRequest) {
     console.error("[portal activity] log failed:", e);
   }
 
+  // FIRST portal open only. The client hits this route on every visit, so the
+  // notification is gated on there being exactly one client_viewed_portal row
+  // for this engagement — the one we just wrote. Anything else means they have
+  // been here before and the firm has already been told.
+  if (action === "client_viewed_portal") {
+    await emitFirstPortalOpen(engagement);
+  }
+
   return NextResponse.json({ ok: true });
+}
+
+// Raise client.portal_first_opened, but only the first time. Counting the
+// activity rows is what makes this idempotent: the client's browser may retry,
+// and they will certainly come back tomorrow.
+async function emitFirstPortalOpen(engagement: {
+  id: string;
+  firm_id: string;
+  client_id: string;
+}): Promise<void> {
+  try {
+    const sb = getServiceRoleSupabase();
+    const { count } = await sb
+      .from("activity_log")
+      .select("id", { count: "exact", head: true })
+      .eq("engagement_id", engagement.id)
+      .eq("action", "client_viewed_portal");
+    // 1 = the row we just wrote. 0 means the log write above failed, in which
+    // case staying quiet is better than announcing an open we did not record.
+    if (count !== 1) return;
+    const { data: engRow } = await sb
+      .from("engagements")
+      .select("title")
+      .eq("id", engagement.id)
+      .maybeSingle();
+    await emitClientPortalFirstOpened(sb, {
+      firmId: engagement.firm_id,
+      clientId: engagement.client_id,
+      clientName: await clientName(sb, engagement.client_id),
+      engagementId: engagement.id,
+      engagementTitle:
+        (engRow as { title: string } | null)?.title ?? null,
+    });
+  } catch (e) {
+    console.error("[portal activity] first-open notification failed:", e);
+  }
 }

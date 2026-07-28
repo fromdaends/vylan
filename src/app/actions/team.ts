@@ -5,6 +5,7 @@
 // the owner check is the gate. Each action returns a small result object whose
 // `error` code the UI (Phase 6) maps to a friendly bilingual message.
 
+import { emitTeamMemberJoined } from "@/lib/notifications/emit";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
@@ -423,6 +424,14 @@ export async function acceptInvite(
     actor_id: newUserId,
     action: "invite_accepted",
     metadata: { invite_id: invite.id },
+  });
+
+  // Tell the owners. The joiner is the actor, so they are never notified about
+  // their own arrival.
+  await emitTeamMemberJoined(admin, {
+    firmId: invite.firm_id as string,
+    newUserId,
+    newUserName: (invite.email as string)?.split("@")[0] ?? null,
   });
 
   // Sign them in (sets the session cookies), then land on the dashboard.

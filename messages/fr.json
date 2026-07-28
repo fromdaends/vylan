@@ -1259,7 +1259,9 @@
     "event_integration_disconnected_label": "Intégration déconnectée",
     "event_integration_disconnected_desc": "Un outil comptable connecté est déconnecté. Toujours activé.",
     "event_billing_payment_failed_label": "Votre paiement Vylan a échoué",
-    "event_billing_payment_failed_desc": "Le paiement de votre propre abonnement Vylan ne fonctionne pas. Toujours activé, parce que cela mène à un compte annulé."
+    "event_billing_payment_failed_desc": "Le paiement de votre propre abonnement Vylan ne fonctionne pas. Toujours activé, parce que cela mène à un compte annulé.",
+    "unsaved_changes": "Modifications non enregistrées",
+    "day_today": "Aujourd'hui"
   },
   "Inbox": {
     "title": "Boîte de réception",

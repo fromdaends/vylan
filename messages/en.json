@@ -1259,7 +1259,9 @@
     "event_integration_disconnected_label": "Integration disconnected",
     "event_integration_disconnected_desc": "A connected accounting tool is disconnected. Always on.",
     "event_billing_payment_failed_label": "Your Vylan payment failed",
-    "event_billing_payment_failed_desc": "Your own Vylan subscription charge does not go through. Always on, because this ends in a cancelled account."
+    "event_billing_payment_failed_desc": "Your own Vylan subscription charge does not go through. Always on, because this ends in a cancelled account.",
+    "unsaved_changes": "Unsaved changes",
+    "day_today": "Today"
   },
   "Inbox": {
     "title": "Inbox",

@@ -12,6 +12,7 @@
 // SignWell doesn't retry them forever; the completion path also self-heals via
 // reconcile if this endpoint is ever down or unconfigured.
 
+import { emitSignatureNotification } from "@/lib/signwell/complete";
 import { NextResponse, type NextRequest } from "next/server";
 import { isValidSignwellEventHash } from "@/lib/signwell/verify";
 import {
@@ -82,6 +83,18 @@ export async function POST(request: NextRequest) {
       break;
     case "document_declined":
       await updateSignatureStatusSR(sr.id, "declined", evStatus);
+      // A declined signature kills the engagement and NOTHING else in the
+      // product tells anyone — which is why this event is locked on in the
+      // catalog. Raised after the status write so the feed can never contradict
+      // the record.
+      await emitSignatureNotification(
+        {
+          firmId: sr.firm_id,
+          engagementId: sr.engagement_id,
+          requestItemId: sr.request_item_id,
+        },
+        "declined",
+      );
       break;
     case "document_canceled":
       await updateSignatureStatusSR(sr.id, "canceled", evStatus);

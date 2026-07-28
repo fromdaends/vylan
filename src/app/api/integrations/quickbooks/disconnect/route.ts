@@ -1,3 +1,4 @@
+import { emitIntegrationEvent } from "@/lib/notifications/emit";
 import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
@@ -55,5 +56,14 @@ export async function POST(request: Request) {
   // for a dead connection) must not lose them; a COMPANY change is handled by the
   // callback's realm comparison.
   await purgeFirmQuickbooksCache(firm.id, clientId);
+  // Locked-on event: the owners hear about a lost accounting connection even if
+  // they have every other notification switched off. The person who clicked
+  // Disconnect is the actor and is not told about their own click.
+  await emitIntegrationEvent(sb, {
+    firmId: firm.id,
+    outcome: "disconnected",
+    provider: "QuickBooks",
+    actorId: me?.id ?? null,
+  });
   return NextResponse.json({ ok: true });
 }
