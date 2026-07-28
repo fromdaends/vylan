@@ -912,7 +912,7 @@ const CONTROL_GAP = 12;
  * Share of the camera frame the guide asks the client to fill, and the guide's
  * own aspect ratio. The share is the load-bearing one — see apertureFor.
  */
-const APERTURE_FRAME_SHARE = 0.34;
+const APERTURE_FRAME_SHARE = 0.42;
 const APERTURE_RATIO = 1.4;
 
 export function apertureFor(
@@ -953,8 +953,18 @@ export function apertureFor(
   // "you have to move the camera far back", which was the same constraint felt
   // from the other side.
   //
-  // So the window targets a page occupying ~1/3 of the frame, which holds
-  // ~100% detection through a normal hand's tilt and leaves real margin.
+  // The share is then the LARGEST one that still holds detection through a
+  // normal hand's tilt, because every point of share is a step closer the
+  // client gets to hold the phone — and closer means more pixels on the page.
+  // Swept at finer angles:
+  //
+  //     share   0deg   4deg   8deg   12deg   16deg
+  //     0.34    100%   100%   100%    100%    100%
+  //     0.42    100%   100%   100%    100%    100%
+  //     0.46    100%   100%   100%    100%      0%
+  //     0.50    100%   100%   100%      0%      0%
+  //
+  // 0.42 keeps the full 16-degree margin; 0.46 is already on the cliff edge.
   const targetArea = view.width * view.height * APERTURE_FRAME_SHARE;
   const wanted = Math.min(
     Math.sqrt(targetArea * APERTURE_RATIO),

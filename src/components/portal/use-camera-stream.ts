@@ -130,15 +130,20 @@ export function useCameraStream(): UseCameraStream {
           // still work rather than throwing OverconstrainedError, and the
           // browser clamps to whatever the hardware actually has.
           //
-          // 2560 rather than 3840: the capture is capped at
-          // MAX_CAPTURE_DIMENSION (2048) on the long edge, so 4K buys no
-          // legibility — it only makes every frame the capture path reads back
-          // 2.2x larger, which is what pushed iOS past its canvas budget and
-          // made the shutter fire into nothing.
+          // Ask for as much as the hardware will give.
+          //
+          // A portrait phone shows a NARROW CENTRE COLUMN of a landscape
+          // sensor — at 375x708 over a 2560x1440 stream, only ~762px of that
+          // width is ever visible. A document filling a third of the guide is
+          // then only ~440 sensor pixels across, which is thin for fine print.
+          // Every extra sensor pixel goes straight into the document's
+          // legibility, and the read-back canvas is bounded independently by
+          // boundedWorkSize, so this no longer risks the iOS canvas limit that
+          // made 4K dangerous before.
           video: {
             facingMode: { ideal: "environment" },
-            width: { ideal: 2560 },
-            height: { ideal: 1440 },
+            width: { ideal: 3840 },
+            height: { ideal: 2160 },
           },
           audio: false,
         });

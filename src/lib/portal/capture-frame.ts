@@ -271,7 +271,28 @@ export async function captureVideoFrameRectified(
   // Drawing downscaled costs no output quality — the result is capped at
   // MAX_CAPTURE_DIMENSION anyway, and the browser's own drawImage box-filters
   // the reduction better than our bilinear sampler does.
-  const work = boundedWorkSize(intrinsic, Math.max(target.width, target.height));
+  // How much of the document's own resolution the output can actually use.
+  //
+  // BUG THIS FIXES: this used to pass the OUTPUT size as the frame's target
+  // long edge, which scaled the WHOLE FRAME down to the size of the cropped
+  // document — so a page occupying 440px of a 2560px frame was drawn at ~107px
+  // and then warped back up to 440. A 4x upscale of a downscaled image, which
+  // is exactly the "document becomes blurry after it zooms in" the founder
+  // photographed. The frame must be drawn at a scale where the QUAD still
+  // carries the pixels the output needs — which is full resolution whenever
+  // the document is smaller than the cap, bounded only by the canvas budget.
+  const quadLong = Math.max(
+    Math.hypot(sourceQuad[1].x - sourceQuad[0].x, sourceQuad[1].y - sourceQuad[0].y),
+    Math.hypot(sourceQuad[3].x - sourceQuad[0].x, sourceQuad[3].y - sourceQuad[0].y),
+  );
+  const keep =
+    quadLong > 0
+      ? Math.min(1, Math.max(target.width, target.height) / quadLong)
+      : 1;
+  const work = boundedWorkSize(
+    intrinsic,
+    Math.max(intrinsic.width, intrinsic.height) * keep,
+  );
   const wx = work.width / intrinsic.width;
   const wy = work.height / intrinsic.height;
   const workQuad = sourceQuad.map((p) => ({
