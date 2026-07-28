@@ -283,6 +283,25 @@
 .vy-reel-word.vy-brand-out {
   animation: vyBrandOut 0.72s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
+/* Motion-free cross-fades for the reduced-motion reel below.
+
+   THESE MUST STAY AT THE TOP LEVEL. @keyframes nested inside an @media block
+   is legal CSS but is not reliably resolved: engines that only match
+   animation-name against top-level keyframes drop the animation entirely.
+   They were originally written inside the block below, and the result was a
+   hard slideshow on the founder's browser while Chromium played the fade
+   perfectly — so local testing said it worked and it did not. The build does
+   NOT hoist them for you (verified against the deployed bundle).
+
+   Guarded by vylan-landing.css.test.ts. */
+@keyframes vyReduceOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes vyReduceIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
   .vy-subprefix.vy-pf-fwd,
   .vy-subprefix.vy-pf-rev { animation: none; }
@@ -303,15 +322,10 @@
      `!important` is deliberate and is aimed at ONE declaration: the global
      `animation-duration: 0.01ms !important` reset at the bottom of
      globals.css, which would otherwise crush these fades back to a jump-cut.
-     Same origin and both important, so the more specific selector wins. */
-  @keyframes vyReduceOut {
-    from { opacity: 1; }
-    to   { opacity: 0; }
-  }
-  @keyframes vyReduceIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
-  }
+     Same origin and both important, so the more specific selector wins.
+
+     vyReduceIn / vyReduceOut are defined ABOVE this block, at the top level —
+     see the note there before moving them back in here. */
   .vy-reel-word.vy-out,
   .vy-reel-word.vy-out-rev {
     animation: vyReduceOut 0.3s ease forwards !important;
