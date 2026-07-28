@@ -57,6 +57,14 @@ export type ResolvedEntry = {
   // replace of this key). Absent = single line (today's behavior).
   split?: boolean | null;
   lineAccounts?: Record<string, ResolvedRef | null>;
+  // XERO ONLY — how this bill should land: "DRAFT", "SUBMITTED" (Xero's
+  // "Awaiting approval", for firms running an approval workflow) or
+  // "AUTHORISED" ("Awaiting payment"). Absent = fall back to the client's
+  // remembered default, then AUTHORISED. Ignored on a PAID expense: that posts
+  // as a bank transaction and Xero has no draft or approval state for those.
+  // Spelled out here rather than importing the Xero type — this module is
+  // provider-neutral and the Xero layer owns the meaning.
+  publishStatus?: "DRAFT" | "SUBMITTED" | "AUTHORISED" | null;
 };
 
 // A reference to one cached QuickBooks entity. `active` is carried so the

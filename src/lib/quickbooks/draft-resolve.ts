@@ -185,3 +185,26 @@ export function draftNeedsInput(
     effectiveDate(suggestion, resolved) == null
   );
 }
+
+// XERO — how this draft should land in Xero ("Publish as").
+//
+// Precedence: what the accountant chose for THIS document, else this client's
+// remembered default, else AUTHORISED (the behaviour before the picker existed,
+// so nothing changes for anyone who never touches it).
+//
+// A PAID expense always resolves to AUTHORISED regardless of any override: it
+// posts as a BankTransaction, and Xero's BankTransaction.Status only accepts
+// AUTHORISED or DELETED — there is no draft or approval state for a cash
+// movement. The card hides the picker in that mode; this is the backstop so a
+// stale override on a draft whose paid-toggle was flipped can never produce a
+// status Xero will reject.
+export function effectivePublishStatus(
+  suggestion: TransactionSuggestion,
+  resolved: ResolvedEntry | null,
+  clientDefault: "DRAFT" | "SUBMITTED" | "AUTHORISED" | null | undefined,
+): "DRAFT" | "SUBMITTED" | "AUTHORISED" {
+  if (effectiveExpenseMode(suggestion, resolved) === "purchase") {
+    return "AUTHORISED";
+  }
+  return resolved?.publishStatus ?? clientDefault ?? "AUTHORISED";
+}

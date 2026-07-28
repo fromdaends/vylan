@@ -462,3 +462,51 @@ export async function filterXeroConnectedClientIds(
   }
   return out;
 }
+
+// This CLIENT's remembered "Publish as" default (0970), or null pre-migration /
+// on any error — the caller then falls back to AUTHORISED, today's behaviour.
+//
+// Client scope, not firm: whether bills should land awaiting approval is an
+// org-level policy, and a firm will have some clients on an approval workflow
+// and some not. Service-role: this is read on the posting path, which has no
+// user session.
+export async function readClientXeroPublishDefault(
+  firmId: string,
+  clientId: string,
+): Promise<"DRAFT" | "SUBMITTED" | "AUTHORISED" | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("xero_connections")
+    .select("default_publish_status")
+    .eq("firm_id", firmId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingXeroSchema(error)) {
+      console.error("[xero] readClientXeroPublishDefault failed:", error);
+    }
+    return null;
+  }
+  const v = data?.default_publish_status;
+  return v === "DRAFT" || v === "SUBMITTED" || v === "AUTHORISED" ? v : null;
+}
+
+// Remember this client's "Publish as" choice, so the next bill for them starts
+// there. Best-effort: a pre-0970 database (or any error) just means the choice
+// applies to this document only. Service-role — the table has no authenticated
+// write grant.
+export async function setClientXeroPublishDefault(
+  firmId: string,
+  clientId: string,
+  status: "DRAFT" | "SUBMITTED" | "AUTHORISED",
+): Promise<void> {
+  const sb = getServiceRoleSupabase();
+  const { error } = await sb
+    .from("xero_connections")
+    .update({ default_publish_status: status, updated_at: new Date().toISOString() })
+    .eq("firm_id", firmId)
+    .eq("client_id", clientId);
+  if (error && !isMissingXeroSchema(error)) {
+    console.error("[xero] setClientXeroPublishDefault failed:", error);
+  }
+}

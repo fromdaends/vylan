@@ -26,6 +26,40 @@
 // per-endpoint defaults differ (Invoices=Exclusive, BankTransactions=Inclusive),
 // so relying on the default would silently mis-state a transaction.
 
+// How a bill/invoice lands in Xero — what Hubdoc calls "Publish as":
+//   DRAFT      -> Xero "Draft"             (nothing owed yet; edit it in Xero)
+//   SUBMITTED  -> Xero "Awaiting approval"  (an approval workflow picks it up)
+//   AUTHORISED -> Xero "Awaiting payment"   (live and payable — our default)
+//
+// Bank transactions (SPEND/RECEIVE) have NO equivalent: a cash movement is not
+// an approvable payable, and Xero's BankTransaction.Status only accepts
+// AUTHORISED or DELETED. The spend builder therefore takes no status at all.
+export type XeroInvoiceStatus = "DRAFT" | "SUBMITTED" | "AUTHORISED";
+
+// Does this status need a DueDate? Xero requires one on an ACCPAY that is, or
+// is about to become, authorised — and a SUBMITTED bill is one approval click
+// away, so it needs one too. Only a true DRAFT may go without.
+export function xeroStatusNeedsDueDate(status: XeroInvoiceStatus): boolean {
+  return status === "AUTHORISED" || status === "SUBMITTED";
+}
+
+// Undoing a post: which Xero status change actually retracts a transaction.
+//
+// THIS IS WHY posted_status IS STORED. Xero REJECTS the VOIDED transition on a
+// DRAFT or SUBMITTED invoice — the legal move there is DELETED. Re-deriving the
+// status from the draft's current state instead of what was really sent would
+// throw on undo, leave the bill sitting in the client's books, and strand the
+// row as "posted" in Vylan.
+//
+// null = posted before we recorded it, which was always AUTHORISED.
+export function xeroUndoStatusFor(
+  postedStatus: XeroInvoiceStatus | null,
+): "VOIDED" | "DELETED" {
+  return postedStatus === "DRAFT" || postedStatus === "SUBMITTED"
+    ? "DELETED"
+    : "VOIDED";
+}
+
 // LineAmountTypes (transaction-level). "Exclusive": line amounts are net, Xero
 // adds tax from each line's TaxType. "NoTax": no tax anywhere (gross line, no
 // TaxType). ("Inclusive" is never produced — we always post net-exclusive.)
@@ -188,9 +222,7 @@ export type XeroBillInput = {
   description?: string | null;
   tax?: XeroTaxApplication | null;
   lines?: XeroExpenseLine[]; // SPLIT (≥1); each carries its pre-tax amount + code
-  // AUTHORISED posts a live bill (needs a DueDate — defaults to the txn date);
-  // DRAFT posts a draft bill for the accountant to finalise in Xero. Default live.
-  status?: "DRAFT" | "AUTHORISED";
+  status?: XeroInvoiceStatus;
 };
 
 export function buildXeroBillPayload(
@@ -216,9 +248,10 @@ export function buildXeroBillPayload(
     Date: input.date,
     Status: status,
   };
-  // An AUTHORISED ACCPAY requires a DueDate; default it to the transaction date
-  // when the document didn't give one (a valid, conservative "due now").
-  if (status === "AUTHORISED") body.DueDate = input.dueDate || input.date;
+  // An AUTHORISED (or soon-to-be-authorised SUBMITTED) ACCPAY requires a
+  // DueDate; default it to the transaction date when the document didn't give
+  // one (a valid, conservative "due now").
+  if (xeroStatusNeedsDueDate(status)) body.DueDate = input.dueDate || input.date;
   else if (input.dueDate) body.DueDate = input.dueDate;
   if (input.reference) body.Reference = input.reference;
   return body;
@@ -274,7 +307,7 @@ export type XeroIncomeInput = {
   reference?: string | null;
   description?: string | null;
   tax?: XeroTaxApplication | null;
-  status?: "DRAFT" | "AUTHORISED";
+  status?: XeroInvoiceStatus;
 };
 
 export function buildXeroInvoicePayload(
@@ -298,7 +331,7 @@ export function buildXeroInvoicePayload(
     Date: input.date,
     Status: status,
   };
-  if (status === "AUTHORISED") body.DueDate = input.dueDate || input.date;
+  if (xeroStatusNeedsDueDate(status)) body.DueDate = input.dueDate || input.date;
   else if (input.dueDate) body.DueDate = input.dueDate;
   if (input.reference) body.Reference = input.reference;
   return body;
