@@ -61,6 +61,13 @@ export const AUDIT_ACTIONS = [
   "user_deactivated",
   "user_reactivated",
   "ownership_transferred",
+  // repeating work. recurrence_* predate this list — they were logged by
+  // the Repeat dialog but never registered, so the audit log rendered the
+  // raw code. series_reassigned is new with the /repeating screen.
+  "recurrence_paused",
+  "recurrence_resumed",
+  "recurrence_ended",
+  "series_reassigned",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

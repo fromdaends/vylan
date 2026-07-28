@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
+  Repeat,
   BookOpen,
   Plug,
   ListChecks,
@@ -111,6 +112,19 @@ export function buildSearchRegistry(
       href: "/clients",
       primary: true,
       keywords: "clients customers contacts clientele client",
+    },
+    {
+      // Repeating schedules live in Settings > Automation, which is not
+      // otherwise findable by typing "recurring" — hence the keyword blob.
+      id: "repeating",
+      label: t.set("nav_automation"),
+      group: "go",
+      icon: Repeat,
+      color: "text-icon-indigo",
+      href: "/settings?tab=automation",
+      primary: true,
+      keywords:
+        "repeating recurring schedule series monthly quarterly yearly automatic recurrent recurrence echeancier calendrier automatique horaire",
     },
     {
       id: "engagements",

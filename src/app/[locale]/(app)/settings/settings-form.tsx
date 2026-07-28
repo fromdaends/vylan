@@ -125,6 +125,7 @@ export function SettingsShell({
   aiUsage,
   isOwner,
   billingSlot,
+  repeatingSlot,
   connect,
   paypal,
   quickbooks,
@@ -158,6 +159,10 @@ export function SettingsShell({
   // passed in as a slot so the client shell can show it under the Payments tab.
   // Null for non-owners.
   billingSlot: React.ReactNode;
+  // Server-rendered repeating-schedule list. A slot (like billingSlot)
+  // because its data is loaded on the server while this shell is a client
+  // component.
+  repeatingSlot: React.ReactNode;
   // Stripe Connect status for the "Get paid by clients" block at the top of the
   // Payments section. Null for non-owners.
   connect: ConnectStatus | null;
@@ -352,10 +357,18 @@ export function SettingsShell({
             focusEventKey={focusEventKey}
           />
         )}
-        {section === "automation" && isOwner && (
+        {section === "automation" && (
           // Everything that runs WITHOUT the accountant doing it by hand
-          // lives here (founder) — for now the invoice automation default
-          // (moved out of Payments); more automations join over time.
+          // lives here (founder) — the repeating-schedule list, plus the
+          // firm-wide automation defaults.
+          //
+          // MIXED VISIBILITY, deliberately: the schedule list is for every
+          // member (staff receive the engagements those schedules create, so
+          // hiding the machine while showing its output is the worse failure —
+          // and row-level privacy is enforced in the database, not here). The
+          // DEFAULTS below it change what the product does on its own and stay
+          // owner-only. This is the one settings tab that is partly visible to
+          // staff; see owner-sections.ts.
           <div className="space-y-12">
             <section>
               <h2 className="text-sm font-semibold">
@@ -365,18 +378,23 @@ export function SettingsShell({
                 {t("automation_hint")}
               </p>
             </section>
-            <ReminderAutomationDefaults
-              initialSettings={reminderDefaultSettings}
-            />
-            {connect?.chargesEnabled ? (
-              <PaymentsInvoiceDefaults
-                initialMode={invoiceDefaultMode}
-                initialDelayDays={invoiceDefaultDelayDays}
-              />
-            ) : (
-              <p className="max-w-xl text-sm text-muted-foreground">
-                {t("automation_needs_connect")}
-              </p>
+            {repeatingSlot}
+            {isOwner && (
+              <>
+                <ReminderAutomationDefaults
+                  initialSettings={reminderDefaultSettings}
+                />
+                {connect?.chargesEnabled ? (
+                  <PaymentsInvoiceDefaults
+                    initialMode={invoiceDefaultMode}
+                    initialDelayDays={invoiceDefaultDelayDays}
+                  />
+                ) : (
+                  <p className="max-w-xl text-sm text-muted-foreground">
+                    {t("automation_needs_connect")}
+                  </p>
+                )}
+              </>
             )}
           </div>
         )}
