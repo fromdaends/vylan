@@ -113,6 +113,58 @@ export function captureFilename(at: number): string {
   return `scan-${iso}.jpg`;
 }
 
+/**
+ * Largest canvas we will allocate to read pixels out of.
+ *
+ * iOS Safari refuses to back a canvas past roughly 16.7M pixels and lies about
+ * it (see captureVideoFrameRectified). A current iPhone's rear camera exceeds
+ * that on its own, so every read-back path has to be bounded. Kept well under
+ * the limit because a phone mid-capture is already holding the video pipeline.
+ */
+const MAX_WORK_PIXELS = 12_000_000;
+const MAX_WORK_DIMENSION = 4096;
+
+/**
+ * The size to draw the source at: big enough to feed `neededLongEdge` at full
+ * quality, never bigger than the source, and always inside the canvas budget.
+ */
+export function boundedWorkSize(source: Size, neededLongEdge: number): Size {
+  const w = Math.max(1, Math.round(source.width));
+  const h = Math.max(1, Math.round(source.height));
+  const longest = Math.max(w, h);
+  const needed = Number.isFinite(neededLongEdge) && neededLongEdge > 0
+    ? neededLongEdge
+    : longest;
+
+  // Never upscale, and never draw more than the output can use.
+  let scale = Math.min(1, needed / longest);
+  // Then clamp to the canvas budget, whichever bound bites first.
+  scale = Math.min(scale, MAX_WORK_DIMENSION / longest);
+  scale = Math.min(scale, Math.sqrt(MAX_WORK_PIXELS / (w * h)));
+
+  return {
+    width: Math.max(1, Math.round(w * scale)),
+    height: Math.max(1, Math.round(h * scale)),
+  };
+}
+
+/**
+ * True when every sampled pixel is identical — the signature of a canvas whose
+ * backing store was refused. A real photograph of a document is never uniform,
+ * so this only ever fires on a genuine failure.
+ */
+export function isUniform(data: Uint8ClampedArray): boolean {
+  if (data.length < 4) return true;
+  const step = Math.max(4, Math.floor(data.length / 4 / 256) * 4);
+  const r = data[0];
+  const g = data[1];
+  const b = data[2];
+  for (let i = 4; i < data.length; i += step) {
+    if (data[i] !== r || data[i + 1] !== g || data[i + 2] !== b) return false;
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------------------
 // Canvas wrapper — untestable under happy-dom (getContext("2d") returns null),
 // so it stays as thin as possible and delegates every decision above.
@@ -159,6 +211,16 @@ export async function captureVideoFrame(
     out.height,
   );
 
+  // Same refused-backing-store guard as the rectified path.
+  try {
+    if (isUniform(ctx.getImageData(0, 0, out.width, out.height).data)) {
+      throw new Error("capture_blank");
+    }
+  } catch (e) {
+    if ((e as Error).message === "capture_blank") throw e;
+    // getImageData can also fail outright; fall through and let toBlob decide.
+  }
+
   const blob = await new Promise<Blob | null>((resolve) => {
     canvas.toBlob((b) => resolve(b), "image/jpeg", CAPTURE_QUALITY);
   });
@@ -194,22 +256,46 @@ export async function captureVideoFrameRectified(
 
   const target = outputSizeFor(sourceQuad, MAX_CAPTURE_DIMENSION);
 
-  // Read the whole frame once, then warp out of it. Reading only the quad's
-  // bounding box would save memory but costs a coordinate rebase for no real
-  // gain at these sizes.
+  // Read the frame at a BOUNDED working scale, never at the sensor's native
+  // resolution.
+  //
+  // This is the bug that made the shutter look broken on a real iPhone. We ask
+  // the camera for a large frame, and allocating a canvas that big walks into
+  // WebKit's per-canvas pixel budget — past which iOS does NOT throw: it hands
+  // back a live 2D context over a refused backing store, drawImage silently
+  // no-ops, and getImageData returns zeros. So the shutter fired, the capture
+  // either threw or produced a black frame, and the client saw nothing happen
+  // while the loop charged up and did it again. (The sibling picked-image path
+  // in enhance-image.ts hit the identical trap; this one was missed.)
+  //
+  // Drawing downscaled costs no output quality — the result is capped at
+  // MAX_CAPTURE_DIMENSION anyway, and the browser's own drawImage box-filters
+  // the reduction better than our bilinear sampler does.
+  const work = boundedWorkSize(intrinsic, Math.max(target.width, target.height));
+  const wx = work.width / intrinsic.width;
+  const wy = work.height / intrinsic.height;
+  const workQuad = sourceQuad.map((p) => ({
+    x: p.x * wx,
+    y: p.y * wy,
+  })) as unknown as Quad;
+
   const frame = document.createElement("canvas");
-  frame.width = intrinsic.width;
-  frame.height = intrinsic.height;
-  const fctx = frame.getContext("2d");
+  frame.width = work.width;
+  frame.height = work.height;
+  const fctx = frame.getContext("2d", { willReadFrequently: true });
   if (!fctx) throw new Error("capture_unsupported");
-  fctx.drawImage(video, 0, 0);
-  const src = fctx.getImageData(0, 0, intrinsic.width, intrinsic.height);
+  fctx.drawImage(video, 0, 0, work.width, work.height);
+  const src = fctx.getImageData(0, 0, work.width, work.height);
+  // A refused backing store reads back as uniform pixels. Catch it here rather
+  // than uploading a black rectangle in place of the client's document.
+  if (isUniform(src.data)) throw new Error("capture_blank");
 
   const warped = warpToRect(
     { data: src.data, width: src.width, height: src.height },
-    sourceQuad,
+    workQuad,
     target,
   );
+  if (isUniform(warped.data)) throw new Error("capture_blank");
 
   const out = document.createElement("canvas");
   out.width = warped.width;

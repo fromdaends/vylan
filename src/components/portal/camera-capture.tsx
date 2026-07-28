@@ -110,6 +110,10 @@ export function CameraCapture({
   // Rolling share of recent frames with a detection — purely for ?scan=debug,
   // where it turns "the border was buggy" into a number.
   const dutyRef = useRef(0);
+  // Last capture problem, surfaced in ?scan=debug. A capture that fails
+  // silently is invisible from the outside — this makes it one screenshot.
+  const captureFallbackRef = useRef<string | null>(null);
+  const shotCountRef = useRef(0);
   const peakSharpnessRef = useRef(0);
   const capturingRef = useRef(false);
   const debugRef = useRef<HTMLPreElement>(null);
@@ -238,12 +242,27 @@ export function CameraCapture({
     try {
       const size = viewRef.current;
       const q = quadRef.current;
-      const file =
-        q && size.width > 0
-          ? await captureVideoFrameRectified(video, q, size)
-          : await captureVideoFrame(video, { view: size });
+      let file: File | null = null;
+
+      // Try the cropped-and-flattened capture, but NEVER let its failure mean
+      // "no photo". This path reads a large frame back out of a canvas, which
+      // is exactly what iOS refuses under memory pressure — and when it failed
+      // the shutter fired, nothing appeared, the loop recharged and fired
+      // again. Silent, endless, and indistinguishable from "auto-capture
+      // doesn't work". A plain uncropped photo beats no photo every time.
+      if (q && size.width > 0) {
+        try {
+          file = await captureVideoFrameRectified(video, q, size);
+        } catch (e) {
+          captureFallbackRef.current = (e as Error).message || "rectify_failed";
+        }
+      }
+      if (!file) file = await captureVideoFrame(video, { view: size });
+
+      shotCountRef.current += 1;
       setShot({ file, url: URL.createObjectURL(file) });
-    } catch {
+    } catch (e) {
+      captureFallbackRef.current = (e as Error).message || "failed";
       setCaptureError("capture_failed");
     } finally {
       capturingRef.current = false;
@@ -400,6 +419,7 @@ export function CameraCapture({
           `quad   ${found ? "found" : "NONE"}  duty ${(dutyRef.current * 100).toFixed(0)}%`,
           `hint   ${step.guidance}`,
           `charge ${(step.progress * 100).toFixed(0)}%  (${step.state.detectedMs.toFixed(0)}/${DETECTED_MS_REQUIRED}ms, miss ${step.state.missMs.toFixed(0)})`,
+          `shots  ${shotCountRef.current}${captureFallbackRef.current ? `  LAST ERR: ${captureFallbackRef.current}` : ""}`,
         ].join("\n");
       }
 
