@@ -10,6 +10,7 @@ import {
   labelKeyFor,
 } from "./catalog";
 import { copyFor, copyKeys } from "./email-copy";
+import { defaultRecipientSettings } from "@/lib/db/notifications";
 
 describe("notification catalog", () => {
   it("has no duplicate keys", () => {
@@ -182,5 +183,31 @@ describe("email copy", () => {
     expect(
       copyFor("document.uploaded", "en")!.headline({ ...vars, count: 1 }),
     ).toContain("New document");
+  });
+});
+
+describe("default recipient settings", () => {
+  it("defaults STAFF to assigned_only, matching what they already see", () => {
+    // The old derived feed showed staff only their own engagements. Defaulting
+    // them to all_firm would silently widen every staff member's view to every
+    // client in the firm the moment this shipped.
+    expect(defaultRecipientSettings("America/Toronto", "staff").scope).toBe(
+      "assigned_only",
+    );
+  });
+
+  it("defaults OWNERS to the whole firm", () => {
+    expect(defaultRecipientSettings("America/Toronto", "owner").scope).toBe(
+      "all_firm",
+    );
+  });
+
+  it("takes the firm's timezone rather than hardcoding Eastern", () => {
+    expect(defaultRecipientSettings("America/Vancouver", "owner").timezone).toBe(
+      "America/Vancouver",
+    );
+    expect(defaultRecipientSettings(null, "owner").timezone).toBe(
+      "America/Toronto",
+    );
   });
 });

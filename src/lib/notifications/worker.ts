@@ -20,7 +20,6 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email";
 import {
   isNotificationsSchemaMissing,
-  markNotificationEmailSent,
   type NotificationRow,
 } from "@/lib/db/notifications";
 import { getNotificationEvent } from "./catalog";
@@ -88,6 +87,22 @@ export async function processSendNotificationEmailJob(
   });
   if (!built) return { skipped: "no_copy_for_event" };
 
+  // Claim before sending, same reasoning as the digest path: stamp first with
+  // an `email_sent_at is null` predicate so a duplicate job (a cancel/enqueue
+  // race in the bundle path) cannot also send. Zero rows back means someone
+  // else already owns this send.
+  const { data: claimed, error: claimErr } = await sb
+    .from("notifications")
+    .update({ email_sent_at: new Date().toISOString() })
+    .eq("id", row.id)
+    .is("email_sent_at", null)
+    .select("id");
+  if (claimErr) {
+    if (isNotificationsSchemaMissing(claimErr)) return { skipped: "schema_missing" };
+    throw claimErr;
+  }
+  if ((claimed ?? []).length === 0) return { skipped: "already_sent" };
+
   const res = await sendEmail({
     to: recipient.email,
     subject: built.subject,
@@ -95,10 +110,10 @@ export async function processSendNotificationEmailJob(
     text: built.text,
   });
   if (!res.sent) {
-    // Let the queue retry with its normal backoff.
+    // Hand it back so the queue's backoff can retry it.
+    await releaseClaim(sb, [row]);
     throw new Error(`notification email failed: ${res.reason}`);
   }
-  await markNotificationEmailSent(sb, [row.id], new Date());
   return { sent: true };
 }
 
@@ -110,6 +125,13 @@ async function sendDigest(
 
   // Everything still worth telling this person about, including the row that
   // triggered this job.
+  //
+  // `email_queued` is the load-bearing filter. notify() writes it at insert
+  // time, where the per-event Email preference and suppressEmail are both in
+  // scope. Without it the digest sweeps up EVERY unread row and emails things
+  // that were deliberately never going to be emailed: events the user switched
+  // email off for, and the two events (assignment, client replies) whose email
+  // is owned by a legacy job — which would duplicate that job's email.
   const { data, error } = await sb
     .from("notifications")
     .select("*")
@@ -117,16 +139,48 @@ async function sendDigest(
     .is("email_sent_at", null)
     .is("read_at", null)
     .is("dismissed_at", null)
+    .eq("payload->>email_queued", "true")
     .order("created_at", { ascending: false })
     .limit(DIGEST_MAX_ROWS);
   if (error) {
     if (isNotificationsSchemaMissing(error)) return { skipped: "schema_missing" };
     throw error;
   }
-  const rows = (data ?? []) as NotificationRow[];
+  const candidates = (data ?? []) as NotificationRow[];
   // The triggering row could have been filtered out by a race (read in another
   // tab between the guard above and this query). If nothing is left, stop.
-  if (rows.length === 0) return { skipped: "nothing_to_digest" };
+  if (candidates.length === 0) return { skipped: "nothing_to_digest" };
+
+  // CLAIM BEFORE SENDING.
+  //
+  // Every notification raised inside one digest window gets the SAME run_after
+  // (nextTopOfHour / nextTimeOfDay produce an exact instant), so the cron
+  // claims several of this user's digest jobs in one wave and runs them with
+  // Promise.all. Reading first and stamping after the send meant each one
+  // passed the already-sent guard, built the same row set, and sent its own
+  // copy — the user got one identical digest per pending notification.
+  //
+  // This UPDATE is the compare-and-swap: `email_sent_at is null` means only
+  // ONE concurrent job can claim a given row, and we then send exactly the
+  // rows we actually won.
+  const { data: claimedData, error: claimErr } = await sb
+    .from("notifications")
+    .update({ email_sent_at: new Date().toISOString() })
+    .in(
+      "id",
+      candidates.map((r) => r.id),
+    )
+    .is("email_sent_at", null)
+    .select("*");
+  if (claimErr) {
+    if (isNotificationsSchemaMissing(claimErr)) {
+      return { skipped: "schema_missing" };
+    }
+    throw claimErr;
+  }
+  const rows = (claimedData ?? []) as NotificationRow[];
+  // Another job in the same wave got there first and is sending these.
+  if (rows.length === 0) return { skipped: "claimed_by_another_job" };
 
   const built = buildDigestEmail({
     rows,
@@ -134,7 +188,10 @@ async function sendDigest(
     locale: recipient.locale,
     detailLevel: recipient.detailLevel,
   });
-  if (!built) return { skipped: "no_copy_for_event" };
+  if (!built) {
+    await releaseClaim(sb, rows);
+    return { skipped: "no_copy_for_event" };
+  }
 
   const res = await sendEmail({
     to: recipient.email!,
@@ -143,16 +200,29 @@ async function sendDigest(
     text: built.text,
   });
   if (!res.sent) {
+    // Hand the rows back so the queue's retry can pick them up again —
+    // otherwise a transient Resend failure would silently swallow the digest.
+    await releaseClaim(sb, rows);
     throw new Error(`digest email failed: ${res.reason}`);
   }
-  // Stamp EVERY row in the digest, so the other queued jobs for this user
-  // find email_sent_at set and no-op instead of sending again.
-  await markNotificationEmailSent(
-    sb,
-    rows.map((r) => r.id),
-    new Date(),
-  );
   return { sent: true, bundledCount: rows.length };
+}
+
+// Undo a claim after a failed send, so a retry can re-claim the rows.
+async function releaseClaim(
+  sb: SupabaseClient,
+  rows: NotificationRow[],
+): Promise<void> {
+  const { error } = await sb
+    .from("notifications")
+    .update({ email_sent_at: null })
+    .in(
+      "id",
+      rows.map((r) => r.id),
+    );
+  if (error && !isNotificationsSchemaMissing(error)) {
+    console.error("[notifications] releaseClaim failed:", error);
+  }
 }
 
 type Recipient = {

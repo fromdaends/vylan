@@ -24,6 +24,7 @@ import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
 import { getFirmReminderDefault } from "@/lib/reminder-defaults";
+import { loadNotificationSettingsBundle } from "@/lib/db/notification-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export default async function SettingsPage({
     connect?: string;
     qbo?: string;
     paypal?: string;
+    event?: string;
   }>;
 }) {
   const { locale: rawLocale } = await params;
@@ -52,6 +54,7 @@ export default async function SettingsPage({
     connect: connectParam,
     qbo: qboParam,
     paypal: paypalParam,
+    event: focusEventKey,
   } = await searchParams;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
@@ -71,6 +74,14 @@ export default async function SettingsPage({
   }
 
   const firmLogoUrl = await getBrandingImageUrl(firm.logo_url);
+  // The signed-in user's OWN notification preferences (per person, not per
+  // firm). Degrades to catalog defaults with schemaReady:false if 0920 has not
+  // been applied, so the tab renders either way.
+  const notifications = await loadNotificationSettingsBundle(supabase, {
+    userId: user.id,
+    firmTimezone: firm.timezone,
+    role: user.role === "owner" ? "owner" : "staff",
+  });
   // AI monthly-cap usage for the Documents tab status (point-read; resilient
   // pre-migration — defaults to 0 used / not paused).
   const aiUsage = await getFirmAiUsage(firm.id);
@@ -269,6 +280,8 @@ export default async function SettingsPage({
         firmLogoUrl={firmLogoUrl}
         email={user.email}
         mfaEnabled={mfaEnabled}
+        notifications={notifications}
+        focusEventKey={focusEventKey ?? null}
         initialSection={tab}
       />
     </div>

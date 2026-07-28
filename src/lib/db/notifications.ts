@@ -52,10 +52,17 @@ export type NotificationRow = {
 // that isn't in it.
 export function defaultRecipientSettings(
   firmTimezone: string | null | undefined,
+  role: "owner" | "staff" = "owner",
 ): RecipientSettings {
   return {
     emailEnabled: true,
-    scope: "all_firm",
+    // Default scope follows ROLE, because it has to match what these people
+    // already see. The old derived feed showed staff only their own assigned
+    // engagements and owners the whole firm. Defaulting everyone to all_firm
+    // would silently widen every staff member's view to every client in the
+    // firm — names, document names and payment amounts included — the moment
+    // this shipped, without anyone choosing it.
+    scope: role === "owner" ? "all_firm" : "assigned_only",
     emailMode: "instant",
     dailyDigestTime: "08:00",
     timezone: firmTimezone?.trim() || "America/Toronto",
@@ -84,8 +91,9 @@ type SettingsRow = {
 function toRecipientSettings(
   row: SettingsRow | undefined,
   firmTimezone: string | null | undefined,
+  role: "owner" | "staff",
 ): RecipientSettings {
-  const base = defaultRecipientSettings(firmTimezone);
+  const base = defaultRecipientSettings(firmTimezone, role);
   if (!row) return base;
   return {
     emailEnabled: row.email_enabled,
@@ -186,6 +194,7 @@ export async function loadFirmRecipients(
       settings: toRecipientSettings(
         settingsByUser.get(row.id),
         opts.firmTimezone,
+        row.role === "owner" ? "owner" : "staff",
       ),
       pref: prefByUser.get(row.id) ?? null,
       mutes: mutesByUser.get(row.id) ?? new Set<string>(),

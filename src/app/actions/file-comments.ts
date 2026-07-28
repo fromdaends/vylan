@@ -6,6 +6,8 @@
 // this validates the body, sanitizes mentions to real members, and fans out the
 // notification.
 
+import { clientName, emitInternalMention } from "@/lib/notifications/emit";
+import { getServerSupabase } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import {
   getCurrentUser,
@@ -76,6 +78,25 @@ export async function addFileCommentAction(input: {
     } catch (e) {
       console.error("[file-comments] mention activity failed:", e);
     }
+    const sb = await getServerSupabase();
+    const { data: engRow } = await sb
+      .from("engagements")
+      .select("title, client_id")
+      .eq("id", input.engagementId)
+      .maybeSingle();
+    const eng = engRow as { title: string; client_id: string } | null;
+    await emitInternalMention(
+      sb,
+      {
+        firmId: firm.id,
+        engagementId: input.engagementId,
+        engagementTitle: eng?.title ?? null,
+        clientId: eng?.client_id ?? null,
+        clientName: await clientName(sb, eng?.client_id ?? null),
+      },
+      // The author is the actor, so mentioning yourself notifies nobody.
+      { actorId: user.id, mentionedUserIds: mentions },
+    );
   }
 
   for (const loc of LOCALES) {

@@ -14,6 +14,12 @@
 // syncing before the completion write would read a stale 'sent' and leave the
 // engagement parked at awaiting_signature until the next event.
 
+import { getServiceRoleSupabase } from "@/lib/supabase/server";
+import {
+  clientName,
+  emitSignatureCompleted,
+  emitSignatureDeclined,
+} from "@/lib/notifications/emit";
 import { getCompletedPdf } from "@/lib/signwell/client";
 import { signedDocPath, uploadObject } from "@/lib/storage";
 import {
@@ -82,6 +88,53 @@ export async function finalizeSignatureCompletion(
         test_mode: sr.test_mode,
       },
     );
+    await emitSignatureNotification(res, "completed");
   }
   return true;
+}
+
+// Firm-facing notification for a signature outcome. Shared by the completion
+// path here and the declined branch in the SignWell webhook, so both resolve
+// the engagement and client the same way.
+export async function emitSignatureNotification(
+  res: { firmId: string; engagementId: string; requestItemId?: string | null },
+  outcome: "completed" | "declined",
+): Promise<void> {
+  try {
+    const sb = getServiceRoleSupabase();
+    const [{ data: engRow }, { data: itemRow }] = await Promise.all([
+      sb
+        .from("engagements")
+        .select("title, client_id")
+        .eq("id", res.engagementId)
+        .maybeSingle(),
+      res.requestItemId
+        ? sb
+            .from("request_items")
+            .select("label, label_fr")
+            .eq("id", res.requestItemId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+    const eng = engRow as { title: string; client_id: string } | null;
+    const item = itemRow as {
+      label: string | null;
+      label_fr: string | null;
+    } | null;
+    const documentName = item?.label?.trim() || item?.label_fr?.trim() || null;
+    const ctx = {
+      firmId: res.firmId,
+      engagementId: res.engagementId,
+      engagementTitle: eng?.title ?? null,
+      clientId: eng?.client_id ?? null,
+      clientName: await clientName(sb, eng?.client_id ?? null),
+    };
+    if (outcome === "completed") {
+      await emitSignatureCompleted(sb, ctx, { documentName });
+    } else {
+      await emitSignatureDeclined(sb, ctx, { documentName });
+    }
+  } catch (err) {
+    console.error("[signwell] signature notification failed:", err);
+  }
 }

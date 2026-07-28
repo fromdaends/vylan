@@ -159,6 +159,46 @@ describe("resolveRecipients", () => {
     expect(r.recipients.map((x) => x.userId)).toEqual(["owner"]);
   });
 
+  it("an explicitly addressed recipient is NOT dropped by assigned_only scope", () => {
+    // An @mention is addressed to a person. Scope answers "how much of the
+    // firm do I want to hear about", and must not silently swallow a message
+    // aimed at you — the author would get no error and the mention would
+    // simply never arrive.
+    const r = resolveRecipients({
+      event: event("message.internal_mention"),
+      actorId: "author",
+      candidates: [
+        candidate("mentioned", {
+          settings: { ...settings, scope: "assigned_only" },
+        }),
+      ],
+      muteKeys: [],
+      assignedUserIds: noAssignees, // deliberately NOT the assignee
+      isEngagementScoped: true,
+      explicitRecipients: true,
+    });
+    expect(r.recipients.map((x) => x.userId)).toEqual(["mentioned"]);
+  });
+
+  it("still applies scope when the recipients were NOT explicit", () => {
+    const r = resolveRecipients({
+      event: event("message.internal_mention"),
+      actorId: "author",
+      candidates: [
+        candidate("bystander", {
+          settings: { ...settings, scope: "assigned_only" },
+        }),
+      ],
+      muteKeys: [],
+      assignedUserIds: noAssignees,
+      isEngagementScoped: true,
+    });
+    expect(r.dropped).toContainEqual({
+      userId: "bystander",
+      reason: "not_assigned",
+    });
+  });
+
   // ── Rule 4 ────────────────────────────────────────────────────────────────
   it("drops users who muted the entity", () => {
     const r = resolveRecipients({

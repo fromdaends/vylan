@@ -14,6 +14,9 @@
 // replayed webhook, a reconcile racing a webhook, or (with two rails) a second
 // provider landing on an already-paid invoice all no-op here.
 
+import { formatCurrency } from "@/lib/format";
+import { getServiceRoleSupabase } from "@/lib/supabase/server";
+import { clientName, emitPaymentEvent } from "@/lib/notifications/emit";
 import {
   markPaymentRequestPaidSR,
   markPaymentRequestFailedSR,
@@ -36,8 +39,7 @@ export type InvoicePaidRefs = {
 export type RecordInvoicePaidResult =
   // newly_paid = THIS call flipped it (activity logged, stage synced).
   // already_settled = someone else won the race / a replay — nothing recorded.
-  | { outcome: "newly_paid" }
-  | { outcome: "already_settled" };
+  { outcome: "newly_paid" } | { outcome: "already_settled" };
 
 export async function recordInvoicePaid(
   paymentRequestId: string,
@@ -97,6 +99,8 @@ export async function recordInvoicePaid(
   if (opts.syncStage !== false && result.engagementId) {
     await syncEngagementStageSR(result.engagementId);
   }
+
+  await emitPaymentNotification(result, "received", paymentRequestId);
   return { outcome: "newly_paid" };
 }
 
@@ -120,5 +124,57 @@ export async function recordInvoiceFailed(
   // a "completed" engagement back to awaiting_payment. Honest.
   if (result.engagementId) {
     await syncEngagementStageSR(result.engagementId);
+  }
+
+  await emitPaymentNotification(result, "failed", paymentRequestId);
+}
+
+// Firm-facing notification for a settled or failed client payment. Runs AFTER
+// the activity log and the stage sync, so the feed can never announce money
+// the ledger has not recorded. The amount is formatted in EN here and blanked
+// entirely for recipients on minimal detail — see toCopyVars in
+// src/lib/notifications/email.ts.
+async function emitPaymentNotification(
+  result: {
+    firmId: string;
+    engagementId: string | null;
+    amountCents?: number | null;
+    currency?: string | null;
+  },
+  outcome: "received" | "failed",
+  paymentRequestId: string,
+): Promise<void> {
+  if (!result.engagementId) return;
+  // try/catch here, not just inside notify(): building the service-role client
+  // THROWS when the environment is incomplete, and that throw would escape into
+  // recordInvoicePaid and fail a payment we have already recorded.
+  try {
+    const sb = getServiceRoleSupabase();
+    const { data: engRow } = await sb
+      .from("engagements")
+      .select("title, client_id")
+      .eq("id", result.engagementId)
+      .maybeSingle();
+    const eng = engRow as { title: string; client_id: string } | null;
+    await emitPaymentEvent(
+      sb,
+      {
+        firmId: result.firmId,
+        engagementId: result.engagementId,
+        engagementTitle: eng?.title ?? null,
+        clientId: eng?.client_id ?? null,
+        clientName: await clientName(sb, eng?.client_id ?? null),
+      },
+      {
+        outcome,
+        amount:
+          typeof result.amountCents === "number"
+            ? formatCurrency(result.amountCents / 100, "en")
+            : null,
+        invoiceId: paymentRequestId,
+      },
+    );
+  } catch (err) {
+    console.error("[paid-event] payment notification failed:", err);
   }
 }

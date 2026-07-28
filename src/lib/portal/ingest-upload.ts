@@ -1,12 +1,7 @@
 import { after } from "next/server";
 import { nanoid } from "nanoid";
-import {
-  markEngagementInProgress,
-  logActivity,
-  resolveAccountantContact,
-} from "@/lib/db/portal";
+import { markEngagementInProgress, logActivity } from "@/lib/db/portal";
 import type { RequestItem } from "@/lib/db/request-items";
-import { sendEmail, buildSignedCopyReturnedEmail } from "@/lib/email";
 import { recomputeItemStatus } from "@/lib/db/file-review";
 import { computeContentHash } from "@/lib/files/content-hash";
 import {
@@ -16,6 +11,12 @@ import {
 } from "@/lib/duplicates";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { enqueueJob } from "@/lib/db/jobs";
+import {
+  clientName,
+  emitDocumentUploaded,
+  emitRequestComplete,
+  emitSignedCopyReturned,
+} from "@/lib/notifications/emit";
 import { processClassifyJob } from "@/lib/ai/process";
 import { scheduleSetAssessment } from "@/lib/ai/set-assessment";
 import {
@@ -189,13 +190,17 @@ export async function ingestPortalUpload(opts: {
   // "wrong document") and instead notify the accountant that the signed copy
   // came back. recomputeItemStatus already moved the item to "in review".
   if (item.kind === "signature") {
-    // Best-effort, off the response path — never fail the upload on email.
+    // Best-effort, off the response path — never fail the upload on a
+    // notification. This used to send the accountant an email DIRECTLY; it now
+    // goes through notify(), which is what gives the firm an off switch, a
+    // feed row, and (critically) stops the same person being emailed twice
+    // once the emitter also covers this event.
     after(async () => {
-      try {
-        await notifyAccountantSignedCopyReturned(engagement, item);
-      } catch (e) {
-        console.error("[portal/upload] signed-copy notification failed:", e);
-      }
+      const ctx = await engagementContext(sb, engagement);
+      await emitSignedCopyReturned(sb, ctx, {
+        documentName:
+          item.label || item.label_fr || item.signing_doc_name || null,
+      });
     });
     return { ok: true, fileId: inserted.id, duplicate: false };
   }
@@ -210,6 +215,28 @@ export async function ingestPortalUpload(opts: {
     kind: "classify_document",
     payload: { uploaded_file_id: inserted.id },
     runAfter: new Date(),
+  });
+
+  // Firm-facing notifications for a real (non-duplicate, non-signature)
+  // document. Off the response path: the client's upload must never wait on,
+  // or fail because of, telling the firm about it.
+  after(async () => {
+    const ctx = await engagementContext(sb, engagement);
+    await emitDocumentUploaded(sb, ctx, { fileId: inserted.id });
+    // Separately: has this upload finished the whole request?
+    //
+    // Two conditions, not one. "The request is complete" is true for EVERY
+    // upload after the completing one, so on its own it would re-fire on every
+    // later file — and this event does not bundle, so each would be a fresh
+    // notification and a fresh email. The second condition is "this upload is
+    // what completed it": the item it belongs to must have had no live file
+    // before now, i.e. this is its first.
+    if (
+      (await isFirstLiveFileForItem(sb, item.id, inserted.id)) &&
+      (await isRequestNowComplete(sb, item.engagement_id))
+    ) {
+      await emitRequestComplete(sb, ctx);
+    }
   });
 
   // Set-aware analysis (Phase 1): debounce a single item-level assessment that
@@ -252,48 +279,75 @@ export async function ingestPortalUpload(opts: {
   return { ok: true, fileId: insertedFileId, duplicate: false };
 }
 
-// Email the accountant that a client returned the signed copy of a signature
-// item. Service-role reads only (the portal is unauthenticated). Resolves the
-// SAME "your accountant" contact the portal footer uses (assigned user, falling
-// back to the firm owner) and writes in that accountant's own language. The
-// document name follows the accountant's language too. Throws are swallowed by
-// the caller's try/catch — a notification must never break the upload.
-async function notifyAccountantSignedCopyReturned(
+// Shared context for every notification raised from a portal upload. One read
+// for the client name; the rest is already on the engagement row.
+async function engagementContext(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
   engagement: PortalUploadEngagement,
-  item: RequestItem,
-): Promise<void> {
-  const sb = getServiceRoleSupabase();
-  const contact = await resolveAccountantContact(sb, {
-    assignedUserId: engagement.assigned_user_id,
+): Promise<{
+  firmId: string;
+  engagementId: string;
+  engagementTitle: string | null;
+  clientId: string | null;
+  clientName: string | null;
+}> {
+  return {
     firmId: engagement.firm_id,
-  });
-  if (!contact?.email) return;
-
-  const { data: client } = await sb
-    .from("clients")
-    .select("display_name")
-    .eq("id", engagement.client_id)
-    .maybeSingle();
-
-  const documentName =
-    (contact.locale === "fr"
-      ? item.label_fr || item.label
-      : item.label || item.label_fr) ||
-    item.signing_doc_name ||
-    "document";
-
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const reviewUrl = `${appUrl}/${contact.locale}/engagements/${engagement.id}`;
-
-  const { subject, html, text } = buildSignedCopyReturnedEmail({
-    accountantName: contact.name,
-    clientName:
-      (client?.display_name as string | undefined) ||
-      (contact.locale === "fr" ? "Votre client" : "Your client"),
-    documentName,
+    engagementId: engagement.id,
     engagementTitle: engagement.title,
-    reviewUrl,
-    locale: contact.locale,
-  });
-  await sendEmail({ to: contact.email, subject, html, text });
+    clientId: engagement.client_id,
+    clientName: await clientName(sb, engagement.client_id),
+  };
+}
+
+// Has this upload just completed the whole request? True only when every
+// REQUIRED item now has at least one live (non-duplicate) file.
+//
+// Computed here rather than derived at render time so "everything is in"
+// becomes a real event with a real timestamp that can be read and dismissed —
+// the derived feed could only ever say "it is complete right now".
+async function isRequestNowComplete(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  engagementId: string,
+): Promise<boolean> {
+  const [{ data: items }, { data: files }] = await Promise.all([
+    sb
+      .from("request_items")
+      .select("id, required")
+      .eq("engagement_id", engagementId),
+    sb
+      .from("uploaded_files")
+      .select("request_item_id, is_duplicate")
+      .eq("engagement_id", engagementId),
+  ]);
+  const required = (items ?? []).filter(
+    (i) => (i as { required: boolean }).required,
+  );
+  if (required.length === 0) return false;
+  const withFile = new Set(
+    (files ?? [])
+      .filter((f) => !(f as { is_duplicate?: boolean }).is_duplicate)
+      .map((f) => (f as { request_item_id: string }).request_item_id),
+  );
+  return required.every((i) => withFile.has((i as { id: string }).id));
+}
+
+// Is the file we just inserted the FIRST live (non-duplicate) file for its
+// request item? Used to fire "everything is in" exactly once: a later upload
+// against an already-satisfied item cannot be the one that completed the set.
+async function isFirstLiveFileForItem(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  requestItemId: string,
+  justInsertedFileId: string,
+): Promise<boolean> {
+  const { data, error } = await sb
+    .from("uploaded_files")
+    .select("id, is_duplicate")
+    .eq("request_item_id", requestItemId);
+  // On a read failure, stay quiet rather than risk a duplicate announcement.
+  if (error) return false;
+  const live = (data ?? []).filter(
+    (f) => !(f as { is_duplicate?: boolean }).is_duplicate,
+  );
+  return live.length === 1 && (live[0] as { id: string }).id === justInsertedFileId;
 }

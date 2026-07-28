@@ -12,6 +12,7 @@ import {
   claimDueJobs,
   markJobDone,
   markJobFailed,
+  MAX_ATTEMPTS,
   type Job,
 } from "@/lib/db/jobs";
 import { processReminderJob } from "@/lib/reminders";
@@ -28,6 +29,7 @@ import { processSyncXeroJob } from "@/lib/xero/sync";
 import { sendEngagementInvoice } from "@/lib/invoices/send";
 import { runAutoFiling } from "@/lib/filing/runner";
 import { processSendNotificationEmailJob } from "@/lib/notifications/worker";
+import { emitIntegrationEvent } from "@/lib/notifications/emit";
 import {
   backfillContentHashes,
   type BackfillResult,
@@ -202,6 +204,7 @@ async function runJob(
         await markJobDone(job.id);
       } else {
         await markJobFailed(job.id, `sync:${detail.detail}`);
+        await notifySyncDeadIfExhausted(job, "QuickBooks");
       }
       return { id: job.id, kind: job.kind, ok: detail.ok, detail };
     }
@@ -213,6 +216,7 @@ async function runJob(
         await markJobDone(job.id);
       } else {
         await markJobFailed(job.id, `sync:${detail.detail}`);
+        await notifySyncDeadIfExhausted(job, "Xero");
       }
       return { id: job.id, kind: job.kind, ok: detail.ok, detail };
     }
@@ -265,5 +269,30 @@ async function runJob(
       ok: false,
       detail: (e as Error).message,
     };
+  }
+}
+
+// Tell the firm their accounting sync is dead — but ONLY once it genuinely is.
+//
+// A single failed run is usually a blip that the queue's own backoff fixes
+// silently; emailing an owner about every one of those would train them to
+// ignore the alert that matters. `attempts` here is the post-claim count, so
+// this fires on the run that exhausts MAX_ATTEMPTS, i.e. the moment the queue
+// gives up and the connection is actually broken until someone reconnects it.
+async function notifySyncDeadIfExhausted(
+  job: Job,
+  provider: string,
+): Promise<void> {
+  if (job.attempts < MAX_ATTEMPTS) return;
+  const firmId = job.payload?.firmId;
+  if (typeof firmId !== "string" || !firmId) return;
+  try {
+    await emitIntegrationEvent(getServiceRoleSupabase(), {
+      firmId,
+      outcome: "sync_failed",
+      provider,
+    });
+  } catch (err) {
+    console.error("[cron] sync-failed notification failed:", err);
   }
 }
