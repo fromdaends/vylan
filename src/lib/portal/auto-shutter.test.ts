@@ -9,15 +9,11 @@ import type { Guidance } from "./frame-metrics";
 const GRACE_MS = 350;
 const CREDIT_HOLD_MS = 1500;
 const REQUIRED_MS = 600;
-const REQUIRED_STEADY_MS = 4000;
-const MOVE_TOLERANCE_MS = 900;
 
 type Frame = {
   detected: boolean;
   guidance: Guidance;
   dt?: number;
-  /** Defaults to false so existing cases exercise the detection path only. */
-  steady?: boolean;
 };
 
 /** Run a sequence of frames at a given interval and collect every step. */
@@ -31,9 +27,6 @@ function run(frames: Frame[], dt = 50) {
       graceMs: GRACE_MS,
       creditHoldMs: CREDIT_HOLD_MS,
       requiredDetectedMs: REQUIRED_MS,
-      steady: f.steady ?? false,
-      movementToleranceMs: MOVE_TOLERANCE_MS,
-      requiredSteadyMs: REQUIRED_STEADY_MS,
     });
     state = step.state;
     return step;
@@ -160,9 +153,6 @@ describe("advanceShutter — firing cadence", () => {
         graceMs: GRACE_MS,
         creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs,
-        steady: false,
-        movementToleranceMs: MOVE_TOLERANCE_MS,
-        requiredSteadyMs: REQUIRED_STEADY_MS,
       });
       expect(step.fire).toBe(false);
     }
@@ -207,7 +197,7 @@ describe("advanceShutter — hostile timing", () => {
     // A backgrounded tab or a paused debugger can hand us seconds; crediting
     // all of it would fire on a frame nobody was looking at.
     const step = advanceShutter(
-      { detectedMs: 400, missMs: 0, movingMs: 0, steadyMs: 0 },
+      { detectedMs: 400, missMs: 0 },
       {
         detected: true,
         guidanceFor: () => "ready",
@@ -215,9 +205,6 @@ describe("advanceShutter — hostile timing", () => {
         graceMs: GRACE_MS,
         creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs: REQUIRED_MS,
-        steady: false,
-        movementToleranceMs: MOVE_TOLERANCE_MS,
-        requiredSteadyMs: REQUIRED_STEADY_MS,
       },
     );
     expect(step.state.detectedMs).toBeLessThanOrEqual(400 + 250);
@@ -226,7 +213,7 @@ describe("advanceShutter — hostile timing", () => {
   it("ignores a non-finite or negative interval rather than corrupting state", () => {
     for (const elapsedMs of [NaN, Infinity, -100, 0]) {
       const step = advanceShutter(
-        { detectedMs: 200, missMs: 0, movingMs: 0, steadyMs: 0 },
+        { detectedMs: 200, missMs: 0 },
         {
           detected: true,
           guidanceFor: () => "ready",
@@ -234,9 +221,6 @@ describe("advanceShutter — hostile timing", () => {
           graceMs: GRACE_MS,
           creditHoldMs: CREDIT_HOLD_MS,
           requiredDetectedMs: REQUIRED_MS,
-          steady: false,
-          movementToleranceMs: MOVE_TOLERANCE_MS,
-          requiredSteadyMs: REQUIRED_STEADY_MS,
         },
       );
       expect(Number.isFinite(step.state.detectedMs)).toBe(true);
@@ -245,7 +229,7 @@ describe("advanceShutter — hostile timing", () => {
   });
 
   it("does not mutate the state it is given", () => {
-    const prev: ShutterState = { detectedMs: 120, missMs: 40, movingMs: 0, steadyMs: 0 };
+    const prev: ShutterState = { detectedMs: 120, missMs: 40 };
     const snapshot = { ...prev };
     advanceShutter(prev, {
       detected: true,
@@ -254,93 +238,38 @@ describe("advanceShutter — hostile timing", () => {
       graceMs: GRACE_MS,
       creditHoldMs: CREDIT_HOLD_MS,
       requiredDetectedMs: REQUIRED_MS,
-      steady: false,
-      movementToleranceMs: MOVE_TOLERANCE_MS,
-      requiredSteadyMs: REQUIRED_STEADY_MS,
     });
     expect(prev).toEqual(snapshot);
   });
 });
 
 
-describe("advanceShutter — the safety net when the detector never finds it", () => {
-  const steadyMiss: Frame = {
-    detected: false,
-    guidance: "searching",
-    steady: true,
-  };
 
-  it("still takes a photo when nothing is ever detected", () => {
-    // The scenario seven rounds of tuning could not fix: the detector simply
-    // does not see this client's document. Holding the camera still must
-    // still produce a picture rather than a phone that does nothing.
-    const steps = run(times(120, steadyMiss));
-    const fired = steps.findIndex((s) => s.fire);
-    expect(fired).toBeGreaterThan(-1);
-    expect((fired + 1) * 50).toBe(REQUIRED_STEADY_MS);
-    expect(steps[fired]!.fireMode).toBe("frame");
+describe("advanceShutter — no document, no photo", () => {
+  it("never fires at a blank wall, however long the client waits", () => {
+    // The founder, on the timer this replaces: "I'm pointing my camera at my
+    // wall, and it's still taking a picture. It shouldn't be a timer."
+    // Twenty seconds of a perfectly still, perfectly undetectable frame.
+    expect(run(times(400, miss)).some((s) => s.fire)).toBe(false);
   });
 
-  it("gives the detector first refusal — the cropped route wins when available", () => {
-    const steps = run(times(40, { ...good, steady: true }));
-    const fired = steps.findIndex((s) => s.fire);
-    // 600ms of detection beats 4000ms of steadiness by a mile.
-    expect((fired + 1) * 50).toBe(REQUIRED_MS);
-    expect(steps[fired]!.fireMode).toBe("document");
+  it("leaves the ring empty while nothing is detected", () => {
+    // An empty ring is the honest reading, and it is what tells the client to
+    // aim at their document rather than wait for a countdown.
+    expect(run(times(400, miss)).every((s) => s.progress === 0)).toBe(true);
   });
 
-  it("does not fire while the phone is genuinely being swept around", () => {
-    // Sustained gross movement — well past the tolerance window — must never
-    // trip the net, however long it goes on.
-    const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
-    expect(run(times(400, moving)).some((s) => s.fire)).toBe(false);
-  });
-
-  it("a wobble PAUSES the ring instead of resetting it", () => {
-    // The founder's report: "it resets at the slightest, slightest movement…
-    // physically impossible to take a picture automatically." A single
-    // non-steady frame must cost nothing but that frame.
-    const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
-    const steps = run([...times(40, steadyMiss), moving, ...times(10, steadyMiss)]);
-    // 40 frames of progress survived the wobble and kept building.
-    expect(steps.at(-1)!.state.steadyMs).toBe(2500);
-  });
-
-  it("still reaches the shutter through repeated hand wobble", () => {
-    // Every fourth frame exceeds the movement threshold — a normal hand, and
-    // the case the founder could not get past. Progress only pauses on those
-    // frames, so it still banks the required steady time and fires.
-    const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
-    const wobbly = Array.from({ length: 160 }, (_, i) =>
-      i % 4 === 3 ? moving : steadyMiss,
-    );
-    const steps = run(wobbly);
+  it("fires as soon as a document has been in frame long enough", () => {
+    const steps = run([...times(60, miss), ...times(20, good)]);
     const firedAt = steps.findIndex((s) => s.fire);
     expect(firedAt).toBeGreaterThan(-1);
-    // A quarter of the frames are wobbles, so it costs ~4/3 of the ideal
-    // wall-clock — about 5.3s rather than 4s. Slower, never impossible.
-    expect(firedAt * 50).toBeLessThan(6000);
+    // 600ms of detection after the wall, not 600ms from the start.
+    expect((firedAt - 60 + 1) * 50).toBe(REQUIRED_MS);
   });
 
-  it("wipes the progress only once movement PERSISTS", () => {
-    const moving: Frame = { detected: false, guidance: "hold_steady", steady: false };
-    // 20 consecutive moving frames = 1000ms > the 900ms tolerance.
-    const steps = run([...times(40, steadyMiss), ...times(20, moving)]);
-    expect(steps.at(-1)!.state.steadyMs).toBe(0);
-  });
-
-  it("reports progress from whichever route is nearer", () => {
-    // With no detection, the ring must still climb — the client needs to see
-    // that something is happening.
-    const steps = run(times(40, steadyMiss));
-    expect(steps[0]!.progress).toBeGreaterThan(0);
-    expect(steps[39]!.progress).toBeGreaterThan(steps[19]!.progress);
-    expect(steps.every((s) => s.progress >= 0 && s.progress <= 1)).toBe(true);
-  });
-
-  it("spends the steady credit on firing, so the net does not burst either", () => {
-    const fires = run(times(240, steadyMiss)).filter((s) => s.fire).length;
-    // 12000ms of steady time at a 4000ms threshold = exactly 3.
-    expect(fires).toBe(3);
+  it("goes quiet again the moment the document leaves the frame", () => {
+    const steps = run([...times(6, good), ...times(60, miss)]);
+    expect(steps.some((s) => s.fire)).toBe(false);
+    expect(steps.at(-1)!.progress).toBe(0);
   });
 });
