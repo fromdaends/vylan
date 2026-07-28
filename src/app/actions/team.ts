@@ -680,11 +680,37 @@ export async function deactivateUser(
       );
       return { ok: false, error: "update_failed" };
     }
+    // Recurring schedules (0940). Without this the departing member keeps
+    // being handed BRAND-NEW work every cycle, forever — the schedule doesn't
+    // know they're gone. Ended series are skipped: they can never spawn again.
+    //
+    // Fail-OPEN on a missing column (deploy-ahead-of-SQL): the rest of the
+    // handover already succeeded and must not be rolled back over this. The
+    // spawner's own active-user check still stops work reaching a ghost.
+    const seriesRes = await admin
+      .from("recurring_series")
+      .update({ assigned_user_id: reassignToId }, { count: "exact" })
+      .eq("firm_id", firm.id)
+      .eq("assigned_user_id", userId)
+      .neq("status", "ended");
+    const seriesMissingSchema =
+      seriesRes.error?.code === "PGRST204" ||
+      seriesRes.error?.code === "PGRST205" ||
+      seriesRes.error?.code === "42703" ||
+      seriesRes.error?.code === "42P01";
+    if (seriesRes.error && !seriesMissingSchema) {
+      console.error(
+        "[team] offboard series reassign failed:",
+        seriesRes.error.message,
+      );
+      return { ok: false, error: "update_failed" };
+    }
     await logUserActivity(firm.id, null, "team_offboard_reassigned", {
       from_user_id: userId,
       to_user_id: reassignToId,
       engagements: engCount ?? 0,
       clients: clientCount ?? 0,
+      schedules: seriesRes.count ?? 0,
     });
   }
 
@@ -876,46 +902,58 @@ export async function setClientsPrivateDefault(
     return { ok: false, error: "update_failed" };
   }
 
-  // Backfill this firm's existing clients AND engagements to private on enable.
-  // Scoped to the firm; only flips currently-public rows.
-  if (enabled) {
-    const [clientsRes, engagementsRes] = await Promise.all([
-      admin
-        .from("clients")
-        .update({ is_private: true })
-        .eq("firm_id", firm.id)
-        .eq("is_private", false),
-      admin
-        .from("engagements")
-        .update({ is_private: true })
-        .eq("firm_id", firm.id)
-        .eq("is_private", false),
-    ]);
-    // Fail-OPEN on a missing is_private column (PGRST204/42703): the engagements
-    // column (0850) may not be applied yet even when the clients one (0810) is —
-    // don't fail the whole toggle over it (it'll backfill once 0850 lands, and
-    // new engagements default private meanwhile). Only a genuine error blocks.
-    const isMissingCol = (e: { code?: string } | null) =>
-      e?.code === "PGRST204" || e?.code === "42703";
-    const realError =
-      (clientsRes.error && !isMissingCol(clientsRes.error)
-        ? clientsRes.error
-        : null) ??
-      (engagementsRes.error && !isMissingCol(engagementsRes.error)
-        ? engagementsRes.error
-        : null);
-    if (realError) {
-      console.error(
-        "[team] setClientsPrivateDefault backfill failed:",
-        realError.message,
-      );
-      return { ok: false, error: "update_failed" };
-    }
+  // Backfill this firm's existing clients AND engagements to match the switch.
+  // Scoped to the firm; only flips rows that are currently the opposite.
+  //
+  // BOTH DIRECTIONS, and the OFF direction is a bug fix. 0840 made privacy-
+  // first the default for every NEW firm, so an owner who adds clients before
+  // inviting anyone leaves their first teammate staring at an empty app —
+  // every client and engagement hidden. Until now this only backfilled on
+  // enable, so there was no bulk way back: the owner had to un-private each
+  // client by hand, one at a time, with no screen that lists them.
+  //
+  // Symmetric is also the least surprising reading of a switch. The cost is
+  // real and worth stating: turning this OFF clears the private flag on rows
+  // an owner may have set deliberately, one at a time, before it was ever
+  // turned on. The UI copy says so.
+  const [clientsRes, engagementsRes] = await Promise.all([
+    admin
+      .from("clients")
+      .update({ is_private: enabled }, { count: "exact" })
+      .eq("firm_id", firm.id)
+      .eq("is_private", !enabled),
+    admin
+      .from("engagements")
+      .update({ is_private: enabled }, { count: "exact" })
+      .eq("firm_id", firm.id)
+      .eq("is_private", !enabled),
+  ]);
+  // Fail-OPEN on a missing is_private column (PGRST204/42703): the engagements
+  // column (0850) may not be applied yet even when the clients one (0810) is —
+  // don't fail the whole toggle over it (it'll backfill once 0850 lands, and
+  // new engagements default private meanwhile). Only a genuine error blocks.
+  const isMissingCol = (e: { code?: string } | null) =>
+    e?.code === "PGRST204" || e?.code === "42703";
+  const realError =
+    (clientsRes.error && !isMissingCol(clientsRes.error)
+      ? clientsRes.error
+      : null) ??
+    (engagementsRes.error && !isMissingCol(engagementsRes.error)
+      ? engagementsRes.error
+      : null);
+  if (realError) {
+    console.error(
+      "[team] setClientsPrivateDefault backfill failed:",
+      realError.message,
+    );
+    return { ok: false, error: "update_failed" };
   }
 
   await logUserActivity(firm.id, null, "firm_settings_changed", {
     setting: "clients_private_by_default",
     value: enabled,
+    clients: clientsRes.count ?? 0,
+    engagements: engagementsRes.count ?? 0,
   });
   revalidatePath("/", "layout");
   return { ok: true };

@@ -20,6 +20,7 @@ import {
 import { TeamSettings } from "@/components/settings/team/firm-settings";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { listClients } from "@/lib/db/clients";
+import { countLiveSeriesByAssignee } from "@/lib/db/recurring";
 import {
   computeEngagementWorkload,
   workloadForMember,
@@ -157,12 +158,17 @@ export default async function TeamPage({
     readyToReview?: number;
     needsAttention?: number;
     clients?: number;
+    schedules?: number;
   };
   let membersForManager: ManagerMember[] = activeMembers;
   if (canManage) {
-    const [worklist, clientsRaw] = await Promise.all([
+    const [worklist, clientsRaw, seriesByAssignee] = await Promise.all([
       loadEngagementWorklist("active"),
       listClients(),
+      // Recurring schedules per person (0940). Counted here so the guarded
+      // offboarding dialog offers a handover to someone whose whole footprint
+      // is repeating work — before this they reported as holding nothing.
+      countLiveSeriesByAssignee(),
     ]);
     const { byMember, unassigned } = computeEngagementWorkload(
       worklist.map((w) => ({
@@ -189,6 +195,7 @@ export default async function TeamPage({
         readyToReview: w.readyToReview,
         needsAttention: w.needsAttention,
         clients: clientCountByOwner.get(m.id) ?? 0,
+        schedules: seriesByAssignee.get(m.id) ?? 0,
       };
     });
   }

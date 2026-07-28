@@ -65,6 +65,9 @@ type ActiveMember = {
   readyToReview?: number;
   needsAttention?: number;
   clients?: number;
+  // Live (not ended) recurring schedules assigned to them (0940). Not shown in
+  // the roster row — it exists so removal can hand the schedules over too.
+  schedules?: number;
 };
 type DeactivatedMember = {
   id: string;
@@ -590,7 +593,12 @@ function MemberRow({
   const readyToReview = member.readyToReview ?? 0;
   const needsAttention = member.needsAttention ?? 0;
   const clientCount = member.clients ?? 0;
-  const holdsWork = activeEngagements > 0 || clientCount > 0;
+  // Recurring schedules (0940). Counted here because a schedule keeps minting
+  // NEW work every cycle — leaving one behind is worse than leaving a finished
+  // engagement behind, yet it used to make this dialog say "holds nothing".
+  const scheduleCount = member.schedules ?? 0;
+  const holdsWork =
+    activeEngagements > 0 || clientCount > 0 || scheduleCount > 0;
   const canReassign = holdsWork && reassignTargets.length > 0;
   // Default the reassignee to the first available teammate (owner sorts first).
   const [reassignTo, setReassignTo] = useState<string>(
@@ -717,11 +725,18 @@ function MemberRow({
           {holdsWork && (
             <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-3">
               <p className="text-sm">
-                {t("offboard_holds", {
-                  name: member.name,
-                  engagements: activeEngagements,
-                  clients: clientCount,
-                })}
+                {scheduleCount > 0
+                  ? t("offboard_holds_with_schedules", {
+                      name: member.name,
+                      engagements: activeEngagements,
+                      clients: clientCount,
+                      schedules: scheduleCount,
+                    })
+                  : t("offboard_holds", {
+                      name: member.name,
+                      engagements: activeEngagements,
+                      clients: clientCount,
+                    })}
               </p>
               {canReassign && (
                 <label className="block">

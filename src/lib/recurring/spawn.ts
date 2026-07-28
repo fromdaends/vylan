@@ -38,6 +38,7 @@ import {
 } from "./schedule";
 import { occurrenceTitle } from "./naming";
 import { parseInvoiceSnapshot } from "./invoice-snapshot";
+import { resolveSeriesAssignee } from "./assignee";
 import { sendEngagementInvoice } from "@/lib/invoices/send";
 
 // How many due series one cron run will process. Hourly cadence means a
@@ -191,6 +192,41 @@ export async function spawnSeriesNow(seriesId: string): Promise<SpawnOutcome> {
   });
 }
 
+// ── Assignment ──────────────────────────────────────────────────────────────
+
+// Resolve the assignee for one spawn: the series' own assignee if they're
+// still with the firm, otherwise an active owner. See assignee.ts for why the
+// fallback is an owner rather than "leave it unassigned".
+//
+// One small query per spawn. Spawns are rare (bounded by MAX_SERIES_PER_RUN,
+// once an hour) and a firm's roster is tiny, so this is not worth caching —
+// and reading it fresh is what makes a mid-cycle removal take effect
+// immediately rather than on the run after next.
+async function resolveSpawnAssignee(
+  sb: Sb,
+  series: RecurringSeries,
+): Promise<string | null> {
+  const { data, error } = await sb
+    .from("users")
+    .select("id, role")
+    .eq("firm_id", series.firm_id)
+    .is("deactivated_at", null);
+  if (error) {
+    // Never fail a spawn over this. Falling back to the pre-0940 behaviour is
+    // the safe direction: worst case an occurrence is assigned the way it
+    // always used to be, which is exactly what shipping today already does.
+    console.error("[recurring] assignee lookup failed:", error.message);
+    return series.assigned_user_id ?? series.created_by_user_id ?? null;
+  }
+  const rows = (data ?? []) as { id: string; role: "owner" | "staff" }[];
+  return resolveSeriesAssignee({
+    assignedUserId: series.assigned_user_id,
+    createdByUserId: series.created_by_user_id,
+    activeUserIds: new Set(rows.map((r) => r.id)),
+    fallbackOwnerId: rows.find((r) => r.role === "owner")?.id ?? null,
+  });
+}
+
 // ── The one spawn path ──────────────────────────────────────────────────────
 
 async function spawnOccurrence(
@@ -297,6 +333,10 @@ async function spawnOccurrence(
       }
     : {};
 
+  // Who gets this occurrence. Resolved per spawn (not cached) so a teammate
+  // removed between two cycles stops receiving work on the very next one.
+  const assignedUserId = await resolveSpawnAssignee(sb, series);
+
   const { data: engagement, error: engErr } = await sb
     .from("engagements")
     .insert({
@@ -314,9 +354,11 @@ async function spawnOccurrence(
       series_id: series.id,
       series_period: plan.periodKey,
       ...invoiceCols,
-      // Accountability defaults to whoever set the series up (may be null).
-      assigned_user_id: series.created_by_user_id,
-      ...(series.created_by_user_id ? { assigned_at: nowIso } : {}),
+      // Accountability follows the SERIES' assignee (0940), not whoever
+      // happened to set it up — and never a teammate who has been removed.
+      // See resolveSpawnAssignee / assignee.ts.
+      assigned_user_id: assignedUserId,
+      ...(assignedUserId ? { assigned_at: nowIso } : {}),
     })
     .select("id")
     .single();

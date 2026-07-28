@@ -38,6 +38,10 @@ export type RecurringSeries = {
   paused_at: string | null;
   ended_at: string | null;
   created_by_user_id: string | null;
+  // Who new engagements spawned from this series go to (migration 0940).
+  // Optional on the type so reads still parse before 0940 is applied — the
+  // spawner falls through to created_by_user_id when it's absent.
+  assigned_user_id?: string | null;
   created_at: string;
 };
 
@@ -67,6 +71,34 @@ export async function getRecurringSeries(
     throw error;
   }
   return (data as RecurringSeries) ?? null;
+}
+
+// Live (not ended) schedules per assignee, for the team roster and — the
+// reason it exists — the guarded-offboarding dialog. Without this, someone
+// whose entire footprint is recurring schedules reports as holding nothing,
+// so the owner is never asked where that work should go.
+//
+// RLS-scoped (the caller's own firm). Returns an empty map when 0770/0940
+// aren't applied here, so the team page renders either way.
+export async function countLiveSeriesByAssignee(): Promise<
+  Map<string, number>
+> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("recurring_series")
+    .select("assigned_user_id")
+    .neq("status", "ended");
+  if (error) {
+    if (isMissingSchema(error)) return new Map();
+    throw error;
+  }
+  const counts = new Map<string, number>();
+  for (const row of (data ?? []) as { assigned_user_id: string | null }[]) {
+    const id = row.assigned_user_id;
+    if (!id) continue;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
 }
 
 export type CreateRecurringSeriesInput = {
@@ -100,11 +132,27 @@ export async function createRecurringSeries(
   // as before 0890, so those keep working in a deploy-ahead-of-SQL window;
   // only the new custom option needs the column to exist.
   const { interval_months, ...rest } = input;
-  const row =
+  const base =
     interval_months == null ? rest : { ...rest, interval_months };
+  // A new series is owned by whoever set it up. Stored EXPLICITLY (0940) and
+  // not left to the backfill, which only ran once — otherwise every series
+  // created after the migration would keep a null assignee, and offboarding
+  // (which matches on assigned_user_id) would silently miss all of them.
+  //
+  // Dropped independently on a pre-0940 DB so creating a schedule still works
+  // ahead of the SQL; the spawner falls through to created_by_user_id there,
+  // which is exactly the old behaviour.
+  const first = await supabase
+    .from("recurring_series")
+    .insert({ ...base, assigned_user_id: base.created_by_user_id })
+    .select("*")
+    .single();
+  if (!first.error) return first.data as RecurringSeries;
+  if (!isMissingSchema(first.error)) throw first.error;
+
   const { data, error } = await supabase
     .from("recurring_series")
-    .insert(row)
+    .insert(base)
     .select("*")
     .single();
   if (error) throw error;
