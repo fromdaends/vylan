@@ -141,6 +141,42 @@ function buildIncomeLineItem(input: {
 
 const DEFAULT_LINE_DESCRIPTION = "Posted from Vylan";
 
+// Xero's Reference field caps at 255 characters.
+//
+// NOT the shared postingReference() from lib/quickbooks/suggest.ts — that caps
+// at 21 because that is QuickBooks' DocNumber limit, which would shred a uuid
+// and throw away the traceability this whole function exists to provide.
+const XERO_REFERENCE_MAX = 255;
+
+// What goes in the posted transaction's Reference.
+//
+// A document with no invoice number used to post with NO reference at all,
+// leaving nothing in Xero tying the transaction back to the paper in Vylan.
+// Hubdoc solves this by always writing something ("HD - <document id>"); this
+// is ours, using the uploaded file's full id so pasting it into Vylan lands on
+// the exact document. Deterministic, so an undo-then-repost writes the same
+// value.
+//
+// ONLY FOR INVOICES (ACCPAY/ACCREC) IN V1 — deliberate. Xero's bank
+// reconciliation "Find & Match" reads Reference, so on a BankTransaction
+// (SPEND/RECEIVE) a high-entropy VYL- token is a live change to how those
+// firms reconcile: today a blank reference lets Xero match on payee + amount +
+// date. Amount and date dominate that match, so this is unlikely to break it —
+// but "unlikely" is not something to discover in a client's books, and no unit
+// test can see it. The `kind` parameter is here so widening to bank
+// transactions after a real reconciliation walkthrough is one line, not a
+// refactor.
+export function xeroPostingReference(
+  documentReference: string | null | undefined,
+  uploadedFileId: string,
+  kind: "invoice" | "banktransaction",
+): string | null {
+  const trimmed = documentReference?.trim();
+  if (trimmed) return trimmed.slice(0, XERO_REFERENCE_MAX);
+  if (kind === "banktransaction") return null;
+  return `VYL-${uploadedFileId}`.slice(0, XERO_REFERENCE_MAX);
+}
+
 // ── Bill (ACCPAY): an unpaid expense payable ────────────────────────────────
 export type XeroBillInput = {
   contactId: string;

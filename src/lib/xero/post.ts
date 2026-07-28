@@ -36,6 +36,7 @@ import {
 import {
   buildXeroBillPayload,
   buildXeroSpendPayload,
+  xeroPostingReference,
   resolveXeroTaxApplication,
   xeroTaxDiscrepancyNote,
   type XeroExpenseLine,
@@ -53,10 +54,7 @@ import {
   effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
 import { postApprovedDraft, type PostOutcome } from "@/lib/quickbooks/post";
-import {
-  postingLineDescription,
-  postingReference,
-} from "@/lib/quickbooks/suggest";
+import { postingLineDescription } from "@/lib/quickbooks/suggest";
 import { getUploadedFileById } from "@/lib/db/uploaded-files";
 import { downloadObject } from "@/lib/storage";
 
@@ -163,7 +161,9 @@ export async function postApprovedXeroDraft(
     eff.party?.name ?? s.partySource ?? null,
     s.lines,
   );
-  const reference = postingReference(s.reference);
+  // Reference is resolved per transaction KIND further down (once isPurchase is
+  // known) — a bill with no document number gets a traceable VYL- fallback, a
+  // bank transaction deliberately does not. See xeroPostingReference.
 
   // Posting context: the QuickbooksLists (for the provider-neutral active checks)
   // + the GUID→code maps Xero line items need.
@@ -217,6 +217,16 @@ export async function postApprovedXeroDraft(
   }
 
   const isPurchase = effectiveExpenseMode(s, draft.resolved) === "purchase";
+
+  // The document's own number when it has one; for a BILL with none, a
+  // deterministic VYL-<fileId> so the transaction in Xero always traces back to
+  // the paper in Vylan (a bank transaction keeps a blank reference — Xero's
+  // reconciliation matcher reads this field).
+  const reference = xeroPostingReference(
+    s.reference,
+    fileId,
+    isPurchase ? "banktransaction" : "invoice",
+  );
 
   let endpoint: XeroTxnEndpoint;
   let payload: Record<string, unknown>;

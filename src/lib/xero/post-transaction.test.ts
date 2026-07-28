@@ -7,6 +7,7 @@ import {
   buildXeroInvoicePayload,
   buildXeroReceivePayload,
   xeroTaxDiscrepancyNote,
+  xeroPostingReference,
 } from "./post-transaction";
 
 describe("deriveNetAmount", () => {
@@ -240,5 +241,55 @@ describe("xeroTaxDiscrepancyNote", () => {
         documentTotal: 169.5,
       }),
     ).toBeNull();
+  });
+});
+
+describe("xeroPostingReference", () => {
+  const FILE = "3f2b8c10-9a4d-4e21-8b77-1c0d5e6f7a89";
+
+  it("passes a real document number through untouched", () => {
+    expect(xeroPostingReference("INV-00123", FILE, "invoice")).toBe("INV-00123");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(xeroPostingReference("  INV-9  ", FILE, "invoice")).toBe("INV-9");
+  });
+
+  // The whole point: a bill with no number still traces back to the document.
+  it("falls back to a traceable VYL- reference on an invoice", () => {
+    expect(xeroPostingReference(null, FILE, "invoice")).toBe(`VYL-${FILE}`);
+    expect(xeroPostingReference("", FILE, "invoice")).toBe(`VYL-${FILE}`);
+    expect(xeroPostingReference("   ", FILE, "invoice")).toBe(`VYL-${FILE}`);
+    expect(xeroPostingReference(undefined, FILE, "invoice")).toBe(
+      `VYL-${FILE}`,
+    );
+  });
+
+  // Deliberate: Xero's bank-reconciliation Find & Match reads Reference, so a
+  // high-entropy token on a SPEND/RECEIVE would change how those firms
+  // reconcile. Blank stays blank until that is walked through for real.
+  it("does NOT invent a reference for a bank transaction", () => {
+    expect(xeroPostingReference(null, FILE, "banktransaction")).toBeNull();
+    expect(xeroPostingReference("   ", FILE, "banktransaction")).toBeNull();
+  });
+
+  it("still uses a real document number on a bank transaction", () => {
+    expect(xeroPostingReference("RCPT-7", FILE, "banktransaction")).toBe(
+      "RCPT-7",
+    );
+  });
+
+  // Xero's limit is 255 — NOT the shared postingReference's 21 (QuickBooks'
+  // DocNumber cap), which would have shredded the uuid.
+  it("caps an overlong document number at Xero's 255", () => {
+    const long = "X".repeat(300);
+    const out = xeroPostingReference(long, FILE, "invoice");
+    expect(out).toHaveLength(255);
+  });
+
+  it("keeps the whole file id — the fallback is well under the cap", () => {
+    const out = xeroPostingReference(null, FILE, "invoice")!;
+    expect(out.length).toBeLessThan(255);
+    expect(out).toContain(FILE); // never truncated, so it stays searchable
   });
 });
