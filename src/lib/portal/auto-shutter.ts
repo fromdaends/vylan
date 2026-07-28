@@ -70,13 +70,27 @@ export function advanceShutter(
     guidanceFor: (documentPresent: boolean) => Guidance;
     /** Real time since the previous analysed frame. */
     elapsedMs: number;
-    /** How long the outline (and the credit) survives a detection dropout. */
+    /** How long the OUTLINE (and the hint) survives a detection dropout. */
     graceMs: number;
+    /**
+     * How long the accumulated CREDIT survives one. Deliberately much longer
+     * than graceMs: on a real phone the detector flickers — found, lost for
+     * half a second, found again — with the document in frame the whole time.
+     * When credit died with the outline, every flicker restarted the count
+     * and a capture that should take a second took seventeen. The border may
+     * blink; the client's progress must not.
+     */
+    creditHoldMs: number;
     /** Accumulated detection time before the shutter fires. */
     requiredDetectedMs: number;
   },
 ): ShutterStep {
   const { detected, guidanceFor, graceMs, requiredDetectedMs } = input;
+  // Credit must never die before the outline does.
+  const creditHoldMs = Math.max(
+    graceMs,
+    Number.isFinite(input.creditHoldMs) ? input.creditHoldMs : graceMs,
+  );
   // A hidden tab, a stalled decode or a debugger pause can hand us a gap of
   // several seconds; crediting all of it would fire on a frame nobody was
   // looking at. Treat a long gap as one ordinary step.
@@ -105,11 +119,10 @@ export function advanceShutter(
 
   const missMs = prev.missMs + elapsed;
   const withinGrace = missMs <= graceMs;
-  // Within the grace window the credit HOLDS rather than draining. Shake blurs
-  // the frame, blur drops detection for a few frames, and draining on every
-  // dropout is precisely what made a shaky hand unable to fire — the founder's
-  // complaint. Past the window the document is genuinely gone: start over.
-  const detectedMs = withinGrace ? prev.detectedMs : 0;
+  // The credit HOLDS through a dropout (it neither drains nor accrues) and is
+  // only forfeited once the document has been gone long enough that this is
+  // plainly a different attempt, not a flicker.
+  const detectedMs = missMs <= creditHoldMs ? prev.detectedMs : 0;
   return {
     state: { detectedMs, missMs },
     outline: withinGrace ? "hold" : "clear",

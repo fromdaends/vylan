@@ -8,6 +8,8 @@ import {
   scaleQuad,
   smoothQuad,
   sobelMagnitude,
+  stabiliseQuad,
+  INITIAL_QUAD_STABILITY,
 } from "./detect-quad";
 
 /* --------------------------------------------------------------- helpers --- */
@@ -1521,5 +1523,68 @@ describe("detectQuad does not invent a page out of nothing", () => {
     }
     console.log(`detectQuad 640x480 high-contrast (single pass): ${best.toFixed(1)}ms`);
     expect(best).toBeLessThan(100);
+  });
+});
+
+describe("stabiliseQuad — the outline must not snap back and forth", () => {
+  const sq = (x: number, y: number, s = 100): Quad =>
+    [
+      { x, y },
+      { x: x + s, y },
+      { x: x + s, y: y + s },
+      { x, y: y + s },
+    ] as unknown as Quad;
+  const OPTS = { alpha: 0.5, jumpDistance: 40, adoptAfter: 3 };
+
+  it("adopts the first sighting immediately", () => {
+    const s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(10, 10), OPTS);
+    expect(s.shown).toEqual(sq(10, 10));
+  });
+
+  it("glides toward a nearby detection instead of teleporting", () => {
+    let s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(0, 0), OPTS);
+    s = stabiliseQuad(s, sq(20, 0), OPTS);
+    // Halfway there at alpha 0.5 — moving, but not a jump.
+    expect(s.shown![0].x).toBeCloseTo(10, 5);
+  });
+
+  it("ignores a one-frame outlier completely", () => {
+    let s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(0, 0), OPTS);
+    const before = s.shown;
+    s = stabiliseQuad(s, sq(300, 300), OPTS); // far-away blip
+    expect(s.shown).toEqual(before);
+    // ...and a return to the original keeps gliding as if nothing happened.
+    s = stabiliseQuad(s, sq(2, 0), OPTS);
+    expect(s.shown![0].x).toBeCloseTo(1, 5);
+  });
+
+  it("never adopts an A/B/A/B alternation — the founder's snapping border", () => {
+    // The detector flips between two rival readings every frame. The outline
+    // must pick one and STAY, not chase the flips.
+    let s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(0, 0), OPTS);
+    for (let i = 0; i < 20; i++) {
+      s = stabiliseQuad(s, i % 2 === 0 ? sq(300, 300) : sq(0, 0), OPTS);
+      expect(s.shown![0].x).toBeLessThan(41); // still at/near A, always
+    }
+  });
+
+  it("adopts a genuinely new position once it persists", () => {
+    let s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(0, 0), OPTS);
+    s = stabiliseQuad(s, sq(300, 300), OPTS);
+    s = stabiliseQuad(s, sq(302, 300), OPTS);
+    expect(s.shown![0].x).toBeCloseTo(0, 5); // two runs: not yet
+    s = stabiliseQuad(s, sq(301, 299), OPTS);
+    expect(s.shown![0].x).toBeGreaterThan(250); // third run: adopted
+  });
+
+  it("holds the shown quad through a no-detection frame and forgets candidates", () => {
+    let s = stabiliseQuad(INITIAL_QUAD_STABILITY, sq(0, 0), OPTS);
+    s = stabiliseQuad(s, sq(300, 300), OPTS); // candidate run 1
+    s = stabiliseQuad(s, null, OPTS);
+    expect(s.shown).toEqual(sq(0, 0));
+    expect(s.candidate).toBeNull();
+    // The far position must start proving itself from scratch afterwards.
+    s = stabiliseQuad(s, sq(300, 300), OPTS);
+    expect(s.candidateRuns).toBe(1);
   });
 });

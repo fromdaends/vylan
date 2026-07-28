@@ -40,7 +40,13 @@ import {
   INITIAL_SHUTTER,
   type ShutterState,
 } from "@/lib/portal/auto-shutter";
-import { detectQuad, smoothQuad, quadArea } from "@/lib/portal/detect-quad";
+import {
+  detectQuad,
+  quadArea,
+  stabiliseQuad,
+  INITIAL_QUAD_STABILITY,
+  type QuadStability,
+} from "@/lib/portal/detect-quad";
 import type { Quad } from "@/lib/portal/rectify";
 
 // Width of the hidden analysis canvas. Everything the scanner "sees" happens at
@@ -55,16 +61,22 @@ const DETECT_WIDTH = 256;
 const ANALYSIS_INTERVAL_MS = 50;
 // Accumulated DETECTION time before the shutter fires itself. Detection is the
 // only gate (founder: "even if the camera is shaky it still takes a picture");
-// 600ms rules out a swing-past without demanding a surgeon's hands.
-const DETECTED_MS_REQUIRED = 600;
-// Corner easing per frame, and the jump distance (in preview px) past which we
-// snap instead of easing — that's the client moving to a different document.
+// half a second rules out a swing-past without demanding a surgeon's hands.
+const DETECTED_MS_REQUIRED = 500;
+// Corner easing per analysed frame.
 const SMOOTHING_ALPHA = 0.35;
-const SMOOTHING_RESET_PX = 90;
-// How long the outline AND the shutter's credit survive a detection dropout.
-// Shake blurs the frame, blur drops detection for a few frames — that must
-// pause progress, not erase it.
-const MISS_GRACE_MS = 350;
+// A detection whose corners land further than this (preview px) from the shown
+// outline is a CLAIM, not a fact — it must persist before the outline moves.
+const QUAD_JUMP_PX = 48;
+const QUAD_ADOPT_FRAMES = 3;
+// How long the OUTLINE survives a detection dropout before it disappears.
+const MISS_GRACE_MS = 400;
+// How long the shutter's CREDIT survives one. Much longer than the outline on
+// purpose: on the founder's phone the detector flickered — found, lost for
+// half a second, found again — with the document in frame the entire time,
+// and credit dying with the outline turned a one-second capture into
+// seventeen. The border may blink; the client's progress must not.
+const CREDIT_HOLD_MS = 1500;
 // Per-frame decay on the running sharpness peak (~0.6%/frame, so it halves
 // over roughly 11 seconds at 10fps). Slow enough to hold a genuine focus
 // reference, quick enough to follow the client moving to a new document.
@@ -94,6 +106,10 @@ export function CameraCapture({
   const prevGrayRef = useRef<Gray | null>(null);
   const quadRef = useRef<Quad | null>(null);
   const shutterRef = useRef<ShutterState>(INITIAL_SHUTTER);
+  const stabilityRef = useRef<QuadStability>(INITIAL_QUAD_STABILITY);
+  // Rolling share of recent frames with a detection — purely for ?scan=debug,
+  // where it turns "the border was buggy" into a number.
+  const dutyRef = useRef(0);
   const peakSharpnessRef = useRef(0);
   const capturingRef = useRef(false);
   const debugRef = useRef<HTMLPreElement>(null);
@@ -313,16 +329,19 @@ export function CameraCapture({
       });
 
       const found = detectQuad(gray);
-      const smoothed = found
-        ? smoothQuad(
-            quadRef.current
-              ? scaleToDetect(quadRef.current, view, canvas)
-              : null,
-            found,
-            SMOOTHING_ALPHA,
-            (SMOOTHING_RESET_PX * canvas.width) / view.width,
-          )
-        : null;
+      dutyRef.current = dutyRef.current * 0.94 + (found ? 0.06 : 0);
+
+      // Hysteresis, not just easing: on a real phone the detector flips
+      // between rival readings of the same scene, and chasing every flip is
+      // what the founder saw as the border "snapping back and forth". The
+      // shown outline glides for nearby updates and ignores far ones until
+      // they persist.
+      stabilityRef.current = stabiliseQuad(stabilityRef.current, found, {
+        alpha: SMOOTHING_ALPHA,
+        jumpDistance: (QUAD_JUMP_PX * canvas.width) / view.width,
+        adoptAfter: QUAD_ADOPT_FRAMES,
+      });
+      const smoothed = stabilityRef.current.shown;
 
       const areaFraction = smoothed
         ? quadArea(smoothed) / (canvas.width * canvas.height)
@@ -354,13 +373,17 @@ export function CameraCapture({
       };
 
       const step = advanceShutter(shutterRef.current, {
-        detected: smoothed !== null,
+        // Raw detection presence, not the stabilised outline — the outline
+        // deliberately persists through dropouts, and crediting that would
+        // let the shutter charge on a ghost.
+        detected: found !== null,
         guidanceFor: (documentPresent) =>
           guidanceFor(judged, documentPresent, {
             minSharpness: sharpnessFloorFor(peakSharpnessRef.current),
           }),
         elapsedMs,
         graceMs: MISS_GRACE_MS,
+        creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs: DETECTED_MS_REQUIRED,
       });
       shutterRef.current = step.state;
@@ -374,9 +397,9 @@ export function CameraCapture({
           `motion ${judged.motion.toFixed(1).padStart(5)}  need <${th.maxMotion}    ${judged.motion > th.maxMotion ? "FAIL" : "ok"}`,
           `sharp  ${judged.sharpness.toFixed(0).padStart(5)}  need >${floor.toFixed(0)}   ${judged.sharpness < floor ? "FAIL" : "ok"}`,
           `fill   ${judged.fill.toFixed(2).padStart(5)}  need >${th.minFill}  ${judged.fill < th.minFill ? "FAIL" : "ok"}`,
-          `quad   ${smoothed ? "found" : "NONE"}`,
+          `quad   ${found ? "found" : "NONE"}  duty ${(dutyRef.current * 100).toFixed(0)}%`,
           `hint   ${step.guidance}`,
-          `charge ${(step.progress * 100).toFixed(0)}%`,
+          `charge ${(step.progress * 100).toFixed(0)}%  (${step.state.detectedMs.toFixed(0)}/${DETECTED_MS_REQUIRED}ms, miss ${step.state.missMs.toFixed(0)})`,
         ].join("\n");
       }
 
@@ -389,6 +412,7 @@ export function CameraCapture({
       } else if (step.outline === "clear") {
         quadRef.current = null;
         setQuad(null);
+        stabilityRef.current = INITIAL_QUAD_STABILITY;
       }
 
       if (step.fire) void capture();
@@ -817,12 +841,3 @@ function scaleToView(
   return q.map((p) => ({ x: p.x * sx, y: p.y * sy })) as unknown as Quad;
 }
 
-function scaleToDetect(
-  q: Quad,
-  view: { width: number; height: number },
-  canvas: { width: number; height: number },
-): Quad {
-  const sx = canvas.width / view.width;
-  const sy = canvas.height / view.height;
-  return q.map((p) => ({ x: p.x * sx, y: p.y * sy })) as unknown as Quad;
-}

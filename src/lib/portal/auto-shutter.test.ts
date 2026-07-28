@@ -7,6 +7,7 @@ import {
 import type { Guidance } from "./frame-metrics";
 
 const GRACE_MS = 350;
+const CREDIT_HOLD_MS = 1500;
 const REQUIRED_MS = 600;
 
 type Frame = { detected: boolean; guidance: Guidance; dt?: number };
@@ -20,6 +21,7 @@ function run(frames: Frame[], dt = 50) {
       guidanceFor: () => f.guidance,
       elapsedMs: f.dt ?? dt,
       graceMs: GRACE_MS,
+      creditHoldMs: CREDIT_HOLD_MS,
       requiredDetectedMs: REQUIRED_MS,
     });
     state = step.state;
@@ -67,13 +69,13 @@ describe("advanceShutter — detection is the ONLY gate", () => {
 
   it("does not fire on a swing-past", () => {
     // A camera sweeping across a document sees it briefly, loses it for
-    // longer than the grace window, sees another. No single run reaches the
-    // requirement, so nothing fires.
+    // longer than the credit-hold window, sees another. No single run reaches
+    // the requirement, so nothing fires.
     const sweep = [
       ...times(4, good), // 200ms
-      ...times(9, miss), // 450ms > grace, credit resets
+      ...times(32, miss), // 1600ms > credit hold, credit resets
       ...times(4, good),
-      ...times(9, miss),
+      ...times(32, miss),
       ...times(4, good),
     ];
     expect(run(sweep).some((s) => s.fire)).toBe(false);
@@ -100,9 +102,32 @@ describe("advanceShutter — shake dropouts do not restart the count", () => {
     expect(steps.at(-1)!.state.detectedMs).toBe(400);
   });
 
-  it("starts over once the document is genuinely gone", () => {
+  it("keeps the credit through a dropout LONGER than the outline's grace", () => {
+    // The founder's 17-second capture: on a real phone the detector flickers
+    // with the document in frame the whole time. 450ms of misses clears the
+    // OUTLINE (grace 350) but must not touch the credit (hold 1500).
     const steps = run([...times(8, good), ...times(9, miss), good]);
-    // 450ms of misses exceeds the 350ms grace: the credit is gone.
+    expect(steps.at(-2)!.outline).toBe("clear");
+    expect(steps.at(-1)!.state.detectedMs).toBe(450);
+  });
+
+  it("fires within seconds under flickering detection — the 17s regression", () => {
+    // 200ms seen / 400ms lost, repeating: a duty cycle far worse than a
+    // steady hand. Credit must accumulate across the dropouts and fire on
+    // the third burst, ~1.6s in — not restart forever.
+    const flicker = Array.from({ length: 6 }, () => [
+      ...times(4, good),
+      ...times(8, miss),
+    ]).flat();
+    const steps = run(flicker);
+    const firedAt = steps.findIndex((s) => s.fire);
+    expect(firedAt).toBeGreaterThan(-1);
+    expect(firedAt * 50).toBeLessThanOrEqual(2000);
+  });
+
+  it("starts over once the document is genuinely gone", () => {
+    const steps = run([...times(8, good), ...times(31, miss), good]);
+    // 1550ms of misses exceeds the 1500ms credit hold: start over.
     expect(steps.at(-1)!.state.detectedMs).toBe(50);
   });
 });
@@ -122,6 +147,7 @@ describe("advanceShutter — firing cadence", () => {
         guidanceFor: () => "ready",
         elapsedMs: 50,
         graceMs: GRACE_MS,
+        creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs,
       });
       expect(step.fire).toBe(false);
@@ -173,6 +199,7 @@ describe("advanceShutter — hostile timing", () => {
         guidanceFor: () => "ready",
         elapsedMs: 30_000,
         graceMs: GRACE_MS,
+        creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs: REQUIRED_MS,
       },
     );
@@ -188,6 +215,7 @@ describe("advanceShutter — hostile timing", () => {
           guidanceFor: () => "ready",
           elapsedMs,
           graceMs: GRACE_MS,
+          creditHoldMs: CREDIT_HOLD_MS,
           requiredDetectedMs: REQUIRED_MS,
         },
       );
@@ -204,6 +232,7 @@ describe("advanceShutter — hostile timing", () => {
       guidanceFor: () => "ready",
       elapsedMs: 50,
       graceMs: GRACE_MS,
+      creditHoldMs: CREDIT_HOLD_MS,
       requiredDetectedMs: REQUIRED_MS,
     });
     expect(prev).toEqual(snapshot);
