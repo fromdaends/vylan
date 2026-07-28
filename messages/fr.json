@@ -3094,7 +3094,13 @@
     "unlink_go": "Dissocier",
     "unlink_failed": "Impossible de dissocier. Réessayez.",
     "post_all_needs_review": "{count, plural, one {# brouillon semble} other {# brouillons semblent}} déjà exister dans QuickBooks, ils n’ont donc pas été envoyés. Ouvrez chaque carte pour joindre ou créer la transaction.",
-    "post_all_needs_review_close": "OK"
+    "post_all_needs_review_close": "OK",
+    "xero_status_label": "Publier comme",
+    "xero_status_draft": "Brouillon",
+    "xero_status_submitted": "En attente d’approbation",
+    "xero_status_authorised": "En attente de paiement",
+    "xero_status_hint": "Comment cette facture arrive dans Xero. « En attente d’approbation » convient aux cabinets qui utilisent un flux d’approbation.",
+    "xero_status_na_spend": "Les dépenses payées sont toujours publiées comme transaction bancaire complétée — Xero n’a pas d’état brouillon ou d’approbation pour celles-ci."
   },
   "ClientMessages": {
     "thread_title": "Messages avec votre client",
