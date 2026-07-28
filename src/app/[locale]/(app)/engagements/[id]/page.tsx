@@ -55,6 +55,10 @@ import {
   QuickbooksDraftCard,
   type DraftCardOptions,
 } from "@/components/engagements/quickbooks-draft-card";
+import {
+  PayoutBreakdownCard,
+  payoutCardData,
+} from "@/components/engagements/payout-breakdown-card";
 import { QuickbooksDraftsSummary } from "@/components/engagements/quickbooks-drafts-summary";
 import {
   getSuggestionsForEngagement,
@@ -1387,11 +1391,20 @@ async function ItemRow({
                 const showDraft =
                   d &&
                   (f.review_status === "approved" || d.status === "posted");
-                // Nothing to show (no draft + comments off) → no footer, exactly
-                // as before.
-                if (!showDraft && !commentsEnabled) return undefined;
+                // Payment-processor payout split (Stripe/Square/PayPal): shown
+                // as soon as it's read, regardless of review state — it is a
+                // reading of the document, not a pending action like a draft.
+                const payoutCard = payoutCardData(f.ai_extracted_fields);
+                // Nothing to show (no draft, no payout, comments off) → no
+                // footer, exactly as before.
+                if (!showDraft && !payoutCard && !commentsEnabled) {
+                  return undefined;
+                }
                 return (
                   <>
+                    {payoutCard && (
+                      <PayoutBreakdownCard data={payoutCard} locale={locale} />
+                    )}
                     {showDraft && d && (
                       <QuickbooksDraftCard
                         suggestion={d.suggestion}
