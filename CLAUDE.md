@@ -22,9 +22,35 @@ You MUST coordinate through git and `.active-sessions.md`.
    ```
    Be specific about files locked (e.g., `src/components/profile/**`,
    `supabase/migrations/0034_*.sql`).
+
+   **The `<device name>` must be unique across CONCURRENT sessions.** More than
+   one session can run on the same physical machine at the same time, and if
+   they both write "Mac (device 1)" the log cannot tell them apart — which
+   defeats the whole point of it. Before writing your entry, read
+   `.active-sessions.md` and if another `active` entry already uses your
+   device name, append a short topic tag: `Mac (device 1) · scanner`,
+   `Mac (device 1) · team`. Use that same tag in every commit message and in
+   your `status: done` update.
 6. Commit and push that entry immediately:
    `git add .active-sessions.md && git commit -m "session: <device> starting <task>" && git push`
 7. Wait for the user's "go" before doing any real work.
+
+### Two sessions on ONE machine — check before you write
+
+Sessions on the same machine share a working directory, so a second session
+can change the branch and leave uncommitted files underneath you between one
+tool call and the next.
+
+**Before any `git` command that writes (commit, checkout, pull, stash), and
+before your first file edit, run `git status` and `git rev-parse --abbrev-ref
+HEAD`.** If you are not on the branch you expect, or the working tree holds
+changes that are not yours: **STOP and tell the user.** Do not commit, do not
+stash, do not switch branches — a stray `git add .` sweeps up their unfinished
+work, and a session-log commit lands on their feature branch.
+
+When two sessions genuinely need to work at once, the second one should ask
+the user for a **git worktree** (an isolated checkout in a separate folder on
+its own branch). Same repo, same history, zero shared files.
 
 ### Working rhythm — every 15–20 minutes OR after each logical chunk
 
