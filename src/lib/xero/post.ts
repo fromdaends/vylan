@@ -20,7 +20,11 @@ import {
   recordReceiptAttached,
   recordDraftVoided,
 } from "@/lib/db/quickbooks-suggestions";
-import { isClientXeroConnected, isClientXeroDemoOrg } from "@/lib/db/xero";
+import {
+  isClientXeroConnected,
+  isClientXeroDemoOrg,
+  readClientXeroPublishDefault,
+} from "@/lib/db/xero";
 import { readXeroPostingContext } from "@/lib/db/xero-cache";
 import { getXeroReadContext, type XeroReadContext } from "@/lib/xero/connection";
 import { XeroError } from "@/lib/xero/client";
@@ -36,6 +40,8 @@ import {
 import {
   buildXeroBillPayload,
   buildXeroSpendPayload,
+  xeroPostingReference,
+  xeroUndoStatusFor,
   resolveXeroTaxApplication,
   xeroTaxDiscrepancyNote,
   type XeroExpenseLine,
@@ -49,14 +55,12 @@ import {
   effectiveMapping,
   effectiveDate,
   effectiveExpenseMode,
+  effectivePublishStatus,
   effectiveSplit,
   effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
 import { postApprovedDraft, type PostOutcome } from "@/lib/quickbooks/post";
-import {
-  postingLineDescription,
-  postingReference,
-} from "@/lib/quickbooks/suggest";
+import { postingLineDescription } from "@/lib/quickbooks/suggest";
 import { getUploadedFileById } from "@/lib/db/uploaded-files";
 import { downloadObject } from "@/lib/storage";
 
@@ -163,7 +167,9 @@ export async function postApprovedXeroDraft(
     eff.party?.name ?? s.partySource ?? null,
     s.lines,
   );
-  const reference = postingReference(s.reference);
+  // Reference is resolved per transaction KIND further down (once isPurchase is
+  // known) — a bill with no document number gets a traceable VYL- fallback, a
+  // bank transaction deliberately does not. See xeroPostingReference.
 
   // Posting context: the QuickbooksLists (for the provider-neutral active checks)
   // + the GUID→code maps Xero line items need.
@@ -217,6 +223,26 @@ export async function postApprovedXeroDraft(
   }
 
   const isPurchase = effectiveExpenseMode(s, draft.resolved) === "purchase";
+
+  // How this bill should land in Xero: the accountant's per-document pick, else
+  // this client's remembered default, else AUTHORISED (unchanged behaviour).
+  // effectivePublishStatus forces AUTHORISED for a paid expense — a SPEND bank
+  // transaction has no draft or approval state in Xero.
+  const publishStatus = effectivePublishStatus(
+    s,
+    draft.resolved,
+    await readClientXeroPublishDefault(draft.firmId, draft.clientId),
+  );
+
+  // The document's own number when it has one; for a BILL with none, a
+  // deterministic VYL-<fileId> so the transaction in Xero always traces back to
+  // the paper in Vylan (a bank transaction keeps a blank reference — Xero's
+  // reconciliation matcher reads this field).
+  const reference = xeroPostingReference(
+    s.reference,
+    fileId,
+    isPurchase ? "banktransaction" : "invoice",
+  );
 
   let endpoint: XeroTxnEndpoint;
   let payload: Record<string, unknown>;
@@ -288,6 +314,7 @@ export async function postApprovedXeroDraft(
       accountCode,
       amount: s.amount,
       date: effDate,
+      status: publishStatus,
       description: lineDescription,
       reference,
       tax,
@@ -332,6 +359,9 @@ export async function postApprovedXeroDraft(
     postedSyncToken: "0", // Xero has no SyncToken
     posterId,
     postedRealmId: ctx.tenantId, // the Xero org (tenant) it posted under
+    // What undo needs to retract this correctly (VOIDED vs DELETED). A SPEND is
+    // always AUTHORISED; only the bill path can be a draft.
+    postedStatus: isPurchase ? "AUTHORISED" : publishStatus,
   });
   if (recorded === "conflict") return { kind: "conflict", ...base };
   if (recorded !== "ok") {
@@ -436,8 +466,17 @@ export async function undoXeroPost(fileId: string): Promise<XeroUndoResult> {
     if (endpoint === "BankTransactions") {
       await xeroDeleteBankTransaction(ctx, draft.postedQboId);
     } else {
-      // An AUTHORISED bill with no payments → VOIDED (Xero rejects DELETE on it).
-      await xeroSetInvoiceStatus(ctx, draft.postedQboId, "VOIDED");
+      // Retract using what we ACTUALLY posted, never a re-derivation of the
+      // draft's current state. Xero rejects VOIDED on a DRAFT or SUBMITTED
+      // invoice (legal move: DELETED) and rejects DELETED on an AUTHORISED one,
+      // so guessing here would throw, leave the bill in the client's books and
+      // strand this row as "posted" with no way back except deleting it by hand
+      // in Xero. postedStatus is null on a pre-0970 row, which was AUTHORISED.
+      await xeroSetInvoiceStatus(
+        ctx,
+        draft.postedQboId,
+        xeroUndoStatusFor(draft.postedStatus),
+      );
     }
   } catch (e) {
     const detail = e instanceof XeroError ? e.message : (e as Error).message;

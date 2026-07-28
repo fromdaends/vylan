@@ -361,9 +361,13 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
   // 0790: 'xero' when this draft's client is Xero-connected, else 'quickbooks'
   // (defaults to 'quickbooks' pre-0790 / on the narrower fallback tiers).
   provider: DraftProvider;
+  // 0970: the Xero status this draft was POSTED with. Undo reads it to pick the
+  // right retraction (VOIDED vs DELETED). Null = pre-0970 row = AUTHORISED.
+  postedStatus: "DRAFT" | "SUBMITTED" | "AUTHORISED" | null;
 } | null> {
   const sb = await getServerSupabase();
   const selects = [
+    "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type, provider, posted_status",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type, provider",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at",
@@ -390,6 +394,9 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
     break;
   }
   if (error || !row) return null;
+  // Did the tier we landed on actually ask for this column? (See the readiness
+  // flags below — this replaces fragile tier-index arithmetic.)
+  const selectHas = (column: string): boolean => selects[tier]!.includes(column);
   // Resolve the engagement's client so the post path targets that client's
   // QuickBooks connection (0710). A separate point read (the repo avoids
   // PostgREST joins); RLS-scoped like the draft read above.
@@ -425,19 +432,35 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
     postedQboId: (row.posted_qbo_id as string | null) ?? null,
     postedSyncToken: (row.posted_qbo_sync_token as string | null) ?? null,
     postAttempt: (row.post_attempt as number | null) ?? 0,
-    // Tier ladder (widest first): tier 0 adds 0790 provider, tier 1 adds 0510
-    // register-match, tier 2 adds 0500 receipt-attach, tier 3 adds the 0450
-    // posting columns; tiers 4–5 carry none. So 0450 columns live on tiers 0–3,
-    // the 0500 column on tiers 0–2, and the 0510 column on tiers 0–1.
-    postReady: tier <= 3,
+    // Each "…Ready" flag asks whether the tier we actually landed on SELECTED
+    // that column — read straight off the select string rather than comparing
+    // against a hard-coded tier index.
+    //
+    // This used to be `tier <= 3` / `<= 2` / `<= 1`, which meant every new
+    // migration column inserted at the top silently shifted all three
+    // thresholds. Miss one and posting is disabled for every firm, with nothing
+    // failing loudly to say so. Naming the column removes the arithmetic
+    // entirely: add a tier, and these keep telling the truth for free.
+    postReady: selectHas("posted_qbo_id"),
     receiptAttachedAt: (row.receipt_attached_at as string | null) ?? null,
-    attachReady: tier <= 2,
+    attachReady: selectHas("receipt_attached_at"),
     matchedQboType: (row.matched_qbo_type as string | null) ?? null,
-    matchReady: tier <= 1,
-    // provider lives only on tier 0 (0790); a narrower fallback tier leaves it
-    // undefined, which normalizes to 'quickbooks'.
+    matchReady: selectHas("matched_qbo_type"),
+    // Absent on a narrower fallback tier, which normalizes to 'quickbooks'.
     provider: normalizeDraftProvider(row.provider),
+    // 0970. What we ACTUALLY sent to Xero, so undo knows whether to VOID
+    // (authorised) or DELETE (draft/submitted) — Xero rejects the wrong one.
+    // Null on a legacy row or a pre-0970 tier, which means AUTHORISED.
+    postedStatus: normalizePostedStatus(row.posted_status),
   };
+}
+
+// The publish status recorded on a posted draft. Anything unrecognised (or
+// absent) reads as null = "posted before we recorded it" = AUTHORISED.
+function normalizePostedStatus(
+  v: unknown,
+): "DRAFT" | "SUBMITTED" | "AUTHORISED" | null {
+  return v === "DRAFT" || v === "SUBMITTED" || v === "AUTHORISED" ? v : null;
 }
 
 // Flip a draft's status (approve / dismiss / reopen) and stamp who acted + when.
@@ -547,6 +570,9 @@ export async function recordDraftPosted(input: {
   // company. Stamped on the widest tier; dropped pre-0520 (matching just stays
   // firm-wide). Never affects whether the post is recorded.
   postedRealmId?: string | null;
+  // XERO (0970): the status this was posted with — what undo needs to retract
+  // it correctly. Omitted on the QuickBooks path, which has no equivalent.
+  postedStatus?: "DRAFT" | "SUBMITTED" | "AUTHORISED" | null;
 }): Promise<RecordPostedResult> {
   const sb = getServiceRoleSupabase();
   const now = new Date().toISOString();
@@ -564,7 +590,7 @@ export async function recordDraftPosted(input: {
   // stale marker), falling back through narrower column sets pre-0520 / pre-0510.
   // A MATCHED post requires the 0510 column — its fallback keeps the marker (only
   // the 0520 realm is dropped), so the marker can't be lost.
-  const patches = input.matchedQboType
+  const basePatches = input.matchedQboType
     ? [
         { ...base, matched_qbo_type: input.matchedQboType, ...realm },
         { ...base, matched_qbo_type: input.matchedQboType },
@@ -574,6 +600,22 @@ export async function recordDraftPosted(input: {
         { ...base, matched_qbo_type: null },
         base,
       ];
+  // 0970 (Xero): record the status we actually posted with, ATOMICALLY with the
+  // post itself rather than as a follow-up write. Undo reads it to choose
+  // between VOIDED and DELETED, and Xero rejects the wrong one — so a row that
+  // said "posted" without its status would be un-undoable. Every variant is
+  // tried with the column first, then without, so a pre-0970 database still
+  // records the post (and null there means AUTHORISED, which is what every
+  // pre-0970 post was).
+  const patches = input.postedStatus
+    ? [
+        ...basePatches.map((p) => ({
+          ...p,
+          posted_status: input.postedStatus,
+        })),
+        ...basePatches,
+      ]
+    : basePatches;
   let data: Array<Record<string, unknown>> | null = null;
   let error: { code?: string; message?: string } | null = null;
   for (const patch of patches) {

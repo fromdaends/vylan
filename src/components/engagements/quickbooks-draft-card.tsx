@@ -16,6 +16,7 @@ import {
   effectiveMapping,
   effectiveDate,
   effectiveExpenseMode,
+  effectivePublishStatus,
   effectiveIncomeMode,
   effectiveSplit,
   effectiveLines,
@@ -29,6 +30,7 @@ import { deriveQuickbooksDraftView } from "./quickbooks-draft-view";
 import { RegenerateDraftButton } from "./regenerate-draft-button";
 import { DraftStatusControls } from "./draft-status-controls";
 import { QuickbooksPaidToggle } from "./quickbooks-paid-toggle";
+import { XeroPublishStatusField } from "./xero-publish-status-field";
 import { QuickbooksSplitSection } from "./quickbooks-split-section";
 import { PostDraftControls } from "@/components/quickbooks/post-draft-controls";
 import {
@@ -131,6 +133,10 @@ export async function QuickbooksDraftCard({
   // Bill (unpaid) vs Purchase (paid) for an expense — drives the toggle + whether
   // the "paid from" account cell shows.
   const expenseMode = effectiveExpenseMode(suggestion, resolved);
+  // XERO "Publish as". The client's remembered default lives server-side and is
+  // applied at post time; the card shows the per-document pick, falling back to
+  // AUTHORISED so an untouched draft reads the same as it will post.
+  const publishStatus = effectivePublishStatus(suggestion, resolved, null);
   // Invoice (owed) vs SalesReceipt (paid) for income — drives the income toggle.
   const incomeMode = effectiveIncomeMode(suggestion, resolved);
   // Split-across-accounts (expense with ≥2 reconciled line items). Only offered
@@ -445,6 +451,24 @@ export async function QuickbooksDraftCard({
               )}
             />
           )}
+          {/* XERO "Publish as" — Draft / Awaiting approval / Awaiting payment.
+              UNPAID expenses only: a paid one posts a bank transaction, and
+              Xero's BankTransaction.Status accepts only AUTHORISED or DELETED,
+              so there is nothing to choose. Rather than show a picker that
+              silently does nothing, say why. */}
+          {isXero &&
+            (expenseMode === "purchase" ? (
+              <p className="self-center text-[11px] leading-snug text-muted-foreground">
+                {t("xero_status_na_spend")}
+              </p>
+            ) : (
+              <XeroPublishStatusField
+                key={`publish-${publishStatus}`}
+                fileId={fileId}
+                value={publishStatus}
+                disabled={!isDraft}
+              />
+            ))}
         </div>
       )}
 

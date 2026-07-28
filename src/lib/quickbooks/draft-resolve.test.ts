@@ -4,6 +4,7 @@ import {
   effectiveDate,
   draftNeedsInput,
   effectiveExpenseMode,
+  effectivePublishStatus,
   effectiveIncomeMode,
   effectiveSplit,
   effectiveLines,
@@ -321,5 +322,51 @@ describe("effectiveIncomeMode", () => {
     expect(
       effectiveIncomeMode(sugg({ direction: "unknown", paid: true }), null),
     ).toBe("invoice");
+  });
+});
+
+describe("effectivePublishStatus (Xero 'Publish as')", () => {
+  const unpaid = sugg({ paid: false });
+
+  it("defaults to AUTHORISED — unchanged for anyone who never touches it", () => {
+    expect(effectivePublishStatus(unpaid, null, null)).toBe("AUTHORISED");
+    expect(effectivePublishStatus(unpaid, null, undefined)).toBe("AUTHORISED");
+  });
+
+  it("uses this client's remembered default when the document has no pick", () => {
+    expect(effectivePublishStatus(unpaid, null, "SUBMITTED")).toBe("SUBMITTED");
+    expect(effectivePublishStatus(unpaid, {} as never, "DRAFT")).toBe("DRAFT");
+  });
+
+  it("the accountant's pick for THIS document beats the client default", () => {
+    expect(
+      effectivePublishStatus(
+        unpaid,
+        { publishStatus: "DRAFT" } as never,
+        "AUTHORISED",
+      ),
+    ).toBe("DRAFT");
+  });
+
+  // Xero's BankTransaction.Status only accepts AUTHORISED or DELETED — a cash
+  // movement has no draft or approval state. The card hides the picker in this
+  // mode; this is the backstop for a stale override left on a draft whose paid
+  // toggle was flipped afterwards.
+  it("forces AUTHORISED on a PAID expense, overriding everything", () => {
+    const paid = sugg({ paid: true });
+    expect(
+      effectivePublishStatus(paid, { publishStatus: "DRAFT" } as never, "DRAFT"),
+    ).toBe("AUTHORISED");
+  });
+
+  it("respects the paid-toggle override when deciding that", () => {
+    // AI said unpaid, accountant marked it paid → bank transaction → AUTHORISED.
+    expect(
+      effectivePublishStatus(
+        unpaid,
+        { paid: true, publishStatus: "SUBMITTED" } as never,
+        null,
+      ),
+    ).toBe("AUTHORISED");
   });
 });

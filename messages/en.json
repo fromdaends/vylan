@@ -3094,7 +3094,13 @@
     "unlink_go": "Unlink",
     "unlink_failed": "Couldn't unlink. Try again.",
     "post_all_needs_review": "{count, plural, one {# draft looks} other {# drafts look}} like they may already be in QuickBooks, so they weren't posted. Open each card to attach or post it.",
-    "post_all_needs_review_close": "OK"
+    "post_all_needs_review_close": "OK",
+    "xero_status_label": "Publish as",
+    "xero_status_draft": "Draft",
+    "xero_status_submitted": "Awaiting approval",
+    "xero_status_authorised": "Awaiting payment",
+    "xero_status_hint": "How this bill lands in Xero. “Awaiting approval” suits firms using an approval workflow.",
+    "xero_status_na_spend": "Paid expenses always post as a completed bank transaction — Xero has no draft or approval state for those."
   },
   "ClientMessages": {
     "thread_title": "Messages with your client",

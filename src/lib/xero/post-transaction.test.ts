@@ -7,6 +7,9 @@ import {
   buildXeroInvoicePayload,
   buildXeroReceivePayload,
   xeroTaxDiscrepancyNote,
+  xeroPostingReference,
+  xeroStatusNeedsDueDate,
+  xeroUndoStatusFor,
 } from "./post-transaction";
 
 describe("deriveNetAmount", () => {
@@ -240,5 +243,138 @@ describe("xeroTaxDiscrepancyNote", () => {
         documentTotal: 169.5,
       }),
     ).toBeNull();
+  });
+});
+
+describe("xeroPostingReference", () => {
+  const FILE = "3f2b8c10-9a4d-4e21-8b77-1c0d5e6f7a89";
+
+  it("passes a real document number through untouched", () => {
+    expect(xeroPostingReference("INV-00123", FILE, "invoice")).toBe("INV-00123");
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(xeroPostingReference("  INV-9  ", FILE, "invoice")).toBe("INV-9");
+  });
+
+  // The whole point: a bill with no number still traces back to the document.
+  it("falls back to a traceable VYL- reference on an invoice", () => {
+    expect(xeroPostingReference(null, FILE, "invoice")).toBe(`VYL-${FILE}`);
+    expect(xeroPostingReference("", FILE, "invoice")).toBe(`VYL-${FILE}`);
+    expect(xeroPostingReference("   ", FILE, "invoice")).toBe(`VYL-${FILE}`);
+    expect(xeroPostingReference(undefined, FILE, "invoice")).toBe(
+      `VYL-${FILE}`,
+    );
+  });
+
+  // Deliberate: Xero's bank-reconciliation Find & Match reads Reference, so a
+  // high-entropy token on a SPEND/RECEIVE would change how those firms
+  // reconcile. Blank stays blank until that is walked through for real.
+  it("does NOT invent a reference for a bank transaction", () => {
+    expect(xeroPostingReference(null, FILE, "banktransaction")).toBeNull();
+    expect(xeroPostingReference("   ", FILE, "banktransaction")).toBeNull();
+  });
+
+  it("still uses a real document number on a bank transaction", () => {
+    expect(xeroPostingReference("RCPT-7", FILE, "banktransaction")).toBe(
+      "RCPT-7",
+    );
+  });
+
+  // Xero's limit is 255 — NOT the shared postingReference's 21 (QuickBooks'
+  // DocNumber cap), which would have shredded the uuid.
+  it("caps an overlong document number at Xero's 255", () => {
+    const long = "X".repeat(300);
+    const out = xeroPostingReference(long, FILE, "invoice");
+    expect(out).toHaveLength(255);
+  });
+
+  it("keeps the whole file id — the fallback is well under the cap", () => {
+    const out = xeroPostingReference(null, FILE, "invoice")!;
+    expect(out.length).toBeLessThan(255);
+    expect(out).toContain(FILE); // never truncated, so it stays searchable
+  });
+});
+
+describe("publish status (Hubdoc 'Publish as')", () => {
+  const bill = {
+    contactId: "c1",
+    accountCode: "400",
+    amount: 100,
+    date: "2024-03-14",
+  };
+
+  it("defaults to AUTHORISED — unchanged from before the picker existed", () => {
+    expect(buildXeroBillPayload(bill).Status).toBe("AUTHORISED");
+  });
+
+  it("emits each of the three statuses", () => {
+    expect(buildXeroBillPayload({ ...bill, status: "DRAFT" }).Status).toBe(
+      "DRAFT",
+    );
+    expect(buildXeroBillPayload({ ...bill, status: "SUBMITTED" }).Status).toBe(
+      "SUBMITTED",
+    );
+    expect(
+      buildXeroBillPayload({ ...bill, status: "AUTHORISED" }).Status,
+    ).toBe("AUTHORISED");
+  });
+
+  // Xero requires a DueDate on a bill that is (or is about to become)
+  // authorised. A SUBMITTED bill is one approval click away, so it needs one.
+  it("sets a DueDate for AUTHORISED and SUBMITTED, defaulting to the txn date", () => {
+    expect(buildXeroBillPayload({ ...bill, status: "AUTHORISED" }).DueDate).toBe(
+      "2024-03-14",
+    );
+    expect(buildXeroBillPayload({ ...bill, status: "SUBMITTED" }).DueDate).toBe(
+      "2024-03-14",
+    );
+  });
+
+  it("omits DueDate on a DRAFT with no due date on the document", () => {
+    expect(buildXeroBillPayload({ ...bill, status: "DRAFT" }).DueDate).toBeUndefined();
+  });
+
+  it("still honours a real due date on a DRAFT", () => {
+    expect(
+      buildXeroBillPayload({ ...bill, status: "DRAFT", dueDate: "2024-04-30" })
+        .DueDate,
+    ).toBe("2024-04-30");
+  });
+
+  // A cash movement has no draft/approval state in Xero.
+  it("never puts a Status on a spend bank transaction", () => {
+    const spend = buildXeroSpendPayload({
+      ...bill,
+      bankAccountId: "bank-1",
+    });
+    expect(spend.Status).toBeUndefined();
+  });
+});
+
+describe("xeroStatusNeedsDueDate", () => {
+  it("is true for AUTHORISED and SUBMITTED, false for DRAFT", () => {
+    expect(xeroStatusNeedsDueDate("AUTHORISED")).toBe(true);
+    expect(xeroStatusNeedsDueDate("SUBMITTED")).toBe(true);
+    expect(xeroStatusNeedsDueDate("DRAFT")).toBe(false);
+  });
+});
+
+// The trap this whole posted_status column exists for: Xero REJECTS VOIDED on a
+// draft or submitted invoice, so undo must send DELETED instead or the bill is
+// stranded in the client's books with Vylan still showing "Posted".
+describe("xeroUndoStatusFor", () => {
+  it("deletes a draft or submitted bill", () => {
+    expect(xeroUndoStatusFor("DRAFT")).toBe("DELETED");
+    expect(xeroUndoStatusFor("SUBMITTED")).toBe("DELETED");
+  });
+
+  it("voids an authorised bill", () => {
+    expect(xeroUndoStatusFor("AUTHORISED")).toBe("VOIDED");
+  });
+
+  // Rows posted before the column existed were always AUTHORISED.
+  it("voids a legacy row with no recorded status", () => {
+    expect(xeroUndoStatusFor(null)).toBe("VOIDED");
   });
 });

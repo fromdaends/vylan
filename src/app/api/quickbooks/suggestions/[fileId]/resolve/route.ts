@@ -16,6 +16,7 @@ import {
 } from "@/lib/db/quickbooks-suggestions";
 import { recordLearnedMapping } from "@/lib/db/quickbooks-learned";
 import { learnedWritesFromResolve } from "@/lib/quickbooks/learn";
+import { setClientXeroPublishDefault } from "@/lib/db/xero";
 import type { ResolvedEntry, ResolvedRef } from "@/lib/quickbooks/suggest";
 import { isPostableDate } from "@/lib/quickbooks/draft-resolve";
 
@@ -101,6 +102,25 @@ export async function POST(
       patch[bf] = val;
     }
   }
+  // `publishStatus` (XERO) — how the bill should land: Draft / Awaiting
+  // approval / Awaiting payment. An enum, not a ref, and validated strictly:
+  // an unexpected value reaching Xero is a rejected post, so a typo fails here
+  // rather than against the client's books.
+  if (Object.prototype.hasOwnProperty.call(body, "publishStatus")) {
+    const v = body.publishStatus;
+    const valid =
+      v === null ||
+      v === "DRAFT" ||
+      v === "SUBMITTED" ||
+      v === "AUTHORISED";
+    if (!valid) {
+      return NextResponse.json(
+        { error: "bad_request", detail: "Invalid publishStatus." },
+        { status: 400 },
+      );
+    }
+    patch.publishStatus = v as ResolvedEntry["publishStatus"];
+  }
   // `date` is the transaction-date override (ISO YYYY-MM-DD). It must be a valid
   // date — a transaction can't have its date "cleared" to nothing.
   if (Object.prototype.hasOwnProperty.call(body, "date")) {
@@ -185,6 +205,23 @@ export async function POST(
   // the unique index is NULLS NOT DISTINCT — so one client's "Home Depot →
   // Repairs" overwrote another's "Home Depot → COGS". Passing the real client id
   // is what 0710's per-client promise depends on.
+  // Choosing "Publish as" also sets it as this CLIENT's default, so the next
+  // bill for them starts there — the same learn-once ergonomics as the rest of
+  // the draft. Best-effort and no-op pre-0970; the per-document pick is already
+  // saved above either way. Skipped when the field is cleared to null (that
+  // means "use the default", not "make null the default").
+  if (patch.publishStatus && draft.clientId) {
+    try {
+      await setClientXeroPublishDefault(
+        draft.firmId,
+        draft.clientId,
+        patch.publishStatus,
+      );
+    } catch (err) {
+      console.warn("[xero] remembering the publish default failed:", err);
+    }
+  }
+
   if (draft.suggestion) {
     try {
       const writes = learnedWritesFromResolve(patch, draft.suggestion);
