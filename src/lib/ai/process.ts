@@ -33,6 +33,7 @@ import {
 import { readCachedQuickbooksListsForFirm } from "@/lib/db/quickbooks-cache";
 import { readCachedXeroListsForFirm } from "@/lib/db/xero-cache";
 import { readLearnedMappingsForFirm } from "@/lib/db/quickbooks-learned";
+import { flagNearDuplicate } from "@/lib/duplicates";
 import { resolveBookkeepingProvider } from "@/lib/bookkeeping/provider";
 import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import {
@@ -283,6 +284,20 @@ export async function processClassifyJob(
       ai_usability: result.usability,
     })
     .eq("id", file.id);
+
+  // NEAR-DUPLICATE CHECK (0990). The upload-time hash check only catches a
+  // byte-identical re-upload; this runs now, once the AI has actually READ the
+  // document, and compares the fields Dext compares — supplier + total +
+  // document number for a numbered document, supplier + date + total for a
+  // receipt. That is what catches the same invoice photographed AND emailed.
+  //
+  // FLAGS ONLY. Unlike the hash check it is probabilistic (a monthly retainer
+  // genuinely repeats supplier and amount), so it writes a separate softer
+  // column and never rejects, never sets the file aside, and never touches the
+  // checklist. Fully best-effort and its own write, exactly like auto-naming
+  // below: a missing column (0990 not applied) leaves the feature off and the
+  // classification above still lands.
+  await flagNearDuplicate(sb, file.id, file.engagement_id, transaction);
 
   // Auto-name (migration 0280): give the file a clean, human name (e.g.
   // "T4 - 2024 - Hydro-Quebec.pdf") so the accountant isn't staring at
