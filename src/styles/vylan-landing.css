@@ -229,22 +229,46 @@
 .vy-reel-brand {
   font-weight: 700;
 }
+/* MOTION EFFECT BUDGET — how big a blur this visitor's browser can afford.
+   Set by LandingShell as data-vy-motion on <html> (src/lib/motion/tier.ts):
+   it starts from the browser's capability hints and then MEASURES real frame
+   times, stepping down when the reel actually stutters.
+
+   Only the blur radius scales. The drift is a plain transform — cheap on any
+   GPU — so it is not what stutters; a 120px blur over a wide text run is.
+   Movement is governed separately, by prefers-reduced-motion below.
+
+   No attribute (JS disabled / not yet run) = the full effect, exactly as it
+   shipped. Radii are tunable; nothing else depends on them. */
+:root {
+  --vy-reel-blur: 120px;
+  --vy-brand-blur: 72px;
+}
+:root[data-vy-motion="soft"] {
+  --vy-reel-blur: 24px;
+  --vy-brand-blur: 20px;
+}
+:root[data-vy-motion="plain"] {
+  --vy-reel-blur: 0px;
+  --vy-brand-blur: 0px;
+}
+
 /* Fire-and-forget word switch — a fixed ~0.5s animation runs to
    completion when a scroll threshold is crossed (NOT scrubbed). */
 @keyframes vyFwdOut {
   0% { opacity: 1; filter: blur(0); transform: translate(0, 0); }
-  100% { opacity: 0; filter: blur(120px); transform: translate(-72px, -50px); }
+  100% { opacity: 0; filter: blur(var(--vy-reel-blur, 120px)); transform: translate(-72px, -50px); }
 }
 @keyframes vyFwdIn {
-  0% { opacity: 0; filter: blur(120px); transform: translate(66px, 46px); }
+  0% { opacity: 0; filter: blur(var(--vy-reel-blur, 120px)); transform: translate(66px, 46px); }
   100% { opacity: 1; filter: blur(0); transform: translate(0, 0); }
 }
 @keyframes vyRevOut {
   0% { opacity: 1; filter: blur(0); transform: translate(0, 0); }
-  100% { opacity: 0; filter: blur(120px); transform: translate(72px, 50px); }
+  100% { opacity: 0; filter: blur(var(--vy-reel-blur, 120px)); transform: translate(72px, 50px); }
 }
 @keyframes vyRevIn {
-  0% { opacity: 0; filter: blur(120px); transform: translate(-66px, -46px); }
+  0% { opacity: 0; filter: blur(var(--vy-reel-blur, 120px)); transform: translate(-66px, -46px); }
   100% { opacity: 1; filter: blur(0); transform: translate(0, 0); }
 }
 .vy-reel-word.vy-out {
@@ -278,7 +302,7 @@
 /* one-shot dissolve for the final "vylan" — drifts up, blurs, fades */
 @keyframes vyBrandOut {
   0% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
-  100% { opacity: 0; filter: blur(72px); transform: translateY(-90px) scale(1.06); }
+  100% { opacity: 0; filter: blur(var(--vy-brand-blur, 72px)); transform: translateY(-90px) scale(1.06); }
 }
 .vy-reel-word.vy-brand-out {
   animation: vyBrandOut 0.72s cubic-bezier(0.4, 0, 0.2, 1) forwards;
@@ -293,24 +317,53 @@
    perfectly — so local testing said it worked and it did not. The build does
    NOT hoist them for you (verified against the deployed bundle).
 
-   Guarded by vylan-landing.css.test.ts. */
+   Guarded by vylan-landing.css.test.ts.
+
+   These now carry the BLUR as well as the opacity ramp, and that is load
+   bearing: an animation only outranks the rule's own declarations for the
+   properties it actually animates. While these only touched opacity, `filter`
+   fell straight through to the `filter: none` in the block below — so every
+   reduced-motion visitor got a flat cut with no blur at all, which is exactly
+   what the founder saw in Opera GX. There is no transform here, so this stays
+   movement-free; the radius comes from the effect-budget var, so a device that
+   cannot afford even this drops to 0 rather than stuttering. */
 @keyframes vyReduceOut {
-  from { opacity: 1; }
-  to   { opacity: 0; }
+  from { opacity: 1; filter: blur(0); }
+  to   { opacity: 0; filter: blur(var(--vy-reel-blur, 24px)); }
 }
 @keyframes vyReduceIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from { opacity: 0; filter: blur(var(--vy-reel-blur, 24px)); }
+  to   { opacity: 1; filter: blur(0); }
 }
 @media (prefers-reduced-motion: reduce) {
+  /* A dissolve in place wants a far smaller radius than a word flying 72px
+     across the screen: at 120px a stationary word just smears into haze, and
+     that radius is also the single most expensive thing the hero paints —
+     the wrong bill to hand a visitor whose system is already asking for less.
+     Bare `:root` on purpose, so the two attribute rules above (which are more
+     specific) still win and a measured-slow device keeps its cheaper budget. */
+  :root {
+    --vy-reel-blur: 24px;
+    --vy-brand-blur: 20px;
+  }
   .vy-subprefix.vy-pf-fwd,
   .vy-subprefix.vy-pf-rev { animation: none; }
   .vy-reel-mask { transition: none; }
-  /* Reduced motion means no MOVEMENT — it does not mean no cross-fade. The
-     vestibular trigger here is the drift and the 120px blur, not the opacity
-     ramp, so the word still fades; it just stops flying in from off to the
-     side. Cutting the animation outright (as this block did) left a hard
-     jump-cut, which is what the founder noticed after the double-word fix.
+  /* Reduced motion means no MOVEMENT — it does not mean no effect. The
+     vestibular trigger is the DRIFT: a word flying 72px across the viewport.
+     A blur ramp on a word that never moves is not movement, so it stays — the
+     word dissolves in place instead of flying. Cutting the animation outright
+     (as this block once did) left a hard jump-cut, and the follow-up that
+     added `filter: none` here left a flat, effect-free cross-fade: that is
+     the "motion blur is nonexistent in Opera" the founder reported, since his
+     browser reports reduced motion (Windows animation effects off).
+
+     The blur now lives in the vyReduce* keyframes, NOT here — an animation
+     only outranks these declarations for properties it actually animates, so
+     a `filter: none` sitting in this rule silently won whenever the keyframes
+     stayed quiet about filter. Its radius follows the effect budget, so a
+     device that genuinely cannot paint it lands on 0 instead of stuttering.
+     `transform: none` stays: that is the movement this block is here for.
 
      These rules previously forced opacity:1 as well, which pinned the
      outgoing word on screen underneath the incoming one — the hero read
@@ -328,22 +381,18 @@
      see the note there before moving them back in here. */
   .vy-reel-word.vy-out,
   .vy-reel-word.vy-out-rev {
-    animation: vyReduceOut 0.3s ease forwards !important;
-    filter: none;
+    animation: vyReduceOut 0.34s ease forwards !important;
     transform: none;
   }
   .vy-reel-word.vy-in,
   .vy-reel-word.vy-in-rev {
-    animation: vyReduceIn 0.3s ease forwards !important;
-    filter: none;
+    animation: vyReduceIn 0.34s ease forwards !important;
     transform: none;
   }
   .vy-reel-word.vy-ai-glitch { animation: none; }
-  /* The finale dissolves rather than vanishing, for the same reason — but
-     without vyBrandOut's upward drift and blur. */
+  /* The finale dissolves in place rather than drifting up and away. */
   .vy-reel-word.vy-brand-out {
     animation: vyReduceOut 0.42s ease forwards !important;
-    filter: none;
     transform: none;
   }
 }

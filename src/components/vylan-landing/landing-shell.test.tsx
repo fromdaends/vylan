@@ -224,3 +224,64 @@ describe("LandingShell hero reel", () => {
     expect(undecidedWords(container)).toEqual([]);
   });
 });
+
+// The motion effect budget: how big a blur the hero is allowed to paint. The
+// blur radius itself lives in CSS (no stylesheets here), so what these check is
+// the contract the CSS keys off — the attribute on <html> — plus the opt-in
+// diagnostic that lets a visitor report what their own browser decided.
+describe("LandingShell motion budget", () => {
+  const path = () => window.location.pathname + window.location.search;
+  let original = "/";
+
+  beforeEach(() => {
+    original = path();
+    // The readout's state write is deferred a frame (lint forbids a
+    // synchronous one in an effect), so run frame callbacks inline to keep
+    // these assertions synchronous — same trick stubLayout uses above.
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      cb(0);
+      return 0;
+    });
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+  });
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    window.history.replaceState({}, "", original);
+    document.documentElement.removeAttribute("data-vy-motion");
+  });
+
+  it("publishes a budget on <html> for the CSS to read, and cleans up", () => {
+    const { unmount } = render(<LandingShell s={S} />);
+    // happy-dom reports no device hints, which must NOT read as a weak device.
+    expect(document.documentElement.getAttribute("data-vy-motion")).toBe("full");
+
+    unmount();
+    expect(document.documentElement.getAttribute("data-vy-motion")).toBeNull();
+  });
+
+  it("does not show the diagnostic readout to ordinary visitors", () => {
+    const { container } = render(<LandingShell s={S} />);
+    expect(container.textContent).not.toMatch(/HERO MOTION/);
+  });
+
+  it("?motion=plain pins the budget and shows the readout", () => {
+    window.history.replaceState({}, "", "/?motion=plain");
+    const { container } = render(<LandingShell s={S} />);
+
+    expect(document.documentElement.getAttribute("data-vy-motion")).toBe(
+      "plain",
+    );
+    expect(container.textContent).toMatch(/HERO MOTION/);
+    expect(container.textContent).toMatch(/no blur/);
+  });
+
+  it("?motion=debug reports the budget without forcing one", () => {
+    window.history.replaceState({}, "", "/?motion=debug");
+    const { container } = render(<LandingShell s={S} />);
+
+    expect(document.documentElement.getAttribute("data-vy-motion")).toBe("full");
+    expect(container.textContent).toMatch(/HERO MOTION/);
+    expect(container.textContent).not.toMatch(/FORCED/);
+  });
+});
