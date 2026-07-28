@@ -47,7 +47,17 @@ export type JobKind =
   // documents when it completes. Payload: { engagementId }. The worker
   // re-checks still-complete + auto-file-on + connected, and the filed_documents
   // ledger makes re-runs idempotent (a retried job can never double-file).
-  | "file_to_storage";
+  | "file_to_storage"
+  // Notifications (migration 0920): deliver ONE notification's email. Payload:
+  // { notification_id, user_id, mode }. This is deliberately the ONLY email
+  // path for notifications — even "instant" ones queue here — so an SMTP
+  // round-trip can never sit inside an upload handler or a webhook. `mode`
+  // carries why it was deferred ('instant' | 'quiet_hours' | 'weekend' |
+  // 'hourly_digest' | 'daily_digest'); digest modes make the worker sweep up
+  // every other due notification for that user into one email. The worker
+  // re-checks read/dismissed/already-sent state, so a retry can never
+  // double-send and a notification the user already read is never emailed.
+  | "send_notification_email";
 export type JobStatus = "pending" | "running" | "done" | "failed";
 
 export type Job = {

@@ -27,6 +27,7 @@ import { processSyncQuickbooksJob } from "@/lib/quickbooks/sync";
 import { processSyncXeroJob } from "@/lib/xero/sync";
 import { sendEngagementInvoice } from "@/lib/invoices/send";
 import { runAutoFiling } from "@/lib/filing/runner";
+import { processSendNotificationEmailJob } from "@/lib/notifications/worker";
 import {
   backfillContentHashes,
   type BackfillResult,
@@ -242,6 +243,15 @@ async function runJob(
       }
       await markJobDone(job.id);
       return { id: job.id, kind: job.kind, ok: result.ok, detail: result };
+    }
+    if (job.kind === "send_notification_email") {
+      // Notification email delivery (migration 0920). The worker re-checks
+      // read/dismissed/already-sent state at send time, so a retry can never
+      // double-send and a notification the user already read in-app is never
+      // emailed. A genuine send failure throws and takes the queue's backoff.
+      const result = await processSendNotificationEmailJob(job.payload);
+      await markJobDone(job.id);
+      return { id: job.id, kind: job.kind, ok: true, detail: result };
     }
     // Unknown kind: nothing to do — mark done so it doesn't spin.
     await markJobDone(job.id);
