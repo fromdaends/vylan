@@ -93,23 +93,6 @@ const MISS_GRACE_MS = 400;
 // and credit dying with the outline turned a one-second capture into
 // seventeen. The border may blink; the client's progress must not.
 const CREDIT_HOLD_MS = 1500;
-// The safety net: if the detector never finds the document, holding the camera
-// still for this long takes an UNCROPPED photo anyway. Deliberately several
-// times DETECTED_MS_REQUIRED so detection always gets first refusal — this is
-// the floor, not the happy path.
-const STEADY_MS_REQUIRED = 4000;
-// What counts as GROSS movement for the net — sweeping the phone across the
-// room, not holding it in a hand.
-//
-// The first value here was 14, which a hand-held phone exceeds constantly: the
-// founder reported the ring "resets at the slightest, slightest movement" and
-// the automatic photo being physically impossible to reach. Their point stands
-// — whether the document is in frame and readable is what should decide this,
-// and camera movement should barely feature. 55 only rules out an actual sweep.
-const STEADY_MOTION_MAX = 55;
-// And even exceeding it does not wipe the progress until it PERSISTS this
-// long. A wobble pauses the ring; it no longer resets it.
-const MOVEMENT_TOLERANCE_MS = 900;
 // Per-frame decay on the running sharpness peak (~0.6%/frame, so it halves
 // over roughly 11 seconds at 10fps). Slow enough to hold a genuine focus
 // reference, quick enough to follow the client moving to a new document.
@@ -274,7 +257,7 @@ export function CameraCapture({
     viewRef.current = view;
   }, [view]);
 
-  const capture = useCallback(async (useDocumentCrop = true) => {
+  const capture = useCallback(async () => {
     const video = videoRef.current;
     if (!video || capturingRef.current) return;
     capturingRef.current = true;
@@ -284,7 +267,7 @@ export function CameraCapture({
       const size = viewRef.current;
       // Only crop when the DOCUMENT route reached the shutter. The safety net
       // fires without a trustworthy quad, so it must take the plain frame.
-      const q = useDocumentCrop ? quadRef.current : null;
+      const q = quadRef.current;
       let file: File | null = null;
 
       // Try the cropped-and-flattened capture, but NEVER let its failure mean
@@ -437,7 +420,6 @@ export function CameraCapture({
 
       // Steadiness for the safety net, judged on the rate-normalised motion so
       // it means the same thing at any loop speed.
-      const steady = judged.motion <= STEADY_MOTION_MAX;
 
       const step = advanceShutter(shutterRef.current, {
         // Raw detection presence, not the stabilised outline — the outline
@@ -452,9 +434,6 @@ export function CameraCapture({
         graceMs: MISS_GRACE_MS,
         creditHoldMs: CREDIT_HOLD_MS,
         requiredDetectedMs: DETECTED_MS_REQUIRED,
-        steady,
-        movementToleranceMs: MOVEMENT_TOLERANCE_MS,
-        requiredSteadyMs: STEADY_MS_REQUIRED,
       });
       shutterRef.current = step.state;
 
@@ -507,7 +486,7 @@ export function CameraCapture({
       // and the ring is a single SVG circle.
       setProgress((p) => (Math.abs(p - step.progress) < 0.01 ? p : step.progress));
 
-      if (step.fire) void capture(step.fireMode === "document");
+      if (step.fire) void capture();
     }
 
     raf = requestAnimationFrame(tick);
