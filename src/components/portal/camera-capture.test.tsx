@@ -235,12 +235,12 @@ describe("apertureFor — the framing window", () => {
     //     0.65    100%     0%      0%      0%
     //
     // A window at two thirds of the screen instructs the client straight into
-    // the dead zone. Anything at or under ~0.38 keeps a normal hand's tilt in
-    // the 100% band.
+    // the dead zone. Swept finer, 0.42 still holds 100% through 16 degrees and
+    // 0.46 is already on the cliff edge — so 0.44 is the ceiling here.
     for (const view of [phone, { width: 393, height: 760 }, { width: 430, height: 932 }]) {
       const a = apertureFor(view);
       const share = (a.width * a.height) / (view.width * view.height);
-      expect(share).toBeLessThanOrEqual(0.38);
+      expect(share).toBeLessThanOrEqual(0.44);
       // ...and not so small that it reads as a stamp.
       expect(share).toBeGreaterThan(0.22);
     }

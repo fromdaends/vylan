@@ -117,10 +117,15 @@ describe("useCameraStream", () => {
     expect(constraints.audio).toBe(false);
     const video = constraints.video as MediaTrackConstraints;
     expect(video.facingMode).toEqual({ ideal: "environment" });
-    // Deliberately NOT 4K. The capture path reads the frame back out of a
-    // canvas, and asking for more pixels than the 2048px output can use is
-    // what pushed iOS past its canvas budget — the shutter fired into nothing.
-    expect((video.width as { ideal: number }).ideal).toBeLessThanOrEqual(2560);
+    // Ask for as much as the hardware will give. A portrait phone shows only a
+    // narrow centre column of a landscape sensor, so every extra sensor pixel
+    // goes straight into the document's legibility.
+    //
+    // This was briefly capped at 2560 to dodge the iOS canvas limit. That was
+    // the wrong lever — starving the camera to protect a downstream canvas.
+    // boundedWorkSize now caps the read-back independently, so the request can
+    // be generous again.
+    expect((video.width as { ideal: number }).ideal).toBeGreaterThanOrEqual(2560);
   });
 
   it("surfaces a denial as denied + camera_denied", async () => {
