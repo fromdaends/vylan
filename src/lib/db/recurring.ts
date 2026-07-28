@@ -73,6 +73,55 @@ export async function getRecurringSeries(
   return (data as RecurringSeries) ?? null;
 }
 
+// Every series in the caller's firm, for the /repeating screen. RLS-scoped, so
+// a staff member's list is silently shorter than an owner's (private clients
+// and — since 0950 — private source engagements are filtered out in the DB).
+//
+// select("*") deliberately, NOT a named column list: naming assigned_user_id
+// would 42703 on a database where 0940 hasn't been applied, taking the whole
+// screen down. With "*" the column is simply absent from the row and the
+// callers fall through to created_by_user_id, which is the old behaviour.
+//
+// Ordered so the DB does the coarse work (status, then soonest first) and the
+// pure sortRows() does the presentation ordering.
+export async function listRecurringSeries(): Promise<RecurringSeries[]> {
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("recurring_series")
+    .select("*")
+    .order("status", { ascending: true })
+    .order("next_spawn_on", { ascending: true });
+  if (error) {
+    if (isMissingSchema(error)) return [];
+    throw error;
+  }
+  return (data ?? []) as RecurringSeries[];
+}
+
+// Change who new engagements from a series are assigned to. Callers MUST have
+// already loaded the series through getRecurringSeries (RLS-scoped) — see the
+// authorizeSeries prologue in app/actions/recurring.ts. This function does not
+// re-check, and the service role is never used here on purpose: the write goes
+// through the caller's own session so recurring_series_update (0950) applies.
+//
+// Returns false — never throws — when 0940 isn't applied, so the UI can say
+// "not switched on yet" instead of showing a 500.
+export async function setSeriesAssignee(
+  seriesId: string,
+  userId: string | null,
+): Promise<boolean> {
+  const supabase = await getServerSupabase();
+  const { error } = await supabase
+    .from("recurring_series")
+    .update({ assigned_user_id: userId })
+    .eq("id", seriesId);
+  if (error) {
+    if (isMissingSchema(error)) return false;
+    throw error;
+  }
+  return true;
+}
+
 // Live (not ended) schedules per assignee, for the team roster and — the
 // reason it exists — the guarded-offboarding dialog. Without this, someone
 // whose entire footprint is recurring schedules reports as holding nothing,

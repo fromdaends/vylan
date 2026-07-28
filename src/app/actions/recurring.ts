@@ -14,9 +14,11 @@ import { logUserActivity } from "@/lib/db/activity";
 import {
   endRecurringSeries,
   getRecurringSeries,
+  setSeriesAssignee,
   updateRecurringSeries,
   type RecurringSeries,
 } from "@/lib/db/recurring";
+import { listFirmUsers } from "@/lib/db/users";
 import { applyRepeatChoice } from "@/lib/recurring/enable";
 import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { spawnSeriesNow } from "@/lib/recurring/spawn";
@@ -198,6 +200,160 @@ async function authorizeSeriesControl(input: {
     return null;
   }
   return { firmId: firm.id, series, firmTimezone: firm.timezone };
+}
+
+// ── Series-only actions (the /repeating screen) ─────────────────────────────
+//
+// The dialog actions above all require an engagementId, which they use for
+// auth, for anchoring the activity row and for revalidation. A list row can't
+// always supply one: source_engagement_id is ON DELETE SET NULL, so a series
+// outlives the engagement it was born from and an orphaned series is currently
+// uncontrollable from anywhere in the product.
+//
+// SECURITY-CRITICAL: this prologue loads the series through the RLS-SCOPED
+// getRecurringSeries and bails on null. That is what stops a staff member
+// acting on a private client's series by guessing its id. Migration 0950 now
+// closes the same hole at the database layer, but the app must not depend on a
+// migration having been applied — both belts, one pair of trousers.
+async function authorizeSeries(
+  seriesId: string,
+): Promise<
+  { firmId: string; series: RecurringSeries; firmTimezone: string } | null
+> {
+  if (!UUID_REGEX.test(seriesId)) return null;
+  const [user, firm, series] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    getRecurringSeries(seriesId),
+  ]);
+  if (!user || !firm || !series || series.firm_id !== firm.id) return null;
+  return { firmId: firm.id, series, firmTimezone: firm.timezone };
+}
+
+// Every list action revalidates the whole layout rather than one engagement
+// path — the row may have no engagement, and the counts in the stat strip
+// change too.
+const REPEATING_PATH = "/repeating";
+
+export type SeriesReassignResult =
+  | { ok: true }
+  | { ok: false; error: "not_found" | "unavailable" | "save_failed" };
+
+// Change who new work from a schedule goes to. Migration 0940 added the column
+// and the offboarding handover, but shipped NO way for a person to change it —
+// this is that way.
+//
+// Any firm member, matching reassignClientAction / reassignEngagementAction,
+// whose comments state that reassignment is accountability, not access control.
+export async function reassignSeriesAction(input: {
+  seriesId: string;
+  userId: string;
+}): Promise<SeriesReassignResult> {
+  const ctx = await authorizeSeries(input.seriesId);
+  if (!ctx) return { ok: false, error: "not_found" };
+  // A stopped schedule will never spawn again, so there is nothing to assign.
+  if (ctx.series.status === "ended") return { ok: false, error: "not_found" };
+  if (!UUID_REGEX.test(input.userId)) return { ok: false, error: "not_found" };
+
+  // The target must be an ACTIVE member of this firm — never a deactivated
+  // one (that would recreate the exact bug 0940 fixed) and never another
+  // firm's user.
+  const members = await listFirmUsers();
+  const target = members.find(
+    (m) => m.id === input.userId && !m.deactivated_at,
+  );
+  if (!target) return { ok: false, error: "not_found" };
+
+  try {
+    const applied = await setSeriesAssignee(ctx.series.id, input.userId);
+    if (!applied) return { ok: false, error: "unavailable" };
+    await logUserActivity(
+      ctx.firmId,
+      ctx.series.source_engagement_id,
+      "series_reassigned",
+      {
+        series_id: ctx.series.id,
+        client_id: ctx.series.client_id,
+        to_user_id: input.userId,
+      },
+    );
+    revalidatePath(REPEATING_PATH);
+    return { ok: true };
+  } catch (error) {
+    console.error("[reassignSeriesAction] failed:", error);
+    return { ok: false, error: "save_failed" };
+  }
+}
+
+// Pause / resume / stop from the list. Deliberately reuses the SAME activity
+// action codes as the dialog versions ('recurrence_paused' etc.) so the
+// timeline reads identically however you got there.
+export async function seriesControlAction(input: {
+  seriesId: string;
+  action: "pause" | "resume" | "stop";
+}): Promise<SeriesControlResult> {
+  const ctx = await authorizeSeries(input.seriesId);
+  if (!ctx) return { ok: false, error: "not_found" };
+  const { series } = ctx;
+
+  const expected =
+    input.action === "pause"
+      ? "active"
+      : input.action === "resume"
+        ? "paused"
+        : null;
+  if (expected && series.status !== expected) {
+    return { ok: false, error: "not_found" };
+  }
+  if (input.action === "stop" && series.status === "ended") {
+    return { ok: false, error: "not_found" };
+  }
+
+  try {
+    if (input.action === "pause") {
+      await updateRecurringSeries(series.id, {
+        status: "paused",
+        paused_at: new Date().toISOString(),
+      });
+    } else if (input.action === "resume") {
+      // FORWARD-ONLY, identical to resumeSeriesAction: the next occurrence is
+      // scheduled from today. Cycles missed while paused are never backfilled.
+      const today = localToday(ctx.firmTimezone);
+      await updateRecurringSeries(series.id, {
+        status: "active",
+        paused_at: null,
+        next_spawn_on: toIsoDate(
+          nextSpawn(
+            today,
+            series.frequency,
+            series.anchor_day,
+            series.interval_months,
+          ),
+        ),
+      });
+    } else {
+      await endRecurringSeries(series.id);
+    }
+
+    await logUserActivity(
+      ctx.firmId,
+      series.source_engagement_id,
+      input.action === "pause"
+        ? "recurrence_paused"
+        : input.action === "resume"
+          ? "recurrence_resumed"
+          : "recurrence_ended",
+      { series_id: series.id, client_id: series.client_id },
+    );
+    revalidatePath(REPEATING_PATH);
+    if (series.source_engagement_id) {
+      revalidatePath(`/engagements/${series.source_engagement_id}`);
+    }
+    return { ok: true };
+  } catch (error) {
+    console.error("[seriesControlAction] failed:", error);
+    return { ok: false, error: "save_failed" };
+  }
 }
 
 export async function pauseSeriesAction(input: {
