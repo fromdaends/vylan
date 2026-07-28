@@ -1,9 +1,23 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { BirdVideo } from "@/components/vylan-landing/bird-video";
 import { VylanMenu } from "@/components/vylan-landing/vylan-menu";
+import {
+  MotionDebug,
+  type MotionDiagnostics,
+} from "@/components/vylan-landing/motion-debug";
+import {
+  initialTier,
+  parseMotionParam,
+  readMotionSignals,
+  readStoredTier,
+  storeTier,
+  summarizeFrames,
+  tierAfterSample,
+  type MotionTier,
+} from "@/lib/motion/tier";
 
 export type LandingShellStrings = {
   brand: string;
@@ -46,6 +60,15 @@ const REEL_END = 0.42; // scroll fraction across which the 4 words cycle
 // Both holds are tuned for readability and easy to tweak.
 const HOLD_FULL = 700; // shorter hold so the header clears ~0.5s sooner once "vylan" appears
 const HOLD_BRAND = 500; // founder: the standalone "vylan" should dissolve ~0.5s sooner (was 1000)
+// Frame-time window for one measurement: a touch longer than the 0.56s word
+// swap, so the sample covers the whole animation and nothing after it.
+const SAMPLE_MS = 600;
+// Hard ceiling on frames per sample. SAMPLE_MS alone is not a termination
+// condition: an environment whose animation-frame timestamp does not advance
+// (a test DOM, a paused clock) would re-request forever and blow the stack.
+// 600ms is ~86 frames even on a 144Hz display, so this never truncates a real
+// sample — it only guarantees the loop ends.
+const MAX_SAMPLE_FRAMES = 150;
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
 function scrollToForm() {
@@ -70,6 +93,99 @@ export function LandingShell({
   const subPrefixRef = useRef<HTMLSpanElement>(null);
   const ctaRowRef = useRef<HTMLDivElement>(null);
   const cueRef = useRef<HTMLDivElement>(null);
+  // Set by the effect below; called by the reel each time a real word swap
+  // starts, so the budget is judged on the actual animation rather than a
+  // synthetic benchmark.
+  const sampleRef = useRef<(() => void) | null>(null);
+  const [diagnostics, setDiagnostics] = useState<MotionDiagnostics | null>(
+    null,
+  );
+
+  // MOTION EFFECT BUDGET. Picks how big a blur the hero can afford, writes it
+  // to <html data-vy-motion>, then measures real frame times and steps down if
+  // the reel actually stutters. Declared BEFORE the reel effect so sampleRef is
+  // populated by the time the reel can fire.
+  //
+  // This is deliberately NOT the reduced-motion switch: that lives in CSS and
+  // governs MOVEMENT. This governs cost, and the two compose.
+  useEffect(() => {
+    const root = document.documentElement;
+    const { forced, debug } = parseMotionParam(
+      new URLSearchParams(window.location.search).get("motion"),
+    );
+    const signals = readMotionSignals();
+    const reducedMotion =
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+    let current: MotionTier = forced ?? readStoredTier() ?? initialTier(signals);
+    root.setAttribute("data-vy-motion", current);
+    // The readout is the only piece of this that is React state, and it is
+    // deferred a frame so the write never lands synchronously in the effect
+    // body (the same rule the inbox seed follows).
+    const debugFrame = debug
+      ? requestAnimationFrame(() =>
+          setDiagnostics({
+            tier: current,
+            forced,
+            reducedMotion,
+            signals,
+            sample: null,
+          }),
+        )
+      : 0;
+
+    // Two real transitions are enough to tell a stuttering device from a
+    // healthy one, and stopping keeps the rest of the scroll free of
+    // measurement work. A forced tier is a diagnostic — never overridden.
+    let samplesLeft = forced ? 0 : 2;
+    let sampling = false;
+
+    sampleRef.current = () => {
+      if (samplesLeft <= 0 || sampling) return;
+      sampling = true;
+      samplesLeft -= 1;
+
+      const deltas: number[] = [];
+      const started = performance.now();
+      let last = started;
+      // A backgrounded tab stops painting: requestAnimationFrame simply does
+      // not fire, so its "frame times" are seconds. That is a paused tab, not a
+      // slow GPU, and reading it as jank would downgrade healthy machines.
+      let wasHidden = document.visibilityState !== "visible";
+      const onVisibility = () => {
+        if (document.visibilityState !== "visible") wasHidden = true;
+      };
+      document.addEventListener("visibilitychange", onVisibility);
+
+      const step = (now: number) => {
+        deltas.push(now - last);
+        last = now;
+        if (now - started < SAMPLE_MS && deltas.length < MAX_SAMPLE_FRAMES) {
+          requestAnimationFrame(step);
+          return;
+        }
+        document.removeEventListener("visibilitychange", onVisibility);
+        sampling = false;
+        const sample = wasHidden ? null : summarizeFrames(deltas);
+        const next = tierAfterSample(current, sample);
+        if (next !== current) {
+          current = next;
+          root.setAttribute("data-vy-motion", next);
+          storeTier(next);
+        }
+        setDiagnostics((d) =>
+          d ? { ...d, tier: next, sample: sample ?? d.sample } : d,
+        );
+      };
+      requestAnimationFrame(step);
+    };
+
+    return () => {
+      if (debugFrame) cancelAnimationFrame(debugFrame);
+      sampleRef.current = null;
+      root.removeAttribute("data-vy-motion");
+    };
+  }, []);
 
   // The scroll-pinned reel engine. Ported from the prototype's vanilla
   // JS — crossing a scroll threshold fires a fixed ~0.5s CSS animation
@@ -157,6 +273,9 @@ export function LandingShell({
         void pf.offsetWidth;
         pf.classList.add(dir < 0 ? "vy-pf-rev" : "vy-pf-fwd");
       }
+      // Only a real swap animates anything worth timing (the very first word
+      // just appears), so the budget is measured on the effect itself.
+      if (prev >= 0) sampleRef.current?.();
       syncWidth(i);
     }
 
@@ -315,6 +434,9 @@ export function LandingShell({
 
   return (
     <>
+      {/* Opt-in readout for ?motion=debug — renders nothing otherwise. */}
+      {diagnostics && <MotionDebug d={diagnostics} />}
+
       {/* background: the bird animation video, persists while scrolling */}
       <BirdVideo />
 
