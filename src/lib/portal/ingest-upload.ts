@@ -223,10 +223,18 @@ export async function ingestPortalUpload(opts: {
   after(async () => {
     const ctx = await engagementContext(sb, engagement);
     await emitDocumentUploaded(sb, ctx, { fileId: inserted.id });
-    // Separately: has this upload finished the whole request? Checked here
-    // rather than derived at render time so the "everything is in" moment
-    // becomes a real, dismissible event with a real timestamp.
-    if (await isRequestNowComplete(sb, item.engagement_id)) {
+    // Separately: has this upload finished the whole request?
+    //
+    // Two conditions, not one. "The request is complete" is true for EVERY
+    // upload after the completing one, so on its own it would re-fire on every
+    // later file — and this event does not bundle, so each would be a fresh
+    // notification and a fresh email. The second condition is "this upload is
+    // what completed it": the item it belongs to must have had no live file
+    // before now, i.e. this is its first.
+    if (
+      (await isFirstLiveFileForItem(sb, item.id, inserted.id)) &&
+      (await isRequestNowComplete(sb, item.engagement_id))
+    ) {
       await emitRequestComplete(sb, ctx);
     }
   });
@@ -322,4 +330,24 @@ async function isRequestNowComplete(
       .map((f) => (f as { request_item_id: string }).request_item_id),
   );
   return required.every((i) => withFile.has((i as { id: string }).id));
+}
+
+// Is the file we just inserted the FIRST live (non-duplicate) file for its
+// request item? Used to fire "everything is in" exactly once: a later upload
+// against an already-satisfied item cannot be the one that completed the set.
+async function isFirstLiveFileForItem(
+  sb: ReturnType<typeof getServiceRoleSupabase>,
+  requestItemId: string,
+  justInsertedFileId: string,
+): Promise<boolean> {
+  const { data, error } = await sb
+    .from("uploaded_files")
+    .select("id, is_duplicate")
+    .eq("request_item_id", requestItemId);
+  // On a read failure, stay quiet rather than risk a duplicate announcement.
+  if (error) return false;
+  const live = (data ?? []).filter(
+    (f) => !(f as { is_duplicate?: boolean }).is_duplicate,
+  );
+  return live.length === 1 && (live[0] as { id: string }).id === justInsertedFileId;
 }

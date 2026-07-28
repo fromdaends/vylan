@@ -1261,7 +1261,9 @@
     "event_billing_payment_failed_label": "Votre paiement Vylan a échoué",
     "event_billing_payment_failed_desc": "Le paiement de votre propre abonnement Vylan ne fonctionne pas. Toujours activé, parce que cela mène à un compte annulé.",
     "unsaved_changes": "Modifications non enregistrées",
-    "day_today": "Aujourd'hui"
+    "day_today": "Aujourd'hui",
+    "page_title": "Notifications",
+    "page_subtitle": "Tout ce qui vous est adressé. Ouvrez-en une pour y aller directement, ou effacez ce que vous avez traité."
   },
   "Inbox": {
     "title": "Boîte de réception",

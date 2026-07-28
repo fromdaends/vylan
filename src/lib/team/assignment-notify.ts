@@ -6,7 +6,24 @@
 
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { sendEmail, buildTeamAssignmentEmail } from "@/lib/email";
-import { wantsEmailFor } from "@/lib/notifications/notify";
+import {
+  emailDetailLevelFor,
+  wantsEmailFor,
+} from "@/lib/notifications/notify";
+
+// Name-free copy for recipients on the "minimal" email detail level.
+const MINIMAL_COPY = {
+  en: {
+    subject: "You have new activity in Vylan",
+    body: "Something new is waiting for you in Vylan.",
+    cta: "Open Vylan",
+  },
+  fr: {
+    subject: "Vous avez de nouvelles activités dans Vylan",
+    body: "Quelque chose de nouveau vous attend dans Vylan.",
+    cta: "Ouvrir Vylan",
+  },
+} as const;
 
 // If the assignee hasn't been back in the app within this window, email them.
 // Long enough that an active teammate sees the in-app notification first.
@@ -126,6 +143,24 @@ export async function processNotifyAssignmentJob(
   const firmName = (firmResp.data?.name as string) ?? "";
   const assigner = assignerResp.data;
   const locale = assignee?.locale === "fr" ? "fr" : "en";
+
+  // Respect the recipient's detail level. This job is the ONLY email for
+  // engagement.assigned_to_you, so without this a user on "minimal" still gets
+  // the engagement title, the assigner's name and the free-text handoff note.
+  const detail = await emailDetailLevelFor(sb, assigneeId);
+  if (detail === "minimal") {
+    const minimalBody = MINIMAL_COPY[locale];
+    const res = await sendEmail({
+      to: assignee!.email as string,
+      subject: minimalBody.subject,
+      html: `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b"><p>${minimalBody.body}</p><p style="margin:24px 0"><a href="${appUrl()}/${locale}/notifications" style="display:inline-block;background:#1D3AFF;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">${minimalBody.cta}</a></p></body></html>`,
+      text: `${minimalBody.body}
+
+${appUrl()}/${locale}/notifications`,
+    });
+    if (!res.sent) return { skipped: "send_failed" };
+    return { sent: true };
+  }
 
   const email = buildTeamAssignmentEmail({
     assignerName: assigner ? displayName(assigner) : firmName || "Vylan",

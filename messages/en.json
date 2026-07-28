@@ -1261,7 +1261,9 @@
     "event_billing_payment_failed_label": "Your Vylan payment failed",
     "event_billing_payment_failed_desc": "Your own Vylan subscription charge does not go through. Always on, because this ends in a cancelled account.",
     "unsaved_changes": "Unsaved changes",
-    "day_today": "Today"
+    "day_today": "Today",
+    "page_title": "Notifications",
+    "page_subtitle": "Everything addressed to you. Open one to jump straight to it, or clear what you have dealt with."
   },
   "Inbox": {
     "title": "Inbox",

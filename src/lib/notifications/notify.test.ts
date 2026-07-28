@@ -383,6 +383,90 @@ describe("notify", () => {
     });
   });
 
+  it("stamps email/in-app INTENT on the row for the digest to read", () => {
+    // The digest sweep reads these. Without them it re-emails events the user
+    // switched email off for, and re-emails the two suppressEmail events —
+    // duplicating the legacy job's email.
+    return notify({
+      firmId: "f1",
+      eventKey: "document.uploaded", // email default OFF, in-app ON
+      entity: { type: "engagement", id: "e1" },
+      now: NOW,
+    }).then(() => {
+      const rows = insertNotifications.mock.calls[0][1] as {
+        payload: Record<string, unknown>;
+      }[];
+      expect(rows[0].payload.email_queued).toBe(false);
+      expect(rows[0].payload.in_app).toBe(true);
+    });
+  });
+
+  it("marks email_queued false when the call site owns its own email", () => {
+    return notify({
+      firmId: "f1",
+      eventKey: "document.request_complete", // email default ON
+      entity: { type: "engagement", id: "e1" },
+      suppressEmail: true,
+      now: NOW,
+    }).then(() => {
+      const rows = insertNotifications.mock.calls[0][1] as {
+        payload: Record<string, unknown>;
+      }[];
+      expect(rows[0].payload.email_queued).toBe(false);
+    });
+  });
+
+  it("marks email_queued true for a normal emailed event", () => {
+    return notify({
+      firmId: "f1",
+      eventKey: "document.request_complete",
+      entity: { type: "engagement", id: "e1" },
+      now: NOW,
+    }).then(() => {
+      const rows = insertNotifications.mock.calls[0][1] as {
+        payload: Record<string, unknown>;
+      }[];
+      expect(rows[0].payload.email_queued).toBe(true);
+    });
+  });
+
+  it("records in_app false when the user switched the feed off for an event", () => {
+    loadFirmRecipients.mockResolvedValue([
+      candidate("a", { pref: { inApp: false, email: true } }),
+    ]);
+    return notify({
+      firmId: "f1",
+      eventKey: "document.uploaded",
+      entity: { type: "engagement", id: "e1" },
+      now: NOW,
+    }).then(() => {
+      const rows = insertNotifications.mock.calls[0][1] as {
+        payload: Record<string, unknown>;
+      }[];
+      // The row still exists — the email hangs off it — but the feed hides it.
+      expect(rows[0].payload.in_app).toBe(false);
+      expect(rows[0].payload.email_queued).toBe(true);
+    });
+  });
+
+  it("passes explicitRecipients through so a mention survives narrow scope", () => {
+    loadFirmRecipients.mockResolvedValue([
+      candidate("mentioned", {
+        settings: { ...settings, scope: "assigned_only" },
+      }),
+    ]);
+    state.assignedUserId = "someone-else";
+    return notify({
+      firmId: "f1",
+      eventKey: "message.internal_mention",
+      entity: { type: "engagement", id: "e1" },
+      recipients: ["mentioned"],
+      now: NOW,
+    }).then((res) => {
+      expect(res.delivered).toBe(1);
+    });
+  });
+
   // ── The two invariants ────────────────────────────────────────────────────
   it("no-ops instead of throwing when the migration is not applied yet", async () => {
     loadFirmRecipients.mockResolvedValue(SCHEMA_MISSING);

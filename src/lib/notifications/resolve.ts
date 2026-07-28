@@ -100,6 +100,13 @@ export function resolveRecipients(input: {
   // assigned to — otherwise the narrow scope would silently hide events that
   // are not about engagements in the first place.
   isEngagementScoped: boolean;
+  // True when the caller named these recipients explicitly (an @mention, an
+  // assignment) rather than fanning out across the firm. Scope is a filter on
+  // "how much of the firm do I want to hear about"; it must NOT silently drop
+  // a message addressed to you personally. Without this, @mentioning a
+  // teammate on assigned_only scope who is not the assignee notifies nobody
+  // and tells the author nothing.
+  explicitRecipients?: boolean;
 }): ResolutionResult {
   const { event, actorId, candidates, muteKeys, assignedUserIds } = input;
   const recipients: ResolvedRecipient[] = [];
@@ -118,8 +125,10 @@ export function resolveRecipients(input: {
       continue;
     }
 
-    // Rule 3 — narrow scope drops engagements you're not on.
+    // Rule 3 — narrow scope drops engagements you're not on. Skipped for
+    // personally-addressed notifications (see explicitRecipients above).
     if (
+      !input.explicitRecipients &&
       c.settings.scope === "assigned_only" &&
       input.isEngagementScoped &&
       !assignedUserIds.has(c.userId)

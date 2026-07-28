@@ -59,6 +59,15 @@ const TIMEZONES: ReadonlyArray<readonly [string, string]> = [
 
 type PrefMap = Record<string, { inApp: boolean; email: boolean }>;
 
+// <input type="time"> yields "" while the user is mid-entry or has cleared it.
+// Writing that into state strands an invalid value that the server rejects with
+// a generic error — and because these controls are conditionally rendered, the
+// offending field may not even be on screen. Ignore empties and keep the last
+// good value; the control still shows what the user typed.
+function timeOrKeep(next: string, current: string): string {
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(next) ? next : current;
+}
+
 export function NotificationsSection({
   isOwner,
   initialSettings,
@@ -109,7 +118,9 @@ export function NotificationsSection({
   const [open, setOpen] = useState<Set<NotificationCategory>>(() => {
     const initial = new Set<NotificationCategory>(INITIALLY_OPEN);
     if (focusEventKey) {
-      const g = groups.find((x) => x.events.some((e) => e.key === focusEventKey));
+      const g = groups.find((x) =>
+        x.events.some((e) => e.key === focusEventKey),
+      );
       if (g) initial.add(g.category);
     }
     return initial;
@@ -123,7 +134,10 @@ export function NotificationsSection({
     setSettings((s) => ({ ...s, ...next }));
   }
 
-  function setPref(key: string, next: Partial<{ inApp: boolean; email: boolean }>) {
+  function setPref(
+    key: string,
+    next: Partial<{ inApp: boolean; email: boolean }>,
+  ) {
     setPrefs((p) => ({ ...p, [key]: { ...p[key], ...next } }));
   }
 
@@ -141,7 +155,9 @@ export function NotificationsSection({
         toast.success(t("saved"));
       } else {
         toast.error(
-          res.error === "schema_missing" ? t("schema_missing") : t("save_error"),
+          res.error === "schema_missing"
+            ? t("schema_missing")
+            : t("save_error"),
         );
       }
     });
@@ -208,7 +224,14 @@ export function NotificationsSection({
                 id="digest-time"
                 type="time"
                 value={settings.dailyDigestTime.slice(0, 5)}
-                onChange={(e) => patch({ dailyDigestTime: e.target.value })}
+                onChange={(e) =>
+                  patch({
+                    dailyDigestTime: timeOrKeep(
+                      e.target.value,
+                      settings.dailyDigestTime,
+                    ),
+                  })
+                }
                 disabled={!settings.emailEnabled}
               />
             </div>
@@ -231,7 +254,9 @@ export function NotificationsSection({
                 ))}
               </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground">{t("timezone_hint")}</p>
+            <p className="text-xs text-muted-foreground">
+              {t("timezone_hint")}
+            </p>
           </div>
 
           <div className="max-w-xl space-y-2">
@@ -291,7 +316,8 @@ export function NotificationsSection({
                     onClick={() =>
                       setOpen((prev) => {
                         const next = new Set(prev);
-                        if (next.has(group.category)) next.delete(group.category);
+                        if (next.has(group.category))
+                          next.delete(group.category);
                         else next.add(group.category);
                         return next;
                       })
@@ -345,7 +371,9 @@ export function NotificationsSection({
                             >
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5 text-sm">
-                                  <span>{t(labelKeyFor(event.key) as never)}</span>
+                                  <span>
+                                    {t(labelKeyFor(event.key) as never)}
+                                  </span>
                                   {locked && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>
@@ -354,10 +382,15 @@ export function NotificationsSection({
                                           className="inline-flex text-muted-foreground"
                                           aria-label={lockLabel}
                                         >
-                                          <Lock className="h-3 w-3" aria-hidden />
+                                          <Lock
+                                            className="h-3 w-3"
+                                            aria-hidden
+                                          />
                                         </span>
                                       </TooltipTrigger>
-                                      <TooltipContent>{lockLabel}</TooltipContent>
+                                      <TooltipContent>
+                                        {lockLabel}
+                                      </TooltipContent>
                                     </Tooltip>
                                   )}
                                 </div>
@@ -440,7 +473,14 @@ export function NotificationsSection({
                   type="time"
                   className="w-32"
                   value={settings.quietHoursStart.slice(0, 5)}
-                  onChange={(e) => patch({ quietHoursStart: e.target.value })}
+                  onChange={(e) =>
+                    patch({
+                      quietHoursStart: timeOrKeep(
+                        e.target.value,
+                        settings.quietHoursStart,
+                      ),
+                    })
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -452,7 +492,14 @@ export function NotificationsSection({
                   type="time"
                   className="w-32"
                   value={settings.quietHoursEnd.slice(0, 5)}
-                  onChange={(e) => patch({ quietHoursEnd: e.target.value })}
+                  onChange={(e) =>
+                    patch({
+                      quietHoursEnd: timeOrKeep(
+                        e.target.value,
+                        settings.quietHoursEnd,
+                      ),
+                    })
+                  }
                 />
               </div>
             </div>
@@ -511,9 +558,7 @@ function Row({
     <div className="flex max-w-xl items-start justify-between gap-6">
       <div className="min-w-0">
         <div className="text-sm">{label}</div>
-        {hint && (
-          <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
-        )}
+        {hint && <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>}
       </div>
       <div className="shrink-0 pt-0.5">{control}</div>
     </div>
@@ -550,7 +595,10 @@ function MutedList({ mutes }: { mutes: MuteRow[] }) {
       {visible.map((m) => {
         const key = `${m.entity_type}:${m.entity_id}`;
         return (
-          <li key={key} className="flex items-center justify-between gap-4 py-3">
+          <li
+            key={key}
+            className="flex items-center justify-between gap-4 py-3"
+          >
             <div className="min-w-0">
               <div className="truncate text-sm">
                 {/* A mute whose target was deleted still gets a row, so the

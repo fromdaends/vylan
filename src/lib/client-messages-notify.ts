@@ -27,7 +27,24 @@ import {
   sendEmail,
 } from "@/lib/email";
 import { getBrandingImageUrlForEmail } from "@/lib/storage";
-import { wantsEmailFor } from "@/lib/notifications/notify";
+import {
+  emailDetailLevelFor,
+  wantsEmailFor,
+} from "@/lib/notifications/notify";
+
+// Name-free copy for recipients on the "minimal" email detail level.
+const MINIMAL_COPY = {
+  en: {
+    subject: "You have new activity in Vylan",
+    body: "A client has written to you in Vylan.",
+    cta: "Open Vylan",
+  },
+  fr: {
+    subject: "Vous avez de nouvelles activités dans Vylan",
+    body: "Un client vous a écrit dans Vylan.",
+    cta: "Ouvrir Vylan",
+  },
+} as const;
 
 // 5 minutes after the LAST message of a burst (founder-approved Phase 0
 // plan). Long enough to absorb rapid follow-ups, short enough that an
@@ -274,6 +291,30 @@ export async function processNotifyFirmMessagesJob(
 
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const url = `${appUrl}/${contact.locale}/engagements/${engagementId}`;
+
+  // Respect the recipient's detail level. This job is the ONLY email for
+  // message.client_replied, so without this a user on "minimal" still receives
+  // the client name, the engagement title AND a snippet of the message body —
+  // the single most sensitive of these emails to land in a shared inbox.
+  const detail = contactUserId
+    ? await emailDetailLevelFor(sb, contactUserId)
+    : "full";
+  if (detail === "minimal") {
+    const copy = MINIMAL_COPY[contact.locale];
+    const res = await sendEmail({
+      to: contact.email,
+      subject: copy.subject,
+      html: `<!DOCTYPE html><html><body style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#1e293b"><p>${copy.body}</p><p style="margin:24px 0"><a href="${url}" style="display:inline-block;background:#1D3AFF;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">${copy.cta}</a></p></body></html>`,
+      text: `${copy.body}
+
+${url}`,
+    });
+    if (!res.sent) {
+      if (res.reason === "not_configured") return { skipped: "not_configured" };
+      return { skipped: `send_failed:${res.reason}` };
+    }
+    return { sent: true };
+  }
 
   const { subject, html, text } = buildFirmMessageEmail({
     accountantName: contact.name,

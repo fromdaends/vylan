@@ -81,8 +81,16 @@ export async function POST(request: NextRequest) {
     case "document_viewed":
       await updateSignatureStatusSR(sr.id, "viewed", evStatus);
       break;
-    case "document_declined":
+    case "document_declined": {
+      // Webhooks are re-delivered. updateSignatureStatusSR rewrites the row
+      // unconditionally and reports nothing back, so the ONLY way to tell a
+      // first delivery from a repeat is the status we read before writing.
+      // Without this guard a retry raises a second signature.declined — an
+      // event that is locked on and bypasses quiet hours, so it would wake
+      // the accountant twice for one refusal.
+      const alreadyDeclined = sr.status === "declined";
       await updateSignatureStatusSR(sr.id, "declined", evStatus);
+      if (alreadyDeclined) break;
       // A declined signature kills the engagement and NOTHING else in the
       // product tells anyone — which is why this event is locked on in the
       // catalog. Raised after the status write so the feed can never contradict
@@ -96,6 +104,7 @@ export async function POST(request: NextRequest) {
         "declined",
       );
       break;
+    }
     case "document_canceled":
       await updateSignatureStatusSR(sr.id, "canceled", evStatus);
       break;

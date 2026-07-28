@@ -77,16 +77,18 @@ export default async function NotificationsPage({
         label={tCommon("breadcrumb")}
         items={[
           { label: tApp("nav_dashboard"), href: "/dashboard" },
-          { label: t("title") },
+          { label: t("page_title") },
         ]}
       />
 
       <header className="mt-8 space-y-2">
         <h1 className="flex items-center gap-3 text-3xl font-semibold tracking-tight sm:text-4xl">
           <Bell className="h-6 w-6 text-muted-foreground" aria-hidden />
-          {t("title")}
+          {t("page_title")}
         </h1>
-        <p className="max-w-xl text-sm text-muted-foreground">{t("subtitle")}</p>
+        <p className="max-w-xl text-sm text-muted-foreground">
+          {t("page_subtitle")}
+        </p>
       </header>
 
       <div className="mt-6 flex items-center justify-between gap-3 border-b border-border/60 pb-3">
@@ -149,7 +151,7 @@ export default async function NotificationsPage({
       {(page > 1 || hasNext) && (
         <nav
           className="mt-8 flex items-center justify-between border-t border-border/60 pt-4"
-          aria-label={t("title")}
+          aria-label={t("page_title")}
         >
           <PageLink
             href={pageHref(unreadOnly, page - 1)}

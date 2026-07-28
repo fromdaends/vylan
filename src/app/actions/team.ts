@@ -431,7 +431,8 @@ export async function acceptInvite(
   await emitTeamMemberJoined(admin, {
     firmId: invite.firm_id as string,
     newUserId,
-    newUserName: (invite.email as string)?.split("@")[0] ?? null,
+    // The name they just typed, not the local part of their email address.
+    newUserName: name?.trim() || null,
   });
 
   // Sign them in (sets the session cookies), then land on the dashboard.

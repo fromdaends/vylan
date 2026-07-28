@@ -55,9 +55,13 @@ export type NotificationSettingsBundle = {
  */
 export async function loadNotificationSettingsBundle(
   sb: SupabaseClient,
-  opts: { userId: string; firmTimezone: string | null },
+  opts: {
+    userId: string;
+    firmTimezone: string | null;
+    role: "owner" | "staff";
+  },
 ): Promise<NotificationSettingsBundle> {
-  const fallback = defaultRecipientSettings(opts.firmTimezone);
+  const fallback = defaultRecipientSettings(opts.firmTimezone, opts.role);
 
   const [settingsResp, prefsResp, mutesResp] = await Promise.all([
     sb
@@ -347,15 +351,19 @@ export async function addNotificationMute(
     entityId: string;
   },
 ): Promise<boolean> {
-  const { error } = await sb.from("notification_mutes").upsert(
-    {
-      user_id: opts.userId,
-      firm_id: opts.firmId,
-      entity_type: opts.entityType,
-      entity_id: opts.entityId,
-    },
-    { onConflict: "user_id,entity_type,entity_id" },
-  );
+  // A plain INSERT, deliberately NOT an upsert. PostgREST compiles upsert to
+  // INSERT ... ON CONFLICT DO UPDATE, which needs the UPDATE privilege —
+  // and migration 0920 grants this table only select/insert/delete, so every
+  // mute would have failed with a permission error. Re-muting something
+  // already muted is a no-op anyway, so the duplicate-key error is the
+  // success case.
+  const { error } = await sb.from("notification_mutes").insert({
+    user_id: opts.userId,
+    firm_id: opts.firmId,
+    entity_type: opts.entityType,
+    entity_id: opts.entityId,
+  });
+  if (error?.code === "23505") return true; // already muted
   if (error) {
     if (!isNotificationsSchemaMissing(error)) {
       console.error("[notification-settings] addMute:", error);

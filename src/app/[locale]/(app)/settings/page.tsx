@@ -80,6 +80,7 @@ export default async function SettingsPage({
   const notifications = await loadNotificationSettingsBundle(supabase, {
     userId: user.id,
     firmTimezone: firm.timezone,
+    role: user.role === "owner" ? "owner" : "staff",
   });
   // AI monthly-cap usage for the Documents tab status (point-read; resilient
   // pre-migration — defaults to 0 used / not paused).

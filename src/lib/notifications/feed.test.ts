@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupByDay, localDayKey, toFeedItem } from "./feed";
+import { groupByDay, localDayKey, showsInFeed, toFeedItem } from "./feed";
 import { getNotificationEvent, NOTIFICATION_EVENTS } from "./catalog";
 import type { NotificationRow } from "@/lib/db/notifications";
 
@@ -108,5 +108,23 @@ describe("catalog / feed consistency", () => {
     for (const e of NOTIFICATION_EVENTS) {
       expect(getNotificationEvent(e.key)!.category).toBe(e.category);
     }
+  });
+});
+
+describe("showsInFeed", () => {
+  it("hides a row written for email only", () => {
+    // A user with In-app OFF but Email ON still gets a row (the email hangs
+    // off it). If the feed showed it anyway, the In-app switch would be
+    // decorative.
+    expect(showsInFeed(row({ payload: { in_app: false } }))).toBe(false);
+  });
+
+  it("shows a normal row", () => {
+    expect(showsInFeed(row({ payload: { in_app: true } }))).toBe(true);
+  });
+
+  it("shows a row written before the flag existed", () => {
+    // An old notification quietly vanishing is worse than one extra row.
+    expect(showsInFeed(row({ payload: {} }))).toBe(true);
   });
 });

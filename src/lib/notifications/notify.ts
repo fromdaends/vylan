@@ -136,6 +136,7 @@ async function runNotify(input: NotifyInput): Promise<NotifyResult> {
     }),
     assignedUserIds,
     isEngagementScoped: engagementId != null,
+    explicitRecipients: input.recipients != null,
   });
   if (recipients.length === 0) return { ...EMPTY, skipped: "no_recipients" };
 
@@ -204,7 +205,20 @@ async function runNotify(input: NotifyInput): Promise<NotifyResult> {
       entity_type: entity?.type ?? null,
       entity_id: entity?.id ?? null,
       actor_id: input.actorId ?? null,
-      payload: { ...basePayload, first_at: now.toISOString() },
+      payload: {
+        ...basePayload,
+        first_at: now.toISOString(),
+        // Whether an email was INTENDED for this row, decided here where the
+        // per-event preference and suppressEmail are both in scope. The digest
+        // sweep reads this: without it, a digest re-emails events the user
+        // switched email off for, and re-emails the two events whose email is
+        // deliberately owned by a legacy job (suppressEmail), duplicating them.
+        email_queued: r.email && !input.suppressEmail,
+        // The feed hides rows for events whose In-app switch is off; the row
+        // still exists because an email-only notification needs something to
+        // hang off.
+        in_app: r.inApp,
+      },
     });
   }
 
@@ -337,5 +351,36 @@ export async function wantsEmailFor(
     );
   } catch {
     return true;
+  }
+}
+
+/**
+ * This user's email detail level.
+ *
+ * Exported for the two legacy email paths (assignment catch-up, client-reply
+ * digest) that build their own message. They are the ONLY email for their
+ * event — the emitter deliberately passes suppressEmail — so if they ignore
+ * this setting, choosing "minimal" silently does nothing for those two, which
+ * are exactly the emails most likely to carry a client name into a shared
+ * inbox.
+ *
+ * Fails to "full" on error, matching the column default.
+ */
+export async function emailDetailLevelFor(
+  sb: SupabaseClient,
+  userId: string,
+): Promise<"full" | "minimal"> {
+  try {
+    const { data } = await sb
+      .from("notification_settings")
+      .select("email_detail_level")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return (data as { email_detail_level: string } | null)
+      ?.email_detail_level === "minimal"
+      ? "minimal"
+      : "full";
+  } catch {
+    return "full";
   }
 }

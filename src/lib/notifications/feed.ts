@@ -77,7 +77,25 @@ export async function listFeed(
   },
 ): Promise<FeedItem[]> {
   const rows = await listUserNotifications(sb, opts);
-  return rows.map(toFeedItem).filter((x): x is FeedItem => x !== null);
+  return rows
+    .filter(showsInFeed)
+    .map(toFeedItem)
+    .filter((x): x is FeedItem => x !== null);
+}
+
+/**
+ * Should this row appear in the feed at all?
+ *
+ * A user who switches In-app OFF but leaves Email ON still needs a row — the
+ * email is queued against it. Without this filter that row would show up in
+ * the bell anyway and the In-app switch would be decorative. notify() stamps
+ * `in_app` on the payload at insert time, where the preference is in scope.
+ *
+ * Absent (rows written before this flag existed) means show it: an old
+ * notification quietly vanishing is worse than one extra row.
+ */
+export function showsInFeed(row: NotificationRow): boolean {
+  return (row.payload ?? {}).in_app !== false;
 }
 
 export async function unreadCount(
