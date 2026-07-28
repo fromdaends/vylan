@@ -65,9 +65,15 @@ const DETECT_WIDTH = 256;
 // outline and the motion reading worse.
 const ANALYSIS_INTERVAL_MS = 50;
 // Accumulated DETECTION time before the shutter fires itself. Detection is the
-// only gate (founder: "even if the camera is shaky it still takes a picture");
-// half a second rules out a swing-past without demanding a surgeon's hands.
-const DETECTED_MS_REQUIRED = 500;
+// only gate (founder: "even if the camera is shaky it still takes a picture").
+//
+// 1200ms, not 500: at half a second the founder's verdict was "it takes the
+// picture literally the second it lines up in frame" — technically correct and
+// unpleasant to use. A capture needs a beat of deliberation so the client sees
+// the outline lock, reads the ring filling, and feels the shot was decided
+// rather than sprung on them. Still comfortably under the ~2s that would start
+// to feel like waiting.
+const DETECTED_MS_REQUIRED = 1200;
 // Corner easing per analysed frame.
 const SMOOTHING_ALPHA = 0.22;
 // A detection whose corners land further than this (preview px) from the shown
