@@ -577,6 +577,9 @@ function WorklistRowView({
     // submenus.)
     stage: row.stage,
     runOptimistic: onOptimisticRemoval,
+    // Right-click "Add a comment" (team mode) — deep-links into the
+    // engagement's comment composer.
+    commentable: teamEnabled,
   });
 
   return (

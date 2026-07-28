@@ -8,6 +8,7 @@ import {
   Archive,
   ArchiveRestore,
   ExternalLink,
+  MessageSquare,
   Milestone,
   RotateCcw,
   Trash2,
@@ -96,6 +97,9 @@ export function useEngagementRowMenu(args: {
   // shows the undo toast right away. Without it (e.g. the Needs-attention
   // rows), the menu fires the action and toasts on completion as before.
   runOptimistic?: (id: string, action: () => Promise<unknown>) => void;
+  // Team mode: offer "Add a comment" — opens the engagement page with its
+  // engagement-level comment composer already open (?comment=1 deep link).
+  commentable?: boolean;
 }): { items: RowMenuItem[]; dialog: ReactNode } {
   const { engagementId, title, state, canDelete, stage, runOptimistic } = args;
   const t = useTranslations("Engagements");
@@ -209,6 +213,16 @@ export function useEngagementRowMenu(args: {
   // axis entirely. Keeping it out of there leaves the tested lifecycle rules
   // untouched by a concern they don't own.
   if (stageItem) items.splice(1, 0, stageItem);
+  // Same reasoning for commenting — spliced in after Open (and before Stage
+  // when both are present, since splice(1) pushes Stage down).
+  if (args.commentable) {
+    items.splice(1, 0, {
+      key: "comment",
+      label: t("add_comment"),
+      icon: MessageSquare,
+      onSelect: () => router.push(`/engagements/${engagementId}?comment=1`),
+    });
+  }
 
   const confirmDelete = () => {
     setConfirmOpen(false);

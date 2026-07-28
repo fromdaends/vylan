@@ -27,9 +27,16 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate, formatCurrency } from "@/lib/format";
 import { EngagementTabs } from "@/components/engagements/engagement-tabs";
 import { FilePreviewRow } from "@/components/engagements/file-preview-row";
-import { FileComments } from "@/components/engagements/file-comments";
 import {
-  listCommentsForFiles,
+  CommentThread,
+  commentKeyForItem,
+  commentKeyForEngagement,
+} from "@/components/engagements/comment-thread";
+import { OpenCommentComposerOnLoad } from "@/components/engagements/open-comment-composer-on-load";
+import {
+  listCommentsForEngagement,
+  groupEngagementComments,
+  type EngagementComments,
   type FileComment,
 } from "@/lib/db/file-comments";
 import { ChecklistItemShell } from "@/components/engagements/checklist-item-shell";
@@ -151,7 +158,7 @@ export default async function EngagementDetailPage({
   searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
-  searchParams?: Promise<{ panel?: string }>;
+  searchParams?: Promise<{ panel?: string; comment?: string }>;
 }) {
   const { locale: rawLocale, id } = await params;
   const locale = assertLocale(rawLocale);
@@ -362,12 +369,13 @@ export default async function EngagementDetailPage({
     teamEnabled: firm?.team_enabled === true,
     activeMemberCount: activeMembers.length,
   });
-  // Team Wave 3: file comments + @mentions, per uploaded file. One batched load,
-  // only in team mode (a firm-team feature). Empty pre-0800 / non-team, so the
-  // thread simply doesn't render.
-  const commentsByFile = teamEnabled
-    ? await listCommentsForFiles(uploads.map((u) => u.id))
-    : new Map<string, FileComment[]>();
+  // Team Wave 3 (+0930): comments + @mentions on files, checklist items, and
+  // the engagement itself. One load for the whole page, only in team mode (a
+  // firm-team feature). Empty pre-migration / non-team, so no thread renders.
+  const engagementComments: EngagementComments = teamEnabled
+    ? await listCommentsForEngagement(engagementId)
+    : groupEngagementComments([]);
+  const commentsByFile = engagementComments.byFile;
   // Resolve a reviewer id -> display name for the QuickBooks draft cards
   // (who approved / dismissed). Includes deactivated members so history shows.
   const reviewerNameById = new Map<string, string>(
@@ -641,6 +649,13 @@ export default async function EngagementDetailPage({
       {/* ?panel=messages (the notifications Reply chip) opens the chat popup
           straight in Client-messages mode. */}
       {sp.panel === "messages" && <OpenPanelOnLoad tab="messages" />}
+      {/* ?comment=1 (the dashboard worklist's right-click "Add a comment")
+          opens the engagement-level comment composer on arrival. */}
+      {sp.comment === "1" && teamEnabled && (
+        <OpenCommentComposerOnLoad
+          commentKey={commentKeyForEngagement(engagement.id)}
+        />
+      )}
       {/* Auto-refresh while the engagement is still active. Picks up new
           client uploads + AI verdicts + activity-log entries without
           requiring the accountant to hit reload. Skipped for draft /
@@ -926,6 +941,7 @@ export default async function EngagementDetailPage({
               clientId={engagement.client_id}
               isOwner={user?.role === "owner"}
               locale={locale}
+              commentable={teamEnabled}
               privacy={
                 teamEnabled && user?.role === "owner"
                   ? {
@@ -994,6 +1010,20 @@ export default async function EngagementDetailPage({
           )}
         </div>
       </header>
+
+      {/* Engagement-level comments (team mode): invisible until someone
+          right-clicks the engagement (worklist) or uses the header's "..." —
+          then a pure thread sits quietly under the header. */}
+      {teamEnabled && (
+        <CommentThread
+          engagementId={engagement.id}
+          target={{ kind: "engagement" }}
+          initialComments={engagementComments.engagement}
+          members={activeMembers}
+          currentUserId={user?.id ?? null}
+          locale={locale}
+        />
+      )}
 
       {isDraft &&
         (items.length === 0 ? (
@@ -1065,6 +1095,7 @@ export default async function EngagementDetailPage({
                     engagementId={id}
                     commentsEnabled={teamEnabled}
                     commentsByFile={commentsByFile}
+                    commentsByItem={engagementComments.byItem}
                     mentionMembers={activeMembers}
                     currentUserId={user?.id ?? null}
                     locale={locale}
@@ -1146,6 +1177,7 @@ async function ItemRow({
   engagementId,
   commentsEnabled,
   commentsByFile,
+  commentsByItem,
   mentionMembers,
   currentUserId,
   locale,
@@ -1156,11 +1188,12 @@ async function ItemRow({
 }: {
   item: RequestItem;
   files: (UploadedFile & { url: string })[];
-  // Team Wave 3 (file comments): the engagement id + per-file threads +
-  // @mentionable active members + the viewer, gated on team mode.
+  // Team Wave 3 (+0930 targets): the engagement id + per-file and per-item
+  // threads + @mentionable active members + the viewer, gated on team mode.
   engagementId: string;
   commentsEnabled: boolean;
   commentsByFile: Map<string, FileComment[]>;
+  commentsByItem: Map<string, FileComment[]>;
   mentionMembers: { id: string; name: string }[];
   currentUserId: string | null;
   // Bookkeeping drafts keyed by uploaded file id (empty when the client isn't
@@ -1284,6 +1317,20 @@ async function ItemRow({
       defaultOpen={defaultOpen}
       collapsible={hasBody}
       summary={summary}
+      commentKey={commentsEnabled ? commentKeyForItem(item.id) : undefined}
+      addCommentLabel={commentsEnabled ? t("add_comment") : undefined}
+      commentsSlot={
+        commentsEnabled ? (
+          <CommentThread
+            engagementId={engagementId}
+            target={{ kind: "item", itemId: item.id }}
+            initialComments={commentsByItem.get(item.id) ?? []}
+            members={mentionMembers}
+            currentUserId={currentUserId}
+            locale={locale}
+          />
+        ) : undefined
+      }
     >
       {hasReason && (
         <Alert variant="destructive">
@@ -1304,6 +1351,7 @@ async function ItemRow({
               expectedYear={expectedYear}
               clientName={clientName}
               rejectionCount={item.ai_rejection_count ?? 0}
+              commentable={commentsEnabled}
               // AI off for this engagement → no AI chrome on the row.
               hideAi={!aiEnabled}
               // Per-document reject (the founder's model: approve the line as a
@@ -1368,9 +1416,9 @@ async function ItemRow({
                       />
                     )}
                     {commentsEnabled && (
-                      <FileComments
-                        fileId={f.id}
+                      <CommentThread
                         engagementId={engagementId}
+                        target={{ kind: "file", fileId: f.id }}
                         initialComments={commentsByFile.get(f.id) ?? []}
                         members={mentionMembers}
                         currentUserId={currentUserId}

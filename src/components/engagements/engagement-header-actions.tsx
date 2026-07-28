@@ -13,6 +13,7 @@ import {
   Loader2,
   Lock,
   LockOpen,
+  MessageSquare,
   MoreHorizontal,
   Receipt,
   Repeat,
@@ -55,6 +56,10 @@ import {
   deleteEngagementAction,
   setEngagementPrivacyAction,
 } from "@/app/actions/engagements";
+import {
+  commentKeyForEngagement,
+  openCommentComposer,
+} from "@/components/engagements/comment-thread";
 
 // The "..." overflow menu for an engagement's occasional actions: copying
 // links, reminder controls, downloads, and deletion. Activity remains
@@ -122,6 +127,9 @@ export function EngagementMoreMenu({
   // Owner-only "Private to me" override (Team Wave 4). Absent for staff / solo
   // firms → the menu item isn't shown.
   privacy?: { isOwner: boolean; isPrivate: boolean };
+  // Team mode: "Add a comment" opens the engagement-level comment composer
+  // under the page header (same thread the worklist right-click deep-links to).
+  commentable?: boolean;
 }) {
   const t = useTranslations("Engagements");
   const router = useRouter();
@@ -129,6 +137,10 @@ export function EngagementMoreMenu({
   const [copied, setCopied] = useState<null | "client" | "payment">(null);
   const [pendingPrivacy, startPrivacy] = useTransition();
   const [isPrivate, setIsPrivate] = useState(privacy?.isPrivate ?? false);
+
+  const addComment = () => {
+    openCommentComposer(commentKeyForEngagement(engagementId));
+  };
 
   const togglePrivacy = () => {
     if (pendingPrivacy) return;
@@ -211,6 +223,12 @@ export function EngagementMoreMenu({
               </DropdownMenuItem>
               <DropdownMenuSeparator />
             </>
+          )}
+          {commentable && (
+            <DropdownMenuItem onSelect={addComment}>
+              <MessageSquare />
+              {t("add_comment")}
+            </DropdownMenuItem>
           )}
           {isLive && (
             <ReminderAutomationDialog
