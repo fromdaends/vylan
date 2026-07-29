@@ -135,6 +135,7 @@ export type PostPayoutJournalState = {
     | "needs_reconnect"
     | "not_buildable"
     | "missing_account_codes"
+    | "blocked_accounts"
     | "accounts_syncing"
     | "post_failed";
   accountNames?: string[];
@@ -176,9 +177,10 @@ export async function postPayoutJournalAction(input: {
     case "already_posted":
       return { ok: true };
     case "missing_account_codes":
+    case "blocked_accounts":
       return {
         ok: false,
-        error: "missing_account_codes",
+        error: outcome.kind,
         accountNames: outcome.accountNames,
       };
     case "post_failed":

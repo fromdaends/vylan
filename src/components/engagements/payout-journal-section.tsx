@@ -31,6 +31,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
+  CommandSeparator,
 } from "@/components/ui/command";
 import {
   Popover,
@@ -45,6 +46,11 @@ import {
   type PayoutMapping,
   type PayoutRole,
 } from "@/lib/quickbooks/payout-journal";
+import {
+  accountsForRole,
+  blockedJournalAccounts,
+  type TypedAccount,
+} from "@/lib/quickbooks/journal-accounts";
 import type { PayoutFigures } from "@/lib/ai/payout-reconcile";
 import {
   postPayoutJournalAction,
@@ -58,7 +64,9 @@ export type PayoutJournalProps = {
   figures: PayoutFigures;
   mapping: PayoutMapping;
   status: "draft" | "approved" | "posted" | "void";
-  accounts: { id: string; name: string }[];
+  // Carries the normalized account TYPE: the picker uses it to hide accounts
+  // the ledger refuses in a journal entry, and to put the sensible ones first.
+  accounts: TypedAccount[];
   locale: AppLocale;
   postedLink: string | null;
   postedRef: string | null;
@@ -113,20 +121,71 @@ const ROLE_COPY: Record<
   },
 };
 
+// Xero will not let a manual journal move a bank balance, so its deposit line
+// cannot go to the real bank account. Xero's own answer is a clearing (or
+// suspense) account: the journal books the deposit there, and the real bank
+// deposit is reconciled against it afterwards. The label has to say that, or
+// an accountant hunting for "Business Bank Account" in a list that no longer
+// contains it will simply conclude the picker is broken.
+const XERO_BANK_COPY = {
+  en: "Clearing account",
+  fr: "Compte d'attente",
+  hintEn: "Xero doesn't allow bank accounts in a journal entry",
+  hintFr: "Xero n'autorise pas les comptes bancaires dans une écriture",
+};
+
+function roleCopy(
+  role: PayoutRole,
+  provider: "quickbooks" | "xero",
+  fr: boolean,
+): { label: string; hint: string | null } {
+  const c = role === "bank" && provider === "xero" ? XERO_BANK_COPY : ROLE_COPY[role];
+  return {
+    label: fr ? c.fr : c.en,
+    hint: (fr ? c.hintFr : c.hintEn) ?? null,
+  };
+}
+
 function AccountPicker({
   value,
-  options,
+  suggested,
+  others,
   placeholder,
+  suggestedLabel,
+  othersLabel,
   disabled,
   onPick,
 }: {
   value: AccountRef | null;
-  options: { id: string; name: string }[];
+  // Split so the accounts that fit this role sit at the top of the list. Both
+  // groups are pickable — the split is guidance, not a restriction.
+  suggested: TypedAccount[];
+  others: TypedAccount[];
   placeholder: string;
+  suggestedLabel: string;
+  othersLabel: string;
   disabled: boolean;
   onPick: (a: AccountRef | null) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const item = (o: TypedAccount) => (
+    <CommandItem
+      key={o.id}
+      value={o.name}
+      onSelect={() => {
+        onPick({ id: o.id, name: o.name });
+        setOpen(false);
+      }}
+    >
+      <Check
+        className={cn(
+          "size-3.5",
+          value?.id === o.id ? "opacity-100" : "opacity-0",
+        )}
+      />
+      <span className="truncate">{o.name}</span>
+    </CommandItem>
+  );
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -159,8 +218,8 @@ function AccountPicker({
           <CommandInput placeholder={placeholder} className="h-9" />
           <CommandList>
             <CommandEmpty>—</CommandEmpty>
-            <CommandGroup>
-              {value && (
+            {value && (
+              <CommandGroup>
                 <CommandItem
                   value="__clear__"
                   onSelect={() => {
@@ -171,26 +230,21 @@ function AccountPicker({
                 >
                   {placeholder}
                 </CommandItem>
-              )}
-              {options.map((o) => (
-                <CommandItem
-                  key={o.id}
-                  value={o.name}
-                  onSelect={() => {
-                    onPick(o);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "size-3.5",
-                      value?.id === o.id ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                  <span className="truncate">{o.name}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
+              </CommandGroup>
+            )}
+            {suggested.length > 0 && (
+              <CommandGroup heading={suggestedLabel}>
+                {suggested.map(item)}
+              </CommandGroup>
+            )}
+            {suggested.length > 0 && others.length > 0 && <CommandSeparator />}
+            {others.length > 0 && (
+              <CommandGroup
+                heading={suggested.length > 0 ? othersLabel : undefined}
+              >
+                {others.map(item)}
+              </CommandGroup>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -260,6 +314,16 @@ export function PayoutJournalSection({
 
   const built = buildPayoutJournal(figures, mapping);
   const needed = requiredRolesFor(figures);
+  // The accounts the entry would actually use, checked against what this
+  // ledger accepts in a journal. Same function the post path guards with, so
+  // the warning here and the refusal there can never disagree.
+  const blockedNames = built.ok
+    ? blockedJournalAccounts(
+        provider,
+        built.journal.lines.map((l) => l.account),
+        new Map(accounts.map((a) => [a.id, a.type])),
+      )
+    : [];
   // Optional roles are only worth offering when they carry money.
   const optional: PayoutRole[] = (
     ["refunds", "fee_tax", "adjustments"] as PayoutRole[]
@@ -339,6 +403,10 @@ export function PayoutJournalSection({
           ? fr
             ? "Le plan comptable était encore en cours de synchronisation. Réessayez dans un instant."
             : "The chart of accounts was still syncing. Try again in a moment."
+          : res.error === "blocked_accounts"
+          ? fr
+            ? `Xero refuse une écriture sur un compte bancaire (${(res.accountNames ?? []).join(", ")}). Rouvrez l'écriture et choisissez un compte d'attente.`
+            : `Xero won't accept a journal entry on a bank account (${(res.accountNames ?? []).join(", ")}). Reopen the entry and choose a clearing account.`
           : res.error === "missing_account_codes"
           ? fr
             ? `Ces comptes n'ont pas de code Xero : ${(res.accountNames ?? []).join(", ")}`
@@ -388,30 +456,55 @@ export function PayoutJournalSection({
         </p>
       )}
 
+      {/* A mapping saved BEFORE the ledger's rules were enforced (or approved
+          and therefore locked) can still point at an account the ledger will
+          refuse. Say so here rather than only at post time — while approved
+          the pickers are hidden, so the accountant needs telling that the fix
+          is behind Reopen. */}
+      {blockedNames.length > 0 && (
+        <p className="mb-2 flex items-start gap-1.5 text-[11px] text-warning">
+          <TriangleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
+          <span>
+            {fr
+              ? `Xero n'autorise pas d'écriture de journal sur un compte bancaire (${blockedNames.join(", ")}).${locked ? " Rouvrez l'écriture pour choisir un compte d'attente." : " Choisissez un compte d'attente ci-dessus."}`
+              : `Xero doesn't allow a journal entry to touch a bank account (${blockedNames.join(", ")}).${locked ? " Reopen the entry to choose a clearing account." : " Choose a clearing account above."}`}
+          </span>
+        </p>
+      )}
+
       {/* Account mapping. Hidden once approved — the picks are the record. */}
       {!locked && accounts.length > 0 && (
         <div className="mb-3 grid gap-2 sm:grid-cols-2">
-          {shown.map((role) => (
-            <div key={role} className="space-y-1">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-[11px] font-medium">
-                  {fr ? ROLE_COPY[role].fr : ROLE_COPY[role].en}
-                </span>
-                {ROLE_COPY[role].hintEn && (
-                  <span className="text-[10px] text-muted-foreground">
-                    {fr ? ROLE_COPY[role].hintFr : ROLE_COPY[role].hintEn}
-                  </span>
-                )}
+          {shown.map((role) => {
+            const copy = roleCopy(role, provider, fr);
+            const { suggested, others } = accountsForRole(
+              role,
+              provider,
+              accounts,
+            );
+            return (
+              <div key={role} className="space-y-1">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-[11px] font-medium">{copy.label}</span>
+                  {copy.hint && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {copy.hint}
+                    </span>
+                  )}
+                </div>
+                <AccountPicker
+                  value={mapping[role] ?? null}
+                  suggested={suggested}
+                  others={others}
+                  placeholder={fr ? "Choisir un compte" : "Choose an account"}
+                  suggestedLabel={fr ? "Suggérés" : "Suggested"}
+                  othersLabel={fr ? "Tous les comptes" : "All accounts"}
+                  disabled={saving}
+                  onPick={(a) => pick(role, a)}
+                />
               </div>
-              <AccountPicker
-                value={mapping[role] ?? null}
-                options={accounts}
-                placeholder={fr ? "Choisir un compte" : "Choose an account"}
-                disabled={saving}
-                onPick={(a) => pick(role, a)}
-              />
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

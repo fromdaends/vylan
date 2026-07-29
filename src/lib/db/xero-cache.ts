@@ -297,31 +297,40 @@ export async function purgeXeroCache(
 export type { XeroReadRows };
 
 /**
- * Xero AccountID -> AccountCode for one client, from the cached account list.
+ * What the manual-journal post path needs from the cached account list, in one
+ * read:
  *
- * Manual journals address lines by CODE, while Vylan's unified account list
- * (and therefore a saved payout mapping) carries the AccountID. This bridges
- * the two at post time. Accounts with no code — some bank accounts genuinely
- * have none — are simply absent, and the payload builder refuses rather than
- * posting a partial journal.
+ *   codeById — Xero AccountID -> AccountCode. Journal lines address accounts
+ *   by CODE, while Vylan's unified account list (and therefore a saved payout
+ *   mapping) carries the AccountID. Accounts with no code are simply absent,
+ *   and the payload builder refuses rather than posting a partial journal.
+ *
+ *   typeById — every cached account's normalized type, including the ones with
+ *   no code. Xero refuses a journal that touches a bank balance, so this is
+ *   what lets the post path decline with a plain reason instead of sending a
+ *   request Xero is certain to reject.
  */
-export async function readXeroAccountCodes(
-  clientId: string,
-): Promise<Map<string, string>> {
+export async function readXeroAccountMeta(clientId: string): Promise<{
+  codeById: Map<string, string>;
+  typeById: Map<string, string | null>;
+}> {
   const sb = getServiceRoleSupabase();
   const { data, error } = await sb
     .from("xero_accounts")
-    .select("xero_id, code")
+    .select("xero_id, code, account_type")
     .eq("client_id", clientId);
+  const codeById = new Map<string, string>();
+  const typeById = new Map<string, string | null>();
   if (error) {
-    console.error("[xero] account code read failed:", error.message);
-    return new Map();
+    console.error("[xero] account meta read failed:", error.message);
+    return { codeById, typeById };
   }
-  const out = new Map<string, string>();
   for (const row of data ?? []) {
     const id = row.xero_id as string | null;
+    if (!id) continue;
     const code = (row.code as string | null)?.trim();
-    if (id && code) out.set(id, code);
+    if (code) codeById.set(id, code);
+    typeById.set(id, (row.account_type as string | null) ?? null);
   }
-  return out;
+  return { codeById, typeById };
 }

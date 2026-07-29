@@ -21,6 +21,75 @@ function truncate(s: string, max = 300): string {
   return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
+/**
+ * Pull the READABLE reason out of a Xero error body.
+ *
+ * Xero answers a rejected write with a ValidationException whose only useful
+ * content is the ValidationErrors array — and that array sits at the END of
+ * each element, after the echoed document. Truncating the raw JSON (which is
+ * what this file used to do) therefore threw away the one part worth reading
+ * and left the accountant looking at
+ *
+ *     Xero ManualJournals write failed (400): { "ErrorNumber": 10, "Type":
+ *     "ValidationException", "Message": "A validation exception occurred", …
+ *
+ * which says nothing at all. Returns null when the body isn't Xero's shape, so
+ * the caller can fall back to the raw text.
+ */
+export function describeXeroFailure(detail: string): string | null {
+  let body: unknown;
+  try {
+    body = JSON.parse(detail);
+  } catch {
+    return null;
+  }
+  if (!body || typeof body !== "object") return null;
+  const b = body as Record<string, unknown>;
+
+  const messages: string[] = [];
+  const push = (v: unknown) => {
+    const m = (v as { Message?: unknown } | null)?.Message;
+    const text = typeof m === "string" ? m.trim() : "";
+    // Xero repeats the same validation error per offending line; say it once.
+    if (text && !messages.includes(text)) messages.push(text);
+  };
+  const collect = (errors: unknown) => {
+    if (Array.isArray(errors)) errors.forEach(push);
+  };
+
+  collect(b.ValidationErrors);
+  if (Array.isArray(b.Elements)) {
+    for (const el of b.Elements) {
+      collect((el as Record<string, unknown> | null)?.ValidationErrors);
+    }
+  }
+  if (messages.length > 0) return messages.join(" ");
+
+  // Non-validation failures (401/403/500) carry a top-level Detail/Message.
+  for (const key of ["Detail", "Message", "error_description"]) {
+    const v = b[key];
+    // "A validation exception occurred" is Xero's generic wrapper — useless on
+    // its own, and only ever reached when the specifics were missing.
+    if (typeof v === "string" && v.trim() && !/^A validation exception/i.test(v)) {
+      return v.trim();
+    }
+  }
+  return null;
+}
+
+/** The error message for a failed Xero write: Xero's own words when it gave
+ * any, the raw body otherwise. */
+function xeroFailureMessage(
+  path: string,
+  status: number,
+  detail: string,
+): string {
+  const explained = describeXeroFailure(detail);
+  return explained
+    ? `Xero: ${truncate(explained, 400)}`
+    : `Xero ${path} write failed (${status}): ${truncate(detail)}`;
+}
+
 // Which Xero endpoint an entity lives under (for creates, undo, and attachments).
 export type XeroTxnEndpoint = "Invoices" | "BankTransactions";
 
@@ -58,7 +127,7 @@ async function xeroPostJson(
     const detail = await res.text().catch(() => "");
     throw new XeroError(
       "request_failed",
-      `Xero ${path} write failed (${res.status}): ${truncate(detail)}`,
+      xeroFailureMessage(path, res.status, detail),
       res.status,
     );
   }
@@ -204,7 +273,7 @@ export async function xeroUploadAttachment(
     const detail = await res.text().catch(() => "");
     throw new XeroError(
       "request_failed",
-      `Xero attachment upload failed (${res.status}): ${truncate(detail)}`,
+      xeroFailureMessage("attachment", res.status, detail),
       res.status,
     );
   }
