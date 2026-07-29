@@ -7,14 +7,13 @@
 // engagement belongs to current_firm_id()), which is the authorization check.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { reopenFile } from "@/lib/db/file-review";
 import { logUserActivity } from "@/lib/db/activity";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 
-const LOCALES = ["en", "fr"] as const;
 
 export async function POST(
   _request: NextRequest,
@@ -67,10 +66,9 @@ export async function POST(
         file_id: id,
       });
     }
-    for (const loc of LOCALES) {
-      revalidatePath(`/${loc}/engagements/${r.engagement_id}`);
-      revalidatePath(`/${loc}/dashboard`);
-    }
+    revalidateAllLocales(`/engagements/${r.engagement_id}`);
+    revalidateAllLocales(`/dashboard`);
+
   } catch (err) {
     console.error("[reopen file route] post-step failed (reopen applied):", err);
   }

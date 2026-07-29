@@ -9,7 +9,6 @@
 // gate + idempotency guarantee no double-post.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
@@ -22,6 +21,7 @@ import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { postApprovedDraft, type PostOutcome } from "@/lib/quickbooks/post";
 import { logUserActivity } from "@/lib/db/activity";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 // A batch posts sequentially and each post now also downloads the receipt and
@@ -30,7 +30,6 @@ export const runtime = "nodejs";
 // platform default.
 export const maxDuration = 60;
 
-const LOCALES = ["en", "fr"] as const;
 
 export async function POST(request: NextRequest) {
   const supabase = await getServerSupabase();
@@ -164,11 +163,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Bust the cache for the queue + each touched engagement (both locales).
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/quickbooks/drafts`);
-    for (const eid of engagementIds) {
-      revalidatePath(`/${loc}/engagements/${eid}`);
-    }
+  revalidateAllLocales(`/quickbooks/drafts`);
+  for (const eid of engagementIds) {
+    revalidateAllLocales(`/engagements/${eid}`);
+
   }
 
   try {

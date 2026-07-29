@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { getCurrentUser } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getEngagement } from "@/lib/db/engagements";
@@ -10,6 +9,7 @@ import {
   startPreparation,
 } from "@/lib/engagements/stage-sync";
 import { isEngagementStage } from "@/lib/engagements/stage";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 // The two PERSON-driven stage actions. Every other transition is automatic and
 // hooked into its own event handler (see stage-sync.ts) — these are the only two
@@ -28,13 +28,11 @@ const UUID_RE =
 
 export type StageActionState = { ok?: boolean; error?: string } | null;
 
-const LOCALES = ["en", "fr"] as const;
 function revalidateStagePaths(engagementId: string) {
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/engagements/${engagementId}`);
-    revalidatePath(`/${loc}/engagements`);
-    revalidatePath(`/${loc}/dashboard`);
-  }
+  revalidateAllLocales(`/engagements/${engagementId}`);
+  revalidateAllLocales(`/engagements`);
+  revalidateAllLocales(`/dashboard`);
+
 }
 
 // Resolve + authorize the engagement for a stage write. Returns null when the

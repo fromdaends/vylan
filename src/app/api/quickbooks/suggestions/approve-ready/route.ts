@@ -9,16 +9,15 @@
 // genuinely ready right now (and each can be reopened individually).
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
 import { listFirmDrafts, setDraftStatus } from "@/lib/db/quickbooks-suggestions";
 import { draftQueueBucket } from "@/lib/quickbooks/draft-queue";
 import { logUserActivity } from "@/lib/db/activity";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 
-const LOCALES = ["en", "fr"] as const;
 
 export async function POST(request: NextRequest) {
   const supabase = await getServerSupabase();
@@ -70,11 +69,10 @@ export async function POST(request: NextRequest) {
   // Bust the cache for the queue + each touched engagement, both locales, the
   // moment the writes land — never hinge it on the best-effort audit log below.
   const engagementIds = [...new Set(ready.map((r) => r.engagementId))];
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/quickbooks/drafts`);
-    for (const eid of engagementIds) {
-      revalidatePath(`/${loc}/engagements/${eid}`);
-    }
+  revalidateAllLocales(`/quickbooks/drafts`);
+  for (const eid of engagementIds) {
+    revalidateAllLocales(`/engagements/${eid}`);
+
   }
 
   // Audit trail (best-effort: one firm-level entry for the batch).

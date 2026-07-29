@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { approveFile } from "@/lib/db/file-review";
 import { deleteUploadedFilePermanently } from "@/lib/db/uploaded-files";
 import { scheduleSetAssessment } from "@/lib/ai/set-assessment";
@@ -12,6 +11,7 @@ import {
   getFirmStorageConnection,
 } from "@/lib/db/filing";
 import { removeFiledCopy } from "@/lib/filing/remove";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 // Per-FILE accountant decisions from the Preview overlay. The item-level
 // actions in items.ts still exist (engagement checklist) and now fan out to
@@ -60,12 +60,10 @@ async function getFileContext(
 // /[locale], so a bare "/engagements/[id]" never matches the real
 // "/fr/engagements/[id]" and would silently revalidate nothing — revalidate
 // every locale's concrete path (matches the items.ts helper).
-const LOCALES = ["en", "fr"] as const;
 function revalidate(engagementId: string | undefined) {
-  for (const loc of LOCALES) {
-    if (engagementId) revalidatePath(`/${loc}/engagements/${engagementId}`);
-    revalidatePath(`/${loc}/dashboard`);
-  }
+  if (engagementId) revalidateAllLocales(`/engagements/${engagementId}`);
+  revalidateAllLocales(`/dashboard`);
+
 }
 
 export async function approveFileAction(formData: FormData) {

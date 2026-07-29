@@ -10,6 +10,7 @@ import {
   xeroPostingReference,
   xeroStatusNeedsDueDate,
   xeroUndoStatusFor,
+  xeroCurrencyCodeFor,
 } from "./post-transaction";
 
 describe("deriveNetAmount", () => {
@@ -412,5 +413,37 @@ describe("due date from the document", () => {
         dueDate: "2026-08-17",
       }).DueDate,
     ).toBe("2026-08-17");
+  });
+});
+
+// Found by posting a real CAD invoice into a USD organisation: $6,720 CAD was
+// recorded as $6,720 USD. The number looks right, so no later reconciliation
+// catches it.
+describe("xeroCurrencyCodeFor", () => {
+  it("sends nothing when the document matches the organisation", () => {
+    expect(xeroCurrencyCodeFor("CAD", "CAD")).toBeNull();
+    expect(xeroCurrencyCodeFor("cad", "CAD")).toBeNull();
+  });
+
+  it("sends the document's currency when they differ", () => {
+    expect(xeroCurrencyCodeFor("CAD", "USD")).toBe("CAD");
+  });
+
+  // Sending a currency the organisation has not enabled makes Xero reject the
+  // post, so "we do not know the org currency" must send nothing rather than
+  // guess — that keeps today's behaviour for pre-1030 connections.
+  it("sends nothing when either side is unknown", () => {
+    expect(xeroCurrencyCodeFor("CAD", null)).toBeNull();
+    expect(xeroCurrencyCodeFor(null, "USD")).toBeNull();
+    expect(xeroCurrencyCodeFor(undefined, undefined)).toBeNull();
+    expect(xeroCurrencyCodeFor("CAD", "  ")).toBeNull();
+  });
+
+  it("puts CurrencyCode on the posted body only when set", () => {
+    const base = { contactId: "c1", accountCode: "400", amount: 100, date: "2026-03-14" };
+    expect(buildXeroBillPayload(base).CurrencyCode).toBeUndefined();
+    expect(
+      buildXeroBillPayload({ ...base, currencyCode: "CAD" }).CurrencyCode,
+    ).toBe("CAD");
   });
 });
