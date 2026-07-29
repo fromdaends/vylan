@@ -10,7 +10,6 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -27,7 +26,6 @@ export function ClientsToolbar({
   activeOnly,
   ownerFilter,
   teamEnabled,
-  members,
 }: {
   // Search is now a pure client-side filter held by the parent
   // view — typing in the input updates this prop on every keystroke
@@ -43,8 +41,6 @@ export function ClientsToolbar({
   // "all" | "mine" | a specific member id.
   ownerFilter: string;
   teamEnabled: boolean;
-  // Teammates (excludes the viewer — "Mine" covers them) for the owner filter.
-  members: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -154,12 +150,6 @@ export function ClientsToolbar({
               {OWNER_FILTERS.map((opt) => (
                 <SelectItem key={opt} value={opt}>
                   {t(`owner_${opt}`)}
-                </SelectItem>
-              ))}
-              {members.length > 0 && <SelectSeparator />}
-              {members.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.name}
                 </SelectItem>
               ))}
             </SelectContent>

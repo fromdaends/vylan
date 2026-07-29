@@ -415,7 +415,10 @@ function OwnerCell({
     );
   }
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <Link
+      href={`/settings/team/${owner.id}`}
+      className="flex min-w-0 items-center gap-2 hover:underline focus-visible:underline focus-visible:outline-none"
+    >
       <AvatarInitials src={owner.avatarUrl} name={owner.name} size={24} />
       <span className="truncate text-sm">
         {owner.name}
@@ -423,7 +426,7 @@ function OwnerCell({
           <span className="text-muted-foreground"> {t("owner_you")}</span>
         )}
       </span>
-    </div>
+    </Link>
   );
 }
 
