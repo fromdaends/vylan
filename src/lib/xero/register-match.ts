@@ -127,8 +127,11 @@ export async function searchXeroRegister(
     // duplicate, and surfacing it would train accountants to dismiss the
     // confirmation dialog.
     entities: QboTxnEntity[];
-    // The organisation's own currency, so a candidate stated in it is not
-    // treated as ambiguous. See the normalisation below.
+    // What this draft would actually be POSTED in: the currency printed on the
+    // document, falling back to the organisation's own. A candidate stated in
+    // that currency is comparable to the draft; anything else is not. See the
+    // normalisation below.
+    documentCurrency: string | null;
     orgCurrency: string | null;
   },
 ): Promise<XeroRegisterSearch> {
@@ -136,7 +139,16 @@ export async function searchXeroRegister(
   const where = encodeURIComponent(whereDateBetween(from, to));
   const candidates: RegisterCandidate[] = [];
   const wanted = new Set(input.entities);
-  const org = input.orgCurrency?.trim().toUpperCase() ?? null;
+  // The DOCUMENT's currency wins over the organisation's. Xero books a
+  // transaction in the organisation's currency unless the post says otherwise,
+  // so a USD-based organisation holding a CAD document posts CAD -- and a USD
+  // 247.83 bill sitting in the window is NOT the same money as a CAD 247.83
+  // receipt. Comparing against the organisation alone would have called that a
+  // duplicate and attached to it.
+  const posting =
+    input.documentCurrency?.trim().toUpperCase() ||
+    input.orgCurrency?.trim().toUpperCase() ||
+    null;
   let truncated = false;
   let readFailed = false;
 
@@ -175,18 +187,18 @@ export async function searchXeroRegister(
           // Xero has no SyncToken; undo/attach work from the id alone.
           syncToken: null,
           // The classifier reads a non-null currency as "this total may be
-          // stated in something other than the books' own currency — ask".
+          // stated in something other than what the draft posts in — ask".
           // QuickBooks only sets CurrencyRef when multicurrency is on, but Xero
           // stamps CurrencyCode on EVERY transaction, so passing it through raw
           // would make every single Xero match ask, forever. Normalised here:
-          // a candidate in the organisation's own currency is unambiguous and
-          // reports null; anything else keeps its code and gets confirmed. An
-          // unknown organisation currency (connection made before we recorded
-          // it) keeps every code, which errs toward asking.
+          // a candidate in the SAME currency this draft would post in is
+          // comparable and reports null; anything else keeps its code and gets
+          // confirmed. Both currencies unknown keeps every code, which errs
+          // toward asking.
           currency:
             typeof r.CurrencyCode === "string" &&
-            org != null &&
-            r.CurrencyCode.toUpperCase() === org
+            posting != null &&
+            r.CurrencyCode.toUpperCase() === posting
               ? null
               : ((r.CurrencyCode as string | null) ?? null),
         });
@@ -226,6 +238,7 @@ export async function checkXeroRegister(
     date: string;
     amountCents: number;
     entities: QboTxnEntity[];
+    documentCurrency: string | null;
     orgCurrency: string | null;
     // Xero ids Vylan itself posted for this firm in this organisation. Removed
     // BEFORE classifying, not after: leaving them in would offer to attach a

@@ -329,6 +329,7 @@ export async function postApprovedXeroDraft(
             date: effDate,
             amountCents: Math.round((s.amount ?? 0) * 100),
             entities: searchEntities,
+            documentCurrency: s.currency,
             orgCurrency,
           });
     if (search == null || search.readFailed) {
@@ -378,6 +379,7 @@ export async function postApprovedXeroDraft(
           date: effDate,
           amountCents: Math.round(s.amount * 100),
           entities: searchEntities,
+          documentCurrency: s.currency,
           orgCurrency,
           excludeIds,
           draftEntity,

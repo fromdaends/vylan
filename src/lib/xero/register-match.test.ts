@@ -52,6 +52,8 @@ const EXPENSE_SEARCH = {
   date: "2026-07-10",
   amountCents: 11498,
   entities: xeroSearchEntities("expense"),
+  // A Canadian document in a Canadian organisation — the ordinary case.
+  documentCurrency: "CAD",
   orgCurrency: "CAD",
 };
 
@@ -172,7 +174,7 @@ describe("searchXeroRegister", () => {
     ]);
   });
 
-  it("reports the organisation's own currency as null so a match can clear", async () => {
+  it("reports the posting currency as null so a match can clear", async () => {
     // Xero stamps CurrencyCode on EVERY transaction (QuickBooks only sets
     // CurrencyRef under multicurrency). Passing it through raw would make the
     // shared classifier ask on every single Xero match, forever.
@@ -187,14 +189,49 @@ describe("searchXeroRegister", () => {
     expect(r.candidates[0]!.currency).toBe("USD");
   });
 
-  it("keeps every code when the organisation's currency is unknown", async () => {
-    // A connection made before we recorded it — err toward asking.
+  it("falls back to the organisation's currency when the document is silent", async () => {
     reply({ invoices: [BILL] });
     const r = await searchXeroRegister(CTX, {
       ...EXPENSE_SEARCH,
+      documentCurrency: null,
+    });
+    expect(r.candidates[0]!.currency).toBeNull();
+  });
+
+  it("keeps every code when NEITHER currency is known", async () => {
+    // A connection made before we recorded it, and a document that did not say
+    // — err toward asking.
+    reply({ invoices: [BILL] });
+    const r = await searchXeroRegister(CTX, {
+      ...EXPENSE_SEARCH,
+      documentCurrency: null,
       orgCurrency: null,
     });
     expect(r.candidates[0]!.currency).toBe("CAD");
+  });
+
+  it("the DOCUMENT's currency decides, not the organisation's", async () => {
+    // Found in the founder's own books: the Xero Demo Company (Global) is USD,
+    // and a CAD receipt posted into it posts CAD. A USD 114.98 bill sitting in
+    // the window is NOT the same money as a CAD 114.98 receipt, and comparing
+    // against the ORGANISATION would have reported it as unambiguous and
+    // attached the receipt to it.
+    reply({ invoices: [{ ...BILL, CurrencyCode: "USD" }] });
+    const r = await searchXeroRegister(CTX, {
+      ...EXPENSE_SEARCH,
+      documentCurrency: "CAD",
+      orgCurrency: "USD",
+    });
+    expect(r.candidates[0]!.currency).toBe("USD");
+
+    // ...and the same-currency candidate in that organisation still clears.
+    reply({ invoices: [{ ...BILL, CurrencyCode: "CAD" }] });
+    const same = await searchXeroRegister(CTX, {
+      ...EXPENSE_SEARCH,
+      documentCurrency: "CAD",
+      orgCurrency: "USD",
+    });
+    expect(same.candidates[0]!.currency).toBeNull();
   });
 
   it("reports a failed read as readFailed AND truncated, never as 'clear'", async () => {
