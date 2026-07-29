@@ -308,16 +308,16 @@ export function TeamManager({
                 </th>
                 {showStats && (
                   <>
-                    <th className="px-3 py-2 text-center font-medium">
+                    <th className="px-3 py-2 text-right font-medium">
                       {t("workload_col_active")}
                     </th>
-                    <th className="px-3 py-2 text-center font-medium">
+                    <th className="px-3 py-2 text-right font-medium">
                       {t("workload_col_review")}
                     </th>
-                    <th className="px-3 py-2 text-center font-medium">
+                    <th className="px-3 py-2 text-right font-medium">
                       {t("workload_col_attention")}
                     </th>
-                    <th className="px-3 py-2 text-center font-medium">
+                    <th className="px-3 py-2 text-right font-medium">
                       {t("workload_col_clients")}
                     </th>
                   </>
@@ -357,23 +357,30 @@ export function TeamManager({
                         </span>
                       </Link>
                     </td>
-                    <td className="px-3 py-3 text-center">
-                      <Count value={unassignedWorkload.activeEngagements} />
+                    <td className="px-3 py-3 text-right">
+                      <Count
+                        value={unassignedWorkload.activeEngagements}
+                        label={t("workload_col_active")}
+                      />
                     </td>
-                    <td className="px-3 py-3 text-center">
+                    <td className="px-3 py-3 text-right">
                       <Count
                         value={unassignedWorkload.readyToReview}
                         tone="accent"
+                        label={t("workload_col_review")}
                       />
                     </td>
-                    <td className="px-3 py-3 text-center">
+                    <td className="px-3 py-3 text-right">
                       <Count
                         value={unassignedWorkload.needsAttention}
                         tone="warning"
+                        label={t("workload_col_attention")}
                       />
                     </td>
-                    <td className="px-3 py-3 text-center">
-                      <Count value={0} />
+                    <td className="px-3 py-3 text-right">
+                      {/* Unassigned work has no client count of its own — the
+                          dash now says that instead of an untrue "0". */}
+                      <Count value={0} label={t("workload_col_clients")} />
                     </td>
                     <td className="py-3 pl-3" aria-hidden />
                   </tr>
@@ -657,17 +664,25 @@ function MemberRow({
 
       {showStats && (
         <>
-          <td className="px-3 py-3 text-center">
-            <Count value={activeEngagements} />
+          <td className="px-3 py-3 text-right">
+            <Count value={activeEngagements} label={t("workload_col_active")} />
           </td>
-          <td className="px-3 py-3 text-center">
-            <Count value={readyToReview} tone="accent" />
+          <td className="px-3 py-3 text-right">
+            <Count
+              value={readyToReview}
+              tone="accent"
+              label={t("workload_col_review")}
+            />
           </td>
-          <td className="px-3 py-3 text-center">
-            <Count value={needsAttention} tone="warning" />
+          <td className="px-3 py-3 text-right">
+            <Count
+              value={needsAttention}
+              tone="warning"
+              label={t("workload_col_attention")}
+            />
           </td>
-          <td className="px-3 py-3 text-center">
-            <Count value={clientCount} />
+          <td className="px-3 py-3 text-right">
+            <Count value={clientCount} label={t("workload_col_clients")} />
           </td>
         </>
       )}
@@ -809,25 +824,51 @@ function MemberRow({
 
 // A workload count cell: muted at zero, tinted (accent for review, warning for
 // attention) when there's something to act on. Shared by the roster rows.
+// A workload count. Two changes make a row of these legible instead of a grid
+// of digits to decode:
+//
+//   ZERO RENDERS AS "—", NOT "0". A teammate with nothing on their plate used to
+//   read "0 0 0 2", and four zeros compete for attention with the numbers that
+//   actually mean something. An em-dash says "nothing here" and gets out of the
+//   way, so the eye lands only on real work. Same rule as everywhere else: mark
+//   the exception, not the category.
+//
+//   RIGHT-ALIGNED, NOT CENTRED. These are tabular numerals, and centring throws
+//   away the whole point — 1, 15 and 44 don't share a units column, so the
+//   figures look ragged and can't be compared down the column at a glance.
+//
+// `label` names the column on hover, so reading one row doesn't mean tracing
+// back up to an 11px uppercase header four rows above.
 function Count({
   value,
   tone,
+  label,
 }: {
   value: number;
   tone?: "accent" | "warning";
+  label?: string;
 }) {
+  if (value === 0) {
+    return (
+      <span
+        className="inline-flex min-w-[2ch] justify-end text-muted-foreground/50"
+        title={label}
+      >
+        &mdash;
+      </span>
+    );
+  }
   return (
     <span
       className={cn(
-        "inline-flex min-w-[2ch] justify-center tabular-nums",
-        value === 0
-          ? "text-muted-foreground/60"
-          : tone === "accent"
-            ? "font-semibold text-accent"
-            : tone === "warning"
-              ? "font-semibold text-warning"
-              : "font-medium text-foreground",
+        "inline-flex min-w-[2ch] justify-end tabular-nums",
+        tone === "accent"
+          ? "font-semibold text-accent"
+          : tone === "warning"
+            ? "font-semibold text-warning"
+            : "font-medium text-foreground",
       )}
+      title={label}
     >
       {value}
     </span>

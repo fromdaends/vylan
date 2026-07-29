@@ -62,6 +62,12 @@ export const AUDIT_ACTIONS = [
   "user_deactivated",
   "user_reactivated",
   "ownership_transferred",
+  // Bulk handover. team_offboard_reassigned predates this list — offboarding has
+  // logged it since Wave 2 but it was never registered, so the audit log printed
+  // the raw code (same failure mode the recurrence_* note below describes).
+  // team_work_handed_over is new: the same move without removing anybody.
+  "team_offboard_reassigned",
+  "team_work_handed_over",
   // repeating work. recurrence_* predate this list — they were logged by
   // the Repeat dialog but never registered, so the audit log rendered the
   // raw code. series_reassigned is new with the /repeating screen.

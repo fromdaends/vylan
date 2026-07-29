@@ -19,6 +19,7 @@ import {
 } from "@/components/settings/audit-actions";
 import { getBrandingImageUrl } from "@/lib/storage";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
+import { HandOverWork } from "@/components/settings/team/hand-over-work";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -158,6 +159,17 @@ export default async function TeamMemberProfilePage({
           />
         )}
       </div>
+
+      {/* Bulk assign. Owner-only, and it renders itself away when there is
+          nothing to move or nobody to move it to. */}
+      {isOwner && (
+        <HandOverWork
+          fromUserId={id}
+          fromName={name}
+          members={reassignTargets}
+          counts={{ engagements: activeCount, clients: clients.length }}
+        />
+      )}
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">

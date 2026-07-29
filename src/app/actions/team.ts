@@ -608,6 +608,149 @@ export type MemberActionResult =
 // signs them out + blocks future sign-in. Never a hard delete: their name
 // stays in the audit trail + past assignments. Guards: can't remove yourself
 // or the firm's only owner (transfer ownership first).
+// Move EVERY live thing one teammate holds onto another, in one go: live
+// engagements (draft/sent/in_progress), all their clients, and their still-live
+// recurring schedules.
+//
+// Extracted out of deactivateUser so the same proven bulk move can run WITHOUT
+// removing anybody — which is the commoner case by far. Somebody goes on leave,
+// or picks up a different book of clients, and you want their plate handed over;
+// you do not want to deactivate them to do it. Before this the only way to move
+// work in bulk was to remove the person.
+//
+// SCOPE NOTES, all deliberate:
+//   · Completed / archived / deleted engagements keep their original assignee —
+//     they are history, and rewriting who did finished work would be a lie.
+//   · Ended series are skipped: they can never spawn again.
+//   · The series update FAILS OPEN on a missing column (deploy-ahead-of-SQL).
+//     The rest of the handover already succeeded and must not be rolled back
+//     over it, and the spawner's own active-user check still stops work
+//     reaching a ghost.
+// Callers must have already established that both people are active members of
+// this firm (or, for offboarding, that the source is the one being removed).
+async function handOverAllWork({
+  firmId,
+  fromUserId,
+  toUserId,
+  reason,
+}: {
+  firmId: string;
+  fromUserId: string;
+  toUserId: string;
+  reason: "team_offboard_reassigned" | "team_work_handed_over";
+}): Promise<
+  | { ok: true; engagements: number; clients: number; schedules: number }
+  | { ok: false; error: "not_found" | "update_failed" }
+> {
+  if (fromUserId === toUserId) return { ok: false, error: "not_found" };
+  const admin = getServiceRoleSupabase();
+  const { data: dest } = await admin
+    .from("users")
+    .select("id, firm_id, deactivated_at")
+    .eq("id", toUserId)
+    .maybeSingle();
+  if (!dest || dest.firm_id !== firmId || dest.deactivated_at) {
+    return { ok: false, error: "not_found" };
+  }
+
+  const { count: engCount, error: engErr } = await admin
+    .from("engagements")
+    .update({ assigned_user_id: toUserId }, { count: "exact" })
+    .eq("firm_id", firmId)
+    .eq("assigned_user_id", fromUserId)
+    .in("status", ["draft", "sent", "in_progress"]);
+  const { count: clientCount, error: clientErr } = await admin
+    .from("clients")
+    .update({ assigned_user_id: toUserId }, { count: "exact" })
+    .eq("firm_id", firmId)
+    .eq("assigned_user_id", fromUserId);
+  if (engErr || clientErr) {
+    console.error(
+      "[team] bulk handover failed:",
+      engErr?.message ?? clientErr?.message,
+    );
+    return { ok: false, error: "update_failed" };
+  }
+
+  const seriesRes = await admin
+    .from("recurring_series")
+    .update({ assigned_user_id: toUserId }, { count: "exact" })
+    .eq("firm_id", firmId)
+    .eq("assigned_user_id", fromUserId)
+    .neq("status", "ended");
+  const seriesMissingSchema =
+    seriesRes.error?.code === "PGRST204" ||
+    seriesRes.error?.code === "PGRST205" ||
+    seriesRes.error?.code === "42703" ||
+    seriesRes.error?.code === "42P01";
+  if (seriesRes.error && !seriesMissingSchema) {
+    console.error("[team] bulk handover series failed:", seriesRes.error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firmId, null, reason, {
+    from_user_id: fromUserId,
+    to_user_id: toUserId,
+    engagements: engCount ?? 0,
+    clients: clientCount ?? 0,
+    schedules: seriesRes.count ?? 0,
+  });
+  return {
+    ok: true,
+    engagements: engCount ?? 0,
+    clients: clientCount ?? 0,
+    schedules: seriesRes.count ?? 0,
+  };
+}
+
+// BULK ASSIGN — hand one teammate's whole plate to another without removing
+// them. The literal "tick several rows and assign them" version would need a
+// multi-select system the app has nowhere else; this covers the case that
+// actually comes up (leave, a book of clients changing hands, a leaver you are
+// NOT deactivating yet) and reuses the handover that offboarding already
+// proved. Owner-only, like every other roster action.
+export async function handOverWorkAction(
+  fromUserId: string,
+  toUserId: string,
+): Promise<
+  | { ok: true; engagements: number; clients: number; schedules: number }
+  | { ok: false; error: string }
+> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+  if (!firm.team_enabled) return { ok: false, error: "team_disabled" };
+
+  // The SOURCE may be deactivated (handing a leaver's work over after the fact
+  // is a real need); it just has to belong to this firm. handOverAllWork
+  // validates the destination is active and in-firm.
+  const admin = getServiceRoleSupabase();
+  const { data: from } = await admin
+    .from("users")
+    .select("id, firm_id")
+    .eq("id", fromUserId)
+    .maybeSingle();
+  if (!from || from.firm_id !== firm.id) {
+    return { ok: false, error: "not_found" };
+  }
+
+  const moved = await handOverAllWork({
+    firmId: firm.id,
+    fromUserId,
+    toUserId,
+    reason: "team_work_handed_over",
+  });
+  if (!moved.ok) return { ok: false, error: moved.error };
+
+  revalidatePath("/settings/team");
+  revalidatePath(`/settings/team/${fromUserId}`);
+  revalidatePath(`/settings/team/${toUserId}`);
+  revalidatePath("/engagements");
+  revalidatePath("/clients");
+  revalidatePath("/dashboard");
+  return moved;
+}
+
 export async function deactivateUser(
   userId: string,
   // Guarded offboarding (team Wave 2): when set, the departing member's LIVE
@@ -647,71 +790,15 @@ export async function deactivateUser(
 
   // Guarded offboarding: reassign the departing member's live work first. Done
   // BEFORE the deactivation so a failure here aborts without stranding a
-  // half-removed member. The reassignee must be an active member of THIS firm
-  // (never the person being removed).
+  // half-removed member.
   if (reassignToId) {
-    if (reassignToId === userId) return { ok: false, error: "not_found" };
-    const { data: dest } = await admin
-      .from("users")
-      .select("id, firm_id, deactivated_at")
-      .eq("id", reassignToId)
-      .maybeSingle();
-    if (!dest || dest.firm_id !== firm.id || dest.deactivated_at) {
-      return { ok: false, error: "not_found" };
-    }
-    const { count: engCount, error: engErr } = await admin
-      .from("engagements")
-      .update(
-        { assigned_user_id: reassignToId },
-        { count: "exact" },
-      )
-      .eq("firm_id", firm.id)
-      .eq("assigned_user_id", userId)
-      .in("status", ["draft", "sent", "in_progress"]);
-    const { count: clientCount, error: clientErr } = await admin
-      .from("clients")
-      .update({ assigned_user_id: reassignToId }, { count: "exact" })
-      .eq("firm_id", firm.id)
-      .eq("assigned_user_id", userId);
-    if (engErr || clientErr) {
-      console.error(
-        "[team] offboard reassign failed:",
-        engErr?.message ?? clientErr?.message,
-      );
-      return { ok: false, error: "update_failed" };
-    }
-    // Recurring schedules (0940). Without this the departing member keeps
-    // being handed BRAND-NEW work every cycle, forever — the schedule doesn't
-    // know they're gone. Ended series are skipped: they can never spawn again.
-    //
-    // Fail-OPEN on a missing column (deploy-ahead-of-SQL): the rest of the
-    // handover already succeeded and must not be rolled back over this. The
-    // spawner's own active-user check still stops work reaching a ghost.
-    const seriesRes = await admin
-      .from("recurring_series")
-      .update({ assigned_user_id: reassignToId }, { count: "exact" })
-      .eq("firm_id", firm.id)
-      .eq("assigned_user_id", userId)
-      .neq("status", "ended");
-    const seriesMissingSchema =
-      seriesRes.error?.code === "PGRST204" ||
-      seriesRes.error?.code === "PGRST205" ||
-      seriesRes.error?.code === "42703" ||
-      seriesRes.error?.code === "42P01";
-    if (seriesRes.error && !seriesMissingSchema) {
-      console.error(
-        "[team] offboard series reassign failed:",
-        seriesRes.error.message,
-      );
-      return { ok: false, error: "update_failed" };
-    }
-    await logUserActivity(firm.id, null, "team_offboard_reassigned", {
-      from_user_id: userId,
-      to_user_id: reassignToId,
-      engagements: engCount ?? 0,
-      clients: clientCount ?? 0,
-      schedules: seriesRes.count ?? 0,
+    const moved = await handOverAllWork({
+      firmId: firm.id,
+      fromUserId: userId,
+      toUserId: reassignToId,
+      reason: "team_offboard_reassigned",
     });
+    if (!moved.ok) return { ok: false, error: moved.error };
   }
 
   const { error } = await admin
