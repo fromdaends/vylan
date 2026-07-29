@@ -60,6 +60,7 @@ export function EngagementsView({
   currentUserId,
   badges,
   teamEnabled,
+  assignMembers,
 }: {
   view: EngagementView;
   rows: WorklistRow[];
@@ -68,6 +69,8 @@ export function EngagementsView({
   currentUserId: string | null;
   badges: { ready: number; deleted: number };
   teamEnabled: boolean;
+  // Active teammates, so a row can be handed to somebody from its menu.
+  assignMembers?: { id: string; name: string }[];
 }) {
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
@@ -300,6 +303,8 @@ export function EngagementsView({
         canDelete={canDelete}
         growNameColumn
         teamEnabled={teamEnabled}
+        // Feeds "Assign to…" in each row's "..." menu. Menu only — no ⇄ column.
+        assignMembers={assignMembers}
         // Opt in to the sortable Status header. Only this view passes these, so
         // every other table (the Overview included) keeps its plain header.
         statusSort={stageFilteringOn ? stageSort : null}
