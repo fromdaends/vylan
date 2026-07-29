@@ -405,6 +405,14 @@ const KNOWN_TAX_WORDS = [
   "HST",
   "QST",
   "PST",
+  // Manitoba calls its retail sales tax RST, and Xero names the rate
+  // "GST/RST". Missing here, that name reduced to {GST} — identical to the
+  // plain GST rate — so the two tied, the ambiguity margin refused to choose,
+  // and every Manitoba client coded their sales tax by hand. Found by the
+  // accuracy eval, not by anyone reading the code. Kept DISTINCT from PST
+  // rather than aliased: a client carrying both a Saskatchewan "GST/PST" and a
+  // Manitoba "GST/RST" rate must not have the two collapse into one another.
+  "RST",
   "VAT",
   "TPS",
   "TVQ",
@@ -595,104 +603,68 @@ export function suggestItem(
   const sellable = items.filter((i) => isSellableItem(i.itemType));
   const pool = sellable.length > 0 ? sellable : items;
 
-  // NAME MATCH FIRST. An invoice that says "Development work — per hour rate"
-  // against a Xero item called exactly that should need no help; deriving the
-  // item only from the income account meant such a document still had to be
-  // filled in by hand, because the account had never been matched either.
+  // NAME MATCHING, before the income-account bridge.
   //
-  // Scored the same way vendors and customers are, rather than demanding an
-  // exact string. A printed line rarely equals the product name character for
-  // character — it carries an extra clause ("Development work — per hour rate ·
-  // Member portal build, sprint 4"), or drops one — and an exact-only rule
-  // silently gives up on all of those and makes the accountant pick from a
-  // dropdown that is already showing the right answer.
+  // An invoice that says "Development work — per hour rate" against a product
+  // called exactly that should need no help. Deriving the product only from the
+  // matched income account meant such a document still had to be filled in by
+  // hand, because for income the account had usually never been matched either.
   //
-  // pickConfident applies BOTH the threshold and the ambiguity margin, so two
-  // similarly-named products still produce no confident pick — which is the
-  // case that actually matters, because a near-name is how the wrong product
-  // ends up on a client's invoice.
+  // EACH LINE IS RESOLVED INDEPENDENTLY, then the results are compared. That
+  // ordering matters: resolving line-by-line and returning the first hit meant
+  // a document naming two DIFFERENT products answered with whichever line came
+  // first, silently dropping the other — and a single posted line cannot
+  // represent both. Disagreement between lines is itself the answer.
   //
-  // An EXACT match still scores 1.0 and is the only thing that clears the
-  // auto-approve bar; a strong partial fills the field in at its true, lower
-  // confidence for the accountant to confirm.
-  // ACTIVE + sellable for the confident pick — an archived product is rejected
-  // by the accounting software on post, so it must never be auto-picked. The
-  // full pool still supplies the candidate list below, so an archived item the
-  // accountant genuinely wants is one click away.
-  const sellablePool = pool.filter((i) => i.active && isSellableItem(i.itemType));
+  // Two ways a line can name a product:
+  //   EXACT       the line IS the product name           -> confidence 1.0
+  //   COVERAGE    the product's words all appear in it   -> confidence 0.9
+  // Exact is the only tier that reaches 1.0, which is the bar auto-approve
+  // requires; coverage fills the field in for the accountant to confirm.
+  //
+  // Coverage rather than similarity because a printed line ELABORATES on the
+  // product name rather than repeating it. Measured on a real document:
+  //   product : "Development work - per hour rate"
+  //   line    : "Development work — per hour rate (Member portal build, sprint 4)"
+  // Every word of the product is present, but the parenthetical doubles the
+  // token count, so a symmetric score lands at 0.5 — under the 0.6 threshold.
+  const sellablePool = pool.filter(
+    // ACTIVE for a confident pick: the accounting software rejects an archived
+    // product on post. The full pool still supplies the candidate list.
+    (i) => i.active && isSellableItem(i.itemType),
+  );
 
-  // EXACT FIRST, and it is the only tier that reaches confidence 1.0 — the bar
-  // auto-approve requires. Everything below fills the field in for the
-  // accountant to confirm instead.
+  type LineHit = { id: string; name: string; active: boolean; exact: boolean };
+  const hits: LineHit[] = [];
+
   for (const desc of lineDescriptions) {
     if (!desc) continue;
+
     const exact = sellablePool.filter((i) => nameScore(desc, i.name) === 1);
     if (exact.length === 1) {
       const m = exact[0]!;
-      return {
-        match: { id: m.id, name: m.name, active: m.active },
-        confidence: 1,
-        candidates: toCandidates(
-          pool.map((i) => ({
-            id: i.id,
-            name: i.name,
-            active: i.active,
-            score: nameScore(desc, i.name),
-          })),
-        ),
-      };
+      hits.push({ id: m.id, name: m.name, active: m.active, exact: true });
+      continue;
     }
-  }
 
-  // THEN CONTAINMENT, because a printed invoice line usually ELABORATES on the
-  // product name rather than repeating it. Measured on the real document:
-  //
-  //   product name : "Development work - per hour rate"
-  //   printed line : "Development work — per hour rate (Member portal build,
-  //                   sprint 4)"
-  //
-  // Every word of the product is there, but the extra clause doubles the token
-  // count, so the Jaccard score is 0.5 — under the 0.6 threshold. Scoring alone
-  // therefore gives up on the commonest shape of invoice line there is.
-  //
-  // So: if every meaningful token of a product name appears in the line, that
-  // product is named in that line. Guarded three ways —
-  //   * the product needs 2+ tokens, or a one-word "Consulting" would swallow
-  //     every line mentioning consulting;
-  //   * the MOST SPECIFIC containment wins, so "Development work" loses to
-  //     "Development work - per hour rate" when both exist;
-  //   * it must be unique at that specificity, or we refuse and ask.
-  for (const desc of lineDescriptions) {
-    if (!desc) continue;
     const descTokens = new Set(nameTokens(desc));
     if (descTokens.size === 0) continue;
-    // COVERAGE, not strict containment: what fraction of the PRODUCT's words
-    // appear in the line. Asymmetric on purpose — the line is allowed to say
-    // more than the product name, which is the normal case, but the product
-    // must be almost entirely accounted for.
-    //
-    // Strict "every token present" was too rigid because the extractor does not
-    // word a line identically every time: one run produced "Development work —
-    // per hour rate (Member portal build, sprint 4)", another may drop or
-    // reorder part of it. Coverage degrades gracefully where all-or-nothing
-    // fell off a cliff.
-    const scoredByCoverage = sellablePool
+    const covered = sellablePool
       .map((i) => {
         const toks = nameTokens(i.name);
         const hit = toks.filter((tk) => descTokens.has(tk)).length;
         return { item: i, toks, coverage: toks.length ? hit / toks.length : 0 };
       })
-      // 2+ tokens or a one-word "Consulting" swallows every line mentioning it.
+      // 2+ tokens, or a one-word "Consulting" swallows every line mentioning it.
       .filter((c) => c.toks.length >= 2 && c.coverage >= MIN_ITEM_COVERAGE)
-      // Most of the product accounted for wins; ties broken by the more
-      // SPECIFIC product, so "Development work" loses to "Development work -
-      // per hour rate" when a client has both.
+      // Most of the product accounted for wins; the more SPECIFIC name breaks
+      // ties, so "Development work" loses to "Development work - per hour rate".
       .sort((a, b) => b.coverage - a.coverage || b.toks.length - a.toks.length);
-    if (scoredByCoverage.length === 0) continue;
-    const top = scoredByCoverage[0]!;
-    const runnerUp = scoredByCoverage[1];
-    // Refuse a photo-finish: two products this close is exactly how the wrong
-    // one ends up on a client's invoice.
+    const top = covered[0];
+    const runnerUp = covered[1];
+    if (!top) continue;
+    // A photo-finish between two equally specific products is how the wrong one
+    // ends up on a client's invoice.
     if (
       runnerUp &&
       runnerUp.coverage === top.coverage &&
@@ -700,52 +672,38 @@ export function suggestItem(
     ) {
       continue;
     }
-    const tied = [top];
-    const m = tied[0]!.item;
-    return {
-      match: { id: m.id, name: m.name, active: m.active },
-      // Named in the line but not equal to it: confident enough to fill in,
-      // deliberately below the auto-approve bar, which only an exact match
-      // clears.
-      confidence: 0.9,
-      candidates: toCandidates(
-        pool.map((i) => ({
-          id: i.id,
-          name: i.name,
-          active: i.active,
-          score: nameScore(desc, i.name),
-        })),
-      ),
-    };
+    hits.push({
+      id: top.item.id,
+      name: top.item.name,
+      active: top.item.active,
+      exact: false,
+    });
   }
-  let best: { match: QboRef | null; confidence: number; scored: Scored[] } = {
-    match: null,
-    confidence: 0,
-    scored: [],
-  };
-  for (const desc of lineDescriptions) {
-    if (!desc) continue;
-    const scored = sellablePool
-      .map((i) => ({
+
+  if (hits.length > 0) {
+    const named = new Set(hits.map((h) => h.id));
+    const candidates = toCandidates(
+      pool.map((i) => ({
         id: i.id,
         name: i.name,
         active: i.active,
-        score: nameScore(desc, i.name),
-      }))
-      .filter((c) => c.score > 0)
-      .sort(byScoreThenActive);
-    const picked = pickConfident(scored, MATCH_THRESHOLD);
-    if (picked.match && picked.confidence > best.confidence) {
-      best = { ...picked, scored };
+        score: named.has(i.id) ? 0.9 : 0,
+      })),
+    );
+    if (named.size > 1) {
+      // Several different products on one document — surface them all and let
+      // the accountant say which the single posted line represents.
+      return { match: null, confidence: 0, candidates };
     }
-  }
-  if (best.match) {
+    const m = hits[0]!;
     return {
-      match: best.match,
-      confidence: best.confidence,
-      candidates: toCandidates(best.scored),
+      match: { id: m.id, name: m.name, active: m.active },
+      // Only an exact match is certain enough to skip the accountant entirely.
+      confidence: hits.every((h) => h.exact) ? 1 : 0.9,
+      candidates,
     };
   }
+
 
   const forAccount = accountId
     ? pool.filter((i) => i.incomeAccountId === accountId)

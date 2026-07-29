@@ -1072,3 +1072,64 @@ describe("remembered product fills in with no line items at all", () => {
     expect(s.item?.match).toBeNull();
   });
 });
+
+// Both found by the accuracy eval rather than by reading the code.
+describe("regressions the eval caught", () => {
+  it("recognises RST, so a Manitoba rate does not collapse into plain GST", () => {
+    expect([...taxTokensFrom("GST/RST on Income")].sort()).toEqual(["GST", "RST"]);
+    expect([...taxTokensFrom("MB RST")]).toEqual(["RST"]);
+    // The failure this caused: both rates scored 1.0 against a GST+RST
+    // document, tied, and the ambiguity margin refused to pick either.
+    const rates = [
+      { id: "gst", name: "GST on Income", active: true },
+      { id: "gstrst", name: "GST/RST on Income", active: true },
+    ];
+    const m = matchTaxCode(
+      [
+        { type: "GST", amount: 300, rate: 5 },
+        { type: "MB RST", amount: 420, rate: 7 },
+      ],
+      rates,
+      "income",
+    );
+    expect(m.match?.id).toBe("gstrst");
+  });
+
+  it("still picks plain GST for a GST-only document", () => {
+    const rates = [
+      { id: "gst", name: "GST on Income", active: true },
+      { id: "gstrst", name: "GST/RST on Income", active: true },
+    ];
+    expect(
+      matchTaxCode([{ type: "GST", amount: 125, rate: 5 }], rates, "income")
+        .match?.id,
+    ).toBe("gst");
+  });
+
+  it("refuses when a document names two DIFFERENT products", () => {
+    const two = [
+      { id: "a", name: "Development work - developer onsite per day", itemType: "Service", incomeAccountId: null, active: true },
+      { id: "b", name: "Project management & implementation - branding", itemType: "Service", incomeAccountId: null, active: true },
+    ];
+    // A single posted line cannot represent both, so choosing one would
+    // silently drop the other.
+    const m = suggestItem("income", null, two, [
+      "Development work - developer onsite per day (3 days on site)",
+      "Project management & implementation - branding",
+    ]);
+    expect(m.match).toBeNull();
+    expect(m.candidates.length).toBeGreaterThan(0);
+  });
+
+  it("still matches when every line names the SAME product", () => {
+    const one = [
+      { id: "a", name: "Development work - per hour rate", itemType: "Service", incomeAccountId: null, active: true },
+    ];
+    expect(
+      suggestItem("income", null, one, [
+        "Development work — per hour rate (sprint 4)",
+        "Development work — per hour rate (integration)",
+      ]).match?.id,
+    ).toBe("a");
+  });
+});
