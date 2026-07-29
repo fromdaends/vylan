@@ -271,7 +271,7 @@ export function PostDraftControls({
                     {t(matchedExisting ? "unlink_title" : "undo_title")}
                   </DialogTitle>
                   <DialogDescription>
-                    {t(matchedExisting ? "unlink_body" : pk("undo_body"))}
+                    {t(matchedExisting ? pk("unlink_body") : pk("undo_body"))}
                   </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
