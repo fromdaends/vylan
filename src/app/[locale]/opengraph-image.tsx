@@ -7,7 +7,7 @@ import { routing } from "@/i18n/routing";
  * anything else that reads OG tags.
  *
  * Living at the [locale] segment root means it is inherited by the landing
- * page, the manifesto, /how-it-works, /contact, the help centre and the legal
+ * page, the manifesto, /how-it-works, the help centre and the legal
  * pages, so every public url previews without each page opting in. The client
  * portal at /r/[token] sits OUTSIDE this segment and deliberately gets nothing:
  * those urls are private, and a preview image is a way for a token to leak into

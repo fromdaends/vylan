@@ -23,7 +23,6 @@ export type VylanMenuStrings = {
   navHowItWorks: string;
   navBookDemo: string;
   navLogin: string;
-  navContact: string;
   navHelp?: string;
   follow: string;
 };
@@ -208,9 +207,6 @@ export function VylanMenu({
                 {s.navBookDemo} <span className="vy-arr">→</span>
               </a>
             )}
-            <Link href="/contact" onClick={closeNow}>
-              {s.navContact} <span className="vy-arr">→</span>
-            </Link>
             {helpHref && s.navHelp ? (
               <a
                 href={helpHref}

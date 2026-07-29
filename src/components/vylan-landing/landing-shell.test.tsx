@@ -53,7 +53,6 @@ const S: LandingShellStrings = {
   navHowItWorks: m.nav_how_it_works,
   navBookDemo: m.nav_book_demo,
   navLogin: m.nav_login,
-  navContact: m.nav_contact,
   navHelp: m.nav_help,
   follow: m.follow,
 };

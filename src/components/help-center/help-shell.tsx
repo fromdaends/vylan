@@ -60,7 +60,6 @@ export async function HelpShell({
     navHowItWorks: tv("nav_how_it_works"),
     navBookDemo: tv("nav_book_demo"),
     navLogin: tv("nav_login"),
-    navContact: tv("nav_contact"),
     follow: tv("follow"),
   };
 
@@ -111,12 +110,6 @@ export async function StillStuck({ locale }: { locale: AppLocale }) {
       <div className="vyh-stuck-actions">
         <a className="vyh-btn" href={`mailto:${brand.supportEmail}`}>
           {t("stuck_email")}
-        </a>
-        <a
-          className="vyh-btn vyh-btn-ghost"
-          href={getPathname({ locale, href: "/contact" })}
-        >
-          {t("stuck_contact")}
         </a>
       </div>
     </div>

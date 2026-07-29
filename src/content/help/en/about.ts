@@ -56,9 +56,7 @@ const ourStory: HelpArticle = {
     note(
       "In the meantime, ",
       link("/how-it-works", "how it works"),
-      " shows you the product itself, and ",
-      link("/contact", "contact"),
-      " reaches a real person.",
+      " shows you the product itself, and hello@vylan.app reaches a real person.",
     ),
   ],
 };
@@ -87,9 +85,7 @@ const theFounders: HelpArticle = {
       "Vylan is small, which means the person answering hello@vylan.app is one of the people building it. If something here is wrong, or missing, or you just want to argue about how document collection should work, that address reaches us.",
     ),
     note(
-      "Want to talk properly? ",
-      link("/contact", "Contact"),
-      " has the details, or book a demo from the ",
+      "Want to talk properly? Our email and both phone numbers are in the footer of every page, or book a demo from the ",
       link("/", "front page"),
       ".",
     ),

@@ -71,7 +71,6 @@ export default async function Home({
     navHowItWorks: t("nav_how_it_works"),
     navBookDemo: t("nav_book_demo"),
     navLogin: t("nav_login"),
-    navContact: t("nav_contact"),
     navHelp: t("nav_help"),
     follow: t("follow"),
   };
@@ -99,8 +98,8 @@ export default async function Home({
         </Link>
       </section>
 
-      {/* FOOTER (Contact now lives on its own /contact page; the footer keeps
-          the details in a small faint line) */}
+      {/* FOOTER — carries the contact details (email, both phone lines,
+          location) on every page; there is no separate contact page. */}
       <VylanFooter />
     </main>
   );

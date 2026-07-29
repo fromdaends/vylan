@@ -43,7 +43,6 @@ export async function LegalDoc({
     navHowItWorks: tv("nav_how_it_works"),
     navBookDemo: tv("nav_book_demo"),
     navLogin: tv("nav_login"),
-    navContact: tv("nav_contact"),
     navHelp: tv("nav_help"),
     follow: tv("follow"),
   };
