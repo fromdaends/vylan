@@ -149,6 +149,7 @@ export async function GET(request: Request) {
         refreshTokenExpiresAt: tokens.refreshTokenExpiresAt,
         tenantName: org.name ?? conn.tenantName,
         countryCode: org.countryCode,
+        baseCurrency: org.baseCurrency,
         isDemo: org.isDemo,
         connectedBy: auth.user.id,
       });

@@ -154,6 +154,9 @@ export type UpsertXeroConnectionInput = {
   refreshTokenExpiresAt: string | null;
   tenantName: string | null;
   countryCode: string | null;
+  // The org's books currency, so posting can tell when a document is in a
+  // DIFFERENT one and say so rather than silently booking the wrong currency.
+  baseCurrency: string | null;
   isDemo: boolean;
   connectedBy: string;
 };
@@ -191,6 +194,7 @@ export async function upsertClientXeroConnection(
       refresh_token_fingerprint: tokenFingerprint(input.refreshToken),
       tenant_name: input.tenantName,
       country_code: input.countryCode,
+      base_currency: input.baseCurrency,
       is_demo: input.isDemo,
       connected_by: input.connectedBy,
       connected_at: new Date().toISOString(),
@@ -509,4 +513,29 @@ export async function setClientXeroPublishDefault(
   if (error && !isMissingXeroSchema(error)) {
     console.error("[xero] setClientXeroPublishDefault failed:", error);
   }
+}
+
+// The books currency of this client's connected organisation, or null when we
+// have not recorded one (a connection made before 1030). Null means "we do not
+// know" and the posting layer then sends no CurrencyCode — today's behaviour —
+// rather than guessing at one.
+export async function readClientXeroBaseCurrency(
+  firmId: string,
+  clientId: string,
+): Promise<string | null> {
+  const sb = getServiceRoleSupabase();
+  const { data, error } = await sb
+    .from("xero_connections")
+    .select("base_currency")
+    .eq("firm_id", firmId)
+    .eq("client_id", clientId)
+    .maybeSingle();
+  if (error) {
+    if (!isMissingXeroSchema(error)) {
+      console.error("[xero] readClientXeroBaseCurrency failed:", error);
+    }
+    return null;
+  }
+  const v = data?.base_currency;
+  return typeof v === "string" && v.trim() ? v.trim().toUpperCase() : null;
 }

@@ -24,6 +24,7 @@ import {
   isClientXeroConnected,
   isClientXeroDemoOrg,
   readClientXeroPublishDefault,
+  readClientXeroBaseCurrency,
 } from "@/lib/db/xero";
 import { readXeroPostingContext } from "@/lib/db/xero-cache";
 import { getXeroReadContext, type XeroReadContext } from "@/lib/xero/connection";
@@ -44,6 +45,7 @@ import {
   buildXeroReceivePayload,
   xeroPostingReference,
   xeroUndoStatusFor,
+  xeroCurrencyCodeFor,
   resolveXeroTaxApplication,
   xeroTaxDiscrepancyNote,
   type XeroExpenseLine,
@@ -258,6 +260,14 @@ export async function postApprovedXeroDraft(
   // this client's remembered default, else AUTHORISED (unchanged behaviour).
   // effectivePublishStatus forces AUTHORISED for a paid expense — a SPEND bank
   // transaction has no draft or approval state in Xero.
+  // A document in a DIFFERENT currency from the client's books must say so, or
+  // Xero records the figure against its own currency and the number looks right
+  // while being wrong.
+  const currencyCode = xeroCurrencyCodeFor(
+    s.currency,
+    await readClientXeroBaseCurrency(draft.firmId, draft.clientId),
+  );
+
   const publishStatus = effectivePublishStatus(
     s,
     draft.resolved,
@@ -317,6 +327,7 @@ export async function postApprovedXeroDraft(
       date: effDate,
       description: lineDescription,
       reference,
+      currencyCode,
       tax,
     };
     if (isSalesReceipt) {
@@ -380,6 +391,7 @@ export async function postApprovedXeroDraft(
       date: effDate,
       description: lineDescription,
       reference,
+      currencyCode,
       tax,
       lines: expenseLines,
     });
@@ -416,6 +428,7 @@ export async function postApprovedXeroDraft(
       status: publishStatus,
       description: lineDescription,
       reference,
+      currencyCode,
       tax,
       lines: expenseLines,
     });
