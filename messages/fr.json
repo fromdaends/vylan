@@ -3133,7 +3133,9 @@
     "xero_status_hint": "Comment cette facture arrive dans Xero. « En attente d’approbation » convient aux cabinets qui utilisent un flux d’approbation.",
     "xero_status_na_spend": "Les documents payés sont toujours publiés comme transaction bancaire complétée — Xero n'a pas d'état brouillon ou d'approbation pour ceux-ci.",
     "field_deposited_to": "Déposé dans",
-    "choose_deposited_to": "Choisissez le compte où le dépôt a été fait"
+    "choose_deposited_to": "Choisissez le compte où le dépôt a été fait",
+    "post_body_income_xero": "Créer ceci comme facture de vente dans Xero? Vous pourrez l'annuler ensuite.",
+    "post_body_salesreceipt_xero": "Créer ceci comme paiement reçu dans Xero? Vous pourrez l'annuler ensuite."
   },
   "ClientMessages": {
     "thread_title": "Messages avec votre client",
