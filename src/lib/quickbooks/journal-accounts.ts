@@ -104,15 +104,18 @@ export function isSuggestedForRole(
     case "adjustments":
       return expense;
     case "bank":
-      // Xero can't use the real bank account here, so the sensible targets are
-      // a clearing/suspense account — by name, or by the current
-      // asset/liability types those normally carry.
+      // Xero can't use the real bank account here, so the target is a
+      // clearing/suspense account — matched BY NAME only.
+      //
+      // Suggesting every CURRENT / CURRLIAB account (the first attempt at
+      // this) was actively harmful: in Xero's own default chart that puts
+      // Accounts Receivable and Accounts Payable at the top of the list, and
+      // those are precisely the other two balances Xero refuses in a manual
+      // journal. The suggestion would have walked the accountant into the
+      // next rejection. When a firm has no clearing account, suggesting
+      // NOTHING is correct — they pick from the full list knowing they chose.
       if (provider === "xero") {
-        return (
-          /clear|suspen|undeposit|holding/.test(name) ||
-          t === "current" ||
-          t === "currliab"
-        );
+        return /clear|suspen|undeposit|holding/.test(name);
       }
       return t === "bank" || t === "credit card" || t.includes("current asset");
   }
