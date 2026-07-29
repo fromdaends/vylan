@@ -68,6 +68,7 @@ import {
   getPayoutJournalsForEngagement,
   type PayoutJournalDraft,
 } from "@/lib/db/payout-journal";
+import type { TypedAccount } from "@/lib/quickbooks/journal-accounts";
 import { QuickbooksDraftsSummary } from "@/components/engagements/quickbooks-drafts-summary";
 import {
   getSuggestionsForEngagement,
@@ -521,6 +522,12 @@ export default async function EngagementDetailPage({
       .filter((x) => x.active && isPayFrom(x.accountType))
       .map(toOpt),
   };
+  // The same accounts, keeping the TYPE. The payout journal needs it: Xero
+  // refuses a journal entry that touches a bank balance, and the type is the
+  // only way to keep those out of the picker instead of failing at post time.
+  const journalAccounts: TypedAccount[] = (bkLists?.accounts ?? [])
+    .filter((x) => x.active)
+    .map((x) => ({ id: x.id, name: x.name, type: x.accountType }));
 
   // Prompt B: signature items (the accountant supplies a document, the client
   // returns a signed copy) render in their own "Signatures" group, separate
@@ -1157,6 +1164,7 @@ export default async function EngagementDetailPage({
                     suggestionsByFile={suggestionsByFile}
                     payoutJournals={payoutJournals}
                     qboOptions={qboOptions}
+                    journalAccounts={journalAccounts}
                     draftProvider={bookkeepingProvider ?? "quickbooks"}
                     reviewerNameById={reviewerNameById}
                     engagementId={id}
@@ -1240,6 +1248,7 @@ async function ItemRow({
   suggestionsByFile,
   payoutJournals,
   qboOptions,
+  journalAccounts,
   draftProvider,
   reviewerNameById,
   engagementId,
@@ -1270,6 +1279,8 @@ async function ItemRow({
   payoutJournals: Map<string, PayoutJournalDraft>;
   // The cached bookkeeping lists the draft cells pick from (QuickBooks or Xero).
   qboOptions: DraftCardOptions;
+  // Same accounts with their type, for the payout journal's pickers.
+  journalAccounts: TypedAccount[];
   // Which product this client is connected to — drives the card's branding +
   // posting gate (posting is QuickBooks-only in Phase 3).
   draftProvider: "quickbooks" | "xero";
@@ -1483,7 +1494,7 @@ async function ItemRow({
                               figures={payoutCard.figures}
                               mapping={journal.mapping}
                               status={journal.status}
-                              accounts={qboOptions.accounts}
+                              accounts={journalAccounts}
                               locale={locale}
                               postedLink={journal.postedLink}
                               postedRef={journal.postedRef}

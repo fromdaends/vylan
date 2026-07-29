@@ -18,7 +18,8 @@ import {
   recordPayoutJournalPostError,
   recordPayoutJournalPosted,
 } from "@/lib/db/payout-journal";
-import { readXeroAccountCodes } from "@/lib/db/xero-cache";
+import { readXeroAccountMeta } from "@/lib/db/xero-cache";
+import { blockedJournalAccounts } from "./journal-accounts";
 import { getXeroReadContext } from "@/lib/xero/connection";
 import { xeroCreateManualJournal } from "@/lib/xero/write";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
@@ -44,6 +45,9 @@ export type PostPayoutJournalOutcome =
   | { kind: "not_buildable"; reason: string }
   // Xero only: an account has no code cached, so its line can't be addressed.
   | { kind: "missing_account_codes"; accountNames: string[] }
+  // Xero only: a mapped account is a bank/credit-card account, which Xero
+  // refuses in a manual journal. The accountant remaps to a clearing account.
+  | { kind: "blocked_accounts"; accountNames: string[] }
   // Xero only: the account cache is EMPTY, which after a (re)connect means the
   // background sync hasn't finished. Transient — retrying shortly works.
   | { kind: "accounts_syncing" }
@@ -86,7 +90,9 @@ export async function postPayoutJournal(input: {
       const ctx = await getXeroReadContext(draft.firmId, draft.clientId);
       if (!ctx) return { kind: "not_connected" };
       // Manual journals address accounts by CODE, not id.
-      const codeByAccountId = await readXeroAccountCodes(draft.clientId);
+      const { codeById: codeByAccountId, typeById } = await readXeroAccountMeta(
+        draft.clientId,
+      );
       // An EMPTY map is a sync race, not a data problem: reconnecting Xero
       // clears and refills this cache in the background, and a post attempted
       // in that window would otherwise report every account as "no code",
@@ -99,6 +105,23 @@ export async function postPayoutJournal(input: {
             "The chart of accounts was still syncing from Xero. Try posting again in a moment.",
         });
         return { kind: "accounts_syncing" };
+      }
+      // Xero will not let a manual journal move a bank balance — it rejects
+      // the whole entry with a validation error. Catch it here, against the
+      // accounts the entry ACTUALLY uses (folded roles included), so the
+      // accountant gets the fix rather than Xero's rejection.
+      const blocked = blockedJournalAccounts(
+        "xero",
+        built.journal.lines.map((l) => l.account),
+        typeById,
+      );
+      if (blocked.length > 0) {
+        await recordPayoutJournalPostError({
+          firmId: draft.firmId,
+          uploadedFileId: input.uploadedFileId,
+          error: `Xero doesn't allow a journal entry to touch a bank account (${blocked.join(", ")}). Reopen the entry and choose a clearing account instead.`,
+        });
+        return { kind: "blocked_accounts", accountNames: blocked };
       }
       const payload = buildXeroJournalPayload({
         journal: built.journal,
