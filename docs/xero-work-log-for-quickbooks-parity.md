@@ -168,15 +168,75 @@ exist. `quickbooks_connections_realm_idx` should stay a plain unique index.
 
 ---
 
+---
+
+## 8. Tracking categories — DONE on Xero (1020)
+
+A second label on a transaction: the account says what KIND of spend, tracking
+says which PART of the business. Fetch, cache, picker, and posted on every line
+for all four transaction types. IDs not names on the wire (a rename in Xero
+between sync and post fails opaquely). Renders nothing when the organisation has
+no categories, which is most of them; never blocks approving or posting.
+
+**QuickBooks equivalent: NEEDED, and a bigger job than it looks.** QuickBooks
+splits the same idea across **Classes** and **Locations**, which are two
+separate API entities with their own preferences (`ClassTrackingPerTxn`,
+`TrackingByCustomer`) and are enabled independently per company. Xero's flat
+"at most two categories" model does not map cleanly. Plan it as its own piece
+rather than porting `xero_tracking_options`.
+
+---
+
+## 9. Due date — SHARED FIX, verify QuickBooks uses it
+
+Found by posting a real Net 30 invoice and reading it back: it landed due on its
+ISSUE date, i.e. immediately overdue. We never extracted a due date at all.
+
+The extraction change is **provider-neutral and already live for both**. What is
+NOT done: the QuickBooks builders were not checked for whether they pass
+`DueDate` through. Verify before assuming QuickBooks benefits.
+
+---
+
+## 10. Currency — SHARED PROBLEM, QuickBooks NOT fixed (1030)
+
+A CAD invoice posted into a USD organisation was recorded as 6,720 USD. Xero
+books in the ORGANISATION's currency unless told otherwise.
+
+Xero now records each organisation's base currency and sends a `CurrencyCode`
+when the document differs. **QuickBooks has the identical hazard and no fix**:
+`quickbooks_connections` has no base-currency column, and the QBO builders never
+send `CurrencyRef`. QBO also requires multicurrency to be ENABLED on the company
+before it will accept one, so the QuickBooks version needs that preference read
+first — not a copy of the Xero column.
+
+---
+
+## 11. Cache invalidation — FIXED FOR THE WHOLE APP
+
+`localePrefix: "as-needed"` means English pages are served WITHOUT `/en`, but 34
+call sites across 18 files revalidated `/en/...`. Silent miss for every English
+user, app-wide. New `revalidateAllLocales()` in `src/lib/revalidate.ts`; all call
+sites converted. Nothing QuickBooks-specific to do — just do not reintroduce the
+`for (const loc of LOCALES) revalidatePath(...)` pattern.
+
+---
+
+## 12. The accuracy eval — extend it, do not rebuild it
+
+`npm run eval:bookkeeping` scores the pipeline against 8 documents with known
+answers. It found two real bugs on its first run (RST missing from the tax
+vocabulary; a two-product invoice confidently picking one).
+
+When QuickBooks work starts, add QBO cases to the SAME harness rather than
+writing a second one. The reference lists in `evals/bookkeeping/cases.ts` are
+already a fixed stand-in for a connected organisation.
+
+---
+
 ## Still open on Xero (finish before starting QuickBooks)
 
-1. **Tracking categories** — the last Hubdoc gap. Two new cache tables, fetch +
-   sync + read adapter + UI picker, `LineItem.Tracking` using GUIDs not names
-   (names are user-editable in Xero and a rename between sync and post fails
-   opaquely). Max 2 active categories per org, applies to all four transaction
-   types. QuickBooks' equivalent is Classes and Locations — different API,
-   different limits, so plan it separately.
-2. **The demo-only posting gate** in `src/lib/xero/post.ts` still blocks real
+1. **The demo-only posting gate** in `src/lib/xero/post.ts` still blocks real
    client books. Needs a deliberate go-live decision (register-match dedupe is
    the main thing still missing vs the QuickBooks path).
 
