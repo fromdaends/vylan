@@ -239,7 +239,7 @@ export function PostDraftControls({
           <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success">
             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
             {matchedExisting
-              ? t("matched_label")
+              ? t(pk("matched_label"))
               : postedByName
                 ? t(pk("posted_by"), { name: postedByName })
                 : t(pk("posted_label"))}
@@ -423,7 +423,7 @@ export function PostDraftControls({
               {!isXero && (
                 <p className="-mt-1 flex items-start gap-1.5 text-[13px] leading-snug text-muted-foreground">
                   <Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span>{t("post_match_hint")}</span>
+                  <span>{t(pk("post_match_hint"))}</span>
                 </p>
               )}
               {failed && (
@@ -474,11 +474,11 @@ export function PostDraftControls({
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>{t("match_title")}</DialogTitle>
+                <DialogTitle>{t(pk("match_title"))}</DialogTitle>
                 <DialogDescription>
                   {matchCandidates.length === 0
-                    ? t("match_gone")
-                    : t("match_body")}
+                    ? t(pk("match_gone"))
+                    : t(pk("match_body"))}
                 </DialogDescription>
               </DialogHeader>
               {matchCandidates.length > 0 && (

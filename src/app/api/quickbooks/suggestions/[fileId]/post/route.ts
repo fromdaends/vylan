@@ -62,8 +62,8 @@ export async function POST(
   }
 
   // Dispatch by provider: a Xero-connected client's draft posts to Xero, all
-  // others to QuickBooks. Both return the same PostOutcome, so the mapping below
-  // is provider-neutral. (Xero ignores the QuickBooks-only `match` override.)
+  // others to QuickBooks. Both return the same PostOutcome and both honour the
+  // `match` override, so the mapping below is provider-neutral.
   const r = await postApprovedDraftForFile(fileId, auth.user.id, { match });
 
   // Revalidate when QuickBooks state may have changed (posted) or an error was
@@ -96,8 +96,8 @@ export async function POST(
       return NextResponse.json({ ok: true, postedQboId: r.postedQboId });
     case "matched_existing":
       // Nothing was created: the receipt was attached to a transaction that was
-      // ALREADY in QuickBooks. Same audit action with a matched flag so the
-      // activity feed tells the two apart.
+      // ALREADY in the client's books (QuickBooks or Xero). Same audit action
+      // with a matched flag so the activity feed tells the two apart.
       try {
         if (r.firmId) {
           await logUserActivity(r.firmId, r.engagementId, "post_qbo_draft", {

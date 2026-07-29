@@ -58,7 +58,8 @@ export async function POST(
   }
 
   // Xero-connected client → undo in Xero (delete the BankTransaction / void the
-  // ACCPAY invoice), then fall through the SAME response contract the client
+  // ACCPAY invoice, or just unlink a MATCHED transaction that was already in the
+  // client's books), then fall through the SAME response contract the client
   // expects. QuickBooks drafts continue below unchanged.
   if (
     draft.clientId &&
@@ -108,6 +109,9 @@ export async function POST(
           await logUserActivity(r.firmId, r.engagementId, "void_qbo_draft", {
             file_id: fileId,
             qbo_id: r.postedXeroId,
+            // Distinguish "removed Vylan's transaction" from "unlinked a
+            // matched one (nothing changed in Xero)" in the activity feed.
+            unlinked_match: r.unlinkedMatch,
           });
         } catch (err) {
           console.error("[xero void route] audit log failed (void applied):", err);
