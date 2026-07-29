@@ -359,6 +359,30 @@ describe("effectivePublishStatus (Xero 'Publish as')", () => {
     ).toBe("AUTHORISED");
   });
 
+  // A PAID SALE is a RECEIVE bank transaction — same rule as a paid expense.
+  it("forces AUTHORISED on a paid SALE too", () => {
+    const paidSale = {
+      ...sugg({}),
+      direction: "income" as const,
+      paid: true,
+    } as never;
+    expect(
+      effectivePublishStatus(paidSale, { publishStatus: "DRAFT" } as never, "DRAFT"),
+    ).toBe("AUTHORISED");
+  });
+
+  // An UNPAID sale is an ACCREC invoice and DOES have the three states.
+  it("honours the pick on an unpaid sale", () => {
+    const unpaidSale = {
+      ...sugg({}),
+      direction: "income" as const,
+      paid: false,
+    } as never;
+    expect(
+      effectivePublishStatus(unpaidSale, { publishStatus: "SUBMITTED" } as never, null),
+    ).toBe("SUBMITTED");
+  });
+
   it("respects the paid-toggle override when deciding that", () => {
     // AI said unpaid, accountant marked it paid → bank transaction → AUTHORISED.
     expect(

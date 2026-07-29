@@ -506,6 +506,24 @@ export async function QuickbooksDraftCard({
               )}
             />
           )}
+          {/* XERO "Publish as" on an UNPAID sale too. An ACCREC invoice has the
+              same Draft / Awaiting approval / Awaiting payment states as a
+              bill, and the posting layer already sends the chosen status — only
+              this card was gating it to expenses. A PAID sale is a bank
+              transaction and has no such states, same as a paid expense. */}
+          {isXero &&
+            (incomeMode === "salesreceipt" ? (
+              <p className="self-center text-[11px] leading-snug text-muted-foreground">
+                {t("xero_status_na_spend")}
+              </p>
+            ) : (
+              <XeroPublishStatusField
+                key={`publish-${publishStatus}`}
+                fileId={fileId}
+                value={publishStatus}
+                disabled={!isDraft}
+              />
+            ))}
         </div>
       )}
 

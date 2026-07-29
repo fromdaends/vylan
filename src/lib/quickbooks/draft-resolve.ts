@@ -210,8 +210,15 @@ export function effectivePublishStatus(
   resolved: ResolvedEntry | null,
   clientDefault: "DRAFT" | "SUBMITTED" | "AUTHORISED" | null | undefined,
 ): "DRAFT" | "SUBMITTED" | "AUTHORISED" {
-  if (effectiveExpenseMode(suggestion, resolved) === "purchase") {
-    return "AUTHORISED";
-  }
+  // A PAID document of either direction posts as a BankTransaction (SPEND out /
+  // RECEIVE in), and Xero's BankTransaction.Status accepts only AUTHORISED or
+  // DELETED — there is no draft or approval state for a cash movement. Forced
+  // here rather than only hidden in the UI, so a stale override left on a draft
+  // whose paid toggle was flipped afterwards can never reach Xero.
+  const isPaid =
+    suggestion.direction === "income"
+      ? effectiveIncomeMode(suggestion, resolved) === "salesreceipt"
+      : effectiveExpenseMode(suggestion, resolved) === "purchase";
+  if (isPaid) return "AUTHORISED";
   return resolved?.publishStatus ?? clientDefault ?? "AUTHORISED";
 }
