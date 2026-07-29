@@ -57,6 +57,7 @@ import {
 import {
   effectiveMapping,
   effectiveDate,
+  isPostableDate,
   effectiveExpenseMode,
   effectiveIncomeMode,
   effectivePublishStatus,
@@ -182,10 +183,20 @@ export async function postApprovedXeroDraft(
 
   // Human-facing detail on the posted entry: a "vendor — items" line description
   // and the document's own number as the Xero Reference (traceable to the paper).
-  const lineDescription = postingLineDescription(
-    eff.party?.name ?? s.partySource ?? null,
-    s.lines,
-  );
+  // On an EXPENSE the description names the supplier and what was bought. On a
+  // SALES INVOICE that would print the CUSTOMER'S OWN NAME as the description of
+  // the work they are being billed for — which is what landed in Xero: a line
+  // reading "Eastside Club" against $6,000 of development. suggestLines is
+  // expense-split machinery and returns nothing for income, so the party name
+  // was all that remained. The product being sold is the right description.
+  const lineDescription =
+    s.direction === "income"
+      ? (eff.item?.name ??
+        postingLineDescription(eff.party?.name ?? s.partySource ?? null, s.lines))
+      : postingLineDescription(
+          eff.party?.name ?? s.partySource ?? null,
+          s.lines,
+        );
   // Reference is resolved per transaction KIND further down (once isPurchase is
   // known) — a bill with no document number gets a traceable VYL- fallback, a
   // bank transaction deliberately does not. See xeroPostingReference.
@@ -299,6 +310,7 @@ export async function postApprovedXeroDraft(
     }
     const incomeCommon = {
       contactId: eff.party.id,
+      dueDate: isPostableDate(s.dueDate) ? s.dueDate : null,
       itemCode,
       accountCode: incomeAccountCode,
       amount: s.amount,
@@ -398,6 +410,9 @@ export async function postApprovedXeroDraft(
       accountCode,
       amount: s.amount,
       date: effDate,
+      // Read off the document ("Net 30", an explicit due date). Absent, the
+      // builder falls back to the transaction date as before.
+      dueDate: isPostableDate(s.dueDate) ? s.dueDate : null,
       status: publishStatus,
       description: lineDescription,
       reference,
