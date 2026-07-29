@@ -152,6 +152,11 @@ export type TransactionSuggestion = {
   // mis-read can never post a wrong total. Older stored suggestions lack it.
   lines?: LineSuggestion[];
   date: string | null;
+  // When payment is DUE. Xero requires a due date on an authorised bill or
+  // invoice; without this every one landed due on its ISSUE date — immediately
+  // overdue, which distorts aged receivables and triggers Xero's own payment
+  // reminders. Optional so older stored suggestions deserialize.
+  dueDate?: string | null;
   // The document's own number (receipt/invoice #), posted as the transaction's
   // Reference / DocNumber so the books trace back to the paper. Optional so older
   // stored suggestions (pre-reference) deserialize cleanly.
@@ -1109,6 +1114,7 @@ export function buildTransactionSuggestion(
     paymentAccount,
     lines,
     date: extraction.document_date,
+    dueDate: extraction.due_date ?? null,
     reference: extraction.document_number ?? null,
     currency: extraction.currency,
     partySource: partyQuery,

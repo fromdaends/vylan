@@ -69,6 +69,27 @@ export type XeroLineAmountTypes = "Exclusive" | "Inclusive" | "NoTax";
 // adds the tax onto.
 export type XeroTaxApplication = { taxType: string; netAmount: number };
 
+// Should the posted transaction carry an explicit CurrencyCode?
+//
+// Xero books a transaction in the ORGANISATION's currency unless told
+// otherwise. A CAD invoice posted into a USD organisation without this became
+// 6,720 USD — the right number against the wrong currency, which no later
+// reconciliation catches because the figure looks correct.
+//
+// Sent ONLY when the two genuinely differ. Sending it needlessly means Xero
+// rejects the post unless that currency is enabled on the organisation, so an
+// unknown base currency (a connection made before we recorded it) deliberately
+// sends nothing and keeps today's behaviour rather than guessing.
+export function xeroCurrencyCodeFor(
+  documentCurrency: string | null | undefined,
+  organisationCurrency: string | null | undefined,
+): string | null {
+  const doc = documentCurrency?.trim().toUpperCase();
+  const org = organisationCurrency?.trim().toUpperCase();
+  if (!doc || !org) return null;
+  return doc === org ? null : doc;
+}
+
 // Round a dollar amount to cents.
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
@@ -253,6 +274,8 @@ export type XeroBillInput = {
   lines?: XeroExpenseLine[]; // SPLIT (≥1); each carries its pre-tax amount + code
   tracking?: readonly XeroTrackingPair[];
   status?: XeroInvoiceStatus;
+  // Set only when the document's currency differs from the organisation's.
+  currencyCode?: string | null;
 };
 
 export function buildXeroBillPayload(
@@ -285,6 +308,7 @@ export function buildXeroBillPayload(
   if (xeroStatusNeedsDueDate(status)) body.DueDate = input.dueDate || input.date;
   else if (input.dueDate) body.DueDate = input.dueDate;
   if (input.reference) body.Reference = input.reference;
+  if (input.currencyCode) body.CurrencyCode = input.currencyCode;
   return body;
 }
 
@@ -300,6 +324,8 @@ export type XeroSpendInput = {
   tax?: XeroTaxApplication | null;
   lines?: XeroExpenseLine[];
   tracking?: readonly XeroTrackingPair[];
+  // Set only when the document's currency differs from the organisation's.
+  currencyCode?: string | null;
 };
 
 export function buildXeroSpendPayload(
@@ -326,6 +352,7 @@ export function buildXeroSpendPayload(
     Date: input.date,
   };
   if (input.reference) body.Reference = input.reference;
+  if (input.currencyCode) body.CurrencyCode = input.currencyCode;
   return body;
 }
 
@@ -342,6 +369,8 @@ export type XeroIncomeInput = {
   tax?: XeroTaxApplication | null;
   tracking?: readonly XeroTrackingPair[];
   status?: XeroInvoiceStatus;
+  // Set only when the document's currency differs from the organisation's.
+  currencyCode?: string | null;
 };
 
 export function buildXeroInvoicePayload(
@@ -369,6 +398,7 @@ export function buildXeroInvoicePayload(
   if (xeroStatusNeedsDueDate(status)) body.DueDate = input.dueDate || input.date;
   else if (input.dueDate) body.DueDate = input.dueDate;
   if (input.reference) body.Reference = input.reference;
+  if (input.currencyCode) body.CurrencyCode = input.currencyCode;
   return body;
 }
 
@@ -384,6 +414,8 @@ export type XeroReceiveInput = {
   description?: string | null;
   tax?: XeroTaxApplication | null;
   tracking?: readonly XeroTrackingPair[];
+  // Set only when the document's currency differs from the organisation's.
+  currencyCode?: string | null;
 };
 
 export function buildXeroReceivePayload(
@@ -408,6 +440,7 @@ export function buildXeroReceivePayload(
     Date: input.date,
   };
   if (input.reference) body.Reference = input.reference;
+  if (input.currencyCode) body.CurrencyCode = input.currencyCode;
   return body;
 }
 

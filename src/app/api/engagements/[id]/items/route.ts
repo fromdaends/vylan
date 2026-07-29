@@ -10,7 +10,6 @@
 // (the row-level policy requires the engagement to belong to current_firm_id()).
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { addItemToEngagement, type NewItemInput } from "@/lib/db/request-items";
 import { logUserActivity } from "@/lib/db/activity";
@@ -18,10 +17,10 @@ import {
   addItemSchema,
   pickAddItemFields,
 } from "@/lib/engagements/add-item-fields";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 
-const LOCALES = ["en", "fr"] as const;
 
 export async function POST(
   request: NextRequest,
@@ -98,10 +97,9 @@ export async function POST(
         label,
       });
     }
-    for (const loc of LOCALES) {
-      revalidatePath(`/${loc}/engagements/${id}`);
-      revalidatePath(`/${loc}/dashboard`);
-    }
+    revalidateAllLocales(`/engagements/${id}`);
+    revalidateAllLocales(`/dashboard`);
+
   } catch (e) {
     console.error("[add_item route] post-insert step failed (item WAS added):", e);
   }

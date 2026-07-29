@@ -674,10 +674,12 @@ function MemberRow({
 
       <td className="py-3 pl-3">
         <div className="flex items-center justify-end gap-1">
-          {/* Jump to this person's engagements (the "view a teammate's work"
-              lens). Available for every active member, including yourself. */}
+          {/* Go to the person, not to a filtered copy of your own list. This
+              used to point at /engagements?assignee=<id>, which showed the same
+              rows their profile already does — under a page titled
+              "Engagements" that never said whose work it was. */}
           <Link
-            href={`/engagements?assignee=${member.id}`}
+            href={`/settings/team/${member.id}`}
             title={t("view_engagements")}
             aria-label={t("view_engagements")}
             className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

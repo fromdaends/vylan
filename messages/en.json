@@ -3133,7 +3133,9 @@
     "xero_status_hint": "How this bill lands in Xero. “Awaiting approval” suits firms using an approval workflow.",
     "xero_status_na_spend": "Paid documents always post as a completed bank transaction — Xero has no draft or approval state for those.",
     "field_deposited_to": "Deposited to",
-    "choose_deposited_to": "Choose the account it was deposited to"
+    "choose_deposited_to": "Choose the account it was deposited to",
+    "post_body_income_xero": "Create this as a sales invoice in Xero? You can undo it afterward.",
+    "post_body_salesreceipt_xero": "Create this as a received payment in Xero? You can undo it afterward."
   },
   "ClientMessages": {
     "thread_title": "Messages with your client",

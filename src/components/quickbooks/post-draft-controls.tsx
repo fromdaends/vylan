@@ -350,8 +350,12 @@ export function PostDraftControls({
   const confirmBody =
     direction === "income"
       ? incomeMode === "salesreceipt"
-        ? t("post_body_salesreceipt")
-        : t("post_body_income")
+        // pk() on BOTH income branches — they were the only ones missing it, so
+        // posting a sales invoice to Xero asked "Create this as an Invoice in
+        // QuickBooks?". Income posting to Xero was added after this copy was
+        // written and the two branches were never revisited.
+        ? t(pk("post_body_salesreceipt"))
+        : t(pk("post_body_income"))
       : expenseMode === "purchase"
         ? t(pk("post_body_purchase"))
         : t(pk("post_body"));

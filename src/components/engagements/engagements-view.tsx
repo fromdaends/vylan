@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { Search, Users } from "lucide-react";
 // useSearchParams is locale-agnostic, so it comes from next/navigation — but the
@@ -16,7 +16,6 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -61,7 +60,6 @@ export function EngagementsView({
   currentUserId,
   badges,
   teamEnabled,
-  members,
 }: {
   view: EngagementView;
   rows: WorklistRow[];
@@ -70,9 +68,6 @@ export function EngagementsView({
   currentUserId: string | null;
   badges: { ready: number; deleted: number };
   teamEnabled: boolean;
-  // Active firm members, for the "view a teammate's work" scope options. Empty
-  // for a solo firm (the scope picker is hidden then anyway).
-  members: { id: string; name: string }[];
 }) {
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
@@ -125,60 +120,21 @@ export function EngagementsView({
       [DIR_PARAM]: next,
     });
   };
-  // Scope filter — All / Mine / a specific teammate ("view Marie's work").
-  // "Mine" and "All" are the personal default, remembered per user in
-  // localStorage. A specific teammate is a TRANSIENT lens: it lives in the URL
-  // (?assignee=<id>) so it's shareable and survives opening an engagement and
-  // coming back (mirroring the stage filter) — but it never becomes the sticky
-  // default. selectAssignedTo already accepts any user id, so the filter itself
-  // generalizes for free.
-  const ASSIGNEE_PARAM = "assignee";
-  const memberIds = useMemo(() => new Set(members.map((m) => m.id)), [members]);
-  // Teammates other than the viewer (the viewer is covered by "Mine").
-  const otherMembers = useMemo(
-    () => members.filter((m) => m.id !== currentUserId),
-    [members, currentUserId],
-  );
-
-  // Resolve a valid scope from ?assignee=, or null if absent/unknown. "all" and
-  // the current user map to the named values; any other known member id is that
-  // teammate's lens. A stale id (member left) is ignored so the view never
-  // filters to nobody.
-  const urlAssignee = searchParams?.get(ASSIGNEE_PARAM) ?? null;
-  const scopeFromUrl: string | null =
-    urlAssignee == null
-      ? null
-      : urlAssignee === "all"
-        ? "all"
-        : urlAssignee === currentUserId
-          ? "mine"
-          : memberIds.has(urlAssignee)
-            ? urlAssignee
-            : null;
-
-  // Default to YOUR OWN work in team mode — you see just your engagements until
-  // you switch to All firm or a teammate's lens (founder's call: personal-first,
-  // even if that means an empty list you can widen with one click). A ?assignee=
-  // deep-link or a remembered Mine/All choice still wins (below). Non-team firms
-  // stay on "all" (there's only you, and the Mine/All filter isn't shown).
-  const [scope, setScope] = useState<string>(
-    scopeFromUrl ?? (teamEnabled ? "mine" : "all"),
-  );
-  // Keep the scope in sync with a ?assignee= deep-link (e.g. "view Marie's work"
-  // from the team page). No localStorage: engagements default to "mine" on every
-  // load — same as the Clients list — and switching to All firm / a teammate is a
-  // per-visit choice that doesn't stick, so you always land on your own work.
-  useEffect(() => {
-    if (!currentUserId || !teamEnabled || !scopeFromUrl) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setScope(scopeFromUrl);
-  }, [currentUserId, teamEnabled, scopeFromUrl]);
-  const chooseScope = (s: string) => {
-    setScope(s);
-    // Reflect a teammate lens in the URL; clear it for Mine/All so the URL stays
-    // clean and a reload returns to the "mine" default.
-    setParams({ [ASSIGNEE_PARAM]: s === "mine" || s === "all" ? null : s });
-  };
+  // Scope filter — All firm / Mine, and deliberately nothing else.
+  //
+  // This used to offer every teammate as a third kind of option, reachable by
+  // ?assignee=<id> from the team page. It was a filter doing navigation's job:
+  // the page still said "Active engagements", nothing on it named whose work you
+  // were looking at, and the empty state read "No active engagements. Create one
+  // to get started." — telling an owner with 15 live jobs that they had none.
+  // The lens also died on any lifecycle tab (separate routes, no param), so
+  // clicking "Completed" from a teammate's lens silently showed you your own.
+  // A teammate's work is a question about the teammate, answered on their
+  // profile (/settings/team/<id>), which already carried the same rows.
+  //
+  // "All firm" survives because it is not a question about a person.
+  const [scope, setScope] = useState<string>(teamEnabled ? "mine" : "all");
+  const chooseScope = (s: string) => setScope(s);
 
   const q = query.trim().toLowerCase();
 
@@ -302,12 +258,6 @@ export function EngagementsView({
               <SelectContent>
                 <SelectItem value="all">{t("scope_all")}</SelectItem>
                 <SelectItem value="mine">{t("scope_mine")}</SelectItem>
-                {otherMembers.length > 0 && <SelectSeparator />}
-                {otherMembers.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
-                ))}
               </SelectContent>
             </Select>
           )}

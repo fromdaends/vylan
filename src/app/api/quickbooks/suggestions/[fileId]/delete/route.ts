@@ -12,7 +12,6 @@
 // itself runs service-role because authenticated users have no delete grant.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import {
   getDraftForFile,
@@ -26,16 +25,15 @@ import {
   effectiveIncomeMode,
 } from "@/lib/quickbooks/draft-resolve";
 import { logUserActivity } from "@/lib/db/activity";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 
-const LOCALES = ["en", "fr"] as const;
 
 function revalidate(engagementId: string) {
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/quickbooks/drafts`);
-    revalidatePath(`/${loc}/engagements/${engagementId}`);
-  }
+  revalidateAllLocales(`/quickbooks/drafts`);
+  revalidateAllLocales(`/engagements/${engagementId}`);
+
 }
 
 export async function POST(

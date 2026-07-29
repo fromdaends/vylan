@@ -9,7 +9,6 @@
 // second upload, so a double click can't create duplicate QuickBooks attachments.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getDraftForFile } from "@/lib/db/quickbooks-suggestions";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
@@ -21,19 +20,18 @@ import { attachReceiptToPostedDraft } from "@/lib/quickbooks/post";
 import { logUserActivity } from "@/lib/db/activity";
 import { isClientXeroConnected } from "@/lib/db/xero";
 import { attachXeroReceipt } from "@/lib/xero/post";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 // Downloads the receipt from storage and uploads it to QuickBooks; give it the
 // same headroom as the post route (both are storage-heavy).
 export const maxDuration = 60;
 
-const LOCALES = ["en", "fr"] as const;
 
 function revalidate(engagementId: string) {
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/quickbooks/drafts`);
-    revalidatePath(`/${loc}/engagements/${engagementId}`);
-  }
+  revalidateAllLocales(`/quickbooks/drafts`);
+  revalidateAllLocales(`/engagements/${engagementId}`);
+
 }
 
 export async function POST(

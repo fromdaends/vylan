@@ -80,6 +80,11 @@ export type TransactionExtraction = {
   // transaction's Reference in QuickBooks/Xero so the entry traces back to the
   // paper. null when the page shows none.
   document_number: string | null;
+  // When payment is DUE. Posted as the transaction's due date; without it every
+  // bill and invoice lands due on its own issue date, i.e. immediately overdue.
+  // Even Hubdoc reads this. OPTIONAL so stored extractions written before this
+  // field existed still deserialize.
+  due_date?: string | null;
   currency: string | null; // ISO 4217 (e.g. "CAD", "USD"); null when unstated
   subtotal: number | null; // pre-tax amount
   total: number | null; // grand total including tax
@@ -136,6 +141,11 @@ const TRANSACTION_TOOL = {
         type: ["string", "null"],
         description:
           "The transaction date printed on the document (invoice date / purchase date) as an ISO date YYYY-MM-DD when you can, else as printed. Null if none is visible.",
+      },
+      due_date: {
+        type: ["string", "null"],
+        description:
+          "The date payment is DUE, as ISO YYYY-MM-DD. Read it from an explicit due date, or WORK IT OUT from payment terms plus the document date ('Net 30' on a 1 June invoice is 2026-07-01). Null when the document shows neither — a paid receipt has none.",
       },
       document_number: {
         type: ["string", "null"],
@@ -232,6 +242,7 @@ const TRANSACTION_TOOL = {
       "customer_name",
       "document_date",
       "document_number",
+      "due_date",
       "currency",
       "subtotal",
       "total",
@@ -431,6 +442,7 @@ export function parseTransaction(
     customer_name: str(raw.customer_name),
     document_date: str(raw.document_date),
     document_number: str(raw.document_number),
+    due_date: str(raw.due_date),
     currency: normalizeCurrency(raw.currency),
     subtotal: num(raw.subtotal),
     total: num(raw.total),

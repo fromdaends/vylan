@@ -669,7 +669,19 @@ function WorklistRowView({
 
             {teamEnabled && (
               <TableCell className="hidden px-4 py-3 align-top text-sm lg:table-cell">
-                {row.assigneeName ? (
+                {/* A person is a place. This name is where you actually think
+                    "what else is she on?", so it has to be the way there —
+                    until now nobody in the app was clickable, and the only
+                    route to a teammate was through Settings. The row's own
+                    click handler bails on any <a>, so this doesn't fight it. */}
+                {row.assigneeName && row.assigneeUserId ? (
+                  <Link
+                    href={`/settings/team/${row.assigneeUserId}`}
+                    className="text-foreground hover:underline focus-visible:underline focus-visible:outline-none"
+                  >
+                    {row.assigneeName}
+                  </Link>
+                ) : row.assigneeName ? (
                   <span className="text-foreground">{row.assigneeName}</span>
                 ) : (
                   <span className="italic text-muted-foreground">

@@ -352,6 +352,10 @@ export async function fetchXeroConnections(
 export type XeroOrganisationProfile = {
   name: string | null;
   countryCode: string | null;
+  // The currency this organisation keeps its books in. Every amount posted
+  // WITHOUT an explicit CurrencyCode is recorded in this, whatever the document
+  // actually said — which is how a CAD invoice became USD.
+  baseCurrency: string | null;
   isDemo: boolean;
 };
 
@@ -386,6 +390,8 @@ export async function fetchXeroOrganisation(
     name: typeof org.Name === "string" ? org.Name : null,
     countryCode:
       typeof org.CountryCode === "string" ? org.CountryCode : null,
+    baseCurrency:
+      typeof org.BaseCurrency === "string" ? org.BaseCurrency : null,
     isDemo: org.IsDemoCompany === true,
   };
 }

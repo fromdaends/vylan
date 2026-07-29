@@ -10,6 +10,7 @@ import {
   xeroPostingReference,
   xeroStatusNeedsDueDate,
   xeroUndoStatusFor,
+  xeroCurrencyCodeFor,
   buildLineTracking,
 } from "./post-transaction";
 
@@ -377,6 +378,74 @@ describe("xeroUndoStatusFor", () => {
   // Rows posted before the column existed were always AUTHORISED.
   it("voids a legacy row with no recorded status", () => {
     expect(xeroUndoStatusFor(null)).toBe("VOIDED");
+  });
+});
+
+// Found by posting a real Net 30 invoice into Xero and reading it back: it
+// landed with a due date equal to its ISSUE date, i.e. immediately overdue.
+describe("due date from the document", () => {
+  const bill = {
+    contactId: "c1",
+    accountCode: "400",
+    amount: 100,
+    date: "2026-06-01",
+  };
+
+  it("uses the document's due date when it has one", () => {
+    expect(
+      buildXeroBillPayload({ ...bill, dueDate: "2026-07-01" }).DueDate,
+    ).toBe("2026-07-01");
+  });
+
+  // Unchanged fallback: an authorised bill REQUIRES a due date in Xero, and
+  // "due now" is the conservative reading of a document that names none.
+  it("still falls back to the transaction date when the document names none", () => {
+    expect(buildXeroBillPayload(bill).DueDate).toBe("2026-06-01");
+  });
+
+  it("applies to sales invoices too", () => {
+    expect(
+      buildXeroInvoicePayload({
+        contactId: "c1",
+        itemCode: "DEV",
+        accountCode: null,
+        amount: 100,
+        date: "2026-07-18",
+        dueDate: "2026-08-17",
+      }).DueDate,
+    ).toBe("2026-08-17");
+  });
+});
+
+// Found by posting a real CAD invoice into a USD organisation: $6,720 CAD was
+// recorded as $6,720 USD. The number looks right, so no later reconciliation
+// catches it.
+describe("xeroCurrencyCodeFor", () => {
+  it("sends nothing when the document matches the organisation", () => {
+    expect(xeroCurrencyCodeFor("CAD", "CAD")).toBeNull();
+    expect(xeroCurrencyCodeFor("cad", "CAD")).toBeNull();
+  });
+
+  it("sends the document's currency when they differ", () => {
+    expect(xeroCurrencyCodeFor("CAD", "USD")).toBe("CAD");
+  });
+
+  // Sending a currency the organisation has not enabled makes Xero reject the
+  // post, so "we do not know the org currency" must send nothing rather than
+  // guess — that keeps today's behaviour for pre-1030 connections.
+  it("sends nothing when either side is unknown", () => {
+    expect(xeroCurrencyCodeFor("CAD", null)).toBeNull();
+    expect(xeroCurrencyCodeFor(null, "USD")).toBeNull();
+    expect(xeroCurrencyCodeFor(undefined, undefined)).toBeNull();
+    expect(xeroCurrencyCodeFor("CAD", "  ")).toBeNull();
+  });
+
+  it("puts CurrencyCode on the posted body only when set", () => {
+    const base = { contactId: "c1", accountCode: "400", amount: 100, date: "2026-03-14" };
+    expect(buildXeroBillPayload(base).CurrencyCode).toBeUndefined();
+    expect(
+      buildXeroBillPayload({ ...base, currencyCode: "CAD" }).CurrencyCode,
+    ).toBe("CAD");
   });
 });
 

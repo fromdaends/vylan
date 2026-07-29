@@ -12,7 +12,6 @@
 
 import { clientName, emitInternalMention } from "@/lib/notifications/emit";
 import { getServerSupabase } from "@/lib/supabase/server";
-import { revalidatePath } from "next/cache";
 import {
   getCurrentUser,
   listFirmUsers,
@@ -26,8 +25,8 @@ import {
 } from "@/lib/db/file-comments";
 import { sanitizeMentions } from "@/lib/team/mentions";
 import { logUserActivity } from "@/lib/db/activity";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
-const LOCALES = ["en", "fr"] as const;
 
 export type AddFileCommentResult =
   | { ok: true; comment: FileComment }
@@ -110,9 +109,8 @@ export async function addFileCommentAction(input: {
     );
   }
 
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/engagements/${input.engagementId}`);
-  }
+  revalidateAllLocales(`/engagements/${input.engagementId}`);
+
   return { ok: true, comment: res.comment };
 }
 
@@ -124,9 +122,8 @@ export async function deleteFileCommentAction(input: {
   if (!user) return { ok: false };
   const ok = await deleteFileComment(input.id); // RLS: author-only
   if (ok) {
-    for (const loc of LOCALES) {
-      revalidatePath(`/${loc}/engagements/${input.engagementId}`);
-    }
+    revalidateAllLocales(`/engagements/${input.engagementId}`);
+
   }
   return { ok };
 }

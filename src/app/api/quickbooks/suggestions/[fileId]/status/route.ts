@@ -11,7 +11,6 @@
 // already staff-allowed, so approving is part of the normal workflow.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getDraftForFile, setDraftStatus } from "@/lib/db/quickbooks-suggestions";
 import { logUserActivity } from "@/lib/db/activity";
@@ -23,10 +22,10 @@ import {
   canApproveDraft,
   type DraftStatus,
 } from "@/lib/quickbooks/draft-status";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 
-const LOCALES = ["en", "fr"] as const;
 
 // The activity-log action string for each target state (audit trail). 'posted'
 // is intentionally absent — posting/undo go through the dedicated /post + /void
@@ -112,9 +111,8 @@ export async function POST(
   // Bust the cache for BOTH locales unconditionally, the moment the write
   // succeeds — never let it hinge on the best-effort audit log below (mirrors
   // resolve/route.ts). revalidatePath is synchronous and won't throw.
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/engagements/${draft.engagementId}`);
-  }
+  revalidateAllLocales(`/engagements/${draft.engagementId}`);
+
 
   // APPROVING TEACHES. Until now only a correction was remembered, so the
   // commonest case — the AI guessed right and the accountant just approved —
