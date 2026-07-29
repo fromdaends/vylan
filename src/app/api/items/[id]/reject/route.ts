@@ -11,14 +11,13 @@
 // current_firm_id()), which IS the authorization check.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { rejectItem } from "@/lib/db/request-items";
 import { logUserActivity } from "@/lib/db/activity";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 
-const LOCALES = ["en", "fr"] as const;
 
 export async function POST(
   request: NextRequest,
@@ -83,10 +82,9 @@ export async function POST(
     if (firmId) {
       await logUserActivity(firmId, engagementId, "reject_item", { item_id: id });
     }
-    for (const loc of LOCALES) {
-      revalidatePath(`/${loc}/engagements/${engagementId}`);
-      revalidatePath(`/${loc}/dashboard`);
-    }
+    revalidateAllLocales(`/engagements/${engagementId}`);
+    revalidateAllLocales(`/dashboard`);
+
   } catch (err) {
     console.error("[reject item route] post-step failed (reject applied):", err);
   }

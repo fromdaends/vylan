@@ -8,7 +8,6 @@
 // client (a row for another firm isn't returned), which IS the authorization.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import {
   getDraftForFile,
@@ -19,10 +18,10 @@ import { learnedWritesFromResolve } from "@/lib/quickbooks/learn";
 import { setClientXeroPublishDefault } from "@/lib/db/xero";
 import type { ResolvedEntry, ResolvedRef } from "@/lib/quickbooks/suggest";
 import { isPostableDate } from "@/lib/quickbooks/draft-resolve";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 
-const LOCALES = ["en", "fr"] as const;
 // Ref-valued fields (an {id,name} pick or null). `paid` is handled separately
 // below because it's a boolean, not a ref.
 const FIELDS = [
@@ -243,8 +242,7 @@ export async function POST(
     }
   }
 
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/engagements/${draft.engagementId}`);
-  }
+  revalidateAllLocales(`/engagements/${draft.engagementId}`);
+
   return NextResponse.json({ ok: true });
 }

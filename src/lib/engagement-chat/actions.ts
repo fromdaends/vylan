@@ -16,7 +16,6 @@
 // buildActionProposal, and the confirm endpoint requires the row's
 // single-use token, which is handed to the browser alone.
 
-import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { approveFile, rejectFile } from "@/lib/db/file-review";
 import {
@@ -40,13 +39,12 @@ import {
 } from "./action-schemas";
 import { fetchChatEngagement, type ChatEngagementRow } from "./data";
 import { REMINDER_COOLDOWN_HOURS } from "./config";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
-const LOCALES = ["en", "fr"] as const;
 function revalidateEngagement(engagementId: string) {
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/engagements/${engagementId}`);
-    revalidatePath(`/${loc}/dashboard`);
-  }
+  revalidateAllLocales(`/engagements/${engagementId}`);
+  revalidateAllLocales(`/dashboard`);
+
 }
 
 type FileRow = {

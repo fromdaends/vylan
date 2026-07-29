@@ -1,7 +1,6 @@
 "use server";
 
 import { z } from "zod";
-import { revalidatePath } from "next/cache";
 import {
   approveItem,
   reopenItem,
@@ -15,6 +14,7 @@ import {
   addItemSchema,
   pickAddItemFields,
 } from "@/lib/engagements/add-item-fields";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export type ItemActionState = {
   ok?: boolean;
@@ -56,12 +56,10 @@ async function getEngagementFirm(
 // revalidated nothing, so a freshly added item only showed up because of the
 // client's router.refresh(). We revalidate every locale's concrete path so the
 // server cache is actually busted (the route group "(app)" is not in the URL).
-const LOCALES = ["en", "fr"] as const;
 function revalidateItemPaths(engagementId: string | undefined) {
-  for (const loc of LOCALES) {
-    if (engagementId) revalidatePath(`/${loc}/engagements/${engagementId}`);
-    revalidatePath(`/${loc}/dashboard`);
-  }
+  if (engagementId) revalidateAllLocales(`/engagements/${engagementId}`);
+  revalidateAllLocales(`/dashboard`);
+
 }
 
 export async function approveItemAction(formData: FormData) {

@@ -8,7 +8,6 @@
 // requestid instead of re-fetching the now-deleted transaction.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import {
   getDraftForFile,
@@ -24,16 +23,15 @@ import {
 import { logUserActivity } from "@/lib/db/activity";
 import { isClientXeroConnected } from "@/lib/db/xero";
 import { undoXeroPost } from "@/lib/xero/post";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 
-const LOCALES = ["en", "fr"] as const;
 
 function revalidate(engagementId: string) {
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/quickbooks/drafts`);
-    revalidatePath(`/${loc}/engagements/${engagementId}`);
-  }
+  revalidateAllLocales(`/quickbooks/drafts`);
+  revalidateAllLocales(`/engagements/${engagementId}`);
+
 }
 
 export async function POST(

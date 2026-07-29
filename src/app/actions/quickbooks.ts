@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
@@ -12,6 +11,7 @@ import { upsertTransactionSuggestion } from "@/lib/db/quickbooks-suggestions";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { parseTransaction } from "@/lib/ai/transaction-extract";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export type RegenerateDraftState = {
   ok: boolean;
@@ -23,7 +23,6 @@ export type RegenerateDraftState = {
     | "no_lists";
 };
 
-const LOCALES = ["en", "fr"] as const;
 
 // Re-map a file's stored transaction read against the firm's CURRENT cached
 // QuickBooks lists and rewrite its draft. The accountant uses this after they add
@@ -109,8 +108,7 @@ export async function regenerateDraftAction(
     provider,
   });
 
-  for (const loc of LOCALES) {
-    revalidatePath(`/${loc}/engagements/${file.engagement_id}`);
-  }
+  revalidateAllLocales(`/engagements/${file.engagement_id}`);
+
   return { ok: true };
 }

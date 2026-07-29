@@ -4,19 +4,18 @@
 // handler just maps its outcome to HTTP + revalidates + audits.
 
 import { NextResponse, type NextRequest } from "next/server";
-import { revalidatePath } from "next/cache";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { type PostMatchOverride } from "@/lib/quickbooks/post";
 import { postApprovedDraftForFile } from "@/lib/xero/post";
 import { isQboTxnEntity } from "@/lib/quickbooks/client";
 import { logUserActivity } from "@/lib/db/activity";
+import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
 // The post now also downloads the receipt and uploads it to QuickBooks; give it
 // headroom over the short platform default (matches the storage-heavy routes).
 export const maxDuration = 60;
 
-const LOCALES = ["en", "fr"] as const;
 
 export async function POST(
   request: NextRequest,
@@ -77,10 +76,9 @@ export async function POST(
       r.kind === "conflict" ||
       r.kind === "record_failed")
   ) {
-    for (const loc of LOCALES) {
-      revalidatePath(`/${loc}/quickbooks/drafts`);
-      revalidatePath(`/${loc}/engagements/${r.engagementId}`);
-    }
+    revalidateAllLocales(`/quickbooks/drafts`);
+    revalidateAllLocales(`/engagements/${r.engagementId}`);
+
   }
 
   switch (r.kind) {
