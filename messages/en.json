@@ -212,7 +212,15 @@
     "leave_team_success": "You left the team. Team features are now hidden.",
     "error_team_disabled": "Create a team before inviting or assigning teammates.",
     "error_team_has_members": "Remove or transfer every other active teammate before leaving the team.",
-    "error_team_has_invites": "Revoke pending invitations before leaving the team."
+    "error_team_has_invites": "Revoke pending invitations before leaving the team.",
+    "handover_button": "Hand over everything",
+    "handover_title": "Hand over {name}'s work",
+    "handover_hint": "Moves {engagements, plural, =0 {no live engagements} one {1 live engagement} other {# live engagements}} and {clients, plural, =0 {no clients} one {1 client} other {# clients}} from {name} to someone else. {name} keeps their account and their access.",
+    "handover_to_label": "Hand it to",
+    "handover_to_placeholder": "Choose a teammate…",
+    "handover_scope_note": "Live work, clients and repeating schedules move. Completed and archived work keeps {name}'s name on it.",
+    "handover_confirm": "Hand it over",
+    "handover_done": "Moved {engagements, plural, one {1 engagement} other {# engagements}} and {clients, plural, one {1 client} other {# clients}} to {name}"
   },
   "Preview": {
     "button": "Preview",
@@ -1161,7 +1169,9 @@
     "action_recurrence_resumed": "Resumed a repeating schedule",
     "action_recurrence_ended": "Stopped a repeating schedule",
     "action_series_reassigned": "Changed who a repeating schedule goes to",
-    "action_engagement_unassigned": "Took an engagement off someone"
+    "action_engagement_unassigned": "Took an engagement off someone",
+    "action_team_offboard_reassigned": "Work handed over (member removed)",
+    "action_team_work_handed_over": "Work handed over"
   },
   "Notifications": {
     "title": "What's new",
@@ -2122,7 +2132,11 @@
     "unassign": "Take it off them",
     "handoff_from": "Handed over by {name} · {date}",
     "handoff_at": "Handed over {date}",
-    "client_was_told": "What your client was told"
+    "client_was_told": "What your client was told",
+    "assign_to": "Assign to…",
+    "assign_nobody": "Nobody",
+    "assigned_toast": "Assigned to {name}",
+    "unassigned_toast": "Assignee cleared"
   },
   "Attention": {
     "metric_active": "Active",

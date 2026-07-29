@@ -10,6 +10,7 @@ import {
   ExternalLink,
   MessageSquare,
   Milestone,
+  UserRound,
   RotateCcw,
   Trash2,
   type LucideIcon,
@@ -41,6 +42,7 @@ import {
   type EngagementStage,
 } from "@/lib/engagements/stage";
 import { useStageOverride } from "./use-stage-override";
+import { reassignEngagementAction } from "@/app/actions/engagements";
 
 // Re-exported from the pure lifecycle module so the worklist row imports the
 // state type from one place; the menu's option logic lives there too.
@@ -100,6 +102,13 @@ export function useEngagementRowMenu(args: {
   // Team mode: offer "Add a comment" — opens the engagement page with its
   // engagement-level comment composer already open (?comment=1 deep link).
   commentable?: boolean;
+  // Active teammates, for the Assign submenu. Before this the row menu could
+  // archive, delete, restore and restage an engagement but not hand it to
+  // anybody — the one thing you most often want from a list of work. Absent or
+  // empty means no Assign item (a solo firm has nobody to assign to).
+  assignees?: { id: string; name: string }[];
+  // Who holds it now, so the current person can be ticked and skipped.
+  assigneeId?: string | null;
 }): { items: RowMenuItem[]; dialog: ReactNode } {
   const { engagementId, title, state, canDelete, stage, runOptimistic } = args;
   const t = useTranslations("Engagements");
@@ -117,6 +126,16 @@ export function useEngagementRowMenu(args: {
     } else {
       void action().then(done);
     }
+  };
+
+  // Assign is NOT a lifecycle action: the row stays on the board, only the name
+  // on it changes. Using fire() here would optimistically remove the row and it
+  // would pop back on the next revalidate.
+  const mutate = (action: () => Promise<unknown>, done: () => void) => {
+    void action().then(() => {
+      done();
+      router.refresh();
+    });
   };
 
   const open: RowMenuItem = {
@@ -198,6 +217,49 @@ export function useEngagementRowMenu(args: {
       }
     : null;
 
+  // Assign. Same submenu shape as Stage, so both renderers (the "..." dropdown
+  // and the right-click menu) already know how to draw it. Deliberately no note
+  // dialog here: a note belongs to a HANDOFF, and this is also how you assign
+  // work that nobody held yet. The full reassign-with-note flow stays on the
+  // engagement page and in the per-row control.
+  const assignees = args.assignees ?? [];
+  const assignItem: RowMenuItem | null = assignees.length
+    ? {
+        key: "assign",
+        label: t("assign_to"),
+        icon: UserRound,
+        submenu: [
+          ...assignees.map((m) => ({
+            key: m.id,
+            label: m.name,
+            checked: m.id === args.assigneeId,
+            onSelect: () => {
+              if (m.id === args.assigneeId) return;
+              mutate(
+                () => reassignEngagementAction(engagementId, m.id),
+                () => toast(t("assigned_toast", { name: m.name })),
+              );
+            },
+          })),
+          // Unassigning is a real state, not a missing value: work with nobody's
+          // name on it is what the dashboard's unassigned bucket is for.
+          ...(args.assigneeId
+            ? [
+                {
+                  key: "__none",
+                  label: t("assign_nobody"),
+                  onSelect: () =>
+                    mutate(
+                      () => reassignEngagementAction(engagementId, null),
+                      () => toast(t("unassigned_toast")),
+                    ),
+                },
+              ]
+            : []),
+        ],
+      }
+    : null;
+
   const byKey: Record<string, RowMenuItem> = {
     open,
     archive,
@@ -213,6 +275,9 @@ export function useEngagementRowMenu(args: {
   // axis entirely. Keeping it out of there leaves the tested lifecycle rules
   // untouched by a concern they don't own.
   if (stageItem) items.splice(1, 0, stageItem);
+  // Assign goes ABOVE Stage: handing work to a person is the commoner action,
+  // and splice(1) keeps pushing the earlier insert down.
+  if (assignItem) items.splice(1, 0, assignItem);
   // Same reasoning for commenting — spliced in after Open (and before Stage
   // when both are present, since splice(1) pushes Stage down).
   if (args.commentable) {

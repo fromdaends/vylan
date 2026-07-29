@@ -212,7 +212,15 @@
     "leave_team_success": "Vous avez quitté l'équipe. Les fonctions d'équipe sont maintenant masquées.",
     "error_team_disabled": "Créez une équipe avant d'inviter ou d'attribuer des collègues.",
     "error_team_has_members": "Retirez ou transférez tous les autres membres actifs avant de quitter l'équipe.",
-    "error_team_has_invites": "Révoquez les invitations en attente avant de quitter l'équipe."
+    "error_team_has_invites": "Révoquez les invitations en attente avant de quitter l'équipe.",
+    "handover_button": "Tout transférer",
+    "handover_title": "Transférer le travail de {name}",
+    "handover_hint": "Transfère {engagements, plural, =0 {aucun mandat en cours} one {1 mandat en cours} other {# mandats en cours}} et {clients, plural, =0 {aucun client} one {1 client} other {# clients}} de {name} vers une autre personne. {name} conserve son compte et ses accès.",
+    "handover_to_label": "Transférer à",
+    "handover_to_placeholder": "Choisir un membre…",
+    "handover_scope_note": "Le travail en cours, les clients et les échéanciers récurrents sont transférés. Le travail terminé ou archivé reste au nom de {name}.",
+    "handover_confirm": "Transférer",
+    "handover_done": "{engagements, plural, one {1 mandat} other {# mandats}} et {clients, plural, one {1 client} other {# clients}} transférés à {name}"
   },
   "Preview": {
     "button": "Aperçu",
@@ -1161,7 +1169,9 @@
     "action_recurrence_resumed": "A repris un horaire récurrent",
     "action_recurrence_ended": "A arrêté un horaire récurrent",
     "action_series_reassigned": "A changé l'attribution d'un horaire récurrent",
-    "action_engagement_unassigned": "A retiré un engagement à quelqu'un"
+    "action_engagement_unassigned": "A retiré un engagement à quelqu'un",
+    "action_team_offboard_reassigned": "Travail transféré (membre retiré)",
+    "action_team_work_handed_over": "Travail transféré"
   },
   "Notifications": {
     "title": "Nouveautés",
@@ -2122,7 +2132,11 @@
     "unassign": "Le retirer",
     "handoff_from": "Confié par {name} · {date}",
     "handoff_at": "Confié le {date}",
-    "client_was_told": "Ce que votre client a reçu"
+    "client_was_told": "Ce que votre client a reçu",
+    "assign_to": "Attribuer à…",
+    "assign_nobody": "Personne",
+    "assigned_toast": "Attribué à {name}",
+    "unassigned_toast": "Personne assignée retirée"
   },
   "Attention": {
     "metric_active": "Actifs",
