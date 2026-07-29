@@ -171,6 +171,7 @@ import {
   FileSignature,
   ExternalLink,
   Lock,
+  ChevronRight,
 } from "lucide-react";
 
 export default async function EngagementDetailPage({
@@ -1412,13 +1413,25 @@ async function ItemRow({
         ) : undefined
       }
     >
+      {/* What the CLIENT was told, in the CLIENT's language — which is often
+          not the accountant's. When a document was auto-rejected, the row below
+          already explains why in the accountant's own language, so showing this
+          as a full-width red alert meant reading the same sentence twice, once
+          in a language the accountant may not use.
+          Collapsed to a disclosure: still one click away when you need to check
+          the exact wording a client received, out of the way when you don't. */}
       {hasReason && (
-        <Alert variant="destructive">
-          <AlertDescription className="text-xs">
-            <span className="font-medium">{t("rejection_reason")}: </span>
+        <details className="group rounded-md border border-destructive/30 bg-destructive/[0.04] px-2.5 py-1.5">
+          <summary className="cursor-pointer list-none text-xs font-medium text-destructive marker:hidden">
+            <span className="inline-flex items-center gap-1.5">
+              <ChevronRight className="size-3 transition-transform group-open:rotate-90" aria-hidden />
+              {t("client_was_told")}
+            </span>
+          </summary>
+          <p className="mt-1.5 pl-4 text-xs leading-snug text-destructive/90">
             {item.rejection_reason}
-          </AlertDescription>
-        </Alert>
+          </p>
+        </details>
       )}
       {hasSubmittedFiles && (
         <ul className="space-y-1.5">

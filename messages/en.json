@@ -2121,7 +2121,8 @@
     "final_delete_confirm_body": "“{name}” will be removed from Vylan and from the client's portal.",
     "unassign": "Take it off them",
     "handoff_from": "Handed over by {name} · {date}",
-    "handoff_at": "Handed over {date}"
+    "handoff_at": "Handed over {date}",
+    "client_was_told": "What your client was told"
   },
   "Attention": {
     "metric_active": "Active",
