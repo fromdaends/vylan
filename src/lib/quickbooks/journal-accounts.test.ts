@@ -118,6 +118,26 @@ describe("isSuggestedForRole", () => {
     ).toBe(true);
   });
 
+  it("NEVER suggests AR or AP as the Xero deposit account", () => {
+    // Xero refuses manual journals against accounts-receivable and
+    // accounts-payable balances just as it does bank balances. Suggesting
+    // them (which a blanket CURRENT/CURRLIAB rule did) walks the accountant
+    // straight into the next rejection.
+    for (const a of [
+      { id: "ar", name: "Accounts Receivable", type: "CURRENT" },
+      { id: "ap", name: "Accounts Payable", type: "CURRLIAB" },
+      { id: "pp", name: "Prepayments", type: "CURRENT" },
+      { id: "st", name: "Sales Tax", type: "CURRLIAB" },
+    ]) {
+      expect(isSuggestedForRole("bank", "xero", a)).toBe(false);
+    }
+  });
+
+  it("suggests nothing rather than something wrong when there is no clearing account", () => {
+    const noClearing = [BANK, SALES, FEES];
+    expect(accountsForRole("bank", "xero", noClearing).suggested).toEqual([]);
+  });
+
   it("suggests the real bank account for the deposit on QuickBooks", () => {
     expect(isSuggestedForRole("bank", "quickbooks", BANK)).toBe(true);
     expect(isSuggestedForRole("bank", "quickbooks", SALES)).toBe(false);
