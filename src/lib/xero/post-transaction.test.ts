@@ -12,6 +12,7 @@ import {
   xeroUndoStatusFor,
   xeroCurrencyCodeFor,
   buildLineTracking,
+  xeroEndpointForDraft,
 } from "./post-transaction";
 
 describe("deriveNetAmount", () => {
@@ -546,5 +547,55 @@ describe("tracking categories", () => {
     for (const l of lines) expect(l.Tracking).toEqual([
       { TrackingCategoryID: "cat-dept", TrackingOptionID: "opt-sales" },
     ]);
+  });
+});
+
+describe("xeroEndpointForDraft — undo and attach-retry must hit the right endpoint", () => {
+  const paidExpense = {
+    suggestion: { direction: "expense", paid: true },
+    resolved: null,
+  };
+  const unpaidExpense = {
+    suggestion: { direction: "expense", paid: false },
+    resolved: null,
+  };
+  const paidIncome = {
+    suggestion: { direction: "income", paid: true },
+    resolved: null,
+  };
+  const unpaidIncome = {
+    suggestion: { direction: "income", paid: false },
+    resolved: null,
+  };
+
+  it("routes what Vylan posted by paid/unpaid", () => {
+    expect(xeroEndpointForDraft(paidExpense)).toBe("BankTransactions"); // SPEND
+    expect(xeroEndpointForDraft(unpaidExpense)).toBe("Invoices"); // ACCPAY
+    expect(xeroEndpointForDraft(paidIncome)).toBe("BankTransactions"); // RECEIVE
+    expect(xeroEndpointForDraft(unpaidIncome)).toBe("Invoices"); // ACCREC
+  });
+
+  it("uses what was MATCHED, not what the draft would have posted", () => {
+    // The whole point: an unpaid bill draft can be matched to a PAID bank line
+    // the client's feed already recorded. Re-deriving from the draft would send
+    // the attach to /Invoices and it would 404.
+    expect(
+      xeroEndpointForDraft({ ...unpaidExpense, matchedQboType: "purchase" }),
+    ).toBe("BankTransactions");
+    expect(
+      xeroEndpointForDraft({ ...paidExpense, matchedQboType: "bill" }),
+    ).toBe("Invoices");
+    expect(
+      xeroEndpointForDraft({ ...unpaidIncome, matchedQboType: "salesreceipt" }),
+    ).toBe("BankTransactions");
+    expect(
+      xeroEndpointForDraft({ ...paidIncome, matchedQboType: "invoice" }),
+    ).toBe("Invoices");
+  });
+
+  it("falls back to Invoices with no suggestion at all", () => {
+    expect(xeroEndpointForDraft({ suggestion: null, resolved: null })).toBe(
+      "Invoices",
+    );
   });
 });

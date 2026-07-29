@@ -475,7 +475,9 @@ export type XeroRawItem = {
 // GET a Xero Accounting endpoint (tenant-scoped) and return the named array.
 // Throws XeroError on a non-2xx / network failure so the sync can mark itself
 // partial and retry.
-async function xeroGet(
+// Exported for the register search, which needs an arbitrary filtered path
+// (`Invoices?where=...`) rather than one of the fixed reference-list reads.
+export async function xeroGet(
   accessToken: string,
   tenantId: string,
   path: string,

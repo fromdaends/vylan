@@ -34,6 +34,13 @@
 // Bank transactions (SPEND/RECEIVE) have NO equivalent: a cash movement is not
 // an approvable payable, and Xero's BankTransaction.Status only accepts
 // AUTHORISED or DELETED. The spend builder therefore takes no status at all.
+// Type-only + pure imports: this module still performs no I/O.
+import type { XeroTxnEndpoint } from "./write";
+import {
+  effectiveIncomeMode,
+  effectiveExpenseMode,
+} from "@/lib/quickbooks/draft-resolve";
+
 export type XeroInvoiceStatus = "DRAFT" | "SUBMITTED" | "AUTHORISED";
 
 // Does this status need a DueDate? Xero requires one on an ACCPAY that is, or
@@ -475,4 +482,48 @@ export function xeroTaxDiscrepancyNote(input: {
     );
   }
   return null;
+}
+
+// Which Xero endpoint a posted draft's transaction lives under — read by undo
+// (delete a bank transaction vs void an invoice) and by the receipt-attach
+// retry. Sending either to the wrong endpoint fails, strands the row as
+// "posted", and leaves the only way back a manual fix inside Xero.
+export function xeroEndpointForDraft(draft: {
+  suggestion: { direction: string } | null;
+  resolved: unknown;
+  // Set only when the draft was MATCHED to a transaction already in the books.
+  // Read back from the database as a plain string, so it is narrowed here.
+  matchedQboType?: string | null;
+}): XeroTxnEndpoint {
+  // A matched draft points at somebody else's transaction, whose shape has
+  // nothing to do with what this draft would have posted: an unpaid bill can be
+  // matched to a paid bank line. Use what we actually matched.
+  if (draft.matchedQboType != null) {
+    return draft.matchedQboType === "purchase" ||
+      draft.matchedQboType === "salesreceipt"
+      ? "BankTransactions"
+      : "Invoices";
+  }
+  const s = draft.suggestion;
+  if (!s) return "Invoices";
+  // PAID either way is a bank transaction (SPEND out / RECEIVE in); UNPAID
+  // either way is an invoice (ACCPAY owed by us / ACCREC owed to us). Undo
+  // reads this to choose between deleting a bank transaction and voiding or
+  // deleting an invoice, so income must be handled here or an undone sales
+  // receipt would be sent to the wrong endpoint entirely.
+  if (s.direction === "income") {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return effectiveIncomeMode(s as any, draft.resolved as any) ===
+      "salesreceipt"
+      ? "BankTransactions" // RECEIVE
+      : "Invoices"; // ACCREC
+  }
+  if (
+    s.direction === "expense" &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    effectiveExpenseMode(s as any, draft.resolved as any) === "purchase"
+  ) {
+    return "BankTransactions"; // SPEND
+  }
+  return "Invoices"; // ACCPAY (bill)
 }

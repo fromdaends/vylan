@@ -46,6 +46,7 @@ import {
   xeroPostingReference,
   xeroUndoStatusFor,
   xeroCurrencyCodeFor,
+  xeroEndpointForDraft,
   resolveXeroTaxApplication,
   xeroTaxDiscrepancyNote,
   type XeroExpenseLine,
@@ -66,7 +67,19 @@ import {
   effectiveSplit,
   effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
-import { postApprovedDraft, type PostOutcome } from "@/lib/quickbooks/post";
+import {
+  postApprovedDraft,
+  type PostOutcome,
+  type PostMatchOverride,
+} from "@/lib/quickbooks/post";
+import type { RegisterCandidate } from "@/lib/quickbooks/register-match";
+import type { QboTxnEntity } from "@/lib/quickbooks/client";
+import {
+  searchXeroRegister,
+  checkXeroRegister,
+  xeroSearchEntities,
+} from "@/lib/xero/register-match";
+import { listFirmPostedQboIds } from "@/lib/db/quickbooks-suggestions";
 import { postingLineDescription } from "@/lib/quickbooks/suggest";
 import { getUploadedFileById } from "@/lib/db/uploaded-files";
 import { downloadObject } from "@/lib/storage";
@@ -87,7 +100,11 @@ export async function postApprovedDraftForFile(
     draft.firmId &&
     (await isClientXeroConnected(draft.firmId, draft.clientId))
   ) {
-    return postApprovedXeroDraft(fileId, posterId);
+    return postApprovedXeroDraft(
+      fileId,
+      posterId,
+      opts as { match?: PostMatchOverride } | undefined,
+    );
   }
   // QuickBooks (unchanged) — forward the register-match override.
   return postApprovedDraft(
@@ -97,41 +114,12 @@ export async function postApprovedDraftForFile(
   );
 }
 
-// Which Xero endpoint a draft's transaction lives under, given its expense mode.
-// (Income is deferred, so this only distinguishes paid SPEND vs unpaid ACCPAY.)
-function xeroEndpointForDraft(draft: {
-  suggestion: { direction: string } | null;
-  resolved: unknown;
-}): XeroTxnEndpoint {
-  const s = draft.suggestion;
-  if (!s) return "Invoices";
-  // PAID either way is a bank transaction (SPEND out / RECEIVE in); UNPAID
-  // either way is an invoice (ACCPAY owed by us / ACCREC owed to us). Undo
-  // reads this to choose between deleting a bank transaction and voiding or
-  // deleting an invoice, so income must be handled here or an undone sales
-  // receipt would be sent to the wrong endpoint entirely.
-  if (s.direction === "income") {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return effectiveIncomeMode(s as any, draft.resolved as any) ===
-      "salesreceipt"
-      ? "BankTransactions" // RECEIVE
-      : "Invoices"; // ACCREC
-  }
-  if (
-    s.direction === "expense" &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    effectiveExpenseMode(s as any, draft.resolved as any) === "purchase"
-  ) {
-    return "BankTransactions"; // SPEND
-  }
-  return "Invoices"; // ACCPAY (bill)
-}
-
 // Post one APPROVED EXPENSE draft to Xero. Income returns not_postable (the card
 // gates it out, so this is defense-in-depth).
 export async function postApprovedXeroDraft(
   fileId: string,
   posterId: string,
+  opts?: { match?: PostMatchOverride },
 ): Promise<PostOutcome> {
   const draft = await getDraftForFile(fileId);
   if (!draft || !draft.suggestion) {
@@ -263,10 +251,11 @@ export async function postApprovedXeroDraft(
   // A document in a DIFFERENT currency from the client's books must say so, or
   // Xero records the figure against its own currency and the number looks right
   // while being wrong.
-  const currencyCode = xeroCurrencyCodeFor(
-    s.currency,
-    await readClientXeroBaseCurrency(draft.firmId, draft.clientId),
+  const orgCurrency = await readClientXeroBaseCurrency(
+    draft.firmId,
+    draft.clientId,
   );
+  const currencyCode = xeroCurrencyCodeFor(s.currency, orgCurrency);
 
   // The accountant's tracking picks, as the {category, option} pairs Xero wants.
   // Entries the accountant cleared (null) are dropped rather than sent empty.
@@ -291,6 +280,136 @@ export async function postApprovedXeroDraft(
     fileId,
     isPurchase ? "banktransaction" : "invoice",
   );
+
+  // ── Don't create what the books already have ─────────────────────────────
+  //
+  // The client's bank feed, or their bookkeeper, may have recorded this days
+  // before the receipt ever reached Vylan. Creating it again puts the same
+  // expense in the books twice, and nothing downstream catches it: both entries
+  // look individually correct, and it surfaces at year end as an overstated
+  // expense and an overstated tax claim.
+  //
+  // Amount (to the penny) + date (±5 days), NOT the party name — what a receipt
+  // prints rarely matches the descriptor a bank feed recorded. One clear
+  // candidate attaches the receipt to it and creates nothing; anything less
+  // certain asks the accountant.
+  const draftEntity: QboTxnEntity = isIncome
+    ? effectiveIncomeMode(s, draft.resolved) === "salesreceipt"
+      ? "salesreceipt"
+      : "invoice"
+    : isPurchase
+      ? "purchase"
+      : "bill";
+  const searchEntities = xeroSearchEntities(isIncome ? "income" : "expense");
+
+  // EXPLICIT ATTACH — the accountant already answered "this IS the existing
+  // one". FAILS CLOSED: if the pick can't be re-verified we must not fall
+  // through to a create, or we'd manufacture the very duplicate they told us
+  // already exists. (The automatic check below fails OPEN, deliberately.)
+  if (opts?.match?.action === "attach") {
+    // Captured while the union is still narrowed — the narrowing is lost across
+    // the awaits below, since opts is a parameter.
+    const pickedId = opts.match.qboId;
+    const pickedEntity = opts.match.entity;
+    // Without the matched_qbo_type column a match can't be marked as matched,
+    // and undo would DELETE a transaction Vylan never created. Refuse rather
+    // than record a match we can't retract correctly.
+    if (!draft.matchReady) {
+      return {
+        kind: "post_failed",
+        ...base,
+        detail: "Couldn't confirm this match in Xero. Please refresh and try again.",
+      };
+    }
+    const excludeIds = await listFirmPostedQboIds(draft.firmId, ctx.tenantId);
+    const search =
+      excludeIds == null
+        ? null
+        : await searchXeroRegister(ctx, {
+            date: effDate,
+            amountCents: Math.round((s.amount ?? 0) * 100),
+            entities: searchEntities,
+            orgCurrency,
+          });
+    if (search == null || search.readFailed) {
+      // Couldn't run a fresh search. We can neither confirm the pick nor safely
+      // create — a soft failure the accountant retries, never a silent
+      // duplicate.
+      return {
+        kind: "post_failed",
+        ...base,
+        detail: "Couldn't confirm this match in Xero. Please try again.",
+      };
+    }
+    // Re-validated against the FRESH search — never trust an id from the
+    // client. Gone or changed → re-ask with the current candidates.
+    const attachTo =
+      search.candidates.find(
+        (c) =>
+          !excludeIds!.has(c.qboId) &&
+          c.qboId === pickedId &&
+          (pickedEntity == null || c.entity === pickedEntity),
+      ) ?? null;
+    if (!attachTo) {
+      return {
+        kind: "needs_match_confirmation",
+        ...base,
+        matchCandidates: search.candidates.filter(
+          (c) => !excludeIds!.has(c.qboId),
+        ),
+      };
+    }
+    return recordXeroMatch({ attachTo, fileId, draft, posterId, ctx, base });
+  }
+
+  // AUTOMATIC pre-create check — FAIL-OPEN: anything unexpected logs and falls
+  // through to the normal create, because the duplicate check must never block
+  // a legitimate post. Skipped when the accountant already chose "post a new
+  // one" (match.action === "create"), and pre-migration-0510.
+  if (!opts?.match && draft.matchReady && s.amount != null) {
+    try {
+      // Exclude what Vylan itself posted for this firm in THIS organisation,
+      // read fresh per post so a draft posted seconds ago (mid-bulk) is already
+      // excluded. A null read means "couldn't check", not "none": skip matching
+      // rather than risk attaching to a transaction Vylan created.
+      const excludeIds = await listFirmPostedQboIds(draft.firmId, ctx.tenantId);
+      if (excludeIds != null) {
+        const { verdict, candidates } = await checkXeroRegister(ctx, {
+          date: effDate,
+          amountCents: Math.round(s.amount * 100),
+          entities: searchEntities,
+          orgCurrency,
+          excludeIds,
+          draftEntity,
+          draftVendorId: eff.party?.id ?? null,
+          draftVendorNames: [eff.party?.name ?? null, s.partySource ?? null],
+        });
+        if (verdict.kind === "confirm") {
+          return {
+            kind: "needs_match_confirmation",
+            ...base,
+            matchCandidates: candidates,
+          };
+        }
+        if (verdict.kind === "clear") {
+          return recordXeroMatch({
+            attachTo: verdict.candidate,
+            fileId,
+            draft,
+            posterId,
+            ctx,
+            base,
+          });
+        }
+      }
+    } catch (e) {
+      // Fail-open: the register read is best-effort, and posting is not.
+      console.error(
+        "[xero] register match check failed (posting anyway):",
+        e instanceof XeroError ? `${e.code} ${e.message}` : (e as Error).message,
+      );
+    }
+  }
 
   let endpoint: XeroTxnEndpoint;
   let payload: Record<string, unknown>;
@@ -558,7 +677,15 @@ export async function attachReceiptToPostedXeroDraft(input: {
 }
 
 export type XeroUndoResult =
-  | { kind: "ok"; engagementId: string; firmId: string; postedXeroId: string }
+  | {
+      kind: "ok";
+      engagementId: string;
+      firmId: string;
+      postedXeroId: string;
+      // True when the draft was MATCHED: nothing was deleted or voided in Xero,
+      // the link was simply removed on our side.
+      unlinkedMatch?: boolean;
+    }
   | { kind: "not_found" }
   | { kind: "not_enabled"; engagementId: string }
   | { kind: "not_posted"; engagementId: string }
@@ -584,9 +711,19 @@ export async function undoXeroPost(fileId: string): Promise<XeroUndoResult> {
   const ctx = await getXeroReadContext(draft.firmId, draft.clientId);
   if (!ctx) return { kind: "not_connected", engagementId: eng };
 
+  // A MATCHED draft points at a transaction that was ALREADY in the client's
+  // books — their bank feed or their bookkeeper made it, not Vylan. Undo must
+  // therefore only UNLINK on our side: the draft returns to Approved, and the
+  // transaction (with any receipt already attached to it in Xero) stays exactly
+  // where it was. Deleting or voiding here would remove a real entry from a
+  // client's ledger on a button that says "Undo".
+  const matched = draft.matchedQboType != null;
+
   const endpoint = xeroEndpointForDraft(draft);
   try {
-    if (endpoint === "BankTransactions") {
+    if (matched) {
+      // Nothing to retract in Xero — the transaction was never ours.
+    } else if (endpoint === "BankTransactions") {
       await xeroDeleteBankTransaction(ctx, draft.postedQboId);
     } else {
       // Retract using what we ACTUALLY posted, never a re-derivation of the
@@ -620,6 +757,7 @@ export async function undoXeroPost(fileId: string): Promise<XeroUndoResult> {
     engagementId: eng,
     firmId: draft.firmId,
     postedXeroId: draft.postedQboId,
+    unlinkedMatch: matched || undefined,
   };
 }
 
@@ -660,4 +798,53 @@ export async function attachXeroReceipt(fileId: string): Promise<XeroAttachResul
     return { kind: "failed", engagementId: eng, detail: outcome.detail };
   }
   return { kind: "attached", engagementId: eng };
+}
+
+
+// Record a draft as posted against a transaction that was ALREADY in the books,
+// and attach the source document to it.
+//
+// Nothing is created. The draft points at the existing Xero transaction, and
+// matchedQboType marks it as matched rather than created — which is what makes
+// Undo UNLINK it instead of deleting a transaction Vylan never made.
+async function recordXeroMatch(input: {
+  attachTo: RegisterCandidate;
+  fileId: string;
+  draft: { postAttempt: number; engagementId: string; firmId: string };
+  posterId: string;
+  ctx: XeroReadContext;
+  base: { engagementId: string; firmId: string };
+}): Promise<PostOutcome> {
+  const { attachTo, fileId, draft, posterId, ctx, base } = input;
+  const recorded = await recordDraftPosted({
+    uploadedFileId: fileId,
+    expectedAttempt: draft.postAttempt,
+    postedQboId: attachTo.qboId,
+    postedSyncToken: "0", // Xero has no SyncToken
+    posterId,
+    postedRealmId: ctx.tenantId,
+    matchedQboType: attachTo.entity,
+    // A matched transaction was not created by us, so there is no publish
+    // status of ours to undo — the recorded status stays null, which undo
+    // reads as AUTHORISED and, combined with matchedQboType, unlinks.
+    postedStatus: null,
+  });
+  if (recorded === "conflict") return { kind: "conflict", ...base };
+  if (recorded !== "ok") {
+    return { kind: "record_failed", ...base };
+  }
+  // Best-effort: the match is already recorded, and a failed attach is
+  // retriable from the card.
+  await attachReceiptToPostedXeroDraft({
+    fileId,
+    ctx,
+    endpoint: attachTo.entity === "bill" || attachTo.entity === "invoice"
+      ? "Invoices"
+      : "BankTransactions",
+    postedXeroId: attachTo.qboId,
+  });
+  // NOT "posted": nothing was created. The card reads this to say the receipt
+  // was attached to a transaction that was already there, and Undo unlinks
+  // rather than deleting a transaction Vylan never made.
+  return { kind: "matched_existing", ...base, postedQboId: attachTo.qboId };
 }
