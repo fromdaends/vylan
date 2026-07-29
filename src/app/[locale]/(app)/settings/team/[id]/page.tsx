@@ -29,11 +29,14 @@ export const dynamic = "force-dynamic";
 // A teammate's profile — "everything they're doing" in one place, and now the
 // ONLY place. This page used to end each section with a "view all" link into
 // /engagements?assignee=<id> and /clients?owner=<id>: the shared lists, wearing
-// a filter. Those pages kept their own title, never named whose work you were
-// looking at, and dropped the filter on reload — so you could refresh and be
-// looking at your own work with nothing to tell you. Worse, the link led to the
-// same rows this page already shows. It was pure loss, so it's gone, and the
-// lifecycle tabs that were the only real reason to leave live here instead.
+// a filter. Those pages kept their own title and never named whose work you were
+// looking at — and clicking any lifecycle tab there silently dropped the person,
+// because Active/Ready/Completed are separate ROUTES that don't carry the
+// param. Verified in production: land on a teammate's lens, click "Completed",
+// and you are looking at YOUR completed work with the picker flipped back to
+// "My engagements" and nothing saying so. Worse, the link led to the same rows
+// this page already shows. Pure loss, so it's gone — and the lifecycle tabs are
+// here instead, as ?view= on this same route, so the person never gets dropped.
 //
 // Open to every member of the firm, not just owners. Making a person's name
 // clickable across the app (which is the point) is worthless if half the firm

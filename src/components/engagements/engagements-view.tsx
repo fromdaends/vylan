@@ -124,11 +124,13 @@ export function EngagementsView({
   //
   // This used to offer every teammate as a third kind of option, reachable by
   // ?assignee=<id> from the team page. It was a filter doing navigation's job:
-  // the page still said "Engagements", nothing on it named whose work you were
-  // looking at, and the lens was transient — a reload silently handed the page
-  // back to you, so you could not trust what you were reading. A teammate's
-  // work is a question about the teammate and it is answered on their profile
-  // (/settings/team/<id>), which already carried the same rows.
+  // the page still said "Active engagements", nothing on it named whose work you
+  // were looking at, and the empty state read "No active engagements. Create one
+  // to get started." — telling an owner with 15 live jobs that they had none.
+  // The lens also died on any lifecycle tab (separate routes, no param), so
+  // clicking "Completed" from a teammate's lens silently showed you your own.
+  // A teammate's work is a question about the teammate, answered on their
+  // profile (/settings/team/<id>), which already carried the same rows.
   //
   // "All firm" survives because it is not a question about a person.
   const [scope, setScope] = useState<string>(teamEnabled ? "mine" : "all");
