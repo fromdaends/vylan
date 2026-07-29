@@ -370,3 +370,59 @@ export async function readXeroAccountMeta(clientId: string): Promise<{
   }
   return { codeById, typeById };
 }
+
+// This client's tracking categories, grouped for the picker: one entry per
+// CATEGORY, each carrying its selectable options.
+//
+// Separate from readCachedXeroLists because QuickbooksLists is the
+// provider-neutral shape the matcher consumes, and tracking has no QuickBooks
+// equivalent in it — bolting it on would push a Xero-only concept through every
+// provider-neutral call site.
+//
+// Only ACTIVE options of ACTIVE categories: an archived one cannot go on a new
+// line, so offering it would produce a post Xero rejects.
+export type XeroTrackingCategoryGroup = {
+  categoryId: string;
+  categoryName: string;
+  options: Array<{ id: string; name: string }>;
+};
+
+export async function readCachedXeroTracking(
+  clientId: string,
+): Promise<XeroTrackingCategoryGroup[]> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("xero_tracking_options")
+    .select("xero_id, name, category_id, category_name, active, category_active")
+    .eq("client_id", clientId);
+  if (error || !data) {
+    if (error && !isMissingXeroSchema(error)) {
+      console.error("[xero] readCachedXeroTracking failed:", error);
+    }
+    return [];
+  }
+  const byCategory = new Map<string, XeroTrackingCategoryGroup>();
+  for (const r of data as Array<Record<string, unknown>>) {
+    if (r.active === false || r.category_active === false) continue;
+    const categoryId = String(r.category_id ?? "");
+    if (!categoryId) continue;
+    const group = byCategory.get(categoryId) ?? {
+      categoryId,
+      categoryName: (r.category_name as string | null) ?? "",
+      options: [],
+    };
+    group.options.push({
+      id: String(r.xero_id ?? ""),
+      name: (r.name as string | null) ?? "",
+    });
+    byCategory.set(categoryId, group);
+  }
+  // Xero allows at most two active categories; the cap is a guard against a
+  // stale cache written before one was archived.
+  return [...byCategory.values()]
+    .map((g) => ({
+      ...g,
+      options: g.options.sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .slice(0, 2);
+}

@@ -120,6 +120,33 @@ export async function POST(
     }
     patch.publishStatus = v as ResolvedEntry["publishStatus"];
   }
+  // `tracking` (XERO) — the FULL map of category id -> option ref|null, sent
+  // whole like lineAccounts so the server's shallow replace keeps every
+  // category rather than dropping the ones not just edited.
+  if (Object.prototype.hasOwnProperty.call(body, "tracking")) {
+    const tr = body.tracking;
+    if (tr === null) {
+      patch.tracking = {};
+    } else if (typeof tr === "object" && !Array.isArray(tr)) {
+      const map: Record<string, ResolvedRef | null> = {};
+      for (const [k, v] of Object.entries(tr as Record<string, unknown>)) {
+        const ref = parseRef(v);
+        if (ref === undefined) {
+          return NextResponse.json(
+            { error: "bad_request", detail: "Invalid tracking." },
+            { status: 400 },
+          );
+        }
+        map[k] = ref;
+      }
+      patch.tracking = map;
+    } else {
+      return NextResponse.json(
+        { error: "bad_request", detail: "Invalid tracking." },
+        { status: 400 },
+      );
+    }
+  }
   // `date` is the transaction-date override (ISO YYYY-MM-DD). It must be a valid
   // date — a transaction can't have its date "cleared" to nothing.
   if (Object.prototype.hasOwnProperty.call(body, "date")) {
