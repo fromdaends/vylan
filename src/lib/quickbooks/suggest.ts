@@ -609,6 +609,80 @@ export function suggestItem(
   // full pool still supplies the candidate list below, so an archived item the
   // accountant genuinely wants is one click away.
   const sellablePool = pool.filter((i) => i.active && isSellableItem(i.itemType));
+
+  // EXACT FIRST, and it is the only tier that reaches confidence 1.0 — the bar
+  // auto-approve requires. Everything below fills the field in for the
+  // accountant to confirm instead.
+  for (const desc of lineDescriptions) {
+    if (!desc) continue;
+    const exact = sellablePool.filter((i) => nameScore(desc, i.name) === 1);
+    if (exact.length === 1) {
+      const m = exact[0]!;
+      return {
+        match: { id: m.id, name: m.name, active: m.active },
+        confidence: 1,
+        candidates: toCandidates(
+          pool.map((i) => ({
+            id: i.id,
+            name: i.name,
+            active: i.active,
+            score: nameScore(desc, i.name),
+          })),
+        ),
+      };
+    }
+  }
+
+  // THEN CONTAINMENT, because a printed invoice line usually ELABORATES on the
+  // product name rather than repeating it. Measured on the real document:
+  //
+  //   product name : "Development work - per hour rate"
+  //   printed line : "Development work — per hour rate (Member portal build,
+  //                   sprint 4)"
+  //
+  // Every word of the product is there, but the extra clause doubles the token
+  // count, so the Jaccard score is 0.5 — under the 0.6 threshold. Scoring alone
+  // therefore gives up on the commonest shape of invoice line there is.
+  //
+  // So: if every meaningful token of a product name appears in the line, that
+  // product is named in that line. Guarded three ways —
+  //   * the product needs 2+ tokens, or a one-word "Consulting" would swallow
+  //     every line mentioning consulting;
+  //   * the MOST SPECIFIC containment wins, so "Development work" loses to
+  //     "Development work - per hour rate" when both exist;
+  //   * it must be unique at that specificity, or we refuse and ask.
+  for (const desc of lineDescriptions) {
+    if (!desc) continue;
+    const descTokens = new Set(nameTokens(desc));
+    if (descTokens.size === 0) continue;
+    const contained = sellablePool
+      .map((i) => ({ item: i, toks: nameTokens(i.name) }))
+      .filter(
+        (c) =>
+          c.toks.length >= 2 && c.toks.every((tk) => descTokens.has(tk)),
+      )
+      .sort((a, b) => b.toks.length - a.toks.length);
+    if (contained.length === 0) continue;
+    const topLen = contained[0]!.toks.length;
+    const tied = contained.filter((c) => c.toks.length === topLen);
+    if (tied.length !== 1) continue; // ambiguous — let the accountant choose
+    const m = tied[0]!.item;
+    return {
+      match: { id: m.id, name: m.name, active: m.active },
+      // Named in the line but not equal to it: confident enough to fill in,
+      // deliberately below the auto-approve bar, which only an exact match
+      // clears.
+      confidence: 0.9,
+      candidates: toCandidates(
+        pool.map((i) => ({
+          id: i.id,
+          name: i.name,
+          active: i.active,
+          score: nameScore(desc, i.name),
+        })),
+      ),
+    };
+  }
   let best: { match: QboRef | null; confidence: number; scored: Scored[] } = {
     match: null,
     confidence: 0,

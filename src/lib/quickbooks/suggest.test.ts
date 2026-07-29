@@ -936,17 +936,49 @@ describe("suggestItem — name matching", () => {
     ).toBe("i2");
   });
 
-  // The case that broke on a real invoice: the printed line carries an extra
-  // clause, so an exact-string rule gave up and left the field blank while the
-  // dropdown underneath was showing the right answer.
-  it("matches when the printed line carries an extra clause", () => {
+  // THE REAL STRING, captured by running the extractor against the actual
+  // invoice rather than guessing at it twice more. Scoring alone gives this
+  // 0.5 — under the 0.6 threshold — because the parenthetical doubles the
+  // token count, which is why two previous attempts both left the field blank.
+  it("matches the product NAMED IN the printed line (verbatim from the AI)", () => {
     const m = suggestItem("income", null, items, [
-      "Development work — per hour rate · Member portal build, sprint 4",
+      "Development work — per hour rate (Member portal build, sprint 4)",
     ]);
     expect(m.match?.id).toBe("i1");
-    // Strong but not exact -> filled in, but NOT enough to auto-approve.
-    expect(m.confidence).toBeGreaterThan(0.6);
-    expect(m.confidence).toBeLessThan(0.99);
+    // Named in the line but not equal to it: filled in, but deliberately below
+    // the auto-approve bar, which only an exact match clears.
+    expect(m.confidence).toBe(0.9);
+  });
+
+  it("prefers the MOST SPECIFIC product when several are named", () => {
+    const withGeneric = [
+      ...items,
+      { ...items[0]!, id: "i0", name: "Development work" },
+    ];
+    const m = suggestItem("income", null, withGeneric, [
+      "Development work — per hour rate (Member portal build, sprint 4)",
+    ]);
+    expect(m.match?.id).toBe("i1");
+  });
+
+  // A one-word product would otherwise swallow every line that mentions it.
+  it("does not let a single-word product match on containment", () => {
+    const oneWord = [{ ...items[0]!, id: "w1", name: "Development" }];
+    expect(
+      suggestItem("income", null, oneWord, [
+        "Development work — per hour rate (Member portal build, sprint 4)",
+      ]).match,
+    ).toBeNull();
+  });
+
+  it("refuses when two equally-specific products are both named", () => {
+    const tie = [
+      { ...items[0]!, id: "t1", name: "Development work" },
+      { ...items[0]!, id: "t2", name: "work Development" },
+    ];
+    expect(
+      suggestItem("income", null, tie, ["Development work rate"]).match,
+    ).toBeNull();
   });
 
   it("only an EXACT match scores 1.0 and can auto-approve", () => {
