@@ -589,29 +589,53 @@ export function suggestItem(
   // item only from the income account meant such a document still had to be
   // filled in by hand, because the account had never been matched either.
   //
-  // Exact only (nameScore === 1, after normalization), and only when exactly
-  // ONE active sellable item matches: an invoice line is a specific thing, and
-  // a fuzzy near-name is how the wrong product ends up on a client's invoice.
+  // Scored the same way vendors and customers are, rather than demanding an
+  // exact string. A printed line rarely equals the product name character for
+  // character — it carries an extra clause ("Development work — per hour rate ·
+  // Member portal build, sprint 4"), or drops one — and an exact-only rule
+  // silently gives up on all of those and makes the accountant pick from a
+  // dropdown that is already showing the right answer.
+  //
+  // pickConfident applies BOTH the threshold and the ambiguity margin, so two
+  // similarly-named products still produce no confident pick — which is the
+  // case that actually matters, because a near-name is how the wrong product
+  // ends up on a client's invoice.
+  //
+  // An EXACT match still scores 1.0 and is the only thing that clears the
+  // auto-approve bar; a strong partial fills the field in at its true, lower
+  // confidence for the accountant to confirm.
+  // ACTIVE + sellable for the confident pick — an archived product is rejected
+  // by the accounting software on post, so it must never be auto-picked. The
+  // full pool still supplies the candidate list below, so an archived item the
+  // accountant genuinely wants is one click away.
+  const sellablePool = pool.filter((i) => i.active && isSellableItem(i.itemType));
+  let best: { match: QboRef | null; confidence: number; scored: Scored[] } = {
+    match: null,
+    confidence: 0,
+    scored: [],
+  };
   for (const desc of lineDescriptions) {
     if (!desc) continue;
-    const exact = pool.filter(
-      (i) => i.active && isSellableItem(i.itemType) && nameScore(desc, i.name) === 1,
-    );
-    if (exact.length === 1) {
-      const m = exact[0]!;
-      return {
-        match: { id: m.id, name: m.name, active: m.active },
-        confidence: 1,
-        candidates: toCandidates(
-          pool.map((i) => ({
-            id: i.id,
-            name: i.name,
-            active: i.active,
-            score: nameScore(desc, i.name),
-          })),
-        ),
-      };
+    const scored = sellablePool
+      .map((i) => ({
+        id: i.id,
+        name: i.name,
+        active: i.active,
+        score: nameScore(desc, i.name),
+      }))
+      .filter((c) => c.score > 0)
+      .sort(byScoreThenActive);
+    const picked = pickConfident(scored, MATCH_THRESHOLD);
+    if (picked.match && picked.confidence > best.confidence) {
+      best = { ...picked, scored };
     }
+  }
+  if (best.match) {
+    return {
+      match: best.match,
+      confidence: best.confidence,
+      candidates: toCandidates(best.scored),
+    };
   }
 
   const forAccount = accountId
