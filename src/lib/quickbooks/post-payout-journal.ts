@@ -44,6 +44,9 @@ export type PostPayoutJournalOutcome =
   | { kind: "not_buildable"; reason: string }
   // Xero only: an account has no code cached, so its line can't be addressed.
   | { kind: "missing_account_codes"; accountNames: string[] }
+  // Xero only: the account cache is EMPTY, which after a (re)connect means the
+  // background sync hasn't finished. Transient — retrying shortly works.
+  | { kind: "accounts_syncing" }
   | { kind: "post_failed"; message: string };
 
 export async function postPayoutJournal(input: {
@@ -84,6 +87,19 @@ export async function postPayoutJournal(input: {
       if (!ctx) return { kind: "not_connected" };
       // Manual journals address accounts by CODE, not id.
       const codeByAccountId = await readXeroAccountCodes(draft.clientId);
+      // An EMPTY map is a sync race, not a data problem: reconnecting Xero
+      // clears and refills this cache in the background, and a post attempted
+      // in that window would otherwise report every account as "no code",
+      // which reads as the accountant's fault and is permanent-sounding.
+      if (codeByAccountId.size === 0) {
+        await recordPayoutJournalPostError({
+          firmId: draft.firmId,
+          uploadedFileId: input.uploadedFileId,
+          error:
+            "The chart of accounts was still syncing from Xero. Try posting again in a moment.",
+        });
+        return { kind: "accounts_syncing" };
+      }
       const payload = buildXeroJournalPayload({
         journal: built.journal,
         memo,
@@ -91,6 +107,13 @@ export async function postPayoutJournal(input: {
         codeByAccountId,
       });
       if (!payload.ok) {
+        // Record it too, so the card's "last attempt" line reflects THIS
+        // failure rather than a stale earlier one.
+        await recordPayoutJournalPostError({
+          firmId: draft.firmId,
+          uploadedFileId: input.uploadedFileId,
+          error: `No Xero account code on: ${payload.accountNames.join(", ")}`,
+        });
         return {
           kind: "missing_account_codes",
           accountNames: payload.accountNames,

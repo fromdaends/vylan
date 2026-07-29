@@ -198,6 +198,41 @@ function AccountPicker({
   );
 }
 
+/**
+ * Shown INSTEAD of the journal when there is nothing to map yet. The section
+ * previously rendered nothing at all in these cases, which reads exactly like
+ * a broken feature — the accountant sees the payout split and then a void
+ * where the entry should be, with no clue why.
+ */
+export function PayoutJournalUnavailable({
+  reason,
+  locale,
+}: {
+  // no_connection = the client has no QuickBooks/Xero, so there are no
+  // accounts to map. preparing = connected, but the draft row hasn't been
+  // created yet (it is created on the next page load).
+  reason: "no_connection" | "preparing";
+  locale: AppLocale;
+}) {
+  const fr = locale === "fr";
+  return (
+    <div className="mt-2.5 border-t border-border/50 pt-2.5">
+      <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-foreground/70">
+        {fr ? "Écriture de journal" : "Journal entry"}
+      </div>
+      <p className="text-xs text-muted-foreground">
+        {reason === "no_connection"
+          ? fr
+            ? "Connectez QuickBooks ou Xero pour ce client afin de créer l'écriture de journal automatiquement."
+            : "Connect QuickBooks or Xero for this client to build the journal entry automatically."
+          : fr
+            ? "Préparation de l'écriture. Actualisez la page dans un instant."
+            : "Preparing the entry. Refresh the page in a moment."}
+      </p>
+    </div>
+  );
+}
+
 export function PayoutJournalSection({
   engagementId,
   uploadedFileId,
@@ -300,7 +335,11 @@ export function PayoutJournalSection({
         return;
       }
       toast.error(
-        res.error === "missing_account_codes"
+        res.error === "accounts_syncing"
+          ? fr
+            ? "Le plan comptable était encore en cours de synchronisation. Réessayez dans un instant."
+            : "The chart of accounts was still syncing. Try again in a moment."
+          : res.error === "missing_account_codes"
           ? fr
             ? `Ces comptes n'ont pas de code Xero : ${(res.accountNames ?? []).join(", ")}`
             : `These accounts have no Xero code: ${(res.accountNames ?? []).join(", ")}`
@@ -339,8 +378,18 @@ export function PayoutJournalSection({
         ) : null}
       </div>
 
+      {/* No accounts cached yet (a fresh connection syncs them in the
+          background) — say so instead of showing empty pickers. */}
+      {!locked && accounts.length === 0 && (
+        <p className="mb-2 text-xs text-muted-foreground">
+          {fr
+            ? "Le plan comptable n'est pas encore synchronisé. Actualisez dans une minute."
+            : "The chart of accounts hasn't synced yet. Refresh in a minute."}
+        </p>
+      )}
+
       {/* Account mapping. Hidden once approved — the picks are the record. */}
-      {!locked && (
+      {!locked && accounts.length > 0 && (
         <div className="mb-3 grid gap-2 sm:grid-cols-2">
           {shown.map((role) => (
             <div key={role} className="space-y-1">

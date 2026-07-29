@@ -59,7 +59,10 @@ import {
   PayoutBreakdownCard,
   payoutCardData,
 } from "@/components/engagements/payout-breakdown-card";
-import { PayoutJournalSection } from "@/components/engagements/payout-journal-section";
+import {
+  PayoutJournalSection,
+  PayoutJournalUnavailable,
+} from "@/components/engagements/payout-journal-section";
 import {
   ensurePayoutJournalDraft,
   getPayoutJournalsForEngagement,
@@ -1466,8 +1469,14 @@ async function ItemRow({
                       <PayoutBreakdownCard
                         data={payoutCard}
                         locale={locale}
+                        // NEVER silently absent: the journal half used to
+                        // vanish with no explanation when any of three
+                        // conditions failed (no draft row, no bookkeeping
+                        // connection, no cached accounts), which is
+                        // indistinguishable from "the feature is broken".
+                        // It now always renders and says which one is missing.
                         journalSlot={
-                          journal && qboOptions.accounts.length > 0 ? (
+                          journal ? (
                             <PayoutJournalSection
                               engagementId={engagementId}
                               uploadedFileId={f.id}
@@ -1485,7 +1494,18 @@ async function ItemRow({
                               payoutDate={payoutCard.payoutDate}
                               provider={journal.provider}
                             />
-                          ) : undefined
+                          ) : (
+                            <PayoutJournalUnavailable
+                              reason={
+                                // ItemRow knows the connection only through
+                                // the account list it was handed.
+                                qboOptions.accounts.length > 0
+                                  ? "preparing"
+                                  : "no_connection"
+                              }
+                              locale={locale}
+                            />
+                          )
                         }
                       />
                     )}
