@@ -176,6 +176,11 @@ export type TransactionSuggestion = {
 // Below this score we treat a fuzzy match as "not sure" and return match=null
 // (still listing candidates). Mirrors the conservative bar in ai/matching.ts.
 export const MATCH_THRESHOLD = 0.6;
+
+// How much of a PRODUCT's name must appear in an invoice line before we accept
+// that the line names that product. High, because this is asymmetric matching
+// and the line is already allowed to carry unlimited extra words.
+export const MIN_ITEM_COVERAGE = 0.8;
 // When the top two candidates are within this margin we call it a tie and return
 // match=null so the accountant disambiguates — a single-token receipt name
 // ("Bell") must NOT confidently auto-pick between "Bell Canada" and "Taco Bell".
@@ -655,17 +660,41 @@ export function suggestItem(
     if (!desc) continue;
     const descTokens = new Set(nameTokens(desc));
     if (descTokens.size === 0) continue;
-    const contained = sellablePool
-      .map((i) => ({ item: i, toks: nameTokens(i.name) }))
-      .filter(
-        (c) =>
-          c.toks.length >= 2 && c.toks.every((tk) => descTokens.has(tk)),
-      )
-      .sort((a, b) => b.toks.length - a.toks.length);
-    if (contained.length === 0) continue;
-    const topLen = contained[0]!.toks.length;
-    const tied = contained.filter((c) => c.toks.length === topLen);
-    if (tied.length !== 1) continue; // ambiguous — let the accountant choose
+    // COVERAGE, not strict containment: what fraction of the PRODUCT's words
+    // appear in the line. Asymmetric on purpose — the line is allowed to say
+    // more than the product name, which is the normal case, but the product
+    // must be almost entirely accounted for.
+    //
+    // Strict "every token present" was too rigid because the extractor does not
+    // word a line identically every time: one run produced "Development work —
+    // per hour rate (Member portal build, sprint 4)", another may drop or
+    // reorder part of it. Coverage degrades gracefully where all-or-nothing
+    // fell off a cliff.
+    const scoredByCoverage = sellablePool
+      .map((i) => {
+        const toks = nameTokens(i.name);
+        const hit = toks.filter((tk) => descTokens.has(tk)).length;
+        return { item: i, toks, coverage: toks.length ? hit / toks.length : 0 };
+      })
+      // 2+ tokens or a one-word "Consulting" swallows every line mentioning it.
+      .filter((c) => c.toks.length >= 2 && c.coverage >= MIN_ITEM_COVERAGE)
+      // Most of the product accounted for wins; ties broken by the more
+      // SPECIFIC product, so "Development work" loses to "Development work -
+      // per hour rate" when a client has both.
+      .sort((a, b) => b.coverage - a.coverage || b.toks.length - a.toks.length);
+    if (scoredByCoverage.length === 0) continue;
+    const top = scoredByCoverage[0]!;
+    const runnerUp = scoredByCoverage[1];
+    // Refuse a photo-finish: two products this close is exactly how the wrong
+    // one ends up on a client's invoice.
+    if (
+      runnerUp &&
+      runnerUp.coverage === top.coverage &&
+      runnerUp.toks.length === top.toks.length
+    ) {
+      continue;
+    }
+    const tied = [top];
     const m = tied[0]!.item;
     return {
       match: { id: m.id, name: m.name, active: m.active },
