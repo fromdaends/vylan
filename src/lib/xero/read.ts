@@ -16,11 +16,13 @@ import {
   fetchXeroAccounts,
   fetchXeroContactsAll,
   fetchXeroTaxRates,
+  fetchXeroTrackingCategories,
   fetchXeroItems,
   XeroError,
   type XeroRawAccount,
   type XeroRawContact,
   type XeroRawTaxRate,
+  type XeroRawTrackingCategory,
   type XeroRawItem,
 } from "@/lib/xero/client";
 import { getXeroReadContext } from "@/lib/xero/connection";
@@ -55,6 +57,16 @@ export type XeroTaxRateRow = {
   // Xero's own answer to "may this rate be used on a sale / on a purchase".
   canApplyToRevenue: boolean;
   canApplyToExpenses: boolean;
+};
+// One tracking OPTION, carrying its category. Flattened deliberately — every
+// consumer wants the pair, and a line is posted with exactly this pair.
+export type XeroTrackingOptionRow = {
+  xeroId: string;
+  name: string;
+  categoryId: string;
+  categoryName: string;
+  active: boolean;
+  categoryActive: boolean;
 };
 export type XeroItemRow = {
   xeroId: string;
@@ -121,6 +133,33 @@ export function toXeroTaxRateRow(r: XeroRawTaxRate): XeroTaxRateRow {
     canApplyToExpenses: r.CanApplyToExpenses !== false,
   };
 }
+// Flatten Xero's nested categories into one row per option.
+export function toXeroTrackingRows(
+  cats: XeroRawTrackingCategory[],
+): XeroTrackingOptionRow[] {
+  const out: XeroTrackingOptionRow[] = [];
+  for (const c of cats) {
+    const categoryId = String(c.TrackingCategoryID ?? "");
+    if (!categoryId) continue;
+    const categoryActive =
+      (c.Status ?? "ACTIVE").toUpperCase() === "ACTIVE";
+    for (const o of c.Options ?? []) {
+      const xeroId = String(o.TrackingOptionID ?? "");
+      if (!xeroId) continue;
+      out.push({
+        xeroId,
+        name: (o.Name ?? "").trim(),
+        categoryId,
+        categoryName: (c.Name ?? "").trim(),
+        // DELETED/ARCHIVED options can't go on a new line.
+        active: (o.Status ?? "ACTIVE").toUpperCase() === "ACTIVE",
+        categoryActive,
+      });
+    }
+  }
+  return out;
+}
+
 export function toXeroItemRow(r: XeroRawItem): XeroItemRow {
   return {
     xeroId: String(r.ItemID ?? ""),
@@ -267,6 +306,7 @@ export type XeroReadRows = {
   contacts: XeroContactRow[] | null;
   taxRates: XeroTaxRateRow[] | null;
   items: XeroItemRow[] | null;
+  tracking: XeroTrackingOptionRow[] | null;
 };
 
 export async function readXeroRows(
@@ -290,6 +330,10 @@ export async function readXeroRows(
   const contactsRaw = await safe(() => fetchXeroContactsAll(ctx.accessToken, ctx.tenantId), "Contacts");
   const taxRaw = await safe(() => fetchXeroTaxRates(ctx.accessToken, ctx.tenantId), "TaxRates");
   const itemsRaw = await safe(() => fetchXeroItems(ctx.accessToken, ctx.tenantId), "Items");
+  const trackingRaw = await safe(
+    () => fetchXeroTrackingCategories(ctx.accessToken, ctx.tenantId),
+    "TrackingCategories",
+  );
   return {
     ok: true,
     rows: {
@@ -302,6 +346,9 @@ export async function readXeroRows(
       items: itemsRaw
         ? itemsRaw.filter((r) => r.IsSold !== false).map(toXeroItemRow)
         : null,
+      // Archived categories/options are KEPT and flagged, so a transaction
+      // already coded to one still displays its label rather than a blank.
+      tracking: trackingRaw ? toXeroTrackingRows(trackingRaw) : null,
     },
   };
 }

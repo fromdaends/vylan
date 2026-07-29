@@ -10,6 +10,7 @@ import {
   xeroPostingReference,
   xeroStatusNeedsDueDate,
   xeroUndoStatusFor,
+  buildLineTracking,
 } from "./post-transaction";
 
 describe("deriveNetAmount", () => {
@@ -376,5 +377,105 @@ describe("xeroUndoStatusFor", () => {
   // Rows posted before the column existed were always AUTHORISED.
   it("voids a legacy row with no recorded status", () => {
     expect(xeroUndoStatusFor(null)).toBe("VOIDED");
+  });
+});
+
+describe("tracking categories", () => {
+  const bill = {
+    contactId: "c1",
+    accountCode: "400",
+    amount: 100,
+    date: "2026-03-14",
+  };
+  const pair = { categoryId: "cat-dept", optionId: "opt-sales" };
+  const second = { categoryId: "cat-loc", optionId: "opt-winnipeg" };
+  const lineOf = (p: Record<string, unknown>) =>
+    (p.LineItems as Record<string, unknown>[])[0]!;
+
+  // An organisation that uses no tracking must not get a Tracking key at all.
+  it("omits Tracking entirely when none is chosen", () => {
+    expect(lineOf(buildXeroBillPayload(bill)).Tracking).toBeUndefined();
+    expect(buildLineTracking(undefined)).toBeNull();
+    expect(buildLineTracking([])).toBeNull();
+  });
+
+  // IDs, not names: a rename in Xero between our sync and the post would fail
+  // with an opaque validation error if we sent names.
+  it("sends category and option IDs, never names", () => {
+    const t = lineOf(buildXeroBillPayload({ ...bill, tracking: [pair] }))
+      .Tracking as Record<string, unknown>[];
+    expect(t).toEqual([
+      { TrackingCategoryID: "cat-dept", TrackingOptionID: "opt-sales" },
+    ]);
+  });
+
+  it("carries both categories", () => {
+    const t = lineOf(
+      buildXeroBillPayload({ ...bill, tracking: [pair, second] }),
+    ).Tracking as unknown[];
+    expect(t).toHaveLength(2);
+  });
+
+  // Xero allows at most two ACTIVE categories per organisation.
+  it("never sends more than two", () => {
+    const t = lineOf(
+      buildXeroBillPayload({
+        ...bill,
+        tracking: [pair, second, { categoryId: "x", optionId: "y" }],
+      }),
+    ).Tracking as unknown[];
+    expect(t).toHaveLength(2);
+  });
+
+  it("applies to spend, sales invoices and receipts too", () => {
+    expect(
+      lineOf(
+        buildXeroSpendPayload({ ...bill, bankAccountId: "b1", tracking: [pair] }),
+      ).Tracking,
+    ).toBeDefined();
+    expect(
+      lineOf(
+        buildXeroInvoicePayload({
+          contactId: "c1",
+          itemCode: "DEV",
+          accountCode: null,
+          amount: 100,
+          date: "2026-03-14",
+          tracking: [pair],
+        }),
+      ).Tracking,
+    ).toBeDefined();
+    expect(
+      lineOf(
+        buildXeroReceivePayload({
+          contactId: "c1",
+          itemCode: "DEV",
+          accountCode: null,
+          bankAccountId: "b1",
+          amount: 100,
+          date: "2026-03-14",
+          tracking: [pair],
+        }),
+      ).Tracking,
+    ).toBeDefined();
+  });
+
+  // The categories describe the TRANSACTION, not the account it was carved
+  // into, so a split expense carries the same tracking on every line.
+  it("puts the same tracking on every line of a split", () => {
+    const p = buildXeroBillPayload({
+      ...bill,
+      tax: { taxType: "GST", netAmount: 100 },
+      lines: [
+        { amount: 60, accountCode: "400" },
+        { amount: 40, accountCode: "420" },
+      ],
+      tracking: [pair],
+    });
+    const lines = p.LineItems as Record<string, unknown>[];
+    expect(lines).toHaveLength(2);
+    for (const l of lines) expect(l.Tracking).toEqual([
+      { TrackingCategoryID: "cat-dept", TrackingOptionID: "opt-sales" },
+    ]);
   });
 });

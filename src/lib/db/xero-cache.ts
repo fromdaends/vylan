@@ -18,6 +18,7 @@ import {
   type XeroContactRow,
   type XeroTaxRateRow,
   type XeroItemRow,
+  type XeroTrackingOptionRow,
   type XeroReadRows,
 } from "@/lib/xero/read";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
@@ -51,7 +52,7 @@ async function readRowsWith(
     if (firmId) q = q.eq("firm_id", firmId);
     return q;
   };
-  const [acc, con, tax, items] = await Promise.all([
+  const [acc, con, tax, items, tracking] = await Promise.all([
     read("xero_accounts", "xero_id, code, name, account_type, active"),
     read("xero_contacts", "xero_id, name, is_supplier, is_customer, active"),
     read(
@@ -59,6 +60,10 @@ async function readRowsWith(
       "xero_id, name, active, can_apply_to_revenue, can_apply_to_expenses",
     ),
     read("xero_items", "xero_id, code, name, income_account_code, active"),
+    read(
+      "xero_tracking_options",
+      "xero_id, name, category_id, category_name, active, category_active",
+    ),
   ]);
   for (const r of [acc, con, tax, items]) {
     if (r.error) {
@@ -106,7 +111,23 @@ async function readRowsWith(
     incomeAccountCode: (r.income_account_code as string | null) ?? null,
     active: r.active !== false,
   }));
-  return { accounts, contacts, taxRates, items: itemRows };
+  const trackingRows: XeroTrackingOptionRow[] = (
+    (tracking.data as Array<Record<string, unknown>> | null) ?? []
+  ).map((r) => ({
+    xeroId: String(r.xero_id ?? ""),
+    name: (r.name as string | null) ?? "",
+    categoryId: String(r.category_id ?? ""),
+    categoryName: (r.category_name as string | null) ?? "",
+    active: r.active !== false,
+    categoryActive: r.category_active !== false,
+  }));
+  return {
+    accounts,
+    contacts,
+    taxRates,
+    items: itemRows,
+    tracking: trackingRows,
+  };
 }
 
 // Shared cache read adapted to the QuickbooksLists shape the matcher/pickers use.
@@ -199,10 +220,16 @@ const TABLE_BY_ENTITY = {
   contacts: "xero_contacts",
   taxRates: "xero_tax_rates",
   items: "xero_items",
+  tracking: "xero_tracking_options",
 } as const;
 export type XeroCacheEntity = keyof typeof TABLE_BY_ENTITY;
 
-type AnyRow = XeroAccountRow | XeroContactRow | XeroTaxRateRow | XeroItemRow;
+type AnyRow =
+  | XeroAccountRow
+  | XeroContactRow
+  | XeroTaxRateRow
+  | XeroItemRow
+  | XeroTrackingOptionRow;
 
 // Column record for a normalized row of the given entity.
 function recordFor(
@@ -231,6 +258,15 @@ function recordFor(
   if (entity === "items") {
     const i = row as XeroItemRow;
     return { ...base, code: i.code, income_account_code: i.incomeAccountCode };
+  }
+  if (entity === "tracking") {
+    const tr = row as XeroTrackingOptionRow;
+    return {
+      ...base,
+      category_id: tr.categoryId,
+      category_name: tr.categoryName,
+      category_active: tr.categoryActive,
+    };
   }
   const t = row as XeroTaxRateRow;
   return {
