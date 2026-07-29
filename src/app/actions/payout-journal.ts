@@ -135,6 +135,7 @@ export type PostPayoutJournalState = {
     | "needs_reconnect"
     | "not_buildable"
     | "missing_account_codes"
+    | "accounts_syncing"
     | "post_failed";
   accountNames?: string[];
   message?: string;

@@ -335,7 +335,11 @@ export function PayoutJournalSection({
         return;
       }
       toast.error(
-        res.error === "missing_account_codes"
+        res.error === "accounts_syncing"
+          ? fr
+            ? "Le plan comptable était encore en cours de synchronisation. Réessayez dans un instant."
+            : "The chart of accounts was still syncing. Try again in a moment."
+          : res.error === "missing_account_codes"
           ? fr
             ? `Ces comptes n'ont pas de code Xero : ${(res.accountNames ?? []).join(", ")}`
             : `These accounts have no Xero code: ${(res.accountNames ?? []).join(", ")}`
