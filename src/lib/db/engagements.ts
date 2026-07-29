@@ -254,6 +254,14 @@ export type CreateEngagementInput = {
   invoice_locks_deliverables?: boolean;
   invoice_description?: string | null;
   reminder_settings: ReminderSettings;
+  // Who the work belongs to from the moment it exists. Absent (or null) keeps
+  // the old behaviour of assigning the creator. Before this, creating work for
+  // somebody else was always TWO steps — create it, then hand it over — which
+  // is also why the handoff note existed for a case that shouldn't need one.
+  // The caller is responsible for validating the id is an active firm member;
+  // the RLS policy can't do it (assigned_user_id has no FK constraint to a
+  // firm-scoped view).
+  assigned_user_id?: string | null;
   items: TemplateItem[];
 };
 
@@ -323,9 +331,10 @@ export async function createEngagementWithItems(
     type: input.type,
     status: "draft",
     due_date: input.due_date,
-    // Default the creator as the assignee-of-record (accountability, not
-    // access control — every firm member still sees every engagement).
-    assigned_user_id: user.user.id,
+    // The creator is the DEFAULT assignee-of-record (accountability, not access
+    // control — every firm member still sees every engagement), but the caller
+    // may name someone else so work can be created already handed over.
+    assigned_user_id: input.assigned_user_id ?? user.user.id,
     assigned_at: new Date().toISOString(),
   };
   // Invoice-automation columns (migration 0590) ride along ONLY when the

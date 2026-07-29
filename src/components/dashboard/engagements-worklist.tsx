@@ -580,6 +580,11 @@ function WorklistRowView({
     // Right-click "Add a comment" (team mode) — deep-links into the
     // engagement's comment composer.
     commentable: teamEnabled,
+    // Assign straight from the row. reassignMembers is already threaded here for
+    // the per-row control, so the menu costs nothing extra — and it works on the
+    // main worklist, where the per-row control isn't shown.
+    assignees: teamEnabled ? reassignMembers : undefined,
+    assigneeId: row.assigneeUserId,
   });
 
   return (

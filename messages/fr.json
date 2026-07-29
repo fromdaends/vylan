@@ -2122,7 +2122,11 @@
     "unassign": "Le retirer",
     "handoff_from": "Confié par {name} · {date}",
     "handoff_at": "Confié le {date}",
-    "client_was_told": "Ce que votre client a reçu"
+    "client_was_told": "Ce que votre client a reçu",
+    "assign_to": "Attribuer à…",
+    "assign_nobody": "Personne",
+    "assigned_toast": "Attribué à {name}",
+    "unassigned_toast": "Personne assignée retirée"
   },
   "Attention": {
     "metric_active": "Actifs",

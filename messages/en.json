@@ -2122,7 +2122,11 @@
     "unassign": "Take it off them",
     "handoff_from": "Handed over by {name} · {date}",
     "handoff_at": "Handed over {date}",
-    "client_was_told": "What your client was told"
+    "client_was_told": "What your client was told",
+    "assign_to": "Assign to…",
+    "assign_nobody": "Nobody",
+    "assigned_toast": "Assigned to {name}",
+    "unassigned_toast": "Assignee cleared"
   },
   "Attention": {
     "metric_active": "Active",

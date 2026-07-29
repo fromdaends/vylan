@@ -171,6 +171,11 @@ const CreateSchema = z
     // Invoice recurrence (Phase 4): recreate this engagement's invoice on every
     // spawned occurrence. Only meaningful with repeat on + an invoice configured.
     repeat_invoice_recreate: z.boolean().optional().default(false),
+    // Assign the work at creation instead of creating-then-handing-over.
+    // Validated against the live active roster below, not just as a uuid:
+    // assigned_user_id has no firm-scoped FK, so a well-formed id from
+    // another firm would otherwise be accepted.
+    assigned_user_id: z.string().uuid().nullable().optional(),
     items: z.array(ItemSchema).min(0),
   })
   // Any invoice (created now OR automated) needs an amount to bill.
@@ -230,6 +235,7 @@ export async function createEngagementAction(
     repeat_anchor_day?: number | null;
     repeat_due_offset_days?: number | null;
     repeat_invoice_recreate?: boolean;
+    assigned_user_id?: string | null;
     items: TemplateItem[];
     send: boolean;
     locale: "fr" | "en";
@@ -255,10 +261,25 @@ export async function createEngagementAction(
     repeat_anchor_day: payload.repeat_anchor_day,
     repeat_due_offset_days: payload.repeat_due_offset_days,
     repeat_invoice_recreate: payload.repeat_invoice_recreate,
+    assigned_user_id: payload.assigned_user_id,
     items: payload.items,
   });
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFromZod(parsed.error) };
+  }
+  // Creating work already assigned to someone. A parseable uuid is NOT proof of
+  // a teammate — assigned_user_id has no firm-scoped foreign key, so an id from
+  // another firm would otherwise be written straight onto the row and RLS would
+  // not object. Anything that isn't a currently-active member of THIS firm falls
+  // back to the creator rather than failing the create: the assignee is
+  // accountability, and losing a whole engagement over it would be worse.
+  let assignedUserId: string | null = null;
+  if (parsed.data.assigned_user_id) {
+    const activeMembers = await listActiveFirmUsers();
+    assignedUserId =
+      activeMembers.some((m) => m.id === parsed.data.assigned_user_id)
+        ? parsed.data.assigned_user_id
+        : null;
   }
   if (invoiceAttachment && invoiceAttachment.size > 0) {
     const validation = validateInvoiceAttachment(invoiceAttachment);
@@ -319,6 +340,7 @@ export async function createEngagementAction(
       invoice_locks_deliverables: parsed.data.invoice_locks_deliverables,
       invoice_description: parsed.data.invoice_description ?? null,
       reminder_settings: parsed.data.reminder_settings,
+      assigned_user_id: assignedUserId,
       items,
     };
     const created = await createEngagementWithItems(input);
