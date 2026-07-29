@@ -234,11 +234,76 @@ already a fixed stand-in for a connected organisation.
 
 ---
 
+## 13. Register match — duplicate protection (#1006)
+
+**QuickBooks ALREADY HAD THIS** (smart posting Stage 5). This entry exists to
+record the three places where Xero could not simply reuse it, and one bug the
+Xero side had that QuickBooks does not.
+
+The shared classifier (`lib/quickbooks/register-match.ts` `classifyRegisterMatch`)
+is REUSED, not forked. Its entity vocabulary ("bill", "purchase", "invoice",
+"salesreceipt") is logical rather than QuickBooks-specific and maps one-to-one
+onto Xero's ACCPAY / SPEND / ACCREC / RECEIVE. Its verdict rules are
+provider-neutral judgement about money; two copies of that judgement is how they
+drift apart. Only the SEARCH is Xero's (`lib/xero/register-match.ts`).
+
+### The three Xero-specific deltas
+
+1. **Currency had to be normalised, not passed through.** QuickBooks only sets
+   `CurrencyRef` when the company has multicurrency on, so the classifier reads
+   "a candidate carrying a currency" as "this total may not be in the home
+   currency — ask". Xero stamps `CurrencyCode` on EVERY transaction. Passed
+   through raw, that guard would have refused every Xero match forever.
+   Normalised against the organisation's own `base_currency` (migration 1030):
+   a candidate in the organisation's currency reports null, a genuinely foreign
+   one keeps its code and gets confirmed. An unknown organisation currency keeps
+   every code, which errs toward asking.
+
+2. **Two requests, not one → a read failure had to become data.** QuickBooks
+   queries one register; a thrown request is the caller's signal. Xero needs
+   `Invoices` and `BankTransactions` separately, so `searchXeroRegister` never
+   throws and reports `truncated` + `readFailed` instead. The two callers use it
+   OPPOSITELY, and that asymmetry is deliberate:
+   - the automatic pre-create check FAILS OPEN (logs, creates as usual) — the
+     duplicate check must never block a legitimate post;
+   - the explicit attach FAILS CLOSED (`post_failed`, retry) — never create the
+     very duplicate the accountant just said already exists.
+   Note the shared classifier returns `none` for zero candidates even when
+   truncated, so `readFailed` is what carries "we could not actually check".
+
+3. **Same-direction registers only.** QuickBooks passes an explicit `entities`
+   list; the Xero search scans both endpoints and would otherwise return income
+   rows for an expense draft. A same-day, same-amount sale is a coincidence, not
+   a duplicate, and surfacing it would train accountants to dismiss the dialog.
+   `xeroSearchEntities(direction)` mirrors QuickBooks' `searchEntities`.
+
+### The Xero-only bug this exposed
+
+`undoXeroPost` re-derived the endpoint from the draft's own shape and
+unconditionally deleted or voided. Once a draft can be MATCHED that is wrong
+twice: it would have removed the CLIENT's own transaction on a button labelled
+"Undo", and an unpaid bill matched to a paid bank line would have gone to the
+wrong endpoint entirely. Undo now unlinks when `matchedQboType` is set, and
+`xeroEndpointForDraft` trusts what was matched. QuickBooks was already correct
+here (its void route checks `matched` and skips the delete, and its
+attach-receipt route already read `matchedQboType`) — no QuickBooks change
+needed.
+
+### Copy
+
+Six `_xero` sibling keys added (`match_title`, `match_body`, `match_gone`,
+`post_match_hint`, `matched_label`, `unlink_body`) and the component's existing
+`pk()` provider-key helper applied to them. The QuickBooks-worded keys are
+untouched.
+
+---
+
 ## Still open on Xero (finish before starting QuickBooks)
 
 1. **The demo-only posting gate** in `src/lib/xero/post.ts` still blocks real
-   client books. Needs a deliberate go-live decision (register-match dedupe is
-   the main thing still missing vs the QuickBooks path).
+   client books. Register-match (section 13) was the last functional gap versus
+   the QuickBooks path and shipped in #1006, so what remains is a deliberate
+   go-live decision, not more code. The founder DEFERRED it on 2026-07-28.
 
 ---
 
@@ -251,5 +316,10 @@ already a fixed stand-in for a connected organisation.
   added here treats `undefined` as no-opinion, so an un-migrated or
   un-resynced client never gets an empty picker.
 - **A per-provider constraint is not a shared one.** Xero's Reference is not
-  QuickBooks' DocNumber; Xero's tax flags are not QuickBooks' rate lists. Three
-  of the six items above are deliberately NOT straight copies.
+  QuickBooks' DocNumber; Xero's tax flags are not QuickBooks' rate lists; Xero's
+  always-present CurrencyCode is not QuickBooks' optional CurrencyRef. Several
+  of the items above are deliberately NOT straight copies.
+- **Reuse the judgement, port only the plumbing.** Section 13 shares the entire
+  match/no-match decision with QuickBooks and reimplements only the query. Where
+  a shared rule needed a different INPUT (currency), the adapter normalised the
+  input rather than adding a provider branch inside the shared rule.
