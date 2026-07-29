@@ -47,7 +47,6 @@ function strings(m: typeof en) {
       { kicker: t.step2_kicker, title: t.step2_title, body: t.step2_body },
       { kicker: t.step3_kicker, title: t.step3_title, body: t.step3_body },
       { kicker: t.step4_kicker, title: t.step4_title, body: t.step4_body },
-      { kicker: t.step5_kicker, title: t.step5_title, body: t.step5_body },
     ],
     workflow: {
       eyebrow: t.wa_eyebrow,
@@ -205,24 +204,24 @@ describe("HowItWorksShell — auto-filing band", () => {
 });
 
 describe("HowItWorksShell — guided walkthrough", () => {
-  it("runs five steps, numbered 01 through 05", () => {
+  it("runs four steps, numbered 01 through 04", () => {
     const { container } = render(
       <HowItWorksShell s={strings(en)} helpHref={HELP} />,
     );
     const nodes = Array.from(
       container.querySelectorAll("[data-node]"),
     ).map((n) => n.textContent);
-    expect(nodes).toEqual(["01", "02", "03", "04", "05"]);
+    expect(nodes).toEqual(["01", "02", "03", "04"]);
   });
 
-  it("answers its own 'blurry photos' complaint with the capture step", () => {
+  it("still answers its own 'blurry photos' complaint, via the AI check", () => {
     render(<HowItWorksShell s={strings(en)} helpHref={HELP} />);
     const t = en.VylanHowItWorks;
-    // The problem section raises it; the walkthrough has to resolve it. If the
-    // capture step is ever dropped, the page goes back to naming a problem it
-    // never answers.
+    // The capture step that used to answer this was cut as disproportionate.
+    // The problem section still raises blurry photos, so the AI-check step has
+    // to be the thing that resolves it.
     expect(screen.getByText(t.problem_chip_1)).toBeTruthy();
-    expect(screen.getByText(t.step2_title)).toBeTruthy();
+    expect(t.step2_body.toLowerCase()).toContain("blurry");
   });
 
   it("does not claim the AI never files anything, now that filing is automatic", () => {
@@ -278,12 +277,9 @@ describe("HowItWorksShell — French", () => {
       "integrations_help",
       // The walkthrough steps, rewritten in the same pass.
       "step1_body",
-      "step2_kicker",
-      "step2_title",
       "step2_body",
       "step3_body",
       "step4_body",
-      "step5_body",
       "trust_4_body",
     ] as const) {
       expect(f[key], `fr.${key} is still the English string`).not.toBe(e[key]);
@@ -296,7 +292,7 @@ describe("HowItWorksShell — nothing lost in the rebuild", () => {
     render(<HowItWorksShell s={strings(en)} helpHref={HELP} />);
     const t = en.VylanHowItWorks;
     expect(screen.getByText(t.step1_title)).toBeTruthy();
-    expect(screen.getByText(t.step5_title)).toBeTruthy();
+    expect(screen.getByText(t.step4_title)).toBeTruthy();
     expect(screen.getByText(t.pay_step3_title)).toBeTruthy();
     expect(screen.getByText(t.trust_1_title)).toBeTruthy();
     expect(screen.getByText(t.inv_mock_total)).toBeTruthy();

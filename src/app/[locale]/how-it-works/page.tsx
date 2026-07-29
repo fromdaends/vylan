@@ -65,16 +65,15 @@ export default async function HowItWorksPage({
     problemBody: t("problem_body"),
     stepsEyebrow: t("steps_eyebrow"),
     stepsTitle: t("steps_title"),
-    // Five steps: link → capture → check → chase → decide. "The capture" was
-    // added once the portal scanner shipped — the problem section three
-    // screens up names "Blurry photos" as its first complaint, and until now
-    // the page raised that and never answered it.
+    // Four steps: link → check → chase → decide. The phone scanner briefly had
+    // a step of its own; it does not deserve one (founder, 2026-07-29) — firms
+    // ask for PDFs, and a whole beat about photographing paper oversells a
+    // fallback. It is one clause inside step 1 instead, where uploading lives.
     steps: [
       { kicker: t("step1_kicker"), title: t("step1_title"), body: t("step1_body") },
       { kicker: t("step2_kicker"), title: t("step2_title"), body: t("step2_body") },
       { kicker: t("step3_kicker"), title: t("step3_title"), body: t("step3_body") },
       { kicker: t("step4_kicker"), title: t("step4_title"), body: t("step4_body") },
-      { kicker: t("step5_kicker"), title: t("step5_title"), body: t("step5_body") },
     ],
     // The playable stage-board demo. Its five stage names come from the
     // PRODUCT's own namespace, not a marketing copy of them: the design took
