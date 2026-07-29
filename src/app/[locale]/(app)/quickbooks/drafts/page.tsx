@@ -15,7 +15,10 @@ import {
 } from "@/lib/db/users";
 import { listFirmDrafts } from "@/lib/db/quickbooks-suggestions";
 import { readCachedQuickbooksListsByClient } from "@/lib/db/quickbooks-cache";
-import { readCachedXeroLists } from "@/lib/db/xero-cache";
+import {
+  readCachedXeroLists,
+  readCachedXeroTracking,
+} from "@/lib/db/xero-cache";
 import {
   filterXeroConnectedClientIds,
   firmHasAnyXeroConnection,
@@ -230,7 +233,8 @@ export default async function QuickbooksDraftsPage({
   // inconclusive check just reports "ok", i.e. no banner this load). Lists: one
   // batched read (5 queries total) so a many-client queue doesn't fan out.
   const HEALTH_BUDGET_MS = 3000;
-  const [listsByClient, xeroListsByClient, health] = await Promise.all([
+  const [listsByClient, xeroListsByClient, xeroTrackingByClient, health] =
+    await Promise.all([
     readCachedQuickbooksListsByClient(qboClientIdsWithDrafts),
     // Xero has no batched by-client reader; load each distinct Xero client's
     // cache in parallel and stitch into a map (mirrors the QBO map shape). A
@@ -245,6 +249,13 @@ export default async function QuickbooksDraftsPage({
           entries.map(([cid, lists]) => [cid, lists]),
         ),
     ),
+    // Tracking categories per Xero client. Empty for the many organisations
+    // that use none, which renders no picker at all.
+    Promise.all(
+      xeroClientIdsWithDrafts.map(
+        async (cid) => [cid, await readCachedXeroTracking(cid)] as const,
+      ),
+    ).then((entries) => new Map(entries)),
     firm && healthScopes.length > 0
       ? Promise.race([
           Promise.all(
@@ -296,6 +307,7 @@ export default async function QuickbooksDraftsPage({
     taxCodes: [],
     items: [],
     paymentAccounts: [],
+    tracking: [],
   };
   const optionsByClient = new Map<string, DraftCardOptions>(
     [...listsByClient].map(([cid, lists]) => [cid, buildOptions(lists)]),
@@ -304,7 +316,11 @@ export default async function QuickbooksDraftsPage({
   // adapter already shaped as QuickbooksLists). A client is at most one provider,
   // so these keys never collide with the QuickBooks ones above.
   for (const [cid, lists] of xeroListsByClient) {
-    optionsByClient.set(cid, buildOptions(lists));
+    optionsByClient.set(cid, {
+      ...buildOptions(lists),
+      // Xero-only; empty for an organisation that uses no tracking.
+      tracking: xeroTrackingByClient.get(cid) ?? [],
+    });
   }
   const optionsFor = (clientId: string | null): DraftCardOptions =>
     (clientId ? optionsByClient.get(clientId) : undefined) ?? EMPTY_OPTIONS;

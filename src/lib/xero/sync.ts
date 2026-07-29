@@ -78,6 +78,22 @@ export async function syncXeroLists(
     else failed.push("taxRates");
     // Items are best-effort + additive: a failed items read must not make the
     // whole sync partial (the three core lists gate lastSyncedAt).
+    // Tracking is best-effort + additive, exactly like items: an organisation
+    // that uses no tracking returns an empty list, and a failed read must not
+    // make an otherwise-good sync report failure.
+    if (rows.tracking) {
+      try {
+        await replaceCachedXeroEntity(
+          firmId,
+          clientId,
+          "tracking",
+          rows.tracking,
+          syncedAt,
+        );
+      } catch (e) {
+        console.warn("[xero] tracking cache write skipped:", e);
+      }
+    }
     if (rows.items) {
       try {
         await replaceCachedXeroEntity(firmId, clientId, "items", rows.items, syncedAt);

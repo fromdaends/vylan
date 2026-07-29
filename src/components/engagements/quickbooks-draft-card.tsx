@@ -31,6 +31,10 @@ import { RegenerateDraftButton } from "./regenerate-draft-button";
 import { DraftStatusControls } from "./draft-status-controls";
 import { QuickbooksPaidToggle } from "./quickbooks-paid-toggle";
 import { XeroPublishStatusField } from "./xero-publish-status-field";
+import {
+  XeroTrackingField,
+  type TrackingCategory,
+} from "./xero-tracking-field";
 import { QuickbooksSplitSection } from "./quickbooks-split-section";
 import { PostDraftControls } from "@/components/quickbooks/post-draft-controls";
 import {
@@ -54,6 +58,10 @@ export type DraftCardOptions = {
   items: PickOption[];
   // Bank + credit-card accounts only — the "paid from" options for a Purchase.
   paymentAccounts: PickOption[];
+  // XERO tracking categories with their options. Empty for QuickBooks, and for
+  // any Xero organisation that does not use tracking — which is most of them,
+  // so the picker renders nothing at all rather than an empty control.
+  tracking?: TrackingCategory[];
 };
 
 // "QuickBooks draft" card (Stage 4). Sits under a receipt / invoice on the
@@ -524,6 +532,26 @@ export async function QuickbooksDraftCard({
                 disabled={!isDraft}
               />
             ))}
+        </div>
+      )}
+
+      {/* XERO tracking — a second label on the transaction, alongside the
+          account. Optional everywhere: a transaction with no tracking is
+          perfectly valid, so this never joins the amber "needs input" set, and
+          it renders nothing when the organisation has no categories. */}
+      {isXero && (options.tracking?.length ?? 0) > 0 && (
+        <div className="px-3 pt-1.5">
+          <XeroTrackingField
+            fileId={fileId}
+            categories={options.tracking!}
+            value={Object.fromEntries(
+              (options.tracking ?? []).map((c) => [
+                c.categoryId,
+                resolved?.tracking?.[c.categoryId]?.id ?? null,
+              ]),
+            )}
+            disabled={!isDraft}
+          />
         </div>
       )}
 

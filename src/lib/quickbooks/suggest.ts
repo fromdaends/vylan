@@ -66,6 +66,11 @@ export type ResolvedEntry = {
   // Spelled out here rather than importing the Xero type — this module is
   // provider-neutral and the Xero layer owns the meaning.
   publishStatus?: "DRAFT" | "SUBMITTED" | "AUTHORISED" | null;
+  // XERO ONLY — the tracking option chosen for each category, keyed by CATEGORY
+  // id. A second label on the transaction ("which department", "which site")
+  // alongside the account. Absent/empty = no tracking, which is what an
+  // organisation that does not use it always posts.
+  tracking?: Record<string, ResolvedRef | null>;
 };
 
 // A reference to one cached QuickBooks entity. `active` is carried so the

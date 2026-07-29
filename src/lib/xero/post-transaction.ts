@@ -129,6 +129,26 @@ export function resolveXeroTaxApplication(input: {
   return { taxType: input.taxType, netAmount: net };
 }
 
+// The tracking to stamp on every posted line: up to two category/option pairs
+// (Xero's hard limit on ACTIVE categories per organisation).
+//
+// IDS, NOT NAMES. Xero accepts either, but a category or option can be renamed
+// in Xero at any moment, and a rename between our last sync and the post fails
+// with an opaque validation error. The GUIDs are stable.
+export type XeroTrackingPair = { categoryId: string; optionId: string };
+
+// Xero's LineItem.Tracking shape. Empty in, nothing out — an organisation that
+// uses no tracking must not get a Tracking key at all.
+export function buildLineTracking(
+  pairs: readonly XeroTrackingPair[] | undefined,
+): Record<string, unknown>[] | null {
+  if (!pairs || pairs.length === 0) return null;
+  return pairs.slice(0, 2).map((p) => ({
+    TrackingCategoryID: p.categoryId,
+    TrackingOptionID: p.optionId,
+  }));
+}
+
 // One posted expense line: an amount against a chart-of-accounts CODE. A
 // single-line post has one; a SPLIT post has several (each its own account code).
 export type XeroExpenseLine = { amount: number; accountCode: string };
@@ -159,7 +179,9 @@ function buildAccountLineItems(
   lines: XeroExpenseLine[],
   tax: XeroTaxApplication | null,
   description: string,
+  tracking?: readonly XeroTrackingPair[],
 ): Record<string, unknown>[] {
+  const trk = buildLineTracking(tracking);
   return lines.map((l) => {
     const li: Record<string, unknown> = {
       Description: description,
@@ -168,6 +190,10 @@ function buildAccountLineItems(
       AccountCode: l.accountCode,
     };
     if (tax) li.TaxType = tax.taxType;
+    // The same tracking rides every line of a split — the categories describe
+    // the TRANSACTION (which department, which location), not the individual
+    // account it was carved into.
+    if (trk) li.Tracking = trk;
     return li;
   });
 }
@@ -182,6 +208,7 @@ function buildIncomeLineItem(input: {
   amount: number;
   tax: XeroTaxApplication | null;
   description: string;
+  tracking?: readonly XeroTrackingPair[];
 }): Record<string, unknown> {
   const li: Record<string, unknown> = {
     Description: input.description,
@@ -191,6 +218,8 @@ function buildIncomeLineItem(input: {
   if (input.itemCode) li.ItemCode = input.itemCode;
   if (input.accountCode) li.AccountCode = input.accountCode;
   if (input.tax) li.TaxType = input.tax.taxType;
+  const trk = buildLineTracking(input.tracking);
+  if (trk) li.Tracking = trk;
   return li;
 }
 
@@ -243,6 +272,7 @@ export type XeroBillInput = {
   description?: string | null;
   tax?: XeroTaxApplication | null;
   lines?: XeroExpenseLine[]; // SPLIT (≥1); each carries its pre-tax amount + code
+  tracking?: readonly XeroTrackingPair[];
   status?: XeroInvoiceStatus;
   // Set only when the document's currency differs from the organisation's.
   currencyCode?: string | null;
@@ -267,6 +297,7 @@ export function buildXeroBillPayload(
       lineList,
       tax,
       input.description || DEFAULT_LINE_DESCRIPTION,
+      input.tracking,
     ),
     Date: input.date,
     Status: status,
@@ -292,6 +323,7 @@ export type XeroSpendInput = {
   description?: string | null;
   tax?: XeroTaxApplication | null;
   lines?: XeroExpenseLine[];
+  tracking?: readonly XeroTrackingPair[];
   // Set only when the document's currency differs from the organisation's.
   currencyCode?: string | null;
 };
@@ -315,6 +347,7 @@ export function buildXeroSpendPayload(
       lineList,
       tax,
       input.description || DEFAULT_LINE_DESCRIPTION,
+      input.tracking,
     ),
     Date: input.date,
   };
@@ -334,6 +367,7 @@ export type XeroIncomeInput = {
   reference?: string | null;
   description?: string | null;
   tax?: XeroTaxApplication | null;
+  tracking?: readonly XeroTrackingPair[];
   status?: XeroInvoiceStatus;
   // Set only when the document's currency differs from the organisation's.
   currencyCode?: string | null;
@@ -355,6 +389,7 @@ export function buildXeroInvoicePayload(
         amount: input.amount,
         tax,
         description: input.description || DEFAULT_LINE_DESCRIPTION,
+        tracking: input.tracking,
       }),
     ],
     Date: input.date,
@@ -378,6 +413,7 @@ export type XeroReceiveInput = {
   reference?: string | null;
   description?: string | null;
   tax?: XeroTaxApplication | null;
+  tracking?: readonly XeroTrackingPair[];
   // Set only when the document's currency differs from the organisation's.
   currencyCode?: string | null;
 };
@@ -398,6 +434,7 @@ export function buildXeroReceivePayload(
         amount: input.amount,
         tax,
         description: input.description || DEFAULT_LINE_DESCRIPTION,
+        tracking: input.tracking,
       }),
     ],
     Date: input.date,

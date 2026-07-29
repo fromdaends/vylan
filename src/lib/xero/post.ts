@@ -268,6 +268,14 @@ export async function postApprovedXeroDraft(
     await readClientXeroBaseCurrency(draft.firmId, draft.clientId),
   );
 
+  // The accountant's tracking picks, as the {category, option} pairs Xero wants.
+  // Entries the accountant cleared (null) are dropped rather than sent empty.
+  const trackingPairs = Object.entries(draft.resolved?.tracking ?? {})
+    .flatMap(([categoryId, ref]) =>
+      ref?.id ? [{ categoryId, optionId: ref.id }] : [],
+    )
+    .slice(0, 2);
+
   const publishStatus = effectivePublishStatus(
     s,
     draft.resolved,
@@ -328,6 +336,7 @@ export async function postApprovedXeroDraft(
       description: lineDescription,
       reference,
       currencyCode,
+      tracking: trackingPairs,
       tax,
     };
     if (isSalesReceipt) {
@@ -392,6 +401,7 @@ export async function postApprovedXeroDraft(
       description: lineDescription,
       reference,
       currencyCode,
+      tracking: trackingPairs,
       tax,
       lines: expenseLines,
     });
@@ -429,6 +439,7 @@ export async function postApprovedXeroDraft(
       description: lineDescription,
       reference,
       currencyCode,
+      tracking: trackingPairs,
       tax,
       lines: expenseLines,
     });

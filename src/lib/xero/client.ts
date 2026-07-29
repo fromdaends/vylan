@@ -451,6 +451,18 @@ export type XeroRawTaxRate = {
   CanApplyToRevenue?: boolean;
   CanApplyToExpenses?: boolean;
 };
+// A tracking category and its options. Xero allows at most two ACTIVE
+// categories per organisation, which is what keeps the picker tractable.
+export type XeroRawTrackingCategory = {
+  TrackingCategoryID?: string;
+  Name?: string;
+  Status?: string; // ACTIVE, ARCHIVED, DELETED
+  Options?: Array<{
+    TrackingOptionID?: string;
+    Name?: string;
+    Status?: string;
+  }>;
+};
 export type XeroRawItem = {
   ItemID?: string;
   Code?: string;
@@ -496,6 +508,17 @@ export async function fetchXeroAccounts(
 ): Promise<XeroRawAccount[]> {
   const json = await xeroGet(accessToken, tenantId, "Accounts");
   return (json.Accounts as XeroRawAccount[] | undefined) ?? [];
+}
+
+// Tracking categories, each with its options nested (full list, no paging).
+// Xero returns archived categories too; the read layer keeps them and flags
+// them, so a line already coded to a since-archived option still displays.
+export async function fetchXeroTrackingCategories(
+  accessToken: string,
+  tenantId: string,
+): Promise<XeroRawTrackingCategory[]> {
+  const json = await xeroGet(accessToken, tenantId, "TrackingCategories");
+  return (json.TrackingCategories as XeroRawTrackingCategory[] | undefined) ?? [];
 }
 
 // Tax rates (full list). No paging, no If-Modified-Since.

@@ -78,7 +78,10 @@ import {
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getClientXeroStatus } from "@/lib/db/xero";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
-import { readCachedXeroLists } from "@/lib/db/xero-cache";
+import {
+  readCachedXeroLists,
+  readCachedXeroTracking,
+} from "@/lib/db/xero-cache";
 import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
@@ -429,15 +432,21 @@ export default async function EngagementDetailPage({
       ? "quickbooks"
       : null;
   const bookkeepingConnected = bookkeepingProvider != null;
-  const [initialSuggestions, bkLists, bkLearned] = bookkeepingConnected
-    ? await Promise.all([
-        getSuggestionsForEngagement(id),
-        bookkeepingProvider === "xero"
-          ? readCachedXeroLists(engagement.client_id)
-          : readCachedQuickbooksLists(engagement.client_id),
-        readFirmLearnedMappings(engagement.client_id),
-      ])
-    : [new Map<string, StoredDraft>(), null, {} as LearnedMappings];
+  const [initialSuggestions, bkLists, bkLearned, bkTracking] =
+    bookkeepingConnected
+      ? await Promise.all([
+          getSuggestionsForEngagement(id),
+          bookkeepingProvider === "xero"
+            ? readCachedXeroLists(engagement.client_id)
+            : readCachedQuickbooksLists(engagement.client_id),
+          readFirmLearnedMappings(engagement.client_id),
+          // Xero-only, and empty for the many organisations that use no
+          // tracking — the picker then renders nothing.
+          bookkeepingProvider === "xero"
+            ? readCachedXeroTracking(engagement.client_id)
+            : Promise.resolve([]),
+        ])
+      : [new Map<string, StoredDraft>(), null, {} as LearnedMappings, []];
   let suggestionsByFile = initialSuggestions;
   // Self-heal: regenerate any draft that's missing but whose file already has a
   // stored transaction read (re-upload race / pre-migration classify / cleanup),
@@ -522,6 +531,7 @@ export default async function EngagementDetailPage({
     paymentAccounts: (bkLists?.accounts ?? [])
       .filter((x) => x.active && isPayFrom(x.accountType))
       .map(toOpt),
+    tracking: bkTracking,
   };
   // The same accounts, keeping the TYPE. The payout journal needs it: Xero
   // refuses a journal entry that touches a bank balance, and the type is the
