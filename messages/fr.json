@@ -2121,7 +2121,8 @@
     "final_delete_confirm_body": "« {name} » sera retiré de Vylan et du portail du client.",
     "unassign": "Le retirer",
     "handoff_from": "Confié par {name} · {date}",
-    "handoff_at": "Confié le {date}"
+    "handoff_at": "Confié le {date}",
+    "client_was_told": "Ce que votre client a reçu"
   },
   "Attention": {
     "metric_active": "Actifs",
