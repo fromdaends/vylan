@@ -132,6 +132,7 @@ export type PostPayoutJournalState = {
     | "not_found"
     | "not_approved"
     | "not_connected"
+    | "needs_reconnect"
     | "not_buildable"
     | "missing_account_codes"
     | "post_failed";
