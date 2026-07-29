@@ -936,10 +936,29 @@ describe("suggestItem — name matching", () => {
     ).toBe("i2");
   });
 
-  // A near-name is how the wrong product ends up on a client's invoice.
-  it("does NOT match a merely similar description", () => {
+  // The case that broke on a real invoice: the printed line carries an extra
+  // clause, so an exact-string rule gave up and left the field blank while the
+  // dropdown underneath was showing the right answer.
+  it("matches when the printed line carries an extra clause", () => {
+    const m = suggestItem("income", null, items, [
+      "Development work — per hour rate · Member portal build, sprint 4",
+    ]);
+    expect(m.match?.id).toBe("i1");
+    // Strong but not exact -> filled in, but NOT enough to auto-approve.
+    expect(m.confidence).toBeGreaterThan(0.6);
+    expect(m.confidence).toBeLessThan(0.99);
+  });
+
+  it("only an EXACT match scores 1.0 and can auto-approve", () => {
+    const exact = suggestItem("income", null, items, [
+      "Development work - per hour rate",
+    ]);
+    expect(exact.confidence).toBe(1);
+  });
+
+  it("still ignores a description that matches nothing", () => {
     expect(
-      suggestItem("income", null, items, ["Development work, hourly"]).match,
+      suggestItem("income", null, items, ["Parking, downtown lot"]).match,
     ).toBeNull();
   });
 
@@ -948,6 +967,7 @@ describe("suggestItem — name matching", () => {
       { ...items[0]!, id: "x1" },
       { ...items[0]!, id: "x2" },
     ];
+    // Both score 1.0, so the ambiguity margin refuses to choose between them.
     expect(
       suggestItem("income", null, dup, ["Development work - per hour rate"])
         .match,
