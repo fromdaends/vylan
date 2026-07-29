@@ -100,7 +100,13 @@ export type LearnSignal =
   // the document: it is a property of the client's books, not of the paper, and
   // it is the same account almost every time. Remembering it is what stops the
   // accountant re-picking it on every single receipt.
-  | "payment_account";
+  | "payment_account"
+  // The product/service a CUSTOMER's invoices post against, keyed by the
+  // customer name. The only other signal for this is the printed line
+  // description, so a document whose lines are not legible leaves the
+  // accountant picking by hand every time. Remembering it from the customer
+  // means the second invoice for that customer fills itself in regardless.
+  | "item";
 export type LearnedRef = { id: string; name: string };
 export type LearnedMappings = Partial<
   Record<LearnSignal, Record<string, LearnedRef>>
@@ -987,11 +993,23 @@ export function buildTransactionSuggestion(
 
   // Income lines post to a product/service ITEM (not an account). Derive it from
   // the matched income account. Empty for expense/unknown.
-  const item = suggestItem(
-    direction,
-    account.match?.id ?? null,
-    lists.items,
-    (extraction.line_items ?? []).map((l) => l.description),
+  // A remembered product for this customer beats deriving one, and crucially it
+  // still works when the document's lines were not legible — which is the case
+  // that otherwise strands the accountant picking the same product forever.
+  const itemLearned = learnedMatch(
+    "item",
+    learnKeyForName(partyQuery),
+    learned,
+    lists.items ?? null,
+  );
+  const item = overlayLearned(
+    suggestItem(
+      direction,
+      account.match?.id ?? null,
+      lists.items,
+      (extraction.line_items ?? []).map((l) => l.description),
+    ),
+    direction === "income" ? itemLearned : null,
   );
   if (direction === "income") {
     if (item.match && !item.match.active) {
@@ -1087,6 +1105,7 @@ export function buildTransactionSuggestion(
     accountLearned ||
     taxLearned ||
     anyLineLearned ||
+    itemLearned ||
     (extraction.paid === true && paymentLearned)
   ) {
     notes.push(
@@ -1143,6 +1162,7 @@ export function buildTransactionSuggestion(
       ...(accountLearned ? (["expense_account"] as const) : []),
       ...(taxLearned ? (["tax"] as const) : []),
       ...(anyLineLearned ? (["line_account"] as const) : []),
+      ...(direction === "income" && itemLearned ? (["item"] as const) : []),
       ...(extraction.paid === true && paymentLearned
         ? (["payment_account"] as const)
         : []),

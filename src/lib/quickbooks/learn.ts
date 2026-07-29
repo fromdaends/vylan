@@ -71,6 +71,28 @@ export function learnedWritesFromResolve(
     }
   }
 
+  // Product/service -> keyed by the CUSTOMER name. An invoice's line posts
+  // against an item, and the only other way to find one is the printed line
+  // description — so a document whose lines are not legible leaves this blank
+  // every single time. Remembering it from the customer fixes that from the
+  // second invoice onwards. Income only: an expense has no item.
+  if (
+    has(patch, "item") &&
+    patch.item &&
+    suggestion.direction === "income" &&
+    partySource
+  ) {
+    const key = learnKeyForName(partySource);
+    if (key) {
+      writes.push({
+        signalType: "item",
+        sourceKey: key,
+        sourceSample: partySource,
+        target: { id: patch.item.id, name: patch.item.name },
+      });
+    }
+  }
+
   // Bank account -> keyed by DIRECTION alone. Unlike every other signal this is
   // not read off the document: it is which of the client's accounts their money
   // moves through, and it is the same one almost every time. Learning it is
@@ -195,6 +217,18 @@ export function learnedWritesFromApproval(
   }
 
   const taxKey = taxLearnKey(suggestion.taxSource ?? null, suggestion.direction);
+  if (eff.item && suggestion.direction === "income" && partySource) {
+    const key = learnKeyForName(partySource);
+    if (key) {
+      writes.push({
+        signalType: "item",
+        sourceKey: key,
+        sourceSample: partySource,
+        target: { id: eff.item.id, name: eff.item.name },
+      });
+    }
+  }
+
   if (eff.paymentAccount) {
     writes.push({
       signalType: "payment_account",
