@@ -263,3 +263,32 @@ describe("learnedWritesFromResolve", () => {
     ).toEqual([]);
   });
 });
+
+// An invoice line posts against a product, and the only other way to find one
+// is the printed line description — which a real document did not give us at
+// all. Remembering it from the CUSTOMER means the second invoice fills itself.
+describe("product/service learning", () => {
+  it("learns the product keyed by the customer name", () => {
+    const w = learnedWritesFromResolve(
+      { item: { id: "i1", name: "Development work - per hour rate" } },
+      incomeSuggestion,
+    );
+    const item = w.find((x) => x.signalType === "item");
+    expect(item?.sourceKey).toBe("acme");
+    expect(item?.target.id).toBe("i1");
+  });
+
+  // An expense has no product/service at all.
+  it("does not learn a product on an expense draft", () => {
+    const w = learnedWritesFromResolve(
+      { item: { id: "i1", name: "Development work - per hour rate" } },
+      expenseSuggestion,
+    );
+    expect(w.find((x) => x.signalType === "item")).toBeUndefined();
+  });
+
+  it("teaches nothing when the product is cleared", () => {
+    const w = learnedWritesFromResolve({ item: null }, incomeSuggestion);
+    expect(w.find((x) => x.signalType === "item")).toBeUndefined();
+  });
+});

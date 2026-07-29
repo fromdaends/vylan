@@ -1030,3 +1030,45 @@ describe("suggestItem — name matching", () => {
     ).toBeNull();
   });
 });
+
+// The failure this exists for: a real invoice extracted ZERO line items, so
+// there was nothing at all to derive the product from and the accountant had to
+// pick it by hand — every single time, forever.
+describe("remembered product fills in with no line items at all", () => {
+  const withItems = {
+    ...lists,
+    items: [
+      {
+        id: "i1",
+        name: "Development work - per hour rate",
+        itemType: "Service",
+        incomeAccountId: null,
+        active: true,
+      },
+    ],
+  };
+  const income = () =>
+    extraction({
+      direction: "income",
+      vendor_name: null,
+      customer_name: "Eastside Club",
+      line_items: [],
+    });
+
+  it("fills the product from memory when the document named none", () => {
+    const s = buildTransactionSuggestion(income(), withItems, {
+      item: {
+        [`${nameTokens("Eastside Club").join(" ")}`]: {
+          id: "i1",
+          name: "Development work - per hour rate",
+        },
+      },
+    });
+    expect(s.item?.match?.id).toBe("i1");
+  });
+
+  it("stays empty when nothing is remembered and nothing is named", () => {
+    const s = buildTransactionSuggestion(income(), withItems);
+    expect(s.item?.match).toBeNull();
+  });
+});

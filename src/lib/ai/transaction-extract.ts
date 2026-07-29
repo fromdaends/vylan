@@ -58,7 +58,7 @@ export type TransactionTaxLine = {
   rate: number | null; // percent, e.g. 5 for 5%, or null when not printed
 };
 
-// One line item read off an EXPENSE document. `amount` is PRE-TAX (its share of
+// One line item read off the document. `amount` is PRE-TAX (its share of
 // the subtotal). Used to split a receipt across multiple QuickBooks accounts.
 export type TransactionLineItem = {
   description: string;
@@ -84,7 +84,10 @@ export type TransactionExtraction = {
   subtotal: number | null; // pre-tax amount
   total: number | null; // grand total including tax
   taxes: TransactionTaxLine[]; // 0..n tax lines (empty when none legible)
-  // EXPENSE line items (pre-tax), for splitting a receipt across accounts. Empty
+  // Line items (pre-tax). On an EXPENSE they drive splitting across accounts;
+  // on a SALES INVOICE they name the product/service the line posts against —
+  // which is the ONLY signal we have for that, so an empty array there means
+  // the accountant has to pick the product by hand. Empty
   // for income or when only a single total is legible.
   line_items: TransactionLineItem[];
   // Has the money already changed hands? BOTH directions: an expense receipt
@@ -198,7 +201,7 @@ const TRANSACTION_TOOL = {
           required: ["description", "amount"],
         },
         description:
-          "Each distinct line item on an EXPENSE receipt/bill, pre-tax. Their amounts should sum to the subtotal. Empty array for income, or when individual lines aren't legible / there's only a single total. Do NOT include tax, tip, subtotal, or total rows as line items.",
+          "Each distinct line item on the document, pre-tax. Their amounts should sum to the subtotal. Read them for BOTH directions: on an expense they let the accountant split the receipt across accounts, and on a SALES INVOICE they name the product or service sold, which is what the line posts against. Give the line as printed — if a line has a heading and a sub-description, include the heading (e.g. 'Development work - per hour rate (member portal build)'). Empty array only when individual lines genuinely aren't legible or there is a single total with no breakdown. Do NOT include tax, tip, subtotal, or total rows as line items.",
       },
       paid: {
         type: ["boolean", "null"],
