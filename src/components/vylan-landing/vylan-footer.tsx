@@ -1,5 +1,5 @@
 // The site-wide black footer (Karbon-style), on every public page: landing,
-// how-it-works, contact, the whole help center, privacy and terms.
+// how-it-works, the whole help center, privacy and terms.
 //
 // SELF-TRANSLATING on purpose. The old footer took a bag of strings from
 // every caller, which meant four pages each rebuilding the same object and a
@@ -24,7 +24,9 @@ import { SocialLinks } from "./social-links";
 import "@/styles/vylan-footer.css";
 
 // The two business lines. E.164 in the tel: href, human-friendly in the label.
-// Also rendered (larger) on the /contact page, which imports this constant.
+// The footer is the only place these appear now: the standalone /contact page
+// was removed (founder, 2026-07-29) because this column already said the same
+// thing on every page of the site.
 export const VYLAN_PHONES = [
   { tel: "+14508306455", label: "450-830-6455" },
   { tel: "+14383415160", label: "438-341-5160" },
@@ -110,9 +112,6 @@ export async function VylanFooter({
           <nav className="vyf-col" aria-label={tf("contact")}>
             <h3 className="vyf-col-title">{tf("contact")}</h3>
             <ul>
-              <li>
-                <Link href="/contact">{t("footer_contact")}</Link>
-              </li>
               <li>
                 <a href={`mailto:${brand.supportEmail}`}>{brand.supportEmail}</a>
               </li>

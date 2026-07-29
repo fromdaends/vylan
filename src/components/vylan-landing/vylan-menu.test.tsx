@@ -32,7 +32,6 @@ const S: VylanMenuStrings = {
   navHowItWorks: "HOW IT WORKS",
   navBookDemo: "BOOK A DEMO",
   navLogin: "LOGIN",
-  navContact: "CONTACT",
   navHelp: "HELP",
   follow: "Follow",
 };
@@ -151,5 +150,18 @@ describe("help link", () => {
     expect(a).toHaveAttribute("href", "/help");
     expect(a).toHaveAttribute("target", "_blank");
     expect(a).toHaveAttribute("rel", "noopener noreferrer");
+  });
+});
+
+describe("no contact item", () => {
+  it("offers nothing pointing at the removed /contact route", () => {
+    // The standalone contact page was deleted (founder, 2026-07-29) — the
+    // footer carries the email, both phone lines and the location on every
+    // page. A menu entry here would be a link to a 404.
+    const { container } = render(<VylanMenu s={S} helpHref="/help" />);
+    const hrefs = Array.from(container.querySelectorAll("a")).map((a) =>
+      a.getAttribute("href"),
+    );
+    expect(hrefs).not.toContain("/contact");
   });
 });
