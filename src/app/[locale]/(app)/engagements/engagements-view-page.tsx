@@ -4,7 +4,6 @@ import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import {
   getCurrentUser,
   listActiveFirmUsers,
-  userDisplayLabel,
 } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
@@ -74,10 +73,6 @@ export async function renderEngagementsView({
           teamEnabled: firm?.team_enabled === true,
           activeMemberCount: activeMembers.length,
         })}
-        members={activeMembers.map((m) => ({
-          id: m.id,
-          name: userDisplayLabel(m),
-        }))}
         badges={{ ready: badges.readyToReview, deleted: badges.recentlyDeleted }}
       />
     </div>

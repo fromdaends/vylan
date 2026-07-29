@@ -494,3 +494,32 @@ describe("status column — sortable header (opt-in)", () => {
     ).toHaveAttribute("aria-sort", "descending");
   });
 });
+
+// A person has to be reachable from where you notice them. Before this, the
+// assignee on a work row was plain text and the only route to a teammate was
+// through Settings — which is why "view Sarah's work" ended up being a filter
+// on your own list instead of a place you could go.
+describe("the assignee is the way to the person", () => {
+  it("links a named assignee to their profile", () => {
+    const q = renderWorklist();
+    const alex = q.getAllByRole("link", { name: "Alex" })[0];
+    expect(alex).toHaveAttribute("href", "/settings/team/me");
+  });
+
+  it("leaves an unassigned row as plain text, not a link to nobody", () => {
+    // Row D (Gagnon) has assigneeUserId null.
+    const q = renderWorklist();
+    expect(
+      q.queryByRole("link", { name: en.Dashboard.wl_unassigned }),
+    ).toBeNull();
+    expect(q.getAllByText(en.Dashboard.wl_unassigned).length).toBeGreaterThan(0);
+  });
+
+  it("does not link a name it has no id for", () => {
+    const q = renderWorklist([
+      { ...rows[0], assigneeUserId: null, assigneeName: "Ghost" },
+    ]);
+    expect(q.queryByRole("link", { name: "Ghost" })).toBeNull();
+    expect(q.getByText("Ghost")).toBeInTheDocument();
+  });
+});

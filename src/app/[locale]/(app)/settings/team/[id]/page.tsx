@@ -10,6 +10,7 @@ import {
 import { getCurrentFirm } from "@/lib/db/firms";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { selectAssignedTo } from "@/lib/dashboard/worklist-select";
+import { scopeForView, selectView, viewLabelKey } from "@/lib/engagements/views";
 import { listClients } from "@/lib/db/clients";
 import { filterClientsByOwner } from "@/components/clients/owner";
 import { listActivityForFirm } from "@/lib/db/activity";
@@ -22,25 +23,50 @@ import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { formatDate } from "@/lib/format";
-import { ArrowRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-// A teammate's profile — "everything they're doing" in one place. Owner-only
-// (mirrors /settings/audit: it surfaces the same activity data), team-mode-only.
-// The engagement + client lists reuse the same filters as the ?assignee= /
-// ?owner= list views, and the "view all" links deep-link straight to them.
+// A teammate's profile — "everything they're doing" in one place, and now the
+// ONLY place. This page used to end each section with a "view all" link into
+// /engagements?assignee=<id> and /clients?owner=<id>: the shared lists, wearing
+// a filter. Those pages kept their own title and never named whose work you were
+// looking at — and clicking any lifecycle tab there silently dropped the person,
+// because Active/Ready/Completed are separate ROUTES that don't carry the
+// param. Verified in production: land on a teammate's lens, click "Completed",
+// and you are looking at YOUR completed work with the picker flipped back to
+// "My engagements" and nothing saying so. Worse, the link led to the same rows
+// this page already shows. Pure loss, so it's gone — and the lifecycle tabs are
+// here instead, as ?view= on this same route, so the person never gets dropped.
+//
+// Open to every member of the firm, not just owners. Making a person's name
+// clickable across the app (which is the point) is worthless if half the firm
+// gets a 404. The engagement and client lists are RLS-scoped, so a staff member
+// sees the intersection of "their work" and "what I'm allowed to see" — the
+// activity feed stays owner-only, mirroring /settings/audit.
+const PROFILE_VIEWS = ["active", "ready", "completed", "archived"] as const;
+type ProfileView = (typeof PROFILE_VIEWS)[number];
+
+function resolveProfileView(raw: string | undefined): ProfileView {
+  return (PROFILE_VIEWS as readonly string[]).includes(raw ?? "")
+    ? (raw as ProfileView)
+    : "active";
+}
+
 export default async function TeamMemberProfilePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; id: string }>;
+  searchParams: Promise<{ view?: string }>;
 }) {
   const { locale: rawLocale, id } = await params;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
+  const view = resolveProfileView((await searchParams).view);
 
   const user = await getCurrentUser();
-  if (!user || user.role !== "owner") notFound();
+  if (!user) notFound();
+  const isOwner = user.role === "owner";
   const firm = await getCurrentFirm();
   if (!firm) redirect(`/${locale}/dashboard`);
   if (!firm.team_enabled) notFound();
@@ -51,13 +77,26 @@ export default async function TeamMemberProfilePage({
   const member = members.find((m) => m.id === id);
   if (!member) notFound();
 
-  const [worklist, clientsRaw, activity, avatarUrl] = await Promise.all([
-    loadEngagementWorklist("active"),
-    listClients(),
-    listActivityForFirm({ actorId: id, limit: 20 }),
-    getBrandingImageUrl(member.avatar_path),
-  ]);
-  const engagements = selectAssignedTo(worklist, id);
+  // Two scopes at most, and usually one: loadEngagementWorklist is React.cache'd
+  // per scope, so active/ready/completed all resolve to the same single query.
+  // Only the Archived tab costs a second one. The stat tile stays pinned to the
+  // ACTIVE count on purpose — a headline number that changes meaning when you
+  // switch tabs isn't a headline, it's a second copy of the table's length.
+  const [activeWorklist, viewWorklist, clientsRaw, activity, avatarUrl] =
+    await Promise.all([
+      loadEngagementWorklist("active"),
+      loadEngagementWorklist(scopeForView(view)),
+      listClients(),
+      isOwner
+        ? listActivityForFirm({ actorId: id, limit: 20 })
+        : Promise.resolve([]),
+      getBrandingImageUrl(member.avatar_path),
+    ]);
+  const activeCount = selectView(
+    "active",
+    selectAssignedTo(activeWorklist, id),
+  ).length;
+  const engagements = selectView(view, selectAssignedTo(viewWorklist, id));
   // Reassignment targets for the per-row "move it" control: active teammates
   // other than the person whose profile this is.
   const reassignTargets = members
@@ -72,6 +111,7 @@ export default async function TeamMemberProfilePage({
   const tCommon = await getTranslations("Common");
   const tClients = await getTranslations("Clients");
   const tAudit = await getTranslations("Audit");
+  const tEngagements = await getTranslations("Engagements");
 
   const knownActions = new Set<string>(AUDIT_ACTIONS as readonly string[]);
   const actionLabel = (key: string): string =>
@@ -108,24 +148,45 @@ export default async function TeamMemberProfilePage({
         </div>
       </header>
 
-      <div className="grid grid-cols-3 gap-3">
-        <StatTile
-          label={t("profile_stat_engagements")}
-          value={engagements.length}
-        />
+      <div className={isOwner ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-3"}>
+        <StatTile label={t("profile_stat_engagements")} value={activeCount} />
         <StatTile label={t("profile_stat_clients")} value={clients.length} />
-        <StatTile
-          label={t("profile_stat_activity")}
-          value={activity.length}
-        />
+        {isOwner && (
+          <StatTile
+            label={t("profile_stat_activity")}
+            value={activity.length}
+          />
+        )}
       </div>
 
       <section className="space-y-3">
-        <SectionHeader
-          title={t("profile_engagements_title")}
-          href={`/engagements?assignee=${id}`}
-          viewAllLabel={t("profile_view_all")}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold tracking-tight">
+            {t("profile_engagements_title")}
+          </h2>
+          {/* The tabs the shared list used to be the only way to reach. Same
+              view vocabulary as /engagements, same labels — so "what did she
+              finish last month?" is answerable here instead of being the one
+              honest reason to send someone somewhere else. */}
+          <nav className="flex flex-wrap gap-1">
+            {PROFILE_VIEWS.map((v) => (
+              <Link
+                key={v}
+                href={v === "active" ? `/settings/team/${id}` : `/settings/team/${id}?view=${v}`}
+                aria-current={v === view ? "page" : undefined}
+                className={
+                  v === view
+                    ? "rounded-md bg-secondary px-2.5 py-1 text-xs font-medium text-foreground"
+                    : "rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
+                }
+              >
+                {tEngagements(
+                  viewLabelKey(v) as Parameters<typeof tEngagements>[0],
+                )}
+              </Link>
+            ))}
+          </nav>
+        </div>
         <WorklistTable
           rows={engagements}
           locale={locale}
@@ -137,11 +198,9 @@ export default async function TeamMemberProfilePage({
       </section>
 
       <section className="space-y-3">
-        <SectionHeader
-          title={t("profile_clients_title")}
-          href={`/clients?owner=${id}`}
-          viewAllLabel={t("profile_view_all")}
-        />
+        <h2 className="text-base font-semibold tracking-tight">
+          {t("profile_clients_title")}
+        </h2>
         {clients.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("profile_no_clients", { name })}
@@ -169,6 +228,7 @@ export default async function TeamMemberProfilePage({
         )}
       </section>
 
+      {isOwner && (
       <section className="space-y-3">
         <h2 className="text-base font-semibold tracking-tight">
           {t("profile_activity_title")}
@@ -219,6 +279,7 @@ export default async function TeamMemberProfilePage({
           </ol>
         )}
       </section>
+      )}
     </div>
   );
 }
@@ -232,25 +293,3 @@ function StatTile({ label, value }: { label: string; value: number }) {
   );
 }
 
-function SectionHeader({
-  title,
-  href,
-  viewAllLabel,
-}: {
-  title: string;
-  href: string;
-  viewAllLabel: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-      <Link
-        href={href}
-        className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-      >
-        {viewAllLabel}
-        <ArrowRight className="size-3.5" />
-      </Link>
-    </div>
-  );
-}

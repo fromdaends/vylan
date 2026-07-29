@@ -13,7 +13,6 @@ import { ClientsListView } from "@/components/clients/clients-list-view";
 import { SORT_OPTIONS, type SortKey } from "@/components/clients/sort";
 import {
   filterClientsByOwner,
-  isBuiltinOwnerFilter,
   type ClientOwner,
 } from "@/components/clients/owner";
 import { DemoBlockButton } from "@/components/app/demo-block-modal";
@@ -61,9 +60,6 @@ export default async function ClientsPage({
     ? (sp.sort as SortKey)
     : "recent";
   const activeOnly = sp.active === "1";
-  // An explicit ?owner choice (toolbar, or a "view a teammate's clients"
-  // deep-link) always wins; validated against real members below once loaded.
-  const rawOwner = (sp.owner ?? "").trim();
 
   const [clientsRaw, engagements, firm, currentUser, members, signals] =
     await Promise.all([
@@ -91,23 +87,17 @@ export default async function ClientsPage({
     activeMemberCount: members.filter((m) => !m.deactivated_at).length,
   });
 
-  // Default to the accountant's OWN clients ("mine") when they actually own at
-  // Default to YOUR OWN clients in team mode — /clients opens on your book, and
-  // you switch to All firm or a teammate via the toolbar / ?owner= (founder's
-  // call: personal-first, even if your book is empty — one click widens it). An
-  // explicit ?owner= still wins. Non-team firms stay on "all".
-  // Valid owner-filter values: the two built-ins ("all"/"mine") + any active
-  // member id. An unknown ?owner= (e.g. a since-removed member) falls back to
-  // the default rather than filtering to nobody.
-  const activeMemberIds = new Set(
-    members.filter((m) => !m.deactivated_at).map((m) => m.id),
-  );
-  const explicitOwner =
-    rawOwner && (isBuiltinOwnerFilter(rawOwner) || activeMemberIds.has(rawOwner))
-      ? rawOwner
-      : null;
+  // Default to YOUR OWN clients in team mode — /clients opens on your book and
+  // one click widens it to the whole firm. There is deliberately no third
+  // option for "a teammate's clients": that was a filter doing navigation's
+  // job, reachable by ?owner=<id> from the team page, and it left this page
+  // titled "Clients" while showing somebody else's book with nothing saying so.
+  // A teammate's clients are a question about the teammate, and they are
+  // answered on their profile (/settings/team/<id>). Non-team firms stay "all".
   const ownerFilter: string = teamEnabled
-    ? (explicitOwner ?? (currentUserId ? "mine" : "all"))
+    ? currentUserId
+      ? "mine"
+      : "all"
     : "all";
 
   // Resolve each firm member's avatar once (small set — seat caps are 1–15)
@@ -123,11 +113,6 @@ export default async function ClientsPage({
       avatarUrl: memberAvatars[i],
     };
   });
-  // Active teammates (excluding the viewer — "Mine" covers them) for the owner
-  // filter's per-person options.
-  const teammates = members
-    .filter((m) => !m.deactivated_at && m.id !== currentUserId)
-    .map((m) => ({ id: m.id, name: userDisplayLabel(m) }));
 
   // Group engagement counts by client_id (for the summary badge in the
   // row's "Engagements" column) AND group the full engagement rows by
@@ -269,7 +254,6 @@ export default async function ClientsPage({
         sort={sort}
         activeOnly={activeOnly}
         teamEnabled={teamEnabled}
-        members={teammates}
       />
     </div>
   );
