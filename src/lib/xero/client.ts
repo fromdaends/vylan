@@ -26,14 +26,22 @@ export const XERO_API_BASE_URL = "https://api.xero.com/api.xro/2.0";
 // Granular scopes (Xero's 2026 model — accounting.transactions is deprecated).
 // Requested up front so the accountant approves ONCE for everything the later
 // phases need: creating bills/invoices (accounting.invoices), paid expense /
-// income bank transactions (accounting.banktransactions), the unified contact
-// list (accounting.contacts), reference data — accounts / tax rates / items /
+// income bank transactions (accounting.banktransactions), payout journal
+// entries (accounting.manualjournals), the unified contact list
+// (accounting.contacts), reference data — accounts / tax rates / items /
 // organisation (accounting.settings.read), receipt attachments
 // (accounting.attachments), and offline_access for the refresh token.
+//
+// NOTE: scopes bake into the token AT AUTHORIZATION TIME. Adding one here does
+// nothing for an ALREADY-CONNECTED org — that connection keeps the scope set it
+// was granted, and the new endpoint 401s until the firm reconnects. postPayout-
+// Journal detects exactly that case and tells them to reconnect rather than
+// showing a raw Xero error.
 export const XERO_SCOPES = [
   "offline_access",
   "accounting.invoices",
   "accounting.banktransactions",
+  "accounting.manualjournals",
   "accounting.contacts",
   "accounting.settings.read",
   "accounting.attachments",

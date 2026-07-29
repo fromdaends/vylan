@@ -36,6 +36,9 @@ export type PostPayoutJournalOutcome =
   | { kind: "not_found" }
   | { kind: "not_approved" }
   | { kind: "not_connected" }
+  // Connected, but the grant predates the journal permission (Xero bakes
+  // scopes into the token at authorization time). Only a reconnect fixes it.
+  | { kind: "needs_reconnect" }
   // The entry couldn't be built — figures don't reconcile, or accounts are
   // still unmapped. Both are the accountant's to fix, not retryable as-is.
   | { kind: "not_buildable"; reason: string }
@@ -131,6 +134,19 @@ export async function postPayoutJournal(input: {
     return { kind: "posted", ref: created.id, link: null };
   } catch (e) {
     const message = (e as Error).message ?? String(e);
+    // A 401 on the journal endpoint from an otherwise-live connection means the
+    // token was granted before accounting.manualjournals was requested. Say
+    // that plainly instead of surfacing Xero's raw JSON.
+    const status = (e as { status?: number }).status;
+    if (status === 401 || /401|Unauthorized/i.test(message)) {
+      await recordPayoutJournalPostError({
+        firmId: draft.firmId,
+        uploadedFileId: input.uploadedFileId,
+        error:
+          "The bookkeeping connection was authorized before journal entries were supported. Reconnect it to grant that permission.",
+      });
+      return { kind: "needs_reconnect" };
+    }
     // Record WHY so the accountant isn't left guessing, and leave the draft
     // approved so the same entry can be retried once the cause is fixed.
     await recordPayoutJournalPostError({

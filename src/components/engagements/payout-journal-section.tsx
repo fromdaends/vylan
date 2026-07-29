@@ -304,10 +304,14 @@ export function PayoutJournalSection({
           ? fr
             ? `Ces comptes n'ont pas de code Xero : ${(res.accountNames ?? []).join(", ")}`
             : `These accounts have no Xero code: ${(res.accountNames ?? []).join(", ")}`
-          : res.error === "not_connected"
+          : res.error === "needs_reconnect"
             ? fr
-              ? "La connexion comptable doit être rétablie."
-              : "The bookkeeping connection needs reconnecting."
+              ? `Reconnectez ${ledgerName} : la connexion a été autorisée avant la prise en charge des écritures de journal.`
+              : `Reconnect ${ledgerName}: it was authorized before journal entries were supported.`
+            : res.error === "not_connected"
+              ? fr
+                ? "La connexion comptable doit être rétablie."
+                : "The bookkeeping connection needs reconnecting."
             : res.message ||
               (fr ? "La comptabilisation a échoué." : "Posting failed."),
       );
