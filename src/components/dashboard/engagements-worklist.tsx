@@ -316,6 +316,7 @@ export function WorklistTable({
   statusSort = null,
   onStatusSortToggle,
   reassignMembers,
+  assignMembers,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -343,6 +344,11 @@ export function WorklistTable({
   // the server→client boundary. When omitted — every other caller — no extra
   // column is rendered, so the Overview + engagement sub-pages are untouched.
   reassignMembers?: { id: string; name: string }[];
+  // Assignment targets for the row MENU only — no extra ⇄ column. The main
+  // engagements list wants "Assign to…" in the "..." menu without a column
+  // of icons on every row; the teammate profile wants both and passes
+  // reassignMembers instead, which implies this.
+  assignMembers?: { id: string; name: string }[];
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -466,6 +472,7 @@ export function WorklistTable({
               row={r}
               locale={locale}
               reassignMembers={reassignMembers}
+              assignMembers={assignMembers}
               onOptimisticRemoval={removeRow}
               statusLabel={tStatus(r.derivedStatus)}
               overdueText={
@@ -522,6 +529,7 @@ function WorklistRowView({
   onOptimisticRemoval,
   teamEnabled,
   reassignMembers,
+  assignMembers,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -537,6 +545,7 @@ function WorklistRowView({
   onOptimisticRemoval: (id: string, action: () => Promise<unknown>) => void;
   teamEnabled: boolean;
   reassignMembers?: { id: string; name: string }[];
+  assignMembers?: { id: string; name: string }[];
 }) {
   const tEng = useTranslations("Engagements");
   const router = useRouter();
@@ -583,7 +592,9 @@ function WorklistRowView({
     // Assign straight from the row. reassignMembers is already threaded here for
     // the per-row control, so the menu costs nothing extra — and it works on the
     // main worklist, where the per-row control isn't shown.
-    assignees: teamEnabled ? reassignMembers : undefined,
+    // Whichever feed the caller gave: reassignMembers (which also draws the ⇄
+    // column) or assignMembers (menu only).
+    assignees: teamEnabled ? (reassignMembers ?? assignMembers) : undefined,
     assigneeId: row.assigneeUserId,
   });
 
