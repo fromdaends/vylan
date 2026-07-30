@@ -12,6 +12,15 @@ import { RecentlyDeleted } from "@/components/files/recently-deleted";
 import { FileSelectionProvider } from "@/components/files/file-selection";
 import { BulkBar } from "@/components/files/bulk-bar";
 import { ImportWizard } from "@/components/files/import-wizard";
+import {
+  FolderRowMenu,
+  NewFolderButton,
+} from "@/components/files/folder-actions";
+import {
+  folderDocumentCounts,
+  listClientFolders as listCustomFolders,
+} from "@/lib/db/folders";
+import { childrenOf, folderPath } from "@/lib/files/folder-tree";
 import { DOCUMENT_RETENTION_DAYS } from "@/lib/files/purge";
 import { Trash2 } from "lucide-react";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
@@ -129,6 +138,7 @@ async function BrowseTab({
   const t = await getTranslations("Files");
 
   const clientId = sp.client?.trim() || null;
+  const folderId = sp.folder?.trim() || null;
   const search = sp.q?.trim() ?? "";
   const page = Math.max(1, Number(sp.page) || 1);
   const sort: DocumentSort =
@@ -155,6 +165,7 @@ async function BrowseTab({
     const q = new URLSearchParams();
     const base: Record<string, string | null> = {
       client: clientId,
+      folder: folderId,
       year: yearParam ?? null,
       category: categoryParam ?? null,
       q: search || null,
@@ -173,7 +184,9 @@ async function BrowseTab({
   // rather than folders: inside a category, or with any document-level filter
   // or a search applied.
   const hasDocumentFilter = !!docType || !!status;
-  const showFiles = categorySet || hasDocumentFilter || !!search;
+  // A custom folder shows its own contents directly — it is a real folder
+  // holding real documents, not a derived bucket to drill further into.
+  const showFiles = categorySet || hasDocumentFilter || !!search || !!folderId;
 
   const docTypeOptions = Object.entries(DOC_TYPE_LABELS)
     .map(([code, meta]) => ({ code, label: meta[locale].split(" — ")[0] }))
@@ -182,6 +195,18 @@ async function BrowseTab({
   const firmYears = Array.from({ length: 8 }, (_, i) => nowYear - i);
 
   const clientHeader = clientId ? await getClientHeader(clientId) : null;
+  // Custom folders for the bulk bar's "file into" control. Only meaningful
+  // inside a client — firm-wide results span clients, and a folder belongs
+  // to exactly one of them.
+  // parentId rides along because the path bar needs the whole chain, not just
+  // a flat list of names.
+  const bulkFolders = clientId
+    ? (await listCustomFolders(clientId)).folders.map((f) => ({
+        id: f.id,
+        name: f.name,
+        parentId: f.parentId,
+      }))
+    : undefined;
 
   // Every client the firm can see — the import wizard maps folders onto these.
   // Deliberately NOT the folder list from the RPC: that only includes clients
@@ -205,6 +230,20 @@ async function BrowseTab({
       label: clientHeader.name,
       href: buildQuery({ client: clientHeader.id, year: null, category: null, page: null }),
     });
+  }
+  // A custom folder's own chain, root-first. Without this the path bar stops at
+  // the client and there is no way to tell which folder you are looking at —
+  // the one thing a file manager's path exists to answer.
+  if (folderId && bulkFolders) {
+    for (const node of folderPath(
+      bulkFolders.map((f) => ({ id: f.id, parentId: f.parentId, name: f.name })),
+      folderId,
+    )) {
+      segments.push({
+        label: node.name,
+        href: buildQuery({ folder: node.id, year: null, category: null, page: null }),
+      });
+    }
   }
   if (yearSet) {
     segments.push({
@@ -284,6 +323,7 @@ async function BrowseTab({
               yearSet,
               category,
               categorySet,
+              folderId: folderId ?? undefined,
               docTypes: docType ? [docType] : undefined,
               statuses: status ? [status] : undefined,
               search,
@@ -293,7 +333,7 @@ async function BrowseTab({
             showClient={!clientId}
             buildHref={(p) => buildQuery({ page: p > 1 ? String(p) : null })}
           />
-          <BulkBar locale={locale} />
+          <BulkBar locale={locale} folders={bulkFolders} />
         </FileSelectionProvider>
       ) : clientId ? (
         <FolderLevel
@@ -396,6 +436,13 @@ async function FolderLevel({
   const { years, available } = await getClientDocumentTree(clientId);
   if (!available) return <Dormant message={t("unavailable")} />;
 
+  // CUSTOM FOLDERS. Real folders the firm made, shown above the derived
+  // year folders. A document only appears in the derived view while it has not
+  // been filed into one of these by hand, so nothing a firm already relies on
+  // disappears the moment they create their first folder.
+  const { folders, available: foldersAvailable } = await listCustomFolders(clientId);
+  const counts = foldersAvailable ? await folderDocumentCounts(clientId) : new Map();
+
   // Inside a year: show its category folders. Otherwise: show the year folders.
   if (yearSet) {
     const group = years.find((y) => y.year === year);
@@ -415,8 +462,22 @@ async function FolderLevel({
     );
   }
 
-  const entries: BrowserEntry[] = years.map((y) => ({
-    kind: "folder",
+  // Custom folders first — they are the firm's own structure, and burying them
+  // under a list of years would make the feature feel like an afterthought.
+  const customEntries: BrowserEntry[] = childrenOf(folders, null).map((f) => ({
+    kind: "folder" as const,
+    id: f.id,
+    name: f.name,
+    href: buildQuery({ folder: f.id, year: null, category: null, page: null }),
+    modified: null,
+    hint: t("folder_item_count", { count: counts.get(f.id) ?? 0 }),
+    actions: (
+      <FolderRowMenu clientId={clientId} folderId={f.id} name={f.name} />
+    ),
+  }));
+
+  const yearEntries: BrowserEntry[] = years.map((y) => ({
+    kind: "folder" as const,
     id: y.year != null ? String(y.year) : "unsorted",
     name: y.year != null ? String(y.year) : t("unsorted"),
     href: buildQuery({
@@ -429,11 +490,18 @@ async function FolderLevel({
   void yearParam;
 
   return (
-    <FileBrowser
-      entries={entries}
-      locale={locale}
-      emptyMessage={t("client_empty_body")}
-    />
+    <div className="space-y-3">
+      {foldersAvailable && (
+        <div className="flex justify-end">
+          <NewFolderButton clientId={clientId} parentId={null} />
+        </div>
+      )}
+      <FileBrowser
+        entries={[...customEntries, ...yearEntries]}
+        locale={locale}
+        emptyMessage={t("client_empty_body")}
+      />
+    </div>
   );
 }
 

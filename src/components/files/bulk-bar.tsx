@@ -26,6 +26,7 @@ import {
   bulkDeleteDocumentsAction,
   bulkMoveDocumentsAction,
 } from "@/app/actions/documents";
+import { setDocumentsFolderAction } from "@/app/actions/folders";
 import { BROWSE_CATEGORIES, categoryForDocType } from "@/lib/files/axes";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
 import { parseSelectionKey, useFileSelection } from "./file-selection";
@@ -34,7 +35,15 @@ import type { DocType } from "@/lib/db/templates";
 // The bulk action bar. Appears only once something is selected, pinned to the
 // bottom of the viewport so it stays reachable while scrolling a long folder —
 // which is the whole situation it exists for.
-export function BulkBar({ locale }: { locale: "en" | "fr" }) {
+export function BulkBar({
+  locale,
+  folders,
+}: {
+  locale: "en" | "fr";
+  /** The current client's custom folders. Absent outside a client, where
+   * "file into a folder" has no single destination to offer. */
+  folders?: { id: string; name: string }[];
+}) {
   const t = useTranslations("Files");
   const router = useRouter();
   const selection = useFileSelection();
@@ -75,6 +84,26 @@ export function BulkBar({ locale }: { locale: "en" | "fr" }) {
       router.refresh();
       // Always report the real numbers. A bulk action that half-worked and said
       // nothing is how a firm ends up with files they think they filed.
+      if (res.failed > 0) {
+        toast.warning(t("bulk_partial", { done: res.succeeded, failed: res.failed }));
+      } else if (res.ok) {
+        toast.success(t("bulk_moved", { count: res.succeeded }));
+      } else {
+        toast.error(t("action_failed"));
+      }
+    });
+  }
+
+  function fileIntoFolder(value: string) {
+    startTransition(async () => {
+      const res = await setDocumentsFolderAction({
+        targets,
+        // "__none__" takes documents back out of any folder, returning them to
+        // the derived year/category view rather than leaving them nowhere.
+        folderId: value === "__none__" ? null : value,
+      });
+      selection?.clear();
+      router.refresh();
       if (res.failed > 0) {
         toast.warning(t("bulk_partial", { done: res.succeeded, failed: res.failed }));
       } else if (res.ok) {
@@ -160,6 +189,24 @@ export function BulkBar({ locale }: { locale: "en" | "fr" }) {
             <FolderInput className="size-3.5" aria-hidden />
             {t("action_move")}
           </Button>
+          {/* Filing into a folder the firm made is a different act from setting
+              a document's year and category, so it gets its own control rather
+              than a fourth dropdown buried in the Move dialog. */}
+          {folders && folders.length > 0 && (
+            <Select value="" onValueChange={fileIntoFolder}>
+              <SelectTrigger size="sm" className="w-[11rem]" aria-label={t("folder_file_into")}>
+                <SelectValue placeholder={t("folder_file_into")} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">{t("folder_remove_from")}</SelectItem>
+                {folders.map((f) => (
+                  <SelectItem key={f.id} value={f.id}>
+                    {f.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button
             variant="ghost"
             size="sm"

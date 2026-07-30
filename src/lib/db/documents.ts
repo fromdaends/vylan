@@ -380,6 +380,12 @@ export type DocumentFilters = {
   page?: number;
   /** True = the Recently deleted view. */
   deleted?: boolean;
+  /**
+   * A custom folder's contents. undefined = don't filter on folder at all;
+   * a string = that folder. The two are NOT the same and conflating them
+   * would make every folder show the whole client's documents.
+   */
+  folderId?: string;
 };
 
 export type DocumentPage = {
@@ -445,6 +451,7 @@ export async function listDocuments(
     : q.is("deleted_at", null);
 
   if (filters.clientId) q = q.eq("client_id", filters.clientId);
+  if (filters.folderId) q = q.eq("folder_id", filters.folderId);
   // yearSet distinguishes "any year" from "the Unsorted bucket". Without it,
   // a null year is indistinguishable from no filter at all and the Unsorted
   // folder would silently show everything.
