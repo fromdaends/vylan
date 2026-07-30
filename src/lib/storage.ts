@@ -1,9 +1,19 @@
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
 import { safeStorageName } from "@/lib/files/safe-name";
+// Limits + accepted types live in a NEUTRAL module so client components can
+// read them without dragging this server-only file (next/headers) into the
+// browser bundle. Re-exported here so existing callers are unchanged.
+import {
+  ALLOWED_MIMES,
+  HEIC_MIMES,
+  MAX_BYTES,
+  isAllowedMime,
+  isHeic,
+} from "@/lib/files/upload-limits";
+export { MAX_BYTES, ALLOWED_MIMES, HEIC_MIMES, isAllowedMime, isHeic };
 
 export const BUCKET = "client-uploads";
-export const MAX_BYTES = 25 * 1024 * 1024;
 // HEIC decoder allocates `width * height * 4` bytes during decode, so a small
 // file with crafted dimensions can OOM the runtime. Real iPhone HEIC photos
 // are under 5 MB; cap below the general limit as a defense.
@@ -38,28 +48,9 @@ export function truncateFilename(name: string): string {
   return name.slice(0, MAX_FILENAME_LEN);
 }
 
-const HEIC_MIMES = new Set([
-  "image/heic",
-  "image/heif",
-  "image/heic-sequence",
-  "image/heif-sequence",
-]);
 
-const ALLOWED_MIMES = new Set([
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  ...HEIC_MIMES,
-]);
 
-export function isHeic(mime: string): boolean {
-  return HEIC_MIMES.has(mime.toLowerCase());
-}
 
-export function isAllowedMime(mime: string): boolean {
-  return ALLOWED_MIMES.has(mime.toLowerCase());
-}
 
 export function storagePath(parts: {
   firmId: string;

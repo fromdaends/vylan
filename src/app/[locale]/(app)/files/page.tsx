@@ -11,6 +11,7 @@ import { DocumentActionsMenu } from "@/components/files/document-actions-menu";
 import { RecentlyDeleted } from "@/components/files/recently-deleted";
 import { FileSelectionProvider } from "@/components/files/file-selection";
 import { BulkBar } from "@/components/files/bulk-bar";
+import { ImportWizard } from "@/components/files/import-wizard";
 import { DOCUMENT_RETENTION_DAYS } from "@/lib/files/purge";
 import { Trash2 } from "lucide-react";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
@@ -182,6 +183,18 @@ async function BrowseTab({
 
   const clientHeader = clientId ? await getClientHeader(clientId) : null;
 
+  // Every client the firm can see — the import wizard maps folders onto these.
+  // Deliberately NOT the folder list from the RPC: that only includes clients
+  // who already have documents, and importing history is exactly how a client
+  // with none gets their first.
+  const { data: allClients } = await (await getServerSupabase())
+    .from("clients")
+    .select("id, display_name")
+    .order("display_name", { ascending: true })
+    .limit(1000);
+  const importClients = ((allClients ?? []) as Array<{ id: string; display_name: string }>)
+    .map((c) => ({ id: c.id, name: c.display_name }));
+
   // The path: root → client → year → category. Each ancestor is a link back up,
   // which is how you leave a folder in a file manager.
   const segments: { label: string; href?: string }[] = [
@@ -241,7 +254,11 @@ async function BrowseTab({
     <div className="space-y-4">
       <PathBar segments={segments} clientProfileId={clientHeader?.id ?? null} />
 
-      <FilesToolbar
+      {/* Import sits beside the search, per the spec — and is the ONLY way
+          documents enter Vylan outside the engagement/portal pipeline. There is
+          deliberately no plain "upload file" action anywhere on Browse. */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <FilesToolbar
         search={search}
         sort={sp.sort ?? "date"}
         docType={sp.type ?? ""}
@@ -249,8 +266,10 @@ async function BrowseTab({
         year={yearParam ?? ""}
         years={firmYears}
         docTypes={docTypeOptions}
-        scope={clientId || showFiles ? "documents" : "folders"}
-      />
+          scope={clientId || showFiles ? "documents" : "folders"}
+        />
+        <ImportWizard clients={importClients} />
+      </div>
 
       {/* Selection only wraps the FILE list. Folder rows are navigation, and a
           checkbox on a folder would promise a bulk action on its contents that
