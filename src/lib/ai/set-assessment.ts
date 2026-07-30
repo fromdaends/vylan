@@ -29,6 +29,7 @@ import {
   isSupportedAiMime,
 } from "./classify";
 import { assessSetWithOpenAI } from "./openai-classify";
+import { providerChain, withProviderFailover } from "./failover";
 import { pdfPageCount, describeFilePages } from "./pdf-pages";
 import {
   analyzeStatements,
@@ -889,8 +890,14 @@ export async function processSetAssessmentJob(
 
 ${pageFacts}`;
 
-  let raw: Record<string, unknown> | null = null;
-  const provider = getProvider();
+  // Same parachute as the single-document read: if the configured vendor can't
+  // serve (quota, auth, timeout), the other one finishes the job rather than
+  // the whole checklist scan dying. See lib/ai/failover.ts.
+  const chain = providerChain(getProvider());
+  const raw = await withProviderFailover<Record<string, unknown>>(
+    "assess-set",
+    chain,
+    async (provider) => {
   if (provider === "openai") {
     const model = getOpenAiModel();
     const { raw: r, usage: u } = await assessSetWithOpenAI({
@@ -908,13 +915,14 @@ ${pageFacts}`;
         mediaType: p.mediaType,
       })),
     });
-    raw = r;
     console.info(
       `[ai/assess-set] provider=openai model=${model} files=${prepared.length} in_tokens=${u?.input ?? "?"} out_tokens=${u?.output ?? "?"}${u?.reasoning != null ? ` reasoning_tokens=${u.reasoning}` : ""}`,
     );
-  } else {
-    raw = await assessSetWithAnthropic(systemPrompt, userText, prepared);
+    return r;
   }
+  return assessSetWithAnthropic(systemPrompt, userText, prepared);
+    },
+  );
   if (!raw) return { skipped: "no_result" }; // transient — cron retries
 
   const parsed = parseSetAssessment(
