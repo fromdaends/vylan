@@ -42,8 +42,10 @@ export const dynamic = "force-dynamic";
 // Open to every member of the firm, not just owners. Making a person's name
 // clickable across the app (which is the point) is worthless if half the firm
 // gets a 404. The engagement and client lists are RLS-scoped, so a staff member
-// sees the intersection of "their work" and "what I'm allowed to see" — the
-// activity feed stays owner-only, mirroring /settings/audit.
+// sees the intersection of "their work" and "what I'm allowed to see" — and the
+// activity feed is open too, mirroring /settings/audit. Keeping this one feed
+// owner-only would have been theatre once the full log opened up: it is the
+// same rows, filtered to one person, which any member can now do themselves.
 const PROFILE_VIEWS = ["active", "ready", "completed", "archived"] as const;
 type ProfileView = (typeof PROFILE_VIEWS)[number];
 
@@ -88,9 +90,7 @@ export default async function TeamMemberProfilePage({
       loadEngagementWorklist("active"),
       loadEngagementWorklist(scopeForView(view)),
       listClients(),
-      isOwner
-        ? listActivityForFirm({ actorId: id, limit: 20 })
-        : Promise.resolve([]),
+      listActivityForFirm({ actorId: id, limit: 20 }),
       getBrandingImageUrl(member.avatar_path),
     ]);
   const activeCount = selectView(
@@ -149,15 +149,10 @@ export default async function TeamMemberProfilePage({
         </div>
       </header>
 
-      <div className={isOwner ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-3"}>
+      <div className="grid grid-cols-3 gap-3">
         <StatTile label={t("profile_stat_engagements")} value={activeCount} />
         <StatTile label={t("profile_stat_clients")} value={clients.length} />
-        {isOwner && (
-          <StatTile
-            label={t("profile_stat_activity")}
-            value={activity.length}
-          />
-        )}
+        <StatTile label={t("profile_stat_activity")} value={activity.length} />
       </div>
 
       {/* Bulk assign. Owner-only, and it renders itself away when there is
@@ -240,7 +235,6 @@ export default async function TeamMemberProfilePage({
         )}
       </section>
 
-      {isOwner && (
       <section className="space-y-3">
         <h2 className="text-base font-semibold tracking-tight">
           {t("profile_activity_title")}
@@ -291,7 +285,6 @@ export default async function TeamMemberProfilePage({
           </ol>
         )}
       </section>
-      )}
     </div>
   );
 }

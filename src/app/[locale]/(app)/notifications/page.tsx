@@ -20,8 +20,8 @@ const PAGE_SIZE = 30;
 //
 // Reads the stored `notifications` table (migration 0920), so every row here
 // carries real read state and can be marked unread or deleted. Distinct from
-// the security audit log at /settings/audit, which is owner-only and shows
-// every activity_log row; this is "things addressed to you".
+// the activity log at /settings/audit, which shows every activity_log row the
+// viewer is allowed to see; this is "things addressed to you".
 export default async function NotificationsPage({
   params,
   searchParams,

@@ -31,9 +31,19 @@ describe("buildSearchRegistry", () => {
   it("hides owner-only entries from staff", () => {
     const staff = buildSearchRegistry(translators, { isOwner: false });
     const owner = buildSearchRegistry(translators, { isOwner: true });
-    for (const ownerOnlyId of ["billing", "audit", "export", "delete-firm"]) {
+    for (const ownerOnlyId of ["billing", "export", "delete-firm"]) {
       expect(staff.some((e) => e.id === ownerOnlyId)).toBe(false);
       expect(owner.some((e) => e.id === ownerOnlyId)).toBe(true);
+    }
+  });
+
+  it("offers the activity log to staff, not just owners", () => {
+    // "audit" used to sit in the owner-only list above. The log is open to
+    // every member now, and the database drops private-client rows per viewer,
+    // so hiding the search entry only made it harder to find.
+    for (const isOwner of [false, true]) {
+      const reg = buildSearchRegistry(translators, { isOwner });
+      expect(reg.some((e) => e.id === "audit")).toBe(true);
     }
   });
 

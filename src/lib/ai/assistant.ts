@@ -221,7 +221,7 @@ If the help center and you ever disagree, the help center is right.
 - **/profile** — name, avatar, optional TOTP MFA, recovery codes.
 - **/firm** — firm name, logo, brand colour (drives portal accent + email accent).
 - **/settings** — ten sections: Account, Security & privacy, Appearance, General, Billing, Payments, Automation, Integrations, Documents, Data & privacy (+ Team when team mode is on).
-- **/settings/audit** — owner-only firm-wide activity log with filters.
+- **/settings/audit** — firm-wide activity log with filters, open to every member.
 - **/settings/team** — invites, roles, activity (team mode).
 - **/billing** — currently a "talk to us" placeholder. Billing is paused while the founder runs 1-on-1 pricing chats.
 

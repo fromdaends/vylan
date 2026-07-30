@@ -292,6 +292,7 @@ export function SettingsShell({
         {section === "security" && (
           <div className="space-y-12">
             <MfaSection initialEnabled={mfaEnabled} />
+            <AuditLogSection t={t} />
             {isOwner && <DataPrivacySection firmName={firmName} t={t} />}
           </div>
         )}
@@ -1137,7 +1138,42 @@ function DocumentsSection({
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Data & privacy (owner-only) — audit log, firm export, delete request.
+// Activity log — EVERY member, not just the owner. Split out of Data & privacy
+// (below) for exactly that reason: reading the history and exporting/deleting
+// the firm are different powers, and bundling them meant the read was gated by
+// the destructive ones. The log itself filters private clients out per-viewer
+// in the database, so opening the link leaks nothing.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AuditLogSection({ t }: { t: Translate }) {
+  return (
+    <section>
+      <h2 className="text-sm font-semibold">{t("section_audit_title")}</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        {t("section_audit_hint")}
+      </p>
+      <div className="mt-4 max-w-xl">
+        <Link
+          href="/settings/audit"
+          className="group flex items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
+        >
+          <span className="flex items-center gap-3">
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
+              <ShieldCheck className="h-4 w-4" />
+            </span>
+            <span className="text-sm font-medium">
+              {t("audit_link_label")}
+            </span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Data & privacy (owner-only) — firm export and delete request.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DataPrivacySection({
@@ -1153,26 +1189,7 @@ function DataPrivacySection({
       <p className="mt-1 text-xs text-muted-foreground">
         {t("section_data_hint")}
       </p>
-      <div className="mt-4 max-w-xl space-y-3">
-        <Link
-          href="/settings/audit"
-          className="group flex items-center justify-between gap-4 rounded-lg border border-border/50 px-4 py-3 transition-colors hover:border-foreground/20 hover:bg-secondary/30"
-        >
-          <span className="flex items-center gap-3">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-secondary text-muted-foreground">
-              <ShieldCheck className="h-4 w-4" />
-            </span>
-            <span className="flex flex-col">
-              <span className="text-sm font-medium">
-                {t("audit_link_label")}
-              </span>
-              <span className="text-xs text-muted-foreground">
-                {t("section_audit_hint")}
-              </span>
-            </span>
-          </span>
-          <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-        </Link>
+      <div className="mt-4 max-w-xl">
         <a
           href="/api/firm/export.zip"
           download
