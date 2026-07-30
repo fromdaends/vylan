@@ -106,6 +106,9 @@ async function probeRecentReads(
 
     let read = 0;
     let lastReadAt: string | null = null;
+    // The newest row overall — the query is ordered by uploaded_at desc.
+    const lastUploadAt =
+      (data[0] as { uploaded_at?: string } | undefined)?.uploaded_at ?? null;
     for (const row of data as Array<{
       ai_extracted_fields: { transaction?: unknown } | null;
       uploaded_at: string;
@@ -115,7 +118,7 @@ async function probeRecentReads(
         if (!lastReadAt) lastReadAt = row.uploaded_at;
       }
     }
-    return { considered: data.length, read, lastReadAt };
+    return { considered: data.length, read, lastReadAt, lastUploadAt };
   } catch {
     return null;
   }

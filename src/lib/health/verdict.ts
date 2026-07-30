@@ -22,6 +22,13 @@ export type Level = "ok" | "warn" | "fail";
 export type Finding = {
   id: string;
   level: Level;
+  // Does this describe the WHOLE INSTALLATION or one firm?
+  //
+  // The page only ever shows one firm, so it never needed the distinction. The
+  // command line checks every firm at once, and without this it repeats "no AI
+  // provider is set" and the migration list once per firm — a wall of identical
+  // text that buries the one finding that is actually about a client.
+  scope: "global" | "firm";
   // What is true, in the founder's language. No jargon, no field names.
   summary: string;
   // What to DO. Omitted when level is "ok" — a passing check needs no action.
@@ -39,7 +46,15 @@ export type HealthFacts = {
     keyPresent: boolean;
     // Of the most recent documents that could carry a transaction, how many
     // actually produced one. null when there have been no uploads to judge by.
-    recent: { considered: number; read: number; lastReadAt: string | null } | null;
+    recent: {
+      considered: number;
+      read: number;
+      lastReadAt: string | null;
+      // When the most recent document arrived at all — read or not. Without it a
+      // firm that stopped using Vylan months ago, whose one old upload was never
+      // read, is indistinguishable from extraction breaking this morning.
+      lastUploadAt: string | null;
+    } | null;
   };
   // Columns a shipped feature depends on, and whether the database has them.
   // Absent = the migration has not been run, and the feature silently no-ops.
@@ -67,6 +82,12 @@ const STUCK_JOB_MINUTES = 60;
 // Below this share of recent documents being read, something is wrong beyond
 // the occasional unreadable photo.
 const READ_RATE_FLOOR = 0.5;
+// Judging extraction needs enough documents to mean anything. One unreadable
+// photo is not evidence of a broken pipeline.
+const MIN_SAMPLE = 3;
+// And it needs to be about NOW. Nothing uploaded in this long means the firm is
+// dormant, and its old unread document is history rather than an alarm.
+const ACTIVE_DAYS = 14;
 
 function daysSince(iso: string | null, now: number): number | null {
   if (!iso) return null;
@@ -92,6 +113,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
   if (!f.ai.keyPresent) {
     out.push({
       id: "ai-key",
+      scope: "global",
       level: "fail",
       summary: `Document reading is switched off. Vylan is set to use ${provider}, but no ${provider} key is configured — uploads will never turn into drafts.`,
       action: `Add the ${provider} API key to your hosting environment variables, then upload a document to confirm a draft appears.`,
@@ -101,6 +123,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
     // otherwise. Harmless if intended, and very confusing if not.
     out.push({
       id: "ai-provider-default",
+      scope: "global",
       level: "warn",
       summary:
         "No AI provider is explicitly set, so Vylan defaulted to Claude. If you meant to use OpenAI, documents are being read by the wrong model.",
@@ -112,11 +135,17 @@ export function assessHealth(f: HealthFacts): Finding[] {
   // 2. Is it actually working? A key can be present and the balance empty — the
   //    only honest evidence is whether recent documents produced anything.
   const r = f.ai.recent;
-  if (f.ai.keyPresent && r && r.considered > 0) {
+  const uploadAge = daysSince(r?.lastUploadAt ?? null, f.now);
+  const active = uploadAge != null && uploadAge <= ACTIVE_DAYS;
+  // Only judge a firm that is actually USING Vylan, and only on a sample big
+  // enough to mean something. A check that cries wolf gets ignored, and then it
+  // is worth less than nothing.
+  if (f.ai.keyPresent && r && r.considered >= MIN_SAMPLE && active) {
     const rate = r.read / r.considered;
     if (r.read === 0) {
       out.push({
         id: "ai-reads",
+        scope: "firm",
         level: "fail",
         summary: `None of the last ${r.considered} documents were read. Uploads are arriving but no drafts are being created.`,
         action: `Check that your ${provider} account has credit remaining, then re-upload one document to test.`,
@@ -124,6 +153,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
     } else if (rate < READ_RATE_FLOOR) {
       out.push({
         id: "ai-reads",
+        scope: "firm",
         level: "warn",
         summary: `Only ${r.read} of the last ${r.considered} documents were read (last one ${ago(r.lastReadAt, f.now)}).`,
         action:
@@ -132,6 +162,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
     } else {
       out.push({
         id: "ai-reads",
+        scope: "firm",
         level: "ok",
         summary: `Documents are being read — ${r.read} of the last ${r.considered}, most recently ${ago(r.lastReadAt, f.now)}.`,
       });
@@ -144,6 +175,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
   if (pending.length > 0) {
     out.push({
       id: "migrations",
+      scope: "global",
       level: "fail",
       summary:
         pending.length === 1
@@ -154,6 +186,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
   } else if (f.migrations.length > 0) {
     out.push({
       id: "migrations",
+      scope: "global",
       level: "ok",
       summary: "All database updates have been applied.",
     });
@@ -166,6 +199,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
     if (days == null) {
       out.push({
         id: `sync-${c.clientName}`,
+        scope: "firm",
         level: "fail",
         summary: `${c.clientName} is connected to ${name}, but its accounts and suppliers have never loaded — so nothing will match.`,
         action: `Open ${c.clientName} and reconnect ${name}.`,
@@ -173,6 +207,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
     } else if (days > STALE_SYNC_DAYS) {
       out.push({
         id: `sync-${c.clientName}`,
+        scope: "firm",
         level: "warn",
         summary: `${c.clientName}'s ${name} lists last updated ${ago(c.lastSyncedAt, f.now)}. Anything added in ${name} since then is invisible to Vylan.`,
         action: `Open ${c.clientName} and reconnect ${name} to refresh them.`,
@@ -181,6 +216,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
     if (!c.booksCurrencyKnown) {
       out.push({
         id: `currency-${c.clientName}`,
+        scope: "firm",
         level: "warn",
         summary: `Vylan does not know what currency ${c.clientName}'s books are kept in, so a receipt in another currency cannot be recorded correctly.`,
         action: `Reconnect ${name} for ${c.clientName} — it records the currency automatically.`,
@@ -192,6 +228,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
   if (f.jobs.failedRecently > 0) {
     out.push({
       id: "jobs-failed",
+      scope: "firm",
       level: "warn",
       summary: `${f.jobs.failedRecently} background ${f.jobs.failedRecently === 1 ? "task" : "tasks"} failed recently — things like refreshing your bookkeeping lists.`,
       action: "Usually self-correcting. If this number keeps growing, tell Claude.",
@@ -203,6 +240,7 @@ export function assessHealth(f: HealthFacts): Finding[] {
   ) {
     out.push({
       id: "jobs-stuck",
+      scope: "firm",
       level: "warn",
       summary: `A background task has been waiting ${Math.round(f.jobs.oldestPendingMinutes / 60)} hours to run.`,
       action: "Tell Claude — the scheduled runner may have stopped.",

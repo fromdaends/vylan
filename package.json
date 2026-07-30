@@ -14,7 +14,8 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:status": "supabase status",
-    "eval:bookkeeping": "vitest run --config vitest.eval.config.ts"
+    "eval:bookkeeping": "vitest run --config vitest.eval.config.ts",
+    "health": "vitest run --config vitest.health.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.95.2",

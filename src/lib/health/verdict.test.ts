@@ -11,7 +11,7 @@ function facts(over: Partial<HealthFacts> = {}): HealthFacts {
       provider: "openai",
       providerChosen: true,
       keyPresent: true,
-      recent: { considered: 10, read: 10, lastReadAt: hoursAgo(2) },
+      recent: { considered: 10, read: 10, lastReadAt: hoursAgo(2) , lastUploadAt: hoursAgo(1) },
     },
     migrations: [
       { file: "1050_x.sql", feature: "sales tax direction", applied: true },
@@ -60,7 +60,7 @@ describe("assessHealth — document reading", () => {
           provider: "anthropic",
           providerChosen: false,
           keyPresent: true,
-          recent: { considered: 5, read: 5, lastReadAt: hoursAgo(1) },
+          recent: { considered: 5, read: 5, lastReadAt: hoursAgo(1) , lastUploadAt: hoursAgo(1) },
         },
       }),
     );
@@ -80,7 +80,7 @@ describe("assessHealth — document reading", () => {
           provider: "openai",
           providerChosen: true,
           keyPresent: true,
-          recent: { considered: 8, read: 0, lastReadAt: null },
+          recent: { considered: 8, read: 0, lastReadAt: null , lastUploadAt: hoursAgo(1) },
         },
       }),
     );
@@ -96,7 +96,7 @@ describe("assessHealth — document reading", () => {
           provider: "openai",
           providerChosen: true,
           keyPresent: true,
-          recent: { considered: 10, read: 3, lastReadAt: hoursAgo(5) },
+          recent: { considered: 10, read: 3, lastReadAt: hoursAgo(5) , lastUploadAt: hoursAgo(1) },
         },
       }),
     );
@@ -108,7 +108,7 @@ describe("assessHealth — document reading", () => {
           provider: "openai",
           providerChosen: true,
           keyPresent: true,
-          recent: { considered: 10, read: 8, lastReadAt: hoursAgo(5) },
+          recent: { considered: 10, read: 8, lastReadAt: hoursAgo(5) , lastUploadAt: hoursAgo(1) },
         },
       }),
     );
@@ -225,22 +225,66 @@ describe("assessHealth — background work", () => {
 
 describe("overallLevel", () => {
   it("reports the worst thing found", () => {
-    expect(overallLevel([{ id: "a", level: "ok", summary: "" }])).toBe("ok");
+    expect(overallLevel([{ id: "a", scope: "global" as const, level: "ok", summary: "" }])).toBe("ok");
     expect(
       overallLevel([
-        { id: "a", level: "ok", summary: "" },
-        { id: "b", level: "warn", summary: "" },
+        { id: "a", scope: "global" as const, level: "ok", summary: "" },
+        { id: "b", scope: "global" as const, level: "warn", summary: "" },
       ]),
     ).toBe("warn");
     expect(
       overallLevel([
-        { id: "a", level: "warn", summary: "" },
-        { id: "b", level: "fail", summary: "" },
+        { id: "a", scope: "global" as const, level: "warn", summary: "" },
+        { id: "b", scope: "global" as const, level: "fail", summary: "" },
       ]),
     ).toBe("fail");
   });
 
   it("is ok when nothing was checked", () => {
     expect(overallLevel([])).toBe("ok");
+  });
+});
+
+describe("assessHealth — does not cry wolf about dormant firms", () => {
+  // A check that raises false alarms gets ignored, and then it is worth less
+  // than nothing. These are the cases that produced them on the first real run.
+  const reads = (over: Partial<NonNullable<HealthFacts["ai"]["recent"]>>) =>
+    facts({
+      ai: {
+        provider: "anthropic",
+        providerChosen: true,
+        keyPresent: true,
+        recent: {
+          considered: 20,
+          read: 0,
+          lastReadAt: null,
+          lastUploadAt: hoursAgo(2),
+          ...over,
+        },
+      },
+    });
+
+  it("FAILS when an ACTIVE firm's recent documents are all unread", () => {
+    const f = assessHealth(reads({})).find((x) => x.id === "ai-reads");
+    expect(f!.level).toBe("fail");
+  });
+
+  it("says NOTHING about a firm that stopped uploading months ago", () => {
+    // Its one old unread document is history, not this morning's outage.
+    const fs = assessHealth(reads({ lastUploadAt: daysAgo(120) }));
+    expect(fs.find((x) => x.id === "ai-reads")).toBeUndefined();
+  });
+
+  it("says nothing when the sample is too small to mean anything", () => {
+    // One unreadable photo is not evidence of a broken pipeline.
+    const fs = assessHealth(reads({ considered: 1, lastUploadAt: hoursAgo(2) }));
+    expect(fs.find((x) => x.id === "ai-reads")).toBeUndefined();
+  });
+
+  it("still judges a firm that uploaded within the fortnight", () => {
+    const f = assessHealth(reads({ lastUploadAt: daysAgo(10) })).find(
+      (x) => x.id === "ai-reads",
+    );
+    expect(f!.level).toBe("fail");
   });
 });
