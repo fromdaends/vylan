@@ -17,7 +17,9 @@ import {
   type UsabilityIssue,
   type UsabilityVerdict,
 } from "./usability";
-import { classifyWithOpenAI, isOpenAiConfigured } from "./openai-classify";
+import { classifyWithOpenAI } from "./openai-classify";
+// Key checks now live in failover.ts, which owns "which providers can serve".
+import { providerChain, withProviderFailover } from "./failover";
 
 const MODEL = "claude-sonnet-4-6";
 
@@ -150,14 +152,13 @@ function client(): Anthropic | null {
   return _client;
 }
 
-function isAnthropicConfigured(): boolean {
-  return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
-}
 
+// AI is "configured" when ANY provider holds a key — not just the one named by
+// AI_CLASSIFIER_PROVIDER. With failover in place the other provider is a real
+// path to a verdict, so gating the whole pipeline on the primary's key would
+// refuse work the deployment can actually do.
 export function isAiConfigured(): boolean {
-  return getProvider() === "openai"
-    ? isOpenAiConfigured()
-    : isAnthropicConfigured();
+  return providerChain(getProvider()).length > 0;
 }
 
 // Every doc type Vylan recognizes — derived from the single source of truth in
@@ -765,9 +766,12 @@ export async function classifyDocument(opts: {
     };
   }
 
-  const provider = getProvider();
-  if (provider === "openai" ? !isOpenAiConfigured() : !isAnthropicConfigured()) {
-    console.warn(`[ai/classify] no API key for provider=${provider} — skipping`);
+  // Try the configured provider, then the other one as a parachute. A vendor
+  // that can't serve (quota exhausted, auth, timeout, 5xx) must never be able
+  // to stop a document being read — see lib/ai/failover.ts.
+  const chain = providerChain(getProvider());
+  if (chain.length === 0) {
+    console.warn("[ai/classify] no API key for ANY provider — skipping");
     return null;
   }
 
@@ -788,8 +792,10 @@ export async function classifyDocument(opts: {
   // Both providers return the same raw object shape; parseClassification (with
   // all its tolerant defaults) is the single source of truth for turning it
   // into a ClassificationResult.
-  let raw: Record<string, unknown> | null = null;
-
+  const raw = await withProviderFailover<Record<string, unknown>>(
+    "classify",
+    chain,
+    async (provider) => {
   if (provider === "openai") {
     const model = getOpenAiModel();
     const { raw: r, usage } = await classifyWithOpenAI({
@@ -801,10 +807,10 @@ export async function classifyDocument(opts: {
       base64,
       mediaType: prepared.mimeType,
     });
-    raw = r;
     console.info(
       `[ai/classify] provider=openai model=${model} in_tokens=${usage?.input ?? "?"} out_tokens=${usage?.output ?? "?"}${usage?.reasoning != null ? ` reasoning_tokens=${usage.reasoning}` : ""}`,
     );
+    return r;
   } else {
     const c = client();
     if (!c) return null;
@@ -854,11 +860,13 @@ export async function classifyDocument(opts: {
 
     for (const block of resp.content) {
       if (block.type === "tool_use" && block.name === "classify_document") {
-        raw = block.input as Record<string, unknown>;
-        break;
+        return block.input as Record<string, unknown>;
       }
     }
+    return null;
   }
+    },
+  );
 
   if (!raw) return null;
   return parseClassification(raw);
