@@ -3,6 +3,7 @@ import {
   presentOthers,
   splitPresence,
   presenceColor,
+  groupPresenceByEngagement,
   PRESENCE_COLORS,
   PRESENCE_VISIBLE_MAX,
 } from "./presence";
@@ -122,5 +123,82 @@ describe("presenceColor", () => {
 
   it("leaves rose out — it reads as an error everywhere else in the app", () => {
     expect(PRESENCE_COLORS).not.toContain("icon-rose");
+  });
+});
+
+describe("groupPresenceByEngagement", () => {
+  const on = (id: string, e: string | null) => [{ phx_ref: `r-${id}`, id, e }];
+
+  it("buckets people onto the engagement they have open", () => {
+    const out = groupPresenceByEngagement(
+      { "u-ben": on("u-ben", "eng-1"), "u-cam": on("u-cam", "eng-2") },
+      "u-ash",
+      roster,
+    );
+    expect(out.get("eng-1")?.map((p) => p.name)).toEqual(["Ben"]);
+    expect(out.get("eng-2")?.map((p) => p.name)).toEqual(["Cam"]);
+  });
+
+  it("leaves out people who are not on any engagement", () => {
+    // Everyone on the firm channel is "present" — only the ones with an
+    // engagement id belong on a row.
+    const out = groupPresenceByEngagement(
+      { "u-ben": on("u-ben", null), "u-cam": on("u-cam", "eng-2") },
+      "u-ash",
+      roster,
+    );
+    expect(out.has("eng-1")).toBe(false);
+    expect([...out.keys()]).toEqual(["eng-2"]);
+  });
+
+  it("never buckets the viewer", () => {
+    const out = groupPresenceByEngagement(
+      { "u-ash": on("u-ash", "eng-1") },
+      "u-ash",
+      roster,
+    );
+    expect(out.size).toBe(0);
+  });
+
+  it("DROPS a key that is not in the roster", () => {
+    // The channel is public and firm-wide now, so an injected key would land on
+    // a real row if this filter ever went away. Same rule as presentOthers.
+    const out = groupPresenceByEngagement(
+      { attacker: on("attacker", "eng-1"), "u-ben": on("u-ben", "eng-1") },
+      "u-ash",
+      roster,
+    );
+    expect(out.get("eng-1")?.map((p) => p.name)).toEqual(["Ben"]);
+  });
+
+  it("uses a person's most recent tab when they have two open", () => {
+    // Two tabs on different engagements: the later meta wins, so you appear on
+    // the one you moved to rather than on both.
+    const out = groupPresenceByEngagement(
+      {
+        "u-ben": [
+          { phx_ref: "a", id: "u-ben", e: "eng-1" },
+          { phx_ref: "b", id: "u-ben", e: "eng-2" },
+        ],
+      },
+      "u-ash",
+      roster,
+    );
+    expect(out.has("eng-1")).toBe(false);
+    expect(out.get("eng-2")?.map((p) => p.name)).toEqual(["Ben"]);
+  });
+
+  it("groups in roster order so a row does not reshuffle", () => {
+    const out = groupPresenceByEngagement(
+      { "u-eve": on("u-eve", "e"), "u-ben": on("u-ben", "e"), "u-cam": on("u-cam", "e") },
+      "u-ash",
+      roster,
+    );
+    expect(out.get("e")?.map((p) => p.name)).toEqual(["Ben", "Cam", "Eve"]);
+  });
+
+  it("is empty before the first sync", () => {
+    expect(groupPresenceByEngagement(null, "u-ash", roster).size).toBe(0);
+    expect(groupPresenceByEngagement({}, "u-ash", roster).size).toBe(0);
   });
 });

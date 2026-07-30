@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { EngagementReassignMenu } from "@/components/engagements/engagement-reassign-menu";
+import { PresenceFaces } from "@/components/engagements/presence-faces";
+import { useFirmPresence } from "@/lib/engagements/use-firm-presence";
+import {
+  groupPresenceByEngagement,
+  type PresentPerson,
+} from "@/lib/engagements/presence";
 import {
   AlertTriangle,
   ArrowDown,
@@ -319,6 +325,8 @@ export function WorklistTable({
   reassignMembers,
   assignMembers,
   viewerId,
+  firmId,
+  presenceRoster,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -355,12 +363,37 @@ export function WorklistTable({
   // that does not pass it simply gets the plain list of names, which is what
   // every caller got before.
   viewerId?: string | null;
+  // Live presence on the rows: who has each job open right now. ONE channel for
+  // the whole table — subscribing per row would mean forty joins on a forty-row
+  // page, re-joined on every navigation and every auto-refresh. Both optional,
+  // so every caller that passes neither behaves exactly as before.
+  firmId?: string | null;
+  presenceRoster?: readonly { id: string; name: string }[];
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
   const tAttention = useTranslations("Attention");
   const tEng = useTranslations("Engagements");
   const tStage = useTranslations("Stage");
+
+  // One firm-wide presence subscription for the entire table. onEngagementId is
+  // null: a list is not "on" any single job, it only listens. Hooks cannot be
+  // conditional, so this always runs — useFirmPresence no-ops on a falsy id,
+  // which is what a caller that passes no firmId gets.
+  const presenceState = useFirmPresence({
+    firmId: firmId ?? "",
+    viewerId: viewerId ?? "",
+    onEngagementId: null,
+  });
+  const presenceByEngagement = useMemo(
+    () =>
+      groupPresenceByEngagement(
+        presenceState,
+        viewerId ?? "",
+        presenceRoster ?? [],
+      ),
+    [presenceState, viewerId, presenceRoster],
+  );
 
   // Optimistic removal: archiving / deleting a row drops it from the list
   // instantly. `removedIds` is a client-only overlay — once the server action
@@ -480,6 +513,7 @@ export function WorklistTable({
               reassignMembers={reassignMembers}
               assignMembers={assignMembers}
               viewerId={viewerId}
+              presentPeople={presenceByEngagement.get(r.id)}
               onOptimisticRemoval={removeRow}
               statusLabel={tStatus(r.derivedStatus)}
               overdueText={
@@ -538,6 +572,7 @@ function WorklistRowView({
   reassignMembers,
   assignMembers,
   viewerId,
+  presentPeople,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -555,6 +590,9 @@ function WorklistRowView({
   reassignMembers?: { id: string; name: string }[];
   assignMembers?: { id: string; name: string }[];
   viewerId?: string | null;
+  // Who has this job open right now. Undefined on the rows nobody is in, which
+  // is nearly all of them — so this usually costs the row nothing.
+  presentPeople?: PresentPerson[];
 }) {
   const tEng = useTranslations("Engagements");
   const router = useRouter();
@@ -636,6 +674,13 @@ function WorklistRowView({
                 </Link>
                 {row.seriesId && (
                   <RecurringBadge label={tEng("repeat_badge")} compact />
+                )}
+                {/* Live: who has this open right now, without opening it.
+                    Compact — smaller faces, no pulsing dot. A dot per row on a
+                    forty-row list would be a disco; the faces are already
+                    unusual enough on a list to catch the eye. */}
+                {presentPeople && presentPeople.length > 0 && (
+                  <PresenceFaces people={presentPeople} compact />
                 )}
               </div>
               <div className="mt-0.5 truncate text-xs text-muted-foreground">

@@ -778,6 +778,7 @@ export default async function EngagementDetailPage({
                 time — so this usually costs the row no height at all. */}
             {teamEnabled && user && (
               <EngagementPresence
+                firmId={engagement.firm_id}
                 engagementId={engagement.id}
                 viewerId={user.id}
                 roster={activeMembers}
