@@ -16,6 +16,7 @@ import {
 } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { signedUrl } from "@/lib/storage";
 import {
   zipToBytes,
@@ -43,7 +44,7 @@ export async function GET(_request: NextRequest) {
   if (!firm || !user) {
     return NextResponse.json({ error: "no_firm" }, { status: 403 });
   }
-  if (user.role !== "owner") {
+  if (!can(user, "firm.settings")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 

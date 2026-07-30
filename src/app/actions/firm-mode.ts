@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 
 // Result returned to the GoLiveCard's useActionState. `ok=true`
 // includes the number of engagements that had their reminders
@@ -36,7 +37,7 @@ export async function convertToLiveAction(
     getCurrentFirm(),
   ]);
   if (!user || !firm) return { ok: false, error: "no_session" };
-  if (user.role !== "owner") return { ok: false, error: "owner_only" };
+  if (!can(user, "firm.settings")) return { ok: false, error: "owner_only" };
   if (!firm.is_demo) return { ok: false, error: "already_live" };
 
   const admin = getServiceRoleSupabase();
