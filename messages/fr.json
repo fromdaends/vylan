@@ -1767,6 +1767,7 @@
     "invoice_amount_label": "Montant à facturer",
     "invoice_use_default": "Utiliser mon tarif enregistré ({amount} $)",
     "invoice_no_default": "Aucun tarif enregistré pour ce service",
+    "invoice_no_default_hint": "Aucun prix enregistré pour ce service — saisissez le montant ci-dessous. Vous pouvez en enregistrer un dans Réglages › Paiements › Prix par défaut.",
     "invoice_custom": "Définir un montant personnalisé",
     "invoice_amount_required": "Entrez un montant à facturer avant d’activer la facturation automatique.",
     "ai_off_badge": "IA désactivée",

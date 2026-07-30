@@ -7,6 +7,28 @@ export type InvoiceAutoMode = "off" | "on_completion" | "delayed";
 // when it can't be determined: mode 'off', or a custom amount that isn't a
 // valid figure (Stripe's floor is $0.50). Prefers the firm's saved default when
 // "use default" is chosen and a default exists; otherwise parses the custom $.
+// Is the firm's saved price for this service actually usable as the amount?
+//
+// MUST agree with resolveInvoiceAmountCents below, which only takes the saved
+// price when it is POSITIVE and otherwise falls through to the typed amount.
+// The builder used to ask a weaker question (`defaultCents != null`), so a firm
+// with a saved price of $0 was offered "Use my saved price ($0.00)", could pick
+// it, and then billed nothing at all — the resolver ignored the 0 and found an
+// empty custom field.
+//
+// It is also what decides whether there is a CHOICE to present. With no usable
+// saved price there is exactly one way to set the amount, and a radio group
+// with one live option is not a choice — it reads as a broken control.
+export function hasUsableSavedPrice(
+  defaultCents: number | null | undefined,
+): boolean {
+  return (
+    typeof defaultCents === "number" &&
+    Number.isFinite(defaultCents) &&
+    defaultCents > 0
+  );
+}
+
 export function resolveInvoiceAmountCents(opts: {
   mode: InvoiceAutoMode;
   useDefault: boolean;
