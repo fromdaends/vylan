@@ -864,6 +864,7 @@ export default async function EngagementDetailPage({
                 assigneeName={assignee ? userDisplayLabel(assignee) : null}
                 assigneeDeactivated={!!assignee?.deactivated_at}
                 members={activeMembers}
+                viewerId={user?.id ?? ""}
                 handoff={handoff}
               />
             </div>

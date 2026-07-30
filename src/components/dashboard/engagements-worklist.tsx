@@ -297,6 +297,7 @@ export function EngagementsWorklist({
         canDelete={canDelete}
         growNameColumn
         teamEnabled={teamEnabled}
+        viewerId={currentUserId}
       />
     </section>
   );
@@ -317,6 +318,7 @@ export function WorklistTable({
   onStatusSortToggle,
   reassignMembers,
   assignMembers,
+  viewerId,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -349,6 +351,10 @@ export function WorklistTable({
   // of icons on every row; the teammate profile wants both and passes
   // reassignMembers instead, which implies this.
   assignMembers?: { id: string; name: string }[];
+  // The signed-in user, so the row menu can offer "Take it". Optional: a caller
+  // that does not pass it simply gets the plain list of names, which is what
+  // every caller got before.
+  viewerId?: string | null;
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
@@ -473,6 +479,7 @@ export function WorklistTable({
               locale={locale}
               reassignMembers={reassignMembers}
               assignMembers={assignMembers}
+              viewerId={viewerId}
               onOptimisticRemoval={removeRow}
               statusLabel={tStatus(r.derivedStatus)}
               overdueText={
@@ -530,6 +537,7 @@ function WorklistRowView({
   teamEnabled,
   reassignMembers,
   assignMembers,
+  viewerId,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -546,6 +554,7 @@ function WorklistRowView({
   teamEnabled: boolean;
   reassignMembers?: { id: string; name: string }[];
   assignMembers?: { id: string; name: string }[];
+  viewerId?: string | null;
 }) {
   const tEng = useTranslations("Engagements");
   const router = useRouter();
@@ -596,6 +605,7 @@ function WorklistRowView({
     // column) or assignMembers (menu only).
     assignees: teamEnabled ? (reassignMembers ?? assignMembers) : undefined,
     assigneeId: row.assigneeUserId,
+    viewerId,
   });
 
   return (

@@ -109,6 +109,9 @@ export function useEngagementRowMenu(args: {
   assignees?: { id: string; name: string }[];
   // Who holds it now, so the current person can be ticked and skipped.
   assigneeId?: string | null;
+  // The signed-in user, so "Take it" can lead the submenu. Same one-click
+  // self-assign as the engagement page; Karbon has it in both places too.
+  viewerId?: string | null;
 }): { items: RowMenuItem[]; dialog: ReactNode } {
   const { engagementId, title, state, canDelete, stage, runOptimistic } = args;
   const t = useTranslations("Engagements");
@@ -229,6 +232,24 @@ export function useEngagementRowMenu(args: {
         label: t("assign_to"),
         icon: UserRound,
         submenu: [
+          // "Take it" first, and only when it would change something. Claiming
+          // work you are already looking at should not mean finding your own
+          // name in a list of colleagues.
+          ...(args.viewerId &&
+          args.viewerId !== args.assigneeId &&
+          assignees.some((m) => m.id === args.viewerId)
+            ? [
+                {
+                  key: "__me",
+                  label: t("assign_to_me"),
+                  onSelect: () =>
+                    mutate(
+                      () =>
+                        reassignEngagementAction(engagementId, args.viewerId!),
+                      () => toast(t("assigned_toast_me"))),
+                },
+              ]
+            : []),
           ...assignees.map((m) => ({
             key: m.id,
             label: m.name,

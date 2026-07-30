@@ -3,7 +3,13 @@
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
-import { AlertTriangle, Check, ChevronDown, UserRound } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  UserRound,
+  UserRoundCheck,
+} from "lucide-react";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
   DropdownMenu,
@@ -37,6 +43,7 @@ export function EngagementAssignee({
   assigneeName,
   assigneeDeactivated,
   members,
+  viewerId,
   handoff,
 }: {
   engagementId: string;
@@ -44,6 +51,11 @@ export function EngagementAssignee({
   assigneeName: string | null;
   assigneeDeactivated: boolean;
   members: { id: string; name: string }[];
+  // The signed-in user, so "Take it" can appear. Karbon has the same one-click
+  // self-assign ("Assign to Me", plus typing "me" in their picker) and it is
+  // the single most-used assignment there is: picking your own name out of a
+  // list to claim work you are already looking at is a silly amount of aim.
+  viewerId: string;
   // The note left by whoever last handed this over. Rendered right under the
   // assignee because that is the only place it is ever looked for — until now
   // it lived only in the activity feed and the notification, so once the
@@ -67,6 +79,22 @@ export function EngagementAssignee({
     if (memberId === assigneeId) return;
     setNote("");
     setTarget({ id: memberId, name: memberName });
+  }
+
+  // Taking work yourself skips the note dialog for the same reason unassigning
+  // does: a handoff note is instructions FOR the person receiving the work, and
+  // here that is you. Prompting you to write yourself a note would be absurd.
+  function takeIt() {
+    if (!viewerId || viewerId === assigneeId) return;
+    const me = members.find((m) => m.id === viewerId);
+    if (!me) return;
+    setTarget(null);
+    setOptimisticName(me.name);
+    startTransition(async () => {
+      const res = await reassignEngagementAction(engagementId, viewerId);
+      if (res.ok) router.refresh();
+      else setOptimisticName(null);
+    });
   }
 
   // Clearing the assignee skips the note dialog: a handoff note is addressed to
@@ -136,6 +164,26 @@ export function EngagementAssignee({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-52">
+            {viewerId !== assigneeId &&
+              members.some((m) => m.id === viewerId) && (
+                <>
+                  <DropdownMenuItem
+                    onSelect={(e) => {
+                      e.preventDefault();
+                      takeIt();
+                    }}
+                    className="gap-2"
+                  >
+                    <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/10 text-primary">
+                      <UserRoundCheck className="size-3" />
+                    </span>
+                    <span className="flex-1 truncate font-medium">
+                      {t("assign_to_me")}
+                    </span>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
             {members.map((m) => (
               <DropdownMenuItem
                 key={m.id}

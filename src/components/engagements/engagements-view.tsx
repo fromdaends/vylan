@@ -305,6 +305,7 @@ export function EngagementsView({
         teamEnabled={teamEnabled}
         // Feeds "Assign to…" in each row's "..." menu. Menu only — no ⇄ column.
         assignMembers={assignMembers}
+        viewerId={currentUserId}
         // Opt in to the sortable Status header. Only this view passes these, so
         // every other table (the Overview included) keeps its plain header.
         statusSort={stageFilteringOn ? stageSort : null}
