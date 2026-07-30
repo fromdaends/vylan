@@ -298,12 +298,89 @@ untouched.
 
 ---
 
+## 14. What a live end-to-end test found (#1010, #1013)
+
+Register match (section 13) was verified against the founder's real Xero Demo
+Company, not just unit tests: a bill was typed into Xero by hand, a matching
+receipt went through the client portal, and the draft was approved and posted.
+Result: Vylan asked, attached the receipt to the hand-entered bill, created
+nothing (bill count held at 34), and Unlink left that bill and its attachment
+untouched. Forcing "post a new one" then created normally. The whole chain works.
+
+Two real defects surfaced that no unit test would have caught, because both
+depend on the SHAPE OF THE REAL ORGANISATION.
+
+### Fixed: the currency comparison was anchored to the wrong side (#1010)
+
+The Demo Company keeps its books in **USD**. Xero books a transaction in the
+organisation's currency unless the post says otherwise, so a USD organisation
+holding a CAD document posts CAD — and the match normalised a candidate's
+CurrencyCode against the ORGANISATION's currency. A USD 247.83 bill would have
+been reported as unambiguous and silently attached to a CAD 247.83 receipt. Same
+number, different money: precisely the misstatement `base_currency` was added to
+prevent, arriving through the other door. Now compares against the effective
+POSTING currency (the document's when stated, the organisation's otherwise),
+which is strictly better in all four org/document/candidate combinations.
+
+**Carry into QuickBooks:** the shared classifier's multicurrency guard assumes a
+currency on the candidate means "possibly not what we post in". That assumption
+is only safe when the comparison currency is the one the transaction will
+actually be stated in. QuickBooks' equivalent is `CurrencyRef`; check the same
+question there rather than porting the Xero adapter.
+
+### Fixed: one provider-named key missed the pk() helper (#1013)
+
+Unlinking a matched Xero draft said "Nothing is deleted in **QuickBooks**".
+Section 13 added `unlink_body_xero` and every other named key in that dialog goes
+through the component's `pk()` helper; this call site was left on the QuickBooks
+key. Cheap to miss, invisible to tsc, and only visible by clicking the button on
+the right provider.
+
+### OPEN, not fixed — a non-CAD document can never be posted
+
+`draftNeedsInput` (src/lib/quickbooks/draft-resolve.ts) returns true whenever
+`suggestion.currency != null && suggestion.currency !== "CAD"`. There is no
+resolved override for currency, so **nothing in the UI can ever clear it** — the
+amber "Amounts appear to be in USD, not CAD" line is permanent and Approve stays
+disabled forever. Hit while testing: a USD receipt had to be abandoned and
+re-made in CAD to finish the run.
+
+This predates the register-match work and is not a regression. It matters now for
+two reasons: Vylan is Canada-wide, and the whole `base_currency` + CurrencyCode
+feature exists to handle foreign-currency documents — which this guard makes
+unreachable. The honest rule is probably "block only when the document's currency
+differs from the organisation's AND the organisation's is unknown", since a
+recorded org currency makes the post correct. Deferred to the founder; the same
+guard is shared with the QuickBooks path, so fix it once.
+
+### Environment notes that cost time
+
+- **`xero_connections.base_currency` is still null** for the only connected
+  client — it is written ONLY by the OAuth callback, so a client connected before
+  migration 1030 needs a reconnect. Until then a CAD document posts into the USD
+  organisation with no CurrencyCode and Xero records it as USD. Verified: the
+  bill created during the test reads "Amount USD 247.83" from a CA$247.83
+  receipt.
+- **A supplier created in Xero is invisible to Vylan's pickers until reconnect.**
+  The contact cache is also only rebuilt by the OAuth callback. There is no
+  resync endpoint. A "Refresh from Xero" button would remove a genuine
+  papercut — the same applies to accounts, tax rates and items.
+- The draft card's **Refresh** button DOES recompute a stored suggestion against
+  the current cache, which is how a newly-cached vendor gets picked up without
+  re-uploading.
+
+---
+
 ## Still open on Xero (finish before starting QuickBooks)
 
 1. **The demo-only posting gate** in `src/lib/xero/post.ts` still blocks real
    client books. Register-match (section 13) was the last functional gap versus
-   the QuickBooks path and shipped in #1006, so what remains is a deliberate
-   go-live decision, not more code. The founder DEFERRED it on 2026-07-28.
+   the QuickBooks path and shipped in #1006, and section 14 verified the whole
+   chain against a real organisation, so what remains is a deliberate go-live
+   decision, not more code. The founder DEFERRED it on 2026-07-28.
+
+2. **A non-CAD document can never be approved** (section 14). One shared guard,
+   no UI escape. Awaiting the founder's call.
 
 ---
 
