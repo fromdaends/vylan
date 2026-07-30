@@ -2,16 +2,18 @@
 
 import type { ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { Plus, Upload } from "lucide-react";
+import { Upload } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { DashboardGreeting } from "@/components/dashboard/dashboard-greeting";
 
 // The welcome band at the top of /dashboard. No card chrome — the time-aware
-// greeting sits flush on the page (left) and the primary entry points —
-// start a new engagement, import clients, the What's-new bell — stay on the
-// right, so the header reads as part of the page rather than a boxed-off
-// panel.
+// greeting sits flush on the page (left) and the secondary entry points (import
+// clients, the What's-new bell) stay on the right, so the header reads as part
+// of the page rather than a boxed-off panel.
+//
+// "New engagement" is deliberately NOT here: the icon rail's "+" is the one
+// primary entry point now, and having both was two buttons for one action.
 export function DashboardHeader({
   firstName,
   subtitle,
@@ -25,7 +27,6 @@ export function DashboardHeader({
   // shell), passed from the page so this header stays presentation-only.
   bell?: ReactNode;
 }) {
-  const tEng = useTranslations("Engagements");
   const tClients = useTranslations("Clients");
 
   return (
@@ -37,12 +38,6 @@ export function DashboardHeader({
       />
 
       <div className="flex flex-wrap items-center gap-2.5">
-        <Button asChild>
-          <Link href="/engagements/new">
-            <Plus className="h-4 w-4" />
-            {tEng("new")}
-          </Link>
-        </Button>
         <Button asChild variant="outline">
           <Link href="/clients/import">
             <Upload className="h-4 w-4" />

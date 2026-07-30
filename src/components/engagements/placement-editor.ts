@@ -15,7 +15,6 @@ export async function openPlacementEditor(opts: {
 }): Promise<void> {
   await openSignWellSession({
     url: opts.url,
-    collapseAppSidebar: true,
     onCompleted: async () => {
       try {
         await finalizeSignaturePlacementAction(opts.itemId);

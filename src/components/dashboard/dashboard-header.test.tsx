@@ -25,7 +25,7 @@ function renderHeader(props: { firstName: string | null; subtitle: string }) {
 }
 
 describe("DashboardHeader", () => {
-  it("greets the user by first name, shows firm + LOCAL today's date, and links to the two primary actions", () => {
+  it("greets the user by first name, shows firm + LOCAL today's date, and links to Import clients", () => {
     renderHeader({ firstName: "Zach", subtitle: "Acme Co" });
 
     // The greeting is time-aware (the exact word depends on the clock), so we
@@ -39,9 +39,16 @@ describe("DashboardHeader", () => {
     const localToday = formatDate(new Date(), "en", "long");
     expect(screen.getByText(`Acme Co · ${localToday}`)).toBeInTheDocument();
 
-    // New engagement → the engagement creation flow.
-    const newEng = screen.getByRole("link", { name: en.Engagements.new });
-    expect(newEng.getAttribute("href") ?? "").toContain("/engagements/new");
+    // "New engagement" is NOT here any more: the icon rail's "+" is the single
+    // primary entry point, and having both was two buttons for one action.
+    expect(
+      screen.queryByRole("link", { name: en.Engagements.new }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen
+        .queryAllByRole("link")
+        .some((a) => a.getAttribute("href") === "/engagements/new"),
+    ).toBe(false);
 
     // Import clients → the CSV import flow.
     const importClients = screen.getByRole("link", {

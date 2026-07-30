@@ -1,75 +1,39 @@
 "use client";
 
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
-import {
-  SIDEBAR_COLLAPSED_EVENT,
-  getSidebarCollapsed,
-  setSidebarCollapsed,
-} from "@/lib/sidebar-collapse";
-import { brand } from "@/lib/brand";
 import { cn } from "@/lib/cn";
 import { logoutAction } from "@/app/actions/auth";
-import { Logo } from "@/components/brand/logo";
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetTitle,
 } from "@/components/ui/sheet";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
-  Archive,
+  BookOpen,
+  BookOpenCheck,
   Building2,
-  ChevronDown,
-  ChevronUp,
-  ClipboardList,
   FileText,
   Folder,
   FolderUp,
   Gauge,
-  HelpCircle,
-  BookOpen,
   LayoutDashboard,
-  ListChecks,
   LogOut,
-  PanelLeft,
-  PanelLeftClose,
-  PencilLine,
   Plug,
-  Search,
   Settings,
   Sparkles,
-  Trash2,
   UserCircle,
   Users,
   Users2,
 } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { SidebarSearch, openCommandPalette } from "@/components/app/sidebar-search";
 import { CommandPalette } from "@/components/app/command-palette";
-import { viewHref, type EngagementView } from "@/lib/engagements/views";
-import {
-  isNavItemActive,
-  isEngagementViewActive,
-  isIntegrationsSectionActive,
-  isIntegrationSubItemVisible,
-} from "@/lib/navigation/active-nav";
-import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
-import { SageLogo } from "@/components/integrations/sage-logo";
-import { XeroLogo } from "@/components/integrations/xero-logo";
-import {
-  ActiveNavProvider,
-  useActiveEngagementView,
-} from "@/components/app/active-nav-context";
+import { IconRail, type RailItem } from "@/components/app/icon-rail";
+import { type EngagementView } from "@/lib/engagements/views";
+import { isNavItemActive } from "@/lib/navigation/active-nav";
+import { ActiveNavProvider } from "@/components/app/active-nav-context";
 
 type Labels = {
   dashboard: string;
@@ -83,6 +47,9 @@ type Labels = {
   // Localized name of the "Document filing" integrations sub-item (the other
   // sub-items are brand names and need no translation).
   integrationsFiling: string;
+  // Rail-sized version of the same destination ("Filing" / "Classement") — the
+  // full name is two words in English and wraps badly in a 72px slot.
+  filingShort: string;
   settings: string;
   firm: string;
   logout: string;
@@ -108,64 +75,6 @@ export type EngagementBadgeCounts = {
   deleted: number;
 };
 
-// The seven Engagement sub-views, in nav order, with their icons + hrefs.
-// Active is the parent destination (/engagements); the rest are sub-routes.
-const ENGAGEMENT_SUBNAV: {
-  view: EngagementView;
-  icon: typeof Users;
-}[] = [
-  { view: "active", icon: Folder },
-  { view: "ready", icon: ListChecks },
-  { view: "drafts", icon: PencilLine },
-  { view: "completed", icon: ClipboardList },
-  { view: "archived", icon: Archive },
-  { view: "deleted", icon: Trash2 },
-];
-
-// The Integrations sub-items, in nav order. Each carries its product's OFFICIAL
-// brand logo (not a line icon) — a deliberate, small departure so the marks read
-// as the real tools. Brand NAMES are not localized. QuickBooks is the existing
-// live surface (/quickbooks/drafts); Sage 50 is the new file-export page.
-//
-// Document filing used to live here as a fourth sub-item. It's a TOP-LEVEL tab
-// now (founder): it's a Vylan-native feature rather than a third-party
-// connection, and burying it a level down made it the least discoverable thing
-// in the sidebar. It is deliberately NOT listed in both places — two rows
-// pointing at one route would both try to light up.
-//
-// `root` is what the sidebar highlights against (QuickBooks lives under a
-// different URL root than the hub index). `name` null = localized (brand names
-// stay hardcoded, they don't translate).
-const INTEGRATION_SUBNAV: {
-  key: string;
-  name: string | null;
-  href: string;
-  root: string;
-  Logo: typeof QuickbooksLogo;
-}[] = [
-  {
-    key: "quickbooks",
-    name: "QuickBooks",
-    href: "/integrations/quickbooks",
-    root: "/integrations/quickbooks",
-    Logo: QuickbooksLogo,
-  },
-  {
-    key: "sage",
-    name: "Sage 50",
-    href: "/integrations/sage",
-    root: "/integrations/sage",
-    Logo: SageLogo,
-  },
-  {
-    key: "xero",
-    name: "Xero",
-    href: "/integrations/xero",
-    root: "/integrations/xero",
-    Logo: XeroLogo,
-  },
-];
-
 type NavItemDef = {
   href: string;
   label: string;
@@ -175,21 +84,6 @@ type NavItemDef = {
   color: string;
 };
 
-// The collapsed-state contract (localStorage key + change event + read/write)
-// lives in @/lib/sidebar-collapse so features outside the shell can flip it too.
-function subscribeCollapsed(callback: () => void) {
-  window.addEventListener(SIDEBAR_COLLAPSED_EVENT, callback);
-  window.addEventListener("storage", callback);
-  return () => {
-    window.removeEventListener(SIDEBAR_COLLAPSED_EVENT, callback);
-    window.removeEventListener("storage", callback);
-  };
-}
-
-function getServerCollapsed(): boolean {
-  return false;
-}
-
 export function AppShell({
   children,
   topBar,
@@ -197,10 +91,7 @@ export function AppShell({
   userDisplayName,
   userEmail,
   userAvatarUrl,
-  firmName,
-  firmLogoUrl,
   labels,
-  engagementBadges,
   isOwner = false,
   teamEnabled = true,
   quickbooksConnected = false,
@@ -212,10 +103,7 @@ export function AppShell({
   userDisplayName: string;
   userEmail: string;
   userAvatarUrl: string | null;
-  firmName: string;
-  firmLogoUrl: string | null;
   labels: Labels;
-  engagementBadges: EngagementBadgeCounts;
   // Gates owner-only entries (billing, audit log, firm export/delete) in the
   // command palette. Defaults false so non-owners never see them.
   isOwner?: boolean;
@@ -233,16 +121,6 @@ export function AppShell({
   const tApp = useTranslations("App");
   const [mobileAccountOpen, setMobileAccountOpen] = useState(false);
 
-  const collapsed = useSyncExternalStore(
-    subscribeCollapsed,
-    getSidebarCollapsed,
-    getServerCollapsed,
-  );
-  const setCollapsed = (next: boolean | ((prev: boolean) => boolean)) => {
-    const value = typeof next === "function" ? next(collapsed) : next;
-    setSidebarCollapsed(value);
-  };
-
   // Close the mobile account sheet on route change (e.g. user tapped
   // a menu link). Ref-guarded to avoid setting state on every render.
   const lastPathRef = useRef(pathname);
@@ -253,79 +131,52 @@ export function AppShell({
     }
   }, [pathname]);
 
-  // Engagements is rendered as its own expandable section (not a plain
-  // NavLink), so it's excluded from this flat list and inserted between
-  // Clients and Templates in the sidebar body.
-  const primaryNav: NavItemDef[] = [
-    {
-      href: "/dashboard",
-      label: labels.dashboard,
-      icon: LayoutDashboard,
-      color: "text-icon-blue",
-    },
-    {
-      // "Performance" is the same word in EN and FR, so the label is safe to
-      // hardcode here — no messages/*.json edit needed.
-      href: "/performance",
-      label: "Performance",
-      icon: Gauge,
-      color: "text-icon-purple",
-    },
-    { href: "/clients", label: labels.clients, icon: Users, color: "text-icon-emerald" },
-    {
-      href: "/templates",
-      label: labels.templates,
-      icon: FileText,
-      color: "text-icon-amber",
-    },
+  // The icon rail's destinations, in order. Flat by design — Engagements and
+  // Integrations are single links now, because their own pages already carry the
+  // sub-navigation the old expandable sections duplicated.
+  const railNav: RailItem[] = [
+    { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
+    // "Performance" is the same word in EN and FR, so it's safe to hardcode.
+    { href: "/performance", label: "Performance", icon: Gauge },
+    { href: "/clients", label: labels.clients, icon: Users },
+    { href: "/templates", label: labels.templates, icon: FileText },
+    // Short label here on purpose: "Document filing" wraps to two cramped lines
+    // in a rail slot. The page itself still uses the full name.
+    { href: "/integrations/filing", label: labels.filingShort, icon: FolderUp },
+    { href: "/engagements", label: labels.engagements, icon: Folder },
+    // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
+    // conditional tab: the design didn't include one, but the feature exists and
+    // hiding it would be a regression for a connected firm. Absent until a
+    // bookkeeping connection exists, exactly as before.
+    ...(quickbooksConnected || xeroConnected
+      ? [
+          {
+            href: "/quickbooks/drafts",
+            label: labels.bookkeeping,
+            icon: BookOpenCheck,
+          },
+        ]
+      : []),
+    { href: "/integrations", label: labels.integrations, icon: Plug },
   ];
 
-  // Integrations hub — an EXPANDABLE section (like Engagements) whose parent
-  // links to the /integrations index. The section is ALWAYS shown: it always
-  // contains Sage 50 (a file export that needs no connection and is available to
-  // every firm member), so hiding the whole section would strand Sage and the
-  // hub. Only the QuickBooks SUB-ITEM is gated on `quickbooksConnected` (see
-  // IntegrationsNav) — mirroring the hub page, which always renders the Sage card
-  // but shows the QuickBooks card only once a client is connected.
-
-  // Firm + Settings used to live in a sidebar "ACCOUNT" section; they
-  // now live in the avatar dropdown menu (and the mobile sheet's
-  // profile menu), so the sidebar nav is just primary destinations.
+  // Firm + Settings live in the account dropdown (and the mobile sheet's profile
+  // menu), so the rail carries primary destinations only.
 
   return (
     <ActiveNavProvider>
     <div className="flex min-h-screen">
-      {/* Desktop sidebar — always visible on sm+, collapses to an
-          icon rail when the toggle is flipped. */}
-      <aside
-        className={cn(
-          // Seamless dark surface (Vercel-style): the sidebar fills with the
-          // same --background black as the main content. The sm:border-r (using
-          // the existing --border token) is the subtle divider that keeps the
-          // two zones distinguishable. backdrop-blur dropped — pointless on a
-          // solid fill.
-          "hidden sm:flex sm:flex-col sm:fixed sm:inset-y-0 sm:left-0 sm:border-r sm:border-border/40 sm:bg-background sm:z-30 transition-[width] duration-200 ease-out",
-          collapsed ? "sm:w-16" : "sm:w-64",
-        )}
-        aria-label={tApp("nav_primary_label")}
-      >
-        <SidebarBody
-          primaryNav={primaryNav}
-          quickbooksConnected={quickbooksConnected}
-          xeroConnected={xeroConnected}
-          labels={labels}
-          engagementBadges={engagementBadges}
-          brandColor={brandColor}
-          userDisplayName={userDisplayName}
-          userEmail={userEmail}
-          userAvatarUrl={userAvatarUrl}
-          firmName={firmName}
-          firmLogoUrl={firmLogoUrl}
-          teamEnabled={teamEnabled}
-          collapsed={collapsed}
-          onToggleCollapse={() => setCollapsed((v) => !v)}
-        />
-      </aside>
+      {/* Desktop navigation — a fixed 76px near-black icon rail. See
+          icon-rail.tsx for why it doesn't collapse and has no sub-menus. */}
+      <IconRail
+        items={railNav}
+        navLabel={tApp("nav_primary_label")}
+        labels={labels}
+        userDisplayName={userDisplayName}
+        userEmail={userEmail}
+        userAvatarUrl={userAvatarUrl}
+        brandColor={brandColor}
+      />
 
       {/* Main content — offset matches the sidebar width on desktop.
           Mobile gets bottom padding to clear the tab bar. */}
@@ -338,8 +189,10 @@ export function AppShell({
           // horizontally by ~the sidebar width. min-w-0 lets it size to the
           // available width; <main> below clips any remaining child overflow
           // (and the table keeps its own internal scroll).
-          "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin-left,margin-right] duration-300 ease-out sm:mr-[var(--assistant-shell-offset)]",
-          collapsed ? "sm:ml-16" : "sm:ml-64",
+          // One fixed offset now — the rail never changes width, so the
+          // left-margin transition the collapse toggle needed is gone. The right
+          // margin still animates for the expandable messaging sidebar.
+          "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin-right] duration-300 ease-out sm:ml-[var(--rail-width)] sm:mr-[var(--assistant-shell-offset)]",
         )}
       >
         {topBar && (
@@ -662,710 +515,3 @@ function MobileMenuItem({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Desktop sidebar body (icons + labels + profile card)
-// ---------------------------------------------------------------------------
-
-function SidebarBody({
-  primaryNav,
-  quickbooksConnected,
-  xeroConnected,
-  labels,
-  engagementBadges,
-  brandColor,
-  userDisplayName,
-  userEmail,
-  userAvatarUrl,
-  firmName,
-  firmLogoUrl,
-  teamEnabled,
-  collapsed,
-  onToggleCollapse,
-}: {
-  primaryNav: NavItemDef[];
-  quickbooksConnected: boolean;
-  xeroConnected: boolean;
-  labels: Labels;
-  engagementBadges: EngagementBadgeCounts;
-  brandColor: string;
-  userDisplayName: string;
-  userEmail: string;
-  userAvatarUrl: string | null;
-  firmName: string;
-  firmLogoUrl: string | null;
-  teamEnabled: boolean;
-  collapsed: boolean;
-  onToggleCollapse?: () => void;
-}) {
-  const tHome = useTranslations("Home");
-  // Desktop account-menu logout submits via this ref. A plain submit button
-  // nested inside a Radix DropdownMenuItem has its click swallowed by the
-  // menu's own selection handling, so the form never posts (the "logout does
-  // nothing" bug). Firing requestSubmit() from the item's onSelect posts it
-  // reliably — same onSelect pattern the Help item above uses.
-  const logoutFormRef = useRef<HTMLFormElement>(null);
-  return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      {/* Brand row */}
-      {collapsed ? (
-        <div className="flex flex-col items-center gap-3 px-2 pt-4 pb-3 border-b border-border/40">
-          {onToggleCollapse ? (
-            // M365-style: when collapsed, the logo IS the expand control.
-            // The Vylan logo shows by default and cross-fades to the panel
-            // icon on hover/focus; clicking expands the rail. Expanded (the
-            // branch below), the logo is a plain link again and the collapse
-            // toggle returns to its own spot on the right.
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              aria-label={labels.expandSidebar}
-              title={labels.expandSidebar}
-              className="group relative inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors duration-200 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-90 motion-reduce:transition-none"
-            >
-              {/* Logo gently shrinks + fades as the panel icon spins in to
-                  replace it. motion-reduce falls back to a plain swap. */}
-              <span className="transition-all duration-300 ease-out group-hover:scale-50 group-hover:opacity-0 group-focus-visible:scale-50 group-focus-visible:opacity-0 motion-reduce:transition-none motion-reduce:group-hover:scale-100">
-                <Logo size={28} priority />
-              </span>
-              <PanelLeft
-                className="absolute left-1/2 top-1/2 size-[18px] -translate-x-1/2 -translate-y-1/2 -rotate-90 scale-50 text-foreground opacity-0 transition-all duration-300 ease-out group-hover:rotate-0 group-hover:scale-100 group-hover:opacity-100 group-focus-visible:rotate-0 group-focus-visible:scale-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
-                aria-hidden
-              />
-            </button>
-          ) : (
-            <Link
-              href="/dashboard"
-              title={brand.name}
-              className="inline-flex items-center justify-center rounded-lg p-1 hover:bg-secondary/40 transition-colors"
-            >
-              <Logo size={28} priority />
-            </Link>
-          )}
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-2 px-5 pt-5 pb-4">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2.5 font-semibold tracking-tight text-base group min-w-0"
-          >
-            <Logo
-              size={32}
-              priority
-              className="transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3 shrink-0"
-            />
-            <span className="truncate">{brand.name}</span>
-          </Link>
-          {onToggleCollapse && (
-            <button
-              type="button"
-              onClick={onToggleCollapse}
-              className="shrink-0 inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-              aria-label={labels.collapseSidebar}
-              title={labels.collapseSidebar}
-            >
-              <PanelLeftClose className="size-4" aria-hidden />
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Global search — full trigger when expanded; a Search icon that
-          opens the command palette when collapsed. */}
-      {collapsed ? (
-        <div className="px-2 pt-1 pb-2">
-          <button
-            type="button"
-            data-command-palette-trigger
-            onClick={openCommandPalette}
-            className="flex w-full items-center justify-center rounded-lg p-2 text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-            aria-label={tHome("search_label")}
-            aria-keyshortcuts="Meta+K Control+K"
-            title={tHome("search_label")}
-          >
-            <Search className="size-[18px]" aria-hidden />
-          </button>
-        </div>
-      ) : (
-        <div className="px-3 pt-1 pb-2">
-          <SidebarSearch />
-        </div>
-      )}
-
-      {/* Nav */}
-      <nav
-        className={cn(
-          "flex-1 overflow-y-auto overflow-x-hidden pb-4",
-          collapsed ? "px-2 space-y-4" : "px-3 space-y-5",
-        )}
-      >
-        <NavSection label={labels.sectionMain} collapsed={collapsed}>
-          {primaryNav.map((item) => (
-            <NavLink
-              key={item.href}
-              href={item.href}
-              icon={item.icon}
-              label={item.label}
-              collapsed={collapsed}
-              color={item.color}
-            />
-          ))}
-          {/* Document filing — its own top-level tab (founder), promoted out of
-              the Integrations sub-list where it was the least discoverable thing
-              in the sidebar. Sits ABOVE Engagements (founder), so the plain
-              links stay together and the two expandable sections (Engagements,
-              Integrations) sit below them. Cyan, since Templates directly above
-              already owns the filing feature's amber. Desktop only — the mobile
-              tab bar stays at its deliberate three tabs + Account. */}
-          <NavLink
-            href="/integrations/filing"
-            icon={FolderUp}
-            label={labels.integrationsFiling}
-            collapsed={collapsed}
-            color="text-icon-cyan"
-          />
-          {/* Engagements is an expandable section (Active / Ready / Drafts /
-              Completed / Archived / Cancelled / Recently deleted) rather than a
-              plain link. Inserted after the primary destinations. */}
-          <EngagementsNav
-            labels={labels}
-            badges={engagementBadges}
-            collapsed={collapsed}
-            bookkeepingConnected={quickbooksConnected || xeroConnected}
-          />
-          {/* Integrations hub — an expandable section mirroring Engagements:
-              the label links to the /integrations index, the chevron reveals the
-              sub-items with their brand logos. Always shown, and both sub-items
-              (Sage 50 + QuickBooks) always list so QuickBooks is discoverable. */}
-          <IntegrationsNav
-            labels={labels}
-            collapsed={collapsed}
-            quickbooksConnected={quickbooksConnected}
-          />
-        </NavSection>
-      </nav>
-
-      {/* Firm button — a deliberately QUIET, secondary affordance: a small firm
-          logo + muted, single-line firm name + a small team icon. Visible to all
-          members; opens the team page. Kept subtler than the profile card below
-          it (smaller avatar, muted xs text, lighter hover) so the profile stays
-          the primary identity and this recedes. */}
-      {teamEnabled && (
-        <div className={cn(collapsed ? "px-2 pb-1" : "px-3 pb-1")}>
-        <Link
-          href="/settings/team"
-          title={firmName}
-          aria-label={firmName}
-          className={cn(
-            "group flex items-center rounded-lg hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors",
-            collapsed
-              ? "w-full justify-center p-1.5"
-              : "w-full gap-2 px-2 py-1.5",
-          )}
-        >
-          <AvatarInitials
-            src={firmLogoUrl}
-            name={firmName}
-            size={collapsed ? 28 : 22}
-            color={brandColor}
-          />
-          {!collapsed && (
-            <>
-              <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground transition-colors group-hover:text-foreground">
-                {firmName}
-              </span>
-              <Users2
-                className="size-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground"
-                aria-hidden
-              />
-            </>
-          )}
-        </Link>
-        </div>
-      )}
-
-      {/* Profile card */}
-      <div
-        className={cn(
-          "border-t border-border/40",
-          collapsed ? "p-2" : "p-3",
-        )}
-      >
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className={cn(
-                "group flex items-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border",
-                collapsed
-                  ? "w-full justify-center p-1.5"
-                  : "w-full gap-3 px-2 py-2",
-              )}
-              aria-label={userDisplayName}
-              title={collapsed ? userDisplayName : undefined}
-            >
-              <AvatarInitials
-                src={userAvatarUrl}
-                name={userDisplayName}
-                size={collapsed ? 32 : 36}
-                color={brandColor}
-              />
-              {!collapsed && (
-                <>
-                  <div className="flex-1 min-w-0 text-left">
-                    <div className="text-sm font-medium leading-tight truncate">
-                      {userDisplayName}
-                    </div>
-                    <div className="text-xs text-muted-foreground leading-tight truncate mt-0.5">
-                      {userEmail}
-                    </div>
-                  </div>
-                  <ChevronUp
-                    className="size-3.5 shrink-0 text-muted-foreground/70 group-hover:text-foreground"
-                    aria-hidden
-                  />
-                </>
-              )}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align={collapsed ? "start" : "end"}
-            side="top"
-            sideOffset={8}
-            className="w-60"
-            // Every item here navigates (Profile/Settings) or acts (Help/Logout),
-            // so don't let Radix return focus to the trigger on close — otherwise
-            // its focus-visible ring lingers on the profile button after a
-            // client-side navigation (looked like the button stayed "selected").
-            onCloseAutoFocus={(e) => e.preventDefault()}
-          >
-            <DropdownMenuLabel className="font-normal">
-              <div className="font-medium truncate">{userDisplayName}</div>
-              <div className="text-xs text-muted-foreground truncate">
-                {userEmail}
-              </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link
-                href="/profile"
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <UserCircle className="h-4 w-4" />
-                {labels.profile}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link
-                href="/settings"
-                className="flex items-center gap-2 cursor-pointer"
-              >
-                <Settings className="h-4 w-4" />
-                {labels.settings}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              className="flex items-center gap-2 cursor-pointer"
-              onSelect={(e) => {
-                e.preventDefault();
-                window.dispatchEvent(new CustomEvent("vylan:open-help"));
-              }}
-            >
-              <HelpCircle className="h-4 w-4" />
-              {labels.help}
-            </DropdownMenuItem>
-            {/* The public help center, beside the assistant rather than
-                instead of it. New tab (founder spec). asChild so the item
-                renders as a real anchor — middle-click and "open in new
-                window" have to work on something that IS a link. */}
-            <DropdownMenuItem asChild className="cursor-pointer">
-              <a
-                href="/help"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2"
-              >
-                <BookOpen className="h-4 w-4" />
-                {labels.helpCenter}
-              </a>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <form ref={logoutFormRef} action={logoutAction}>
-              <DropdownMenuItem
-                className="flex items-center gap-2 text-destructive focus:text-destructive cursor-pointer"
-                onSelect={(e) => {
-                  e.preventDefault();
-                  logoutFormRef.current?.requestSubmit();
-                }}
-              >
-                <LogOut className="h-4 w-4" />
-                {labels.logout}
-              </DropdownMenuItem>
-            </form>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
-  );
-}
-
-function NavSection({
-  label,
-  collapsed,
-  children,
-}: {
-  label: string;
-  collapsed: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-0.5">
-      {!collapsed && (
-        <div className="text-[10px] uppercase tracking-[0.1em] text-muted-foreground/70 font-semibold px-3 pb-1.5">
-          {label}
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
-
-function NavLink({
-  href,
-  icon: Icon,
-  label,
-  collapsed,
-  color,
-}: {
-  href: string;
-  icon: typeof Users;
-  label: string;
-  collapsed: boolean;
-  color: string;
-}) {
-  const pathname = usePathname();
-  const active = isNavItemActive(pathname, href);
-  return (
-    <Link
-      href={href}
-      title={collapsed ? label : undefined}
-      aria-label={collapsed ? label : undefined}
-    >
-      <span
-        className={cn(
-          "flex items-center rounded-lg text-sm font-medium transition-colors",
-          collapsed ? "justify-center h-10 w-full" : "gap-2.5 px-3 py-2",
-          active
-            ? "bg-secondary text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
-            : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
-        )}
-      >
-        {/* Icon keeps its vibrant hue in every state so the rail stays
-            colorful; the active row reads via its tinted background. */}
-        <Icon className={cn("size-4 shrink-0", color)} aria-hidden />
-        {!collapsed && <span className="truncate">{label}</span>}
-      </span>
-    </Link>
-  );
-}
-
-// Expandable "Integrations" sidebar section. Built on the SAME pattern as
-// EngagementsNav below: the parent row's label links to the hub index
-// (/integrations) while a separate caret toggles the sub-item list; it
-// auto-expands whenever you're anywhere in the section (the hub, the Sage page,
-// or the pre-existing QuickBooks surface). Collapsed to icons, it degrades to a
-// single icon link to the index. The sub-items carry each product's brand logo.
-function IntegrationsNav({
-  labels,
-  collapsed,
-  quickbooksConnected,
-}: {
-  labels: Labels;
-  collapsed: boolean;
-  quickbooksConnected: boolean;
-}) {
-  const pathname = usePathname();
-  const onIntegrations = isIntegrationsSectionActive(pathname);
-  const [open, setOpen] = useState(onIntegrations);
-  // Both integrations always show now — Sage 50 (file export) and QuickBooks
-  // (shown even before connecting, so it's discoverable).
-  const subnav = INTEGRATION_SUBNAV.filter((item) =>
-    isIntegrationSubItemVisible(item.key, quickbooksConnected),
-  );
-  // Re-expand if navigation lands in the section (e.g. via search or a card).
-  const lastOnRef = useRef(onIntegrations);
-  useEffect(() => {
-    if (onIntegrations && !lastOnRef.current) setOpen(true);
-    lastOnRef.current = onIntegrations;
-  }, [onIntegrations]);
-
-  // Collapsed rail: a single icon link to the hub index (no room for the
-  // accordion, which needs labels the rail hides).
-  if (collapsed) {
-    return (
-      <Link
-        href="/integrations"
-        title={labels.integrations}
-        aria-label={labels.integrations}
-      >
-        <span
-          className={cn(
-            "flex h-10 w-full items-center justify-center rounded-lg text-sm font-medium transition-colors",
-            onIntegrations
-              ? "bg-secondary text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
-              : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
-          )}
-        >
-          <Plug className="size-4 shrink-0 text-icon-purple" aria-hidden />
-        </span>
-      </Link>
-    );
-  }
-
-  return (
-    <div>
-      {/* Parent row: the label links to the index; the caret toggles the list. */}
-      <div
-        className={cn(
-          "flex items-center rounded-lg text-sm font-medium transition-colors",
-          onIntegrations
-            ? "text-foreground"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <Link
-          href="/integrations"
-          className={cn(
-            "flex flex-1 items-center gap-2.5 rounded-lg px-3 py-2 hover:bg-secondary/60",
-            pathname === "/integrations" &&
-              "bg-secondary shadow-[inset_0_1px_0_0_var(--color-border)]",
-          )}
-        >
-          <Plug className="size-4 shrink-0 text-icon-purple" aria-hidden />
-          <span className="truncate">{labels.integrations}</span>
-        </Link>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-label={labels.integrationsToggle}
-          className="mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronDown
-            className={cn(
-              "size-4 transition-transform duration-200",
-              open ? "rotate-0" : "-rotate-90",
-            )}
-            aria-hidden
-          />
-        </button>
-      </div>
-
-      {/* Sub-items — smooth grid-rows expand, matching Engagements. */}
-      <div
-        className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
-        style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
-      >
-        <div className="overflow-hidden">
-          <div className="mt-0.5 space-y-0.5 border-l border-border/50 pl-3 ml-4">
-            {subnav.map(({ key, name, href, root, Logo }) => {
-              const active = isNavItemActive(pathname, root);
-              return (
-                <Link
-                  key={key}
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
-                    active
-                      ? "bg-secondary text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
-                  )}
-                >
-                  {/* Brand marks keep their real color in both themes. */}
-                  <Logo className="size-4 shrink-0" aria-hidden />
-                  <span className="flex-1 truncate">
-                    {name ?? labels.integrationsFiling}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Expandable "Engagements" sidebar section. The parent row links to
-// /engagements (Active) and toggles the sub-view list; sub-rows deep-link to
-// each view. Auto-expands when you're anywhere under /engagements. When the
-// rail is collapsed to icons, it degrades to a single icon link to Active
-// (the accordion needs labels, which the rail hides).
-function EngagementsNav({
-  labels,
-  badges,
-  collapsed,
-  bookkeepingConnected,
-}: {
-  labels: Labels;
-  badges: EngagementBadgeCounts;
-  collapsed: boolean;
-  // Drives the "Bookkeeping" sub-item (the shared QuickBooks+Xero drafts queue),
-  // which lives under Engagements since drafts are downstream of engagement docs.
-  // Shown once the firm has ANY bookkeeping connection.
-  bookkeepingConnected: boolean;
-}) {
-  const pathname = usePathname();
-  const detailView = useActiveEngagementView();
-  // The Bookkeeping drafts queue (/quickbooks/drafts) is a sub-item of this
-  // section, so being on it counts as "on Engagements" — the section highlights
-  // + auto-expands there, and there's always a nav anchor even for a disconnected
-  // firm (where the Bookkeeping sub-item itself is hidden).
-  const onBookkeeping = isNavItemActive(pathname, "/quickbooks/drafts");
-  const onEngagements =
-    isNavItemActive(pathname, "/engagements") || onBookkeeping;
-  // Open when on any engagements route; otherwise user-controlled.
-  const [open, setOpen] = useState(onEngagements);
-  // Re-expand if navigation lands under /engagements (e.g. via search).
-  const lastOnRef = useRef(onEngagements);
-  useEffect(() => {
-    if (onEngagements && !lastOnRef.current) setOpen(true);
-    lastOnRef.current = onEngagements;
-  }, [onEngagements]);
-
-  const badgeFor = (view: EngagementView): number | null => {
-    if (view === "ready" && badges.ready > 0) return badges.ready;
-    if (view === "deleted" && badges.deleted > 0) return badges.deleted;
-    return null;
-  };
-
-  // Collapsed rail: a single icon link to Active (no room for the accordion).
-  if (collapsed) {
-    return (
-      <Link
-        href="/engagements"
-        title={labels.engagements}
-        aria-label={labels.engagements}
-      >
-        <span
-          className={cn(
-            "flex h-10 w-full items-center justify-center rounded-lg text-sm font-medium transition-colors",
-            onEngagements
-              ? "bg-secondary text-foreground shadow-[inset_0_1px_0_0_var(--color-border)]"
-              : "text-muted-foreground hover:text-foreground hover:bg-secondary/60",
-          )}
-        >
-          <Folder className="size-4 shrink-0 text-icon-cyan" aria-hidden />
-        </span>
-      </Link>
-    );
-  }
-
-  return (
-    <div>
-      {/* Parent row: the label links to Active; the caret toggles the list.
-          Two controls in one row so clicking the name navigates while the
-          chevron just expands/collapses. */}
-      <div
-        className={cn(
-          "flex items-center rounded-lg text-sm font-medium transition-colors",
-          onEngagements
-            ? "text-foreground"
-            : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <Link
-          href="/engagements"
-          className={cn(
-            "flex flex-1 items-center gap-2.5 rounded-lg px-3 py-2 hover:bg-secondary/60",
-            pathname === "/engagements" &&
-              "bg-secondary shadow-[inset_0_1px_0_0_var(--color-border)]",
-          )}
-        >
-          <Folder className="size-4 shrink-0 text-icon-cyan" aria-hidden />
-          <span className="truncate">{labels.engagements}</span>
-        </Link>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open}
-          aria-label={labels.engagementsToggle}
-          className="mr-1 inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ChevronDown
-            className={cn(
-              "size-4 transition-transform duration-200",
-              open ? "rotate-0" : "-rotate-90",
-            )}
-            aria-hidden
-          />
-        </button>
-      </div>
-
-      {/* Sub-views — smooth grid-rows expand. */}
-      <div
-        className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
-        style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
-      >
-        <div className="overflow-hidden">
-          <div className="mt-0.5 space-y-0.5 border-l border-border/50 pl-3 ml-4">
-            {ENGAGEMENT_SUBNAV.map(({ view, icon: Icon }) => {
-              const href = viewHref(view);
-              const active = isEngagementViewActive(pathname, view, detailView);
-              const count = badgeFor(view);
-              return (
-                <Link
-                  key={view}
-                  href={href}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
-                    active
-                      ? "bg-secondary text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
-                  )}
-                >
-                  <Icon className="size-3.5 shrink-0" aria-hidden />
-                  <span className="flex-1 truncate">
-                    {labels.engagementViews[view]}
-                  </span>
-                  {count != null && (
-                    <span
-                      className={cn(
-                        "inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold tabular-nums",
-                        view === "deleted"
-                          ? "bg-destructive/15 text-destructive"
-                          : "bg-accent/15 text-accent",
-                      )}
-                    >
-                      {count}
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-            {/* Bookkeeping — the shared QuickBooks+Xero drafts queue. A sibling of
-                the engagement views (drafts are downstream of engagement docs);
-                links to the pre-existing /quickbooks/drafts route. Shown once the
-                firm has any bookkeeping connection. */}
-            {bookkeepingConnected && (
-              <Link
-                href="/quickbooks/drafts"
-                aria-current={onBookkeeping ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-2 rounded-md px-2.5 py-1.5 text-[13px] transition-colors",
-                  onBookkeeping
-                    ? "bg-secondary text-foreground font-medium"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary/50",
-                )}
-              >
-                <BookOpen className="size-3.5 shrink-0" aria-hidden />
-                <span className="flex-1 truncate">{labels.bookkeeping}</span>
-              </Link>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}

@@ -88,6 +88,11 @@
   --stage-completed: oklch(0.55 0.15 162);    /* green */
 
   --radius: 0.625rem;
+
+  /* Width of the fixed desktop icon rail. ONE source of truth: the rail sets its
+     own width from this and the main content offsets by the same value, so they
+     can never drift apart — and resizing the rail is a one-line change here. */
+  --rail-width: 92px;
 }
 
 .dark {
