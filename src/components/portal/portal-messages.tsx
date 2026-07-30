@@ -19,7 +19,10 @@ import {
 import { useTranslations } from "next-intl";
 import { ChevronLeft, FileUp, Send } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { AvatarInitials } from "@/components/ui/avatar-initials";
+import {
+  AvatarInitials,
+  computeInitials,
+} from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -130,26 +133,35 @@ export function PortalMessages({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       {/* Conversation header: who you're talking to, and — on mobile only — a
-          Back button out of the full-screen thread. */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-4 py-3 sm:px-5">
+          Back button out of the full-screen thread. Near-black in BOTH themes so
+          it matches the firm header above it and caps the desktop bubble. */}
+      <div
+        className="flex shrink-0 items-center gap-3 px-4 py-3 sm:px-5"
+        style={{ background: "#0a0a0c" }}
+      >
         {onBack && (
           <button
             type="button"
             onClick={onBack}
             aria-label={t("hub_back")}
-            className="-ml-1.5 inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+            className="-ml-1.5 inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 lg:hidden"
           >
             <ChevronLeft className="size-5" aria-hidden />
           </button>
         )}
-        <AvatarInitials name={firmName} size={38} color="#475569" />
+        {/* Translucent white disc rather than a slate fill — the initials have to
+            read on near-black in both themes. */}
+        <span
+          aria-hidden
+          className="flex size-[38px] shrink-0 items-center justify-center rounded-full bg-white/[0.14] text-[13px] font-semibold text-white"
+        >
+          {computeInitials(firmName)}
+        </span>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+          <div className="truncate text-[15px] font-semibold tracking-tight text-white">
             {t("messages_section_title")}
           </div>
-          <div className="truncate text-xs text-muted-foreground">
-            {firmName}
-          </div>
+          <div className="truncate text-xs text-white/[0.62]">{firmName}</div>
         </div>
       </div>
 

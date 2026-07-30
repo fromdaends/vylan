@@ -279,7 +279,13 @@ export function PortalShell({
       {/* Hairline brand accent at the very top. */}
       <div aria-hidden className="h-1 w-full" style={{ background: brand }} />
 
-      <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-md">
+      {/* Firm header — permanently near-black in BOTH themes, matching the
+          app-side icon rail, so the firm's identity band reads as chrome rather
+          than page. Same #0a0a0c the rail uses. */}
+      <header
+        className="sticky top-0 z-30 bg-[#0a0a0c]"
+        style={{ background: "#0a0a0c" }}
+      >
         <div
           className={cn(
             "mx-auto flex h-16 items-center justify-between gap-3 px-4 sm:px-6",
@@ -294,11 +300,11 @@ export function PortalShell({
               <img
                 src={firmLogoUrl}
                 alt={ctx.firm.name}
-                className="size-10 shrink-0 rounded-xl object-cover ring-1 ring-border"
+                className="size-10 shrink-0 rounded-xl object-cover ring-1 ring-white/15"
               />
             ) : (
               <div
-                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold text-white ring-1 ring-black/10"
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl text-sm font-semibold text-white ring-1 ring-inset ring-white/[0.12]"
                 style={{ background: brand }}
                 aria-hidden
               >
@@ -306,10 +312,10 @@ export function PortalShell({
               </div>
             )}
             <div className="min-w-0">
-              <div className="truncate text-[15px] font-semibold tracking-tight text-foreground">
+              <div className="truncate text-[15px] font-semibold tracking-tight text-white">
                 {ctx.firm.name}
               </div>
-              <div className="truncate text-xs text-muted-foreground">
+              <div className="truncate text-xs text-white/[0.62]">
                 {ctx.engagement.title}
               </div>
             </div>
@@ -317,11 +323,12 @@ export function PortalShell({
           <div className="flex shrink-0 items-center gap-2">
             <a
               href={`?lang=${otherLocale}`}
-              className="inline-flex h-8 items-center rounded-full border border-border bg-card px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="inline-flex h-8 items-center rounded-full border border-white/[0.18] px-3 text-xs font-medium text-white/[0.72] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
             >
               {otherLocale.toUpperCase()}
             </a>
             <ThemeToggle
+              onDark
               className="rounded-full"
               lightLabel={t("theme_light")}
               darkLabel={t("theme_dark")}
