@@ -160,7 +160,7 @@ export function TeamManager({
   // Which tab is showing. "people" = the roster, invitations and former members.
   // "firm" = the firm itself: seats, its settings, ownership, leaving.
   // Defaults to "people" so any caller that does not pass it behaves as before.
-  view?: "people" | "firm";
+  view?: "people" | "settings";
   // Firm navigation, rendered directly under the header. Optional so every
   // other caller of this component is unaffected.
   tabs?: ReactNode;
@@ -270,7 +270,7 @@ export function TeamManager({
 
       {/* Seat usage — a fact about the FIRM (what you are paying for), not about
           any one person, so it lives on the Firm tab. */}
-      {view === "firm" &&
+      {view === "settings" &&
         canManage &&
         (onTrial ? (
           <TrialTeamLock />
@@ -432,7 +432,7 @@ export function TeamManager({
       {/* ── FIRM TAB ── the firm's own settings, brought out of the ⋯ dialog and
           onto the page, because a switch nobody can find is a switch nobody
           uses. Still reachable from the ⋯ menu too. */}
-      {view === "firm" && canManage && firmSettings && (
+      {view === "settings" && canManage && firmSettings && (
         <div className="rounded-xl border border-border/60 bg-card p-5">
           {firmSettings}
         </div>
@@ -440,7 +440,7 @@ export function TeamManager({
 
       {/* Transfer ownership — owner-only, and only when there's an active
           staff member to hand to. */}
-      {view === "firm" &&
+      {view === "settings" &&
         canManage &&
         activeMembers.some((m) => m.role === "staff") && (
         <TransferOwnership
@@ -450,7 +450,7 @@ export function TeamManager({
         />
       )}
 
-      {view === "firm" && canManage && <LeaveTeamSection />}
+      {view === "settings" && canManage && <LeaveTeamSection />}
 
       {canManage && (
         <InviteModal

@@ -21,7 +21,7 @@ import { cn } from "@/lib/cn";
 // a full rebuild of it, so this whole feature stays out of app-shell.tsx — the
 // consequence is that the Firm button still opens the old team page and this
 // lives at its own URL until that work lands.
-export type FirmTabKey = "people" | "firm" | "billing" | "audit";
+export type FirmTabKey = "people" | "settings";
 
 export function FirmTabs({
   current,
@@ -31,18 +31,20 @@ export function FirmTabs({
   // Resolved by the calling page so this stays a thin, translation-free view.
   labels: Record<FirmTabKey, string>;
 }) {
-  // Every href below is a route that exists TODAY. The People tab used to point
-  // at /firm/preview, a page that was deleted when this work moved onto the real
-  // team page — so the first tab 404'd. Checked, not assumed, this time.
+  // TWO tabs, both views of THIS page, switched by ?tab=. Nothing here leaves
+  // the firm.
+  //
+  // Billing and the audit log used to sit here and should not have: they are
+  // their own destinations elsewhere in the app, and a tab row whose items
+  // navigate away is a link list wearing a tab row's clothes. They were my
+  // invention, not a requirement.
+  //
+  // The second tab is "Settings", not "Firm": the rail's entry for this whole
+  // page is already called Firm, so a Firm tab inside the Firm page names the
+  // container twice and tells you nothing about which half you are on.
   const tabs: { key: FirmTabKey; href: string }[] = [
-    // People and Firm are two views of the SAME page, switched by ?tab=. They
-    // stay on the page on purpose: leaving for /settings is what made the old
-    // "Settings" tab feel like it routed wrong.
     { key: "people", href: "/settings/team" },
-    // The firm itself: its settings, its seats, who owns it, how to leave it.
-    { key: "firm", href: "/settings/team?tab=firm" },
-    { key: "billing", href: "/billing" },
-    { key: "audit", href: "/settings/audit" },
+    { key: "settings", href: "/settings/team?tab=settings" },
   ];
 
   return (

@@ -57,8 +57,8 @@ export default async function TeamPage({
   // Only owners have a Firm tab (every block on it is owner-gated), so a staff
   // member arriving on ?tab=firm falls back to the roster rather than a blank
   // page. An unrecognised value falls back the same way.
-  const view: "people" | "firm" =
-    canManage && requestedTab === "firm" ? "firm" : "people";
+  const view: "people" | "settings" =
+    canManage && requestedTab === "settings" ? "settings" : "people";
   const [members, invites, usage] = await Promise.all([
     listFirmUsers(),
     canManage ? listFirmInvites() : Promise.resolve([]),
@@ -67,8 +67,6 @@ export default async function TeamPage({
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
-  const tBilling = await getTranslations("Billing");
-  const tAudit = await getTranslations("Audit");
 
   const breadcrumb = (
     <Breadcrumb
@@ -224,9 +222,7 @@ export default async function TeamPage({
               current={view}
               labels={{
                 people: t("tab_people"),
-                firm: t("tab_firm"),
-                billing: tBilling("title"),
-                audit: tAudit("title"),
+                settings: tApp("nav_settings"),
               }}
             />
           ) : undefined
