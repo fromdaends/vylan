@@ -42,7 +42,7 @@ export async function AutomatedJobsPanel() {
       icon: FolderUp,
       title: t("today_filing_title"),
       body: t("today_filing_body"),
-      href: "/vylan?tab=filing",
+      href: "/files?tab=settings",
       cta: t("today_open_filing"),
     },
   ];

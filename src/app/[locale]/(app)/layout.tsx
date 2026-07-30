@@ -137,6 +137,7 @@ export default async function AppLayout({
         engagements: t("nav_engagements"),
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
+        files: t("nav_files"),
         bookkeeping: t("nav_bookkeeping"),
         vylanHub: t("nav_vylan"),
         engagementViews: {

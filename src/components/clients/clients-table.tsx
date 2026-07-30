@@ -456,6 +456,13 @@ function RowActions({
             </DropdownMenuItem>
           }
         />
+        {/* One of exactly two cross-links between Clients and Files (the other
+            is "View client profile" in the Files client view). Deliberately not
+            more: the two surfaces answer different questions and the spec is
+            explicit that Files must not grow into a second Clients page. */}
+        <DropdownMenuItem asChild>
+          <Link href={`/files?client=${client.id}`}>{t("view_files")}</Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href={`/clients/${client.id}/archive`}>
             {t("document_archive")}

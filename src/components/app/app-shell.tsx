@@ -17,6 +17,7 @@ import {
   Building2,
   FileText,
   Folder,
+  FolderOpen,
   Gauge,
   LayoutDashboard,
   LogOut,
@@ -39,6 +40,10 @@ type Labels = {
   engagements: string;
   engagementsToggle: string;
   templates: string;
+  // The firm-wide document browser. Sits between Templates and Engagements
+  // because that is where it belongs in the mental model: the things you set up
+  // (templates), the things you have (files), the work in flight (engagements).
+  files: string;
   bookkeeping: string;
   // The Vylan hub's rail label. One word by design — it has to sit on one line
   // in a 72px rail slot.
@@ -133,16 +138,18 @@ export function AppShell({
     // destination (founder). The logo IS the way home; the Vylan hub inherits
     // the first slot.
     //
-    // The Vylan hub — the firm's own automation surface (Automated jobs +
-    // Document filing). Sparkles is the app's established AI mark (the chat
-    // popup's "Vylan" tab uses it), so the nav and the assistant agree.
-    // This replaced the standalone Filing tab: filing is one job inside the hub
-    // now, and /integrations/filing redirects to ?tab=filing.
+    // The Vylan hub — the firm's own automation surface. Sparkles is the app's
+    // established AI mark (the chat popup's "Vylan" tab uses it), so the nav and
+    // the assistant agree. Document filing USED to be its second tab; it moved
+    // to /files?tab=settings, where it sits beside the documents it files.
     { href: "/vylan", label: labels.vylanHub, icon: Sparkles },
     // "Performance" is the same word in EN and FR, so it's safe to hardcode.
     { href: "/performance", label: "Performance", icon: Gauge },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
+    // Files — every client document in one place, plus the filing settings that
+    // decide where copies land in the firm's cloud storage.
+    { href: "/files", label: labels.files, icon: FolderOpen },
     { href: "/engagements", label: labels.engagements, icon: Folder },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
     // conditional tab: the design didn't include one, but the feature exists and

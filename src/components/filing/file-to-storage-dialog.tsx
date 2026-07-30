@@ -118,7 +118,7 @@ export function FileToStorageDialog({
               {t("dialog_not_connected")}
             </p>
             <Button asChild variant="outline" size="sm">
-              <Link href="/vylan?tab=filing">{t("dialog_go_connect")}</Link>
+              <Link href="/files?tab=settings">{t("dialog_go_connect")}</Link>
             </Button>
           </div>
         ) : status.connection.needsReconnect ||
@@ -130,7 +130,7 @@ export function FileToStorageDialog({
                 : t("dialog_needs_destination")}
             </p>
             <Button asChild variant="outline" size="sm">
-              <Link href="/vylan?tab=filing">{t("dialog_go_connect")}</Link>
+              <Link href="/files?tab=settings">{t("dialog_go_connect")}</Link>
             </Button>
           </div>
         ) : result ? (
