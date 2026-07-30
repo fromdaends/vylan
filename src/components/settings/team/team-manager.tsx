@@ -22,7 +22,6 @@ import {
 import { cn } from "@/lib/cn";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -132,6 +131,7 @@ export function TeamManager({
   locale,
   unassignedWorkload,
   firmSettings,
+  tabs,
 }: {
   // The firm's name — shown as the page heading (this is the firm's team).
   firmName: string;
@@ -155,6 +155,9 @@ export function TeamManager({
   };
   // Firm-wide settings, rendered inside the ⋯ (top-right) dialog — not inline.
   firmSettings?: ReactNode;
+  // Firm navigation, rendered directly under the header. Optional so every
+  // other caller of this component is unaffected.
+  tabs?: ReactNode;
 }) {
   const t = useTranslations("Team");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -257,6 +260,8 @@ export function TeamManager({
         </Dialog>
       )}
 
+      {tabs}
+
       {/* Seat usage (owner-only). On an active free trial we swap the seat
           meter for a "locked — book a call to unlock your team" panel. */}
       {canManage &&
@@ -299,11 +304,14 @@ export function TeamManager({
           for owners only; unowned work rolls into a trailing "Unassigned" row. */}
       <div>
         <h2 className="text-sm font-semibold">{t("section_active")}</h2>
-        <div className="mt-3 overflow-x-auto">
+        <div className="mt-3 overflow-hidden rounded-xl border border-border/60 bg-card">
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/40 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                <th className="py-2 pr-3 font-medium">
+              {/* Wide letter-spacing and a quiet grey: a column head is a label,
+                  not content, and Karbon's real roster tracks them out like this. */}
+              <tr className="border-b border-border/60 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                <th className="py-3 pl-4 pr-3 font-medium">
                   {t("workload_col_member")}
                 </th>
                 {showStats && (
@@ -387,6 +395,7 @@ export function TeamManager({
                 )}
             </tbody>
           </table>
+        </div>
         </div>
       </div>
 
@@ -627,10 +636,10 @@ function MemberRow({
   }
 
   return (
-    <tr className="border-b border-border/40 last:border-0 hover:bg-secondary/30">
-      <td className="py-3 pr-3">
+    <tr className="border-b border-border/50 transition-colors last:border-0 hover:bg-muted/40">
+      <td className="py-4 pl-4 pr-3">
         <div className="flex items-center gap-3">
-          <AvatarInitials src={member.avatarUrl} name={member.name} size={36} />
+          <AvatarInitials src={member.avatarUrl} name={member.name} size={38} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               {canViewProfile ? (
@@ -645,12 +654,19 @@ function MemberRow({
                   {member.name}
                 </span>
               )}
-              <Badge
-                variant={member.role === "owner" ? "default" : "secondary"}
-                className="shrink-0 font-normal"
-              >
-                {member.role === "owner" ? t("role_owner") : t("role_staff")}
-              </Badge>
+              {member.role === "owner" ? (
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
+                  <span
+                    aria-hidden
+                    className="size-1.5 shrink-0 rounded-full bg-accent"
+                  />
+                  {t("role_owner")}
+                </span>
+              ) : (
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {t("role_staff")}
+                </span>
+              )}
               {member.isSelf && (
                 <span className="text-xs text-muted-foreground">{t("you")}</span>
               )}
