@@ -384,18 +384,27 @@ export function CommentThread({
           </div>
         )}
 
-        {/* Composer */}
-        <div
-          className={cn(
-            "flex items-start gap-2 p-2.5",
-            count > 0 && "border-t border-border/60",
-          )}
-        >
-          {me && <AvatarInitials name={me.name} size={22} />}
-          <div className="relative min-w-0 flex-1">
-            {/* No quote line above the composer when the thread is empty — the
-                card is already anchored to the thing being commented on. */}
-            <textarea
+        {/* Composer. The whole row is ONE rounded field and it owns the focus
+            ring (focus-within), with the avatar and the buttons inside it —
+            Notion's shape, and the fix for a ring that used to hug the bare
+            textarea: globals.css gives every :focus-visible element a 2px ring
+            in the BASE layer, so a textarea with no radius and no padding drew
+            a hard square rectangle jammed against the avatar. The textarea now
+            cancels that ring outright (ring-0, utilities layer > base layer)
+            and the container draws the real one. */}
+        <div className={cn("p-2.5", count > 0 && "border-t border-border/60")}>
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-xl border border-border/70 px-2.5 py-1.5",
+              "transition-[border-color,box-shadow] duration-150",
+              "focus-within:border-ring/60 focus-within:ring-2 focus-within:ring-ring/40",
+            )}
+          >
+            {me && <AvatarInitials name={me.name} size={22} />}
+            <div className="relative min-w-0 flex-1">
+              {/* No quote line above the composer when the thread is empty —
+                  the card is already anchored to what's being commented on. */}
+              <textarea
               ref={taRef}
               value={body}
               onChange={(e) => onBodyChange(e.target.value)}
@@ -412,11 +421,13 @@ export function CommentThread({
                   setMentionQuery(null);
                 }
               }}
-              rows={1}
-              placeholder={t("comment_placeholder_short")}
-              disabled={pending}
-              className="max-h-24 w-full resize-none bg-transparent py-1 text-[13px] leading-snug placeholder:text-muted-foreground/70 focus-visible:outline-none"
-            />
+                rows={1}
+                placeholder={t("comment_placeholder_short")}
+                disabled={pending}
+                // ring-0 cancels the base-layer *:focus-visible ring; the
+                // rounded container above draws the focus state instead.
+                className="max-h-24 w-full resize-none bg-transparent py-1 text-[13px] leading-snug placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-0"
+              />
 
             {mentionQuery != null && mentionMatches.length > 0 && (
               <div className="absolute left-0 top-full z-10 mt-1 w-56 overflow-hidden rounded-lg border border-border bg-popover shadow-md">
@@ -446,7 +457,7 @@ export function CommentThread({
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+            <div className="flex shrink-0 items-center gap-0.5">
             <button
               type="button"
               onClick={insertMentionToken}
@@ -480,6 +491,7 @@ export function CommentThread({
                 <ArrowUp className="size-3.5" aria-hidden />
               )}
             </button>
+            </div>
           </div>
         </div>
       </PopoverContent>
