@@ -12,6 +12,11 @@ import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/badge";
 import { formatBytes, formatDate, type AppLocale } from "@/lib/format";
 import { RowCheckbox } from "./row-checkbox";
+import {
+  DraggableFile,
+  FolderDropTarget,
+  type DropTarget,
+} from "./drag-drop";
 
 // THE FILE BROWSER — one list, used at every level of the drill-down.
 //
@@ -43,6 +48,10 @@ export type BrowserEntry =
       hint?: string | null;
       /** Rename/delete menu, for folders the firm made themselves. */
       actions?: React.ReactNode;
+      /** What dropping documents on this folder does. EVERY folder is a drop
+       * target: a custom one re-files, a year sets the year, a category sets
+       * the category. */
+      dropTarget?: DropTarget;
     }
   | {
       kind: "file";
@@ -120,12 +129,16 @@ export async function FileBrowser({
         {entries.map((entry) => (
           <li key={`${entry.kind}-${entry.id}`}>
             {entry.kind === "folder" ? (
-              // A FOLDER row is navigation, so the link covers everything up to
-              // the actions menu — but the MENU MUST SIT OUTSIDE THE LINK.
-              // Nesting a button inside an anchor means every click on it also
-              // navigates: the menu opens and is then torn down by the
-              // navigation before the dialog can render. Same reason file rows
-              // are not wrapped in a link at all.
+              /* A FOLDER row is navigation, so the link covers everything up to
+                 the actions menu — but the MENU MUST SIT OUTSIDE THE LINK.
+                 Nesting a button inside an anchor means every click on it also
+                 navigates: the menu opens and is then torn down by the
+                 navigation before the dialog can render. Same reason file rows
+                 are not wrapped in a link at all. */
+              <FolderDropTarget
+                target={entry.dropTarget ?? { kind: "folder", folderId: null }}
+                label={entry.name}
+              >
               <div className={cn(ROW_CLASS, "gap-0 p-0")}>
               <Link
                 href={entry.href}
@@ -157,12 +170,18 @@ export async function FileBrowser({
                   {entry.actions}
                 </span>
               </div>
+              </FolderDropTarget>
             ) : (
               // A FILE row is NOT wrapped in a link, even once preview exists:
               // the "From" cell holds its own link to the source engagement, and
               // an anchor inside an anchor is invalid HTML that browsers repair
               // unpredictably. The name is the click target instead — which is
               // also how Drive and Finder behave.
+              <DraggableFile
+                source={entry.selectSource ?? ""}
+                id={entry.selectId ?? ""}
+                name={entry.name}
+              >
               <div className={ROW_CLASS}>
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
                   {/* Renders nothing outside a selection provider (the recycle
@@ -223,6 +242,7 @@ export async function FileBrowser({
                 </Cell>
                 <span className="w-8 shrink-0 text-right">{entry.actions}</span>
               </div>
+              </DraggableFile>
             )}
           </li>
         ))}

@@ -452,6 +452,10 @@ async function FolderLevel({
       name: c.category ? docTypeGroupLabel(c.category, locale) : t("unsorted"),
       href: buildQuery({ category: c.category ?? "unsorted", page: null }),
       modified: c.lastActivity,
+      // Dropping documents on a category folder sets their category — the same
+      // gesture as dropping on a custom folder, because to the person dragging
+      // there is no difference between the two.
+      dropTarget: { kind: "category" as const, category: c.category },
     }));
     return (
       <FileBrowser
@@ -471,6 +475,7 @@ async function FolderLevel({
     href: buildQuery({ folder: f.id, year: null, category: null, page: null }),
     modified: null,
     hint: t("folder_item_count", { count: counts.get(f.id) ?? 0 }),
+    dropTarget: { kind: "folder" as const, folderId: f.id },
     actions: (
       <FolderRowMenu clientId={clientId} folderId={f.id} name={f.name} />
     ),
@@ -486,6 +491,10 @@ async function FolderLevel({
       page: null,
     }),
     modified: y.lastActivity,
+    // Dropping on a year folder sets the year. "Unsorted" is a real
+    // destination too — y.year is null there, which the drop handler sends as
+    // the Unsorted bucket rather than as "leave it alone".
+    dropTarget: { kind: "year" as const, year: y.year },
   }));
   void yearParam;
 
