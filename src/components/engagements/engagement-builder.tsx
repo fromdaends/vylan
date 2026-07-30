@@ -41,7 +41,10 @@ import { DayOfMonthPicker } from "@/components/engagements/day-of-month-picker";
 import { SelectableTemplateCard } from "@/components/templates/template-card";
 import { templateItemApplies } from "@/lib/doc-types";
 import { resolveInitialTemplate } from "@/lib/engagements/initial-template";
-import { resolveInvoiceAmountCents } from "@/lib/invoices/resolve";
+import {
+  resolveInvoiceAmountCents,
+  hasUsableSavedPrice,
+} from "@/lib/invoices/resolve";
 import {
   localizedTemplateName,
   BLANK_TEMPLATE_SEED_ID,
@@ -232,6 +235,10 @@ export function EngagementBuilder({
   const invoiceDefaultCents = selectedTemplate
     ? (servicePrices[selectedTemplate.type] ?? null)
     : null;
+  // Whether that saved price can actually be billed. Asks the SAME question
+  // resolveInvoiceAmountCents does (positive, not merely present), so the UI
+  // can't offer a $0 saved price that the resolver would then ignore.
+  const hasSavedPrice = hasUsableSavedPrice(invoiceDefaultCents);
   // The amount to bill from the current invoice choices (shared pure helper).
   // The helper only distinguishes "off" from any billing mode, so "now" maps to
   // a non-off mode for the amount calculation.
@@ -1091,36 +1098,42 @@ export function EngagementBuilder({
                   <Label className="text-xs text-muted-foreground">
                     {t("invoice_amount_label")}
                   </Label>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
-                    <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <input
-                        type="radio"
-                        name="invoice-amount-source"
-                        checked={
-                          invoiceUseDefault && invoiceDefaultCents != null
-                        }
-                        onChange={() => setInvoiceUseDefault(true)}
-                        disabled={invoiceDefaultCents == null}
-                      />
-                      {invoiceDefaultCents != null
-                        ? t("invoice_use_default", {
-                            amount: (invoiceDefaultCents / 100).toFixed(2),
-                          })
-                        : t("invoice_no_default")}
-                    </label>
-                    <label className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <input
-                        type="radio"
-                        name="invoice-amount-source"
-                        checked={
-                          !invoiceUseDefault || invoiceDefaultCents == null
-                        }
-                        onChange={() => setInvoiceUseDefault(false)}
-                      />
-                      {t("invoice_custom")}
-                    </label>
-                  </div>
-                  {(!invoiceUseDefault || invoiceDefaultCents == null) && (
+                  {/* The saved-price choice only exists when there IS a saved
+                      price. Before this, the first radio stayed on screen with
+                      the label "No saved price for this service" and disabled —
+                      a sentence of FACT dressed as an option, which reads as a
+                      button that won't work (the founder reported exactly
+                      that). With nothing to choose between, say why in one line
+                      and let them type the amount. */}
+                  {hasSavedPrice ? (
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-5">
+                      <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <input
+                          type="radio"
+                          name="invoice-amount-source"
+                          checked={invoiceUseDefault}
+                          onChange={() => setInvoiceUseDefault(true)}
+                        />
+                        {t("invoice_use_default", {
+                          amount: ((invoiceDefaultCents ?? 0) / 100).toFixed(2),
+                        })}
+                      </label>
+                      <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <input
+                          type="radio"
+                          name="invoice-amount-source"
+                          checked={!invoiceUseDefault}
+                          onChange={() => setInvoiceUseDefault(false)}
+                        />
+                        {t("invoice_custom")}
+                      </label>
+                    </div>
+                  ) : (
+                    <p className="text-xs leading-snug text-muted-foreground">
+                      {t("invoice_no_default_hint")}
+                    </p>
+                  )}
+                  {(!invoiceUseDefault || !hasSavedPrice) && (
                     <div className="flex items-center gap-1.5">
                       <span className="text-sm text-muted-foreground">$</span>
                       <Input

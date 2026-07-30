@@ -1767,6 +1767,7 @@
     "invoice_amount_label": "Amount to bill",
     "invoice_use_default": "Use my saved price (${amount})",
     "invoice_no_default": "No saved price for this service",
+    "invoice_no_default_hint": "No saved price for this service yet — enter the amount below. You can save one under Settings › Payments › Default prices.",
     "invoice_custom": "Set a custom amount",
     "invoice_amount_required": "Enter an amount to bill before turning on invoice automation.",
     "ai_off_badge": "AI off",

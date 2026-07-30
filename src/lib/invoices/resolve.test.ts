@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { invoiceRunAfterMs, resolveInvoiceAmountCents } from "./resolve";
+import {
+  invoiceRunAfterMs,
+  resolveInvoiceAmountCents,
+  hasUsableSavedPrice,
+} from "./resolve";
 
 describe("resolveInvoiceAmountCents", () => {
   it("returns null when automation is off", () => {
@@ -85,5 +89,61 @@ describe("invoiceRunAfterMs", () => {
   it("clamps negative / fractional days", () => {
     expect(invoiceRunAfterMs(base, -3)).toBe(base);
     expect(invoiceRunAfterMs(base, 2.9)).toBe(base + 2 * 86_400_000);
+  });
+});
+
+// The founder's report: "doesn't let me select no saved price for this service".
+// The first radio stayed on screen, disabled, labelled with a STATEMENT OF FACT
+// ("No saved price for this service") rather than a choice — so it read as a
+// button that refuses to work. hasUsableSavedPrice is what decides whether
+// there is a choice to show at all, and it deliberately asks the same question
+// resolveInvoiceAmountCents asks.
+describe("hasUsableSavedPrice", () => {
+  it("accepts a real saved price", () => {
+    expect(hasUsableSavedPrice(25000)).toBe(true);
+    expect(hasUsableSavedPrice(1)).toBe(true);
+  });
+
+  it("rejects no saved price at all", () => {
+    expect(hasUsableSavedPrice(null)).toBe(false);
+    expect(hasUsableSavedPrice(undefined)).toBe(false);
+  });
+
+  // THE SECOND BUG. The UI used to ask `!= null`, the resolver asks `> 0`. A
+  // firm with a saved price of $0 was offered "Use my saved price ($0.00)",
+  // could select it, and then billed NOTHING — the resolver skipped the zero
+  // and found an empty custom field.
+  it("rejects a zero or negative saved price, exactly as the resolver does", () => {
+    expect(hasUsableSavedPrice(0)).toBe(false);
+    expect(hasUsableSavedPrice(-500)).toBe(false);
+    expect(
+      resolveInvoiceAmountCents({
+        mode: "on_completion",
+        useDefault: true,
+        defaultCents: 0,
+        customAmount: "",
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects nonsense rather than showing a NaN price", () => {
+    expect(hasUsableSavedPrice(Number.NaN)).toBe(false);
+    expect(hasUsableSavedPrice(Number.POSITIVE_INFINITY)).toBe(false);
+  });
+
+  // The agreement itself: anything hasUsableSavedPrice accepts, the resolver
+  // must actually bill.
+  it("agrees with the resolver on every accepted value", () => {
+    for (const cents of [1, 50, 5000, 25000, 999999]) {
+      expect(hasUsableSavedPrice(cents)).toBe(true);
+      expect(
+        resolveInvoiceAmountCents({
+          mode: "on_completion",
+          useDefault: true,
+          defaultCents: cents,
+          customAmount: "",
+        }),
+      ).toBe(cents);
+    }
   });
 });
