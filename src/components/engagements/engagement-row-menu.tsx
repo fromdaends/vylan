@@ -43,6 +43,7 @@ import {
 } from "@/lib/engagements/stage";
 import { useStageOverride } from "./use-stage-override";
 import { reassignEngagementAction } from "@/app/actions/engagements";
+import { toastAssigned } from "./assigned-toast";
 
 // Re-exported from the pure lifecycle module so the worklist row imports the
 // state type from one place; the menu's option logic lives there too.
@@ -222,9 +223,10 @@ export function useEngagementRowMenu(args: {
 
   // Assign. Same submenu shape as Stage, so both renderers (the "..." dropdown
   // and the right-click menu) already know how to draw it. Deliberately no note
-  // dialog here: a note belongs to a HANDOFF, and this is also how you assign
-  // work that nobody held yet. The full reassign-with-note flow stays on the
-  // engagement page and in the per-row control.
+  // No dialog anywhere any more: assigning lands immediately and the note is an
+  // optional beat inside the confirmation toast, identically here and on the
+  // engagement page. "Take it" and "Nobody" get a plain toast — neither has
+  // anyone to write instructions to.
   const assignees = args.assignees ?? [];
   const assignItem: RowMenuItem | null = assignees.length
     ? {
@@ -258,7 +260,19 @@ export function useEngagementRowMenu(args: {
               if (m.id === args.assigneeId) return;
               mutate(
                 () => reassignEngagementAction(engagementId, m.id),
-                () => toast(t("assigned_toast", { name: m.name })),
+                // The SAME toast the engagement page shows, so the note is
+                // offered in both places instead of only one. This path used to
+                // fire a plain toast and silently drop the note entirely — the
+                // asymmetry the founder flagged.
+                () =>
+                  toastAssigned({
+                    engagementId,
+                    message: t("assigned_toast", { name: m.name }),
+                    addNoteLabel: t("assign_add_note"),
+                    placeholder: t("assign_note_placeholder"),
+                    saveLabel: t("assign_note_send"),
+                    savedLabel: t("assign_note_saved"),
+                  }),
               );
             },
           })),

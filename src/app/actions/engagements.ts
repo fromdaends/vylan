@@ -877,6 +877,53 @@ export async function reassignEngagementAction(
   return { ok: true };
 }
 
+// Attach a handoff note to an engagement AFTER it was reassigned — the "Add a
+// note" affordance on the assignment toast.
+//
+// Splitting the note from the assignment is the whole point: reassigning used
+// to open a dialog every single time, so the 90% of handoffs that need no note
+// still cost a modal, while the row-menu path offered no note at all. Now the
+// assignment lands instantly and the note is an optional second beat.
+//
+// APPEND-ONLY. This writes its own activity row rather than editing the
+// reassignment's metadata — an audit log that gets rewritten after the fact is
+// not an audit log, and "Tyler added a handoff note" is a truthful second
+// event. getLatestHandoffNote reads whichever of the two is newest.
+//
+// NO SECOND NOTIFICATION, deliberately. The assignee was already told the work
+// is theirs; pinging them again seconds later would be noise. The note's real
+// home is the engagement page, right under "Assigned to" — which is where the
+// person holding the work looks, and the reason notes are rendered there at all
+// (they used to live only in a notification, so once it was read the
+// instructions were gone).
+//
+// KNOWN LIMIT, stated rather than hidden: the delayed catch-up EMAIL bakes its
+// payload at enqueue time, so a note added afterwards does not reach it. The
+// note is on the engagement either way.
+export async function addHandoffNoteAction(
+  engagementId: string,
+  note: string,
+): Promise<{ ok: boolean; error?: "no_session" | "empty" | "not_found" }> {
+  const [user, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+
+  const clean = normalizeHandoffNote(note);
+  if (!clean) return { ok: false, error: "empty" };
+
+  // Confirm the engagement is one this caller can actually see. getEngagement
+  // reads through RLS, so a foreign or private id resolves to null and never
+  // gets a row written against it.
+  const engagement = await getEngagement(engagementId);
+  if (!engagement) return { ok: false, error: "not_found" };
+
+  await logUserActivity(firm.id, engagementId, "engagement_handoff_note", {
+    note: clean,
+  });
+
+  revalidateEngagementPaths(engagementId);
+  return { ok: true };
+}
+
 export async function toggleRemindersPausedAction(formData: FormData) {
   const id = formData.get("id");
   const next = formData.get("paused") === "1";

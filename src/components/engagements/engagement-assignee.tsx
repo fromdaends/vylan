@@ -18,18 +18,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
 import { reassignEngagementAction } from "@/app/actions/engagements";
-import { HANDOFF_NOTE_MAX } from "@/lib/engagements/handoff-note";
+import { toastAssigned } from "./assigned-toast";
 
 // "Assigned to / Assigné à" control on the engagement detail. Shows who's
 // accountable (avatar + name) and lets any firm member reassign to any ACTIVE
@@ -63,32 +53,42 @@ export function EngagementAssignee({
   handoff?: { note: string; from: string | null; at: string } | null;
 }) {
   const t = useTranslations("Engagements");
-  const tc = useTranslations("Common");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   // Optimistic label so the new assignee shows immediately on confirm.
   const [optimisticName, setOptimisticName] = useState<string | null>(null);
   const displayName = optimisticName ?? assigneeName;
-  // The member picked in the dropdown, awaiting confirm + an optional note.
-  const [target, setTarget] = useState<{ id: string; name: string } | null>(
-    null,
-  );
-  const [note, setNote] = useState("");
 
+  // Assign on click. No dialog: see assigned-toast.tsx for why the
+  // confirmation moved into the toast and became optional.
   function pick(memberId: string, memberName: string) {
-    if (memberId === assigneeId) return;
-    setNote("");
-    setTarget({ id: memberId, name: memberName });
+    if (memberId === assigneeId || pending) return;
+    setOptimisticName(memberName);
+    startTransition(async () => {
+      const res = await reassignEngagementAction(engagementId, memberId);
+      if (res.ok) {
+        router.refresh();
+        toastAssigned({
+          engagementId,
+          message: t("assigned_toast", { name: memberName }),
+          addNoteLabel: t("assign_add_note"),
+          placeholder: t("assign_note_placeholder"),
+          saveLabel: t("assign_note_send"),
+          savedLabel: t("assign_note_saved"),
+        });
+      } else {
+        setOptimisticName(null); // revert
+      }
+    });
   }
 
-  // Taking work yourself skips the note dialog for the same reason unassigning
-  // does: a handoff note is instructions FOR the person receiving the work, and
-  // here that is you. Prompting you to write yourself a note would be absurd.
+  // Taking work yourself offers no note, for the same reason unassigning does
+  // not: a handoff note is instructions FOR the person receiving the work, and
+  // here that is you. Being offered a note to write yourself would be absurd.
   function takeIt() {
     if (!viewerId || viewerId === assigneeId) return;
     const me = members.find((m) => m.id === viewerId);
     if (!me) return;
-    setTarget(null);
     setOptimisticName(me.name);
     startTransition(async () => {
       const res = await reassignEngagementAction(engagementId, viewerId);
@@ -97,38 +97,18 @@ export function EngagementAssignee({
     });
   }
 
-  // Clearing the assignee skips the note dialog: a handoff note is addressed to
-  // the person taking the work over, and there isn't one.
+  // Clearing the assignee offers no note: a handoff note is addressed to the
+  // person taking the work over, and there isn't one.
   function unassign() {
     if (assigneeId === null) return;
     setOptimisticName(null);
-    setTarget(null);
     startTransition(async () => {
       const res = await reassignEngagementAction(engagementId, null);
       if (res.ok) router.refresh();
     });
   }
 
-  function confirmAssign() {
-    if (!target) return;
-    const memberName = target.name;
-    const memberId = target.id;
-    const noteToSend = note.trim();
-    setOptimisticName(memberName);
-    setTarget(null);
-    startTransition(async () => {
-      const res = await reassignEngagementAction(
-        engagementId,
-        memberId,
-        noteToSend || undefined,
-      );
-      if (res.ok) {
-        router.refresh();
-      } else {
-        setOptimisticName(null); // revert on failure
-      }
-    });
-  }
+
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -248,50 +228,6 @@ export function EngagementAssignee({
         </div>
       )}
 
-      <Dialog
-        open={target !== null}
-        onOpenChange={(open) => {
-          if (!open) setTarget(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {t("assign_dialog_title", { name: target?.name ?? "" })}
-            </DialogTitle>
-            <DialogDescription>{t("assign_dialog_hint")}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-1.5">
-            <label
-              htmlFor="handoff-note"
-              className="text-sm font-medium text-foreground"
-            >
-              {t("assign_note_label")}
-            </label>
-            <Textarea
-              id="handoff-note"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              maxLength={HANDOFF_NOTE_MAX}
-              rows={3}
-              placeholder={t("assign_note_placeholder")}
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setTarget(null)}
-            >
-              {tc("cancel")}
-            </Button>
-            <Button type="button" onClick={confirmAssign}>
-              {t("assign_confirm")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
