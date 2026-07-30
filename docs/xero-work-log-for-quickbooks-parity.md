@@ -222,7 +222,7 @@ sites converted. Nothing QuickBooks-specific to do — just do not reintroduce t
 
 ---
 
-## 12. The accuracy eval — extend it, do not rebuild it
+## 12. The accuracy eval — extend it, do not rebuild it (see also section 16)
 
 `npm run eval:bookkeeping` scores the pipeline against 8 documents with known
 answers. It found two real bugs on its first run (RST missing from the tax
@@ -433,6 +433,81 @@ country-named copy should assume neither.
 Real multi-currency accounting — exchange rates, gain/loss on settlement,
 dual-currency reporting. This removes a wall so foreign documents can be recorded
 correctly; it does not make Vylan a multi-currency ledger.
+
+---
+
+## 16. The accuracy eval, measured for the first time (#1029)
+
+Section 12 said "extend it, do not rebuild it". Extended: 8 cases to 23, and each
+one now declares HOW IT WAS CAPTURED — clean scan, phone photo on a desk, faded
+thermal roll, photocopy — because rendering everything as a pristine 760px
+screenshot flattered the pipeline. Distortions are hashed from the case id rather
+than random, so a score only moves when accuracy moves.
+
+**The harness had never actually called the AI.** Vitest does not load
+`.env.local`, `ANTHROPIC_API_KEY` was therefore absent, and `extractTransaction`
+returns null quietly by design — so the suite completed in 296ms reporting 0%
+accuracy. Every accuracy figure quoted before 2026-07-29 was fictional. It now
+loads the file and throws if the key is missing.
+
+### First measured score, 23 cases
+
+| dimension | score |
+| --- | --- |
+| direction, total, document number, paid, line items, party, tax | 100% |
+| document date | 20/21 |
+| expense account | 13/17 (four MISSES, no errors) |
+| refused a non-transaction | 2/2 |
+
+The four account misses are suppliers whose account is obvious (Petro-Canada →
+Motor Vehicle, Bell → Telephone). They cost a click and the learn loop closes
+each permanently after one correction — worth knowing before anyone "improves"
+account matching, because the ceiling on that number is a product choice, not a
+model limit.
+
+### The bug it found: numeric date order
+
+`08/06/2026` on a Winnipeg receipt came back as 2026-08-06 — August 6 instead of
+June 8. The total was right; only the date was wrong, which nobody spots by eye
+and which lands the expense in the wrong month and potentially the wrong GST
+filing period.
+
+The prompt now resolves in order: a spelled-out month decides it → any component
+over 12 decides it → otherwise **the document's own country** decides it
+(GST/HST/QST/RST, a province code, a postal code or French → day-first; a US
+state with a ZIP or "Sales tax" → month-first) → failing everything, day-first.
+
+**Written as "read the document's country", NOT "Canada is day-first."** That
+distinction is the whole point: the second version breaks every American receipt,
+and this is shared with the QuickBooks path. Any future locale-dependent rule
+belongs in the same shape.
+
+Also hardened against assembling a date from nearby digits: a till receipt is
+full of numbers that are not the date (site, terminal, pump, auth, transaction,
+the time), so it must come from a labelled field, and an unreadable one must be
+null. A null date asks the accountant; a guessed one silently books the wrong
+period.
+
+### One failure deliberately left in
+
+On the faded thermal fuel receipt the month digit "06" reads as "04". The
+ordering and the day are now correct and every other field on that document is
+exact; it is legible when zoomed, so this is a limit on low-contrast thermal
+print rather than reasoning. Easing that case's fade to make it pass would be
+cheating a test the founder relies on, so the assertion is a **named baseline of
+one known wrong value** — any NEW wrong value still fails. If it starts passing,
+drop the allowance to zero rather than leave the slack lying around.
+
+### Harness lessons
+
+- Chrome does not exit after `--screenshot`. Waiting for it cost 45s per case and
+  blew the timeout; polling for the file and killing the process does 23 cases in
+  26s. A shared profile makes it worse — the next launch blocks on the lock.
+- A verdict without values is not a finding. "WRONG" sent one investigation off
+  to write a throwaway probe; the scorecard prints got and want now.
+- Render and LOOK at a new case (`render.test.ts`, no AI, free). The first
+  thermal render was illegible and clipped the totals column off the right edge,
+  which would have scored as model failure.
 
 ---
 
