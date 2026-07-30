@@ -536,6 +536,110 @@ drop the allowance to zero rather than leave the slack lying around.
 
 ---
 
+## 17. QuickBooks parity — what actually shipped (#1045, #1047, #1050)
+
+Worked straight down this document. Every item was VERIFIED IN CODE before being
+touched, and two of the log's own predictions turned out to be wrong in useful
+ways.
+
+### Done
+
+| § | item | outcome |
+| --- | --- | --- |
+| 9 | Due date | **Was broken.** The builders never passed `DueDate`, so every QuickBooks bill landed due on its issue date — immediately overdue. Confirmed against Intuit's field list that `DueDate` is writable on Bill. |
+| 3 | Reference fallback | **Was missing**, and deliberately NOT a copy — see below. |
+| 5 | Deposit account on a paid sale | **Was a real bug**, exactly as this log's open question suspected. |
+| 4 | Tax direction | **Needed**, and the signal is `SalesTaxRateList` / `PurchaseTaxRateList`, as predicted. Migration 1050. |
+| 10, 15 | Currency | **Half done** — the recording half. Migration 1060. See below. |
+| 2 | Publish status | **Nothing to build**, but for a better reason than this log guessed. |
+
+### The reference fallback is NOT the Xero one, and this is the trap
+
+QuickBooks caps `DocNumber` at 21 characters where Xero allows 255, so `VYL-` plus
+a whole uuid gets sliced into noise.
+
+Worse: **QuickBooks' `DocNumber` on an Invoice IS the number the customer sees**,
+and QuickBooks assigns its own when the field is omitted. Xero's `Reference` is a
+separate internal field, which is why the Xero fallback is safe on income and this
+one is not. So the QuickBooks fallback applies to **bills and purchases only**.
+Copying Xero here would have printed "VYL-ac5776aa…" on clients' customer-facing
+invoices as the invoice number.
+
+Generalise from this: **the same-sounding field is not the same field.** Check
+what a provider SHOWS the end customer before writing to it.
+
+### §5 was right to be flagged as an open question
+
+`buildSalesReceiptPayload` deliberately OMITS `DepositToAccountRef` — its own
+comment says QuickBooks records to Undeposited Funds and "no bank account is
+required to post, unlike a paid expense" — while `draftNeedsInput` demanded one
+for any paid sale. Every QuickBooks paid-sale draft therefore waited on a
+mandatory pick the builder then discarded.
+
+Fixed as a CAPABILITY on the suggestion (`depositAccountRequired`), not a provider
+name, for the same reason as `booksCurrency`. It defaults to REQUIRED so older
+stored suggestions and any future producer that forgets stay safe: an unnecessary
+question costs a click, a missing bank account on a Xero RECEIVE fails the post.
+
+### §4 needed the READS made tolerant first
+
+All three cached-list readers turn ANY query error into "no cached lists at all".
+Adding two columns to their selects would have stripped every QuickBooks draft of
+its vendor, account AND tax matches between the merge and the SQL being run — and
+1040 was sitting unapplied at the time, so the window was real. Each reader now
+retries with the basic column set on a missing-schema error, keeping its client
+scope. The write degrades the same way.
+
+**Rule for any future cache column: make the read tolerant in the same commit.**
+
+### §10/§15 currency: recording only, and stopping there was the point
+
+§15's own order is record first, set `booksCurrency` second. Setting it before the
+payload can state a currency would unblock approval for documents that then post
+at face value in the wrong currency — the exact misstatement the feature exists to
+prevent. So #1050 records and changes nothing about posting or approval.
+
+Not a copy of 1030 because **QuickBooks refuses a `CurrencyRef` unless
+multicurrency is switched on for the company**, so the home currency alone cannot
+decide expressibility. Both facts live on the **Preferences** entity, not
+`CompanyInfo`. `multicurrency_enabled` is three-state: `false` is "this company
+cannot take a CurrencyRef", `null` is "we never looked".
+
+**STILL TO DO:** the payload half — send `CurrencyRef` when the document differs
+from the home currency AND multicurrency is on, then set `booksCurrency` on the
+QuickBooks producers so approval opens up exactly where the post can express the
+currency. Deliberately NOT written blind: the Xero equivalent was only correct
+because it was posted into a real organisation and read back, which is how the
+compare-against-the-organisation bug was found. This needs a QuickBooks company
+that is safe to post into.
+
+### §2 publish status: nothing to build, better reason
+
+This log guessed QuickBooks has "no three-state equivalent". Closer to the truth:
+QuickBooks Advanced and Enterprise DO have a bill-approval workflow with
+Approved / Needs Approval / Pending Approval — but **the API does not return or
+accept that status**, so Vylan cannot participate either way. A bill Vylan posts
+enters the client's own approval workflow by QuickBooks' rules, not by anything
+Vylan sets. Correct action is still to build nothing and invent no status.
+
+*Sourcing caveat: Intuit's Bill reference page would not render for automated
+reading, so this rests on the SDK field listings plus Intuit's help content rather
+than the canonical reference. The safe action is identical either way, which is
+why it was acceptable to conclude on that basis — a stronger claim would need the
+page read by hand.*
+
+### QuickBooks undo is a different mechanism, as §2 warned
+
+Xero juggles VOIDED vs DELETED by publish status. QuickBooks uses
+`?operation=delete` with a **SyncToken** (Xero has none). The failure mode to
+watch is therefore not draft state but **applied payments** — a bill with a bill
+payment against it, or an invoice with a payment received, is expected to refuse
+deletion. The code already fails loudly (records `post_error`, surfaces QuickBooks'
+own message on the card) rather than silently, so nothing was changed. **Flagged
+as unverified:** no live QuickBooks company was available to reproduce it.
+
+---
+
 ## Still open on Xero (finish before starting QuickBooks)
 
 1. ~~**The demo-only posting gate** in `src/lib/xero/post.ts` still blocks real
