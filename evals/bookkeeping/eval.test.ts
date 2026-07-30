@@ -29,7 +29,7 @@ import { draftNeedsInput } from "@/lib/quickbooks/draft-resolve";
 import { decideAutoApprove } from "@/lib/quickbooks/auto-approve";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import { CASES, ACCOUNTS, CONTACTS, TAX_RATES, ITEMS } from "./cases";
-import { renderMissing, pngPath } from "./render";
+import { renderMissing, imagePath, imageMime, captureOf } from "./render";
 
 // The client's connected books, in the shape the matcher consumes. Xero splits
 // its unified contact list the same way (unflagged contacts land in both).
@@ -53,6 +53,19 @@ function score(expected: string | null, actual: string | null): FieldResult {
   return actual === expected ? "correct" : "wrong";
 }
 
+// What a failure actually was. A bare "WRONG" sent the last investigation off to
+// write a throwaway probe just to see the value; now the scorecard says it.
+function detail(
+  verdict: FieldResult,
+  expected: string | null,
+  actual: string | null,
+): string {
+  if (verdict === "correct") return "ok";
+  if (verdict === "missed") return "MISSED";
+  if (verdict === "invented") return `INVENTED ${actual}`;
+  return `WRONG got ${actual} want ${expected}`;
+}
+
 const PAD = 26;
 
 describe("bookkeeping accuracy", () => {
@@ -73,50 +86,107 @@ describe("bookkeeping accuracy", () => {
     let readable = 0;
     let autoApprovable = 0;
     let needsInput = 0;
+    // Documents that are not transactions at all, scored separately: the only
+    // question for those is whether the pipeline refused to invent one.
+    let refusalCases = 0;
+    let refusedCorrectly = 0;
+    const invented: string[] = [];
+    // Per capture mode, so a drop can be attributed to image quality rather than
+    // to comprehension.
+    const byCapture: Record<string, { ok: number; bad: number }> = {};
 
     for (const c of CASES) {
-      const bytes = readFileSync(pngPath(c.id));
+      const bytes = readFileSync(imagePath(c));
       const extraction = await extractTransaction({
         fileBytes: bytes,
-        mimeType: "image/png",
+        mimeType: imageMime(c),
       });
+
+      // ── A document that is NOT a purchase or a sale ───────────────────────
+      if (c.expectNoTransaction) {
+        refusalCases++;
+        // Refusing outright, or reading it but declining to name an amount, both
+        // count: neither puts a number in the books.
+        const refused = !extraction || extraction.total == null;
+        if (refused) refusedCorrectly++;
+        else invented.push(`${c.id} -> ${extraction.total}`);
+        rows.push({
+          case: c.id,
+          ...(refused
+            ? { refusal: "ok" }
+            : { refusal: `INVENTED ${extraction.total}` }),
+        });
+        continue;
+      }
+
+      const truth = c.truth;
+      if (!truth) throw new Error(`case ${c.id} has neither truth nor expectNoTransaction`);
+
       if (!extraction) {
         rows.push({ case: c.id, note: "EXTRACTION RETURNED NOTHING" });
+        const cap = (byCapture[captureOf(c)] ??= { ok: 0, bad: 0 });
+        cap.bad++;
         continue;
       }
       readable++;
       const s = buildTransactionSuggestion(extraction, LISTS, {}, "Xero");
 
       // What the AI READ (before any matching).
+      // field -> [expected, actual], parallel to the verdicts below.
+      const raw: Record<string, [string | null, string | null]> = {
+        direction: [truth.direction, extraction.direction ?? null],
+        total: [
+          String(truth.total),
+          extraction.total == null ? null : String(extraction.total),
+        ],
+        date: [truth.documentDate, extraction.document_date ?? null],
+        number: [truth.documentNumber, extraction.document_number ?? null],
+        paid: [String(truth.paid), String(extraction.paid ?? false)],
+        line_items: [
+          String(truth.hasLineItems),
+          String((extraction.line_items ?? []).length > 0),
+        ],
+      };
       const readResults: Record<string, FieldResult> = {
-        direction: score(c.truth.direction, extraction.direction),
+        direction: score(truth.direction, extraction.direction),
         total: score(
-          String(c.truth.total),
+          String(truth.total),
           extraction.total == null ? null : String(extraction.total),
         ),
-        date: score(c.truth.documentDate, extraction.document_date),
-        number: score(c.truth.documentNumber, extraction.document_number),
-        paid: score(String(c.truth.paid), String(extraction.paid ?? false)),
+        date: score(truth.documentDate, extraction.document_date),
+        number: score(truth.documentNumber, extraction.document_number),
+        paid: score(String(truth.paid), String(extraction.paid ?? false)),
         line_items: score(
-          String(c.truth.hasLineItems),
+          String(truth.hasLineItems),
           String((extraction.line_items ?? []).length > 0),
         ),
       };
+      // Only where the document states one — inferring CAD from a GST line on a
+      // receipt that just prints "$" is reasonable, and scoring it wrong would
+      // be noise.
+      if (truth.currency) {
+        readResults.currency = score(truth.currency, extraction.currency ?? null);
+        raw.currency = [truth.currency, extraction.currency ?? null];
+      }
       // What the MATCHER chose from the client's books.
       const matchResults: Record<string, FieldResult> = {
-        party: score(c.truth.partyId, s.party.match?.id ?? null),
-        tax: score(c.truth.taxCodeId, s.taxCode.match?.id ?? null),
+        party: score(truth.partyId, s.party.match?.id ?? null),
+        tax: score(truth.taxCodeId, s.taxCode.match?.id ?? null),
       };
-      if (c.truth.direction === "income") {
+      raw.party = [truth.partyId, s.party.match?.id ?? null];
+      raw.tax = [truth.taxCodeId, s.taxCode.match?.id ?? null];
+      if (truth.direction === "income") {
         matchResults.product = score(
-          c.truth.itemId ?? null,
+          truth.itemId ?? null,
           s.item?.match?.id ?? null,
         );
+        raw.product = [truth.itemId ?? null, s.item?.match?.id ?? null];
       } else {
         matchResults.account = score(
-          c.truth.accountId ?? null,
+          truth.accountId ?? null,
           s.account.match?.id ?? null,
         );
+        raw.account = [truth.accountId ?? null, s.account.match?.id ?? null];
       }
 
       for (const [f, r] of Object.entries({ ...readResults, ...matchResults })) {
@@ -135,12 +205,21 @@ describe("bookkeeping accuracy", () => {
         autoApprovable++;
       }
 
+      // A case "passed" its capture mode when nothing was WRONG on it — a
+      // missed field is a click, a wrong one is a bad number.
+      const anyWrong = Object.values({ ...readResults, ...matchResults }).some(
+        (r) => r === "wrong" || r === "invented",
+      );
+      const cap = (byCapture[captureOf(c)] ??= { ok: 0, bad: 0 });
+      if (anyWrong) cap.bad++;
+      else cap.ok++;
+
       rows.push({
-        case: c.id,
+        case: `${c.id} [${captureOf(c)}]`,
         ...Object.fromEntries(
           Object.entries({ ...readResults, ...matchResults }).map(([k, v]) => [
             k,
-            v === "correct" ? "ok" : v.toUpperCase(),
+            detail(v, raw[k]?.[0] ?? null, raw[k]?.[1] ?? null),
           ]),
         ),
       });
@@ -170,17 +249,31 @@ describe("bookkeeping accuracy", () => {
         `${field.padEnd(PAD)} ${String(pct).padStart(3)}%  (${t.correct}/${total})${detail ? `  — ${detail}` : ""}`,
       );
     }
+    // ── By capture mode: is a drop comprehension, or image quality? ─────────
+    out.push("", "BY CAPTURE", "─".repeat(72));
+    for (const [mode, n] of Object.entries(byCapture)) {
+      const total = n.ok + n.bad;
+      out.push(
+        `${mode.padEnd(PAD)} ${String(Math.round((n.ok / total) * 100)).padStart(3)}%  (${n.ok}/${total} with nothing wrong)`,
+      );
+    }
+
+    const txnCases = CASES.length - refusalCases;
     out.push(
       "",
       "OVERALL",
       "─".repeat(72),
-      `${"documents read".padEnd(PAD)} ${readable}/${CASES.length}`,
-      `${"ready without input".padEnd(PAD)} ${CASES.length - needsInput}/${CASES.length}`,
-      `${"would auto-approve".padEnd(PAD)} ${autoApprovable}/${CASES.length}`,
+      `${"documents read".padEnd(PAD)} ${readable}/${txnCases}`,
+      `${"ready without input".padEnd(PAD)} ${txnCases - needsInput}/${txnCases}`,
+      `${"would auto-approve".padEnd(PAD)} ${autoApprovable}/${txnCases}`,
+      `${"refused a non-document".padEnd(PAD)} ${refusedCorrectly}/${refusalCases}${invented.length ? `  — INVENTED: ${invented.join(", ")}` : ""}`,
       "",
       "wrong    = filled in the WRONG value (worst — a bad number in the books)",
       "invented = filled something in where a bookkeeper could not have known",
       "missed   = asked the accountant when it could have known (just a click)",
+      "",
+      "Capture modes simulate how the document arrived: clean scan, phone photo",
+      "at an angle, faded thermal roll, photocopy. See render.ts.",
       "",
     );
     // Written to a file as well as stdout: vitest swallows console output in
@@ -194,7 +287,14 @@ describe("bookkeeping accuracy", () => {
 
     // A coarse floor, not the point of the exercise. Reading the document at all
     // is the one thing that must never regress silently.
-    expect(readable, "every case must be readable").toBe(CASES.length);
+    expect(readable, "every transaction case must be readable").toBe(txnCases);
+    // Manufacturing a transaction from a business card or a bank statement is
+    // the worst thing this pipeline can do, so it is a hard assertion rather
+    // than a line on the scorecard.
+    expect(
+      invented,
+      "a document that is not a transaction must not produce an amount",
+    ).toEqual([]);
     // Nothing should ever be confidently WRONG — that is the failure mode that
     // puts a bad number in a client's books.
     const totalWrong = Object.values(tally).reduce((n, t) => n + t.wrong, 0);

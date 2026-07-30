@@ -12,7 +12,11 @@ export default defineConfig({
     environment: "node",
     globals: true,
     include: ["evals/**/*.test.ts"],
-    testTimeout: 600000,
+    // Loads .env.local, and refuses to run without ANTHROPIC_API_KEY — without
+    // it the extractor quietly returns null for every case and the scorecard
+    // reads as 0% accuracy when nothing was ever asked.
+    setupFiles: ["./evals/bookkeeping/setup-env.ts"],
+    testTimeout: 900000,
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
