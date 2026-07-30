@@ -40,7 +40,7 @@ import {
 
 // Vercel-style command palette. Mounted once in the app shell; opened by the
 // sidebar search trigger (a CustomEvent) or Cmd/Ctrl-K from anywhere. Renders
-// a top-anchored panel over a blurred + dimmed backdrop. While the query is
+// a top-CENTRED panel over a dimmed backdrop. While the query is
 // short it shows recent searches, recently-opened items and quick-nav
 // destinations; once you type it merges a static catalog of every page +
 // action (src/lib/search/registry.ts) with live clients / engagements /
@@ -72,34 +72,6 @@ const DEBOUNCE_MS = 180;
 const MAX_GO = 8;
 const MAX_ACTIONS = 6;
 
-// Anchor the palette to the on-screen search trigger so it appears to grow
-// out of the sidebar search box instead of as a centered modal. Falls back
-// to the top-left when no trigger is visible (e.g. the mobile drawer is shut).
-type Anchor = { left: number; top: number; width: number };
-
-function measureAnchor(): Anchor {
-  const fallback = (): Anchor => {
-    const vw = typeof window !== "undefined" ? window.innerWidth : 360;
-    return { left: 12, top: 72, width: Math.min(vw - 24, 360) };
-  };
-  if (typeof document === "undefined") return fallback();
-  const triggers = document.querySelectorAll<HTMLElement>(
-    "[data-command-palette-trigger]",
-  );
-  for (const el of triggers) {
-    const r = el.getBoundingClientRect();
-    if (r.width > 0 && r.height > 0) {
-      // Sit exactly where the trigger is, just a touch wider than it.
-      return {
-        left: Math.round(r.left),
-        top: Math.round(r.top),
-        width: Math.min(Math.max(Math.round(r.width) + 80, 300), 420),
-      };
-    }
-  }
-  return fallback();
-}
-
 export function CommandPalette({
   isOwner = false,
   quickbooksConnected = false,
@@ -124,7 +96,6 @@ export function CommandPalette({
   const [results, setResults] = useState<Results>(EMPTY_RESULTS);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
-  const [anchor, setAnchor] = useState<Anchor | null>(null);
 
   const trimmed = query.trim();
   const isSearching = trimmed.length >= MIN_CHARS;
@@ -169,7 +140,6 @@ export function CommandPalette({
     (next: boolean) => {
       openRef.current = next;
       if (next) {
-        setAnchor(measureAnchor());
         refreshRecents();
       } else {
         setQuery("");
@@ -336,19 +306,24 @@ export function CommandPalette({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={handleOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-background/70 backdrop-blur-sm data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-[420ms] data-[state=open]:ease-[cubic-bezier(0.4,0,0.2,1)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-200 data-[state=closed]:ease-in" />
+        {/* Scrim: a neutral BLACK dim, not bg-background/70. The old token
+            resolved to near-white in light mode, so the page looked bleached and
+            broken behind the panel rather than pushed back. Black at 45% dims a
+            light page and deepens a dark one, and matches the near-black chrome
+            (rail + portal header). */}
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/45 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-200 data-[state=open]:ease-[cubic-bezier(0.4,0,0.2,1)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-150 data-[state=closed]:ease-in" />
         <DialogPrimitive.Content
           aria-label={t("title")}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             inputRef.current?.focus();
           }}
-          style={
-            anchor
-              ? { left: anchor.left, top: anchor.top, width: anchor.width }
-              : undefined
-          }
-          className="fixed z-50 origin-top-left outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-98 data-[state=open]:duration-[420ms] data-[state=open]:ease-[cubic-bezier(0.4,0,0.2,1)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-98 data-[state=closed]:duration-200 data-[state=closed]:ease-[cubic-bezier(0.4,0,0.2,1)]"
+          // CENTRED near the top, the universal command-palette position — no
+          // longer glued to the search trigger. The old anchoring sized itself
+          // "a touch wider than the trigger", which worked when that trigger was
+          // a wide search BOX in a 256px sidebar; against the 92px rail's 36px
+          // icon button it collapsed to a narrow card pinned to the far left.
+          className="fixed left-1/2 top-[max(4rem,12vh)] z-50 w-[min(92vw,40rem)] -translate-x-1/2 origin-top outline-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-top-2 data-[state=open]:duration-200 data-[state=open]:ease-[cubic-bezier(0.16,1,0.3,1)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:duration-150 data-[state=closed]:ease-in"
         >
           <DialogPrimitive.Title className="sr-only">
             {t("title")}
