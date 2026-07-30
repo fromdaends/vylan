@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Sparkles, X, ChevronRight } from "lucide-react";
@@ -13,13 +13,33 @@ import type { HomeNotification } from "@/lib/home/notifications";
 // new bell); the only new state is a localStorage "last seen" timestamp, so no
 // migration and it works immediately.
 //
-// Semantics (GitHub-style): on mount we read the stored last-seen, compute the
-// notifications newer than it, and immediately stamp "now" so a later visit only
-// shows what's newer still. The FIRST ever visit (no stored value) shows nothing
-// — we just record the baseline rather than dumping the whole history.
+// Semantics (GitHub-style): we take the stored last-seen as this visit's
+// baseline, show the notifications newer than it, and stamp "now" so a later
+// visit only shows what's newer still. The FIRST ever visit (no stored value)
+// shows nothing — we just record the baseline rather than dumping the history.
 
 const SEEN_KEY = "vylan:home-seen-at";
 const MAX_ITEMS = 6;
+
+// The stored last-seen stamp, or null when there is nothing usable to compare
+// against: the first ever visit, a corrupted value, or storage blocked entirely
+// (private mode). All three mean the same thing here — show nothing.
+function readSeenAt(): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SEEN_KEY);
+    if (!raw) return null;
+    const parsed = Date.parse(raw);
+    return Number.isNaN(parsed) ? null : parsed;
+  } catch {
+    return null;
+  }
+}
+
+// Nothing to subscribe to: the baseline is captured once per mount and then
+// deliberately never changes. A stable no-op unsubscribe keeps
+// useSyncExternalStore from resubscribing on every render.
+const subscribeNever = () => () => {};
 
 export function WhileYouWereAway({
   notifications,
@@ -29,40 +49,51 @@ export function WhileYouWereAway({
   locale: AppLocale;
 }) {
   const t = useTranslations("Home");
-  // null until the mount effect resolves the baseline; [] means "nothing new".
-  const [newItems, setNewItems] = useState<HomeNotification[] | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
+  // The baseline is FROZEN for the life of this mount, captured by the lazy
+  // initialiser on the first render — before the effect below overwrites the
+  // stored stamp. That ordering is the whole trick: the effect writes the very
+  // key this reads, so anything that re-read localStorage afterwards would come
+  // back as "now" a beat after mount and the banner would erase itself the
+  // instant it appeared. Never call setBaseline.
+  const [baseline] = useState(readSeenAt);
+
+  // Hydration safety: the server — and the client's first paint — get the false
+  // snapshot and render nothing, so the two agree; React swaps in the real
+  // baseline immediately after hydration. This is the same reveal the mount
+  // effect used to do with setState, minus the cascading render (satisfies
+  // react-hooks/set-state-in-effect), and matches DashboardGreeting next door.
+  const hydrated = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
+  const seenAt = hydrated ? baseline : null;
+
+  // Stamp "now" so the NEXT visit measures from here. This visit keeps
+  // measuring against the baseline captured above.
   useEffect(() => {
-    let seenAt: number | null = null;
     try {
-      const raw = localStorage.getItem(SEEN_KEY);
-      seenAt = raw ? Date.parse(raw) : null;
-    } catch {
-      seenAt = null;
-    }
-    // Stamp "now" so the next visit measures from here (this visit still shows
-    // whatever we computed against the previous baseline).
-    try {
-      localStorage.setItem(SEEN_KEY, new Date().toISOString());
+      window.localStorage.setItem(SEEN_KEY, new Date().toISOString());
     } catch {
       // ignore (private mode / disabled storage) — banner just won't persist.
     }
-    // First-ever visit: record the baseline, show nothing.
-    if (seenAt == null || Number.isNaN(seenAt)) {
-      setNewItems([]);
-      return;
-    }
-    const fresh = notifications
+  }, []);
+
+  // Derived during render rather than stored: an empty list covers both "not
+  // resolved yet" and "nothing new", and both render nothing.
+  const newItems = useMemo(() => {
+    if (seenAt == null) return [];
+    return notifications
       .filter((n) => {
         const ts = Date.parse(n.timestamp);
-        return !Number.isNaN(ts) && ts > seenAt!;
+        return !Number.isNaN(ts) && ts > seenAt;
       })
       .sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp));
-    setNewItems(fresh);
-  }, [notifications]);
+  }, [notifications, seenAt]);
 
-  if (dismissed || newItems == null || newItems.length === 0) return null;
+  if (dismissed || newItems.length === 0) return null;
 
   const shown = newItems.slice(0, MAX_ITEMS);
   const extra = newItems.length - shown.length;
