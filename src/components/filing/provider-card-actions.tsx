@@ -166,7 +166,7 @@ export function FilingStatusToasts() {
     } else {
       toast.error(t("toast_error_generic"));
     }
-    router.replace("/integrations/filing", { scroll: false });
+    router.replace("/vylan?tab=filing", { scroll: false });
   }, [params, router, t]);
 
   return null;

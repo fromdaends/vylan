@@ -17,7 +17,6 @@ import {
   Building2,
   FileText,
   Folder,
-  FolderUp,
   Gauge,
   LayoutDashboard,
   LogOut,
@@ -44,12 +43,9 @@ type Labels = {
   bookkeeping: string;
   integrations: string;
   integrationsToggle: string;
-  // Localized name of the "Document filing" integrations sub-item (the other
-  // sub-items are brand names and need no translation).
-  integrationsFiling: string;
-  // Rail-sized version of the same destination ("Filing" / "Classement") — the
-  // full name is two words in English and wraps badly in a 72px slot.
-  filingShort: string;
+  // The Vylan hub's rail label. One word by design — it has to sit on one line
+  // in a 72px rail slot.
+  vylanHub: string;
   settings: string;
   firm: string;
   logout: string;
@@ -140,9 +136,12 @@ export function AppShell({
     { href: "/performance", label: "Performance", icon: Gauge },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
-    // Short label here on purpose: "Document filing" wraps to two cramped lines
-    // in a rail slot. The page itself still uses the full name.
-    { href: "/integrations/filing", label: labels.filingShort, icon: FolderUp },
+    // The Vylan hub — the firm's own automation surface (Automated jobs +
+    // Document filing). Sparkles is the app's established AI mark (the chat
+     // popup's "Vylan" tab uses it), so the nav and the assistant agree.
+    // This replaced the standalone Filing tab: filing is one job inside the hub
+    // now, and /integrations/filing redirects to ?tab=filing.
+    { href: "/vylan", label: labels.vylanHub, icon: Sparkles },
     { href: "/engagements", label: labels.engagements, icon: Folder },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
     // conditional tab: the design didn't include one, but the feature exists and

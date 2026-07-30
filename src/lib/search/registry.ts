@@ -2,6 +2,8 @@ import {
   LayoutDashboard,
   Users,
   Briefcase,
+  Sparkles,
+  FolderUp,
   Repeat,
   BookOpen,
   Plug,
@@ -112,6 +114,29 @@ export function buildSearchRegistry(
       href: "/clients",
       primary: true,
       keywords: "clients customers contacts clientele client",
+    },
+    {
+      // The Vylan hub (automated jobs + document filing). Two entries so both
+      // tabs are findable by name — "filing" used to be its own destination and
+      // firms will keep typing that, not "vylan".
+      id: "vylan-hub",
+      label: t.app("nav_vylan"),
+      group: "go",
+      icon: Sparkles,
+      color: "text-icon-indigo",
+      href: "/vylan",
+      keywords:
+        "vylan automation automations automated jobs tasks rules taches automatisations automatise",
+    },
+    {
+      id: "vylan-filing",
+      label: t.app("nav_integrations_filing"),
+      group: "go",
+      icon: FolderUp,
+      color: "text-icon-cyan",
+      href: "/vylan?tab=filing",
+      keywords:
+        "filing file documents storage drive sharepoint onedrive dropbox smartvault folders naming classement rangement stockage dossiers",
     },
     {
       // Repeating schedules live in Settings > Automation, which is not

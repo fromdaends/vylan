@@ -1461,7 +1461,8 @@
     "metric_completed": "Complétés",
     "recent_engagements": "Engagements récents",
     "nav_integrations_filing": "Classement",
-    "nav_filing_short": "Classement"
+    "nav_filing_short": "Classement",
+    "nav_vylan": "Vylan"
   },
   "TeamChat": {
     "page_title": "Clavardage d'équipe",
@@ -3474,5 +3475,25 @@
     "empty_search": "Aucun horaire ne correspond.",
     "empty_filtered": "Rien ici pour l'instant. Essayez un autre filtre.",
     "privacy_note_staff": "Les horaires des clients privés ne sont visibles que par les propriétaires ; cette liste peut donc être plus courte que celle d'un propriétaire."
+  },
+  "VylanHub": {
+    "page_title": "Vylan",
+    "page_subtitle": "Les automatisations qui travaillent pour vous, et où vont les documents terminés.",
+    "tab_jobs": "Tâches automatisées",
+    "tab_filing": "Classement des documents",
+    "soon_title": "Les automatisations personnalisées arrivent",
+    "soon_body": "Vous pourrez créer vos propres tâches ici — choisir ce qui les déclenche, ce qu'elles font et à quels clients elles s'appliquent — au lieu de la liste fixe ci-dessous. Tout ce que vous avez déjà configuré continue de fonctionner.",
+    "today_section": "Ce que Vylan automatise déjà",
+    "today_reminders_title": "Relancer vos clients",
+    "today_reminders_body": "Vylan envoie des courriels selon un calendrier tant que des documents obligatoires manquent, et s'arrête dès qu'ils sont reçus.",
+    "today_invoices_title": "Envoyer les factures",
+    "today_invoices_body": "Facturez automatiquement à la fin d'un mandat, ou un certain nombre de jours après.",
+    "today_repeat_title": "Répéter un mandat",
+    "today_repeat_body": "Recréez la même liste pour le même client à chaque cycle, avec un nouveau lien client.",
+    "today_filing_title": "Classer les documents approuvés",
+    "today_filing_body": "Envoyez les documents approuvés vers votre stockage infonuagique, dans le bon dossier et nommés à votre façon.",
+    "today_open_settings": "Ouvrir les paramètres d'automatisation",
+    "today_open_engagements": "Ouvrir les mandats",
+    "today_open_filing": "Configurer le classement"
   }
 }
