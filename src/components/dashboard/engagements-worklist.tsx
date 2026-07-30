@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { EngagementReassignMenu } from "@/components/engagements/engagement-reassign-menu";
 import { PresenceFaces } from "@/components/engagements/presence-faces";
+import { BulkAssignBar } from "@/components/engagements/bulk-assign-bar";
 import { useFirmPresence } from "@/lib/engagements/use-firm-presence";
 import {
   groupPresenceByEngagement,
@@ -327,6 +328,7 @@ export function WorklistTable({
   viewerId,
   firmId,
   presenceRoster,
+  bulkAssignMembers,
 }: {
   rows: WorklistRow[];
   locale: AppLocale;
@@ -369,12 +371,43 @@ export function WorklistTable({
   // so every caller that passes neither behaves exactly as before.
   firmId?: string | null;
   presenceRoster?: readonly { id: string; name: string }[];
+  // Passing this turns on tick-rows-and-reassign. Absent — every caller except
+  // the main engagements list — and there is no checkbox column at all, so the
+  // Overview, the Inbox and the teammate profile are untouched.
+  bulkAssignMembers?: { id: string; name: string }[];
 }) {
   const t = useTranslations("Dashboard");
   const tStatus = useTranslations("Status");
   const tAttention = useTranslations("Attention");
   const tEng = useTranslations("Engagements");
   const tStage = useTranslations("Stage");
+
+  // Ticked rows. A Set because the only operations are has/add/delete, and the
+  // bar needs the count more than the order.
+  const router = useRouter();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const bulkEnabled = Boolean(bulkAssignMembers?.length);
+  // What is ACTUALLY selected: the ticked ids, intersected with the rows on
+  // screen right now. DERIVED, not synced with an effect — acting on a row you
+  // can no longer see is the classic bulk-action bug and it is silent (the
+  // count says 8, three of them were filtered away). Deriving makes that
+  // unrepresentable instead of relying on a cleanup running in time.
+  //
+  // The raw set is deliberately NOT pruned: type into the search box, tick a
+  // row, clear the search, and your earlier ticks are still there. Filtering is
+  // a view, not a deselection.
+  const selectedIds = useMemo(
+    () => rows.filter((r) => selected.has(r.id)).map((r) => r.id),
+    [rows, selected],
+  );
+
+  const toggleSelected = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   // One firm-wide presence subscription for the entire table. onEngagementId is
   // null: a list is not "on" any single job, it only listens. Hooks cannot be
@@ -435,6 +468,32 @@ export function WorklistTable({
       <Table>
         <TableHeader>
           <TableRow className="hover:bg-transparent">
+            {bulkEnabled && (
+              <TableHead className="w-9 pl-4 pr-0">
+                <input
+                  type="checkbox"
+                  aria-label={tEng("bulk_select_all")}
+                  checked={rows.length > 0 && selectedIds.length === rows.length}
+                  // Some-but-not-all shows the dash state, so "select all" is
+                  // honest about what a second click will do.
+                  ref={(el) => {
+                    if (el) {
+                      el.indeterminate =
+                        selectedIds.length > 0 &&
+                        selectedIds.length < rows.length;
+                    }
+                  }}
+                  onChange={(e) =>
+                    setSelected(
+                      e.target.checked
+                        ? new Set(rows.map((r) => r.id))
+                        : new Set(),
+                    )
+                  }
+                  className="size-3.5 cursor-pointer accent-primary align-middle"
+                />
+              </TableHead>
+            )}
             <TableHead
               className={cn(
                 "px-4",
@@ -514,6 +573,10 @@ export function WorklistTable({
               assignMembers={assignMembers}
               viewerId={viewerId}
               presentPeople={presenceByEngagement.get(r.id)}
+              selectable={bulkEnabled}
+              selected={selected.has(r.id)}
+              onToggleSelected={toggleSelected}
+              anySelected={selectedIds.length > 0}
               onOptimisticRemoval={removeRow}
               statusLabel={tStatus(r.derivedStatus)}
               overdueText={
@@ -551,6 +614,21 @@ export function WorklistTable({
           ))}
         </TableBody>
       </Table>
+
+      {/* Floats over the list rather than pushing it down, so ticking a row
+          never reflows the thing you are ticking. Renders nothing until
+          something is selected. */}
+      {bulkEnabled && (
+        <BulkAssignBar
+          selectedIds={selectedIds}
+          members={bulkAssignMembers ?? []}
+          onClear={() => setSelected(new Set())}
+          onDone={() => {
+            setSelected(new Set());
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -573,6 +651,10 @@ function WorklistRowView({
   assignMembers,
   viewerId,
   presentPeople,
+  selectable = false,
+  selected = false,
+  onToggleSelected,
+  anySelected = false,
 }: {
   row: WorklistRow;
   locale: AppLocale;
@@ -593,6 +675,12 @@ function WorklistRowView({
   // Who has this job open right now. Undefined on the rows nobody is in, which
   // is nearly all of them — so this usually costs the row nothing.
   presentPeople?: PresentPerson[];
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelected?: (id: string) => void;
+  // Once anything is ticked, every checkbox stays visible — otherwise you are
+  // hunting for hover targets while mid-selection.
+  anySelected?: boolean;
 }) {
   const tEng = useTranslations("Engagements");
   const router = useRouter();
@@ -651,7 +739,7 @@ function WorklistRowView({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <TableRow
-            className="cursor-pointer"
+            className="group/row cursor-pointer"
             onClick={(e) => {
               // Whole-row click opens the engagement. Skip when the click
               // lands on an interactive child (the title link or the "..."
@@ -659,11 +747,32 @@ function WorklistRowView({
               // keep their own behaviour. Plain JS navigation — not a CSS
               // stretched-link — so it works in Safari too (cf. #366).
               const el = e.target as HTMLElement;
-              if (el.closest("a, button")) return;
+              if (el.closest("a, button, input")) return;
               if (window.getSelection()?.toString()) return;
               router.push(`/engagements/${row.id}`);
             }}
           >
+            {selectable && (
+              <TableCell className="w-9 py-3 pl-4 pr-0 align-top">
+                <input
+                  type="checkbox"
+                  aria-label={tEng("bulk_select_row")}
+                  checked={selected}
+                  onChange={() => onToggleSelected?.(row.id)}
+                  // Hidden until you hover the row — and pinned visible once
+                  // ANYTHING is ticked, so you are not hunting hover targets
+                  // mid-selection. A permanent column of empty boxes over an
+                  // untouched list is exactly the kind of always-on control
+                  // this app avoids.
+                  className={cn(
+                    "mt-1 size-3.5 cursor-pointer accent-primary transition-opacity",
+                    selected || anySelected
+                      ? "opacity-100"
+                      : "opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
+                  )}
+                />
+              </TableCell>
+            )}
             <TableCell className="px-4 py-3 align-top">
               <div className="flex items-center gap-1.5">
                 <Link

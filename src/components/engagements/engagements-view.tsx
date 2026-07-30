@@ -312,6 +312,10 @@ export function EngagementsView({
         viewerId={currentUserId}
         firmId={firmId}
         presenceRoster={assignMembers}
+        // Tick-rows-and-reassign, only here. The Overview, the Inbox and the
+        // teammate profile pass nothing and get no checkbox column at all —
+        // this is the list you actually triage from.
+        bulkAssignMembers={teamEnabled ? assignMembers : undefined}
         // Opt in to the sortable Status header. Only this view passes these, so
         // every other table (the Overview included) keeps its plain header.
         statusSort={stageFilteringOn ? stageSort : null}

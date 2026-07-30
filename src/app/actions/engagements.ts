@@ -49,6 +49,7 @@ import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { canDeleteEngagements } from "@/lib/engagements/lifecycle";
+import { BULK_ASSIGN_MAX } from "@/lib/engagements/bulk-assign";
 import { normalizeHandoffNote } from "@/lib/engagements/handoff-note";
 import { syncEngagementStage } from "@/lib/engagements/stage-sync";
 import { buildEngagementInviteEmail, sendEmail } from "@/lib/email";
@@ -900,6 +901,126 @@ export async function reassignEngagementAction(
 // KNOWN LIMIT, stated rather than hidden: the delayed catch-up EMAIL bakes its
 // payload at enqueue time, so a note added afterwards does not reach it. The
 // note is on the engagement either way.
+// Move several engagements to one person in a single action.
+//
+// The gap this closes: the only bulk path was "Hand over EVERYTHING" on a
+// teammate's profile — all-or-nothing, and owner-only. There was no way to move
+// eight of someone's twelve files. Karbon has had the tick-rows-and-reassign
+// version for years and it is their single biggest advantage on assignment.
+//
+// NOT owner-gated, matching the single-engagement path: any staff member can
+// already reassign any engagement they can see, one at a time, and Karbon's own
+// posture is the same (a Standard User can edit work by default; only the
+// offboarding sweep is admin-only). Doing ten at once is the same act, not a
+// bigger one. The bulk sweep on a teammate's profile stays owner-only because
+// THAT one moves clients and recurring schedules too.
+//
+// RLS does the security. The update runs through the USER's client, so an id
+// the caller cannot see is silently not updated rather than rejected — and the
+// count that comes back is the truth about what actually moved, which is what
+// gets reported.
+export async function bulkAssignEngagementsAction(
+  engagementIds: string[],
+  assigneeId: string | null,
+): Promise<{
+  ok: boolean;
+  moved?: number;
+  error?: "no_session" | "invalid_assignee" | "too_many" | "update_failed";
+}> {
+  const [user, firm, activeMembers] = await Promise.all([
+    getCurrentUser(),
+    getCurrentFirm(),
+    listActiveFirmUsers(),
+  ]);
+  if (!user || !firm) return { ok: false, error: "no_session" };
+
+  const ids = Array.from(new Set(engagementIds.filter(Boolean)));
+  if (ids.length === 0) return { ok: true, moved: 0 };
+  if (ids.length > BULK_ASSIGN_MAX) return { ok: false, error: "too_many" };
+
+  if (
+    !hasActiveTeam({
+      teamEnabled: firm.team_enabled === true,
+      activeMemberCount: activeMembers.length,
+    })
+  ) {
+    return { ok: false, error: "invalid_assignee" };
+  }
+
+  // Target must be an ACTIVE member of THIS firm — assigned_user_id has no
+  // firm-scoped foreign key, so a well-formed uuid from another firm would
+  // otherwise be accepted. Null is "unassign", which has no target to check.
+  if (assigneeId !== null && !activeMembers.some((m) => m.id === assigneeId)) {
+    return { ok: false, error: "invalid_assignee" };
+  }
+
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("engagements")
+    .update({
+      assigned_user_id: assigneeId,
+      // Null the timestamp too: "assigned at 3pm to nobody" is not a fact.
+      assigned_at: assigneeId === null ? null : new Date().toISOString(),
+    })
+    .eq("firm_id", firm.id)
+    .in("id", ids)
+    .select("id, title, client_id");
+  if (error) {
+    console.error("[engagements] bulk assign failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+  const moved = (data ?? []) as { id: string; title: string; client_id: string }[];
+  if (moved.length === 0) return { ok: true, moved: 0 };
+
+  // One activity row PER engagement, not one summary row. A summary would leave
+  // each individual engagement's own history with a hole where "who handed this
+  // to me?" should be — and that history is the thing an accountant actually
+  // opens. Same action string as a single reassign, so the audit log reads
+  // identically whether you moved one or ten.
+  await Promise.all(
+    moved.map((e) =>
+      logUserActivity(
+        firm.id,
+        e.id,
+        assigneeId === null ? "engagement_unassigned" : "engagement_reassigned",
+        { ...(assigneeId === null ? {} : { to_user_id: assigneeId }), bulk: true },
+      ),
+    ),
+  );
+
+  // Tell the new assignee, once per engagement. suppressEmail for the same
+  // reason the single path does it — the delayed catch-up job owns the email
+  // and is smarter about it. Skipped entirely on self-assignment and on
+  // unassign: nobody needs telling that work left them in a sweep they ran.
+  if (assigneeId !== null && assigneeId !== user.id) {
+    const actorName = await userName(sb, user.id);
+    await Promise.all(
+      moved.map(async (e) =>
+        notify({
+          firmId: firm.id,
+          eventKey: "engagement.assigned_to_you",
+          entity: { type: "engagement", id: e.id },
+          actorId: user.id,
+          engagementId: e.id,
+          clientId: e.client_id ?? null,
+          recipients: [assigneeId],
+          suppressEmail: true,
+          payload: {
+            engagement_title: e.title ?? null,
+            client_name: await clientName(sb, e.client_id ?? null),
+            actor_name: actorName,
+            note: null,
+            href: `/engagements/${e.id}`,
+          },
+        }),
+      ),
+    );
+  }
+
+  for (const e of moved) revalidateEngagementPaths(e.id);
+  return { ok: true, moved: moved.length };
+}
+
 export async function addHandoffNoteAction(
   engagementId: string,
   note: string,
