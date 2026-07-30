@@ -416,7 +416,8 @@ stop. Two consequences worth keeping:
 
 1. Add a currency to the QuickBooks post payload (`CurrencyRef`, plus the
    exchange rate QuickBooks wants on a foreign transaction — Xero derives its
-   own, QuickBooks does not always).
+   own, QuickBooks does not always). **UNDERSTATED — see section 18: the rate is
+   mandatory, and the vendor's own currency must match the transaction's.**
 2. Record the QuickBooks company's home currency the way 1030 records Xero's, and
    populate it on connect.
 3. Only then set `booksCurrency` on the QuickBooks path. Setting it earlier would
@@ -637,6 +638,80 @@ payment against it, or an invoice with a payment received, is expected to refuse
 deletion. The code already fails loudly (records `post_error`, surfaces QuickBooks'
 own message on the card) rather than silently, so nothing was changed. **Flagged
 as unverified:** no live QuickBooks company was available to reproduce it.
+
+---
+
+## 18. QuickBooks multicurrency is a BIGGER feature than Xero's — measured, not guessed
+
+Tested against a real Intuit sandbox ("Sandbox Company CA", home currency CAD,
+multicurrency ENABLED) by posting actual bills and reading the errors back. Every
+line below is an observed API response, not documentation.
+
+### What was confirmed
+
+`fetchCurrencyPrefs` reads the right thing. Raw response:
+`{"MultiCurrencyEnabled":true,"HomeCurrency":{"value":"CAD"}}` — exactly the shape
+the parser assumes. Section 17's recording half is correct.
+
+### Two constraints Xero does not have, and section 15 underestimated both
+
+**1. An ExchangeRate is REQUIRED, not optional.** Posting a USD bill with a
+`CurrencyRef` and no rate:
+
+```
+400  code 2410  "Curreny, ExchangeRate is missing."
+     "The currency and exchange rate are required for transaction in foreign currency."
+```
+
+Xero derives its own rate. QuickBooks refuses the transaction outright. Section 15
+said QuickBooks "does not always" derive one — it never does. **Vylan has no
+source of exchange rates**, so this alone blocks the feature.
+
+**2. The transaction's currency must MATCH THE VENDOR'S OWN currency.** In
+QuickBooks a vendor is denominated in a currency, and a bill cannot depart from
+it:
+
+| bill currency | vendor currency | result |
+| --- | --- | --- |
+| USD + rate | CAD | `6000` — "You can only use one foreign currency per transaction." |
+| USD + rate | HKD | `6000` — same |
+| HKD + rate | HKD | **accepted** (id 190, rate 0.18) |
+| CAD, no currency fields | CAD | accepted (the control) |
+
+So a USD receipt cannot be posted to a supplier set up in CAD at all. Recording it
+requires a USD-denominated vendor record to exist first.
+
+### Why this is not a patch
+
+Vylan's matcher picks a vendor by NAME from the cached list and knows nothing
+about vendor currency. A foreign-currency receipt matched to the (correctly
+named) CAD supplier would fail at post time with "you can only use one foreign
+currency per transaction" — a message that explains nothing to an accountant.
+
+A real implementation needs all three:
+
+1. **Cache each vendor's currency** (`Vendor.CurrencyRef`, already returned by the
+   query the sync runs) and surface it in the matcher, so a foreign document can
+   only match a vendor of that currency.
+2. **A way to create or choose a correctly-denominated vendor** when none exists —
+   note that a vendor's currency is FIXED AT CREATION in QuickBooks and cannot be
+   changed afterwards, so this is a real decision, not a silent fixup.
+3. **An exchange-rate source**, or an accountant-supplied rate on the draft.
+
+### Therefore: today's behaviour is CORRECT, keep it
+
+Foreign-currency documents are blocked on the QuickBooks path
+(`booksCurrency` stays null, so `draftNeedsInput` holds them). That is not a gap
+to close quickly — it is the safe answer until the three pieces above exist.
+**Do not set `booksCurrency` on the QuickBooks producers** to "unblock" it: the
+post would then fail at Intuit with a cryptic validation error, or worse succeed
+against a mismatched vendor if Intuit ever relaxes the rule.
+
+Xero remains genuinely easier here, and that asymmetry is real rather than an
+artefact of how each integration was written.
+
+*Test artefacts left in the sandbox: bills id 189 (CAD control) and id 190 (HKD),
+both DocNumber `VYL-CUR-*`. Harmless, and a sandbox reset clears them.*
 
 ---
 
