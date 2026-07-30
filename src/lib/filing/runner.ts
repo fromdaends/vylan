@@ -292,10 +292,13 @@ export async function runEngagementFiling(input: {
   let folderTemplate = FILING_DEFAULTS.folderTemplate;
   let nameTemplate = FILING_DEFAULTS.nameTemplate;
   let language: FilingLanguage = FILING_DEFAULTS.language;
+  // Both default to today's behaviour, so a firm that has never opened the
+  // settings page — or an environment without 1110 — files exactly as before.
+  let fileRejected = false;
   {
     const { data: settings, error: settingsErr } = await sb
       .from("firm_filing_settings")
-      .select("folder_template, name_template, language")
+      .select("folder_template, name_template, language, file_rejected, folder_source")
       .eq("firm_id", input.firmId)
       .maybeSingle();
     if (settingsErr && isFilingSchemaMissing(settingsErr)) {
@@ -307,6 +310,7 @@ export async function runEngagementFiling(input: {
       if (folder && validateFolderTemplate(folder).ok) folderTemplate = folder;
       if (name && validateNameTemplate(name).ok) nameTemplate = name;
       language = settings.language === "fr" ? "fr" : "en";
+      fileRejected = settings.file_rejected === true;
     }
   }
 
@@ -386,6 +390,7 @@ export async function runEngagementFiling(input: {
         engagementId: input.engagementId,
         clientName: engCtx.clientName,
         fileFinalDocuments: eng.file_final_documents === true,
+        fileRejected,
         folderTemplate,
         nameTemplate,
         language,

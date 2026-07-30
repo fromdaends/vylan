@@ -39,13 +39,22 @@ export const FILING_DEFAULTS = {
   nameTemplate: "{doc_type} - {year} - {detail}",
   language: "en" as FilingLanguage,
   autoFileOnComplete: true,
+  fileRejected: false,
+  folderSource: "template" as FilingFolderSource,
 };
+
+export type FilingFolderSource = "template" | "vylan";
 
 export type FirmFilingSettings = {
   folderTemplate: string;
   nameTemplate: string;
   language: FilingLanguage;
   autoFileOnComplete: boolean;
+  /** Include documents the accountant rejected. Off by default. */
+  fileRejected: boolean;
+  /** Where the cloud folder structure comes from: the token template, or the
+   * firm's own folder tree in Files. */
+  folderSource: FilingFolderSource;
   // False = no row yet (the firm has never saved) — defaults in effect.
   saved: boolean;
   // False = migration 0900 not applied — the whole feature is dormant.
@@ -58,6 +67,8 @@ function defaultSettings(available: boolean, saved = false): FirmFilingSettings 
     nameTemplate: FILING_DEFAULTS.nameTemplate,
     language: FILING_DEFAULTS.language,
     autoFileOnComplete: FILING_DEFAULTS.autoFileOnComplete,
+    fileRejected: FILING_DEFAULTS.fileRejected,
+    folderSource: FILING_DEFAULTS.folderSource,
     saved,
     available,
   };
@@ -68,7 +79,7 @@ export async function getFirmFilingSettings(): Promise<FirmFilingSettings> {
   const sb = await getServerSupabase();
   const { data, error } = await sb
     .from("firm_filing_settings")
-    .select("folder_template, name_template, language, auto_file_on_complete")
+    .select("folder_template, name_template, language, auto_file_on_complete, file_rejected, folder_source")
     .maybeSingle();
   if (error) {
     if (!isFilingSchemaMissing(error)) {
@@ -82,6 +93,9 @@ export async function getFirmFilingSettings(): Promise<FirmFilingSettings> {
     nameTemplate: (data.name_template as string) ?? FILING_DEFAULTS.nameTemplate,
     language: data.language === "fr" ? "fr" : "en",
     autoFileOnComplete: (data.auto_file_on_complete as boolean) ?? true,
+    // Absent pre-1110: read as the historical behaviour, never as "on".
+    fileRejected: (data.file_rejected as boolean) ?? false,
+    folderSource: data.folder_source === "vylan" ? "vylan" : "template",
     saved: true,
     available: true,
   };
@@ -97,6 +111,8 @@ export async function saveFirmFilingSettings(input: {
   nameTemplate: string;
   language: FilingLanguage;
   autoFileOnComplete: boolean;
+  fileRejected: boolean;
+  folderSource: FilingFolderSource;
 }): Promise<"ok" | "unavailable" | "error"> {
   const firm = await getCurrentFirm();
   if (!firm) return "error";
@@ -108,6 +124,8 @@ export async function saveFirmFilingSettings(input: {
       name_template: input.nameTemplate,
       language: input.language,
       auto_file_on_complete: input.autoFileOnComplete,
+      file_rejected: input.fileRejected,
+      folder_source: input.folderSource,
       updated_at: new Date().toISOString(),
     },
     { onConflict: "firm_id" },

@@ -54,7 +54,18 @@ export type EligibilityDecision =
  */
 export function decideEligibility(
   doc: FilingCandidate,
-  opts: { fileFinalDocuments: boolean },
+  opts: {
+    fileFinalDocuments: boolean;
+    /**
+     * Include documents the accountant rejected. Defaults to FALSE — a rejected
+     * document is one the firm told the client to replace, and filing it beside
+     * the good copy is how the wrong version ends up in someone's books.
+     *
+     * Optional so every existing caller and test keeps today's behaviour
+     * without being touched; only the runner passes it, from the firm setting.
+     */
+    fileRejected?: boolean;
+  },
 ): EligibilityDecision {
   if (doc.source === "final") {
     if (!opts.fileFinalDocuments) {
@@ -65,9 +76,13 @@ export function decideEligibility(
   }
   if (doc.isDuplicate) return { eligible: false, reason: "duplicate" };
   if (doc.reviewStatus === "rejected") {
-    return { eligible: false, reason: "rejected" };
-  }
-  if (doc.reviewStatus !== "approved") {
+    // Opt-in only, and it stays a deliberate act: a firm that wants a complete
+    // archive rather than a clean one can have it, but nobody gets it by
+    // accident.
+    if (!opts.fileRejected) return { eligible: false, reason: "rejected" };
+  } else if (doc.reviewStatus !== "approved") {
+    // Still pending. Not filed under any setting — "we haven't looked at it
+    // yet" is not a state worth copying into the firm's permanent storage.
     return { eligible: false, reason: "not_approved" };
   }
   if (!doc.storagePath) return { eligible: false, reason: "no_bytes" };
@@ -143,6 +158,9 @@ export type FilingRunInput = {
   // against this name.
   clientName: string;
   fileFinalDocuments: boolean;
+  /** Firm setting (1110). Optional and false-by-default so every existing
+   * caller and test keeps today's behaviour: rejected documents are not filed. */
+  fileRejected?: boolean;
   folderTemplate: string;
   nameTemplate: string;
   language: FilingLanguage;
@@ -189,6 +207,7 @@ export async function runFiling(
   for (const { doc, tokenContext } of input.candidates) {
     const decision = decideEligibility(doc, {
       fileFinalDocuments: input.fileFinalDocuments,
+      fileRejected: input.fileRejected === true,
     });
     if (!decision.eligible) {
       await deps.ledger.recordSkip({

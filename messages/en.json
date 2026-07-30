@@ -3357,7 +3357,9 @@
     "skip_final_not_opted_in": "Final document — not opted in.",
     "skip_no_bytes": "The file's contents are unavailable.",
     "open_folder_generic": "Open the Vylan folder",
-    "not_configured_hint": "{provider} isn't set up on this environment yet."
+    "not_configured_hint": "{provider} isn't set up on this environment yet.",
+    "rejected_label": "Also file rejected documents",
+    "rejected_hint": "Off by default. A rejected document is one you asked the client to replace — filing it beside the good copy is how the wrong version ends up in the books. Turn this on only if you want a complete archive rather than a clean one."
   },
   "Repeating": {
     "title": "Repeating work",
