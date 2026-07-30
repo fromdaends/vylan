@@ -22,6 +22,7 @@ import type {
   QbItem,
   QbNamed,
   QuickbooksLists,
+  QbTaxCode,
 } from "@/lib/quickbooks/read";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -75,6 +76,26 @@ function toCachedAccount(r: Record<string, unknown>): QbAccount {
     active: r.active !== false,
   };
 }
+// 1050's direction columns. Selected separately from the basic set so a read can
+// retry without them when the migration has not been applied — a missing column
+// otherwise errors the query, and the callers turn ANY error into "no cached
+// lists at all", which would strip every draft of its matches.
+const TAX_COLS_RICH = "qbo_id, name, active, can_apply_to_revenue, can_apply_to_expenses";
+const TAX_COLS_BASIC = "qbo_id, name, active";
+
+function toCachedTaxCode(r: Record<string, unknown>): QbTaxCode {
+  return {
+    id: String(r.qbo_id ?? ""),
+    name: (r.name as string | null) ?? "",
+    active: r.active !== false,
+    // Absent (pre-1050 row, or a client not resynced since) means "no opinion" →
+    // keep the code, so an un-resynced client sees every rate exactly as before
+    // rather than an empty picker.
+    canApplyToRevenue: r.can_apply_to_revenue !== false,
+    canApplyToExpenses: r.can_apply_to_expenses !== false,
+  };
+}
+
 function toCachedNamed(r: Record<string, unknown>): QbNamed {
   return {
     id: String(r.qbo_id ?? ""),
@@ -135,6 +156,8 @@ export async function readCachedQuickbooksLists(
   clientId?: QuickbooksClientScope,
 ): Promise<QuickbooksLists | null> {
   const sb = await getServerSupabase();
+  // Reassigned to the basic set if 1050 turns out not to be applied.
+  let taxCols = TAX_COLS_RICH;
   const fetch = (scopeOn: boolean) => {
     const scope = <Q>(q: Q): Q => (scopeOn ? withClientScope(q, clientId) : q);
     return Promise.all([
@@ -145,7 +168,7 @@ export async function readCachedQuickbooksLists(
       ),
       scope(sb.from("quickbooks_vendors").select("qbo_id, name, active")),
       scope(sb.from("quickbooks_customers").select("qbo_id, name, active")),
-      scope(sb.from("quickbooks_tax_codes").select("qbo_id, name, active")),
+      scope(sb.from("quickbooks_tax_codes").select(taxCols)),
     ]);
   };
   // Always try the client-scoped read first; degrade to the no-filter read when
@@ -153,6 +176,13 @@ export async function readCachedQuickbooksLists(
   // For a specific client the missing-schema error stays → return null (no cache
   // for that client yet), never the firm's rows.
   let [acc, ven, cus, tax] = await fetch(true);
+  // 1050 not applied yet: the tax query alone failed on the two direction
+  // columns. Retry with the basic set BEFORE the pre-0710 fallback, and keep the
+  // client scope — a missing column must never cost the whole cache.
+  if (tax.error && isMissingSchema(tax.error)) {
+    taxCols = TAX_COLS_BASIC;
+    [acc, ven, cus, tax] = await fetch(true);
+  }
   if (
     isFirmLevelScope(clientId) &&
     [acc, ven, cus, tax].some((r) => r.error && isMissingSchema(r.error))
@@ -174,7 +204,11 @@ export async function readCachedQuickbooksLists(
     accounts: (acc.data ?? []).map(toCachedAccount),
     vendors: (ven.data ?? []).map(toCachedNamed),
     customers: (cus.data ?? []).map(toCachedNamed),
-    taxCodes: (tax.data ?? []).map(toCachedNamed),
+    // Cast because the select string is chosen at runtime (rich vs basic), which
+    // drops PostgREST's inferred row type.
+    taxCodes: (
+      (tax.data as Array<Record<string, unknown>> | null) ?? []
+    ).map(toCachedTaxCode),
     items: await readCachedItems(sb, undefined, clientId),
   };
 }
@@ -202,7 +236,8 @@ export async function readCachedQuickbooksListsByClient(
   const out = new Map<string, Grouped>();
   if (clientIds.length === 0) return out;
   const sb = await getServerSupabase();
-  const [acc, ven, cus, tax, items] = await Promise.all([
+  // eslint-disable-next-line prefer-const -- tax is reassigned by the 1050 retry
+  let [acc, ven, cus, tax, items] = await Promise.all([
     sb
       .from("quickbooks_accounts")
       .select("client_id, qbo_id, name, account_type, active")
@@ -217,7 +252,7 @@ export async function readCachedQuickbooksListsByClient(
       .in("client_id", clientIds),
     sb
       .from("quickbooks_tax_codes")
-      .select("client_id, qbo_id, name, active")
+      .select(`client_id, ${TAX_COLS_RICH}`)
       .in("client_id", clientIds),
     // Items stay TOLERANT like readCachedItems: a missing table (pre-0460) or
     // error just means "no items" — it must never break the four core lists.
@@ -226,6 +261,15 @@ export async function readCachedQuickbooksListsByClient(
       .select("client_id, qbo_id, name, item_type, income_account_qbo_id, active")
       .in("client_id", clientIds),
   ]);
+  // 1050 not applied yet: re-read the tax codes without the direction columns.
+  // Everything else already succeeded, and an error here would otherwise return
+  // an empty map — stripping every row in the drafts queue of its cached lists.
+  if (tax.error && isMissingSchema(tax.error)) {
+    tax = (await sb
+      .from("quickbooks_tax_codes")
+      .select(`client_id, ${TAX_COLS_BASIC}`)
+      .in("client_id", clientIds)) as typeof tax;
+  }
   for (const r of [acc, ven, cus, tax]) {
     if (r.error) {
       if (!isMissingSchema(r.error)) {
@@ -264,7 +308,7 @@ export async function readCachedQuickbooksListsByClient(
     l.customers.push(toCachedNamed(r)),
   );
   groupInto(tax.data as Array<Record<string, unknown>> | null, (l, r) =>
-    l.taxCodes.push(toCachedNamed(r)),
+    l.taxCodes.push(toCachedTaxCode(r)),
   );
   if (!items.error) {
     groupInto(items.data as Array<Record<string, unknown>> | null, (l, r) => {
@@ -287,6 +331,8 @@ export async function readCachedQuickbooksListsForFirm(
   clientId?: QuickbooksClientScope,
 ): Promise<QuickbooksLists | null> {
   const sb = getServiceRoleSupabase();
+  // Reassigned to the basic set if 1050 turns out not to be applied.
+  let firmTaxCols = TAX_COLS_RICH;
   const fetch = (scopeOn: boolean) => {
     const scope = <Q>(q: Q): Q => (scopeOn ? withClientScope(q, clientId) : q);
     return Promise.all([
@@ -309,10 +355,7 @@ export async function readCachedQuickbooksListsForFirm(
           .eq("firm_id", firmId),
       ),
       scope(
-        sb
-          .from("quickbooks_tax_codes")
-          .select("qbo_id, name, active")
-          .eq("firm_id", firmId),
+        sb.from("quickbooks_tax_codes").select(firmTaxCols).eq("firm_id", firmId),
       ),
     ]);
   };
@@ -321,6 +364,12 @@ export async function readCachedQuickbooksListsForFirm(
   // For a specific client the missing-schema error stays → return null (no cache
   // for that client yet), never the firm's rows.
   let [acc, ven, cus, tax] = await fetch(true);
+  // 1050 not applied yet: retry the same scope without the direction columns
+  // before anything else, so a missing column never costs the whole cache.
+  if (tax.error && isMissingSchema(tax.error)) {
+    firmTaxCols = TAX_COLS_BASIC;
+    [acc, ven, cus, tax] = await fetch(true);
+  }
   if (
     isFirmLevelScope(clientId) &&
     [acc, ven, cus, tax].some((r) => r.error && isMissingSchema(r.error))
@@ -338,11 +387,14 @@ export async function readCachedQuickbooksListsForFirm(
       return null;
     }
   }
+  // Cast because the tax select string is chosen at runtime (rich vs basic), which
+  // drops PostgREST's inferred row types across the whole batch.
+  const rows = (d: unknown) => (d as Array<Record<string, unknown>> | null) ?? [];
   return {
-    accounts: (acc.data ?? []).map(toCachedAccount),
-    vendors: (ven.data ?? []).map(toCachedNamed),
-    customers: (cus.data ?? []).map(toCachedNamed),
-    taxCodes: (tax.data ?? []).map(toCachedNamed),
+    accounts: rows(acc.data).map(toCachedAccount),
+    vendors: rows(ven.data).map(toCachedNamed),
+    customers: rows(cus.data).map(toCachedNamed),
+    taxCodes: rows(tax.data).map(toCachedTaxCode),
     items: await readCachedItems(sb, firmId, clientId),
   };
 }
@@ -400,6 +452,10 @@ type CacheRow = {
   accountType?: string | null;
   itemType?: string | null;
   incomeAccountId?: string | null;
+  // Tax codes only (1050). Undefined = QuickBooks did not tell us, which every
+  // reader treats as "no opinion, keep the code".
+  canApplyToRevenue?: boolean;
+  canApplyToExpenses?: boolean;
 };
 
 // Replace a firm's cached rows for one entity: upsert the fresh rows (stamped
@@ -428,7 +484,13 @@ export async function replaceCachedEntity(
   // client's slice. `false` = the pre-0710 legacy path: conflict on (firm_id,
   // qbo_id), omit client_id, prune the whole firm. Returns schemaMiss (instead of
   // throwing) when the client-inclusive pass fails on a missing client_id column.
-  const run = async (useClientId: boolean): Promise<{ schemaMiss: boolean }> => {
+  // `withTaxFlags` = include 1050's two direction columns. Retried without them
+  // when the migration has not been applied yet, so a merge that lands before the
+  // SQL is run degrades to today's behaviour instead of failing the whole sync.
+  const run = async (
+    useClientId: boolean,
+    withTaxFlags = true,
+  ): Promise<{ schemaMiss: boolean; taxFlagMiss: boolean }> => {
     const onConflict = useClientId
       ? "firm_id,client_id,qbo_id"
       : "firm_id,qbo_id";
@@ -445,6 +507,12 @@ export async function replaceCachedEntity(
             income_account_qbo_id: r.incomeAccountId ?? null,
           }
         : {}),
+      ...(entity === "taxCodes" && withTaxFlags
+        ? {
+            can_apply_to_revenue: r.canApplyToRevenue ?? null,
+            can_apply_to_expenses: r.canApplyToExpenses ?? null,
+          }
+        : {}),
       synced_at: syncedAt,
     }));
     // Upsert in chunks so a very large company can't exceed request limits.
@@ -452,7 +520,12 @@ export async function replaceCachedEntity(
       const chunk = records.slice(i, i + 500);
       const { error } = await sb.from(table).upsert(chunk, { onConflict });
       if (error) {
-        if (useClientId && isMissingSchema(error)) return { schemaMiss: true };
+        if (withTaxFlags && entity === "taxCodes" && isMissingSchema(error)) {
+          return { schemaMiss: false, taxFlagMiss: true };
+        }
+        if (useClientId && isMissingSchema(error)) {
+          return { schemaMiss: true, taxFlagMiss: false };
+        }
         throw error;
       }
     }
@@ -465,18 +538,22 @@ export async function replaceCachedEntity(
     if (useClientId) del = withClientScope(del, clientValue);
     const { error: delErr } = await del;
     if (delErr) {
-      if (useClientId && isMissingSchema(delErr)) return { schemaMiss: true };
+      if (useClientId && isMissingSchema(delErr)) {
+        return { schemaMiss: true, taxFlagMiss: false };
+      }
       throw delErr;
     }
-    return { schemaMiss: false };
+    return { schemaMiss: false, taxFlagMiss: false };
   };
 
   // PRIMARY (post-0710): always the client-inclusive pass. FALLBACK (pre-0710, the
   // client_id column is absent): replace firm-only — but ONLY for a firm-level
   // scope. For a specific client, skip the fallback (it would upsert/prune the
   // firm's rows); the primary already no-op'd on the missing column.
-  const primary = await run(true);
-  if (primary.schemaMiss && isFirmLevelScope(clientId)) await run(false);
+  let primary = await run(true);
+  // 1050 not applied yet: same pass, without the two direction columns.
+  if (primary.taxFlagMiss) primary = await run(true, false);
+  if (primary.schemaMiss && isFirmLevelScope(clientId)) await run(false, false);
 }
 
 // Append/refresh ONE cached row WITHOUT the destructive prune replaceCachedEntity

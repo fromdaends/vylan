@@ -298,3 +298,65 @@ describe("listsAreSynced", () => {
     expect(listsAreSynced(full)).toBe(true);
   });
 });
+
+describe("toTaxCode — direction from QuickBooks' two rate lists", () => {
+  const rate = { TaxRateDetail: [{ TaxRateRef: { value: "1" } }] };
+  const empty = { TaxRateDetail: [] };
+
+  it("reads a sales-only code", () => {
+    const t = toTaxCode({
+      Id: "3",
+      Name: "GST on Income",
+      SalesTaxRateList: rate,
+      PurchaseTaxRateList: empty,
+    });
+    expect(t.canApplyToRevenue).toBe(true);
+    expect(t.canApplyToExpenses).toBe(false);
+  });
+
+  it("reads a purchases-only code", () => {
+    const t = toTaxCode({
+      Id: "4",
+      Name: "GST/RST on Purchases",
+      SalesTaxRateList: empty,
+      PurchaseTaxRateList: rate,
+    });
+    expect(t.canApplyToRevenue).toBe(false);
+    expect(t.canApplyToExpenses).toBe(true);
+  });
+
+  it("reads a code usable both ways", () => {
+    const t = toTaxCode({
+      Id: "5",
+      Name: "Exempt",
+      SalesTaxRateList: rate,
+      PurchaseTaxRateList: rate,
+    });
+    expect(t.canApplyToRevenue).toBe(true);
+    expect(t.canApplyToExpenses).toBe(true);
+  });
+
+  it("leaves both flags ABSENT when QuickBooks sent no lists", () => {
+    // Absent means "no opinion" and the matcher keeps the code. Guessing false
+    // would EXCLUDE it and silently empty the client's tax picker.
+    const t = toTaxCode({ Id: "6", Name: "GST" });
+    expect("canApplyToRevenue" in t).toBe(false);
+    expect("canApplyToExpenses" in t).toBe(false);
+  });
+
+  it("leaves a flag absent on an unfamiliar shape rather than guessing false", () => {
+    const t = toTaxCode({
+      Id: "7",
+      Name: "Odd",
+      SalesTaxRateList: "not-an-object",
+      PurchaseTaxRateList: { SomethingElse: 1 },
+    });
+    expect("canApplyToRevenue" in t).toBe(false);
+    expect("canApplyToExpenses" in t).toBe(false);
+  });
+
+  it("still reads the basics", () => {
+    const t = toTaxCode({ Id: "8", Name: "  HST  ", Active: false });
+    expect(t).toMatchObject({ id: "8", name: "HST", active: false });
+  });
+});
