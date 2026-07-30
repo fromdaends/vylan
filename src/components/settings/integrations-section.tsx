@@ -1,19 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { CheckCircle2, AlertTriangle, ChevronRight } from "lucide-react";
-import { Link } from "@/i18n/navigation";
+import { CheckCircle2, AlertTriangle } from "lucide-react";
 import { QuickbooksLists } from "@/components/settings/quickbooks-lists";
-import { QuickbooksLogo } from "@/components/quickbooks/quickbooks-logo";
-import { XeroLogo } from "@/components/integrations/xero-logo";
-import { SageLogo } from "@/components/integrations/sage-logo";
 
-// "Integrations" settings section. QuickBooks now connects PER CLIENT (from each
-// client's own page), so this section is NO LONGER a connect entry point — it just
-// explains where to connect and, if a legacy firm-wide connection still exists,
-// lets an owner see + disconnect it. Visible to any firm member; disconnect is
-// owner-only.
+// "Integrations" settings section — THE integrations hub now that the standalone
+// /integrations tab has left the sidebar. It renders the connection cards
+// (QuickBooks / Xero / Sage) passed in as `cardsSlot`, because the badges need
+// server-side connection state and this is a client component.
+//
+// QuickBooks connects PER CLIENT (from each client's own page), so the cards
+// open each tool's page rather than connecting here. If a legacy firm-wide
+// QuickBooks connection still exists, the block below lets an owner see and
+// disconnect it. Visible to any firm member; disconnect is owner-only.
 export type QuickbooksStatus = {
   // Whether the Intuit app keys are set at the platform level.
   configured: boolean;
@@ -32,9 +32,13 @@ export type QuickbooksStatus = {
 export function IntegrationsSection({
   quickbooks,
   isOwner,
+  cardsSlot,
 }: {
-  quickbooks: QuickbooksStatus;
+  // Null when the QuickBooks status couldn't be resolved — the hub cards still
+  // render; only the legacy firm-wide QuickBooks block below is skipped.
+  quickbooks: QuickbooksStatus | null;
   isOwner: boolean;
+  cardsSlot: ReactNode;
 }) {
   const t = useTranslations("Settings");
   const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
@@ -43,13 +47,13 @@ export function IntegrationsSection({
 
   // Surface a message for a callback that came back unhappy (edge-case fallbacks).
   const callbackError =
-    quickbooks.callbackStatus === "error"
+    quickbooks?.callbackStatus === "error"
       ? t("qbo_connect_error")
-      : quickbooks.callbackStatus === "denied"
+      : quickbooks?.callbackStatus === "denied"
         ? t("qbo_connect_denied")
-        : quickbooks.callbackStatus === "setup"
+        : quickbooks?.callbackStatus === "setup"
           ? t("qbo_connect_setup")
-          : quickbooks.callbackStatus === "enc"
+          : quickbooks?.callbackStatus === "enc"
             ? t("qbo_encryption_required")
             : null;
 
@@ -122,25 +126,11 @@ export function IntegrationsSection({
         {t("integrations_hub_intro")}
       </p>
 
-      {/* The real entry point: the Integrations hub (QuickBooks, Xero, Sage).
-          Connecting happens there / per client — this Settings tab just points to
-          it, so it's no longer a QuickBooks-only dead end. */}
-      <Link
-        href="/integrations"
-        className="group mt-4 flex max-w-xl items-center justify-between gap-4 rounded-lg border border-border/60 bg-card/40 px-4 py-3 transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5">
-            <QuickbooksLogo className="h-5 w-5" />
-            <XeroLogo className="h-5 w-5" />
-            <SageLogo className="h-5 w-5" />
-          </span>
-          <span className="text-sm font-medium">
-            {t("integrations_open_cta")}
-          </span>
-        </div>
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-      </Link>
+      {/* The hub itself: the QuickBooks / Xero / Sage cards, rendered on the
+          server (see IntegrationsCards) so their badges show live connection
+          state. This used to be a link out to a standalone /integrations page;
+          that page is gone from the sidebar and now redirects back here. */}
+      {cardsSlot}
 
       {callbackError && (
         <div
@@ -154,7 +144,7 @@ export function IntegrationsSection({
       {/* Legacy firm-wide QuickBooks connection (client_id NULL). New connections
           are per client, so this only appears when an old firm-level link still
           exists — it lets an owner see + disconnect it. */}
-      {quickbooks.configured && quickbooks.connected && (
+      {quickbooks?.configured && quickbooks.connected && (
         <>
           <div
             className={

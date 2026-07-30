@@ -138,8 +138,6 @@ export default async function AppLayout({
         engagementsToggle: t("nav_engagements_toggle"),
         templates: t("nav_templates"),
         bookkeeping: t("nav_bookkeeping"),
-        integrations: t("nav_integrations"),
-        integrationsToggle: t("nav_integrations_toggle"),
         vylanHub: t("nav_vylan"),
         engagementViews: {
           active: tEng("view_active_label"),
