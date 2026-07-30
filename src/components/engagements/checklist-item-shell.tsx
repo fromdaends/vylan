@@ -9,7 +9,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { openCommentComposer } from "@/components/engagements/comment-thread";
+import { useCommentFromMenu } from "@/components/engagements/use-comment-from-menu";
 
 // Collapsible wrapper for one checklist item. The item's header (label, status,
 // approve/reject controls) is server-rendered and passed as `summary`; the body
@@ -49,6 +49,12 @@ export function ChecklistItemShell({
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // Opens the item's comment card after this menu closes. This path happened to
+  // work already (right-clicking a plain row focuses nothing, so Radix's focus
+  // restore had no button to jump back to) — but right-clicking straight after
+  // clicking any button would have restored focus there and killed the card,
+  // the same way the engagement's "..." menu did. See useCommentFromMenu.
+  const comment = useCommentFromMenu();
 
   const header = (
     <div className="flex items-start gap-2 p-3 sm:p-3.5">
@@ -77,8 +83,11 @@ export function ChecklistItemShell({
       {commentKey && addCommentLabel ? (
         <ContextMenu>
           <ContextMenuTrigger asChild>{header}</ContextMenuTrigger>
-          <ContextMenuContent className="w-48 !animate-none">
-            <ContextMenuItem onSelect={() => openCommentComposer(commentKey)}>
+          <ContextMenuContent
+            className="w-48 !animate-none"
+            onCloseAutoFocus={comment.onCloseAutoFocus}
+          >
+            <ContextMenuItem onSelect={() => comment.request(commentKey)}>
               <MessageSquare />
               {addCommentLabel}
             </ContextMenuItem>
