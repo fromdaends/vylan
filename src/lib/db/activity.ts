@@ -60,7 +60,11 @@ export async function getLatestHandoffNote(engagementId: string): Promise<{
     .from("activity_log")
     .select("metadata, created_at, actor_id")
     .eq("engagement_id", engagementId)
-    .eq("action", "engagement_reassigned")
+    // Either event can carry the note: the reassignment itself (note typed
+    // before confirming, the old flow) or a handoff note added afterwards from
+    // the toast. Most recent wins, which is what makes a LATER bare
+    // reassignment correctly clear a stale note instead of resurrecting it.
+    .in("action", ["engagement_reassigned", "engagement_handoff_note"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

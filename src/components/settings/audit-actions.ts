@@ -55,6 +55,10 @@ export const AUDIT_ACTIONS = [
   "invite_resent",
   "engagement_reassigned",
   "engagement_unassigned",
+  // A handoff note written AFTER the reassignment, from the toast. Its own
+  // action rather than editing the reassignment row: an audit log is
+  // append-only, and "Tyler added a handoff note" is a truthful second event.
+  "engagement_handoff_note",
   "client_reassigned",
   "client_privacy_changed",
   "engagement_privacy_changed",
