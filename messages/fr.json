@@ -1181,7 +1181,8 @@
     "action_file_moved": "A déplacé un document vers un autre dossier",
     "action_file_downloaded": "A téléchargé un document",
     "action_file_deleted": "A déplacé un document vers Récemment supprimés",
-    "action_file_restored": "A restauré un document supprimé"
+    "action_file_restored": "A restauré un document supprimé",
+    "action_documents_imported": "A importé des documents dans Vylan"
   },
   "Notifications": {
     "title": "Nouveautés",
@@ -3521,6 +3522,29 @@
     "bulk_delete_help": "{count, plural, one {Il sera déplacé} other {Ils seront déplacés}} vers Récemment supprimés, {count, plural, one {il disparaît} other {ils disparaissent}} immédiatement du portail de votre client, et vous pouvez {count, plural, one {le} other {les}} remettre pendant 30 jours.",
     "bulk_moved": "{count, plural, one {# fichier déplacé} other {# fichiers déplacés}}.",
     "bulk_deleted": "{count, plural, one {# fichier déplacé} other {# fichiers déplacés}} vers Récemment supprimés.",
-    "bulk_partial": "{done} réussis, {failed} en échec."
+    "bulk_partial": "{done} réussis, {failed} en échec.",
+    "import_button": "Importer des fichiers",
+    "import_title": "Importer vos fichiers existants",
+    "import_intro": "Amenez vos documents historiques dans Vylan. Choisissez un dossier sur votre ordinateur, indiquez à quel client chaque sous-dossier appartient, et Vylan fait le reste.",
+    "import_intro_short": "Vérifiez ce qui a été trouvé, puis indiquez à qui appartient chaque dossier.",
+    "import_pick": "Choisir un dossier",
+    "import_pick_hint": "Choisissez le dossier qui contient un sous-dossier par client.",
+    "import_types": "Les PDF et les images (JPG, PNG, HEIC) peuvent être importés. Les fichiers Word, Excel et autres sont ignorés — ils seront listés pour que vous sachiez ce qui a été laissé de côté.",
+    "import_found": "{files, plural, one {# fichier} other {# fichiers}} dans {folders, plural, one {# dossier} other {# dossiers}}.",
+    "import_skipping": "{count, plural, one {# fichier ignoré} other {# fichiers ignorés}}",
+    "import_loose_files": "Fichiers hors dossier",
+    "import_group_meta": "{count, plural, one {# fichier} other {# fichiers}} · {size}",
+    "import_choose_client": "Choisir un client…",
+    "import_skip_folder": "Ne pas importer ce dossier",
+    "import_unmapped": "{count, plural, one {# dossier a encore besoin d'un client} other {# dossiers ont encore besoin d'un client}} avant de commencer.",
+    "import_start": "Importer {count, plural, one {# fichier} other {# fichiers}}",
+    "import_back": "Retour",
+    "import_running": "Importation… {done} sur {total}",
+    "import_keep_open": "Gardez cet onglet ouvert jusqu'à la fin — les fichiers sont lus depuis votre ordinateur. Si l'importation s'arrête, redéposez le même dossier et Vylan reprendra où il s'était arrêté.",
+    "import_done": "{count, plural, one {# fichier importé} other {# fichiers importés}}.",
+    "import_done_skipped": "{count, plural, one {# était déjà dans Vylan} other {# étaient déjà dans Vylan}} et a été ignoré.",
+    "import_done_failed": "{count, plural, one {# fichier n'a pas pu être importé} other {# fichiers n'ont pas pu être importés}} :",
+    "import_next_step": "Les fichiers importés se trouvent sous Non classé. Sélectionnez-en plusieurs et utilisez Déplacer pour les classer par année et par dossier.",
+    "import_close": "Terminé"
   }
 }

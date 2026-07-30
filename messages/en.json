@@ -1181,7 +1181,8 @@
     "action_file_moved": "Moved a document to a different folder",
     "action_file_downloaded": "Downloaded a document",
     "action_file_deleted": "Moved a document to Recently deleted",
-    "action_file_restored": "Restored a deleted document"
+    "action_file_restored": "Restored a deleted document",
+    "action_documents_imported": "Imported documents into Vylan"
   },
   "Notifications": {
     "title": "What's new",
@@ -3521,6 +3522,29 @@
     "bulk_delete_help": "{count, plural, one {It moves} other {They move}} to Recently deleted, disappear from your client's portal straight away, and you can put {count, plural, one {it} other {them}} back for 30 days.",
     "bulk_moved": "{count, plural, one {# file moved} other {# files moved}}.",
     "bulk_deleted": "{count, plural, one {# file moved} other {# files moved}} to Recently deleted.",
-    "bulk_partial": "{done} done, {failed} couldn't be."
+    "bulk_partial": "{done} done, {failed} couldn't be.",
+    "import_button": "Import files",
+    "import_title": "Import your existing files",
+    "import_intro": "Bring historical documents into Vylan. Pick a folder from your computer, tell Vylan which client each sub-folder belongs to, and it does the rest.",
+    "import_intro_short": "Check what was found, then say who each folder belongs to.",
+    "import_pick": "Choose a folder",
+    "import_pick_hint": "Pick the folder that holds one sub-folder per client.",
+    "import_types": "PDFs and images (JPG, PNG, HEIC) can be imported. Word, Excel and other file types are skipped — they'll be listed so you know what was left out.",
+    "import_found": "{files, plural, one {# file} other {# files}} in {folders, plural, one {# folder} other {# folders}}.",
+    "import_skipping": "{count, plural, one {# file skipped} other {# files skipped}}",
+    "import_loose_files": "Files not in a folder",
+    "import_group_meta": "{count, plural, one {# file} other {# files}} · {size}",
+    "import_choose_client": "Choose a client…",
+    "import_skip_folder": "Don't import this folder",
+    "import_unmapped": "{count, plural, one {# folder still needs a client} other {# folders still need a client}} before you can start.",
+    "import_start": "Import {count, plural, one {# file} other {# files}}",
+    "import_back": "Back",
+    "import_running": "Importing… {done} of {total}",
+    "import_keep_open": "Keep this tab open until it finishes — the files are being read from your computer. If it stops, drop the same folder again and Vylan will pick up where it left off.",
+    "import_done": "{count, plural, one {# file imported} other {# files imported}}.",
+    "import_done_skipped": "{count, plural, one {# was already in Vylan} other {# were already in Vylan}} and was skipped.",
+    "import_done_failed": "{count, plural, one {# file couldn't be imported} other {# files couldn't be imported}}:",
+    "import_next_step": "Imported files sit under Unsorted. Select several and use Move to file them by year and folder.",
+    "import_close": "Done"
   }
 }

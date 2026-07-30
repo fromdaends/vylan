@@ -85,6 +85,7 @@ export const AUDIT_ACTIONS = [
   "file_downloaded",
   "file_deleted",
   "file_restored",
+  "documents_imported",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
