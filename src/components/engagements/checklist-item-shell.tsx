@@ -21,19 +21,19 @@ import { openCommentComposer } from "@/components/engagements/comment-thread";
 // long checklist reads as a calm list of headers; items that need the
 // accountant's eye start open).
 //
-// Commenting (founder: right-click, "pure"): when `commentKey` is set,
-// right-clicking the item's HEADER row offers "Add a comment", which asks the
-// item's CommentThread (rendered via `commentsSlot`, under the summary — so
-// comments stay visible even while the item is collapsed) to open its
-// composer. The header only — the file rows inside the body carry their own
-// context menus, and nesting two triggers on the same surface would fight.
+// Commenting (founder: Notion-style): when `commentKey` is set, right-clicking
+// the item's HEADER row offers "Add a comment", which opens that item's comment
+// card. The card itself hangs off the bubble the caller puts INSIDE `summary`
+// (so it sits in the row's margin and stays put whether the item is open or
+// collapsed) — the shell only owns the right-click entry. The header only: the
+// file rows inside the body carry their own context menus, and nesting two
+// triggers on the same surface would fight.
 export function ChecklistItemShell({
   defaultOpen,
   collapsible,
   summary,
   commentKey,
   addCommentLabel,
-  commentsSlot,
   children,
 }: {
   defaultOpen: boolean;
@@ -46,9 +46,6 @@ export function ChecklistItemShell({
   commentKey?: string;
   // Server-translated label for that menu item (the shell owns no namespace).
   addCommentLabel?: string;
-  // The item's CommentThread, rendered under the summary regardless of the
-  // collapsed state.
-  commentsSlot?: ReactNode;
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -89,14 +86,6 @@ export function ChecklistItemShell({
         </ContextMenu>
       ) : (
         header
-      )}
-      {/* empty:hidden — the thread renders NOTHING when there are no comments
-          and no open composer, and this wrapper's padding must vanish with it
-          (otherwise every item would carry a phantom gap under its header). */}
-      {commentsSlot && (
-        <div className="empty:hidden px-3 pb-3 sm:px-3.5 pl-9 sm:pl-10">
-          {commentsSlot}
-        </div>
       )}
       {collapsible && open && children && (
         <div className={cn("space-y-2 px-3 pb-3 sm:px-3.5", "pl-9 sm:pl-10")}>

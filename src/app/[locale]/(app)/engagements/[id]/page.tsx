@@ -975,12 +975,27 @@ export default async function EngagementDetailPage({
               </form>
             </>
           )}
-          {/* No Activity affordance here, by design. History belongs in the
-              owner's audit log at /settings/audit, filtered by client or by
-              person — not as a door on a page every teammate opens. Who is
+          {/* No Activity affordance here, by design (#1044). History belongs
+              in the owner's audit log at /settings/audit, filtered by client or
+              by person — not as a door on a page every teammate opens. Who is
               LOOKING at this job is a live question, answered by presence at
               the top of the page; who TOUCHED it months ago is an audit
               question and belongs where audit questions are answered. */}
+          {/* Engagement-level comments (team mode): the bubble sits with the
+              header's other controls and stays invisible until this engagement
+              has a comment — or until the worklist right-click / the "..."
+              menu asks for the composer. */}
+          {teamEnabled && (
+            <CommentThread
+              engagementId={engagement.id}
+              target={{ kind: "engagement" }}
+              initialComments={engagementComments.engagement}
+              members={activeMembers}
+              currentUserId={user?.id ?? null}
+              locale={locale}
+              quotedText={engagement.title}
+            />
+          )}
           {/* The "..." menu holds reminder and invoice settings, copy links,
               downloads, cancellation, and deletion so only primary buttons +
               the payment pill stay in the row. Delete keeps its confirmation +
@@ -1059,20 +1074,6 @@ export default async function EngagementDetailPage({
           )}
         </div>
       </header>
-
-      {/* Engagement-level comments (team mode): invisible until someone
-          right-clicks the engagement (worklist) or uses the header's "..." —
-          then a pure thread sits quietly under the header. */}
-      {teamEnabled && (
-        <CommentThread
-          engagementId={engagement.id}
-          target={{ kind: "engagement" }}
-          initialComments={engagementComments.engagement}
-          members={activeMembers}
-          currentUserId={user?.id ?? null}
-          locale={locale}
-        />
-      )}
 
       {isDraft &&
         (items.length === 0 ? (
@@ -1304,6 +1305,20 @@ async function ItemRow({
             )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          {/* The item's comment bubble, in the row's margin (Notion). Renders
+              nothing until this item actually has a comment — or until the
+              right-click entry asks for the composer. */}
+          {commentsEnabled && (
+            <CommentThread
+              engagementId={engagementId}
+              target={{ kind: "item", itemId: item.id }}
+              initialComments={commentsByItem.get(item.id) ?? []}
+              members={mentionMembers}
+              currentUserId={currentUserId}
+              locale={locale}
+              quotedText={label}
+            />
+          )}
           {missingPageBlock ? (
             <Badge variant="outline" className="border-warning/40 text-warning">
               {t("set_incomplete_badge")}
@@ -1375,18 +1390,6 @@ async function ItemRow({
       summary={summary}
       commentKey={commentsEnabled ? commentKeyForItem(item.id) : undefined}
       addCommentLabel={commentsEnabled ? t("add_comment") : undefined}
-      commentsSlot={
-        commentsEnabled ? (
-          <CommentThread
-            engagementId={engagementId}
-            target={{ kind: "item", itemId: item.id }}
-            initialComments={commentsByItem.get(item.id) ?? []}
-            members={mentionMembers}
-            currentUserId={currentUserId}
-            locale={locale}
-          />
-        ) : undefined
-      }
     >
       {/* What the CLIENT was told, in the CLIENT's language — which is often
           not the accountant's. When a document was auto-rejected, the row below
@@ -1420,6 +1423,19 @@ async function ItemRow({
               clientName={clientName}
               rejectionCount={item.ai_rejection_count ?? 0}
               commentable={commentsEnabled}
+              commentAnchor={
+                commentsEnabled ? (
+                  <CommentThread
+                    engagementId={engagementId}
+                    target={{ kind: "file", fileId: f.id }}
+                    initialComments={commentsByFile.get(f.id) ?? []}
+                    members={mentionMembers}
+                    currentUserId={currentUserId}
+                    locale={locale}
+                    quotedText={f.display_name ?? f.original_filename}
+                  />
+                ) : undefined
+              }
               // AI off for this engagement → no AI chrome on the row.
               hideAi={!aiEnabled}
               // Per-document reject (the founder's model: approve the line as a
@@ -1457,9 +1473,10 @@ async function ItemRow({
                 // The journal half only appears for a firm with a bookkeeping
                 // connection (there are no accounts to map otherwise).
                 const journal = payoutJournals.get(f.id);
-                // Nothing to show (no draft, no payout, comments off) → no
-                // footer, exactly as before.
-                if (!showDraft && !payoutCard && !commentsEnabled) {
+                // Nothing to show (no draft, no payout) → no footer. Comments
+                // no longer live down here: they hang off the bubble in the
+                // row's own controls.
+                if (!showDraft && !payoutCard) {
                   return undefined;
                 }
                 return (
@@ -1534,16 +1551,6 @@ async function ItemRow({
                         receiptAttachedAt={d.receiptAttachedAt}
                         matchedQboType={d.matchedQboType}
                         provider={draftProvider}
-                      />
-                    )}
-                    {commentsEnabled && (
-                      <CommentThread
-                        engagementId={engagementId}
-                        target={{ kind: "file", fileId: f.id }}
-                        initialComments={commentsByFile.get(f.id) ?? []}
-                        members={mentionMembers}
-                        currentUserId={currentUserId}
-                        locale={locale}
                       />
                     )}
                   </>

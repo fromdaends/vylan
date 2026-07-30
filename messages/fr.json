@@ -86,6 +86,10 @@
     }
   },
   "Team": {
+    "comment_placeholder_short": "Ajouter un commentaire…",
+    "comment_count_label": "{count, plural, =1 {1 commentaire} other {# commentaires}}",
+    "mention_section_people": "Personnes",
+    "mention_insert": "Mentionner un collègue",
     "invite_email_placeholder": "collegue@exemple.com",
     "title": "Équipe",
     "subtitle": "Invitez des collègues et gérez qui a accès à votre cabinet.",
