@@ -18,7 +18,7 @@ import {
 } from "@/lib/quickbooks/draft-resolve";
 import { attachReceiptToPostedDraft } from "@/lib/quickbooks/post";
 import { logUserActivity } from "@/lib/db/activity";
-import { isClientXeroConnected } from "@/lib/db/xero";
+import { resolveRetractionProvider } from "@/lib/bookkeeping/posted-provider";
 import { attachXeroReceipt } from "@/lib/xero/post";
 import { revalidateAllLocales } from "@/lib/revalidate";
 
@@ -57,12 +57,19 @@ export async function POST(
     );
   }
 
-  // Xero-connected client → attach the receipt to the posted Xero transaction,
-  // matching the SAME response contract. QuickBooks drafts continue below.
+  // Posted to Xero → attach the receipt to the posted Xero transaction, matching
+  // the SAME response contract. QuickBooks drafts continue below.
+  //
+  // Dispatch follows WHERE IT WAS POSTED (1040), not the client's current
+  // connection — the attachment has to go to the system holding the transaction.
   if (
     draft.clientId &&
     draft.firmId &&
-    (await isClientXeroConnected(draft.firmId, draft.clientId))
+    (await resolveRetractionProvider({
+      postedProvider: draft.postedProvider,
+      firmId: draft.firmId,
+      clientId: draft.clientId,
+    })) === "xero"
   ) {
     const r = await attachXeroReceipt(fileId);
     switch (r.kind) {

@@ -21,7 +21,7 @@ import {
   effectiveIncomeMode,
 } from "@/lib/quickbooks/draft-resolve";
 import { logUserActivity } from "@/lib/db/activity";
-import { isClientXeroConnected } from "@/lib/db/xero";
+import { resolveRetractionProvider } from "@/lib/bookkeeping/posted-provider";
 import { undoXeroPost } from "@/lib/xero/post";
 import { revalidateAllLocales } from "@/lib/revalidate";
 
@@ -57,14 +57,22 @@ export async function POST(
     );
   }
 
-  // Xero-connected client → undo in Xero (delete the BankTransaction / void the
-  // ACCPAY invoice, or just unlink a MATCHED transaction that was already in the
-  // client's books), then fall through the SAME response contract the client
-  // expects. QuickBooks drafts continue below unchanged.
+  // Posted to Xero → undo in Xero (delete the BankTransaction / void the ACCPAY
+  // invoice, or just unlink a MATCHED transaction that was already in the client's
+  // books), then fall through the SAME response contract the client expects.
+  // QuickBooks drafts continue below unchanged.
+  //
+  // Dispatch follows WHERE IT WAS POSTED (1040), not the client's current
+  // connection: the transaction stays in the system that created it no matter what
+  // the client connects afterwards. See lib/bookkeeping/posted-provider.ts.
   if (
     draft.clientId &&
     draft.firmId &&
-    (await isClientXeroConnected(draft.firmId, draft.clientId))
+    (await resolveRetractionProvider({
+      postedProvider: draft.postedProvider,
+      firmId: draft.firmId,
+      clientId: draft.clientId,
+    })) === "xero"
   ) {
     const r = await undoXeroPost(fileId);
     switch (r.kind) {

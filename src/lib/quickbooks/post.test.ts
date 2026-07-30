@@ -312,6 +312,9 @@ describe("postApprovedDraft — smart match-or-create", () => {
       matchedQboType: "purchase",
       // Stamped with the live realm so the exclusion set stays company-scoped.
       postedRealmId: "r",
+      // 1040: which SYSTEM holds it, so undo/attach can't be misrouted to Xero if
+      // this client later connects Xero.
+      postedProvider: "quickbooks",
     });
     // The receipt lands on the MATCHED transaction (its entity, not the draft's).
     expect(mockUpload).toHaveBeenCalledWith(READ_CTX, "purchase", "900", {

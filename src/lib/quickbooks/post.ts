@@ -555,6 +555,7 @@ export async function postApprovedDraft(
     postedSyncToken: result.syncToken,
     posterId,
     postedRealmId: ctx.realmId,
+    postedProvider: "quickbooks", // 1040 — see posted-provider.ts
   });
   if (recorded === "conflict") return { kind: "conflict", ...base };
   if (recorded !== "ok") {
@@ -623,6 +624,7 @@ async function recordMatchAndAttach(input: {
     posterId: input.posterId,
     matchedQboType: attachTo.entity,
     postedRealmId: input.ctx.realmId,
+    postedProvider: "quickbooks", // 1040 — a MATCHED row still lives in QuickBooks
   });
   if (recorded === "conflict") return { kind: "conflict", ...base };
   if (recorded !== "ok") {
