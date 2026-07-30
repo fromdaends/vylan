@@ -47,6 +47,9 @@ type Labels = {
   // Localized name of the "Document filing" integrations sub-item (the other
   // sub-items are brand names and need no translation).
   integrationsFiling: string;
+  // Rail-sized version of the same destination ("Filing" / "Classement") — the
+  // full name is two words in English and wraps badly in a 72px slot.
+  filingShort: string;
   settings: string;
   firm: string;
   logout: string;
@@ -137,7 +140,9 @@ export function AppShell({
     { href: "/performance", label: "Performance", icon: Gauge },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
-    { href: "/integrations/filing", label: labels.integrationsFiling, icon: FolderUp },
+    // Short label here on purpose: "Document filing" wraps to two cramped lines
+    // in a rail slot. The page itself still uses the full name.
+    { href: "/integrations/filing", label: labels.filingShort, icon: FolderUp },
     { href: "/engagements", label: labels.engagements, icon: Folder },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
     // conditional tab: the design didn't include one, but the feature exists and
@@ -187,7 +192,7 @@ export function AppShell({
           // One fixed offset now — the rail never changes width, so the
           // left-margin transition the collapse toggle needed is gone. The right
           // margin still animates for the expandable messaging sidebar.
-          "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin-right] duration-300 ease-out sm:ml-[76px] sm:mr-[var(--assistant-shell-offset)]",
+          "flex-1 min-w-0 flex flex-col min-h-screen transition-[margin-right] duration-300 ease-out sm:ml-[var(--rail-width)] sm:mr-[var(--assistant-shell-offset)]",
         )}
       >
         {topBar && (

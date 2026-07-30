@@ -44,7 +44,9 @@ import { isNavItemActive } from "@/lib/navigation/active-nav";
 //
 // Mobile is untouched: this is hidden below `sm` and the bottom tab bar remains
 // the phone navigation.
-const RAIL_WIDTH_PX = 76;
+//
+// Width lives in --rail-width (globals.css) because the main content offsets by
+// the same value; keeping it in one place stops the two drifting apart.
 
 // Near-black, slightly cooler than pure #000 so it separates from a black page
 // background in dark mode.
@@ -90,8 +92,8 @@ export function IconRail({
   return (
     <aside
       aria-label={navLabel}
-      style={{ width: RAIL_WIDTH_PX, background: RAIL_BG }}
-      className="hidden sm:flex sm:fixed sm:inset-y-0 sm:left-0 sm:z-30 sm:flex-col sm:items-center sm:px-2 sm:pb-3.5 sm:pt-3.5"
+      style={{ background: RAIL_BG }}
+      className="hidden sm:flex sm:fixed sm:inset-y-0 sm:left-0 sm:z-30 sm:w-[var(--rail-width)] sm:flex-col sm:items-center sm:px-2.5 sm:pb-4 sm:pt-4"
     >
       {/* Brand. Given deliberate breathing room below (founder): the gap that
           follows is what isolates the logo from the action buttons, so the mark
@@ -138,7 +140,7 @@ export function IconRail({
       <nav
         // Hidden scrollbar: a firm with the Bookkeeping tab shown can overflow a
         // short viewport, and a visible bar inside a 76px rail is all noise.
-        className="mt-4 flex w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mt-5 flex w-full flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item) => {
           const active = isNavItemActive(pathname, item.href);
@@ -149,7 +151,7 @@ export function IconRail({
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex w-[60px] shrink-0 flex-col items-center gap-1 rounded-[9px] px-0.5 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+                "flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
                 active
                   ? "bg-white/[0.14] text-white"
                   : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white",
@@ -158,7 +160,7 @@ export function IconRail({
               <Icon className="size-[22px]" aria-hidden />
               <span
                 className={cn(
-                  "text-center text-[9px] leading-none tracking-[0.01em]",
+                  "text-center text-[10px] leading-none tracking-[0.01em]",
                   active ? "font-semibold" : "font-medium",
                 )}
               >

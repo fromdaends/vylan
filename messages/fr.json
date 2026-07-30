@@ -1458,7 +1458,8 @@
     "metric_drafts": "Brouillons",
     "metric_completed": "Complétés",
     "recent_engagements": "Engagements récents",
-    "nav_integrations_filing": "Classement"
+    "nav_integrations_filing": "Classement",
+    "nav_filing_short": "Classement"
   },
   "TeamChat": {
     "page_title": "Clavardage d'équipe",
