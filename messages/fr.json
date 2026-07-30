@@ -3577,6 +3577,7 @@
     "folder_cycle": "Un dossier ne peut pas être déplacé dans lui-même.",
     "folder_item_count": "{count, plural, =0 {Vide} one {# fichier} other {# fichiers}}",
     "folder_file_into": "Classer dans…",
-    "folder_remove_from": "Retirer du dossier"
+    "folder_remove_from": "Retirer du dossier",
+    "drop_done": "{count, plural, one {# fichier déplacé} other {# fichiers déplacés}} vers {folder}."
   }
 }

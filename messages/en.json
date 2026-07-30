@@ -3577,6 +3577,7 @@
     "folder_cycle": "A folder can't be moved inside itself.",
     "folder_item_count": "{count, plural, =0 {Empty} one {# file} other {# files}}",
     "folder_file_into": "File into…",
-    "folder_remove_from": "Take out of folder"
+    "folder_remove_from": "Take out of folder",
+    "drop_done": "{count, plural, one {# file moved} other {# files moved}} to {folder}."
   }
 }
