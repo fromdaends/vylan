@@ -558,7 +558,15 @@ export async function QuickbooksDraftCard({
       {v.foreignCurrency && v.currency && (
         <p className="mt-2 flex items-center gap-1 px-3 text-[11px] text-warning">
           <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
-          {t("foreign_currency", { currency: v.currency })}
+          {/* Name the books' currency when we know it: telling a US firm their
+              USD receipt "isn't CAD" is noise. Falls back to the CAD-worded key
+              when we haven't recorded one. */}
+          {v.booksCurrency === "CAD"
+            ? t("foreign_currency", { currency: v.currency })
+            : t("foreign_currency_books", {
+                currency: v.currency,
+                books: v.booksCurrency,
+              })}
         </p>
       )}
 

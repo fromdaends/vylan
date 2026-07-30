@@ -1133,3 +1133,34 @@ describe("regressions the eval caught", () => {
     ).toBe("a");
   });
 });
+
+describe("the foreign-currency note names the books' currency", () => {
+  it("says nothing when the document matches the books", () => {
+    const s = buildTransactionSuggestion(
+      extraction({ currency: "USD" }),
+      lists,
+      {},
+      "Xero",
+      "USD",
+    );
+    expect(s.notes.some((n) => n.includes("appear to be in"))).toBe(false);
+    expect(s.booksCurrency).toBe("USD");
+  });
+
+  it("names the books' currency, not CAD, when they differ", () => {
+    const s = buildTransactionSuggestion(
+      extraction({ currency: "CAD" }),
+      lists,
+      {},
+      "Xero",
+      "USD",
+    );
+    expect(s.notes.some((n) => n.includes("in CAD, not USD"))).toBe(true);
+  });
+
+  it("falls back to CAD wording when no books currency is given", () => {
+    const s = buildTransactionSuggestion(extraction({ currency: "USD" }), lists);
+    expect(s.notes.some((n) => n.includes("in USD, not CAD"))).toBe(true);
+    expect(s.booksCurrency).toBeNull();
+  });
+});

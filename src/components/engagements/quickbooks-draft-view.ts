@@ -35,7 +35,13 @@ export type QuickbooksDraftView = {
   taxTotal: number | null;
   date: string | null;
   currency: string | null;
-  foreignCurrency: boolean; // currency is present and not CAD
+  // The document names a currency, and it differs from what the books are kept
+  // in (booksCurrency when known, else the legacy CAD assumption). Drives the
+  // amber note only — since #1016 it no longer implies the draft is unapprovable.
+  foreignCurrency: boolean;
+  // What we compared against, so the note can name it instead of saying "CAD" to
+  // a firm whose books are in dollars of a different colour.
+  booksCurrency: string;
   readiness: number; // 0..1 overall, for the small meter
 };
 
@@ -62,6 +68,9 @@ export function deriveQuickbooksDraftView(
   s: TransactionSuggestion,
 ): QuickbooksDraftView {
   const hasTax = s.taxTotal != null;
+  // What the books are kept in, as far as we know; CAD is the legacy assumption
+  // for a connection made before we recorded it.
+  const booksCurrency = s.booksCurrency?.trim().toUpperCase() || "CAD";
   return {
     direction: s.direction,
     partyKind: s.partyKind,
@@ -89,7 +98,10 @@ export function deriveQuickbooksDraftView(
     taxTotal: s.taxTotal,
     date: s.date,
     currency: s.currency,
-    foreignCurrency: s.currency != null && s.currency !== "CAD",
+    foreignCurrency:
+      s.currency != null &&
+      s.currency.trim().toUpperCase() !== booksCurrency,
+    booksCurrency,
     readiness: s.overallConfidence,
   };
 }

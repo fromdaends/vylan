@@ -167,6 +167,17 @@ export type TransactionSuggestion = {
   // stored suggestions (pre-reference) deserialize cleanly.
   reference?: string | null;
   currency: string | null;
+  // The currency the CONNECTED BOOKS are kept in — but only when we both know it
+  // AND can state a currency on the post. Xero records it on connect and its
+  // posts carry an explicit CurrencyCode, so the Xero path sets this; the
+  // QuickBooks payload has no currency field at all, so that path leaves it null.
+  //
+  // null therefore means "we cannot state a currency", which is exactly the
+  // condition under which a foreign-currency document must not be posted: the
+  // amount would be recorded at face value in whatever currency the books use,
+  // and nothing downstream would catch it. Optional so older stored suggestions
+  // deserialize (and behave as before).
+  booksCurrency?: string | null;
   // Which fields were filled from a REMEMBERED correction rather than fuzzy
   // matching. The card already says so in prose; this is the structured form,
   // and it is what auto-approve keys off — "the system recognised this" is a
@@ -864,6 +875,9 @@ export function buildTransactionSuggestion(
   // every existing caller is unchanged; the Xero path passes "Xero". Purely
   // cosmetic — matching logic, keys, and stored ids are provider-neutral.
   providerLabel: string = "QuickBooks",
+  // The connected books' currency — see TransactionSuggestion.booksCurrency.
+  // Defaults to null so every existing caller keeps today's behaviour.
+  booksCurrency: string | null = null,
 ): TransactionSuggestion {
   const notes: string[] = [];
   const direction = extraction.direction;
@@ -1086,8 +1100,13 @@ export function buildTransactionSuggestion(
       ? round2(extraction.taxes.reduce((sum, t) => sum + t.amount, 0))
       : null;
 
-  if (extraction.currency && extraction.currency !== "CAD") {
-    notes.push(`Amounts appear to be in ${extraction.currency}, not CAD.`);
+  // What the books are kept in, as far as we can tell. Falls back to CAD only
+  // because that is what every client was until Vylan went Canada-wide — an
+  // assumption, not a fact, which is why it is written down here rather than
+  // scattered through the callers.
+  const books = booksCurrency?.trim().toUpperCase() || "CAD";
+  if (extraction.currency && extraction.currency !== books) {
+    notes.push(`Amounts appear to be in ${extraction.currency}, not ${books}.`);
   }
   if (extraction.total == null) {
     notes.push("No total amount could be read.");
@@ -1122,6 +1141,7 @@ export function buildTransactionSuggestion(
     dueDate: extraction.due_date ?? null,
     reference: extraction.document_number ?? null,
     currency: extraction.currency,
+    booksCurrency: booksCurrency?.trim().toUpperCase() || null,
     partySource: partyQuery,
     // Structured record of what came from memory. Built from the SAME
     // learnedMatch results the notes above report, so the note and the flag can

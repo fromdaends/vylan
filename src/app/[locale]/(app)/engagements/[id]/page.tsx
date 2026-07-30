@@ -76,7 +76,9 @@ import {
   type StoredDraft,
 } from "@/lib/db/quickbooks-suggestions";
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
-import { getClientXeroStatus } from "@/lib/db/xero";
+import { getClientXeroStatus,
+  readClientXeroBaseCurrency,
+} from "@/lib/db/xero";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import {
   readCachedXeroLists,
@@ -464,6 +466,15 @@ export default async function EngagementDetailPage({
       learned: bkLearned,
       existingFileIds: new Set(suggestionsByFile.keys()),
       provider: bookkeepingProvider ?? "quickbooks",
+      // See TransactionSuggestion.booksCurrency — Xero only; QuickBooks posts
+      // carry no currency, so it keeps the CAD assumption.
+      booksCurrency:
+        bookkeepingProvider === "xero" && engagement.client_id
+          ? await readClientXeroBaseCurrency(
+              engagement.firm_id,
+              engagement.client_id,
+            )
+          : null,
     });
     if (created > 0) suggestionsByFile = await getSuggestionsForEngagement(id);
   }

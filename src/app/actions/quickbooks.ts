@@ -4,7 +4,10 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
 import { readCachedXeroLists } from "@/lib/db/xero-cache";
-import { getClientXeroStatus } from "@/lib/db/xero";
+import {
+  getClientXeroStatus,
+  readClientXeroBaseCurrency,
+} from "@/lib/db/xero";
 import { readFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
 import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import { upsertTransactionSuggestion } from "@/lib/db/quickbooks-suggestions";
@@ -94,11 +97,20 @@ export async function regenerateDraftAction(
   if (!cached) return { ok: false, error: "no_lists" };
 
   const provider = isXero ? "xero" : "quickbooks";
+  // Xero records the organisation's currency on connect and its posts state one
+  // explicitly, so pass it: that is what lets a US firm's USD receipt through
+  // instead of parking it at "needs input" forever. QuickBooks sends no currency
+  // on the post at all, so it passes nothing and keeps its CAD assumption.
+  const booksCurrency =
+    isXero && clientId
+      ? await readClientXeroBaseCurrency(firm.id, clientId)
+      : null;
   const suggestion = buildTransactionSuggestion(
     transaction,
     cached,
     learned,
     isXero ? "Xero" : "QuickBooks",
+    booksCurrency,
   );
   await upsertTransactionSuggestion({
     firmId: firm.id,
