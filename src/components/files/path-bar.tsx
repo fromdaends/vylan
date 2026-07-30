@@ -2,6 +2,7 @@ import { Link } from "@/i18n/navigation";
 import { ChevronRight, ExternalLink } from "lucide-react";
 import { getTranslations } from "next-intl/server";
 import { cn } from "@/lib/cn";
+import { FolderDropTarget, type DropTarget } from "./drag-drop";
 
 // The path bar — "Files › TEST — Acme Corp › 2025 › Bookkeeping & business".
 //
@@ -15,8 +16,15 @@ export async function PathBar({
   segments,
   clientProfileId,
 }: {
-  /** Root first. The last segment is the current folder and is not a link. */
-  segments: { label: string; href?: string }[];
+  /**
+   * Root first. The last segment is the current folder and is not a link.
+   *
+   * A segment carrying a `drop` is also a DROP TARGET — dragging a file onto an
+   * ancestor is how you move it up a level in Finder, Explorer and Drive, and
+   * without it there is no way to drag a file OUT of the folder you are looking
+   * at: everything else on screen is inside it.
+   */
+  segments: { label: string; href?: string; drop?: DropTarget }[];
   /** When inside a client, the id for the one allowed cross-link to Clients. */
   clientProfileId?: string | null;
 }) {
@@ -36,12 +44,17 @@ export async function PathBar({
                   />
                 )}
                 {seg.href && !last ? (
-                  <Link
-                    href={seg.href}
-                    className="truncate rounded px-1.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  <FolderDropTarget
+                    target={seg.drop ?? { kind: "folder", folderId: null }}
+                    label={seg.label}
                   >
-                    {seg.label}
-                  </Link>
+                    <Link
+                      href={seg.href}
+                      className="truncate rounded px-1.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {seg.label}
+                    </Link>
+                  </FolderDropTarget>
                 ) : (
                   <span
                     aria-current={last ? "page" : undefined}

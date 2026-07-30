@@ -21,6 +21,7 @@ import {
   listClientFolders as listCustomFolders,
 } from "@/lib/db/folders";
 import { childrenOf, folderPath } from "@/lib/files/folder-tree";
+import type { DropTarget } from "@/components/files/drag-drop";
 import { DOCUMENT_RETENTION_DAYS } from "@/lib/files/purge";
 import { Trash2 } from "lucide-react";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
@@ -222,13 +223,19 @@ async function BrowseTab({
 
   // The path: root → client → year → category. Each ancestor is a link back up,
   // which is how you leave a folder in a file manager.
-  const segments: { label: string; href?: string }[] = [
+  // Segments carrying a `drop` double as drag targets — dropping a file on an
+  // ancestor is how you move it UP a level, and it is the only way to get a
+  // document out of the folder you are currently looking at.
+  const segments: { label: string; href?: string; drop?: DropTarget }[] = [
     { label: t("path_root"), href: "/files" },
   ];
   if (clientHeader) {
     segments.push({
       label: clientHeader.name,
-      href: buildQuery({ client: clientHeader.id, year: null, category: null, page: null }),
+      href: buildQuery({ client: clientHeader.id, folder: null, year: null, category: null, page: null }),
+      // Dropping on the client takes a document OUT of whatever folder it is
+      // in — the only way to move something back to the top level.
+      drop: { kind: "folder" as const, folderId: null },
     });
   }
   // A custom folder's own chain, root-first. Without this the path bar stops at
@@ -242,6 +249,7 @@ async function BrowseTab({
       segments.push({
         label: node.name,
         href: buildQuery({ folder: node.id, year: null, category: null, page: null }),
+        drop: { kind: "folder" as const, folderId: node.id },
       });
     }
   }
@@ -249,6 +257,7 @@ async function BrowseTab({
     segments.push({
       label: yearParam === "unsorted" ? t("unsorted") : String(year),
       href: buildQuery({ category: null, page: null }),
+      drop: { kind: "year" as const, year },
     });
   }
   if (categorySet) {
@@ -315,6 +324,20 @@ async function BrowseTab({
           this does not do. */}
       {showFiles ? (
         <FileSelectionProvider>
+          {/* A custom folder shows its SUB-FOLDERS above its files. Without
+              this, a folder created inside another one was invisible — and
+              there was nothing on screen to drag a file onto, which is why
+              drag-and-drop appeared not to work at all: the gesture was fine,
+              there was simply never a drop target in view. */}
+          {folderId && bulkFolders && (
+            <SubfolderList
+              locale={locale}
+              clientId={clientId!}
+              folders={bulkFolders}
+              parentId={folderId}
+              buildQuery={buildQuery}
+            />
+          )}
           <FileList
             locale={locale}
             filters={{
@@ -416,6 +439,57 @@ async function ClientLevel({
 }
 
 // ── Levels 2 and 3: years, then categories ──────────────────────────────────
+
+/**
+ * The sub-folders of the folder you are currently inside.
+ *
+ * Rendered ABOVE that folder's files, so a folder can hold both — which is what
+ * every file manager does, and what makes dragging possible: you cannot drop a
+ * file on a folder that is one level up and off screen.
+ *
+ * Nothing renders when the folder has no children, so a plain folder of
+ * documents does not grow an empty header.
+ */
+async function SubfolderList({
+  locale,
+  clientId,
+  folders,
+  parentId,
+  buildQuery,
+}: {
+  locale: AppLocaleish;
+  clientId: string;
+  folders: { id: string; name: string; parentId: string | null }[];
+  parentId: string;
+  buildQuery: (o?: Record<string, string | null>) => string;
+}) {
+  const t = await getTranslations("Files");
+  const children = childrenOf(folders, parentId);
+  if (children.length === 0) return null;
+
+  const entries: BrowserEntry[] = children.map((f) => ({
+    kind: "folder" as const,
+    id: f.id,
+    name: f.name,
+    href: buildQuery({ folder: f.id, year: null, category: null, page: null }),
+    modified: null,
+    actions: <FolderRowMenu clientId={clientId} folderId={f.id} name={f.name} />,
+    dropTarget: { kind: "folder" as const, folderId: f.id },
+  }));
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-end">
+        <NewFolderButton clientId={clientId} parentId={parentId} />
+      </div>
+      <FileBrowser
+        entries={entries}
+        locale={locale}
+        emptyMessage={t("folder_empty")}
+      />
+    </div>
+  );
+}
 
 async function FolderLevel({
   locale,
