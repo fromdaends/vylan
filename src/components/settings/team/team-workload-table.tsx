@@ -27,24 +27,20 @@ export type TeamWorkloadUnassigned = {
   needsAttention: number;
 };
 
-export async function TeamWorkloadTable({
-  rows,
-  unassigned,
+// A count cell: muted at zero, tinted (accent for review, warning for
+// attention) when there's something to act on. Declared at module scope, not
+// inside the table body — a component defined during render is a brand-new
+// component type on every render, which forces React to throw away and rebuild
+// the subtree instead of updating it. It closes over nothing, so hoisting it is
+// a straight move.
+function Count({
+  value,
+  tone,
 }: {
-  rows: TeamWorkloadRow[];
-  unassigned: TeamWorkloadUnassigned;
+  value: number;
+  tone?: "accent" | "warning";
 }) {
-  const t = await getTranslations("Team");
-
-  // A count cell: muted at zero, tinted (accent for review, warning for
-  // attention) when there's something to act on.
-  const Count = ({
-    value,
-    tone,
-  }: {
-    value: number;
-    tone?: "accent" | "warning";
-  }) => (
+  return (
     <span
       className={cn(
         "inline-flex min-w-[2ch] justify-center tabular-nums",
@@ -60,6 +56,16 @@ export async function TeamWorkloadTable({
       {value}
     </span>
   );
+}
+
+export async function TeamWorkloadTable({
+  rows,
+  unassigned,
+}: {
+  rows: TeamWorkloadRow[];
+  unassigned: TeamWorkloadUnassigned;
+}) {
+  const t = await getTranslations("Team");
 
   return (
     <section className="rounded-xl border border-border/50">
