@@ -100,15 +100,40 @@ export function toCustomer(r: {
   };
 }
 
+// Does one of QuickBooks' two rate lists actually contain a rate?
+//
+// The shape is { TaxRateDetail: [ { TaxRateRef, … }, … ] }. Returns undefined when
+// the field is ABSENT or in a shape we do not recognise — never false. That
+// distinction matters: undefined means "no opinion" and the matcher keeps the
+// code, whereas false EXCLUDES it. Guessing false on an unfamiliar payload would
+// silently empty a client's tax picker, which is far worse than not filtering.
+function listHasRates(list: unknown): boolean | undefined {
+  if (list == null || typeof list !== "object") return undefined;
+  const detail = (list as { TaxRateDetail?: unknown }).TaxRateDetail;
+  if (!Array.isArray(detail)) return undefined;
+  return detail.length > 0;
+}
+
 export function toTaxCode(r: {
   Id?: string;
   Name?: string;
   Active?: boolean;
-}): QbNamed {
+  // QuickBooks states usability per DIRECTION as two lists of rates, rather than
+  // as Xero's two booleans. A code is usable on sales when its sales list has
+  // rates and on purchases when its purchase list does.
+  SalesTaxRateList?: unknown;
+  PurchaseTaxRateList?: unknown;
+}): QbTaxCode {
+  const revenue = listHasRates(r.SalesTaxRateList);
+  const expenses = listHasRates(r.PurchaseTaxRateList);
   return {
     id: String(r.Id ?? ""),
     name: (r.Name ?? "").trim(),
     active: r.Active !== false,
+    // Only set when QuickBooks actually told us; absent stays absent so the
+    // matcher keeps its "no opinion" behaviour.
+    ...(revenue === undefined ? {} : { canApplyToRevenue: revenue }),
+    ...(expenses === undefined ? {} : { canApplyToExpenses: expenses }),
   };
 }
 
