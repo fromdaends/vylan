@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ClampedNumberInput } from "@/components/ui/clamped-number-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -927,22 +928,13 @@ export function EngagementBuilder({
                           </label>
                           <div className="max-w-xl space-y-1.5 text-xs text-muted-foreground">
                             <div className="flex flex-wrap items-center justify-end gap-2">
-                              <Input
-                                type="number"
+                              <ClampedNumberInput
                                 min={1}
                                 max={365}
                                 value={step.days}
                                 disabled={!step.enabled}
-                                onChange={(event) =>
-                                  updateReminderStep(step.tone, {
-                                    days: Math.min(
-                                      365,
-                                      Math.max(
-                                        1,
-                                        Math.floor(Number(event.target.value) || 1),
-                                      ),
-                                    ),
-                                  })
+                                onCommit={(days) =>
+                                  updateReminderStep(step.tone, { days })
                                 }
                                 aria-label={t("reminder_days_label")}
                                 className="h-8 w-20"
@@ -955,22 +947,13 @@ export function EngagementBuilder({
                               <span className="ml-1">
                                 {t("reminder_repeat_prefix")}
                               </span>
-                              <Input
-                                type="number"
+                              <ClampedNumberInput
                                 min={1}
                                 max={12}
                                 value={step.repeatCount}
                                 disabled={!step.enabled}
-                                onChange={(event) =>
-                                  updateReminderStep(step.tone, {
-                                    repeatCount: Math.min(
-                                      12,
-                                      Math.max(
-                                        1,
-                                        Math.floor(Number(event.target.value) || 1),
-                                      ),
-                                    ),
-                                  })
+                                onCommit={(repeatCount) =>
+                                  updateReminderStep(step.tone, { repeatCount })
                                 }
                                 aria-label={t("reminder_repeat_label")}
                                 className="h-8 w-16"
