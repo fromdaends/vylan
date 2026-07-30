@@ -11,11 +11,13 @@ import {
   quickbooksProductionKeyMissing,
   revokeToken,
   QuickbooksError,
+  fetchCurrencyPrefs,
 } from "@/lib/quickbooks/client";
 import {
   upsertFirmQuickbooksConnection,
   getFirmQuickbooksRealm,
   findQuickbooksConnectionsByRealm,
+  updateQuickbooksCurrencyPrefs,
 } from "@/lib/db/quickbooks";
 import { purgeFirmQuickbooksCache } from "@/lib/db/quickbooks-cache";
 import { purgeFirmLearnedMappings } from "@/lib/db/quickbooks-learned";
@@ -142,6 +144,11 @@ export async function GET(request: Request) {
           },
           match.clientId,
         );
+        await updateQuickbooksCurrencyPrefs(
+          firm.id,
+          await fetchCurrencyPrefs(tokens.accessToken, realmId, environment),
+          match.clientId,
+        );
       }
       const candidates = await fetchQuickbooksCustomerCandidates(
         tokens.accessToken,
@@ -235,6 +242,15 @@ export async function GET(request: Request) {
       await purgeFirmQuickbooksCache(firm.id, clientId);
       await purgeFirmLearnedMappings(firm.id, clientId);
     }
+    // Record the company's currency settings (1060) — its home currency, and
+    // whether multicurrency is even switched on, which decides whether a
+    // foreign-currency document can be expressed at all. Deliberately AFTER the
+    // save and best-effort: a failure here must never cost the connection.
+    await updateQuickbooksCurrencyPrefs(
+      firm.id,
+      await fetchCurrencyPrefs(tokens.accessToken, realmId, environment),
+      clientId,
+    );
     // Kick off THIS client's first cache sync in the background (best-effort) so
     // its reference lists (accounts/vendors/customers/tax codes/items) populate,
     // ready for posting. Per-client since Phase 3b.
