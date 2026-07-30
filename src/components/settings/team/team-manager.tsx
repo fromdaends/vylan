@@ -187,8 +187,17 @@ export function TeamManager({
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {firmName}
           </h1>
+          {/* The subtitle follows the TAB. It used to be pinned to the People
+              copy — "Invite teammates and manage who has access to your firm" —
+              which sat above the Settings tab describing a screen you were not
+              looking at. Reuses firm_settings_subtitle, which already said the
+              right thing for that half. */}
           <p className="mt-1 text-sm text-muted-foreground">
-            {canManage ? t("subtitle") : t("subtitle_readonly")}
+            {view === "settings"
+              ? t("firm_settings_subtitle")
+              : canManage
+                ? t("subtitle")
+                : t("subtitle_readonly")}
           </p>
         </div>
         <div className="flex items-center gap-2">
