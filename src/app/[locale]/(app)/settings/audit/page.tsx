@@ -2,7 +2,11 @@ import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { assertLocale } from "@/lib/locale";
-import { getCurrentUser } from "@/lib/db/users";
+import {
+  getCurrentUser,
+  listFirmUsers,
+  userDisplayLabel,
+} from "@/lib/db/users";
 import { listClients } from "@/lib/db/clients";
 import {
   listActivityForFirm,
@@ -30,7 +34,7 @@ export default async function AuditLogPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ client?: string; action?: string }>;
+  searchParams: Promise<{ client?: string; action?: string; person?: string }>;
 }) {
   const { locale: rawLocale } = await params;
   const locale = assertLocale(rawLocale);
@@ -48,11 +52,27 @@ export default async function AuditLogPage({
   const clientFilter = (sp.client ?? "").trim() || "";
   const actionFilter = isAuditAction(sp.action) ? sp.action : "";
 
+  // "Filter by person" replaces the activity feed that briefly sat on each
+  // teammate's profile page. Same question — "what has Ashley been doing" —
+  // asked in the one place only the owner can open, instead of on a page every
+  // colleague can. listFirmUsers is RLS-scoped to the firm, so validating the
+  // ?person= id against it is what keeps a hand-typed uuid from another firm
+  // out of the query. An unrecognised id DROPS the filter (the dropdown falls
+  // back to "Everyone" and the full log shows) rather than filtering to an
+  // empty list — an empty page with no visible reason reads as a bug, and there
+  // is nothing to protect here: the log is already owner-only and RLS-scoped.
+  const members = await listFirmUsers();
+  const requestedPerson = (sp.person ?? "").trim();
+  const personFilter = members.some((m) => m.id === requestedPerson)
+    ? requestedPerson
+    : "";
+
   const [clients, entries] = await Promise.all([
     listClients({ includeArchived: true }),
     listActivityForFirm({
       clientId: clientFilter || null,
       action: actionFilter || null,
+      actorId: personFilter || null,
       limit: 500,
     }),
   ]);
@@ -96,8 +116,18 @@ export default async function AuditLogPage({
           id: c.id,
           display_name: c.display_name,
         }))}
+        people={
+          // A solo firm has one person, so a "filter by person" control there
+          // is a dropdown with a single option — noise. Deactivated teammates
+          // stay in the list: their history does not leave with them, and it is
+          // the departure itself you most often want to look back at.
+          members.length > 1
+            ? members.map((m) => ({ id: m.id, name: userDisplayLabel(m) }))
+            : []
+        }
         client={clientFilter}
         action={actionFilter}
+        person={personFilter}
       />
 
       <div className="rounded-xl border border-border bg-card overflow-hidden animate-in-up">
@@ -105,7 +135,9 @@ export default async function AuditLogPage({
           <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
             <ShieldCheck className="h-6 w-6 opacity-50" aria-hidden />
             <p className="text-sm">
-              {clientFilter || actionFilter ? t("empty_filtered") : t("empty")}
+              {clientFilter || actionFilter || personFilter
+                ? t("empty_filtered")
+                : t("empty")}
             </p>
           </div>
         ) : (

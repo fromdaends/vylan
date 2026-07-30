@@ -11,19 +11,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Filter, User } from "lucide-react";
+import { Building2, Filter, UserRound } from "lucide-react";
 import { AUDIT_ACTIONS } from "./audit-actions";
 
 type ClientOption = { id: string; display_name: string };
+type PersonOption = { id: string; name: string };
 
 export function AuditFilters({
   clients,
+  people,
   client,
   action,
+  person,
 }: {
   clients: ClientOption[];
+  // The firm's roster. EMPTY on a solo firm — the page passes nothing when
+  // there is only one person to filter by, and the control renders itself away
+  // rather than offering a choice of one.
+  people: PersonOption[];
   client: string;
   action: string;
+  person: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -55,7 +63,7 @@ export function AuditFilters({
           className="w-[15rem]"
           aria-label={t("filter_client_label")}
         >
-          <User className="h-3.5 w-3.5 text-muted-foreground" />
+          <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
           <SelectValue placeholder={t("filter_client_label")} />
         </SelectTrigger>
         <SelectContent>
@@ -89,6 +97,30 @@ export function AuditFilters({
           ))}
         </SelectContent>
       </Select>
+
+      {people.length > 0 && (
+        <Select
+          value={person || "all"}
+          onValueChange={(v) => setParam("person", v)}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-[15rem]"
+            aria-label={t("filter_person_label")}
+          >
+            <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+            <SelectValue placeholder={t("filter_person_label")} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t("filter_all_people")}</SelectItem>
+            {people.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
 
       {pending && (
         <span className="text-xs text-muted-foreground/70">…</span>
