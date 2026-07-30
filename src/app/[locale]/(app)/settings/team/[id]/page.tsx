@@ -206,6 +206,7 @@ export default async function TeamMemberProfilePage({
           growNameColumn
           teamEnabled={false}
           reassignMembers={reassignTargets}
+          viewerId={user.id}
         />
       </section>
 
