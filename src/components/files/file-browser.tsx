@@ -167,12 +167,12 @@ export async function FileBrowser({
                   />
                   <span className="truncate text-sm">{entry.name}</span>
                 </span>
-                <Cell width="w-36">{entry.hint ?? ""}</Cell>
-                <Cell width="w-40">{""}</Cell>
-                <Cell width="w-20" align="right">
+                <Cell width="w-36" column="type">{entry.hint ?? ""}</Cell>
+                <Cell width="w-40" column="source">{""}</Cell>
+                <Cell width="w-20" align="right" column="size">
                   {""}
                 </Cell>
-                <Cell width="w-24" align="right" alwaysVisible>
+                <Cell width="w-24" align="right" column="modified">
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
               </Link>
@@ -232,8 +232,8 @@ export async function FileBrowser({
                   ))}
                 </span>
 
-                <Cell width="w-36">{entry.typeLabel ?? "—"}</Cell>
-                <Cell width="w-40">
+                <Cell width="w-36" column="type">{entry.typeLabel ?? "—"}</Cell>
+                <Cell width="w-40" column="source">
                   {entry.from ? (
                     entry.from.href && !entry.from.muted ? (
                       <Link
@@ -249,10 +249,10 @@ export async function FileBrowser({
                     "—"
                   )}
                 </Cell>
-                <Cell width="w-20" align="right">
+                <Cell width="w-20" align="right" column="size">
                   {formatBytes(entry.sizeBytes)}
                 </Cell>
-                <Cell width="w-24" align="right" alwaysVisible>
+                <Cell width="w-24" align="right" column="modified">
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
                 <span className="w-8 shrink-0 text-right">{entry.actions}</span>
@@ -271,17 +271,35 @@ export async function FileBrowser({
 const ROW_CLASS =
   "flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
-/** One metadata cell. Hidden below `sm` unless it is the Modified column —
- * on a phone there is only room for the name and one date. */
+// Each metadata column earns its place only once the row is wide enough to
+// still show a NAME afterwards.
+//
+// These were all `hidden sm:block`, which meant that from 640px upward every
+// column appeared at once — about 604px of fixed width before the name gets
+// anything. Between roughly 640px and 900px the name flexed to ZERO and rows
+// rendered as a folder icon and a date with no label at all. The text was in
+// the DOM the whole time, which is why it never looked like a bug worth
+// chasing; it just looked like the list was broken.
+//
+// Widest column drops last. Modified never drops — "which of these did we
+// touch last" is the one thing the list has to answer at any size.
+const COL_VISIBILITY = {
+  type: "hidden lg:block",
+  source: "hidden xl:block",
+  size: "hidden md:block",
+  modified: "block",
+} as const;
+
+/** One metadata cell. */
 function Cell({
   width,
   align = "left",
-  alwaysVisible = false,
+  column,
   children,
 }: {
   width: string;
   align?: "left" | "right";
-  alwaysVisible?: boolean;
+  column: keyof typeof COL_VISIBILITY;
   children: React.ReactNode;
 }) {
   return (
@@ -290,7 +308,7 @@ function Cell({
         "shrink-0 truncate text-xs text-muted-foreground",
         width,
         align === "right" && "text-right",
-        alwaysVisible ? "block" : "hidden sm:block",
+        COL_VISIBILITY[column],
       )}
     >
       {children}
@@ -302,9 +320,9 @@ function BrowserHeader({ t }: { t: (key: string) => string }) {
   return (
     <div className="flex items-center gap-3 border-b border-border/60 bg-muted/30 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
       <span className="min-w-0 flex-1">{t("col_name")}</span>
-      <span className="hidden w-36 shrink-0 sm:block">{t("col_type")}</span>
-      <span className="hidden w-40 shrink-0 sm:block">{t("col_source")}</span>
-      <span className="hidden w-20 shrink-0 text-right sm:block">
+      <span className="hidden w-36 shrink-0 lg:block">{t("col_type")}</span>
+      <span className="hidden w-40 shrink-0 xl:block">{t("col_source")}</span>
+      <span className="hidden w-20 shrink-0 text-right md:block">
         {t("col_size")}
       </span>
       <span className="w-24 shrink-0 text-right">{t("col_modified")}</span>
