@@ -3510,6 +3510,7 @@
     "bin_title": "Recently deleted",
     "bin_intro": "Documents you deleted in the last {days} days. Restore one and it goes straight back where it was. After {days} days they're erased for good.",
     "bin_empty": "Nothing has been deleted.",
-    "col_deleted": "Deleted"
+    "col_deleted": "Deleted",
+    "col_client": "Client"
   }
 }

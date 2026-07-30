@@ -3510,6 +3510,7 @@
     "bin_title": "Récemment supprimés",
     "bin_intro": "Documents supprimés au cours des {days} derniers jours. Restaurez-en un et il retourne exactement où il était. Après {days} jours, ils sont effacés définitivement.",
     "bin_empty": "Rien n'a été supprimé.",
-    "col_deleted": "Supprimé le"
+    "col_deleted": "Supprimé le",
+    "col_client": "Client"
   }
 }

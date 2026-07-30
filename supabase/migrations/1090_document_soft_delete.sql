@@ -186,7 +186,16 @@ as $$
   offset greatest(0, coalesce(p_offset, 0))
 $$;
 
-revoke all on function public.firm_deleted_documents(integer, integer, integer) from anon;
+-- REVOKE FROM PUBLIC, not from anon. Postgres grants EXECUTE on a new function
+-- to PUBLIC by default, and `anon` inherits that — so `revoke ... from anon`
+-- removes a grant anon never held and changes nothing. (Verified empirically:
+-- with only the anon revoke in place, an anonymous caller could still invoke
+-- this.) It was never a leak, because the body self-scopes to
+-- current_firm_id() and an anonymous caller therefore matches no rows — the
+-- same defence 0810 relies on for its policy helpers. But defence in depth is
+-- the point of the line, and a revoke that revokes nothing is worse than none.
+revoke execute on function public.firm_deleted_documents(integer, integer, integer) from public;
+revoke execute on function public.firm_deleted_documents(integer, integer, integer) from anon;
 grant execute on function public.firm_deleted_documents(integer, integer, integer) to authenticated;
 
 -- ── 5. Restore ─────────────────────────────────────────────────────────────
@@ -251,5 +260,8 @@ begin
 end;
 $$;
 
-revoke all on function public.restore_document(text, uuid) from anon;
+-- See the note on firm_deleted_documents above: PUBLIC is the grant that
+-- actually exists, so PUBLIC is what has to be revoked.
+revoke execute on function public.restore_document(text, uuid) from public;
+revoke execute on function public.restore_document(text, uuid) from anon;
 grant execute on function public.restore_document(text, uuid) to authenticated;
