@@ -198,7 +198,6 @@ export function SettingsShell({
   teamSettings?: {
     clientsPrivateByDefault: boolean;
     notifyOnAssignment: boolean;
-    requireReviewSignoff: boolean;
   } | null;
   firmLogoUrl: string | null;
   email: string;
@@ -314,7 +313,6 @@ export function SettingsShell({
               <TeamSettings
                 clientsPrivateByDefault={teamSettings.clientsPrivateByDefault}
                 notifyOnAssignment={teamSettings.notifyOnAssignment}
-                requireReviewSignoff={teamSettings.requireReviewSignoff}
               />
             </div>
           </section>

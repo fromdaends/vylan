@@ -4,7 +4,7 @@ import { useState, useTransition, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { toast } from "sonner";
-import { Lock, BellRing, ClipboardCheck } from "lucide-react";
+import { Lock, BellRing } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { setClientsPrivateDefault, setFirmTeamFlag } from "@/app/actions/team";
 
@@ -51,18 +51,15 @@ function ToggleRow({
 export function TeamSettings({
   clientsPrivateByDefault,
   notifyOnAssignment,
-  requireReviewSignoff,
 }: {
   clientsPrivateByDefault: boolean;
   notifyOnAssignment: boolean;
-  requireReviewSignoff: boolean;
 }) {
   const t = useTranslations("Team");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [priv, setPriv] = useState(clientsPrivateByDefault);
   const [notify, setNotify] = useState(notifyOnAssignment);
-  const [signoff, setSignoff] = useState(requireReviewSignoff);
 
   // Shared optimistic runner: flip local state now, call the action, revert +
   // toast on failure. `onSuccess` receives the new value, so a toggle whose
@@ -119,18 +116,6 @@ export function TeamSettings({
         onToggle={(next) =>
           run(setNotify, next, () =>
             setFirmTeamFlag("notify_on_assignment", next),
-          )
-        }
-      />
-      <ToggleRow
-        icon={<ClipboardCheck className="size-4" aria-hidden="true" />}
-        label={t("signoff_label")}
-        help={t("signoff_help")}
-        checked={signoff}
-        disabled={pending}
-        onToggle={(next) =>
-          run(setSignoff, next, () =>
-            setFirmTeamFlag("require_review_signoff", next),
           )
         }
       />
