@@ -336,7 +336,7 @@ through the component's `pk()` helper; this call site was left on the QuickBooks
 key. Cheap to miss, invisible to tsc, and only visible by clicking the button on
 the right provider.
 
-### OPEN, not fixed — a non-CAD document can never be posted
+### Was open, fixed in #1016 (see section 15) — a non-CAD document could never be posted
 
 `draftNeedsInput` (src/lib/quickbooks/draft-resolve.ts) returns true whenever
 `suggestion.currency != null && suggestion.currency !== "CAD"`. There is no
@@ -351,7 +351,8 @@ feature exists to handle foreign-currency documents — which this guard makes
 unreachable. The honest rule is probably "block only when the document's currency
 differs from the organisation's AND the organisation's is unknown", since a
 recorded org currency makes the post correct. Deferred to the founder; the same
-guard is shared with the QuickBooks path, so fix it once.
+guard is shared with the QuickBooks path, so fix it once. **Done in #1016**, and
+the answer turned out to be per-provider rather than one rule — see section 15.
 
 ### Environment notes that cost time
 
@@ -371,6 +372,70 @@ guard is shared with the QuickBooks path, so fix it once.
 
 ---
 
+## 15. Foreign currency: the guard is about CAPABILITY, not Canada (#1016)
+
+The blocker from section 14 is gone. What replaced it is the most important thing
+in this document for the QuickBooks work, because **the answer is different per
+provider and the difference is a real capability gap, not a preference.**
+
+The question is not "is this document CAD" but **"can the post STATE the
+currency"**:
+
+| provider | states a currency? | a foreign document |
+| --- | --- | --- |
+| Xero, org currency known | yes — explicit `CurrencyCode` | warns, records correctly |
+| Xero, org currency unknown | no | still blocks |
+| QuickBooks | **no — the payload has no currency field at all** | still blocks |
+
+`lib/quickbooks/post-transaction.ts` sends no currency of any kind. So on
+QuickBooks a foreign-currency document would be booked at face value in the
+company's own currency: a wrong number that reads as right, which nothing
+downstream catches. That is why QuickBooks keeps the hard block and Xero does
+not, and it is not something to "port" — **it is the parity gap.**
+
+### The mechanism, and why it stayed small
+
+`TransactionSuggestion.booksCurrency` carries the books' currency, and is set
+**only by the path that can state one**. `null` therefore means "we cannot state
+a currency", which is exactly the condition under which a foreign document must
+stop. Two consequences worth keeping:
+
+- Behaviour is **byte-identical** for QuickBooks (never sets it) and for any Xero
+  connection predating migration 1030 (nothing recorded yet). Nobody's queue
+  changed on deploy.
+- `draftNeedsInput` is reached from **eight** call sites spanning the
+  server/client boundary (`draft-queue`, `draft-summary`, `canApproveDraft` →
+  the status route, the bulk-approve route, auto-approve, ready-on-accept, the
+  card, the queue row). Threading a new argument through all of them would have
+  been most of the change. Putting the value **on the suggestion** — which is
+  built server-side and persisted as JSON — gave every reader access for free,
+  including the two client components. Prefer this shape for anything else a
+  draft needs to know about its own connection.
+
+### When QuickBooks currency support is built
+
+1. Add a currency to the QuickBooks post payload (`CurrencyRef`, plus the
+   exchange rate QuickBooks wants on a foreign transaction — Xero derives its
+   own, QuickBooks does not always).
+2. Record the QuickBooks company's home currency the way 1030 records Xero's, and
+   populate it on connect.
+3. Only then set `booksCurrency` on the QuickBooks path. Setting it earlier would
+   unblock approval for documents the post still cannot state — the one change
+   here that would be actively unsafe to copy across.
+
+Also: the amber note and the card warning now name the books' currency instead of
+saying "not CAD" (new key `foreign_currency_books`; the CAD-worded
+`foreign_currency` stays for the unknown case). Any future provider-named or
+country-named copy should assume neither.
+
+### What is NOT solved
+
+Real multi-currency accounting — exchange rates, gain/loss on settlement,
+dual-currency reporting. This removes a wall so foreign documents can be recorded
+correctly; it does not make Vylan a multi-currency ledger.
+
+---
+
 ## Still open on Xero (finish before starting QuickBooks)
 
 1. **The demo-only posting gate** in `src/lib/xero/post.ts` still blocks real
@@ -379,8 +444,8 @@ guard is shared with the QuickBooks path, so fix it once.
    chain against a real organisation, so what remains is a deliberate go-live
    decision, not more code. The founder DEFERRED it on 2026-07-28.
 
-2. **A non-CAD document can never be approved** (section 14). One shared guard,
-   no UI escape. Awaiting the founder's call.
+2. ~~A non-CAD document can never be approved~~ — **fixed in #1016** (section
+   15). The founder asked for it once American firms came into view.
 
 ---
 
