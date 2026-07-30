@@ -280,7 +280,10 @@ Then capture:
   failing that, read the document's country — GST/HST/QST/RST, a province code,
   a postal code or French text mean DAY first (08/06/2026 = 8 June), a US state
   with a ZIP or "Sales tax" means MONTH first (08/06/2026 = 6 August). Reading it
-  the wrong way round puts the expense in the wrong month.
+  the wrong way round puts the expense in the wrong month. A receipt carries many
+  numbers that are NOT the date — site, terminal, pump, auth and transaction
+  numbers, and the time — so take it only from a field labelled as a date, and
+  return null rather than assembling one from nearby digits.
 - document_number — the document's own number if printed (receipt/invoice/order
   number, e.g. "CC-20418"), copied exactly. Null if there's none. Never use a
   date, total, phone, or tax-registration number.
