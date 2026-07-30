@@ -21,7 +21,7 @@ import { cn } from "@/lib/cn";
 // a full rebuild of it, so this whole feature stays out of app-shell.tsx — the
 // consequence is that the Firm button still opens the old team page and this
 // lives at its own URL until that work lands.
-export type FirmTabKey = "people" | "settings" | "billing" | "audit";
+export type FirmTabKey = "people" | "firm" | "billing" | "audit";
 
 export function FirmTabs({
   current,
@@ -35,14 +35,12 @@ export function FirmTabs({
   // at /firm/preview, a page that was deleted when this work moved onto the real
   // team page — so the first tab 404'd. Checked, not assumed, this time.
   const tabs: { key: FirmTabKey; href: string }[] = [
-    // People IS this page. Self-linking is deliberate: the tab has to be
-    // clickable-looking and consistent with the others, and it makes the row
-    // work identically whichever tab you arrive on.
+    // People and Firm are two views of the SAME page, switched by ?tab=. They
+    // stay on the page on purpose: leaving for /settings is what made the old
+    // "Settings" tab feel like it routed wrong.
     { key: "people", href: "/settings/team" },
-    // The FIRM's settings — the private-by-default switch, assignment email,
-    // sign-off gate. Same destination as the "Firm settings" item in this page's
-    // own ⋯ menu, so the two entry points agree.
-    { key: "settings", href: "/settings?tab=team" },
+    // The firm itself: its settings, its seats, who owns it, how to leave it.
+    { key: "firm", href: "/settings/team?tab=firm" },
     { key: "billing", href: "/billing" },
     { key: "audit", href: "/settings/audit" },
   ];

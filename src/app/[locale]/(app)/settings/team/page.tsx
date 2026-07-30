@@ -34,10 +34,15 @@ export const dynamic = "force-dynamic";
 // actions + /api routes still reject staff, so this read-only UI is safe.
 export default async function TeamPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { locale: rawLocale } = await params;
+  // Which tab. Anything unrecognised falls back to the roster rather than a
+  // blank page — a bad ?tab= should never cost you the screen.
+  const requestedTab = (await searchParams).tab;
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
@@ -49,6 +54,11 @@ export default async function TeamPage({
   // Owners manage; staff only view. firm_invites + seat usage are owner-only
   // (RLS) — staff would just get empty results, so skip those fetches for them.
   const canManage = user.role === "owner";
+  // Only owners have a Firm tab (every block on it is owner-gated), so a staff
+  // member arriving on ?tab=firm falls back to the roster rather than a blank
+  // page. An unrecognised value falls back the same way.
+  const view: "people" | "firm" =
+    canManage && requestedTab === "firm" ? "firm" : "people";
   const [members, invites, usage] = await Promise.all([
     listFirmUsers(),
     canManage ? listFirmInvites() : Promise.resolve([]),
@@ -207,16 +217,19 @@ export default async function TeamPage({
     <div className="space-y-8">
       {breadcrumb}
       <TeamManager
+        view={view}
         tabs={
-          <FirmTabs
-            current="people"
-            labels={{
-              people: t("tab_people"),
-              settings: t("firm_settings_title"),
-              billing: tBilling("title"),
-              audit: tAudit("title"),
-            }}
-          />
+          canManage ? (
+            <FirmTabs
+              current={view}
+              labels={{
+                people: t("tab_people"),
+                firm: t("tab_firm"),
+                billing: tBilling("title"),
+                audit: tAudit("title"),
+              }}
+            />
+          ) : undefined
         }
         firmName={firm.name}
         canManage={canManage}
