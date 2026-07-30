@@ -1460,7 +1460,8 @@
     "metric_completed": "Completed",
     "recent_engagements": "Recent engagements",
     "nav_integrations_filing": "Document filing",
-    "nav_filing_short": "Filing"
+    "nav_filing_short": "Filing",
+    "nav_vylan": "Vylan"
   },
   "TeamChat": {
     "page_title": "Team chat",
@@ -3473,5 +3474,25 @@
     "empty_search": "No schedule matches that.",
     "empty_filtered": "Nothing here right now. Try a different filter.",
     "privacy_note_staff": "Schedules for private clients are only visible to owners, so this list may be shorter than an owner's."
+  },
+  "VylanHub": {
+    "page_title": "Vylan",
+    "page_subtitle": "Automations that run on your behalf, and where finished documents go.",
+    "tab_jobs": "Automated jobs",
+    "tab_filing": "Document filing",
+    "soon_title": "Custom automations are coming",
+    "soon_body": "You'll be able to build your own jobs here — pick what triggers them, what they do, and which clients they apply to — instead of the fixed set below. Everything you've already set up keeps working.",
+    "today_section": "What Vylan automates today",
+    "today_reminders_title": "Chase clients for documents",
+    "today_reminders_body": "Vylan emails clients on a schedule while required documents are still missing, and stops on its own when they're in.",
+    "today_invoices_title": "Send invoices",
+    "today_invoices_body": "Bill automatically when an engagement completes, or a set number of days after.",
+    "today_repeat_title": "Repeat an engagement",
+    "today_repeat_body": "Recreate the same checklist for the same client each cycle, with a fresh client link.",
+    "today_filing_title": "File approved documents",
+    "today_filing_body": "Send approved documents to your cloud storage in the right folder, named your way.",
+    "today_open_settings": "Open automation settings",
+    "today_open_engagements": "Open engagements",
+    "today_open_filing": "Set up document filing"
   }
 }
