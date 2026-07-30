@@ -116,6 +116,11 @@ export function CommentThread({
   const [picked, setPicked] = useState<Member[]>([]);
   // The active "@query" being typed (null = menu closed).
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  // The comment that just landed from THIS composer, so only that one plays
+  // the arrival animation — replaying it for the whole thread every time the
+  // card opens would be noise on top of the card's own entrance.
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const myKey = keyFor(engagementId, target);
   const me = members.find((m) => m.id === currentUserId) ?? null;
@@ -231,9 +236,15 @@ export function CommentThread({
       });
       if (res.ok) {
         setComments((prev) => [...prev, res.comment]);
+        setJustAddedId(res.comment.id);
         resetComposer();
         // Stay open — Notion keeps the thread up after a reply so you can see
-        // what you just wrote land.
+        // what you just wrote land. Ride it into view when the thread has
+        // outgrown the card.
+        requestAnimationFrame(() => {
+          const el = listRef.current;
+          if (el) el.scrollTop = el.scrollHeight;
+        });
       } else if (res.error === "not_activated") {
         toast.error(t("comment_not_activated"));
       } else if (res.error === "empty") {
@@ -297,19 +308,42 @@ export function CommentThread({
       <PopoverContent
         align="end"
         sideOffset={6}
-        className="w-[21rem] p-0 shadow-lg"
+        className={cn(
+          "w-[21rem] p-0 shadow-lg",
+          // Subtle open/close: a quick fade + a small zoom that grows FROM the
+          // bubble (Radix hands us the transform origin), plus a 4px drift off
+          // the trigger's side. Same class vocabulary as the Select content so
+          // the app's overlays all move alike; deliberately shorter and
+          // smaller than that one — this card appears next to the cursor, and
+          // anything longer reads as lag. The global reduced-motion rule
+          // collapses the duration to ~0, and since these keyframes only ever
+          // animate opacity/transform TOWARD the resting state, the card is
+          // still fully visible when motion is off.
+          "origin-(--radix-popover-content-transform-origin)",
+          "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=open]:duration-150",
+          "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=closed]:duration-100",
+          "data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1",
+          "data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1",
+        )}
         // Radix steals focus to the card on open; we want the composer, and
         // the effect above already puts it there.
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         {count > 0 && (
-          <div className="max-h-[15rem] overflow-y-auto [scrollbar-width:thin]">
+          <div
+            ref={listRef}
+            className="max-h-[15rem] overflow-y-auto [scrollbar-width:thin]"
+          >
             {comments.map((c, i) => (
               <article
                 key={c.id}
                 className={cn(
                   "group px-3 py-2.5",
                   i > 0 && "border-t border-border/50",
+                  // Just posted: a short fade + 4px rise so the reply reads as
+                  // arriving rather than blinking into the list.
+                  c.id === justAddedId &&
+                    "animate-in fade-in-0 slide-in-from-bottom-1 duration-200",
                 )}
               >
                 <div className="flex items-center gap-2">
@@ -430,7 +464,10 @@ export function CommentThread({
               aria-label={t("comment_post")}
               title={t("comment_post")}
               className={cn(
-                "inline-flex size-6 items-center justify-center rounded-full transition-colors",
+                // The colour shift as it goes live is the cue that Enter will
+                // send; the press scale is the only movement it makes.
+                "inline-flex size-6 items-center justify-center rounded-full",
+                "transition-[background-color,color,transform] duration-150 active:scale-90",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 body.trim().length === 0 || pending
                   ? "bg-muted text-muted-foreground"
