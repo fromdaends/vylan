@@ -1,12 +1,21 @@
 // Posting one approved draft to XERO (Phase 4b) — the orchestration that ties the
 // pure builders (post-transaction.ts) to the write calls (write.ts). Mirrors
-// quickbooks/post.ts but for Xero, and DELIBERATELY SIMPLER:
-//   - EXPENSES only for now: a paid expense posts a BankTransaction SPEND, an
-//     unpaid expense posts an Invoice ACCPAY. INCOME (Invoice/Receive) is deferred
-//     — Xero's RECEIVE needs a deposit bank account we don't yet collect for
-//     income, so the card keeps income Xero drafts on "posting coming soon".
-//   - NO register-match (the smart "already in Xero?" dedupe) — the already_posted
-//     guard prevents an app-level double-post; bank-feed dedup is a later add.
+// quickbooks/post.ts but for Xero:
+//   - BOTH directions post: a paid expense posts a BankTransaction SPEND, an
+//     unpaid expense an Invoice ACCPAY, a paid sale a RECEIVE, an unpaid sale an
+//     ACCREC. Only an UNKNOWN-direction draft is unpostable.
+//   - REGISTER-MATCH is in place (register-match.ts): before creating anything we
+//     check whether the client's books already hold this transaction (bank feed,
+//     their own bookkeeper) and attach the receipt to it instead of creating a
+//     duplicate. The already_posted guard only stops re-posting the same FILE.
+//
+// LIVE FOR REAL BOOKS. Posting was gated to Xero DEMO companies while this path
+// was hardened; the founder lifted that gate once register-match landed, so every
+// connected org — including a real client's live books — is writable from here.
+// That makes the pre-create duplicate check load-bearing rather than a nicety: it
+// is the only thing standing between a re-uploaded receipt and an overstated
+// expense in a real ledger. Keep its fail-closed/fail-open split intact (an
+// EXPLICIT accountant match fails closed, the AUTOMATIC check fails open).
 //
 // Returns the SAME PostOutcome shape the QuickBooks path uses so the post route's
 // outcome→HTTP mapping is shared. Idempotency-Key (fileId-postAttempt) makes an
@@ -22,7 +31,6 @@ import {
 } from "@/lib/db/quickbooks-suggestions";
 import {
   isClientXeroConnected,
-  isClientXeroDemoOrg,
   readClientXeroPublishDefault,
   readClientXeroBaseCurrency,
 } from "@/lib/db/xero";
@@ -85,9 +93,15 @@ import { getUploadedFileById } from "@/lib/db/uploaded-files";
 import { downloadObject } from "@/lib/storage";
 
 // Dispatch a post to the right provider. The post route calls this; a Xero-
-// connected client's draft posts to Xero, everyone else to QuickBooks (its
-// register-match `match` override is ignored by the Xero path). Both return the
-// same PostOutcome so the route's HTTP mapping is provider-neutral.
+// connected client's draft posts to Xero, everyone else to QuickBooks. Both honour
+// the register-match `match` override and return the same PostOutcome, so the
+// route's HTTP mapping is provider-neutral.
+//
+// ⚠️ Dispatch reads the client's CURRENT connection, not the provider the draft was
+// actually posted to (posted_realm_id holds a QBO realmId and a Xero tenantId in
+// one column, with no provider discriminator). Undo has the same shape. A client
+// who switches providers after posting therefore sends the wrong id to the wrong
+// API. Pre-existing and tracked separately from the demo-gate lift.
 export async function postApprovedDraftForFile(
   fileId: string,
   posterId: string,
@@ -133,20 +147,6 @@ export async function postApprovedXeroDraft(
   }
   if (draft.status !== "approved") return { kind: "not_approved", ...base };
   if (!draft.clientId || !draft.firmId) return { kind: "not_connected", ...base };
-
-  // SAFETY GATE: live posting is enabled for Xero DEMO companies only while the
-  // posting path is hardened (register-match dedupe, recorded-provider undo
-  // dispatch — see the go-live checklist). A real client's books can't be written
-  // yet. Fails closed (isClientXeroDemoOrg returns false on any error).
-  if (!(await isClientXeroDemoOrg(draft.firmId, draft.clientId))) {
-    return {
-      kind: "not_postable",
-      ...base,
-      problems: [],
-      detail:
-        "Xero posting is in testing — it's enabled for Xero Demo companies only right now.",
-    };
-  }
 
   const s = draft.suggestion;
 

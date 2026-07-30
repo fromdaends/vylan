@@ -513,13 +513,29 @@ drop the allowance to zero rather than leave the slack lying around.
 
 ## Still open on Xero (finish before starting QuickBooks)
 
-1. **The demo-only posting gate** in `src/lib/xero/post.ts` still blocks real
-   client books. Register-match (section 13) was the last functional gap versus
-   the QuickBooks path and shipped in #1006, and section 14 verified the whole
-   chain against a real organisation, so what remains is a deliberate go-live
-   decision, not more code. The founder DEFERRED it on 2026-07-28.
+1. ~~**The demo-only posting gate** in `src/lib/xero/post.ts` still blocks real
+   client books~~ — **LIFTED on 2026-07-29.** Register-match (section 13) was the
+   last functional gap versus the QuickBooks path and shipped in #1006, and
+   section 14 verified the whole chain against a real organisation, so what
+   remained was a deliberate go-live decision, not more code. The founder
+   deferred it on 2026-07-28 and called for it the next day. The gate was one
+   server-side check (`isClientXeroDemoOrg`, now deleted — it had no other
+   caller); the UI already rendered the Post button for Xero drafts, gating only
+   on unknown DIRECTION, so removing the check was the whole change. New
+   `src/lib/xero/post.test.ts` asserts a real org posts, and is written so a
+   re-added demo check fails the suite rather than passing quietly.
 
-2. ~~A non-CAD document can never be approved~~ — **fixed in #1016** (section
+2. **Undo and post dispatch on the CURRENT connection, not the recorded
+   provider.** Pre-existing, and unrelated to the gate — but it now matters more,
+   because a misrouted undo strands a transaction in a REAL ledger. `posted_realm_id`
+   holds a QuickBooks realmId and a Xero tenantId in one column with no provider
+   discriminator, so `postApprovedDraftForFile` and the void route both ask
+   "is this client Xero-connected *right now*". A client who switches providers
+   after posting sends the wrong id to the wrong API: the draft stays `posted`,
+   the entry stays in the books, and there is no in-app way back. Needs a
+   `posted_provider` column plus a shared dispatch, kept revertable on its own.
+
+3. ~~A non-CAD document can never be approved~~ — **fixed in #1016** (section
    15). The founder asked for it once American firms came into view.
 
 ---
