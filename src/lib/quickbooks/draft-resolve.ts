@@ -151,6 +151,31 @@ export function effectiveIncomeMode(
 // ACCOUNT (Bill lines post to an account). The tax code matters only when the
 // document showed tax. A foreign currency or a missing total also flag. Used by
 // the roll-up and to tint the card.
+// Must a foreign-currency document stop and wait for a human?
+//
+// The real question is not "is this CAD" but "can the post STATE the currency".
+// Xero records the organisation's currency on connect and its posts carry an
+// explicit CurrencyCode, so a USD receipt going into USD books is ordinary, and
+// a CAD receipt going into USD books is recorded correctly as CAD. Neither needs
+// a human. The QuickBooks payload carries no currency at all, so there the
+// amount WOULD be booked at face value in the company's own currency — a wrong
+// number that reads as right, and nothing downstream catches it.
+//
+// booksCurrency is set only when we can state a currency (see the field's own
+// comment), so null is the "cannot state it" case. There we have no reference to
+// compare against and fall back to the pre-Canada-wide assumption that the books
+// are CAD, which keeps behaviour identical for every connection that predates
+// migration 1030 — reconnecting is what records it.
+//
+// NOT a silent pass: a difference still raises the amber note on the card
+// (foreignCurrency in the draft view), it just no longer blocks approval.
+function currencyBlocksApproval(suggestion: TransactionSuggestion): boolean {
+  const doc = suggestion.currency?.trim().toUpperCase();
+  if (!doc) return false;
+  if (suggestion.booksCurrency) return false;
+  return doc !== "CAD";
+}
+
 export function draftNeedsInput(
   suggestion: TransactionSuggestion,
   resolved: ResolvedEntry | null,
@@ -185,7 +210,7 @@ export function draftNeedsInput(
     eff.party == null ||
     mappingMissing ||
     (hasTax && eff.taxCode == null) ||
-    (suggestion.currency != null && suggestion.currency !== "CAD") ||
+    currencyBlocksApproval(suggestion) ||
     suggestion.amount == null ||
     // A date is required so QuickBooks can auto-match this to the bank feed
     // instead of posting it dated "today".

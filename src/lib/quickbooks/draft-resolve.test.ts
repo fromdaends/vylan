@@ -136,7 +136,7 @@ describe("draftNeedsInput", () => {
     ).toBe(false);
   });
 
-  it("flags a foreign currency and a missing amount", () => {
+  it("flags a foreign currency we cannot state, and a missing amount", () => {
     const full: ResolvedEntry = {
       party: null,
       account: { id: "a1", name: "Supplies" },
@@ -424,5 +424,68 @@ describe("draftNeedsInput — paid income needs a deposit account", () => {
   // which is why this half could ship with no extra input from the accountant.
   it("does NOT ask for one on an unpaid sale", () => {
     expect(draftNeedsInput(income({ paid: false }), null)).toBe(false);
+  });
+});
+
+describe("draftNeedsInput — foreign currency blocks only when we cannot state it", () => {
+  // The real question is not "is this CAD" but "can the post state the currency".
+  // Xero records the organisation's currency on connect and sends an explicit
+  // CurrencyCode; QuickBooks sends none, so it keeps the CAD assumption.
+  // booksCurrency is set only on the path that CAN state one.
+  const complete: ResolvedEntry = {
+    party: null,
+    account: { id: "a1", name: "Supplies" },
+    taxCode: null,
+  };
+
+  it("lets a US receipt through on US books — the whole point", () => {
+    // A US firm on USD books uploading a USD receipt. Before this, it parked at
+    // "needs input" forever with no control anywhere that could clear it.
+    expect(
+      draftNeedsInput(
+        sugg({ currency: "USD", booksCurrency: "USD" }),
+        complete,
+      ),
+    ).toBe(false);
+  });
+
+  it("lets a CAD receipt through on US books — the post states CAD", () => {
+    expect(
+      draftNeedsInput(
+        sugg({ currency: "CAD", booksCurrency: "USD" }),
+        complete,
+      ),
+    ).toBe(false);
+  });
+
+  it("still blocks a foreign receipt when the books' currency is unknown", () => {
+    // Nothing can state a currency here, so the amount would be recorded at face
+    // value in whatever the books use. Unchanged behaviour, and the reason a
+    // connection made before migration 1030 must reconnect.
+    expect(draftNeedsInput(sugg({ currency: "USD" }), complete)).toBe(true);
+    expect(
+      draftNeedsInput(
+        sugg({ currency: "USD", booksCurrency: null }),
+        complete,
+      ),
+    ).toBe(true);
+  });
+
+  it("never blocks a CAD receipt on unknown books (the legacy assumption)", () => {
+    expect(draftNeedsInput(sugg({ currency: "CAD" }), complete)).toBe(false);
+  });
+
+  it("never blocks when the document names no currency at all", () => {
+    expect(
+      draftNeedsInput(sugg({ currency: null, booksCurrency: "USD" }), complete),
+    ).toBe(false);
+    expect(draftNeedsInput(sugg({ currency: null }), complete)).toBe(false);
+  });
+
+  it("normalises the document's currency before comparing", () => {
+    // Exercised against the CAD fallback, which is the only path that actually
+    // compares strings — with booksCurrency set it short-circuits before this.
+    expect(draftNeedsInput(sugg({ currency: " cad " }), complete)).toBe(false);
+    expect(draftNeedsInput(sugg({ currency: "usd" }), complete)).toBe(true);
   });
 });

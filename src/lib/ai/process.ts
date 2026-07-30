@@ -46,6 +46,7 @@ import { buildDisplayName } from "./display-name";
 import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { isEngagementAiEnabled } from "./engagement-ai";
+import { readClientXeroBaseCurrency } from "@/lib/db/xero";
 
 export async function processClassifyJob(
   payload: Record<string, unknown>,
@@ -377,11 +378,18 @@ export async function processClassifyJob(
             limitFirmId,
             limitClientId,
           );
+          // See TransactionSuggestion.booksCurrency — this is what stops a US
+          // firm's USD receipt parking at "needs input" forever.
+          const booksCurrency =
+            provider === "xero" && limitClientId
+              ? await readClientXeroBaseCurrency(limitFirmId, limitClientId)
+              : null;
           const suggestion = buildTransactionSuggestion(
             transaction,
             cached,
             learned,
             provider === "xero" ? "Xero" : "QuickBooks",
+            booksCurrency,
           );
           await upsertTransactionSuggestion({
             firmId: limitFirmId,

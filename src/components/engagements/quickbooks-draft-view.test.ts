@@ -90,3 +90,28 @@ describe("deriveQuickbooksDraftView", () => {
     expect(v.direction).toBe("expense");
   });
 });
+
+describe("deriveQuickbooksDraftView — foreignCurrency is relative to the books", () => {
+  it("is quiet when the document matches the books' currency", () => {
+    // A US firm's USD receipt on USD books is ordinary, not a warning.
+    const v = deriveQuickbooksDraftView(
+      suggestion({ currency: "USD", booksCurrency: "USD" }),
+    );
+    expect(v.foreignCurrency).toBe(false);
+    expect(v.booksCurrency).toBe("USD");
+  });
+
+  it("warns when it genuinely differs, and reports what it compared against", () => {
+    const v = deriveQuickbooksDraftView(
+      suggestion({ currency: "CAD", booksCurrency: "USD" }),
+    );
+    expect(v.foreignCurrency).toBe(true);
+    expect(v.booksCurrency).toBe("USD");
+  });
+
+  it("falls back to CAD when the books' currency was never recorded", () => {
+    const v = deriveQuickbooksDraftView(suggestion({ currency: "USD" }));
+    expect(v.foreignCurrency).toBe(true);
+    expect(v.booksCurrency).toBe("CAD");
+  });
+});

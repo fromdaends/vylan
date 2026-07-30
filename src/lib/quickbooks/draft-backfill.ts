@@ -31,6 +31,7 @@ import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import { listsAreSynced } from "@/lib/quickbooks/read";
 import { upsertTransactionSuggestion } from "@/lib/db/quickbooks-suggestions";
 import type { TransactionExtraction } from "@/lib/ai/transaction-extract";
+import { readClientXeroBaseCurrency } from "@/lib/db/xero";
 
 // How many documents one sync will repair. Comfortably above a realistic
 // disconnect/reconnect window (a handful of uploads), far below "rebuild the
@@ -102,6 +103,12 @@ export async function rebuildMissingDraftsForClient(
     if (todo.length === 0) return { rebuilt: 0, detail: "nothing_missing" };
 
     const learned = await readLearnedMappingsForFirm(firmId, clientId);
+    // See TransactionSuggestion.booksCurrency: Xero can state a currency on the
+    // post, QuickBooks cannot, so only the Xero path supplies one.
+    const booksCurrency =
+      provider === "xero"
+        ? await readClientXeroBaseCurrency(firmId, clientId)
+        : null;
     let rebuilt = 0;
     for (const f of todo) {
       const suggestion = buildTransactionSuggestion(
@@ -109,6 +116,7 @@ export async function rebuildMissingDraftsForClient(
         cached,
         learned,
         provider === "xero" ? "Xero" : "QuickBooks",
+        booksCurrency,
       );
       // upsertTransactionSuggestion is itself best-effort (it swallows a
       // missing table); a row that fails to write just stays missing and the

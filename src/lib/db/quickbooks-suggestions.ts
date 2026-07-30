@@ -919,6 +919,10 @@ export async function backfillMissingSuggestions(input: {
   // draft carries the right provider tag + "Xero" note wording. Defaults to
   // 'quickbooks' so pre-Xero callers are unchanged.
   provider?: DraftProvider;
+  // See TransactionSuggestion.booksCurrency. Passed in rather than read here
+  // because this function is given an engagement, not a client. Defaults to null
+  // (= "we cannot state a currency"), which is the safe reading.
+  booksCurrency?: string | null;
 }): Promise<number> {
   if (!input.lists) return 0;
   const provider = input.provider ?? "quickbooks";
@@ -943,6 +947,7 @@ export async function backfillMissingSuggestions(input: {
         input.lists,
         input.learned ?? {},
         providerLabel,
+        input.booksCurrency ?? null,
       );
       await upsertTransactionSuggestion({
         firmId: input.firmId,
