@@ -1179,7 +1179,11 @@
     "action_file_downloaded": "A téléchargé un document",
     "action_file_deleted": "A déplacé un document vers Récemment supprimés",
     "action_file_restored": "A restauré un document supprimé",
-    "action_documents_imported": "A importé des documents dans Vylan"
+    "action_documents_imported": "A importé des documents dans Vylan",
+    "action_folder_created": "A créé un dossier",
+    "action_folder_renamed": "A renommé un dossier",
+    "action_folder_moved": "A déplacé un dossier",
+    "action_folder_deleted": "A supprimé un dossier"
   },
   "Notifications": {
     "title": "Nouveautés",
@@ -3542,6 +3546,23 @@
     "import_done_skipped": "{count, plural, one {# était déjà dans Vylan} other {# étaient déjà dans Vylan}} et a été ignoré.",
     "import_done_failed": "{count, plural, one {# fichier n'a pas pu être importé} other {# fichiers n'ont pas pu être importés}} :",
     "import_next_step": "Les fichiers importés se trouvent sous Non classé. Sélectionnez-en plusieurs et utilisez Déplacer pour les classer par année et par dossier.",
-    "import_close": "Terminé"
+    "import_close": "Terminé",
+    "folder_new": "Nouveau dossier",
+    "folder_new_title": "Nouveau dossier",
+    "folder_new_help": "Les dossiers sont à vous, organisez-les comme bon vous semble. Les fichiers que vous n'y avez pas mis restent visibles sous leur année.",
+    "folder_name": "Nom du dossier",
+    "folder_create": "Créer",
+    "folder_created": "Dossier créé.",
+    "folder_renamed": "Dossier renommé.",
+    "folder_deleted": "Dossier supprimé.",
+    "folder_rename_title": "Renommer le dossier",
+    "folder_delete_title": "Supprimer « {name} » ?",
+    "folder_delete_help": "Rien de son contenu n'est supprimé. Tout ce qui s'y trouve remonte d'un niveau : vous ne perdez aucun document.",
+    "folder_actions": "Actions pour le dossier {name}",
+    "folder_name_taken": "Un dossier porte déjà ce nom ici.",
+    "folder_cycle": "Un dossier ne peut pas être déplacé dans lui-même.",
+    "folder_item_count": "{count, plural, =0 {Vide} one {# fichier} other {# fichiers}}",
+    "folder_file_into": "Classer dans…",
+    "folder_remove_from": "Retirer du dossier"
   }
 }

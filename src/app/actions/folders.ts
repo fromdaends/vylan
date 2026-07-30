@@ -1,0 +1,297 @@
+"use server";
+
+// Creating, renaming, moving and deleting a client's custom folders.
+//
+// Same three rules as the document actions: authorize through RLS (no
+// hand-rolled permission check to drift), audit after the write lands, and
+// never touch the stored file itself.
+//
+// DELETING A FOLDER NEVER DELETES DOCUMENTS. Its contents — documents and
+// sub-folders alike — move up to its parent first, then the folder row is
+// soft-deleted. That is why folders need no recycle bin of their own: nothing
+// is ever lost by removing one, so there is nothing to restore. The alternative
+// (refusing to delete a non-empty folder) makes tidying up a chore, and
+// cascading the delete to documents would make a folder button destroy files.
+
+import { revalidatePath } from "next/cache";
+import { getServerSupabase } from "@/lib/supabase/server";
+import { getCurrentFirm } from "@/lib/db/firms";
+import { logUserActivity } from "@/lib/db/activity";
+import { listClientFolders } from "@/lib/db/folders";
+import {
+  nameTaken,
+  normalizeFolderName,
+  wouldCreateCycle,
+} from "@/lib/files/folder-tree";
+
+export type FolderActionResult =
+  | { ok: true; id?: string }
+  | {
+      ok: false;
+      error: "invalid" | "name_taken" | "cycle" | "not_found" | "unavailable" | "error";
+    };
+
+const DOC_TABLES = ["uploaded_files", "final_documents", "imported_documents"] as const;
+
+function isSchemaMissing(err: { code?: string | null } | null): boolean {
+  return (
+    err?.code === "PGRST204" ||
+    err?.code === "42703" ||
+    err?.code === "PGRST205" ||
+    err?.code === "42P01"
+  );
+}
+
+export async function createFolderAction(input: {
+  clientId: string;
+  parentId: string | null;
+  name: string;
+}): Promise<FolderActionResult> {
+  const name = normalizeFolderName(input.name ?? "");
+  if (!input.clientId || !name) return { ok: false, error: "invalid" };
+
+  const firm = await getCurrentFirm();
+  if (!firm) return { ok: false, error: "error" };
+  const sb = await getServerSupabase();
+
+  // The client read is the permission check: RLS hides a client this user may
+  // not see, so a folder can never be created under one.
+  const { data: client } = await sb
+    .from("clients")
+    .select("id")
+    .eq("id", input.clientId)
+    .maybeSingle();
+  if (!client) return { ok: false, error: "not_found" };
+
+  // Checked here so the user gets a sentence rather than a raw unique-index
+  // violation. The database index is still the real guarantee against two
+  // people creating the same folder at the same moment.
+  const { folders } = await listClientFolders(input.clientId);
+  if (nameTaken(folders, input.parentId ?? null, name)) {
+    return { ok: false, error: "name_taken" };
+  }
+
+  const { data: auth } = await sb.auth.getUser();
+  const { data, error } = await sb
+    .from("document_folders")
+    .insert({
+      firm_id: firm.id,
+      client_id: input.clientId,
+      parent_id: input.parentId ?? null,
+      name,
+      created_by: auth.user?.id ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    if (error.code === "23505") return { ok: false, error: "name_taken" };
+    return { ok: false, error: isSchemaMissing(error) ? "unavailable" : "error" };
+  }
+
+  await logUserActivity(firm.id, null, "folder_created", {
+    client_id: input.clientId,
+    folder_id: data.id,
+    name,
+  });
+  revalidatePath("/files");
+  return { ok: true, id: data.id as string };
+}
+
+export async function renameFolderAction(input: {
+  clientId: string;
+  folderId: string;
+  name: string;
+}): Promise<FolderActionResult> {
+  const name = normalizeFolderName(input.name ?? "");
+  if (!input.folderId || !name) return { ok: false, error: "invalid" };
+
+  const firm = await getCurrentFirm();
+  if (!firm) return { ok: false, error: "error" };
+
+  const { folders } = await listClientFolders(input.clientId);
+  const self = folders.find((f) => f.id === input.folderId);
+  if (!self) return { ok: false, error: "not_found" };
+  if (nameTaken(folders, self.parentId, name, self.id)) {
+    return { ok: false, error: "name_taken" };
+  }
+
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("document_folders")
+    .update({ name })
+    .eq("id", input.folderId)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (error.code === "23505") return { ok: false, error: "name_taken" };
+    return { ok: false, error: isSchemaMissing(error) ? "unavailable" : "error" };
+  }
+  if (!data) return { ok: false, error: "not_found" };
+
+  await logUserActivity(firm.id, null, "folder_renamed", {
+    client_id: input.clientId,
+    folder_id: input.folderId,
+    name,
+  });
+  revalidatePath("/files");
+  return { ok: true };
+}
+
+/** Move a folder (and everything under it) to a different parent. */
+export async function moveFolderAction(input: {
+  clientId: string;
+  folderId: string;
+  newParentId: string | null;
+}): Promise<FolderActionResult> {
+  if (!input.folderId) return { ok: false, error: "invalid" };
+  const firm = await getCurrentFirm();
+  if (!firm) return { ok: false, error: "error" };
+
+  const { folders } = await listClientFolders(input.clientId);
+  const self = folders.find((f) => f.id === input.folderId);
+  if (!self) return { ok: false, error: "not_found" };
+
+  // THE guard. Dropping a folder into its own descendant detaches that whole
+  // branch from the root: it becomes invisible in the UI and every ancestor
+  // walk loops forever. Nothing about that is recoverable from the interface
+  // that caused it, so it is refused before the write.
+  if (wouldCreateCycle(folders, input.folderId, input.newParentId ?? null)) {
+    return { ok: false, error: "cycle" };
+  }
+  if (nameTaken(folders, input.newParentId ?? null, self.name, self.id)) {
+    return { ok: false, error: "name_taken" };
+  }
+
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("document_folders")
+    .update({ parent_id: input.newParentId ?? null })
+    .eq("id", input.folderId)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    if (error.code === "23505") return { ok: false, error: "name_taken" };
+    return { ok: false, error: isSchemaMissing(error) ? "unavailable" : "error" };
+  }
+  if (!data) return { ok: false, error: "not_found" };
+
+  await logUserActivity(firm.id, null, "folder_moved", {
+    client_id: input.clientId,
+    folder_id: input.folderId,
+    parent_id: input.newParentId ?? null,
+  });
+  revalidatePath("/files");
+  return { ok: true };
+}
+
+/**
+ * Remove a folder, keeping everything that was inside it.
+ *
+ * Contents are re-parented UP one level first — documents to the folder's
+ * parent (or back to the derived year/category view if it was at the root),
+ * sub-folders likewise. Only then is the folder row soft-deleted. A folder
+ * button must never be a way to destroy documents.
+ */
+export async function deleteFolderAction(input: {
+  clientId: string;
+  folderId: string;
+}): Promise<FolderActionResult> {
+  if (!input.folderId) return { ok: false, error: "invalid" };
+  const firm = await getCurrentFirm();
+  if (!firm) return { ok: false, error: "error" };
+
+  const { folders } = await listClientFolders(input.clientId);
+  const self = folders.find((f) => f.id === input.folderId);
+  if (!self) return { ok: false, error: "not_found" };
+
+  const sb = await getServerSupabase();
+
+  // Documents first: if this fails we have not removed anything yet, and the
+  // user can try again against an unchanged tree.
+  for (const table of DOC_TABLES) {
+    const { error } = await sb
+      .from(table)
+      .update({ folder_id: self.parentId })
+      .eq("folder_id", input.folderId);
+    if (error && !isSchemaMissing(error)) {
+      return { ok: false, error: "error" };
+    }
+  }
+
+  // Then sub-folders, up one level.
+  {
+    const { error } = await sb
+      .from("document_folders")
+      .update({ parent_id: self.parentId })
+      .eq("parent_id", input.folderId);
+    if (error) return { ok: false, error: "error" };
+  }
+
+  const { data, error } = await sb
+    .from("document_folders")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", input.folderId)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    return { ok: false, error: isSchemaMissing(error) ? "unavailable" : "error" };
+  }
+  if (!data) return { ok: false, error: "not_found" };
+
+  await logUserActivity(firm.id, null, "folder_deleted", {
+    client_id: input.clientId,
+    folder_id: input.folderId,
+    name: self.name,
+  });
+  revalidatePath("/files");
+  return { ok: true };
+}
+
+/**
+ * File documents into a folder, or back out of one.
+ *
+ * A null folderId returns them to the derived year/category view rather than
+ * leaving them nowhere — a document must always be reachable.
+ */
+export async function setDocumentsFolderAction(input: {
+  targets: { source: string; id: string }[];
+  folderId: string | null;
+}): Promise<{ ok: boolean; succeeded: number; failed: number }> {
+  const firm = await getCurrentFirm();
+  if (!firm) return { ok: false, succeeded: 0, failed: 0 };
+  const sb = await getServerSupabase();
+
+  const TABLE: Record<string, string> = {
+    checklist: "uploaded_files",
+    final: "final_documents",
+    imported: "imported_documents",
+  };
+
+  let succeeded = 0;
+  let failed = 0;
+  for (const t of (input.targets ?? []).slice(0, 200)) {
+    const table = TABLE[t.source];
+    if (!table || !t.id) {
+      failed++;
+      continue;
+    }
+    const { data, error } = await sb
+      .from(table)
+      .update({ folder_id: input.folderId })
+      .eq("id", t.id)
+      .select("id")
+      .maybeSingle();
+    if (error || !data) failed++;
+    else succeeded++;
+  }
+
+  if (succeeded > 0) {
+    await logUserActivity(firm.id, null, "file_moved", {
+      folder_id: input.folderId,
+      count: succeeded,
+      via: "folder",
+    });
+  }
+  revalidatePath("/files");
+  return { ok: succeeded > 0, succeeded, failed };
+}

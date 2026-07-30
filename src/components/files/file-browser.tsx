@@ -41,6 +41,8 @@ export type BrowserEntry =
       modified: string | null;
       /** Optional right-aligned hint, e.g. the client type. */
       hint?: string | null;
+      /** Rename/delete menu, for folders the firm made themselves. */
+      actions?: React.ReactNode;
     }
   | {
       kind: "file";
@@ -138,9 +140,10 @@ export async function FileBrowser({
                 <Cell width="w-24" align="right" alwaysVisible>
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
-                {/* Keeps folder rows aligned with file rows, which carry an
-                    actions menu in this column. */}
-                <span className="w-8 shrink-0" aria-hidden />
+                {/* Custom folders carry rename/delete here; derived folders
+                    have nothing to act on, and the empty span keeps both
+                    aligned with the file rows below. */}
+                <span className="w-8 shrink-0 text-right">{entry.actions}</span>
               </Link>
             ) : (
               // A FILE row is NOT wrapped in a link, even once preview exists:

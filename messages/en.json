@@ -1179,7 +1179,11 @@
     "action_file_downloaded": "Downloaded a document",
     "action_file_deleted": "Moved a document to Recently deleted",
     "action_file_restored": "Restored a deleted document",
-    "action_documents_imported": "Imported documents into Vylan"
+    "action_documents_imported": "Imported documents into Vylan",
+    "action_folder_created": "Created a folder",
+    "action_folder_renamed": "Renamed a folder",
+    "action_folder_moved": "Moved a folder",
+    "action_folder_deleted": "Removed a folder"
   },
   "Notifications": {
     "title": "What's new",
@@ -3542,6 +3546,23 @@
     "import_done_skipped": "{count, plural, one {# was already in Vylan} other {# were already in Vylan}} and was skipped.",
     "import_done_failed": "{count, plural, one {# file couldn't be imported} other {# files couldn't be imported}}:",
     "import_next_step": "Imported files sit under Unsorted. Select several and use Move to file them by year and folder.",
-    "import_close": "Done"
+    "import_close": "Done",
+    "folder_new": "New folder",
+    "folder_new_title": "New folder",
+    "folder_new_help": "Folders are yours to organise however you like. Files you haven't put in one still show up under their year.",
+    "folder_name": "Folder name",
+    "folder_create": "Create",
+    "folder_created": "Folder created.",
+    "folder_renamed": "Folder renamed.",
+    "folder_deleted": "Folder removed.",
+    "folder_rename_title": "Rename folder",
+    "folder_delete_title": "Remove “{name}”?",
+    "folder_delete_help": "Nothing inside is deleted. Anything in this folder moves up one level, so you won't lose a single document.",
+    "folder_actions": "Actions for the {name} folder",
+    "folder_name_taken": "There's already a folder with that name here.",
+    "folder_cycle": "A folder can't be moved inside itself.",
+    "folder_item_count": "{count, plural, =0 {Empty} one {# file} other {# files}}",
+    "folder_file_into": "File into…",
+    "folder_remove_from": "Take out of folder"
   }
 }
