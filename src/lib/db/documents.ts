@@ -246,23 +246,26 @@ export async function listClientFolders(opts: {
 export type CategoryGroup = {
   category: BrowseCategory | null;
   count: number;
+  /** Most recent document in this folder — the "Modified" column. */
+  lastActivity: string | null;
 };
 
 export type YearGroup = {
   /** Null = the "Unsorted" bucket (no detectable year). */
   year: number | null;
   count: number;
+  lastActivity: string | null;
   categories: CategoryGroup[];
 };
 
 /**
- * The collapsible year → category tree for one client.
+ * One client's year → category folder structure.
  *
  * Grouped in Node rather than SQL, and that is a deliberate limit rather than
  * an oversight: the set is ONE client's documents, which is bounded by how much
  * work a firm does for a single client — hundreds, not the firm-wide thousands
- * the landing page had to worry about. Only the two axis columns are fetched,
- * so even a heavy client is a few kilobytes.
+ * the landing page had to worry about. Only three small columns are fetched, so
+ * even a heavy client is a few kilobytes.
  */
 export async function getClientDocumentTree(clientId: string): Promise<{
   years: YearGroup[];
@@ -272,7 +275,7 @@ export async function getClientDocumentTree(clientId: string): Promise<{
   const sb = await getServerSupabase();
   const { data, error } = await sb
     .from("firm_documents")
-    .select("browse_year, browse_category")
+    .select("browse_year, browse_category, created_at")
     .eq("client_id", clientId)
     .is("deleted_at", null);
   if (error) {
@@ -284,37 +287,60 @@ export async function getClientDocumentTree(clientId: string): Promise<{
   const rows = (data ?? []) as Array<{
     browse_year: number | null;
     browse_category: string | null;
+    created_at: string;
   }>;
   return { years: groupDocumentAxes(rows), total: rows.length, available: true };
 }
 
 /**
- * Fold raw (year, category) pairs into the collapsible tree the client view
+ * Fold raw (year, category, date) rows into the folder structure the browser
  * renders. Pure, so the ordering rules below are testable without a database —
  * and they matter: "newest year first, Unsorted last" is the difference between
  * an accountant landing on this year's work and landing on a pile of files the
  * AI could not date.
+ *
+ * Each folder carries the date of the newest document inside it, which is what
+ * a file manager's "Modified" column means for a folder.
  */
 export function groupDocumentAxes(
-  rows: Array<{ browse_year: number | null; browse_category: string | null }>,
+  rows: Array<{
+    browse_year: number | null;
+    browse_category: string | null;
+    created_at?: string | null;
+  }>,
 ): YearGroup[] {
-  const byYear = new Map<number | null, Map<string | null, number>>();
+  const byYear = new Map<
+    number | null,
+    Map<string | null, { count: number; last: string | null }>
+  >();
+  const newer = (a: string | null, b: string | null | undefined) =>
+    !b ? a : !a ? b : b > a ? b : a;
+
   for (const r of rows) {
     const y = r.browse_year ?? null;
     if (!byYear.has(y)) byYear.set(y, new Map());
     const cats = byYear.get(y)!;
     const c = r.browse_category ?? null;
-    cats.set(c, (cats.get(c) ?? 0) + 1);
+    const prev = cats.get(c) ?? { count: 0, last: null };
+    cats.set(c, {
+      count: prev.count + 1,
+      last: newer(prev.last, r.created_at),
+    });
   }
 
   const years: YearGroup[] = [...byYear.entries()]
     .map(([year, cats]) => ({
       year,
-      count: [...cats.values()].reduce((a, b) => a + b, 0),
+      count: [...cats.values()].reduce((a, b) => a + b.count, 0),
+      lastActivity: [...cats.values()].reduce<string | null>(
+        (acc, c) => newer(acc, c.last),
+        null,
+      ),
       categories: [...cats.entries()]
-        .map(([category, count]) => ({
+        .map(([category, v]) => ({
           category: (category as BrowseCategory | null) ?? null,
-          count,
+          count: v.count,
+          lastActivity: v.last,
         }))
         // Unsorted last within a year; named categories alphabetical by code so
         // the order is stable across locales (labels are translated at render).
