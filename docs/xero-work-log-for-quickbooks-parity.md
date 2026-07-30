@@ -450,7 +450,28 @@ returns null quietly by design — so the suite completed in 296ms reporting 0%
 accuracy. Every accuracy figure quoted before 2026-07-29 was fictional. It now
 loads the file and throws if the key is missing.
 
-### First measured score, 23 cases
+### ⚠️ The score below is CLAUDE's, and production runs OpenAI (#1034)
+
+`getProvider()` (src/lib/ai/classify.ts) defaults to Anthropic and flips only on
+`AI_CLASSIFIER_PROVIDER=openai`. Both the classifier and the transaction
+extractor ride that one switch. `.env.local` sets no provider, so this run took
+the default and scored 23 documents on **claude-sonnet-4-6** while production is
+set to **openai**. The numbers are real; they describe a model the product does
+not ship — a subtler failure than the no-key one above, because it looks
+entirely plausible.
+
+Since #1034 the harness refuses to start unless the SELECTED provider's key is
+present, warns when the provider was defaulted, and stamps every scorecard with
+provider and model. To measure what is actually shipped:
+
+```
+AI_CLASSIFIER_PROVIDER=openai npm run eval:bookkeeping
+```
+
+That needs `OPENAI_API_KEY` locally (copy it from Vercel). **Until that run
+happens there is NO measured accuracy figure for production.**
+
+### First measured score, 23 cases — ANTHROPIC ONLY
 
 | dimension | score |
 | --- | --- |
@@ -466,6 +487,10 @@ account matching, because the ceiling on that number is a product choice, not a
 model limit.
 
 ### The bug it found: numeric date order
+
+Found on Claude. The fix is a change to the shared system prompt and schema
+description, which BOTH providers read, so it applies to OpenAI as well — but it
+has not been measured there. Treat "dates 20/21" as an Anthropic figure.
 
 `08/06/2026` on a Winnipeg receipt came back as 2026-08-06 — August 6 instead of
 June 8. The total was right; only the date was wrong, which nobody spots by eye

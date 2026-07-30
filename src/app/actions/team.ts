@@ -1049,7 +1049,7 @@ export async function setClientsPrivateDefault(
 // The simple boolean team settings (owner-set). Whitelisted so a caller can't
 // flip an arbitrary firms column. clients_private_by_default is NOT here — it
 // has its own action (setClientsPrivateDefault) because enabling it backfills.
-const TEAM_FLAGS = ["notify_on_assignment", "require_review_signoff"] as const;
+const TEAM_FLAGS = ["notify_on_assignment"] as const;
 export type TeamFlag = (typeof TEAM_FLAGS)[number];
 
 // Toggle a firm team setting (owner-only). Service-role update scoped to the
