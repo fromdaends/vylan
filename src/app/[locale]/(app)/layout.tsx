@@ -19,7 +19,6 @@ import { KeyboardShortcuts } from "@/components/help/keyboard-shortcuts";
 import { AppShell } from "@/components/app/app-shell";
 import { TrialBanner } from "@/components/app/demo-banner";
 import { Toaster } from "@/components/ui/sonner";
-import { getEngagementBadges } from "@/lib/engagements/badges";
 
 export default async function AppLayout({
   children,
@@ -81,18 +80,19 @@ export default async function AppLayout({
     redirect(getPathname({ locale, href: "/onboarding" }));
   }
 
-  const [avatarUrl, firmLogoUrl, badges, quickbooksHasAny, xeroHasAny] =
-    await Promise.all([
-      getBrandingImageUrl(dbUser.avatar_path),
-      getBrandingImageUrl(firm.logo_url),
-      getEngagementBadges(),
-      // Drive the QuickBooks Integrations sub-item + (with Xero) the Bookkeeping
-      // tab. True when the firm has ANY connection (firm-level OR any client) — so
-      // the nav appears once a product is actually in use, not merely because the
-      // app's keys are installed. Cheap + RLS-scoped; false before the migration.
-      firmHasAnyQuickbooksConnection(),
-      firmHasAnyXeroConnection(),
-    ]);
+  // The firm logo and the engagement ready/deleted badge counts are no longer
+  // fetched here: the icon rail has no firm button and no Engagements sub-nav to
+  // badge, so both were dead queries on every authenticated page render. The
+  // Engagements page still computes its own badges for its tab strip.
+  const [avatarUrl, quickbooksHasAny, xeroHasAny] = await Promise.all([
+    getBrandingImageUrl(dbUser.avatar_path),
+    // Drives the Bookkeeping rail tab. True when the firm has ANY connection
+    // (firm-level OR any client) — so the tab appears once a product is actually
+    // in use, not merely because the app's keys are installed. Cheap +
+    // RLS-scoped; false before the migration.
+    firmHasAnyQuickbooksConnection(),
+    firmHasAnyXeroConnection(),
+  ]);
 
   // Free-trial banner state (only rendered for unconverted trial firms).
   // isTrialExpired / trialDaysLeft default "now" internally so Date.now()
@@ -118,8 +118,6 @@ export default async function AppLayout({
       userDisplayName={userDisplayLabel(dbUser)}
       userEmail={dbUser.email}
       userAvatarUrl={avatarUrl}
-      firmName={firm.name}
-      firmLogoUrl={firmLogoUrl}
       isOwner={dbUser.role === "owner"}
       teamEnabled={teamEnabled}
       quickbooksConnected={quickbooksHasAny}
@@ -133,10 +131,6 @@ export default async function AppLayout({
           />
         ) : undefined
       }
-      engagementBadges={{
-        ready: badges.readyToReview,
-        deleted: badges.recentlyDeleted,
-      }}
       labels={{
         dashboard: t("nav_dashboard"),
         clients: t("nav_clients"),

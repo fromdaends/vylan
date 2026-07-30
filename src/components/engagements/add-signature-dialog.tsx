@@ -74,7 +74,6 @@ export function AddSignatureDialog({ engagementId }: { engagementId: string }) {
       try {
         await openSignWellSession({
           url: editUrl,
-          collapseAppSidebar: true,
           onCompleted: async () => {
             try {
               await finalizeSignaturePlacementAction(itemId);
