@@ -48,6 +48,8 @@ import { decide, applyDecision, type DispatcherResult } from "./router";
 import { getFirmAiUsage, incrementFirmAiUsage } from "./usage";
 import { isEngagementAiEnabled } from "./engagement-ai";
 import { readClientXeroBaseCurrency } from "@/lib/db/xero";
+import { quickbooksBooksCurrency } from "@/lib/quickbooks/books-currency";
+import { readQuickbooksCurrencyPrefs } from "@/lib/db/quickbooks";
 
 export async function processClassifyJob(
   payload: Record<string, unknown>,
@@ -404,7 +406,11 @@ export async function processClassifyJob(
           const booksCurrency =
             provider === "xero" && limitClientId
               ? await readClientXeroBaseCurrency(limitFirmId, limitClientId)
-              : null;
+              : limitClientId
+                ? quickbooksBooksCurrency(
+                    await readQuickbooksCurrencyPrefs(limitFirmId, limitClientId),
+                  )
+                : null;
           const suggestion = buildTransactionSuggestion(
             transaction,
             cached,

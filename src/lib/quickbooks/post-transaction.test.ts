@@ -695,3 +695,58 @@ describe("due date — a bill must not land immediately overdue", () => {
     expect("DepositToAccountRef" in r).toBe(false);
   });
 });
+
+describe("foreign currency — both fields or neither", () => {
+  // QuickBooks rejects a CurrencyRef with no ExchangeRate (code 2410), so a
+  // partial pair is worse than sending nothing.
+  const bill = (over: Record<string, unknown>) =>
+    buildBillPayload({
+      vendorId: "v1",
+      accountId: "a1",
+      amount: 247.83,
+      date: "2026-07-30",
+      reference: null,
+      tax: null,
+      ...over,
+    }) as Record<string, unknown>;
+
+  it("states the currency and the rate together", () => {
+    const b = bill({ currency: "USD", exchangeRate: 1.400374 });
+    expect(b.CurrencyRef).toEqual({ value: "USD" });
+    expect(b.ExchangeRate).toBe(1.400374);
+  });
+
+  it("sends NEITHER for a home-currency transaction", () => {
+    const b = bill({});
+    expect("CurrencyRef" in b).toBe(false);
+    expect("ExchangeRate" in b).toBe(false);
+  });
+
+  it("sends neither when the rate is missing — a partial pair is rejected", () => {
+    const b = bill({ currency: "USD", exchangeRate: null });
+    expect("CurrencyRef" in b).toBe(false);
+    expect("ExchangeRate" in b).toBe(false);
+  });
+
+  it("sends neither when the currency is missing", () => {
+    const b = bill({ currency: null, exchangeRate: 1.4 });
+    expect("CurrencyRef" in b).toBe(false);
+  });
+
+  it("does the same on an Invoice and a Purchase", () => {
+    const inv = buildInvoicePayload({
+      customerId: "c1", itemId: "i1", amount: 100, date: "2026-07-30",
+      reference: null, tax: null, currency: "USD", exchangeRate: 1.4,
+    }) as Record<string, unknown>;
+    expect(inv.CurrencyRef).toEqual({ value: "USD" });
+    expect(inv.ExchangeRate).toBe(1.4);
+
+    const pur = buildPurchasePayload({
+      vendorId: "v1", accountId: "a1", paymentAccountId: "p1", amount: 100,
+      date: "2026-07-30", reference: null, tax: null,
+      paymentType: "Check", currency: "USD", exchangeRate: 1.4,
+    }) as Record<string, unknown>;
+    expect(pur.CurrencyRef).toEqual({ value: "USD" });
+    expect(pur.ExchangeRate).toBe(1.4);
+  });
+});

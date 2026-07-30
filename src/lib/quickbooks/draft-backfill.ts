@@ -32,6 +32,8 @@ import { listsAreSynced } from "@/lib/quickbooks/read";
 import { upsertTransactionSuggestion } from "@/lib/db/quickbooks-suggestions";
 import type { TransactionExtraction } from "@/lib/ai/transaction-extract";
 import { readClientXeroBaseCurrency } from "@/lib/db/xero";
+import { quickbooksBooksCurrency } from "@/lib/quickbooks/books-currency";
+import { readQuickbooksCurrencyPrefs } from "@/lib/db/quickbooks";
 
 // How many documents one sync will repair. Comfortably above a realistic
 // disconnect/reconnect window (a handful of uploads), far below "rebuild the
@@ -108,7 +110,9 @@ export async function rebuildMissingDraftsForClient(
     const booksCurrency =
       provider === "xero"
         ? await readClientXeroBaseCurrency(firmId, clientId)
-        : null;
+        : quickbooksBooksCurrency(
+            await readQuickbooksCurrencyPrefs(firmId, clientId),
+          );
     let rebuilt = 0;
     for (const f of todo) {
       const suggestion = buildTransactionSuggestion(
