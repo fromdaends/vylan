@@ -109,6 +109,7 @@ import { engagementMatchesSeries } from "@/lib/recurring/sync";
 import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { SeriesSyncPrompt } from "@/components/engagements/series-sync-prompt";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
+import { EngagementPresence } from "@/components/engagements/engagement-presence";
 import { getLatestHandoffNote } from "@/lib/db/activity";
 import {
   getRecentInvoiceCancel,
@@ -761,6 +762,17 @@ export default async function EngagementDetailPage({
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">
             {engagement.title}
+            {/* Who else has this open, live, beside the name — the convention
+                every collaborative tool shares. Renders nothing when you are
+                alone, which is most of the time. Team-mode only: a solo firm
+                has nobody to be present. */}
+            {teamEnabled && user && (
+              <EngagementPresence
+                engagementId={engagement.id}
+                viewerId={user.id}
+                roster={activeMembers}
+              />
+            )}
           </h1>
           <div className="flex items-center gap-2 mt-2.5 text-sm flex-wrap">
             {/* No workflow position (a draft or cancelled engagement, or an

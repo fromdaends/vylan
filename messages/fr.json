@@ -2141,7 +2141,9 @@
     "assign_to": "Attribuer à…",
     "assign_nobody": "Personne",
     "assigned_toast": "Attribué à {name}",
-    "unassigned_toast": "Personne assignée retirée"
+    "unassigned_toast": "Personne assignée retirée",
+    "presence_viewing": "{count, plural, one {# personne consulte ceci} other {# personnes consultent ceci}}",
+    "presence_person_viewing": "{name} consulte ceci"
   },
   "Attention": {
     "metric_active": "Actifs",

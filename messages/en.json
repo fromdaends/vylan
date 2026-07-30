@@ -2141,7 +2141,9 @@
     "assign_to": "Assign to…",
     "assign_nobody": "Nobody",
     "assigned_toast": "Assigned to {name}",
-    "unassigned_toast": "Assignee cleared"
+    "unassigned_toast": "Assignee cleared",
+    "presence_viewing": "{count, plural, one {# person is viewing this} other {# people are viewing this}}",
+    "presence_person_viewing": "{name} is viewing this"
   },
   "Attention": {
     "metric_active": "Active",
