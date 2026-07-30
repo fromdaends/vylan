@@ -147,7 +147,7 @@ export function IconRail({
       <nav
         // Hidden scrollbar: a firm with the Bookkeeping tab shown can overflow a
         // short viewport, and a visible bar inside a 76px rail is all noise.
-        className="mt-5 flex w-full flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mt-4 flex w-full flex-1 flex-col items-center gap-1.5 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {items.map((item) => (
           <RailLink
@@ -265,7 +265,7 @@ function RailLink({ item, active }: { item: RailItem; active: boolean }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+        "flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
         active
           ? "bg-white/[0.14] text-white"
           : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white",
