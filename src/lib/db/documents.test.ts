@@ -6,10 +6,11 @@ import {
 } from "./documents";
 
 describe("groupDocumentAxes", () => {
-  const rows = (...pairs: [number | null, string | null][]) =>
-    pairs.map(([browse_year, browse_category]) => ({
+  const rows = (...pairs: [number | null, string | null, string?][]) =>
+    pairs.map(([browse_year, browse_category, created_at]) => ({
       browse_year,
       browse_category,
+      created_at: created_at ?? null,
     }));
 
   it("counts documents per year and per category within a year", () => {
@@ -20,9 +21,32 @@ describe("groupDocumentAxes", () => {
     expect(years[0].year).toBe(2024);
     expect(years[0].count).toBe(3);
     expect(years[0].categories).toEqual([
-      { category: "federal", count: 2 },
-      { category: "quebec", count: 1 },
+      { category: "federal", count: 2, lastActivity: null },
+      { category: "quebec", count: 1, lastActivity: null },
     ]);
+  });
+
+  it("gives each folder the date of the newest document inside it", () => {
+    // A folder's "Modified" column in a file manager means exactly this.
+    const years = groupDocumentAxes(
+      rows(
+        [2024, "federal", "2026-01-10T00:00:00Z"],
+        [2024, "federal", "2026-03-02T00:00:00Z"],
+        [2024, "quebec", "2026-02-01T00:00:00Z"],
+      ),
+    );
+    expect(years[0].categories.find((c) => c.category === "federal")?.lastActivity).toBe(
+      "2026-03-02T00:00:00Z",
+    );
+    // The year folder rolls up to the newest of everything beneath it.
+    expect(years[0].lastActivity).toBe("2026-03-02T00:00:00Z");
+  });
+
+  it("survives documents with no date at all", () => {
+    const years = groupDocumentAxes(
+      rows([2024, "federal"], [2024, "federal", "2026-03-02T00:00:00Z"]),
+    );
+    expect(years[0].lastActivity).toBe("2026-03-02T00:00:00Z");
   });
 
   it("puts the newest year first so the current job is what you land on", () => {
@@ -51,7 +75,12 @@ describe("groupDocumentAxes", () => {
   it("handles a client whose documents are entirely unsorted", () => {
     const years = groupDocumentAxes(rows([null, null], [null, null]));
     expect(years).toEqual([
-      { year: null, count: 2, categories: [{ category: null, count: 2 }] },
+      {
+        year: null,
+        count: 2,
+        lastActivity: null,
+        categories: [{ category: null, count: 2, lastActivity: null }],
+      },
     ]);
   });
 
