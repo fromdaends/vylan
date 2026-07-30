@@ -489,3 +489,56 @@ describe("draftNeedsInput — foreign currency blocks only when we cannot state 
     expect(draftNeedsInput(sugg({ currency: "usd" }), complete)).toBe(true);
   });
 });
+
+describe("draftNeedsInput — a paid sale needs a deposit account only where the post does", () => {
+  // QuickBooks' SalesReceipt builder deliberately omits DepositToAccountRef and
+  // lets QuickBooks book to Undeposited Funds. Demanding one there made every
+  // QuickBooks paid-sale draft wait on a mandatory pick that was then discarded.
+  const paidSale = (over: Partial<TransactionSuggestion> = {}) =>
+    sugg({
+      direction: "income",
+      partyKind: "customer",
+      paid: true,
+      item: matched("i1", "Consulting"),
+      taxCode: matched("t1", "GST on Income"),
+      ...over,
+    });
+
+  it("does not ask on QuickBooks, where the deposit account is optional", () => {
+    expect(
+      draftNeedsInput(paidSale({ depositAccountRequired: false }), null),
+    ).toBe(false);
+  });
+
+  it("still asks on Xero, where a RECEIVE cannot exist without a bank account", () => {
+    expect(
+      draftNeedsInput(paidSale({ depositAccountRequired: true }), null),
+    ).toBe(true);
+  });
+
+  it("asks when the flag is absent — older suggestions stay on the safe side", () => {
+    // An unnecessary question costs a click; a missing bank account on a Xero
+    // RECEIVE fails the post outright.
+    expect(draftNeedsInput(paidSale(), null)).toBe(true);
+  });
+
+  it("is satisfied on Xero once the account is chosen", () => {
+    expect(
+      draftNeedsInput(paidSale({ depositAccountRequired: true }), {
+        party: null,
+        account: null,
+        taxCode: null,
+        paymentAccount: { id: "b1", name: "Chequing" },
+      }),
+    ).toBe(false);
+  });
+
+  it("does not change an UNPAID sale, which never needed one", () => {
+    expect(
+      draftNeedsInput(
+        paidSale({ paid: false, depositAccountRequired: true }),
+        null,
+      ),
+    ).toBe(false);
+  });
+});

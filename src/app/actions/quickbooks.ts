@@ -111,6 +111,8 @@ export async function regenerateDraftAction(
     learned,
     isXero ? "Xero" : "QuickBooks",
     booksCurrency,
+    // Only Xero's RECEIVE bank transaction needs a deposit account.
+    isXero,
   );
   await upsertTransactionSuggestion({
     firmId: firm.id,

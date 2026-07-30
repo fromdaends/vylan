@@ -178,6 +178,24 @@ export type TransactionSuggestion = {
   // and nothing downstream would catch it. Optional so older stored suggestions
   // deserialize (and behave as before).
   booksCurrency?: string | null;
+  // Must a PAID sale name the account the money landed in before it can be
+  // approved?
+  //
+  // Xero: yes. A paid sale posts as a RECEIVE bank transaction, which cannot
+  // exist without a bank account.
+  // QuickBooks: no. buildSalesReceiptPayload deliberately OMITS
+  // DepositToAccountRef so QuickBooks records the money to Undeposited Funds and
+  // the accountant groups it into a real deposit later.
+  //
+  // Written as a capability rather than a provider name on purpose: the same
+  // reasoning as booksCurrency, and it keeps `if (provider === "xero")` out of
+  // the shared rules, which is how the two paths drift apart.
+  //
+  // Optional, defaulting to REQUIRED, so older stored suggestions and any future
+  // producer that forgets to set it stay on the safe side — an unnecessary
+  // question costs a click, a missing bank account on a Xero RECEIVE fails the
+  // post outright.
+  depositAccountRequired?: boolean;
   // Which fields were filled from a REMEMBERED correction rather than fuzzy
   // matching. The card already says so in prose; this is the structured form,
   // and it is what auto-approve keys off — "the system recognised this" is a
@@ -878,6 +896,9 @@ export function buildTransactionSuggestion(
   // The connected books' currency — see TransactionSuggestion.booksCurrency.
   // Defaults to null so every existing caller keeps today's behaviour.
   booksCurrency: string | null = null,
+  // See TransactionSuggestion.depositAccountRequired. Defaults to true, which is
+  // Xero's requirement and the pre-existing behaviour.
+  depositAccountRequired: boolean = true,
 ): TransactionSuggestion {
   const notes: string[] = [];
   const direction = extraction.direction;
@@ -1142,6 +1163,7 @@ export function buildTransactionSuggestion(
     reference: extraction.document_number ?? null,
     currency: extraction.currency,
     booksCurrency: booksCurrency?.trim().toUpperCase() || null,
+    depositAccountRequired,
     partySource: partyQuery,
     // Structured record of what came from memory. Built from the SAME
     // learnedMatch results the notes above report, so the note and the flag can
@@ -1213,4 +1235,33 @@ export function postingReference(
   const r = reference?.trim();
   if (!r) return null;
   return r.length > 21 ? r.slice(0, 21) : r;
+}
+
+// The DocNumber to post when the document itself prints no number.
+//
+// Without one, a receipt with no visible number lands in QuickBooks with an empty
+// DocNumber and nothing ties the transaction back to the paper — the same gap the
+// Xero side closed with a VYL-<fileId> reference.
+//
+// NOT a copy of xeroPostingReference, for two reasons:
+//
+//   1. QuickBooks caps DocNumber at 21 characters. A uuid is 36, so the Xero
+//      form (VYL- plus the whole id, under Xero's 255 limit) would be sliced into
+//      something meaningless. Truncated to the first 17 characters of the id,
+//      which is still far more than enough to be unique within one company.
+//   2. QuickBooks' DocNumber on an INVOICE is the number the CUSTOMER sees, and
+//      QuickBooks assigns its own when the field is omitted. Xero's Reference is
+//      a separate internal field, so the Xero fallback is safe on income and this
+//      one is not. Bills and Purchases only — inventing "VYL-…" as a customer's
+//      invoice number would both confuse the customer and override QuickBooks'
+//      own numbering.
+export function quickbooksPostingReference(
+  reference: string | null | undefined,
+  uploadedFileId: string,
+  entity: "bill" | "purchase" | "invoice" | "salesreceipt",
+): string | null {
+  const own = postingReference(reference);
+  if (own) return own;
+  if (entity === "invoice" || entity === "salesreceipt") return null;
+  return `VYL-${uploadedFileId.replace(/-/g, "").slice(0, 17)}`;
 }

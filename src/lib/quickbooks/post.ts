@@ -37,13 +37,14 @@ import { downloadObject } from "@/lib/storage";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import {
   postingLineDescription,
-  postingReference,
+  quickbooksPostingReference,
 } from "@/lib/quickbooks/suggest";
 import {
   effectiveMapping,
   effectiveDate,
   effectiveExpenseMode,
   effectiveIncomeMode,
+  isPostableDate,
   effectiveSplit,
   effectiveLines,
 } from "@/lib/quickbooks/draft-resolve";
@@ -161,7 +162,22 @@ export async function postApprovedDraft(
     eff.party?.name ?? s.partySource ?? null,
     s.lines,
   );
-  const reference = postingReference(s.reference);
+  // Which of the four QuickBooks shapes this will become. Derived here rather than
+  // inside the branches below because the DocNumber fallback depends on it: a
+  // Bill or a Purchase gets a traceable VYL- number when the paper shows none, an
+  // Invoice must NOT (QuickBooks assigns its own, and the customer sees it).
+  const draftEntity: QboTxnEntity =
+    s.direction === "income"
+      ? effectiveIncomeMode(s, draft.resolved) === "salesreceipt"
+        ? "salesreceipt"
+        : "invoice"
+      : effectiveExpenseMode(s, draft.resolved) === "purchase"
+        ? "purchase"
+        : "bill";
+  const reference = quickbooksPostingReference(s.reference, fileId, draftEntity);
+  // When payment is DUE. Guarded the same way as the transaction date: a
+  // malformed value becomes null rather than being sent to QuickBooks.
+  const dueDate = isPostableDate(s.dueDate) ? s.dueDate : null;
   // A real transaction date is required so QuickBooks auto-matches this to the
   // bank feed instead of dating it "today". draftNeedsInput already blocks
   // approval without one; this re-checks at post time (defense in depth, and it
@@ -264,12 +280,12 @@ export async function postApprovedDraft(
       reference,
       tax,
     };
-    if (effectiveIncomeMode(s, draft.resolved) === "salesreceipt") {
+    if (draftEntity === "salesreceipt") {
       entity = "salesreceipt";
       payload = buildSalesReceiptPayload(incomeInput);
     } else {
       entity = "invoice";
-      payload = buildInvoicePayload(incomeInput);
+      payload = buildInvoicePayload({ ...incomeInput, dueDate });
     }
   } else if (effectiveExpenseMode(s, draft.resolved) === "purchase") {
     const problems = checkPurchasePostable({
@@ -340,6 +356,7 @@ export async function postApprovedDraft(
       accountId: expenseAccount.id,
       amount: s.amount,
       date: effDate,
+      dueDate,
       memo: "Posted from Vylan",
       description: lineDescription,
       reference,

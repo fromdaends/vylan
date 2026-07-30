@@ -117,6 +117,7 @@ export async function rebuildMissingDraftsForClient(
         learned,
         provider === "xero" ? "Xero" : "QuickBooks",
         booksCurrency,
+        provider === "xero",
       );
       // upsertTransactionSuggestion is itself best-effort (it swallows a
       // missing table); a row that fails to write just stays missing and the

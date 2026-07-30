@@ -407,6 +407,7 @@ export function buildSearchRegistry(
       icon: ScrollText,
       color: "text-icon-indigo",
       href: "/settings/audit",
+      ownerOnly: true,
       keywords:
         "audit log security history activity trail journal verification historique securite",
     },

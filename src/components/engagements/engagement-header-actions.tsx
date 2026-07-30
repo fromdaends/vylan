@@ -8,7 +8,6 @@ import {
   Check,
   Download,
   FolderUp,
-  History,
   Link as LinkIcon,
   Loader2,
   Lock,
@@ -67,7 +66,6 @@ import {
 // dropped — Delete covers removing an engagement.)
 export function EngagementMoreMenu({
   engagementId,
-  clientId,
   locale,
   status,
   remindersPaused,
@@ -90,10 +88,10 @@ export function EngagementMoreMenu({
   commentable,
 }: {
   engagementId: string;
-  // The engagement's client id — the Activity item deep-links to the firm
-  // activity log pre-filtered to this client. No owner flag needed: the log is
-  // open to every member and filters itself per viewer in the database.
-  clientId: string;
+  // NOTE: clientId used to be a prop here, solely to deep-link the Activity
+  // item at the firm audit log. That item is gone, and nothing else in this
+  // menu needed the client — so the prop went with it rather than lingering as
+  // a parameter no one reads.
   locale: "fr" | "en";
   status: "live" | "complete" | "cancelled";
   remindersPaused: boolean;
@@ -189,21 +187,6 @@ export function EngagementMoreMenu({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
-          {/* Activity → the firm activity log, pre-filtered to this
-              engagement's client (Activity moved out of the old assistant
-              panel). Shown to everyone: the log is no longer owner-only, and
-              it filters itself per-viewer in the database. */}
-          <DropdownMenuItem
-            onSelect={() => {
-              router.push(
-                `/settings/audit?client=${encodeURIComponent(clientId)}`,
-              );
-            }}
-          >
-            <History />
-            {t("activity_menu")}
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
           {privacy?.isOwner && (
             <>
               <DropdownMenuItem
