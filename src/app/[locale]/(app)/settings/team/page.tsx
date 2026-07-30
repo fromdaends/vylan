@@ -18,6 +18,7 @@ import {
   TeamSetup,
 } from "@/components/settings/team/team-manager";
 import { TeamSettings } from "@/components/settings/team/firm-settings";
+import { FirmTabs } from "@/components/firm/firm-tabs";
 import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { listClients } from "@/lib/db/clients";
 import { countLiveSeriesByAssignee } from "@/lib/db/recurring";
@@ -56,6 +57,8 @@ export default async function TeamPage({
   const t = await getTranslations("Team");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
+  const tBilling = await getTranslations("Billing");
+  const tAudit = await getTranslations("Audit");
 
   const breadcrumb = (
     <Breadcrumb
@@ -204,6 +207,17 @@ export default async function TeamPage({
     <div className="space-y-8">
       {breadcrumb}
       <TeamManager
+        tabs={
+          <FirmTabs
+            current="people"
+            labels={{
+              people: t("tab_people"),
+              settings: t("firm_settings_title"),
+              billing: tBilling("title"),
+              audit: tAudit("title"),
+            }}
+          />
+        }
         firmName={firm.name}
         canManage={canManage}
         onTrial={isOnTrial(firm)}
