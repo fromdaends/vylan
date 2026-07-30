@@ -193,9 +193,11 @@ export default async function EngagementDetailPage({
   // need to wait for getEngagement — run the whole lot in ONE parallel batch.
   // The uploads branch also batch-signs every download URL in a single storage
   // round-trip (was N separate calls, the biggest chunk of this page's load).
-  // Only the client lookup (needs engagement.client_id) waits. The Activity
-  // feed no longer loads here — it lives in the Assistant panel's Activity
-  // tab, which fetches it on demand via /api/engagement-chat/activity.
+  // Only the client lookup (needs engagement.client_id) waits. There is no
+  // Activity feed on this page at all any more: history is owner-only and
+  // lives at /settings/audit, filterable by client or by person. The Assistant
+  // panel's Activity tab and its /api/engagement-chat/activity route are gone
+  // too — they had been dead for a while before anyone noticed.
   const [engagement, items, uploadData, firm, user, firmUsers] =
     await Promise.all([
       getEngagement(id),
