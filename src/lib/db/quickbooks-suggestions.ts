@@ -364,9 +364,20 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
   // 0970: the Xero status this draft was POSTED with. Undo reads it to pick the
   // right retraction (VOIDED vs DELETED). Null = pre-0970 row = AUTHORISED.
   postedStatus: "DRAFT" | "SUBMITTED" | "AUTHORISED" | null;
+  // 1040: which system this draft was ACTUALLY posted to. Retraction paths (undo,
+  // receipt-attach) dispatch on THIS rather than on the client's current
+  // connection, so a client who switches providers after posting still has their
+  // transaction retracted through the API that created it.
+  //
+  // Deliberately NOT `provider` (0790): that records the pipeline the draft was
+  // created for and moves with the client's connection, so it cannot say where a
+  // write landed. NULL = posted before 1040 → callers fall back to the live
+  // connection check (the pre-1040 behaviour).
+  postedProvider: DraftProvider | null;
 } | null> {
   const sb = await getServerSupabase();
   const selects = [
+    "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type, provider, posted_status, posted_provider",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type, provider, posted_status",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type, provider",
     "engagement_id, firm_id, resolved, suggestion, status, posted_qbo_id, posted_qbo_sync_token, post_attempt, receipt_attached_at, matched_qbo_type",
@@ -452,7 +463,19 @@ export async function getDraftForFile(uploadedFileId: string): Promise<{
     // (authorised) or DELETE (draft/submitted) — Xero rejects the wrong one.
     // Null on a legacy row or a pre-0970 tier, which means AUTHORISED.
     postedStatus: normalizePostedStatus(row.posted_status),
+    // 1040. Note this normalizer KEEPS null rather than defaulting to
+    // 'quickbooks' the way normalizeDraftProvider does: null is meaningful here
+    // ("we never recorded it → ask the live connection"), and defaulting would
+    // silently claim every pre-1040 Xero post was a QuickBooks one.
+    postedProvider: normalizePostedProvider(row.posted_provider),
   };
+}
+
+// The provider a post was recorded against. Unlike normalizeDraftProvider this
+// preserves null — see the postedProvider field comment for why that matters.
+function normalizePostedProvider(v: unknown): DraftProvider | null {
+  if (v === "xero" || v === "quickbooks") return v;
+  return null;
 }
 
 // The publish status recorded on a posted draft. Anything unrecognised (or
@@ -573,6 +596,10 @@ export async function recordDraftPosted(input: {
   // XERO (0970): the status this was posted with — what undo needs to retract
   // it correctly. Omitted on the QuickBooks path, which has no equivalent.
   postedStatus?: "DRAFT" | "SUBMITTED" | "AUTHORISED" | null;
+  // 1040: which system this write actually went to. Both post paths pass it, so
+  // undo/attach can target the API that created the transaction instead of
+  // guessing from the client's current connection.
+  postedProvider?: DraftProvider;
 }): Promise<RecordPostedResult> {
   const sb = getServiceRoleSupabase();
   const now = new Date().toISOString();
@@ -607,7 +634,7 @@ export async function recordDraftPosted(input: {
   // tried with the column first, then without, so a pre-0970 database still
   // records the post (and null there means AUTHORISED, which is what every
   // pre-0970 post was).
-  const patches = input.postedStatus
+  const statusPatches = input.postedStatus
     ? [
         ...basePatches.map((p) => ({
           ...p,
@@ -616,6 +643,21 @@ export async function recordDraftPosted(input: {
         ...basePatches,
       ]
     : basePatches;
+  // 1040 (both providers): stamp WHICH system we wrote to, atomically with the
+  // post — same laddering rationale as posted_status above. A row that said
+  // "posted" without its provider is a row whose undo has to guess, which is the
+  // bug 1040 exists to close. Tried with the column first, then without, so a
+  // pre-1040 database still records the post (null there = fall back to the
+  // connection check, i.e. exactly the old behaviour).
+  const patches = input.postedProvider
+    ? [
+        ...statusPatches.map((p) => ({
+          ...p,
+          posted_provider: input.postedProvider,
+        })),
+        ...statusPatches,
+      ]
+    : statusPatches;
   let data: Array<Record<string, unknown>> | null = null;
   let error: { code?: string; message?: string } | null = null;
   for (const patch of patches) {

@@ -603,6 +603,9 @@ export async function postApprovedXeroDraft(
     postedSyncToken: "0", // Xero has no SyncToken
     posterId,
     postedRealmId: ctx.tenantId, // the Xero org (tenant) it posted under
+    // 1040: WHICH system, not just which company. posted_realm_id alone can't say
+    // — it holds a Xero tenantId and a QuickBooks realmId in one column.
+    postedProvider: "xero",
     // What undo needs to retract this correctly (VOIDED vs DELETED). A SPEND is
     // always AUTHORISED; only the bill path can be a draft.
     postedStatus: endpoint === "Invoices" ? publishStatus : "AUTHORISED",
@@ -825,6 +828,7 @@ async function recordXeroMatch(input: {
     postedSyncToken: "0", // Xero has no SyncToken
     posterId,
     postedRealmId: ctx.tenantId,
+    postedProvider: "xero", // 1040 — a MATCHED row still lives in Xero
     matchedQboType: attachTo.entity,
     // A matched transaction was not created by us, so there is no publish
     // status of ours to undo — the recorded status stays null, which undo

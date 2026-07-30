@@ -166,6 +166,17 @@ describe("postApprovedXeroDraft — real (non-demo) organisations", () => {
     );
   });
 
+  // 1040: posted_realm_id alone can't identify the SYSTEM (it holds a Xero
+  // tenantId and a QuickBooks realmId in one column), so undo would have to guess
+  // if this weren't stamped. See lib/bookkeeping/posted-provider.ts.
+  it("stamps xero as the posted provider so undo targets the right API", async () => {
+    await postApprovedXeroDraft("file-1", "user-1");
+
+    expect(mockRecordPosted).toHaveBeenCalledWith(
+      expect.objectContaining({ postedProvider: "xero" }),
+    );
+  });
+
   // The gate returned `not_postable` with an empty `problems` array — a shape no
   // real postability failure produces. Asserting it never comes back catches a
   // re-added gate even if it is worded differently.

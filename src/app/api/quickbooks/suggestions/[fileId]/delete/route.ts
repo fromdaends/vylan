@@ -25,6 +25,7 @@ import {
   effectiveIncomeMode,
 } from "@/lib/quickbooks/draft-resolve";
 import { logUserActivity } from "@/lib/db/activity";
+import { resolveRetractionProvider } from "@/lib/bookkeeping/posted-provider";
 import { revalidateAllLocales } from "@/lib/revalidate";
 
 export const runtime = "nodejs";
@@ -70,6 +71,31 @@ export async function POST(
   const isPosted = draft.status === "posted" && !!draft.postedQboId;
   const matched = draft.matchedQboType != null;
   if (isPosted && !matched) {
+    // This route only knows how to retract from QuickBooks. A draft posted to XERO
+    // reaching the call below would hand a Xero UUID to quickbooksDelete — it
+    // can't delete the wrong record (the id shapes don't overlap) but it failed
+    // with "Reconnect QuickBooks", which is nonsense advice for a Xero client.
+    //
+    // Say what's actually true and point at Undo, which DOES have a Xero path
+    // (undoXeroPost). Wiring delete through it is deliberately not done here:
+    // choosing between voiding and deleting in a real client's ledger is a
+    // decision to make explicitly, not a side effect of a dispatch fix.
+    if (
+      (await resolveRetractionProvider({
+        postedProvider: draft.postedProvider,
+        firmId: draft.firmId,
+        clientId: draft.clientId,
+      })) === "xero"
+    ) {
+      return NextResponse.json(
+        {
+          error: "not_supported",
+          detail:
+            "This draft was posted to Xero. Use Undo to remove it from Xero first, then delete the draft.",
+        },
+        { status: 409 },
+      );
+    }
     const ctx = await getQuickbooksReadContext(draft.firmId, draft.clientId);
     if (!ctx) {
       return NextResponse.json(
