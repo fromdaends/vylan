@@ -33,6 +33,7 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { Plus, FileText, Lock } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import {
@@ -173,7 +174,16 @@ export default async function ClientDetailPage({
   const isOwner = me?.role === "owner";
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    // Two columns, following Canopy's client profile: a narrow rail of quiet
+    // reference cards on the left, and the WORK on the right where the eye
+    // lands. The old single 3xl column stacked contact details ABOVE the
+    // engagements, so the first thing you saw on a client was their phone
+    // number and the actual job list was below the fold.
+    //
+    // Deliberately not copied from the reference: its ten-tab row, and its
+    // Spouse / Dependents / Linked contacts / Tags cards. Vylan has no data
+    // behind any of those, and an empty card is worse than no card.
+    <div className="space-y-6 max-w-6xl">
       <Breadcrumb
         label={tCommon("breadcrumb")}
         items={[
@@ -183,7 +193,9 @@ export default async function ClientDetailPage({
       />
 
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="flex min-w-0 items-start gap-3">
+          <AvatarInitials name={client.display_name} size={44} />
+          <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">
             {client.display_name}
           </h1>
@@ -222,6 +234,7 @@ export default async function ClientDetailPage({
               />
             </div>
           )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/clients/${client.id}/archive`}>
@@ -255,8 +268,11 @@ export default async function ClientDetailPage({
         </div>
       </header>
 
-      <div className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
+      {/* ── Left rail: reference, not action ─────────────────────────────── */}
+      <div className="space-y-4">
+      <section className="rounded-xl border border-border/60 bg-card p-4">
+        <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
           {t("contact_info")}
         </h2>
         {/* Read-only by default. Every field renders as a labeled value,
@@ -264,7 +280,9 @@ export default async function ClientDetailPage({
             the "Edit client" dialog in the header. This protects the email
             in particular, since it's where document-request links and
             reminders get sent. */}
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 text-sm">
+        {/* One column in the rail — the old two-column grid put a phone
+            number beside an email in a space too narrow for either. */}
+        <dl className="mt-3 grid grid-cols-1 gap-y-4 text-sm">
           <DetailRow label={t("col_email")} value={client.email} />
           <DetailRow label={t("col_phone")} value={client.phone} mono />
           <DetailRow
@@ -274,7 +292,7 @@ export default async function ClientDetailPage({
           />
           <DetailRow label={t("field_notes")} value={client.notes} wide />
         </dl>
-      </div>
+      </section>
 
       {/* Bookkeeping lives on the client's own page: an OWNER can connect this
           client here (the client is known from context — no name-matching), and
@@ -286,7 +304,7 @@ export default async function ClientDetailPage({
         clientXero.connected ||
         (isOwner && (clientQuickbooks.configured || clientXero.configured))) && (
         <div className="space-y-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
+          <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
             {t("bk_section_title")}
           </h2>
           {(clientQuickbooks.connected ||
@@ -314,6 +332,10 @@ export default async function ClientDetailPage({
         </div>
       )}
 
+      </div>
+
+      {/* ── Main column: the work ────────────────────────────────────────── */}
+      <div className="space-y-6">
       <div className="space-y-3">
         <div className="flex flex-row items-center justify-between gap-3">
           <h2 className="text-base font-semibold tracking-tight text-foreground">
@@ -393,6 +415,8 @@ export default async function ClientDetailPage({
           />
         </div>
       )}
+      </div>
+      </div>
     </div>
   );
 }

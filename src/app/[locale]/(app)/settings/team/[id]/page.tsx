@@ -123,7 +123,7 @@ export default async function TeamMemberProfilePage({
   const name = userDisplayLabel(member);
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="max-w-6xl space-y-6">
       <Breadcrumb
         label={tCommon("breadcrumb")}
         items={[
@@ -145,32 +145,57 @@ export default async function TeamMemberProfilePage({
               <Badge variant="outline">{t("profile_deactivated")}</Badge>
             )}
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">{member.email}</p>
         </div>
       </header>
 
-      <div className={isOwner ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-3"}>
-        <StatTile label={t("profile_stat_engagements")} value={activeCount} />
-        <StatTile label={t("profile_stat_clients")} value={clients.length} />
+      {/* Two columns, same shape as a client's page and following Canopy's
+          profile layout: a narrow rail of quiet reference on the left, the
+          person's actual WORK on the right. */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
+
+      {/* ── Left rail ────────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <section className="rounded-xl border border-border/60 bg-card p-4">
+          <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
+            {t("profile_about_title")}
+          </h2>
+          {/* The three big number tiles that used to sit here are gone. A row
+              of oversized figures across the top is the "AI-generated dashboard"
+              look the founder has rejected before; the same numbers read fine as
+              quiet label/value rows, and they are reference, not the point. */}
+          <dl className="mt-3 space-y-3 text-sm">
+            <ProfileRow label={tClients("col_email")} value={member.email} />
+            <ProfileRow
+              label={t("profile_stat_engagements")}
+              value={String(activeCount)}
+            />
+            <ProfileRow
+              label={t("profile_stat_clients")}
+              value={String(clients.length)}
+            />
+            {isOwner && (
+              <ProfileRow
+                label={t("profile_stat_activity")}
+                value={String(activity.length)}
+              />
+            )}
+          </dl>
+        </section>
+
+        {/* Bulk assign. Owner-only, and it renders itself away when there is
+            nothing to move or nobody to move it to. */}
         {isOwner && (
-          <StatTile
-            label={t("profile_stat_activity")}
-            value={activity.length}
+          <HandOverWork
+            fromUserId={id}
+            fromName={name}
+            members={reassignTargets}
+            counts={{ engagements: activeCount, clients: clients.length }}
           />
         )}
       </div>
 
-      {/* Bulk assign. Owner-only, and it renders itself away when there is
-          nothing to move or nobody to move it to. */}
-      {isOwner && (
-        <HandOverWork
-          fromUserId={id}
-          fromName={name}
-          members={reassignTargets}
-          counts={{ engagements: activeCount, clients: clients.length }}
-        />
-      )}
-
+      {/* ── Main column: their work ──────────────────────────────────────── */}
+      <div className="space-y-6">
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold tracking-tight">
@@ -293,16 +318,19 @@ export default async function TeamMemberProfilePage({
         )}
       </section>
       )}
+      </div>
+      </div>
     </div>
   );
 }
 
-function StatTile({ label, value }: { label: string; value: number }) {
+function ProfileRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card p-4">
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate text-right font-medium tabular-nums">
+        {value}
+      </dd>
     </div>
   );
 }
-
