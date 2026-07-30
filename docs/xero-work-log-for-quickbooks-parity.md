@@ -664,8 +664,12 @@ the parser assumes. Section 17's recording half is correct.
 ```
 
 Xero derives its own rate. QuickBooks refuses the transaction outright. Section 15
-said QuickBooks "does not always" derive one — it never does. **Vylan has no
-source of exchange rates**, so this alone blocks the feature.
+said QuickBooks "does not always" derive one — it never does.
+
+**CORRECTED (see section 19): this does NOT block the feature.** QuickBooks will
+hand over the rate it uses itself, via `GET /exchangerate`. The sentence that
+originally stood here — "Vylan has no source of exchange rates" — was wrong, and
+wrong in the expensive direction: it made a solvable problem look like a wall.
 
 **2. The transaction's currency must MATCH THE VENDOR'S OWN currency.** In
 QuickBooks a vendor is denominated in a currency, and a bill cannot depart from
@@ -712,6 +716,80 @@ artefact of how each integration was written.
 
 *Test artefacts left in the sandbox: bills id 189 (CAD control) and id 190 (HKD),
 both DocNumber `VYL-CUR-*`. Harmless, and a sandbox reset clears them.*
+
+---
+
+## 19. The two blockers from section 18, answered by testing
+
+Both of section 18's obstacles were probed against the same live sandbox. One
+dissolves completely; the other narrows to something workable. Every line is an
+observed response.
+
+### Exchange rates: SOLVED — QuickBooks gives us its own
+
+```
+GET /v3/company/{realm}/exchangerate?sourcecurrencycode=USD&asofdate=2026-07-30
+200 {"ExchangeRate":{"SourceCurrencyCode":"USD","TargetCurrencyCode":"CAD",
+     "Rate":1.400374,"AsOfDate":"2026-07-30","domain":"QBO"}}
+```
+
+This is the ideal source and better than any alternative that was on the table:
+it is **the same rate the client's own books use**, so a posted bill can never
+disagree with QuickBooks' own reporting. No external FX provider, no new
+dependency, no subscription, no drift between Vylan's number and Intuit's.
+
+Section 18 claimed Vylan had no rate source and that this alone blocked the
+feature. That was wrong. Corrected above.
+
+### Supplier currency: READABLE, so the matcher can be made currency-aware
+
+`Vendor.CurrencyRef` comes back on every vendor — `{"value":"CAD","name":"Canadian
+Dollar"}` — in the same query the sync already runs. Caching it is the same shape
+of change as 1050's tax-direction columns.
+
+### The real remaining constraint: Vylan CANNOT create a foreign-currency supplier
+
+Tested four ways, all against a company where USD is already an ACTIVE currency
+(`CompanyCurrency` returns HKD, EUR, USD — so the active-currency list is not the
+obstacle):
+
+| attempt | result |
+| --- | --- |
+| create vendor, `CurrencyRef: {value:"USD"}` | **200 OK, vendor created as CAD** |
+| create vendor, `CurrencyRef: {value,name}` | **200 OK, vendor created as CAD** |
+| sparse-update an HKD vendor to USD | **200 OK, still HKD** |
+| the seeded HKD vendor (made in the QuickBooks UI) | genuinely HKD |
+
+So QuickBooks **silently ignores `CurrencyRef` on vendor create and update over
+the API**, returning 200 with the home currency instead. Note the failure mode —
+success status, wrong result, no error anywhere. The same quiet-failure family as
+everything else in this document.
+
+A foreign-currency supplier therefore has to be created by the accountant in
+QuickBooks itself, where the currency is chosen at creation and then fixed
+forever.
+
+### What this makes buildable
+
+The feature is now fully specified with no unknowns left:
+
+1. **Cache `Vendor.CurrencyRef`** — mirrors 1050.
+2. **Make the matcher currency-aware**: a document in a foreign currency may only
+   match a supplier denominated in that currency. When none exists, say so
+   plainly — "this receipt is in USD; create a USD supplier in QuickBooks first"
+   — rather than matching the correctly-named CAD supplier and failing at post
+   time with "you can only use one foreign currency per transaction", which tells
+   an accountant nothing.
+3. **Fetch the rate from QuickBooks** at post time and send it as `ExchangeRate`.
+4. **Only then** set `booksCurrency` on the QuickBooks producers, so approval
+   opens exactly when all three conditions can be met and not before.
+
+Until 2 and 3 exist, section 18's conclusion stands: keep foreign-currency
+documents blocked on the QuickBooks path.
+
+*Further sandbox artefacts from this round: vendors id 69, 70 and two `VYL A/B`
+test vendors (all created as CAD), plus bill `VYL-FX-OK` attempts. A sandbox reset
+clears everything.*
 
 ---
 
