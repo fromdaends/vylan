@@ -220,7 +220,8 @@
     "handover_to_placeholder": "Choisir un membre…",
     "handover_scope_note": "Le travail en cours, les clients et les échéanciers récurrents sont transférés. Le travail terminé ou archivé reste au nom de {name}.",
     "handover_confirm": "Transférer",
-    "handover_done": "{engagements, plural, one {1 mandat} other {# mandats}} et {clients, plural, one {1 client} other {# clients}} transférés à {name}"
+    "handover_done": "{engagements, plural, one {1 mandat} other {# mandats}} et {clients, plural, one {1 client} other {# clients}} transférés à {name}",
+    "tab_people": "Personnes"
   },
   "Preview": {
     "button": "Aperçu",

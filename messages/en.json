@@ -220,7 +220,8 @@
     "handover_to_placeholder": "Choose a teammate…",
     "handover_scope_note": "Live work, clients and repeating schedules move. Completed and archived work keeps {name}'s name on it.",
     "handover_confirm": "Hand it over",
-    "handover_done": "Moved {engagements, plural, one {1 engagement} other {# engagements}} and {clients, plural, one {1 client} other {# clients}} to {name}"
+    "handover_done": "Moved {engagements, plural, one {1 engagement} other {# engagements}} and {clients, plural, one {1 client} other {# clients}} to {name}",
+    "tab_people": "People"
   },
   "Preview": {
     "button": "Preview",
