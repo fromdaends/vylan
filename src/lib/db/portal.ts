@@ -169,6 +169,14 @@ export type PortalContext = {
   // portal's Messages entry. Cleared when the client opens the thread.
   messages_unread: number;
   messaging_ready: boolean;
+  // The client's OTHER portal-accessible engagements with this firm, powering
+  // the header switcher (a dead-simple hop between a client's engagements).
+  // Includes the current one; the switcher only shows when there are 2+.
+  // Client-safe by design: NO magic tokens live here — switching goes through
+  // the guarded /r/[token]/to/[id] route, which resolves the sibling token
+  // server-side, so a leaked link never carries the client's other links in
+  // its HTML source.
+  sibling_engagements: { id: string; title: string; status: string }[];
 };
 
 export async function loadPortalContext(
@@ -364,8 +372,7 @@ export async function loadPortalContext(
         tax_total_cents: (pr.tax_total_cents as number | null) ?? null,
         due_date: (pr.due_date as string | null) ?? null,
         invoice_terms: (pr.invoice_terms as string | null) ?? null,
-        invoice_language:
-          (pr.invoice_language as "en" | "fr" | null) ?? null,
+        invoice_language: (pr.invoice_language as "en" | "fr" | null) ?? null,
       }
     : null;
 
@@ -374,8 +381,10 @@ export async function loadPortalContext(
   // lock fields decide (read best-effort so a pre-0610 env just yields "not
   // locked" rather than dropping the payment card); when none exists yet (deferred
   // invoice), fall back to the engagement's captured lock preference.
-  let lockRow: { locks_deliverables?: boolean; override_unlocked?: boolean } | null =
-    null;
+  let lockRow: {
+    locks_deliverables?: boolean;
+    override_unlocked?: boolean;
+  } | null = null;
   if (pr) {
     const { data } = await sb
       .from("payment_requests")
@@ -460,7 +469,10 @@ export async function loadPortalContext(
   const paymentConfig = {
     stripeReady: rails.stripe,
     paypal:
-      rails.paypal && isPayPalConfigured() && ppClientId && firmRow.paypal_merchant_id
+      rails.paypal &&
+      isPayPalConfigured() &&
+      ppClientId &&
+      firmRow.paypal_merchant_id
         ? {
             merchantId: firmRow.paypal_merchant_id,
             clientId: ppClientId,
@@ -470,6 +482,13 @@ export async function loadPortalContext(
           }
         : null,
   };
+
+  // The client's other portal-accessible engagements, for the header switcher.
+  // One cheap indexed read; the switcher only renders when there are 2+.
+  const siblingEngagements = await listClientPortalEngagements(
+    engagement.client_id as string,
+    engagement.firm_id as string,
+  );
 
   return {
     engagement: engagement as Engagement,
@@ -491,6 +510,7 @@ export async function loadPortalContext(
     messages: portalMessages,
     messages_unread: messagesUnread,
     messaging_ready: messagingReady,
+    sibling_engagements: siblingEngagements,
   };
 }
 
@@ -528,6 +548,74 @@ export async function findEngagementForToken(token: string): Promise<{
   };
 }
 
+// The client's portal-accessible engagements with this firm, for the header
+// switcher. Same gate as a live portal: has a magic link, live-or-complete
+// (never draft/cancelled), not archived or soft-deleted, and not expired.
+// Returns client-safe fields ONLY — deliberately no magic tokens (the switcher
+// hops via the guarded /r/[token]/to/[id] route). Newest first.
+export async function listClientPortalEngagements(
+  clientId: string,
+  firmId: string,
+): Promise<{ id: string; title: string; status: string }[]> {
+  const sb = getServiceRoleSupabase();
+  const { data } = await sb
+    .from("engagements")
+    .select("id, title, status, created_at, magic_token, magic_expires_at")
+    .eq("client_id", clientId)
+    .eq("firm_id", firmId)
+    .not("magic_token", "is", null)
+    .in("status", ["sent", "in_progress", "complete"])
+    .is("archived_at", null)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+  const now = Date.now();
+  return ((data ?? []) as Record<string, unknown>[])
+    .filter((e) => {
+      const exp = e.magic_expires_at as string | null;
+      return !exp || new Date(exp).getTime() > now;
+    })
+    .map((e) => ({
+      id: e.id as string,
+      title: e.title as string,
+      status: e.status as string,
+    }));
+}
+
+// The security guard behind the switcher: given the CURRENT token and a TARGET
+// engagement id, return the target's magic token ONLY when it belongs to the
+// SAME client + firm and is itself portal-accessible. A held token can hop to a
+// sibling engagement of the same client and nowhere else — it can never be used
+// to enumerate or reach another client's portal.
+export async function resolveSiblingPortalToken(
+  currentToken: string,
+  targetEngagementId: string,
+): Promise<string | null> {
+  const current = await findEngagementForToken(currentToken);
+  if (!current) return null;
+  if (targetEngagementId === current.id) return null; // already here
+  const sb = getServiceRoleSupabase();
+  const { data: target } = await sb
+    .from("engagements")
+    .select("id, firm_id, client_id, status, magic_token, magic_expires_at")
+    .eq("id", targetEngagementId)
+    .maybeSingle();
+  if (!target || !target.magic_token) return null;
+  if (
+    target.client_id !== current.client_id ||
+    target.firm_id !== current.firm_id
+  ) {
+    return null;
+  }
+  if (target.status === "cancelled") return null;
+  if (
+    target.magic_expires_at &&
+    new Date(target.magic_expires_at as string) < new Date()
+  ) {
+    return null;
+  }
+  return target.magic_token as string;
+}
+
 export type AccountantContact = {
   email: string;
   // The accountant's preferred language — drives the language of notifications
@@ -557,7 +645,11 @@ export async function resolveAccountantContact(
   const pick = (row: Row | null): AccountantContact | null => {
     if (!row?.email) return null;
     const name = row.display_name?.trim() || row.name?.trim() || null;
-    return { email: row.email, locale: row.locale === "en" ? "en" : "fr", name };
+    return {
+      email: row.email,
+      locale: row.locale === "en" ? "en" : "fr",
+      name,
+    };
   };
 
   if (opts.assignedUserId) {
@@ -636,7 +728,8 @@ export async function setItemStatus(
   // Needs the engagement id; every caller passes it except where it's optional,
   // in which case we look it up rather than skip (a missed sync would leave a
   // stale chip). Best-effort — never fail the status write that just landed.
-  const targetEngagementId = engagementId ?? (await lookupEngagementId(sb, itemId));
+  const targetEngagementId =
+    engagementId ?? (await lookupEngagementId(sb, itemId));
   if (targetEngagementId) {
     await syncEngagementStage(sb, targetEngagementId);
   }

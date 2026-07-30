@@ -2820,6 +2820,7 @@
     "card_docs_all_set": "Tout est bon",
     "hub_back": "Retour",
     "messages_section_title": "Messages",
+    "switch_engagement": "Changer de mandat",
     "card_messages_line": "Écrire directement à {firm}",
     "card_messages_new": "{count, plural, one {# nouveau message} other {# nouveaux messages}}",
     "messages_intro": "Une ligne directe avec {firm}. Écrivez en tout temps — les réponses s'affichent sur cette page.",
