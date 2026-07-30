@@ -89,7 +89,6 @@ import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { isSelectableTaxCode } from "@/lib/quickbooks/tax-code";
 import { expectedYearFromTitle } from "@/lib/ai/matching";
 import { OpenPanelOnLoad } from "@/components/assistant/open-panel-on-load";
-import { EngagementActivityButton } from "@/components/engagements/engagement-activity-button";
 import { AddItemDialog } from "@/components/engagements/add-item-dialog";
 import { AddSignatureDialog } from "@/components/engagements/add-signature-dialog";
 import { ResumeSignaturePlacement } from "@/components/engagements/resume-signature-placement";
@@ -111,9 +110,7 @@ import { snapshotFromRequestItems } from "@/lib/recurring/snapshot";
 import { SeriesSyncPrompt } from "@/components/engagements/series-sync-prompt";
 import { EngagementAssignee } from "@/components/engagements/engagement-assignee";
 import { getLatestHandoffNote } from "@/lib/db/activity";
-import { EngagementContributors } from "@/components/engagements/engagement-contributors";
 import {
-  listEngagementContributors,
   getRecentInvoiceCancel,
 } from "@/lib/db/activity";
 import { PaymentCanceledChip } from "@/components/engagements/payment-canceled-chip";
@@ -644,12 +641,6 @@ export default async function EngagementDetailPage({
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
 
-  // "Worked on by" — the distinct teammates who've acted on this engagement.
-  // Team-mode only (a solo firm is always just the owner). Names resolve from
-  // the already-loaded firmUsers map; a title tooltip shows when they last acted.
-  const contributors = teamEnabled
-    ? await listEngagementContributors(engagement.id)
-    : [];
   // The handoff note from the last reassignment. Team-mode only, and only
   // fetched when there IS an assignee — the note is instructions for the person
   // holding the work, so on an unassigned engagement it has no audience.
@@ -669,14 +660,6 @@ export default async function EngagementDetailPage({
         at: formatDate(handoffRaw.at, locale, "medium"),
       }
     : null;
-
-  const contributorDisplay = contributors.map((c) => ({
-    userId: c.userId,
-    name: reviewerNameById.get(c.userId) ?? t("contributor_unknown"),
-    title: t("worked_last", {
-      date: formatDate(c.lastAt, locale, "medium"),
-    }),
-  }));
 
   // Which All-Engagements sub-page this engagement belongs to — drives both the
   // sidebar highlight (via SetEngagementDetailView) and the breadcrumb. Derived
@@ -871,14 +854,6 @@ export default async function EngagementDetailPage({
               />
             </div>
           )}
-          {teamEnabled && contributorDisplay.length > 0 && (
-            <div className="mt-3">
-              <EngagementContributors
-                label={t("worked_on_by")}
-                contributors={contributorDisplay}
-              />
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -1000,11 +975,12 @@ export default async function EngagementDetailPage({
               </form>
             </>
           )}
-          {/* Activity: drafts keep a standalone icon (they have no "..." menu);
-              every other state opens it from the "..." menu. Both link to the
-              firm activity log, pre-filtered to this client — open to staff
-              now, and row-filtered per viewer in the database. */}
-          {isDraft && <EngagementActivityButton clientId={engagement.client_id} />}
+          {/* No Activity affordance here, by design. History belongs in the
+              owner's audit log at /settings/audit, filtered by client or by
+              person — not as a door on a page every teammate opens. Who is
+              LOOKING at this job is a live question, answered by presence at
+              the top of the page; who TOUCHED it months ago is an audit
+              question and belongs where audit questions are answered. */}
           {/* The "..." menu holds reminder and invoice settings, copy links,
               downloads, cancellation, and deletion so only primary buttons +
               the payment pill stay in the row. Delete keeps its confirmation +
@@ -1013,7 +989,6 @@ export default async function EngagementDetailPage({
           {!isDraft && (
             <EngagementMoreMenu
               engagementId={engagement.id}
-              clientId={engagement.client_id}
               locale={locale}
               commentable={teamEnabled}
               privacy={
