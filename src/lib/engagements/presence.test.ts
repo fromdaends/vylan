@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   presentOthers,
   splitPresence,
+  presenceColor,
+  PRESENCE_COLORS,
   PRESENCE_VISIBLE_MAX,
 } from "./presence";
 
@@ -94,5 +96,31 @@ describe("splitPresence", () => {
 
   it("handles nobody", () => {
     expect(splitPresence([])).toEqual({ shown: [], overflow: 0 });
+  });
+});
+
+describe("presenceColor", () => {
+  it("is stable for the same person", () => {
+    // A colour that shuffled between reloads would be worse than no colour:
+    // the whole point is "the green one is Sarah".
+    const id = "8f14e45f-ea28-4c1e-9c0b-6d2f1a3b4c5d";
+    expect(presenceColor(id)).toBe(presenceColor(id));
+  });
+
+  it("only ever returns a colour from the palette", () => {
+    for (const id of ["", "a", "u-ash", "8f14e45f-ea28-4c1e-9c0b-6d2f1a3b4c5d", "ZZZZ"]) {
+      expect(PRESENCE_COLORS).toContain(presenceColor(id));
+    }
+  });
+
+  it("spreads a realistic roster over more than one colour", () => {
+    // Not a uniformity guarantee — just that a small firm does not end up
+    // with six identical circles, which would defeat the feature.
+    const ids = Array.from({ length: 12 }, (_, i) => `user-${i}-abcdef`);
+    expect(new Set(ids.map(presenceColor)).size).toBeGreaterThan(1);
+  });
+
+  it("leaves rose out — it reads as an error everywhere else in the app", () => {
+    expect(PRESENCE_COLORS).not.toContain("icon-rose");
   });
 });

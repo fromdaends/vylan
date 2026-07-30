@@ -5,6 +5,13 @@ import { useTranslations } from "next-intl";
 import { getBrowserSupabase } from "@/lib/supabase/client";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  presenceColor,
   presentOthers,
   splitPresence,
   type PresenceRoster,
@@ -27,6 +34,18 @@ import {
 // switch. The reducer that decides what to draw lives in lib/engagements/
 // presence.ts, and the roster filter it applies is load-bearing — read the
 // comment there before changing anything here.
+//
+// ── THE LOOK ─────────────────────────────────────────────────────────────────
+//
+// Overlapping faces, each in its own stable colour, each ringed in the page
+// background so the overlap reads as a stack instead of a smear. Colour is the
+// point: a row of identical grey circles tells you a number, a row of coloured
+// ones tells you WHO without reading. The colours are the app's own icon
+// tokens, already tuned for light and dark.
+//
+// One animation, not five: a slow breath on the live dot. The faces themselves
+// only lift on hover, and both stop under prefers-reduced-motion — the ring and
+// the dot are still there, so nothing that carries meaning depends on movement.
 export function EngagementPresence({
   engagementId,
   viewerId,
@@ -43,12 +62,6 @@ export function EngagementPresence({
 
   useEffect(() => {
     if (!viewerId) return;
-    // persistSession/autoRefreshToken/detectSessionInUrl are all off: this is
-    // the app's first browser-side Supabase client, the session cookies are
-    // HttpOnly so it can never hold one anyway, and detectSessionInUrl would
-    // otherwise have this component sniffing every URL it mounts under —
-    // including on a page that sits one navigation from the two auth
-    // confirmation routes.
     const supabase = getBrowserSupabase();
     const channel = supabase.channel(`engagement-presence:${engagementId}`, {
       // `enabled` stated explicitly rather than relying on the fact that a
@@ -90,30 +103,73 @@ export function EngagementPresence({
   const { shown, overflow } = splitPresence(people);
 
   return (
-    <span
-      className="inline-flex items-center gap-1 align-middle"
-      aria-label={t("presence_viewing", { count: people.length })}
-    >
-      {shown.map((p) => (
-        <span
-          key={p.id}
-          title={t("presence_person_viewing", { name: p.name })}
-          className="inline-block rounded-full ring-2 ring-background"
-        >
-          <AvatarInitials name={p.name} size={22} />
+    <TooltipProvider delayDuration={150}>
+      <span
+        className="inline-flex items-center gap-2"
+        aria-label={t("presence_viewing", { count: people.length })}
+      >
+        {/* The live dot. The one moving thing here, and it earns it: without
+            it a coloured face is indistinguishable from a static avatar of the
+            assignee. Stops under prefers-reduced-motion (globals.css), where
+            the solid dot still reads as "live". */}
+        <span className="relative inline-flex size-1.5 shrink-0">
+          <span className="absolute inline-flex size-full animate-ping rounded-full bg-icon-emerald opacity-60 motion-reduce:hidden" />
+          <span className="relative inline-flex size-1.5 rounded-full bg-icon-emerald" />
         </span>
-      ))}
-      {overflow > 0 && (
-        <span
-          title={people
-            .slice(shown.length)
-            .map((p) => p.name)
-            .join(", ")}
-          className="inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-secondary px-1.5 text-[11px] font-medium text-muted-foreground ring-2 ring-background"
-        >
-          +{overflow}
+
+        {/* -space-x pulls the faces into an overlapping stack. The ring is the
+            PAGE background, not a border, so the overlap reads as depth rather
+            than as two circles fighting. */}
+        <span className="flex items-center -space-x-1.5">
+          {shown.map((p) => (
+            <Tooltip key={p.id}>
+              <TooltipTrigger asChild>
+                <span
+                  // tabIndex so the name is reachable without a mouse — Radix
+                  // opens the tooltip on focus, which is also what gives touch
+                  // devices a way in, since hover does not exist there.
+                  tabIndex={0}
+                  style={{ ["--ring-color" as string]: `var(--${presenceColor(p.id)})` }}
+                  className="relative inline-flex rounded-full ring-2 ring-background transition-transform duration-200 ease-out hover:z-10 hover:-translate-y-0.5 focus-visible:z-10 focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                >
+                  <span
+                    className="inline-flex rounded-full p-[1.5px]"
+                    style={{ backgroundColor: "var(--ring-color)" }}
+                  >
+                    <AvatarInitials
+                      name={p.name}
+                      size={22}
+                      className="ring-1 ring-background"
+                    />
+                  </span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>
+                {t("presence_person_viewing", { name: p.name })}
+              </TooltipContent>
+            </Tooltip>
+          ))}
+
+          {overflow > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  tabIndex={0}
+                  className="relative inline-flex h-[25px] min-w-[25px] items-center justify-center rounded-full bg-secondary px-1.5 text-[11px] font-medium tabular-nums text-muted-foreground ring-2 ring-background transition-transform duration-200 ease-out hover:z-10 hover:-translate-y-0.5 focus-visible:z-10 focus-visible:outline-none motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                >
+                  +{overflow}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" sideOffset={6}>
+                {people
+                  .slice(shown.length)
+                  .map((p) => p.name)
+                  .join(", ")}
+              </TooltipContent>
+            </Tooltip>
+          )}
         </span>
-      )}
-    </span>
+      </span>
+    </TooltipProvider>
   );
 }

@@ -762,12 +762,20 @@ export default async function EngagementDetailPage({
 
       <header className="flex flex-wrap items-start justify-between gap-3 animate-in-up">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            {engagement.title}
-            {/* Who else has this open, live, beside the name — the convention
-                every collaborative tool shares. Renders nothing when you are
-                alone, which is most of the time. Team-mode only: a solo firm
-                has nobody to be present. */}
+          {/* Title and the live "who else is here" row are SIBLINGS in a flex
+              row, not nested. The facepile used to live inside the <h1>, where
+              it inherited the heading's 3xl line-height and font metrics and so
+              sat on the text baseline, jammed against the last letter. A 22px
+              circle cannot share a baseline with 30px type and look deliberate.
+              items-center + gap-3 lets the row centre the avatars against the
+              title's optical middle instead. */}
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-3xl font-semibold tracking-tight">
+              {engagement.title}
+            </h1>
+            {/* Team-mode only: a solo firm has nobody to be present. Renders
+                nothing when you are the only one looking, which is most of the
+                time — so this usually costs the row no height at all. */}
             {teamEnabled && user && (
               <EngagementPresence
                 engagementId={engagement.id}
@@ -775,7 +783,7 @@ export default async function EngagementDetailPage({
                 roster={activeMembers}
               />
             )}
-          </h1>
+          </div>
           <div className="flex items-center gap-2 mt-2.5 text-sm flex-wrap">
             {/* No workflow position (a draft or cancelled engagement, or an
                 environment where migration 0690 hasn't been applied) → the
