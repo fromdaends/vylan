@@ -16,7 +16,6 @@ import {
   Building2,
   Users,
   LogOut,
-  ListChecks,
   SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -358,7 +357,6 @@ export function TeamManager({
                   member={m}
                   showStats={showStats}
                   canManage={canManage && !m.isSelf && m.role !== "owner"}
-                  canViewProfile={canManage}
                   // Who this person's work can be handed to on removal: any OTHER
                   // active member (owner included). Empty → no reassign option.
                   reassignTargets={activeMembers
@@ -617,7 +615,6 @@ function MemberRow({
   member,
   showStats,
   canManage,
-  canViewProfile,
   reassignTargets,
 }: {
   member: ActiveMember;
@@ -625,7 +622,6 @@ function MemberRow({
   showStats: boolean;
   canManage: boolean;
   // Owners can open a teammate's profile (their engagements/clients/activity).
-  canViewProfile: boolean;
   // Other active members this person's work can be reassigned to on removal.
   reassignTargets: { id: string; name: string }[];
 }) {
@@ -668,24 +664,44 @@ function MemberRow({
   }
 
   return (
-    <tr className="border-b border-border/50 transition-colors last:border-0 hover:bg-muted/40">
+    // The entire row opens the person. Deliberately an onClick and NOT the
+    // usual stretched-link trick (an absolutely-positioned ::after over the
+    // row): that is broken on <tr> in WebKit, so it would do nothing in Safari
+    // — which is the browser this was reported from.
+    //
+    // The guard matters: this row also holds a "..." menu and, for an owner, a
+    // switch. Without it, opening the menu would navigate away underneath you.
+    // closest() walks up from whatever was actually clicked, so anything
+    // interactive — or inside a popover portal — is left alone.
+    <tr
+      onClick={(e) => {
+        const el = e.target as HTMLElement;
+        if (
+          el.closest(
+            'a,button,input,select,textarea,[role="menu"],[role="menuitem"],[role="dialog"],[role="switch"]',
+          )
+        ) {
+          return;
+        }
+        router.push(`/settings/team/${member.id}`);
+      }}
+      className="cursor-pointer border-b border-border/50 transition-colors last:border-0 hover:bg-muted/40"
+    >
       <td className="py-4 pl-4 pr-3">
         <div className="flex items-center gap-3">
           <AvatarInitials src={member.avatarUrl} name={member.name} size={38} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              {canViewProfile ? (
-                <Link
-                  href={`/settings/team/${member.id}`}
-                  className="truncate text-sm font-medium hover:underline"
-                >
-                  {member.name}
-                </Link>
-              ) : (
-                <span className="truncate text-sm font-medium">
-                  {member.name}
-                </span>
-              )}
+              <Link
+                href={`/settings/team/${member.id}`}
+                className="truncate text-sm font-medium hover:underline"
+                // The whole row navigates (see the <tr> handler). This stays a
+                // real link so the keyboard, middle-click and "open in new tab"
+                // all still work — a row-level onClick alone gives none of that.
+                onClick={(e) => e.stopPropagation()}
+              >
+                {member.name}
+              </Link>
               {member.role === "owner" ? (
                 <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-muted px-2 py-0.5 text-xs text-foreground">
                   <span
@@ -737,19 +753,9 @@ function MemberRow({
 
       <td className="py-3 pl-3">
         <div className="flex items-center justify-end gap-1">
-          {/* Go to the person, not to a filtered copy of your own list. This
-              used to point at /engagements?assignee=<id>, which showed the same
-              rows their profile already does — under a page titled
-              "Engagements" that never said whose work it was. */}
-          <Link
-            href={`/settings/team/${member.id}`}
-            title={t("view_engagements")}
-            aria-label={t("view_engagements")}
-            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ListChecks className="size-4" />
-          </Link>
-
+          {/* The little "view their work" icon that used to live here is gone:
+              the row itself now goes there, so it was a second button for the
+              thing the whole row already does. */}
           {canManage && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
