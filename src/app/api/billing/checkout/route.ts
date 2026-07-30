@@ -3,6 +3,7 @@ import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { priceIdFor, type PlanId } from "@/lib/plans";
 
 export const runtime = "nodejs";
@@ -32,9 +33,11 @@ export async function POST(request: NextRequest) {
   if (!auth.user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
-  // Owner-only: billing is firm-admin. Staff are blocked from starting checkout.
+  // billing.manage — the firm's own Vylan subscription. NOT money.view:
+  // every member has that one, and mapping checkout to it would let staff
+  // start a subscription change.
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "billing.manage")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
   const firm = await getCurrentFirm();

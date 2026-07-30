@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { clearFirmConnectAccount } from "@/lib/db/stripe-connect";
 
 export const runtime = "nodejs";
@@ -23,9 +24,10 @@ export async function POST() {
   if (!auth.user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
-  // Owner-only: the connected payout account is firm-admin, same as connecting.
+  // billing.manage — same capability as connecting, so the two can never
+  // disagree about who may touch the payout account.
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "billing.manage")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
   const firm = await getCurrentFirm();

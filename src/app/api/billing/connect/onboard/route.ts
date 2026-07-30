@@ -3,6 +3,7 @@ import { stripe, isStripeConfigured } from "@/lib/stripe";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { setFirmConnectAccountId } from "@/lib/db/stripe-connect";
 
 export const runtime = "nodejs";
@@ -23,9 +24,11 @@ export async function POST() {
   if (!auth.user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
-  // Owner-only: connecting the firm's payout account is firm-admin.
+  // billing.manage — connecting the firm's payout account. Deliberately the
+  // same capability as the subscription: both are "the firm's money plumbing",
+  // and a firm that trusts someone with one trusts them with the other.
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "billing.manage")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
   const firm = await getCurrentFirm();
