@@ -60,6 +60,7 @@ export type RailItem = {
 
 export function IconRail({
   items,
+  footerItem,
   navLabel,
   labels,
   userDisplayName,
@@ -68,6 +69,12 @@ export function IconRail({
   brandColor,
 }: {
   items: RailItem[];
+  // Pinned below the scrolling nav, above the account avatar. For a destination
+  // that must ALWAYS be visible and labelled whatever the viewport height: the
+  // nav above is overflow-y-auto with a hidden scrollbar (see its comment), so a
+  // list item that falls past the fold keeps its icon on screen but loses its
+  // LABEL — an unlabelled glyph jammed against the avatar.
+  footerItem?: RailItem;
   navLabel: string;
   labels: {
     profile: string;
@@ -142,34 +149,26 @@ export function IconRail({
         // short viewport, and a visible bar inside a 76px rail is all noise.
         className="mt-5 flex w-full flex-1 flex-col items-center gap-2 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {items.map((item) => {
-          const active = isNavItemActive(pathname, item.href);
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
-                active
-                  ? "bg-white/[0.14] text-white"
-                  : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white",
-              )}
-            >
-              <Icon className="size-[22px]" aria-hidden />
-              <span
-                className={cn(
-                  "text-center text-[10px] leading-none tracking-[0.01em]",
-                  active ? "font-semibold" : "font-medium",
-                )}
-              >
-                {item.label}
-              </span>
-            </Link>
-          );
-        })}
+        {items.map((item) => (
+          <RailLink
+            key={item.href}
+            item={item}
+            active={isNavItemActive(pathname, item.href)}
+          />
+        ))}
       </nav>
+
+      {/* Firm sits here rather than in the list above: it is a firm-level
+          destination — the same spot the old sidebar kept its quiet firm button
+          — and pinning it means it never scrolls out of view on a short screen. */}
+      {footerItem && (
+        <div className="mt-2 flex w-full shrink-0 flex-col items-center border-t border-white/[0.08] pt-3">
+          <RailLink
+            item={footerItem}
+            active={isNavItemActive(pathname, footerItem.href)}
+          />
+        </div>
+      )}
 
       {/* Account — the same menu the old sidebar's profile card opened. */}
       <DropdownMenu>
@@ -253,5 +252,34 @@ export function IconRail({
         </DropdownMenuContent>
       </DropdownMenu>
     </aside>
+  );
+}
+
+// One rail destination. Extracted so the scrolling list and the pinned footer
+// item render byte-identically — if they drifted, the pinned one would quietly
+// stop looking like a nav item.
+function RailLink({ item, active }: { item: RailItem; active: boolean }) {
+  const Icon = item.icon;
+  return (
+    <Link
+      href={item.href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+        active
+          ? "bg-white/[0.14] text-white"
+          : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white",
+      )}
+    >
+      <Icon className="size-[22px]" aria-hidden />
+      <span
+        className={cn(
+          "text-center text-[10px] leading-none tracking-[0.01em]",
+          active ? "font-semibold" : "font-medium",
+        )}
+      >
+        {item.label}
+      </span>
+    </Link>
   );
 }

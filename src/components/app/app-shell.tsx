@@ -158,21 +158,11 @@ export function AppShell({
         ]
       : []),
     { href: "/integrations", label: labels.integrations, icon: Plug },
-    // THE FIRM. This was missing entirely on desktop: the old sidebar carried a
-    // quiet firm button at its foot, the icon rail that replaced it does not, and
-    // the comment here used to claim Firm "lives in the account dropdown" — it
-    // does not. That dropdown holds Profile / Settings / Help / Help centre /
-    // Log out and nothing else. Mobile kept its own /settings/team entry, which
-    // is why the regression was desktop-only and easy to miss.
-    // Team-gated: with collaboration off the page 404s, so the entry would be a
-    // dead end rather than a destination.
-    ...(teamEnabled
-      ? [{ href: "/settings/team", label: labels.firm, icon: Building2 }]
-      : []),
   ];
 
-  // Settings lives in the account dropdown. Firm is in the rail above, because
-  // it is somewhere you GO, not a preference you set.
+  // Settings lives in the account dropdown; Firm is pinned at the foot of the
+  // rail (see footerItem below), because it is somewhere you GO rather than a
+  // preference you set.
 
   return (
     <ActiveNavProvider>
@@ -181,6 +171,16 @@ export function AppShell({
           icon-rail.tsx for why it doesn't collapse and has no sub-menus. */}
       <IconRail
         items={railNav}
+        // Firm is PINNED below the list, not in it. Added to the list first, it
+        // became the ninth item, fell past the fold of the rail's hidden-scrollbar
+        // nav, and rendered as an unlabelled glyph pressed against the avatar.
+        // Team-gated: with collaboration off the page 404s, so it would be a dead
+        // end rather than a destination.
+        footerItem={
+          teamEnabled
+            ? { href: "/settings/team", label: labels.firm, icon: Building2 }
+            : undefined
+        }
         navLabel={tApp("nav_primary_label")}
         labels={labels}
         userDisplayName={userDisplayName}
