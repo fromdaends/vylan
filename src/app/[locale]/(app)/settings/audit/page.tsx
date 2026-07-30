@@ -36,19 +36,11 @@ export default async function AuditLogPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  // Open to every member of the firm. This used to be owner-only, which was
-  // backwards: the log answers "what happened to this file" — the question
-  // staff ask most — and every route it links to (engagements, clients) was
-  // already staff-visible. Data safety does not depend on hiding the page:
-  // listActivityForFirm reads through the USER's Supabase client, so
-  // activity_log_select (0810) drops every row belonging to a private client
-  // before it reaches the server. A staff member sees the firm's history minus
-  // the private work, which is exactly the rule everywhere else in the app.
-  //
-  // Firm export and the delete request stay owner-only — they live in the
-  // Data & privacy section, not here.
+  // Owner-only — matches the gating on the existing Data & Privacy
+  // section in /settings. Staff members get a 404 rather than a 403 so
+  // the page's existence isn't leaked to non-owners.
   const user = await getCurrentUser();
-  if (!user) {
+  if (!user || user.role !== "owner") {
     notFound();
   }
 

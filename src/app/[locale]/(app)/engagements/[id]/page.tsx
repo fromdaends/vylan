@@ -1001,10 +1001,12 @@ export default async function EngagementDetailPage({
             </>
           )}
           {/* Activity: drafts keep a standalone icon (they have no "..." menu);
-              every other state opens it from the "..." menu. Both link to the
-              firm activity log, pre-filtered to this client — open to staff
-              now, and row-filtered per viewer in the database. */}
-          {isDraft && <EngagementActivityButton clientId={engagement.client_id} />}
+              every other state opens it from the "..." menu. Both now link to
+              the owner-only firm audit log, pre-filtered to this client —
+              hidden from staff, who can't open the audit log. */}
+          {isDraft && user?.role === "owner" && (
+            <EngagementActivityButton clientId={engagement.client_id} />
+          )}
           {/* The "..." menu holds reminder and invoice settings, copy links,
               downloads, cancellation, and deletion so only primary buttons +
               the payment pill stay in the row. Delete keeps its confirmation +
@@ -1014,6 +1016,7 @@ export default async function EngagementDetailPage({
             <EngagementMoreMenu
               engagementId={engagement.id}
               clientId={engagement.client_id}
+              isOwner={user?.role === "owner"}
               locale={locale}
               commentable={teamEnabled}
               privacy={

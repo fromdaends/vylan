@@ -6,10 +6,10 @@ import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 
 // Draft engagements keep a standalone Activity affordance in the header (they
-// have no "..." menu). It links to the firm activity log, pre-filtered to this
-// engagement's client — the same destination as the Activity item in the "..."
-// menu on sent engagements. No longer owner-gated at the call site: the log is
-// open to every member and hides private clients per-viewer in the database.
+// have no "..." menu). It links to the owner-only firm audit log, pre-filtered
+// to this engagement's client — the same destination as the Activity item in
+// the "..." menu on sent engagements. Owner-gated at the call site (the audit
+// log is owner-only, so staff never see this).
 export function EngagementActivityButton({ clientId }: { clientId: string }) {
   const t = useTranslations("Activity");
   return (
