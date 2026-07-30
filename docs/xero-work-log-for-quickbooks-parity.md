@@ -838,3 +838,96 @@ clears everything.*
   match/no-match decision with QuickBooks and reimplements only the query. Where
   a shared rule needed a different INPUT (currency), the adapter normalised the
   input rather than adding a provider branch inside the shared rule.
+
+## 21. Posting to QuickBooks, and its duplicate protection, PROVEN — not assumed
+
+The founder asked a fair question: "and you know that posting to quickbooks
+works 100% and the duplicate protection". The honest answer at the time was no.
+What had been proven was that `buildBillPayload` produces a payload QuickBooks
+accepts — its output had been fired at the live API by hand. What had never been
+run was the **orchestration**: a document going in one end and a transaction
+coming out the other. And **duplicate protection had never been tested at all**,
+on either provider, because it shipped before this month's work and "it was
+already there" is not evidence.
+
+Both are now proven, against a real sandbox company, and the proof is a command
+anyone can re-run: `npm run qbo:post`.
+
+### What ran, and what it showed
+
+A generated CAD invoice from a supplier that genuinely exists in the company
+(`Boreal Traiteur & Evenements inc.`, $169.50, HST 13%, Net 30) went through
+`ingestPortalUpload` — the shared intake behind both upload routes — was read by
+production's model, and produced a draft. That draft then went through
+`saveResolvedPatch` → `setDraftStatus` → `postApprovedDraftForFile`, which is
+exactly what the post route calls. Read back from QuickBooks:
+
+```
+POST    posted 195
+BOOKS   Bill 195 | total 169.5 CAD | vendor Boreal Traiteur & Evenements inc.
+        | txn 2026-07-30 | due 2026-08-29 | doc# BT-5590
+RECEIPT 1 attached to Bill 195
+REPOST  needs_match_confirmation | candidates: bill#195, bill#194, bill#193
+ATTACH  matched_existing 195
+COUNT   before duplicate step: 195,194,193 | after: 195,194,193
+```
+
+That last line is the whole point: the duplicate path added **nothing**. The
+`due 2026-08-29` and `doc# BT-5590` also verify §16's due-date fix and the
+posting-reference work live rather than by unit test.
+
+### Four things the exercise taught, all of which had bitten silently
+
+1. **Intuit's idempotency key makes a naive re-run a no-op.** Vylan sends
+   `requestid = fileId-postAttempt`; a repeated POST carrying a key Intuit has
+   seen returns the ORIGINAL transaction **without creating anything**. That is
+   exactly right in production — a retried post cannot double-book — but it
+   means a check that resets only `posted_qbo_id` is not posting at all, just
+   replaying an old receipt. A rerun MUST bump `post_attempt`.
+
+2. **Never hard-delete a transaction to clean up.** An earlier version of the
+   check deleted the bill a previous run had created. QuickBooks then reissued
+   the freed id to the next bill, and reported that id as "Object Not Found" on
+   both read and attach — three runs in a row looked like a posting bug that did
+   not exist. Let the sandbox accumulate; reset only Vylan's side.
+
+3. **A Bill does not echo its attachments.** `GET /bill/{id}` returns no
+   `AttachableRef`, so asserting on it reports zero attachments however many
+   there are — a check that lies in the reassuring direction, which is the worst
+   kind. Attachments must be read from `Attachable`, and when read properly the
+   receipt image is there.
+
+4. **Vylan's own file-level duplicate detection fires before any of this.** Two
+   byte-identical uploads never produce two drafts — the second is routed as a
+   duplicate and never classified. So register matching is for the OTHER case:
+   the same transaction arriving as a different file, or already entered by
+   hand. Testing it needs two different documents, not the same one twice.
+
+### The local-credentials problem, and the way around it
+
+Token refresh needs `QBO_CLIENT_ID` / `QBO_CLIENT_SECRET`, which live only in
+the hosting environment, so a laptop can only talk to QuickBooks inside the hour
+after the last refresh. Rather than copy secrets down, `npm run qbo:refresh`
+enqueues the app's own `sync_quickbooks` job and nudges the deployment's cron:
+the deployment refreshes and persists the rotated tokens, and the local process
+then reads a fresh one from the database like any other reader. Same trick reads
+documents without a local AI key — `ingestPortalUpload` already queues a durable
+classify job, so the deployment's model does the reading and the result is what
+PRODUCTION would produce rather than whatever is configured locally.
+
+This is worth generalising: when a check needs a credential only the deployment
+holds, prefer asking the deployment to do that step over copying the credential.
+
+### The commands
+
+| command | what it answers |
+| --- | --- |
+| `npm run qbo:e2e` | does a document become a draft? (needs a pending request item) |
+| `npm run qbo:post` | does that draft become a transaction, once and only once? |
+| `npm run qbo:inspect` | what is actually in the connected company right now? |
+| `npm run qbo:refresh` | give me another hour of QuickBooks access locally |
+| `npm run health` | is anything silently not working? |
+
+All are `.check.ts`, which `npm test` deliberately does not match: they need a
+live database or a live connection, and they are things you RUN when you want to
+know, not things that gate a change.

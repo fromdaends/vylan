@@ -15,7 +15,11 @@
     "db:reset": "supabase db reset",
     "db:status": "supabase status",
     "eval:bookkeeping": "vitest run --config vitest.eval.config.ts",
-    "health": "vitest run --config vitest.health.config.ts"
+    "health": "vitest run --config vitest.check.config.ts src/lib/health/run.check.ts",
+    "qbo:e2e": "vitest run --config vitest.check.config.ts src/lib/quickbooks/e2e.check.ts",
+    "qbo:post": "vitest run --config vitest.check.config.ts src/lib/quickbooks/post-e2e.check.ts",
+    "qbo:inspect": "vitest run --config vitest.check.config.ts src/lib/quickbooks/inspect.check.ts",
+    "qbo:refresh": "vitest run --config vitest.check.config.ts src/lib/quickbooks/refresh.check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.95.2",
