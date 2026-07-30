@@ -51,7 +51,8 @@ describe("buildSearchRegistry", () => {
 
   it("always exposes the Integrations hub, even with no QuickBooks connection", () => {
     // Sage 50 lives in the hub and needs no connection, so the hub must stay
-    // reachable via search for every firm (matches the always-visible nav tab).
+    // reachable via search for every firm. The hub moved into Settings (it no
+    // longer has a sidebar tab), so search points at that tab directly.
     for (const quickbooksConnected of [false, true]) {
       const reg = buildSearchRegistry(translators, {
         isOwner: false,
@@ -59,7 +60,7 @@ describe("buildSearchRegistry", () => {
       });
       const hub = reg.find((e) => e.id === "integrations");
       expect(hub).toBeDefined();
-      expect(hub?.href).toBe("/integrations");
+      expect(hub?.href).toBe("/settings?tab=integrations");
     }
   });
 

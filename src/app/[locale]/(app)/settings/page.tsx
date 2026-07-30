@@ -23,6 +23,7 @@ import { getFirmInvoiceSettings } from "@/lib/db/invoice-settings";
 import { SettingsShell } from "./settings-form";
 import { TrialStatusCard } from "@/components/app/trial-status-card";
 import { SubscriptionCard } from "@/components/billing/subscription-card";
+import { IntegrationsCards } from "@/components/integrations/integrations-cards";
 import { getFirmReminderDefault } from "@/lib/reminder-defaults";
 import { loadNotificationSettingsBundle } from "@/lib/db/notification-settings";
 import { listFirmUsers, userDisplayLabel } from "@/lib/db/users";
@@ -284,6 +285,12 @@ export default async function SettingsPage({
     callbackStatus: qboCallbackStatus,
   };
 
+  // The Integrations hub cards (QuickBooks, Xero, Sage) — an async server
+  // component handed to the client shell as a slot, like billingSlot above.
+  // They moved here when the standalone /integrations tab left the rail, so
+  // Settings > Integrations is now the real hub rather than a signpost to one.
+  const integrationsSlot = <IntegrationsCards />;
+
   // Per-service default prices for the Payments settings editor (owner-only).
   // Defaults to {} until migration 0380 is applied (column absent -> undefined).
   const servicePrices = isOwner ? (firm.service_prices ?? {}) : null;
@@ -327,6 +334,7 @@ export default async function SettingsPage({
         connect={connect}
         paypal={paypal}
         quickbooks={quickbooks}
+        integrationsSlot={integrationsSlot}
         servicePrices={servicePrices}
         invoiceSettings={invoiceSettings}
         paymentsList={paymentsList}

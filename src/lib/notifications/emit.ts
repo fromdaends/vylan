@@ -347,7 +347,9 @@ export async function emitIntegrationEvent(
       // A broken connection re-fails on every run; bundling collapses it, and
       // the count tells the owner how long it has been going.
       count: 1,
-      href: "/integrations",
+      // The hub lives in Settings now (no sidebar tab); /integrations only
+      // redirects there, so link straight to the tab.
+      href: "/settings?tab=integrations",
     },
   }), "emitIntegrationEvent");
 }

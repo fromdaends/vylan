@@ -130,6 +130,7 @@ export function SettingsShell({
   connect,
   paypal,
   quickbooks,
+  integrationsSlot,
   servicePrices,
   invoiceSettings,
   paymentsList,
@@ -174,6 +175,10 @@ export function SettingsShell({
   // QuickBooks (Intuit) connection status for the Integrations section. Null for
   // non-owners.
   quickbooks: QuickbooksStatus | null;
+  // Server-rendered Integrations hub cards (QuickBooks / Xero / Sage). A slot
+  // (like billingSlot) because the badges need live connection state and this
+  // shell is a client component.
+  integrationsSlot: React.ReactNode;
   // Per-service default prices (cents) for the Payments section editor. Null for
   // non-owners.
   servicePrices: Record<string, number> | null;
@@ -400,8 +405,15 @@ export function SettingsShell({
             )}
           </div>
         )}
-        {section === "integrations" && quickbooks && (
-          <IntegrationsSection quickbooks={quickbooks} isOwner={isOwner} />
+        {/* Not gated on `quickbooks`: the hub cards are the point of this tab
+            now, so a null QuickBooks status must not blank the whole section —
+            it only hides the legacy firm-wide QuickBooks block inside it. */}
+        {section === "integrations" && (
+          <IntegrationsSection
+            quickbooks={quickbooks}
+            isOwner={isOwner}
+            cardsSlot={integrationsSlot}
+          />
         )}
         {section === "documents" && isOwner && (
           <DocumentsSection

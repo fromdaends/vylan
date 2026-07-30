@@ -174,13 +174,14 @@ export function buildSearchRegistry(
     {
       // The Integrations HUB — always reachable. Sage 50 (a file export) needs no
       // connection, so this destination exists for every firm, connected or not.
-      // Mirrors the sidebar's always-visible Integrations section.
+      // Points straight at the Settings tab that hosts it now (it left the
+      // sidebar); /integrations only redirects there, so skip the hop.
       id: "integrations",
       label: t.app("nav_integrations"),
       group: "go",
       icon: Plug,
       color: "text-icon-cyan",
-      href: "/integrations",
+      href: "/settings?tab=integrations",
       keywords:
         "integrations integration connect apps sage sage 50 export file quickbooks qbo intuit comptabilite exportation",
     },

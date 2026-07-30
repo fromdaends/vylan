@@ -102,6 +102,7 @@ function renderShell(
         connect={null}
         paypal={null}
         quickbooks={null}
+        integrationsSlot={<div>INTEGRATIONS_SLOT</div>}
         servicePrices={null}
         invoiceSettings={null}
         paymentsList={null}
@@ -213,6 +214,14 @@ describe("SettingsShell — Account / Security & privacy / Payments", () => {
       screen.getByText(en.Settings.connect_start_title),
     ).toBeInTheDocument();
     expect(screen.getByText("SUBSCRIPTION_SLOT")).toBeInTheDocument();
+  });
+
+  it("renders the Integrations hub cards even with no QuickBooks status", () => {
+    // The hub moved into Settings, so the cards ARE this tab. It used to be
+    // gated on `quickbooks &&`, which blanked the whole tab when the status
+    // couldn't be resolved — that would now hide Xero and Sage too.
+    renderShell({ initialSection: "integrations", quickbooks: null });
+    expect(screen.getByText("INTEGRATIONS_SLOT")).toBeInTheDocument();
   });
 
   it("hides Payments + the owner-only privacy tools from non-owners but keeps 2FA", () => {

@@ -20,7 +20,6 @@ import {
   Gauge,
   LayoutDashboard,
   LogOut,
-  Plug,
   Settings,
   Sparkles,
   UserCircle,
@@ -41,8 +40,6 @@ type Labels = {
   engagementsToggle: string;
   templates: string;
   bookkeeping: string;
-  integrations: string;
-  integrationsToggle: string;
   // The Vylan hub's rail label. One word by design — it has to sit on one line
   // in a 72px rail slot.
   vylanHub: string;
@@ -127,9 +124,9 @@ export function AppShell({
     }
   }, [pathname]);
 
-  // The icon rail's destinations, in order. Flat by design — Engagements and
-  // Integrations are single links now, because their own pages already carry the
-  // sub-navigation the old expandable sections duplicated.
+  // The icon rail's destinations, in order. Flat by design — Engagements is a
+  // single link, because its own page already carries the sub-navigation the
+  // old expandable section duplicated.
   const railNav: RailItem[] = [
     { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
     // "Performance" is the same word in EN and FR, so it's safe to hardcode.
@@ -156,7 +153,8 @@ export function AppShell({
           },
         ]
       : []),
-    { href: "/integrations", label: labels.integrations, icon: Plug },
+    // No Integrations tab: it lives in Settings > Integrations now (founder:
+    // "no point in it being in the sidebar"). /integrations redirects there.
   ];
 
   // Settings lives in the account dropdown; Firm is pinned at the foot of the
