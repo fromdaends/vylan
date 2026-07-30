@@ -137,6 +137,24 @@ export type SetAssessment = {
    * Optional: older assessments read as false.
    */
   auto_rejected_incomplete?: boolean;
+  /**
+   * How many of the item's files this run actually compared against each other,
+   * and how many it holds in total. Equal on the normal path.
+   *
+   * They differ when the item holds more files than ONE call can carry
+   * (MAX_SET_FILES / MAX_SET_BYTES) — a client dumping a hundred documents onto
+   * one line. The per-file read still covers every one of them; it is the
+   * CROSS-file check (missing pages, balances that chain, an uncovered month)
+   * that stops at the cap.
+   *
+   * Recorded as NUMBERS, not as the English sentence that used to carry this in
+   * flags[], because flags[] is never rendered on the engagement page — so a
+   * run that compared 16 of 100 files looked identical to one that compared all
+   * 100. The accountant now sees the shortfall (SetSummaryLine), in their own
+   * language. Optional: assessments written before this read as "no shortfall".
+   */
+  reviewed_file_count?: number;
+  total_file_count?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -978,6 +996,12 @@ ${pageFacts}`;
 
   // Coverage honesty: when the item held more files than one call can carry,
   // say so — silence would read as "everything was reviewed together".
+  //
+  // Recorded TWICE on purpose, for two different readers: as counts, which the
+  // engagement page renders (see SetSummaryLine), and as the sentence in
+  // flags[], which the AI chat reads. flags[] alone was the bug — nothing on
+  // the page ever showed it, so comparing 16 of 100 files looked exactly like
+  // comparing all 100.
   if (allFiles.length > prepared.length) {
     parsed.flags = [
       `Only the first ${prepared.length} of ${allFiles.length} files were reviewed together; the rest were not part of this assessment.`,
@@ -1027,6 +1051,13 @@ ${pageFacts}`;
 
   const assessment: SetAssessment = {
     ...parsed,
+    // How much of the item this run actually compared against itself. The
+    // engagement page renders the shortfall when these differ — see
+    // setComparisonShortfall. Always recorded, so a later reader never has to
+    // guess whether an assessment predates the counts or genuinely covered
+    // everything.
+    reviewed_file_count: prepared.length,
+    total_file_count: allFiles.length,
     // The item is "waiting on the client" only when we're actually asking the
     // client (confident incomplete + firm opted in). Anything routed to the
     // accountant leaves the item in its normal review flow.

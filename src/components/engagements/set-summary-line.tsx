@@ -24,11 +24,32 @@ export function shouldShowSetLine(
   // would be computed and then never displayed, which is exactly the headline
   // bookkeeping case.
   if ((assessment.chain_findings?.length ?? 0) > 0) return true;
+  // "We compared 16 of your 100 files" must reach the accountant even when
+  // nothing else about the set warrants a line. Silence here is the failure
+  // mode: a partial comparison that looks exactly like a complete one.
+  if (setComparisonShortfall(assessment) != null) return true;
   return (
     fileCount > 1 ||
     assessment.outcome === "incomplete" ||
     assessment.outcome === "unplaceable"
   );
+}
+
+// PURE: how many of the item's files were left out of the cross-file check, or
+// null when it covered everything.
+//
+// Only ever reports a shortfall it can prove from two present, sane numbers —
+// assessments written before these counts existed, or with nonsense in them,
+// report nothing rather than inventing a warning.
+export function setComparisonShortfall(
+  assessment: Pick<SetAssessment, "reviewed_file_count" | "total_file_count">,
+): { reviewed: number; total: number } | null {
+  const reviewed = assessment.reviewed_file_count;
+  const total = assessment.total_file_count;
+  if (typeof reviewed !== "number" || typeof total !== "number") return null;
+  if (!Number.isFinite(reviewed) || !Number.isFinite(total)) return null;
+  if (reviewed < 0 || total <= reviewed) return null;
+  return { reviewed, total };
 }
 
 // A "missing page" block: the item rolled up to "rejected" purely because the
@@ -100,7 +121,15 @@ export function SetSummaryLine({
   // asked to re-send the complete document — say so, or the accountant sees
   // rejected files appear "by themselves".
   const autoRejected = assessment.auto_rejected_incomplete === true;
-  const hasRows = findings.length > 0 || coverage.length > 0 || autoRejected;
+  // The cross-file check can only carry so many files in one pass. When the
+  // item holds more, the accountant is told exactly how many were compared —
+  // otherwise a check covering 16 of 100 files reads as covering all 100.
+  const shortfall = setComparisonShortfall(assessment);
+  const hasRows =
+    findings.length > 0 ||
+    coverage.length > 0 ||
+    autoRejected ||
+    shortfall != null;
 
   // One line per fact, not one paragraph.
   const points = splitConclusionPoints(text);
@@ -152,6 +181,31 @@ export function SetSummaryLine({
       {/* Checked-by-arithmetic rows, separated from the model's prose above. */}
       {hasRows && (
         <div className="mt-2 space-y-1.5 border-t border-border/50 pt-2">
+          {/* FIRST, above every finding: how much of the item this check
+              actually covered. A missing-page verdict drawn from 16 of 100
+              files means something different from one drawn from all 100, and
+              the accountant has to know which they are reading before they
+              read it. */}
+          {shortfall && (
+            <div className="flex items-start gap-1.5">
+              <AlertTriangle
+                className="mt-px size-3.5 shrink-0 text-warning"
+                aria-hidden
+              />
+              <div className="min-w-0">
+                <div className="font-medium text-warning">
+                  {locale === "fr"
+                    ? `${shortfall.reviewed} des ${shortfall.total} fichiers comparés entre eux`
+                    : `${shortfall.reviewed} of ${shortfall.total} files compared together`}
+                </div>
+                <div className="text-muted-foreground">
+                  {locale === "fr"
+                    ? `Chaque fichier a été lu individuellement, mais les ${shortfall.total - shortfall.reviewed} autres n’ont pas été comparés au reste : pages manquantes, mois non couverts et soldes qui ne se suivent pas peuvent leur avoir échappé. À vérifier à la main.`
+                    : `Every file was read on its own, but the other ${shortfall.total - shortfall.reviewed} were not compared against the rest — missing pages, uncovered months and balances that don't follow on could have been missed among them. Worth a manual look.`}
+                </div>
+              </div>
+            </div>
+          )}
           {autoRejected && (
             <div className="flex items-start gap-1.5">
               <AlertTriangle
