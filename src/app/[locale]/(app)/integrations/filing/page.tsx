@@ -1,16 +1,19 @@
 import { redirect } from "@/i18n/navigation";
 
-// Document filing moved into the Vylan hub (/vylan?tab=filing): the providers
-// are third-party connections, but the FEATURE is Vylan-native automation, so it
-// belongs beside the other automated jobs rather than under Integrations.
+// Document filing now lives in the Files section (/files?tab=settings), beside
+// the documents it files: a firm editing a folder template wants the browser one
+// click away to see the result.
 //
-// This route stays as a redirect rather than being deleted — the filing OAuth
-// callbacks, older emails, and any bookmark a firm already has all point here.
+// This route has been a redirect since filing left Integrations, and it stays
+// one — the storage OAuth callbacks, older emails, and any bookmark a firm
+// already has all still point here. It now forwards STRAIGHT to the new home
+// rather than hopping through /vylan?tab=filing, so there is one redirect
+// instead of two.
 export default async function FilingPageRedirect({
   params,
 }: {
   params: Promise<{ locale: string }>;
 }) {
   const { locale } = await params;
-  redirect({ href: "/vylan?tab=filing", locale });
+  redirect({ href: "/files?tab=settings", locale });
 }
