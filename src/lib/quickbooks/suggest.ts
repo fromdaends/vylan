@@ -935,12 +935,60 @@ export function buildTransactionSuggestion(
     notes.push("Couldn't tell if this is an expense or income.");
   }
 
+  // QUICKBOOKS ONLY: a party is DENOMINATED in a currency and a transaction
+  // cannot depart from it. Verified against a live company — a USD bill on a CAD
+  // supplier is refused with "You can only use one foreign currency per
+  // transaction", and so is a CAD bill on an HKD supplier. The rule is not "the
+  // document must be in the home currency"; it is that the transaction's currency
+  // and the party's must be the SAME.
+  //
+  // So candidates in another currency are removed BEFORE matching, rather than
+  // letting the correctly-named-but-wrong-currency supplier win and fail at post
+  // time with a message that tells an accountant nothing.
+  //
+  // A party whose currency we do not know is KEPT — unknown is no opinion, which
+  // is what leaves a client not yet resynced matching exactly as before. Xero
+  // sets no party currency at all, so nothing there is ever filtered.
+  const postingCurrency =
+    extraction.currency?.trim().toUpperCase() ||
+    booksCurrency?.trim().toUpperCase() ||
+    null;
+  const currencyMismatch = (p: QbNamed): boolean =>
+    !!postingCurrency && !!p.currency && p.currency !== postingCurrency;
+  const partyListForCurrency =
+    partyList && postingCurrency
+      ? partyList.filter((p) => !currencyMismatch(p))
+      : partyList;
+
   // A remembered vendor/customer for this exact name wins over fuzzy matching.
   const partyLearned =
     partyKind === "vendor" || partyKind === "customer"
-      ? learnedMatch(partyKind, learnKeyForName(partyQuery), learned, partyList)
+      ? learnedMatch(
+          partyKind,
+          learnKeyForName(partyQuery),
+          learned,
+          partyListForCurrency,
+        )
       : null;
-  const party = overlayLearned(bestMatches(partyQuery, partyList), partyLearned);
+  const party = overlayLearned(
+    bestMatches(partyQuery, partyListForCurrency),
+    partyLearned,
+  );
+
+  // Say WHY, when the only thing standing in the way is the currency. Without
+  // this the draft just shows "pick a supplier" with the right one apparently
+  // missing from the list.
+  if (partyKind && partyQuery && postingCurrency && !party.match && partyList) {
+    const blocked = bestMatches(partyQuery, partyList.filter(currencyMismatch));
+    if (blocked.match) {
+      notes.push(
+        `"${blocked.match.name}" is set up in ${partyList.find((p) => p.id === blocked.match!.id)?.currency} ` +
+          `and this document is in ${postingCurrency}. QuickBooks won't record a ${postingCurrency} ` +
+          `transaction against a ${partyList.find((p) => p.id === blocked.match!.id)?.currency} ${partyKind} — ` +
+          `create a ${postingCurrency} ${partyKind} in QuickBooks, then refresh this draft.`,
+      );
+    }
+  }
   if (partyKind && partyQuery && partyList === null) {
     notes.push(
       `Your ${providerLabel} ${partyKind} list isn't loaded yet, so we couldn't match "${partyQuery}".`,

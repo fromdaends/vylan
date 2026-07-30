@@ -30,8 +30,10 @@ import {
   quickbooksTaxLinesEnabled,
   QuickbooksError,
   type QboTxnEntity,
+  fetchExchangeRate,
 } from "@/lib/quickbooks/client";
 import { readCachedQuickbooksLists } from "@/lib/db/quickbooks-cache";
+import { readQuickbooksCurrencyPrefs } from "@/lib/db/quickbooks";
 import { getUploadedFileById } from "@/lib/db/uploaded-files";
 import { downloadObject } from "@/lib/storage";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
@@ -178,6 +180,8 @@ export async function postApprovedDraft(
   // When payment is DUE. Guarded the same way as the transaction date: a
   // malformed value becomes null rather than being sent to QuickBooks.
   const dueDate = isPostableDate(s.dueDate) ? s.dueDate : null;
+
+
   // A real transaction date is required so QuickBooks auto-matches this to the
   // bank feed instead of dating it "today". draftNeedsInput already blocks
   // approval without one; this re-checks at post time (defense in depth, and it
@@ -200,6 +204,51 @@ export async function postApprovedDraft(
       ? opts.ctx
       : await getQuickbooksReadContext(draft.firmId, draft.clientId);
   if (!ctx) return { kind: "not_connected", ...base };
+
+  // ── Foreign currency ──────────────────────────────────────────────────────
+  //
+  // QuickBooks needs BOTH a CurrencyRef and an ExchangeRate on a foreign
+  // transaction (code 2410 without the rate), and will not accept one at all
+  // unless multicurrency is switched on for the company. So this is all-or-
+  // nothing: state the currency with a real rate, or send neither and post in the
+  // home currency exactly as before.
+  //
+  // The rate comes from QUICKBOOKS ITSELF, which is the same rate the client's
+  // books use — a posted bill can never disagree with QuickBooks' own reporting,
+  // and there is no external FX dependency to drift or lapse.
+  const prefs = await readQuickbooksCurrencyPrefs(draft.firmId, draft.clientId);
+  const docCurrency = s.currency?.trim().toUpperCase() || null;
+  const isForeign =
+    !!docCurrency &&
+    !!prefs.homeCurrency &&
+    docCurrency !== prefs.homeCurrency;
+  let currency: string | null = null;
+  let exchangeRate: number | null = null;
+  if (isForeign) {
+    if (prefs.multicurrencyEnabled !== true) {
+      // The company cannot express this at all. Refuse rather than post the
+      // amount at face value in the home currency, which is the silent
+      // misstatement this whole feature exists to prevent.
+      return {
+        kind: "not_postable",
+        ...base,
+        problems: ["multicurrency_disabled"],
+      };
+    }
+    exchangeRate = await fetchExchangeRate(
+      ctx.accessToken,
+      ctx.realmId,
+      docCurrency,
+      effDate,
+      ctx.environment,
+    );
+    if (exchangeRate == null) {
+      // Never guess a rate. QuickBooks would reject the post anyway, and a made-up
+      // rate is the one thing that could put a wrong number in a client's books.
+      return { kind: "not_postable", ...base, problems: ["exchange_rate_unavailable"] };
+    }
+    currency = docCurrency;
+  }
 
   // Decide whether to attach tax (net + tax code, QBO computes) or fall back to
   // the gross-no-tax line. Direction-agnostic — used by both builders below.
@@ -275,6 +324,8 @@ export async function postApprovedDraft(
       itemId: eff.item.id,
       amount: s.amount,
       date: effDate,
+      currency,
+      exchangeRate,
       memo: "Posted from Vylan",
       description: lineDescription,
       reference,
@@ -357,6 +408,8 @@ export async function postApprovedDraft(
       amount: s.amount,
       date: effDate,
       dueDate,
+      currency,
+      exchangeRate,
       memo: "Posted from Vylan",
       description: lineDescription,
       reference,

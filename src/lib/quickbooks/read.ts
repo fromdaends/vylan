@@ -16,7 +16,23 @@ import {
 import { quickbooksQuery, QuickbooksError } from "@/lib/quickbooks/client";
 
 // One name + status, shared by vendors/customers/tax codes.
-export type QbNamed = { id: string; name: string; active: boolean };
+export type QbNamed = {
+  id: string;
+  name: string;
+  active: boolean;
+  // QUICKBOOKS ONLY: the currency this supplier/customer is DENOMINATED in.
+  //
+  // In QuickBooks a party carries a currency and a transaction cannot depart
+  // from it — posting a USD bill to a CAD supplier is refused outright ("you can
+  // only use one foreign currency per transaction"), and the currency is fixed
+  // when the party is created. Xero has no equivalent: there a contact is
+  // currency-neutral and the transaction states its own.
+  //
+  // Optional, and undefined means "we do not know" — never "home currency".
+  // Nothing filters on an unknown value, so a client not yet resynced keeps
+  // matching exactly as before.
+  currency?: string;
+};
 export type QbAccount = QbNamed & { accountType: string | null };
 // A tax code, plus (XERO ONLY) which side of the books it may be used on. Xero
 // publishes CanApplyToRevenue / CanApplyToExpenses on every rate; QuickBooks has
@@ -75,16 +91,26 @@ export function toAccount(r: {
   };
 }
 
+// A party's currency, or nothing at all when QuickBooks did not say. Spread into
+// the object so the key is ABSENT rather than explicitly undefined — the
+// difference matters to the matcher, which only filters on a known value.
+function currencyOf(ref: { value?: string } | undefined): { currency?: string } {
+  const c = ref?.value?.trim().toUpperCase();
+  return c ? { currency: c } : {};
+}
+
 export function toVendor(r: {
   Id?: string;
   DisplayName?: string;
   CompanyName?: string;
   Active?: boolean;
+  CurrencyRef?: { value?: string };
 }): QbNamed {
   return {
     id: String(r.Id ?? ""),
     name: (r.DisplayName ?? r.CompanyName ?? "").trim(),
     active: r.Active !== false,
+    ...currencyOf(r.CurrencyRef),
   };
 }
 
@@ -92,11 +118,13 @@ export function toCustomer(r: {
   Id?: string;
   DisplayName?: string;
   Active?: boolean;
+  CurrencyRef?: { value?: string };
 }): QbNamed {
   return {
     id: String(r.Id ?? ""),
     name: (r.DisplayName ?? "").trim(),
     active: r.Active !== false,
+    ...currencyOf(r.CurrencyRef),
   };
 }
 

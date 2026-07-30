@@ -82,6 +82,22 @@ function toCachedAccount(r: Record<string, unknown>): QbAccount {
 // lists at all", which would strip every draft of its matches.
 const TAX_COLS_RICH = "qbo_id, name, active, can_apply_to_revenue, can_apply_to_expenses";
 const TAX_COLS_BASIC = "qbo_id, name, active";
+// 1070's party currency, same treatment: a read must survive the column not
+// existing yet, because every caller turns one query error into "no cached lists
+// at all" and that would strip every draft of its matches.
+const PARTY_COLS_RICH = "qbo_id, name, active, currency";
+const PARTY_COLS_BASIC = "qbo_id, name, active";
+
+function toCachedParty(r: Record<string, unknown>): QbNamed {
+  const c = (r.currency as string | null)?.trim().toUpperCase();
+  return {
+    id: String(r.qbo_id ?? ""),
+    name: (r.name as string | null) ?? "",
+    active: r.active !== false,
+    // Absent stays absent — the matcher only filters on a currency it knows.
+    ...(c ? { currency: c } : {}),
+  };
+}
 
 function toCachedTaxCode(r: Record<string, unknown>): QbTaxCode {
   return {
@@ -96,13 +112,6 @@ function toCachedTaxCode(r: Record<string, unknown>): QbTaxCode {
   };
 }
 
-function toCachedNamed(r: Record<string, unknown>): QbNamed {
-  return {
-    id: String(r.qbo_id ?? ""),
-    name: (r.name as string | null) ?? "",
-    active: r.active !== false,
-  };
-}
 function toCachedItem(r: Record<string, unknown>): QbItem {
   return {
     id: String(r.qbo_id ?? ""),
@@ -158,6 +167,7 @@ export async function readCachedQuickbooksLists(
   const sb = await getServerSupabase();
   // Reassigned to the basic set if 1050 turns out not to be applied.
   let taxCols = TAX_COLS_RICH;
+  let partyCols = PARTY_COLS_RICH;
   const fetch = (scopeOn: boolean) => {
     const scope = <Q>(q: Q): Q => (scopeOn ? withClientScope(q, clientId) : q);
     return Promise.all([
@@ -166,8 +176,8 @@ export async function readCachedQuickbooksLists(
           .from("quickbooks_accounts")
           .select("qbo_id, name, account_type, active"),
       ),
-      scope(sb.from("quickbooks_vendors").select("qbo_id, name, active")),
-      scope(sb.from("quickbooks_customers").select("qbo_id, name, active")),
+      scope(sb.from("quickbooks_vendors").select(partyCols)),
+      scope(sb.from("quickbooks_customers").select(partyCols)),
       scope(sb.from("quickbooks_tax_codes").select(taxCols)),
     ]);
   };
@@ -179,8 +189,13 @@ export async function readCachedQuickbooksLists(
   // 1050 not applied yet: the tax query alone failed on the two direction
   // columns. Retry with the basic set BEFORE the pre-0710 fallback, and keep the
   // client scope — a missing column must never cost the whole cache.
-  if (tax.error && isMissingSchema(tax.error)) {
-    taxCols = TAX_COLS_BASIC;
+  if (
+    (tax.error && isMissingSchema(tax.error)) ||
+    (ven.error && isMissingSchema(ven.error)) ||
+    (cus.error && isMissingSchema(cus.error))
+  ) {
+    if (tax.error) taxCols = TAX_COLS_BASIC;
+    if (ven.error || cus.error) partyCols = PARTY_COLS_BASIC;
     [acc, ven, cus, tax] = await fetch(true);
   }
   if (
@@ -202,12 +217,16 @@ export async function readCachedQuickbooksLists(
   }
   return {
     accounts: (acc.data ?? []).map(toCachedAccount),
-    vendors: (ven.data ?? []).map(toCachedNamed),
-    customers: (cus.data ?? []).map(toCachedNamed),
-    // Cast because the select string is chosen at runtime (rich vs basic), which
-    // drops PostgREST's inferred row type.
+    // Cast throughout: the select strings are chosen at runtime (rich vs basic),
+    // which drops PostgREST's inferred row types.
+    vendors: (
+      (ven.data as unknown as Array<Record<string, unknown>> | null) ?? []
+    ).map(toCachedParty),
+    customers: (
+      (cus.data as unknown as Array<Record<string, unknown>> | null) ?? []
+    ).map(toCachedParty),
     taxCodes: (
-      (tax.data as Array<Record<string, unknown>> | null) ?? []
+      (tax.data as unknown as Array<Record<string, unknown>> | null) ?? []
     ).map(toCachedTaxCode),
     items: await readCachedItems(sb, undefined, clientId),
   };
@@ -244,11 +263,11 @@ export async function readCachedQuickbooksListsByClient(
       .in("client_id", clientIds),
     sb
       .from("quickbooks_vendors")
-      .select("client_id, qbo_id, name, active")
+      .select(`client_id, ${PARTY_COLS_RICH}`)
       .in("client_id", clientIds),
     sb
       .from("quickbooks_customers")
-      .select("client_id, qbo_id, name, active")
+      .select(`client_id, ${PARTY_COLS_RICH}`)
       .in("client_id", clientIds),
     sb
       .from("quickbooks_tax_codes")
@@ -269,6 +288,19 @@ export async function readCachedQuickbooksListsByClient(
       .from("quickbooks_tax_codes")
       .select(`client_id, ${TAX_COLS_BASIC}`)
       .in("client_id", clientIds)) as typeof tax;
+  }
+  // Same for 1070's party currency.
+  if (ven.error && isMissingSchema(ven.error)) {
+    ven = (await sb
+      .from("quickbooks_vendors")
+      .select(`client_id, ${PARTY_COLS_BASIC}`)
+      .in("client_id", clientIds)) as typeof ven;
+  }
+  if (cus.error && isMissingSchema(cus.error)) {
+    cus = (await sb
+      .from("quickbooks_customers")
+      .select(`client_id, ${PARTY_COLS_BASIC}`)
+      .in("client_id", clientIds)) as typeof cus;
   }
   for (const r of [acc, ven, cus, tax]) {
     if (r.error) {
@@ -302,10 +334,10 @@ export async function readCachedQuickbooksListsByClient(
     l.accounts.push(toCachedAccount(r)),
   );
   groupInto(ven.data as Array<Record<string, unknown>> | null, (l, r) =>
-    l.vendors.push(toCachedNamed(r)),
+    l.vendors.push(toCachedParty(r)),
   );
   groupInto(cus.data as Array<Record<string, unknown>> | null, (l, r) =>
-    l.customers.push(toCachedNamed(r)),
+    l.customers.push(toCachedParty(r)),
   );
   groupInto(tax.data as Array<Record<string, unknown>> | null, (l, r) =>
     l.taxCodes.push(toCachedTaxCode(r)),
@@ -333,6 +365,7 @@ export async function readCachedQuickbooksListsForFirm(
   const sb = getServiceRoleSupabase();
   // Reassigned to the basic set if 1050 turns out not to be applied.
   let firmTaxCols = TAX_COLS_RICH;
+  let firmPartyCols = PARTY_COLS_RICH;
   const fetch = (scopeOn: boolean) => {
     const scope = <Q>(q: Q): Q => (scopeOn ? withClientScope(q, clientId) : q);
     return Promise.all([
@@ -345,13 +378,13 @@ export async function readCachedQuickbooksListsForFirm(
       scope(
         sb
           .from("quickbooks_vendors")
-          .select("qbo_id, name, active")
+          .select(firmPartyCols)
           .eq("firm_id", firmId),
       ),
       scope(
         sb
           .from("quickbooks_customers")
-          .select("qbo_id, name, active")
+          .select(firmPartyCols)
           .eq("firm_id", firmId),
       ),
       scope(
@@ -366,8 +399,13 @@ export async function readCachedQuickbooksListsForFirm(
   let [acc, ven, cus, tax] = await fetch(true);
   // 1050 not applied yet: retry the same scope without the direction columns
   // before anything else, so a missing column never costs the whole cache.
-  if (tax.error && isMissingSchema(tax.error)) {
-    firmTaxCols = TAX_COLS_BASIC;
+  if (
+    (tax.error && isMissingSchema(tax.error)) ||
+    (ven.error && isMissingSchema(ven.error)) ||
+    (cus.error && isMissingSchema(cus.error))
+  ) {
+    if (tax.error) firmTaxCols = TAX_COLS_BASIC;
+    if (ven.error || cus.error) firmPartyCols = PARTY_COLS_BASIC;
     [acc, ven, cus, tax] = await fetch(true);
   }
   if (
@@ -392,8 +430,8 @@ export async function readCachedQuickbooksListsForFirm(
   const rows = (d: unknown) => (d as Array<Record<string, unknown>> | null) ?? [];
   return {
     accounts: rows(acc.data).map(toCachedAccount),
-    vendors: rows(ven.data).map(toCachedNamed),
-    customers: rows(cus.data).map(toCachedNamed),
+    vendors: rows(ven.data).map(toCachedParty),
+    customers: rows(cus.data).map(toCachedParty),
     taxCodes: rows(tax.data).map(toCachedTaxCode),
     items: await readCachedItems(sb, firmId, clientId),
   };
@@ -456,6 +494,8 @@ type CacheRow = {
   // reader treats as "no opinion, keep the code".
   canApplyToRevenue?: boolean;
   canApplyToExpenses?: boolean;
+  // Vendors and customers only (1070) — the currency the party is denominated in.
+  currency?: string;
 };
 
 // Replace a firm's cached rows for one entity: upsert the fresh rows (stamped
@@ -513,6 +553,9 @@ export async function replaceCachedEntity(
             can_apply_to_expenses: r.canApplyToExpenses ?? null,
           }
         : {}),
+      ...((entity === "vendors" || entity === "customers") && withTaxFlags
+        ? { currency: r.currency ?? null }
+        : {}),
       synced_at: syncedAt,
     }));
     // Upsert in chunks so a very large company can't exceed request limits.
@@ -520,7 +563,12 @@ export async function replaceCachedEntity(
       const chunk = records.slice(i, i + 500);
       const { error } = await sb.from(table).upsert(chunk, { onConflict });
       if (error) {
-        if (withTaxFlags && entity === "taxCodes" && isMissingSchema(error)) {
+        if (
+          withTaxFlags &&
+          (entity === "taxCodes" || entity === "vendors" || entity === "customers") &&
+          isMissingSchema(error)
+        ) {
+          // 1050 or 1070 not applied: retry this entity without its extra column.
           return { schemaMiss: false, taxFlagMiss: true };
         }
         if (useClientId && isMissingSchema(error)) {

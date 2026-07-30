@@ -191,6 +191,13 @@ export type BillInput = {
   // aged payables and any reminder built on it. Extraction has supplied this for
   // both providers since the Xero work; only the passthrough was missing.
   dueDate?: string | null;
+  // A FOREIGN-currency transaction. Both fields or neither: QuickBooks rejects a
+  // CurrencyRef with no ExchangeRate (code 2410), and the party must already be
+  // denominated in this currency or it refuses with "you can only use one foreign
+  // currency per transaction". Omitted entirely for a home-currency transaction,
+  // which is the overwhelming majority and must keep posting exactly as before.
+  currency?: string | null;
+  exchangeRate?: number | null;
   memo?: string | null;
   // The line description shown in QuickBooks (vendor + item summary). Falls back
   // to nothing when absent.
@@ -224,6 +231,13 @@ export function buildBillPayload(input: BillInput): Record<string, unknown> {
   applyExpenseTax(bill, tax);
   if (input.date) bill.TxnDate = input.date;
   if (input.dueDate) bill.DueDate = input.dueDate;
+  // Only when we have BOTH — a partial pair is rejected outright, so sending
+  // nothing is the safe degradation.
+  if (input.currency && input.exchangeRate) {
+    bill.CurrencyRef = { value: input.currency };
+    bill.ExchangeRate = input.exchangeRate;
+  }
+
   if (input.memo) bill.PrivateNote = input.memo;
   if (input.reference) bill.DocNumber = input.reference;
   return bill;
@@ -237,6 +251,9 @@ export type InvoiceInput = {
   // See BillInput.dueDate. An invoice with no due date is immediately overdue,
   // which is worse on the income side: it drives customer-facing reminders.
   dueDate?: string | null;
+  // See BillInput.currency — both fields or neither.
+  currency?: string | null;
+  exchangeRate?: number | null;
   memo?: string | null;
   description?: string | null; // line description (customer + item summary)
   reference?: string | null; // → QuickBooks DocNumber
@@ -280,6 +297,10 @@ function buildIncomeTxnBody(input: InvoiceInput): Record<string, unknown> {
   // A SalesReceipt is already settled, so a due date is meaningless there; the
   // caller passes it only for an Invoice.
   if (input.dueDate) body.DueDate = input.dueDate;
+  if (input.currency && input.exchangeRate) {
+    body.CurrencyRef = { value: input.currency };
+    body.ExchangeRate = input.exchangeRate;
+  }
   if (input.memo) body.PrivateNote = input.memo;
   return body;
 }
@@ -322,6 +343,10 @@ export type PurchaseInput = {
   vendorId: string;
   accountId: string; // the expense (chart-of-accounts) category
   paymentAccountId: string; // the bank/credit-card account it was PAID FROM
+  // See BillInput.currency — both fields or neither.
+  currency?: string | null;
+  exchangeRate?: number | null;
+
   paymentType: QboPaymentType;
   amount: number; // gross total — the fallback line amount when no tax is applied
   date: string | null;
@@ -360,6 +385,10 @@ export function buildPurchasePayload(
   };
   applyExpenseTax(purchase, tax);
   if (input.date) purchase.TxnDate = input.date;
+  if (input.currency && input.exchangeRate) {
+    purchase.CurrencyRef = { value: input.currency };
+    purchase.ExchangeRate = input.exchangeRate;
+  }
   if (input.memo) purchase.PrivateNote = input.memo;
   if (input.reference) purchase.DocNumber = input.reference;
   return purchase;
@@ -381,7 +410,14 @@ export type PurchasePostabilityProblem =
   | "payment_account_wrong_type"
   // The paid-from account's type couldn't be determined (cached lists unavailable),
   // so we refuse to GUESS PaymentType (a wrong guess is rejected by QuickBooks).
-  | "payment_account_type_unknown";
+  | "payment_account_type_unknown"
+  // The document is in a currency this QuickBooks company cannot express:
+  // multicurrency is switched off, so a CurrencyRef would be rejected and posting
+  // the figure at face value in the home currency would silently misstate it.
+  | "multicurrency_disabled"
+  // QuickBooks could not supply the exchange rate it uses for this currency and
+  // date, and a foreign transaction is refused without one. Never guessed.
+  | "exchange_rate_unavailable";
 
 // Account types a Purchase can be paid FROM (mirrors the picker filter). Exported
 // so the post path can refuse to guess PaymentType for anything else.

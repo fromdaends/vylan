@@ -595,6 +595,69 @@ export async function fetchCurrencyPrefs(
   }
 }
 
+// The exchange rate QUICKBOOKS ITSELF uses for a currency on a given date.
+//
+// QuickBooks REFUSES a foreign-currency transaction without an ExchangeRate —
+// verified: posting a USD bill with a CurrencyRef and no rate returns
+//   400 code 2410 "The currency and exchange rate are required for transaction
+//   in foreign currency."
+// Xero derives its own; QuickBooks never does.
+//
+// Asking QuickBooks rather than an outside FX service is the point. It is the
+// same rate the client's own books use, so a bill Vylan posts can never disagree
+// with QuickBooks' own reporting — and there is no extra dependency, no
+// subscription, and nothing to go stale.
+//
+// Returns null on any failure, and the caller must then NOT post: a foreign
+// transaction without a rate is rejected anyway, so a guessed rate is the only
+// thing that could put a wrong number in the books.
+export async function fetchExchangeRate(
+  accessToken: string,
+  realmId: string,
+  sourceCurrency: string,
+  asOfDate: string,
+  environment?: QuickbooksEnvironment,
+): Promise<number | null> {
+  const url =
+    `${quickbooksApiBaseUrl(environment)}/v3/company/${encodeURIComponent(realmId)}` +
+    `/exchangerate?sourcecurrencycode=${encodeURIComponent(sourceCurrency)}` +
+    `&asofdate=${encodeURIComponent(asOfDate)}&minorversion=${QBO_MINORVERSION}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok) {
+    console.warn(
+      withTid(
+        `[quickbooks] exchange rate read failed (${res.status}) for ${sourceCurrency}`,
+        tidOf(res),
+      ),
+    );
+    return null;
+  }
+  try {
+    const json = (await res.json()) as { ExchangeRate?: { Rate?: unknown } };
+    const rate = json.ExchangeRate?.Rate;
+    // A zero or negative rate is not a rate; treat it as unknown rather than
+    // posting a transaction that values the money at nothing.
+    return typeof rate === "number" && Number.isFinite(rate) && rate > 0
+      ? rate
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 // Back-compat: the company's display name only (Stage 1 callers). Thin wrapper
 // over fetchCompanyProfile.
 export async function fetchCompanyName(

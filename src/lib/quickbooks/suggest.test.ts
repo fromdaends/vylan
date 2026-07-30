@@ -1205,3 +1205,63 @@ describe("quickbooksPostingReference — traceable, without inventing a customer
     expect(quickbooksPostingReference(long, FILE, "bill")).toHaveLength(21);
   });
 });
+
+describe("party currency — QuickBooks refuses a transaction whose currency differs from the party's", () => {
+  // Verified against a live QuickBooks company: a USD bill on a CAD supplier is
+  // rejected outright, and so is a CAD bill on an HKD supplier. The rule is that
+  // the transaction's currency and the party's must MATCH.
+  const cadVendor = { id: "v-cad", name: "Staples Canada", active: true, currency: "CAD" };
+  const usdVendor = { id: "v-usd", name: "Staples Canada", active: true, currency: "USD" };
+  const unknownVendor = { id: "v-unk", name: "Staples Canada", active: true };
+
+  const build = (vendors: QbNamed[], docCurrency: string | null, books: string | null) =>
+    buildTransactionSuggestion(
+      extraction({ vendor_name: "Staples Canada", currency: docCurrency }),
+      { ...lists, vendors },
+      {},
+      "QuickBooks",
+      books,
+    );
+
+  it("picks the supplier whose currency matches the document", () => {
+    const s = build([cadVendor, usdVendor], "USD", "CAD");
+    expect(s.party.match?.id).toBe("v-usd");
+  });
+
+  it("refuses the wrong-currency supplier rather than matching it", () => {
+    const s = build([cadVendor], "USD", "CAD");
+    expect(s.party.match).toBeNull();
+  });
+
+  it("explains WHY, naming both currencies and what to do", () => {
+    const s = build([cadVendor], "USD", "CAD");
+    const note = s.notes.find((n) => n.includes("set up in"));
+    expect(note).toBeTruthy();
+    expect(note).toContain("CAD");
+    expect(note).toContain("USD");
+    expect(note).toContain("create a USD vendor in QuickBooks");
+  });
+
+  it("keeps a supplier whose currency we do not know — unknown is no opinion", () => {
+    // This is what leaves a client not yet resynced matching exactly as before.
+    const s = build([unknownVendor], "USD", "CAD");
+    expect(s.party.match?.id).toBe("v-unk");
+  });
+
+  it("applies to HOME-currency documents too, not just foreign ones", () => {
+    // A CAD bill on an HKD supplier is refused by QuickBooks just the same.
+    const hkd = { id: "v-hkd", name: "Staples Canada", active: true, currency: "HKD" };
+    const s = build([hkd], "CAD", "CAD");
+    expect(s.party.match).toBeNull();
+  });
+
+  it("falls back to the books' currency when the document states none", () => {
+    const s = build([cadVendor, usdVendor], null, "CAD");
+    expect(s.party.match?.id).toBe("v-cad");
+  });
+
+  it("filters nothing when neither currency is known — today's behaviour", () => {
+    const s = build([cadVendor], null, null);
+    expect(s.party.match?.id).toBe("v-cad");
+  });
+});

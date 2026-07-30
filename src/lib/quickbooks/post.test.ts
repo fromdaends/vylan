@@ -35,8 +35,19 @@ vi.mock("@/lib/quickbooks/client", () => {
     quickbooksUploadAttachment: vi.fn(),
     quickbooksCreate: vi.fn(),
     quickbooksTaxLinesEnabled: vi.fn(() => false),
+    // QuickBooks supplies the rate for a foreign transaction; these tests are all
+    // home-currency, so it must never be reached.
+    fetchExchangeRate: vi.fn(async () => null),
   };
 });
+// The post path reads the company's currency settings. Unknown by default, which
+// is the "home currency, nothing to state" path every test here exercises.
+vi.mock("@/lib/db/quickbooks", () => ({
+  readQuickbooksCurrencyPrefs: vi.fn(async () => ({
+    homeCurrency: null,
+    multicurrencyEnabled: null,
+  })),
+}));
 vi.mock("@/lib/quickbooks/register-match", () => ({
   findRegisterCandidates: vi.fn(),
   classifyRegisterMatch: vi.fn(),

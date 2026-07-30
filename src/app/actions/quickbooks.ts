@@ -15,6 +15,8 @@ import type { QuickbooksLists } from "@/lib/quickbooks/read";
 import type { LearnedMappings } from "@/lib/quickbooks/suggest";
 import { parseTransaction } from "@/lib/ai/transaction-extract";
 import { revalidateAllLocales } from "@/lib/revalidate";
+import { quickbooksBooksCurrency } from "@/lib/quickbooks/books-currency";
+import { readQuickbooksCurrencyPrefs } from "@/lib/db/quickbooks";
 
 export type RegenerateDraftState = {
   ok: boolean;
@@ -104,7 +106,11 @@ export async function regenerateDraftAction(
   const booksCurrency =
     isXero && clientId
       ? await readClientXeroBaseCurrency(firm.id, clientId)
-      : null;
+      : clientId
+        ? quickbooksBooksCurrency(
+            await readQuickbooksCurrencyPrefs(firm.id, clientId),
+          )
+        : null;
   const suggestion = buildTransactionSuggestion(
     transaction,
     cached,
