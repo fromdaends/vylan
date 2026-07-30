@@ -329,10 +329,23 @@ async function BrowseTab({
               there was nothing on screen to drag a file onto, which is why
               drag-and-drop appeared not to work at all: the gesture was fine,
               there was simply never a drop target in view. */}
-          {folderId && bulkFolders && (
+          {/* FOLDERS ARE ALWAYS ON SCREEN BESIDE THE FILES.
+
+              This is what makes dragging usable. The mechanism worked before
+              this — verified end to end on production — but at the deepest
+              level (inside a category) the ONLY drop targets were the small
+              path-bar links at the top of the page. A gesture whose target is
+              a 100px text link you have to know about is a gesture nobody
+              discovers. Drive shows folders and files in one list; so does
+              this now.
+
+              Inside a custom folder these are its sub-folders; anywhere else
+              they are the client's own folders, which is where you would want
+              to drag something anyway. */}
+          {clientId && bulkFolders && (
             <SubfolderList
               locale={locale}
-              clientId={clientId!}
+              clientId={clientId}
               folders={bulkFolders}
               parentId={folderId}
               buildQuery={buildQuery}
@@ -460,11 +473,22 @@ async function SubfolderList({
   locale: AppLocaleish;
   clientId: string;
   folders: { id: string; name: string; parentId: string | null }[];
-  parentId: string;
+  /** Inside a folder: its children. Null (anywhere else in the client): the
+   * client's top-level folders, so there is always a drop target on screen. */
+  parentId: string | null;
   buildQuery: (o?: Record<string, string | null>) => string;
 }) {
   const t = await getTranslations("Files");
   const children = childrenOf(folders, parentId);
+  // No folders yet — but the New folder button still shows, because "there is
+  // nowhere to put this file" is exactly when someone wants to make one.
+  if (children.length === 0 && !parentId) {
+    return (
+      <div className="flex justify-end">
+        <NewFolderButton clientId={clientId} parentId={null} />
+      </div>
+    );
+  }
   if (children.length === 0) return null;
 
   const entries: BrowserEntry[] = children.map((f) => ({
