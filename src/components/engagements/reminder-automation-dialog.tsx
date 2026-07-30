@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ClampedNumberInput } from "@/components/ui/clamped-number-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -157,22 +158,13 @@ export function ReminderAutomationDialog({
                     {t(`reminder_tone_${step.tone}`)}
                   </label>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <Input
-                      type="number"
+                    <ClampedNumberInput
                       min={1}
                       max={365}
                       value={step.days}
                       disabled={!step.enabled}
-                      onChange={(event) =>
-                        updateStep(step.tone, {
-                          days: Math.min(
-                            365,
-                            Math.max(
-                              1,
-                              Math.floor(Number(event.target.value) || 1),
-                            ),
-                          ),
-                        })
+                      onCommit={(days) =>
+                        updateStep(step.tone, { days })
                       }
                       aria-label={t("reminder_days_label")}
                       className="h-8 w-20"
@@ -183,22 +175,13 @@ export function ReminderAutomationDialog({
                         : t("reminder_days_after_send")}
                     </span>
                     <span>{t("reminder_repeat_prefix")}</span>
-                    <Input
-                      type="number"
+                    <ClampedNumberInput
                       min={1}
                       max={12}
                       value={step.repeatCount}
                       disabled={!step.enabled}
-                      onChange={(event) =>
-                        updateStep(step.tone, {
-                          repeatCount: Math.min(
-                            12,
-                            Math.max(
-                              1,
-                              Math.floor(Number(event.target.value) || 1),
-                            ),
-                          ),
-                        })
+                      onCommit={(repeatCount) =>
+                        updateStep(step.tone, { repeatCount })
                       }
                       aria-label={t("reminder_repeat_label")}
                       className="h-8 w-16"
