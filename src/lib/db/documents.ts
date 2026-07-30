@@ -23,6 +23,7 @@ import { getServerSupabase } from "@/lib/supabase/server";
 import { DOC_TYPE_LABELS } from "@/lib/doc-types";
 import type { DocType } from "@/lib/db/templates";
 import { resolveDocType, type BrowseCategory } from "@/lib/files/axes";
+import { ANALYSIS_FRESH_MS } from "@/lib/engagements/file-ai-headline";
 
 // PGRST205 = table/view missing from the schema cache, 42P01 = undefined table,
 // PGRST204 / 42703 = missing column, PGRST202 = function not found (1080).
@@ -65,13 +66,21 @@ export type BrowseDocument = {
   createdAt: string;
   deletedAt: string | null;
   /**
-   * The AI has not finished reading this one yet. Move is disabled while this
-   * is true (the classification is about to overwrite the axes anyway).
+   * The AI is still reading this one RIGHT NOW. Move is disabled while this is
+   * true (the classification is about to overwrite the axes anyway), which is
+   * exactly why it has to mean "in flight" and not merely "has no type".
    *
-   * IMPORTANT: an IMPORTED document is never "pending" — by the founder's
-   * decision imports skip the AI entirely, so they arrive with no type forever
-   * and hand-sorting is the whole point. Treating them as pending would disable
-   * Move and strand every imported file in Unsorted permanently.
+   * Two ways a document can have no type forever, and neither is pending:
+   *
+   *   * An IMPORTED document. By the founder's decision imports skip the AI
+   *     entirely, so hand-sorting is the whole point of them.
+   *   * A checklist upload the AI never ran on — the firm has AI off, it hit a
+   *     rate limit, or the job died. Past ANALYSIS_FRESH_MS the product already
+   *     treats an un-run analysis as "never ran" rather than in-flight, and
+   *     this uses the same constant.
+   *
+   * Get this wrong in either direction and the file shows a spinner that never
+   * resolves while its Move button stays greyed out — permanently unsortable.
    */
   classificationPending: boolean;
   /** Filled in by the caller that needs it; see attachEngagementContext. */
@@ -103,6 +112,34 @@ type ViewRow = {
 const VIEW_COLUMNS =
   "source, id, client_id, engagement_id, storage_path, original_filename, display_name, mime_type, size_bytes, ai_doc_type, ai_confidence, manual_doc_type, browse_year, browse_category, review_status, is_duplicate, deleted_at, created_at";
 
+/**
+ * Is the AI still reading this document right now?
+ *
+ * Pure and exported so the rule is testable — it decides whether Move is
+ * available, so "no type yet" and "no type, ever" must not be confused.
+ *
+ * `now` is a parameter rather than a Date.now() call inside so tests can pin it.
+ */
+export function isClassificationPending(
+  doc: {
+    source: DocumentSource;
+    aiDocType: string | null;
+    manualDocType: string | null;
+    createdAt: string;
+  },
+  now: number = Date.now(),
+): boolean {
+  // Imports never go near the model, and a hand-set type means somebody already
+  // answered the question the model was going to answer.
+  if (doc.source !== "checklist") return false;
+  if (doc.aiDocType != null || doc.manualDocType != null) return false;
+  const uploadedAt = new Date(doc.createdAt).getTime();
+  if (!Number.isFinite(uploadedAt)) return false;
+  // Past the freshness window an un-run analysis is treated as never having
+  // run — the same rule the engagement page's AI headline already applies.
+  return now - uploadedAt < ANALYSIS_FRESH_MS;
+}
+
 function toBrowseDocument(row: ViewRow): BrowseDocument {
   const source = row.source as DocumentSource;
   const resolved = resolveDocType({
@@ -128,9 +165,12 @@ function toBrowseDocument(row: ViewRow): BrowseDocument {
     isDuplicate: row.is_duplicate === true,
     createdAt: row.created_at,
     deletedAt: row.deleted_at,
-    // Only a checklist upload can be mid-analysis. See the field's doc comment
-    // for why imports must never be treated this way.
-    classificationPending: source === "checklist" && row.ai_doc_type == null,
+    classificationPending: isClassificationPending({
+      source,
+      aiDocType: row.ai_doc_type,
+      manualDocType: row.manual_doc_type,
+      createdAt: row.created_at,
+    }),
   };
 }
 

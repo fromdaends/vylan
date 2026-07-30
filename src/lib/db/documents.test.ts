@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { docTypeCodesMatching, groupDocumentAxes } from "./documents";
+import {
+  docTypeCodesMatching,
+  groupDocumentAxes,
+  isClassificationPending,
+} from "./documents";
 
 describe("groupDocumentAxes", () => {
   const rows = (...pairs: [number | null, string | null][]) =>
@@ -53,6 +57,53 @@ describe("groupDocumentAxes", () => {
 
   it("returns nothing for a client with no documents", () => {
     expect(groupDocumentAxes([])).toEqual([]);
+  });
+});
+
+describe("isClassificationPending — the greyed-out-Move guard", () => {
+  const NOW = Date.parse("2026-07-30T12:00:00Z");
+  const minutesAgo = (m: number) => new Date(NOW - m * 60_000).toISOString();
+  const doc = (over: Partial<Parameters<typeof isClassificationPending>[0]> = {}) => ({
+    source: "checklist" as const,
+    aiDocType: null,
+    manualDocType: null,
+    createdAt: minutesAgo(1),
+    ...over,
+  });
+
+  it("is pending for an unread upload that just arrived", () => {
+    expect(isClassificationPending(doc(), NOW)).toBe(true);
+  });
+
+  it("stops being pending once the analysis window has passed", () => {
+    // The bug this test exists for: a file the AI never ran on would otherwise
+    // show "Analyzing…" forever AND keep its Move button disabled — permanently
+    // unsortable, with no way for the user to tell why.
+    expect(isClassificationPending(doc({ createdAt: minutesAgo(16) }), NOW)).toBe(false);
+    expect(isClassificationPending(doc({ createdAt: minutesAgo(60 * 24 * 11) }), NOW)).toBe(false);
+  });
+
+  it("is not pending once the AI has answered", () => {
+    expect(isClassificationPending(doc({ aiDocType: "t4" }), NOW)).toBe(false);
+  });
+
+  it("is not pending once a human has answered", () => {
+    expect(isClassificationPending(doc({ manualDocType: "t4" }), NOW)).toBe(false);
+  });
+
+  it("is never pending for an imported document", () => {
+    // Imports skip the model entirely, so a fresh one would otherwise look
+    // in-flight for its first 15 minutes and refuse to be sorted.
+    expect(isClassificationPending(doc({ source: "imported" }), NOW)).toBe(false);
+  });
+
+  it("is never pending for a deliverable", () => {
+    expect(isClassificationPending(doc({ source: "final" }), NOW)).toBe(false);
+  });
+
+  it("fails safe on an unparseable date", () => {
+    // Better to allow Move than to lock a row nobody can explain.
+    expect(isClassificationPending(doc({ createdAt: "not a date" }), NOW)).toBe(false);
   });
 });
 
