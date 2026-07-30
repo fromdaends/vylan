@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from "vitest";
 import {
   render,
   screen,
@@ -17,6 +25,22 @@ import {
 } from "./comment-thread";
 import type { FileComment } from "@/lib/db/file-comments";
 import en from "../../../messages/en.json";
+
+// Radix Popover leans on a few DOM APIs the test DOM doesn't implement.
+beforeAll(() => {
+  Element.prototype.scrollIntoView = () => {};
+  Element.prototype.hasPointerCapture = () => false;
+  Element.prototype.setPointerCapture = () => {};
+  Element.prototype.releasePointerCapture = () => {};
+  if (!("ResizeObserver" in globalThis)) {
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver =
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      };
+  }
+});
 
 const addMock = vi.fn();
 const deleteMock = vi.fn();
@@ -46,6 +70,7 @@ const existing: FileComment[] = [
 function renderThread(
   target: CommentTarget = { kind: "item", itemId: "i1" },
   initialComments: FileComment[] = [],
+  quotedText = "T4 slips",
 ) {
   return render(
     <NextIntlClientProvider locale="en" messages={en}>
@@ -56,10 +81,13 @@ function renderThread(
         members={members}
         currentUserId="u-me"
         locale="en"
+        quotedText={quotedText}
       />
     </NextIntlClientProvider>,
   );
 }
+
+const openCard = () => act(() => openCommentComposer(commentKeyForItem("i1")));
 
 beforeEach(() => {
   addMock.mockReset();
@@ -70,29 +98,44 @@ afterEach(() => {
   cleanup();
 });
 
-describe("CommentThread (pure commenting)", () => {
-  it("renders NOTHING when there are no comments and no one asked to write", () => {
+describe("CommentThread — the row's margin bubble", () => {
+  it("renders NOTHING when there are no comments and nobody asked to write", () => {
     const { container } = renderThread();
     expect(container.innerHTML).toBe("");
   });
 
-  it("renders existing comments as bare lines — no composer, no panel chrome", () => {
+  it("shows a bubble carrying the comment count once comments exist", () => {
     renderThread({ kind: "item", itemId: "i1" }, existing);
-    expect(screen.getByText("Zach")).toBeInTheDocument();
-    expect(screen.getByText("Missing page 2 here")).toBeInTheDocument();
-    // Pure: no textarea until explicitly opened.
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    const bubble = screen.getByRole("button", { name: /1 comment/i });
+    expect(bubble).toBeInTheDocument();
+    expect(bubble).toHaveTextContent("1");
+    // Nothing is spilled onto the row itself — the thread lives in the card.
+    expect(screen.queryByText("Missing page 2 here")).not.toBeInTheDocument();
   });
 
-  it("opens its composer only for its own target key", () => {
+  it("opens the card on click, quoting what was commented on", async () => {
+    renderThread({ kind: "item", itemId: "i1" }, existing);
+    fireEvent.click(screen.getByRole("button", { name: /1 comment/i }));
+    await waitFor(() =>
+      expect(screen.getByText("Missing page 2 here")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Zach")).toBeInTheDocument();
+    // The quoted target line (Notion's echo of the commented thing).
+    expect(screen.getByText("T4 slips")).toBeInTheDocument();
+  });
+});
+
+describe("CommentThread — the composer", () => {
+  it("opens on demand for its own target only", async () => {
     renderThread({ kind: "item", itemId: "i1" });
     act(() => openCommentComposer(commentKeyForFile("some-file")));
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    act(() => openCommentComposer(commentKeyForItem("i1")));
-    expect(screen.getByRole("textbox")).toBeInTheDocument();
+
+    openCard();
+    await waitFor(() => expect(screen.getByRole("textbox")).toBeInTheDocument());
   });
 
-  it("Enter posts to the right target and the comment appears; composer closes", async () => {
+  it("Enter posts against the right target and keeps the card open", async () => {
     addMock.mockResolvedValue({
       ok: true,
       comment: {
@@ -107,9 +150,8 @@ describe("CommentThread (pure commenting)", () => {
       },
     });
     renderThread({ kind: "item", itemId: "i1" });
-    act(() => openCommentComposer(commentKeyForItem("i1")));
-
-    const box = screen.getByRole("textbox");
+    openCard();
+    const box = await screen.findByRole("textbox");
     fireEvent.change(box, { target: { value: "On it" } });
     fireEvent.keyDown(box, { key: "Enter" });
 
@@ -122,8 +164,8 @@ describe("CommentThread (pure commenting)", () => {
         body: "On it",
       }),
     );
-    // Pure again after posting — the input is gone.
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    // Notion keeps the thread up after a reply; the box just empties.
+    expect(screen.getByRole("textbox")).toHaveValue("");
   });
 
   it("a file-target thread posts with its file id", async () => {
@@ -140,9 +182,9 @@ describe("CommentThread (pure commenting)", () => {
         createdAt: "2026-07-28T09:00:00Z",
       },
     });
-    renderThread({ kind: "file", fileId: "f1" });
+    renderThread({ kind: "file", fileId: "f1" }, [], "T4-2025.pdf");
     act(() => openCommentComposer(commentKeyForFile("f1")));
-    const box = screen.getByRole("textbox");
+    const box = await screen.findByRole("textbox");
     fireEvent.change(box, { target: { value: "Wrong year?" } });
     fireEvent.keyDown(box, { key: "Enter" });
     await waitFor(() =>
@@ -152,24 +194,35 @@ describe("CommentThread (pure commenting)", () => {
     );
   });
 
-  it("Escape walks away and leaves nothing behind", () => {
-    const { container } = renderThread({ kind: "item", itemId: "i1" });
-    act(() => openCommentComposer(commentKeyForItem("i1")));
-    const box = screen.getByRole("textbox");
-    fireEvent.change(box, { target: { value: "half a thought" } });
-    fireEvent.keyDown(box, { key: "Escape" });
-    expect(container.innerHTML).toBe("");
-    expect(addMock).not.toHaveBeenCalled();
+  it("the send arrow stays disabled until something is typed", async () => {
+    renderThread({ kind: "item", itemId: "i1" });
+    openCard();
+    const send = await screen.findByRole("button", {
+      name: en.Team.comment_post,
+    });
+    expect(send).toBeDisabled();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "hey" } });
+    expect(send).toBeEnabled();
   });
 
-  it("blurring an empty composer closes it quietly", () => {
-    const { container } = renderThread({ kind: "item", itemId: "i1" });
-    act(() => openCommentComposer(commentKeyForItem("i1")));
-    fireEvent.blur(screen.getByRole("textbox"));
-    expect(container.innerHTML).toBe("");
+  it("typing @ offers teammates under a People heading, never yourself", async () => {
+    renderThread({ kind: "item", itemId: "i1" });
+    openCard();
+    const box = await screen.findByRole("textbox");
+    fireEvent.change(box, { target: { value: "hey @" } });
+    await waitFor(() =>
+      expect(
+        screen.getByText(en.Team.mention_section_people),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Zach")).toBeInTheDocument();
+    // "Tyler" is the viewer — you can't mention yourself.
+    expect(screen.queryByText("Tyler")).not.toBeInTheDocument();
   });
+});
 
-  it("own comments offer delete; others' don't", () => {
+describe("CommentThread — deleting", () => {
+  it("offers delete on your own comment only", async () => {
     const mine: FileComment = {
       ...existing[0]!,
       id: "c2",
@@ -178,9 +231,29 @@ describe("CommentThread (pure commenting)", () => {
       body: "my note",
     };
     renderThread({ kind: "item", itemId: "i1" }, [existing[0]!, mine]);
-    const deletes = screen.getAllByRole("button", {
-      name: en.Team.comment_delete,
-    });
-    expect(deletes).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: /2 comments/i }));
+    await waitFor(() => expect(screen.getByText("my note")).toBeInTheDocument());
+    expect(
+      screen.getAllByRole("button", { name: en.Team.comment_delete }),
+    ).toHaveLength(1);
+  });
+
+  it("closes the card and clears the bubble when the last comment goes", async () => {
+    deleteMock.mockResolvedValue({ ok: true });
+    const mine: FileComment = {
+      ...existing[0]!,
+      id: "c2",
+      authorUserId: "u-me",
+      authorName: "Tyler",
+      body: "my note",
+    };
+    const { container } = renderThread({ kind: "item", itemId: "i1" }, [mine]);
+    fireEvent.click(screen.getByRole("button", { name: /1 comment/i }));
+    await waitFor(() => expect(screen.getByText("my note")).toBeInTheDocument());
+    fireEvent.click(
+      screen.getByRole("button", { name: en.Team.comment_delete }),
+    );
+    // Back to a perfectly clean row.
+    await waitFor(() => expect(container.innerHTML).toBe(""));
   });
 });
