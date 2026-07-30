@@ -34,6 +34,10 @@ import {
   backfillContentHashes,
   type BackfillResult,
 } from "@/lib/files/backfill-content-hash";
+import {
+  backfillBrowseAxesBatch,
+  type BackfillResult as AxesBackfillResult,
+} from "@/lib/files/backfill-browse-axes";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -112,11 +116,26 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Files-browser axes backfill (1070), same deal: every document uploaded
+  // before that migration has no year and no category, so it would sit in
+  // "Unsorted" forever. A batch per run drains the history; once drained the
+  // partial index makes it one cheap empty SELECT. Reports unavailable (and
+  // stays silent) until the migration is applied.
+  let axesBackfill: AxesBackfillResult | null = null;
+  if (remaining() > MIN_WAVE_HEADROOM_MS) {
+    try {
+      axesBackfill = await backfillBrowseAxesBatch(getServiceRoleSupabase());
+    } catch (e) {
+      console.error("[cron] browse-axes backfill failed:", e);
+    }
+  }
+
   return NextResponse.json({
     ranAt: new Date().toISOString(),
     claimed: claimedTotal,
     results,
     backfill,
+    axesBackfill,
   });
 }
 

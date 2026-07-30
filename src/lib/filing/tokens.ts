@@ -40,7 +40,12 @@ export type FilingTokenContext = {
 // Mirrors the display-name builder (lib/ai/display-name.ts): below this
 // classifier confidence — or for unknown/other — the TYPE is not trusted in a
 // name, and the generic label is used instead.
-const MIN_CONFIDENCE = 0.5;
+//
+// EXPORTED because the Files browser derives its {category} axis from exactly
+// the same judgement (lib/files/axes.ts). A second copy of this number would
+// mean a document could file into "Federal slips" while Browse showed it under
+// "Unsorted" — the two answers must come from one constant.
+export const MIN_DOC_TYPE_CONFIDENCE = 0.5;
 const GENERIC_LABEL = "Document";
 
 // Fallback folder name when a folder-context token has no value (a document
@@ -50,18 +55,33 @@ export const UNSORTED_LABEL: Record<FilingLanguage, string> = {
   fr: "Non classé",
 };
 
-function trustedDocType(ctx: FilingTokenContext): DocType | null {
-  const code = ctx.docTypeCode;
+/**
+ * The classifier's answer, but only when it is worth acting on: a known code,
+ * not the unknown/other escape hatches, and confident enough to put in a folder
+ * name. Null means "we do not actually know what this is".
+ *
+ * Split out of trustedDocType (which needs a whole token context) so the Files
+ * browser can ask the same question about a bare row — one implementation, one
+ * threshold, one answer.
+ */
+export function trustedDocTypeCode(
+  code: string | null | undefined,
+  confidence: number | null | undefined,
+): DocType | null {
   if (
     !code ||
     code === "unknown" ||
     code === "other" ||
-    (ctx.docConfidence ?? 0) < MIN_CONFIDENCE ||
+    (confidence ?? 0) < MIN_DOC_TYPE_CONFIDENCE ||
     !(code in DOC_TYPE_LABELS)
   ) {
     return null;
   }
   return code as DocType;
+}
+
+function trustedDocType(ctx: FilingTokenContext): DocType | null {
+  return trustedDocTypeCode(ctx.docTypeCode, ctx.docConfidence);
 }
 
 // The short type handle used in names ("T4", "RL-1", "Bank statements") — the
