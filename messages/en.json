@@ -3511,6 +3511,16 @@
     "bin_intro": "Documents you deleted in the last {days} days. Restore one and it goes straight back where it was. After {days} days they're erased for good.",
     "bin_empty": "Nothing has been deleted.",
     "col_deleted": "Deleted",
-    "col_client": "Client"
+    "col_client": "Client",
+    "bulk_selected": "{count, plural, one {# file selected} other {# files selected}}",
+    "bulk_clear": "Clear selection",
+    "bulk_keep": "Leave as is",
+    "bulk_move_title": "Move {count, plural, one {# file} other {# files}}",
+    "bulk_move_help": "Anything left as “Leave as is” stays exactly as it is on every file you picked.",
+    "bulk_delete_title": "Delete {count, plural, one {# file} other {# files}}?",
+    "bulk_delete_help": "{count, plural, one {It moves} other {They move}} to Recently deleted, disappear from your client's portal straight away, and you can put {count, plural, one {it} other {them}} back for 30 days.",
+    "bulk_moved": "{count, plural, one {# file moved} other {# files moved}}.",
+    "bulk_deleted": "{count, plural, one {# file moved} other {# files moved}} to Recently deleted.",
+    "bulk_partial": "{done} done, {failed} couldn't be."
   }
 }

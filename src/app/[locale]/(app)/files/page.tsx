@@ -9,6 +9,8 @@ import { PathBar } from "@/components/files/path-bar";
 import { FilesPagination } from "@/components/files/files-pagination";
 import { DocumentActionsMenu } from "@/components/files/document-actions-menu";
 import { RecentlyDeleted } from "@/components/files/recently-deleted";
+import { FileSelectionProvider } from "@/components/files/file-selection";
+import { BulkBar } from "@/components/files/bulk-bar";
 import { DOCUMENT_RETENTION_DAYS } from "@/lib/files/purge";
 import { Trash2 } from "lucide-react";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
@@ -250,24 +252,30 @@ async function BrowseTab({
         scope={clientId || showFiles ? "documents" : "folders"}
       />
 
+      {/* Selection only wraps the FILE list. Folder rows are navigation, and a
+          checkbox on a folder would promise a bulk action on its contents that
+          this does not do. */}
       {showFiles ? (
-        <FileList
-          locale={locale}
-          filters={{
-            clientId,
-            year,
-            yearSet,
-            category,
-            categorySet,
-            docTypes: docType ? [docType] : undefined,
-            statuses: status ? [status] : undefined,
-            search,
-            sort,
-            page,
-          }}
-          showClient={!clientId}
-          buildHref={(p) => buildQuery({ page: p > 1 ? String(p) : null })}
-        />
+        <FileSelectionProvider>
+          <FileList
+            locale={locale}
+            filters={{
+              clientId,
+              year,
+              yearSet,
+              category,
+              categorySet,
+              docTypes: docType ? [docType] : undefined,
+              statuses: status ? [status] : undefined,
+              search,
+              sort,
+              page,
+            }}
+            showClient={!clientId}
+            buildHref={(p) => buildQuery({ page: p > 1 ? String(p) : null })}
+          />
+          <BulkBar locale={locale} />
+        </FileSelectionProvider>
       ) : clientId ? (
         <FolderLevel
           locale={locale}
@@ -454,6 +462,8 @@ async function FileList({
     sizeBytes: doc.sizeBytes,
     typeLabel: fileTypeLabel(doc, locale, t),
     from: fileSource(doc, t),
+    selectSource: doc.source,
+    selectId: doc.id,
     badges: fileBadges(doc, t, showClient ? clientNames?.get(doc.clientId) : null),
     actions: (
       <DocumentActionsMenu

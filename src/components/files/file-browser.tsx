@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/ui/badge";
 import { formatBytes, formatDate, type AppLocale } from "@/lib/format";
+import { RowCheckbox } from "./row-checkbox";
 
 // THE FILE BROWSER — one list, used at every level of the drill-down.
 //
@@ -62,6 +63,10 @@ export type BrowserEntry =
       badges?: { label: string; tone: "default" | "outline" | "destructive" | "secondary" }[];
       /** The per-file actions menu, built by the page (it is a client island). */
       actions?: React.ReactNode;
+      /** Identity for multi-select. Both are needed: an id is only unique
+       * within its own table, so selection is keyed on the pair. */
+      selectSource?: string;
+      selectId?: string;
     };
 
 // File-type icon, the way a file manager picks one: by what the file IS, not by
@@ -145,6 +150,13 @@ export async function FileBrowser({
               // also how Drive and Finder behave.
               <div className={ROW_CLASS}>
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
+                  {/* Renders nothing outside a selection provider (the recycle
+                      bin), so the same row works in both places. */}
+                  <RowCheckbox
+                    source={entry.selectSource ?? ""}
+                    id={entry.selectId ?? ""}
+                    label={entry.name}
+                  />
                   {(() => {
                     const Icon = iconForMime(entry.mimeType);
                     return (

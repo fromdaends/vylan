@@ -3511,6 +3511,16 @@
     "bin_intro": "Documents supprimés au cours des {days} derniers jours. Restaurez-en un et il retourne exactement où il était. Après {days} jours, ils sont effacés définitivement.",
     "bin_empty": "Rien n'a été supprimé.",
     "col_deleted": "Supprimé le",
-    "col_client": "Client"
+    "col_client": "Client",
+    "bulk_selected": "{count, plural, one {# fichier sélectionné} other {# fichiers sélectionnés}}",
+    "bulk_clear": "Effacer la sélection",
+    "bulk_keep": "Ne pas changer",
+    "bulk_move_title": "Déplacer {count, plural, one {# fichier} other {# fichiers}}",
+    "bulk_move_help": "Tout ce qui reste à « Ne pas changer » demeure exactement tel quel sur chaque fichier choisi.",
+    "bulk_delete_title": "Supprimer {count, plural, one {# fichier} other {# fichiers}} ?",
+    "bulk_delete_help": "{count, plural, one {Il sera déplacé} other {Ils seront déplacés}} vers Récemment supprimés, {count, plural, one {il disparaît} other {ils disparaissent}} immédiatement du portail de votre client, et vous pouvez {count, plural, one {le} other {les}} remettre pendant 30 jours.",
+    "bulk_moved": "{count, plural, one {# fichier déplacé} other {# fichiers déplacés}}.",
+    "bulk_deleted": "{count, plural, one {# fichier déplacé} other {# fichiers déplacés}} vers Récemment supprimés.",
+    "bulk_partial": "{done} réussis, {failed} en échec."
   }
 }
