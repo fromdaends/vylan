@@ -120,9 +120,17 @@ export async function FileBrowser({
         {entries.map((entry) => (
           <li key={`${entry.kind}-${entry.id}`}>
             {entry.kind === "folder" ? (
-              // A FOLDER is pure navigation, so the whole row is the target —
-              // the big click area you expect in a file manager.
-              <Link href={entry.href} className={cn(ROW_CLASS, "cursor-pointer")}>
+              // A FOLDER row is navigation, so the link covers everything up to
+              // the actions menu — but the MENU MUST SIT OUTSIDE THE LINK.
+              // Nesting a button inside an anchor means every click on it also
+              // navigates: the menu opens and is then torn down by the
+              // navigation before the dialog can render. Same reason file rows
+              // are not wrapped in a link at all.
+              <div className={cn(ROW_CLASS, "gap-0 p-0")}>
+              <Link
+                href={entry.href}
+                className={cn(ROW_CLASS, "min-w-0 flex-1 cursor-pointer")}
+              >
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
                   <Folder
                     // Filled, in the brand blue: the single strongest signal
@@ -140,11 +148,15 @@ export async function FileBrowser({
                 <Cell width="w-24" align="right" alwaysVisible>
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
+              </Link>
                 {/* Custom folders carry rename/delete here; derived folders
                     have nothing to act on, and the empty span keeps both
-                    aligned with the file rows below. */}
-                <span className="w-8 shrink-0 text-right">{entry.actions}</span>
-              </Link>
+                    aligned with the file rows below. Outside the Link above —
+                    see the comment there. */}
+                <span className="w-8 shrink-0 pr-4 text-right">
+                  {entry.actions}
+                </span>
+              </div>
             ) : (
               // A FILE row is NOT wrapped in a link, even once preview exists:
               // the "From" cell holds its own link to the source engagement, and

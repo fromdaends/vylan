@@ -14,7 +14,7 @@
 // cascading the delete to documents would make a folder button destroy files.
 
 import { revalidatePath } from "next/cache";
-import { getServerSupabase } from "@/lib/supabase/server";
+import { getServerSupabase, getServiceRoleSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { logUserActivity } from "@/lib/db/activity";
 import { listClientFolders } from "@/lib/db/folders";
@@ -214,6 +214,7 @@ export async function deleteFolderAction(input: {
       .update({ folder_id: self.parentId })
       .eq("folder_id", input.folderId);
     if (error && !isSchemaMissing(error)) {
+      console.error("[folders] reparent documents failed:", table, error.code, error.message);
       return { ok: false, error: "error" };
     }
   }
@@ -224,19 +225,40 @@ export async function deleteFolderAction(input: {
       .from("document_folders")
       .update({ parent_id: self.parentId })
       .eq("parent_id", input.folderId);
-    if (error) return { ok: false, error: "error" };
+    if (error) {
+      console.error("[folders] reparent subfolders failed:", error.code, error.message);
+      return { ok: false, error: "error" };
+    }
   }
 
-  const { data, error } = await sb
+  // THE WRITE THAT SETS deleted_at GOES THROUGH THE SERVICE ROLE.
+  //
+  // Through the session client this fails with 42501, "new row violates
+  // row-level security policy" — observed, not assumed. The policy's own
+  // clauses reference deleted_at, so the row it is being asked to write is one
+  // the policy will not accept, and the update is refused even though the
+  // caller may plainly see and edit the folder.
+  //
+  // Authorization is NOT skipped here: listClientFolders above read this folder
+  // through RLS, so the caller has already proven they can see it, and that
+  // read applied the firm scope and the private-client rule. This is the same
+  // discipline the rest of the codebase uses when the service role is needed
+  // for a write the policy cannot express — prove scope first, then act.
+  //
+  // Note also there is no .select(): once deleted_at is set the row stops
+  // satisfying its own SELECT policy, so RETURNING would come back empty on
+  // SUCCESS and read as "not found".
+  const { error: delErr } = await getServiceRoleSupabase()
     .from("document_folders")
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", input.folderId)
-    .select("id")
-    .maybeSingle();
-  if (error) {
-    return { ok: false, error: isSchemaMissing(error) ? "unavailable" : "error" };
+    // Belt and braces on top of the RLS-proved read above: the service role
+    // bypasses policies, so the firm scope is re-stated by hand.
+    .eq("firm_id", firm.id);
+  if (delErr) {
+    console.error("[folders] soft delete failed:", delErr.code, delErr.message);
+    return { ok: false, error: isSchemaMissing(delErr) ? "unavailable" : "error" };
   }
-  if (!data) return { ok: false, error: "not_found" };
 
   await logUserActivity(firm.id, null, "folder_deleted", {
     client_id: input.clientId,

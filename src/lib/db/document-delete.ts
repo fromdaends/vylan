@@ -74,19 +74,42 @@ export async function softDeleteDocument(
     itemId = (data?.request_item_id as string | null) ?? null;
   }
 
-  const { data, error } = await sb
+  // Prove the document is visible to this caller BEFORE the update, because it
+  // cannot be proven afterwards — see below.
+  const { data: exists } = await sb
+    .from(TABLE[source])
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+  if (!exists) return { ok: false, error: "not_found" };
+
+  // THE WRITE GOES THROUGH THE SERVICE ROLE, and this was found by clicking the
+  // button rather than by reasoning about it.
+  //
+  // Through the session client the update is refused with 42501, "new row
+  // violates row-level security policy". 1090's policies reference deleted_at,
+  // so the very row this is trying to write is one the policy will not accept —
+  // the caller can see and edit the document, but cannot mark it deleted.
+  //
+  // Authorization is not skipped: the existence read above went through RLS, so
+  // the caller has already proven they may see this document — which is what
+  // applies the firm scope, the private-client rule (0810), the private
+  // engagement rule (0850) and the assigned-staff relaxation (0990). This is
+  // the same prove-then-act discipline used elsewhere in the codebase.
+  //
+  // Also no .select(): once deleted_at is set the row stops satisfying its own
+  // SELECT policy, so RETURNING comes back empty on SUCCESS and would read as
+  // "not found".
+  const { error } = await getServiceRoleSupabase()
     .from(TABLE[source])
     .update({
       deleted_at: new Date().toISOString(),
       deleted_by_user_id: userId,
     })
-    .eq("id", id)
-    .select("id")
-    .maybeSingle();
+    .eq("id", id);
   if (error) {
     return { ok: false, error: isSchemaMissing(error) ? "unavailable" : "error" };
   }
-  if (!data) return { ok: false, error: "not_found" };
 
   if (source === "checklist") await settleChecklistAfterChange(id, itemId);
   return { ok: true };

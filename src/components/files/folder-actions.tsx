@@ -162,11 +162,6 @@ export function FolderRowMenu({
             size="icon-sm"
             aria-label={t("folder_actions", { name })}
             className="opacity-60 transition-opacity hover:opacity-100"
-            // The row is a link; the menu button sits inside it.
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-            }}
           >
             <MoreHorizontal className="size-4" />
           </Button>

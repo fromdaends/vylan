@@ -20,7 +20,7 @@ import {
   folderDocumentCounts,
   listClientFolders as listCustomFolders,
 } from "@/lib/db/folders";
-import { childrenOf } from "@/lib/files/folder-tree";
+import { childrenOf, folderPath } from "@/lib/files/folder-tree";
 import { DOCUMENT_RETENTION_DAYS } from "@/lib/files/purge";
 import { Trash2 } from "lucide-react";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
@@ -165,6 +165,7 @@ async function BrowseTab({
     const q = new URLSearchParams();
     const base: Record<string, string | null> = {
       client: clientId,
+      folder: folderId,
       year: yearParam ?? null,
       category: categoryParam ?? null,
       q: search || null,
@@ -183,7 +184,9 @@ async function BrowseTab({
   // rather than folders: inside a category, or with any document-level filter
   // or a search applied.
   const hasDocumentFilter = !!docType || !!status;
-  const showFiles = categorySet || hasDocumentFilter || !!search;
+  // A custom folder shows its own contents directly — it is a real folder
+  // holding real documents, not a derived bucket to drill further into.
+  const showFiles = categorySet || hasDocumentFilter || !!search || !!folderId;
 
   const docTypeOptions = Object.entries(DOC_TYPE_LABELS)
     .map(([code, meta]) => ({ code, label: meta[locale].split(" — ")[0] }))
@@ -195,8 +198,14 @@ async function BrowseTab({
   // Custom folders for the bulk bar's "file into" control. Only meaningful
   // inside a client — firm-wide results span clients, and a folder belongs
   // to exactly one of them.
+  // parentId rides along because the path bar needs the whole chain, not just
+  // a flat list of names.
   const bulkFolders = clientId
-    ? (await listCustomFolders(clientId)).folders.map((f) => ({ id: f.id, name: f.name }))
+    ? (await listCustomFolders(clientId)).folders.map((f) => ({
+        id: f.id,
+        name: f.name,
+        parentId: f.parentId,
+      }))
     : undefined;
 
   // Every client the firm can see — the import wizard maps folders onto these.
@@ -221,6 +230,20 @@ async function BrowseTab({
       label: clientHeader.name,
       href: buildQuery({ client: clientHeader.id, year: null, category: null, page: null }),
     });
+  }
+  // A custom folder's own chain, root-first. Without this the path bar stops at
+  // the client and there is no way to tell which folder you are looking at —
+  // the one thing a file manager's path exists to answer.
+  if (folderId && bulkFolders) {
+    for (const node of folderPath(
+      bulkFolders.map((f) => ({ id: f.id, parentId: f.parentId, name: f.name })),
+      folderId,
+    )) {
+      segments.push({
+        label: node.name,
+        href: buildQuery({ folder: node.id, year: null, category: null, page: null }),
+      });
+    }
   }
   if (yearSet) {
     segments.push({
