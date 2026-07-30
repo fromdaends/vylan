@@ -1017,7 +1017,10 @@ ${pageFacts}`;
     .from("uploaded_files")
     .select("id")
     .eq("request_item_id", itemId)
-    .eq("is_duplicate", false);
+    .eq("is_duplicate", false)
+    // A deleted document is no longer part of the item's set — counting it here
+    // makes the staleness check disagree with what the assessment actually saw.
+    .is("deleted_at", null);
   const before = new Set(allFiles.map((f) => f.id));
   const nowIds = (nowRows ?? []).map((r) => r.id as string);
   if (nowIds.length !== before.size || nowIds.some((id) => !before.has(id))) {
@@ -1175,6 +1178,7 @@ ${pageFacts}`;
     const { data: activeRows } = await sb
       .from("uploaded_files")
       .select("id, review_status, is_duplicate")
+      .is("deleted_at", null)
       .in("id", preparedIds);
     // An APPROVED file is a human decision — never clobbered, even inside an
     // incomplete set (the .neq below also guards the read-write race).

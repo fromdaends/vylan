@@ -38,6 +38,10 @@ import {
   backfillBrowseAxesBatch,
   type BackfillResult as AxesBackfillResult,
 } from "@/lib/files/backfill-browse-axes";
+import {
+  purgeExpiredDeletedDocuments,
+  type PurgeResult as DocumentPurgeResult,
+} from "@/lib/files/purge";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -130,12 +134,25 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Recycle-bin purge (1090): erase documents whose 30-day recovery window has
+  // expired. Rides this cron rather than getting its own schedule, beside the
+  // two backfills — same budget guard, same "no time left, try next run" rule.
+  let documentPurge: DocumentPurgeResult | null = null;
+  if (remaining() > MIN_WAVE_HEADROOM_MS) {
+    try {
+      documentPurge = await purgeExpiredDeletedDocuments();
+    } catch (e) {
+      console.error("[cron] document purge failed:", e);
+    }
+  }
+
   return NextResponse.json({
     ranAt: new Date().toISOString(),
     claimed: claimedTotal,
     results,
     backfill,
     axesBackfill,
+    documentPurge,
   });
 }
 

@@ -81,6 +81,8 @@ export async function GET(
         "id, request_item_id, storage_path, original_filename, display_name, is_duplicate, review_status",
       )
       .eq("engagement_id", engagement.id)
+      // A deleted document must not reappear inside a download bundle.
+      .is("deleted_at", null)
       .order("uploaded_at", { ascending: true }),
     sb
       .from("request_items")

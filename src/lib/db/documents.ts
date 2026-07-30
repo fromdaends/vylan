@@ -676,6 +676,60 @@ export async function getDocumentDetail(
   };
 }
 
+// ── The recycle bin ─────────────────────────────────────────────────────────
+
+export type DeletedDocument = {
+  source: DocumentSource;
+  id: string;
+  clientId: string;
+  clientName: string;
+  name: string;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  deletedAt: string;
+};
+
+/**
+ * Documents in the recycle bin, within the retention window.
+ *
+ * Goes through the firm_deleted_documents() function because migration 1090's
+ * policies have deliberately made these rows invisible to every ordinary read —
+ * that is what makes the soft delete actually hide things. The function is
+ * SECURITY DEFINER but self-scoped to the caller's firm and re-applies the same
+ * private-client rules, so it grants reach and never permission.
+ */
+export async function listDeletedDocuments(retentionDays = 30): Promise<{
+  documents: DeletedDocument[];
+  available: boolean;
+}> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb.rpc("firm_deleted_documents", {
+    p_retention_days: retentionDays,
+    p_limit: 200,
+    p_offset: 0,
+  });
+  if (error) {
+    if (!isFilesSchemaMissing(error)) {
+      console.error("[files] recycle bin read failed:", error.message);
+    }
+    return { documents: [], available: !isFilesSchemaMissing(error) };
+  }
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  return {
+    documents: rows.map((r) => ({
+      source: r.source as DocumentSource,
+      id: r.id as string,
+      clientId: r.client_id as string,
+      clientName: (r.client_name as string) ?? "",
+      name: (r.name as string) ?? "",
+      mimeType: (r.mime_type as string | null) ?? null,
+      sizeBytes: r.size_bytes == null ? null : Number(r.size_bytes),
+      deletedAt: r.deleted_at as string,
+    })),
+    available: true,
+  };
+}
+
 /** The client's own name + type, for the breadcrumb and the cross-link. */
 export async function getClientHeader(clientId: string): Promise<{
   id: string;

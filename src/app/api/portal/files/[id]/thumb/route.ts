@@ -74,6 +74,8 @@ export async function GET(
     .from("uploaded_files")
     .select("storage_path, mime_type, engagement_id")
     .eq("id", id)
+    // Same as the bytes route: service role, so the exclusion must be explicit.
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (

@@ -1179,7 +1179,9 @@
     "action_team_work_handed_over": "Travail transféré",
     "action_file_renamed": "A renommé un document",
     "action_file_moved": "A déplacé un document vers un autre dossier",
-    "action_file_downloaded": "A téléchargé un document"
+    "action_file_downloaded": "A téléchargé un document",
+    "action_file_deleted": "A déplacé un document vers Récemment supprimés",
+    "action_file_restored": "A restauré un document supprimé"
   },
   "Notifications": {
     "title": "Nouveautés",
@@ -3498,6 +3500,17 @@
     "move_year": "Année",
     "move_category": "Dossier",
     "move_note": "Le document est déplacé dans Vylan seulement. Une copie déjà classée dans votre stockage infonuagique reste où elle est.",
-    "move_done": "Déplacé."
+    "move_done": "Déplacé.",
+    "action_delete": "Supprimer",
+    "action_restore": "Restaurer",
+    "delete_title": "Déplacer vers Récemment supprimés ?",
+    "delete_help": "« {name} » sera déplacé vers Récemment supprimés. Il disparaît immédiatement de Vylan et du portail de votre client, et vous pouvez le remettre pendant 30 jours.",
+    "delete_done": "Déplacé vers Récemment supprimés.",
+    "restore_done": "« {name} » est de retour.",
+    "bin_title": "Récemment supprimés",
+    "bin_intro": "Documents supprimés au cours des {days} derniers jours. Restaurez-en un et il retourne exactement où il était. Après {days} jours, ils sont effacés définitivement.",
+    "bin_empty": "Rien n'a été supprimé.",
+    "col_deleted": "Supprimé le",
+    "col_client": "Client"
   }
 }

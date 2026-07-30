@@ -8,6 +8,9 @@ import { FileBrowser, type BrowserEntry } from "@/components/files/file-browser"
 import { PathBar } from "@/components/files/path-bar";
 import { FilesPagination } from "@/components/files/files-pagination";
 import { DocumentActionsMenu } from "@/components/files/document-actions-menu";
+import { RecentlyDeleted } from "@/components/files/recently-deleted";
+import { DOCUMENT_RETENTION_DAYS } from "@/lib/files/purge";
+import { Trash2 } from "lucide-react";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
 import { isBrowseCategory, type BrowseCategory } from "@/lib/files/axes";
 import {
@@ -15,6 +18,7 @@ import {
   getClientDocumentTree,
   getClientHeader,
   listClientFolders,
+  listDeletedDocuments,
   listDocuments,
   type BrowseDocument,
   type DocumentSort,
@@ -202,6 +206,35 @@ async function BrowseTab({
     segments.push({ label: t("path_search", { query: search }) });
   }
 
+  // The recycle bin. A view of the Browse tab rather than a third top-level
+  // tab: the spec caps the section at Browse + Filing settings, and this is
+  // "somewhere inside Browse" the way Finder's Trash is part of the file
+  // manager rather than a separate application.
+  if (sp.deleted === "1") {
+    const { documents, available } = await listDeletedDocuments(
+      DOCUMENT_RETENTION_DAYS,
+    );
+    return (
+      <div className="space-y-4">
+        <PathBar
+          segments={[
+            { label: t("path_root"), href: "/files" },
+            { label: t("bin_title") },
+          ]}
+        />
+        {available ? (
+          <RecentlyDeleted
+            documents={documents}
+            locale={locale}
+            retentionDays={DOCUMENT_RETENTION_DAYS}
+          />
+        ) : (
+          <Dormant message={t("unavailable")} />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <PathBar segments={segments} clientProfileId={clientHeader?.id ?? null} />
@@ -252,6 +285,18 @@ async function BrowseTab({
           buildQuery={buildQuery}
         />
       )}
+
+      {/* The way into the recycle bin. Quiet and at the bottom, like every file
+          manager's Trash — findable, never in the way. */}
+      <div className="pt-2">
+        <Link
+          href="/files?deleted=1"
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <Trash2 className="size-3.5" aria-hidden />
+          {t("bin_title")}
+        </Link>
+      </div>
     </div>
   );
 }

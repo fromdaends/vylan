@@ -326,10 +326,14 @@ export async function runEngagementFiling(input: {
       .select(
         "id, storage_path, original_filename, display_name, mime_type, review_status, is_duplicate, ai_classification, ai_confidence, ai_extracted_fields, uploaded_at",
       )
-      .eq("engagement_id", input.engagementId),
+      .eq("engagement_id", input.engagementId)
+      // Soft-deleted documents are never filed out to the firm's cloud storage
+      // (spec). Service role, so RLS does not do this for us.
+      .is("deleted_at", null),
     sb
       .from("final_documents")
       .select("id, storage_path, original_filename, display_name, mime_type, created_at")
+      .is("deleted_at", null)
       .eq("engagement_id", input.engagementId),
   ]);
 

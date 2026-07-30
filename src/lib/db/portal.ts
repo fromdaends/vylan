@@ -223,6 +223,11 @@ export async function loadPortalContext(
       "id, request_item_id, original_filename, review_status, rejection_reason, mime_type, storage_path, uploaded_at, ai_usability, is_duplicate",
     )
     .eq("engagement_id", engagement.id)
+    // THE ONE THAT MATTERS MOST. This read is the client portal, and it uses
+    // the service role (the client has a magic-link token, not a session), so
+    // migration 1090's RLS exclusion does not apply to it. Without this line a
+    // document the firm deleted keeps showing to the client indefinitely.
+    .is("deleted_at", null)
     .order("uploaded_at", { ascending: true });
 
   // Sign direct storage URLs for image files so the portal loads them straight

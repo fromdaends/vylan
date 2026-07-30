@@ -213,6 +213,7 @@ export async function resolveArchiveFile(input: {
     const { data: f } = await sb
       .from("uploaded_files")
       .select("storage_path, original_filename, display_name, mime_type, engagement_id, is_duplicate")
+      .is("deleted_at", null)
       .eq("id", fileId)
       .maybeSingle();
     if (!f || !f.storage_path || f.is_duplicate) return null;
@@ -228,6 +229,7 @@ export async function resolveArchiveFile(input: {
     const { data: d } = await sb
       .from("final_documents")
       .select("storage_path, original_filename, display_name, mime_type, engagement_id")
+      .is("deleted_at", null)
       .eq("id", fileId)
       .eq("firm_id", firmId)
       .maybeSingle();
@@ -305,11 +307,13 @@ export async function collectEngagementArchive(input: {
     sb
       .from("uploaded_files")
       .select("storage_path, original_filename, display_name, is_duplicate, review_status, size_bytes")
+      .is("deleted_at", null)
       .eq("engagement_id", engagementId),
     sb.from("signature_requests").select("signed_file_path, request_item_id").eq("engagement_id", engagementId),
     sb
       .from("final_documents")
       .select("storage_path, original_filename, display_name, size_bytes")
+      .is("deleted_at", null)
       .eq("engagement_id", engagementId),
     sb.from("request_items").select("id, label, label_fr").eq("engagement_id", engagementId),
   ]);
@@ -371,6 +375,7 @@ export async function collectClientArchive(input: {
     sb
       .from("uploaded_files")
       .select("engagement_id, storage_path, original_filename, display_name, is_duplicate, review_status, size_bytes")
+      .is("deleted_at", null)
       .in("engagement_id", engIds),
     sb
       .from("signature_requests")
@@ -379,6 +384,7 @@ export async function collectClientArchive(input: {
     sb
       .from("final_documents")
       .select("engagement_id, storage_path, original_filename, display_name, size_bytes")
+      .is("deleted_at", null)
       .in("engagement_id", engIds),
     sb.from("request_items").select("id, engagement_id, label, label_fr").in("engagement_id", engIds),
   ]);

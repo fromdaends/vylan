@@ -4,7 +4,14 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Download, Eye, FolderInput, MoreHorizontal, Pencil } from "lucide-react";
+import {
+  Download,
+  Eye,
+  FolderInput,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  deleteDocumentAction,
   logDocumentDownloadAction,
   moveDocumentAction,
   renameDocumentAction,
@@ -70,7 +78,7 @@ export function DocumentActionsMenu({
   const t = useTranslations("Files");
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [dialog, setDialog] = useState<null | "rename" | "move">(null);
+  const [dialog, setDialog] = useState<null | "rename" | "move" | "delete">(null);
 
   const [newName, setNewName] = useState(name);
   const [moveType, setMoveType] = useState<string>(docType ?? "none");
@@ -98,6 +106,19 @@ export function DocumentActionsMenu({
         toast.success(t("rename_done"));
       } else {
         toast.error(res.error === "invalid" ? t("rename_invalid") : t("action_failed"));
+      }
+    });
+  }
+
+  function submitDelete() {
+    startTransition(async () => {
+      const res = await deleteDocumentAction({ source, id });
+      if (res.ok) {
+        setDialog(null);
+        router.refresh();
+        toast.success(t("delete_done"));
+      } else {
+        toast.error(t("action_failed"));
       }
     });
   }
@@ -207,6 +228,16 @@ export function DocumentActionsMenu({
             <FolderInput className="size-4" />
             {t("action_move")}
           </DropdownMenuItem>
+          <DropdownMenuItem
+            className="gap-2 text-destructive focus:text-destructive"
+            onSelect={(e) => {
+              e.preventDefault();
+              setDialog("delete");
+            }}
+          >
+            <Trash2 className="size-4" />
+            {t("action_delete")}
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -235,6 +266,25 @@ export function DocumentActionsMenu({
             </Button>
             <Button onClick={submitRename} disabled={pending || !newName.trim()}>
               {t("save")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete — a soft delete, so the copy says "recoverable", not "gone".
+          Overstating it would make people hesitate over an undoable action. */}
+      <Dialog open={dialog === "delete"} onOpenChange={(o) => !o && setDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("delete_title")}</DialogTitle>
+            <DialogDescription>{t("delete_help", { name })}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDialog(null)} disabled={pending}>
+              {t("cancel")}
+            </Button>
+            <Button variant="destructive" onClick={submitDelete} disabled={pending}>
+              {t("action_delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
