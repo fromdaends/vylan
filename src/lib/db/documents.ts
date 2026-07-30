@@ -573,6 +573,109 @@ export async function attachEngagementContext(
   });
 }
 
+// ── One document, in full (the preview panel) ───────────────────────────────
+
+export type DocumentDetail = BrowseDocument & {
+  clientName: string | null;
+  /** Read off the document by the AI — checklist uploads only. */
+  issuer: string | null;
+  period: string | null;
+  documentDate: string | null;
+  /** Who put it here: the client through the portal, or someone at the firm. */
+  uploader: "client" | "team";
+  /** Where the filing engine put a copy, if it ran. */
+  filedTo: { path: string | null; link: string | null; provider: string } | null;
+};
+
+/**
+ * Everything the preview panel shows about one document.
+ *
+ * Read through the RLS client, so a document the caller may not see simply
+ * comes back null — the caller renders the same "not found" either way and
+ * never becomes an existence oracle.
+ */
+export async function getDocumentDetail(
+  source: DocumentSource,
+  id: string,
+): Promise<DocumentDetail | null> {
+  const sb = await getServerSupabase();
+  const { data, error } = await sb
+    .from("firm_documents")
+    .select(VIEW_COLUMNS)
+    .eq("source", source)
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) return null;
+  const base = toBrowseDocument(data as unknown as ViewRow);
+
+  const [withEngagement] = await attachEngagementContext([base]);
+
+  const { data: client } = await sb
+    .from("clients")
+    .select("display_name")
+    .eq("id", base.clientId)
+    .maybeSingle();
+
+  // The AI's extracted fields live on uploaded_files, not on the view — the
+  // view deliberately carries only what the LIST needs, and this jsonb blob is
+  // large enough that pulling it into every paginated page would be wasteful.
+  let issuer: string | null = null;
+  let period: string | null = null;
+  let documentDate: string | null = null;
+  if (source === "checklist") {
+    const { data: fields } = await sb
+      .from("uploaded_files")
+      .select("ai_extracted_fields")
+      .eq("id", id)
+      .maybeSingle();
+    const f = (fields?.ai_extracted_fields ?? {}) as Record<string, unknown>;
+    const str = (v: unknown) =>
+      typeof v === "string" && v.trim() !== "" ? v : null;
+    issuer = str(f.issuer_name);
+    period = str(f.account_or_period);
+    documentDate = str(f.document_date);
+  }
+
+  // Where the filing engine put it, if it ran. Absent pre-0900, and absent for
+  // anything never filed — both read as "not filed", which is the truth.
+  let filedTo: DocumentDetail["filedTo"] = null;
+  {
+    const { data: filed } = await sb
+      .from("filed_documents")
+      .select("folder_path, filed_name, provider_link, connection_id, status")
+      .eq("source", source === "final" ? "final" : "checklist")
+      .eq("file_id", id)
+      .eq("status", "filed")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (filed) {
+      const { data: conn } = await sb
+        .from("storage_connections")
+        .select("provider")
+        .eq("id", filed.connection_id as string)
+        .maybeSingle();
+      filedTo = {
+        path: [filed.folder_path, filed.filed_name].filter(Boolean).join("/") || null,
+        link: (filed.provider_link as string | null) ?? null,
+        provider: (conn?.provider as string | null) ?? "",
+      };
+    }
+  }
+
+  return {
+    ...withEngagement,
+    clientName: (client?.display_name as string | null) ?? null,
+    issuer,
+    period,
+    documentDate,
+    // A checklist upload arrives through the client portal; deliverables and
+    // imports are put there by the firm.
+    uploader: source === "checklist" ? "client" : "team",
+    filedTo,
+  };
+}
+
 /** The client's own name + type, for the breadcrumb and the cross-link. */
 export async function getClientHeader(clientId: string): Promise<{
   id: string;

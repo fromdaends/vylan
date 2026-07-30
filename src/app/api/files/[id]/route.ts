@@ -18,13 +18,12 @@
 // → firm-scoped lookup → indistinguishable 404 for anything outside the firm.
 
 import { NextResponse, type NextRequest } from "next/server";
-import {
-  getServerSupabase,
-  getServiceRoleSupabase,
-} from "@/lib/supabase/server";
-import { getCurrentFirm } from "@/lib/db/firms";
 import { signedUrl } from "@/lib/storage";
 import { buildContentDisposition } from "@/lib/files/content-disposition";
+import {
+  resolveServableDocument,
+  sourceFromParam,
+} from "@/lib/files/serve-document";
 
 export const runtime = "nodejs";
 // Streaming a range chunk is fast; the ceiling only matters if the upstream
@@ -37,38 +36,20 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) {
-    return NextResponse.json({ error: "unauth" }, { status: 401 });
-  }
-  const firm = await getCurrentFirm();
-  if (!firm) {
-    return NextResponse.json({ error: "no_firm" }, { status: 403 });
-  }
-
-  const sb = getServiceRoleSupabase();
-  // Find the file, then confirm its engagement belongs to the caller's firm.
-  // A file from another firm is an indistinguishable 404 — no existence oracle.
-  const { data: file } = await sb
-    .from("uploaded_files")
-    .select("storage_path, original_filename, display_name, mime_type, engagement_id")
-    .eq("id", id)
-    .maybeSingle();
+  // ?source= lets the Files browser stream the firm's own deliverables and
+  // imported historical files through this same proxy. Absent = 'checklist',
+  // which is every existing caller in the product — their behaviour is
+  // unchanged, including the exact lookup and authorization path.
+  const source = sourceFromParam(request.nextUrl.searchParams.get("source"));
+  const file = await resolveServableDocument(source, id);
   if (!file) {
+    // "Not found" and "not yours" are the same answer: no existence oracle for
+    // another firm's documents.
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  // Authorize the parent engagement through the AUTHED (RLS) client, not the
-  // service role — so a "Private to me" client's engagement is invisible to
-  // STAFF (0810) and this 404s for them, while owners still pass. RLS also
-  // scopes to the firm; the explicit firm_id eq is kept as defense-in-depth.
-  const { data: engagement } = await supabase
-    .from("engagements")
-    .select("id")
-    .eq("id", file.engagement_id)
-    .eq("firm_id", firm.id)
-    .maybeSingle();
-  if (!engagement) {
+  // A document in the recycle bin is not readable. Restoring it is the way
+  // back, and until then a stale tab holding its URL must not still stream it.
+  if (file.deletedAt) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
@@ -76,7 +57,7 @@ export async function GET(
   // only needs to outlive this one upstream request.
   let upstreamUrl: string;
   try {
-    upstreamUrl = await signedUrl(file.storage_path, 120);
+    upstreamUrl = await signedUrl(file.storagePath, 120);
   } catch {
     return NextResponse.json({ error: "sign_failed" }, { status: 502 });
   }
@@ -102,14 +83,11 @@ export async function GET(
   // Trust the stored MIME type (validated at upload) rather than the upstream's
   // — combined with the global `nosniff` header this makes the browser render
   // PDFs/images inline correctly and never sniff something unexpected.
-  headers.set("Content-Type", file.mime_type || "application/octet-stream");
+  headers.set("Content-Type", file.mimeType || "application/octet-stream");
   // Download/open as the AI's clean name when we have one, else the original.
   headers.set(
     "Content-Disposition",
-    buildContentDisposition(
-      file.display_name ?? file.original_filename,
-      wantsDownload,
-    ),
+    buildContentDisposition(file.fileName, wantsDownload),
   );
   headers.set("Accept-Ranges", "bytes");
   // Private bytes: cache only in the user's browser, never on a shared CDN.
