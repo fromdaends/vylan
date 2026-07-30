@@ -28,6 +28,7 @@ import { buildTransactionSuggestion } from "@/lib/quickbooks/suggest";
 import { draftNeedsInput } from "@/lib/quickbooks/draft-resolve";
 import { decideAutoApprove } from "@/lib/quickbooks/auto-approve";
 import type { QuickbooksLists } from "@/lib/quickbooks/read";
+import { getProvider, getOpenAiModel } from "@/lib/ai/classify";
 import { CASES, ACCOUNTS, CONTACTS, TAX_RATES, ITEMS } from "./cases";
 import { renderMissing, imagePath, imageMime, captureOf } from "./render";
 
@@ -226,7 +227,23 @@ describe("bookkeeping accuracy", () => {
     }
 
     // ── Scorecard ────────────────────────────────────────────────────────────
-    const out: string[] = ["", "PER CASE", "─".repeat(72)];
+    //
+    // Stamped with the provider, because a score is meaningless unless you know
+    // what produced it — the first expanded run measured Claude while production
+    // was on OpenAI.
+    const provider = getProvider();
+    const model =
+      provider === "openai" ? getOpenAiModel() : "claude-sonnet-4-6";
+    const out: string[] = [
+      "",
+      `PROVIDER  ${provider}  (${model})`,
+      provider === "anthropic" && !process.env.AI_CLASSIFIER_PROVIDER?.trim()
+        ? "          ⚠ defaulted — set AI_CLASSIFIER_PROVIDER to match production"
+        : "",
+      "",
+      "PER CASE",
+      "─".repeat(72),
+    ].filter((l) => l !== "");
     for (const r of rows) {
       const { case: id, ...rest } = r;
       const bad = Object.entries(rest).filter(([, v]) => v !== "ok");
