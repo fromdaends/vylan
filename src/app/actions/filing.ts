@@ -59,6 +59,12 @@ export async function saveFilingSettingsAction(
     nameTemplate: string;
     language: "en" | "fr";
     autoFileOnComplete: boolean;
+    /** Include documents the accountant rejected. Optional so an older client
+     * bundle posting without it cannot turn it on by omission. */
+    fileRejected?: boolean;
+    /** 'template' renders the folder tokens; 'vylan' mirrors the firm's own
+     * folder tree from Files. */
+    folderSource?: "template" | "vylan";
   },
 ): Promise<SaveFilingSettingsState> {
   const user = await getCurrentUser();
@@ -106,6 +112,11 @@ export async function saveFilingSettingsAction(
     nameTemplate,
     language: input.language === "fr" ? "fr" : "en",
     autoFileOnComplete: input.autoFileOnComplete === true,
+    // Both default to today's behaviour when absent, so a caller that omits
+    // them can never silently turn on rejected filing or restructure a firm's
+    // cloud storage.
+    fileRejected: input.fileRejected === true,
+    folderSource: input.folderSource === "vylan" ? "vylan" : "template",
   });
   if (saved === "unavailable") return { ok: false, error: "unavailable" };
   if (saved === "error") return { ok: false, error: "save_failed" };

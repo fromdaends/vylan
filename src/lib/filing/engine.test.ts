@@ -178,6 +178,45 @@ describe("decideEligibility", () => {
     ).toEqual({ eligible: false, reason: "no_bytes" });
   });
 
+  it("files a rejected document ONLY when the firm opted in", () => {
+    // Off by default and unchanged for every firm that touches nothing — the
+    // whole point of the setting is that it is a deliberate act.
+    expect(
+      decideEligibility(candidate({ reviewStatus: "rejected" }), {
+        ...opts,
+        fileRejected: true,
+      }),
+    ).toEqual({ eligible: true });
+    expect(
+      decideEligibility(candidate({ reviewStatus: "rejected" }), {
+        ...opts,
+        fileRejected: false,
+      }),
+    ).toEqual({ eligible: false, reason: "rejected" });
+  });
+
+  it("never files a PENDING document, whatever the rejected setting says", () => {
+    // "We haven't looked at it yet" is not a state worth copying into a firm's
+    // permanent storage, and opting into rejected documents must not quietly
+    // opt them into unreviewed ones too.
+    expect(
+      decideEligibility(candidate({ reviewStatus: "pending" }), {
+        ...opts,
+        fileRejected: true,
+      }),
+    ).toEqual({ eligible: false, reason: "not_approved" });
+  });
+
+  it("still refuses a rejected DUPLICATE even when rejected filing is on", () => {
+    // The duplicate check runs first and is unaffected by the new setting.
+    expect(
+      decideEligibility(
+        candidate({ isDuplicate: true, reviewStatus: "rejected" }),
+        { ...opts, fileRejected: true },
+      ),
+    ).toEqual({ eligible: false, reason: "duplicate" });
+  });
+
   it("rejected wins over duplicate-flag ordering ambiguity deterministically", () => {
     expect(
       decideEligibility(

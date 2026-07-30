@@ -41,6 +41,7 @@ type Props = {
     nameTemplate: string;
     language: FilingLanguage;
     autoFileOnComplete: boolean;
+    fileRejected: boolean;
   };
   sample: FilingTokenContext;
   yearlessSample: FilingTokenContext;
@@ -63,6 +64,7 @@ export function FilingSettingsForm({
   const [nameTemplate, setNameTemplate] = useState(initial.nameTemplate);
   const [language, setLanguage] = useState<FilingLanguage>(initial.language);
   const [autoFile, setAutoFile] = useState(initial.autoFileOnComplete);
+  const [fileRejected, setFileRejected] = useState(initial.fileRejected);
   const [saving, startSaving] = useTransition();
 
   const folderRef = useRef<HTMLInputElement>(null);
@@ -140,6 +142,7 @@ export function FilingSettingsForm({
         nameTemplate,
         language,
         autoFileOnComplete: autoFile,
+        fileRejected,
       });
       if (result?.ok) {
         toast.success(t("saved"));
@@ -314,6 +317,26 @@ export function FilingSettingsForm({
             id="filing-auto"
             checked={autoFile}
             onCheckedChange={setAutoFile}
+            disabled={!editable}
+          />
+        </div>
+
+        {/* Rejected documents. This has ALWAYS been the behaviour — the engine
+            refuses a rejected document outright — so the switch does not change
+            anything by existing. It makes an invisible guarantee visible, and
+            gives a firm that wants a complete archive rather than a clean one
+            the ability to say so. Off by default, and off is the safe side:
+            filing a rejected document beside the good copy is how the wrong
+            version ends up in someone's books. */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <Label htmlFor="filing-rejected">{t("rejected_label")}</Label>
+            <p className="text-xs text-muted-foreground">{t("rejected_hint")}</p>
+          </div>
+          <Switch
+            id="filing-rejected"
+            checked={fileRejected}
+            onCheckedChange={setFileRejected}
             disabled={!editable}
           />
         </div>

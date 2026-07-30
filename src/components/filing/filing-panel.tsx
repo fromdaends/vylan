@@ -112,6 +112,7 @@ export async function FilingPanel() {
               nameTemplate: settings.nameTemplate,
               language,
               autoFileOnComplete: settings.autoFileOnComplete,
+              fileRejected: settings.fileRejected,
             }}
             sample={sample.tokenContext}
             yearlessSample={sample.yearlessContext}

@@ -3345,7 +3345,9 @@
     "skip_final_not_opted_in": "Document final — non activé.",
     "skip_no_bytes": "Le contenu du fichier est indisponible.",
     "open_folder_generic": "Ouvrir le dossier Vylan",
-    "not_configured_hint": "{provider} n'est pas encore configuré sur cet environnement."
+    "not_configured_hint": "{provider} n'est pas encore configuré sur cet environnement.",
+    "rejected_label": "Classer aussi les documents refusés",
+    "rejected_hint": "Désactivé par défaut. Un document refusé est un document que vous avez demandé au client de remplacer — le classer à côté du bon exemplaire, c'est ainsi que la mauvaise version se retrouve dans les livres. À activer seulement si vous voulez une archive complète plutôt qu'une archive propre."
   },
   "Repeating": {
     "title": "Travail récurrent",
