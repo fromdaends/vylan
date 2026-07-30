@@ -19,7 +19,7 @@ import {
   workloadForMember,
 } from "@/lib/team/workload";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
-import { FirmNav } from "@/components/firm/firm-nav";
+import { FirmTabs } from "@/components/firm/firm-tabs";
 import { StateChip } from "@/components/firm/state-chip";
 import { cn } from "@/lib/cn";
 
@@ -70,14 +70,16 @@ export default async function FirmPreviewPage({
   if (!firm.team_enabled) notFound();
 
   const canManage = user.role === "owner";
-  const [members, invites, usage, firmLogoUrl] = await Promise.all([
+  const [members, invites, usage] = await Promise.all([
     listFirmUsers(),
     canManage ? listFirmInvites() : Promise.resolve([]),
     canManage ? getFirmSeatUsage(firm.id) : Promise.resolve(null),
-    getBrandingImageUrl(firm.logo_url),
   ]);
 
   const t = await getTranslations("Team");
+  const tApp = await getTranslations("App");
+  const tBilling = await getTranslations("Billing");
+  const tAudit = await getTranslations("Audit");
 
   const avatars = await Promise.all(
     members.map((m) => getBrandingImageUrl(m.avatar_path)),
@@ -139,34 +141,35 @@ export default async function FirmPreviewPage({
   // listed with the people because it already HOLDS A SEAT — kept on a page of
   // its own, the roster quietly understates the size of the firm.
   return (
-    <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
-      <FirmNav
-        firmName={firm.name}
-        firmLogoUrl={firmLogoUrl}
-        seatLabel={seatLabel}
+    <div className="space-y-5">
+      {/* The firm's identity, then its tabs — Canopy's client-page shape. The
+          name is the H1 because every tab below is a view of THIS firm, not a
+          separate destination. */}
+      <header>
+        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
+          {firm.name}
+        </h1>
+        {seatLabel && (
+          <p className="mt-0.5 text-sm text-muted-foreground">{seatLabel}</p>
+        )}
+      </header>
+
+      <FirmTabs
         current="people"
+        labels={{
+          people: t("section_active"),
+          settings: tApp("nav_settings"),
+          billing: tBilling("title"),
+          audit: tAudit("title"),
+        }}
       />
 
-      <div className="min-w-0 flex-1">
-        <header className="flex flex-wrap items-start gap-3">
-          <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-              {t("section_active")}
-            </h1>
-            <p className="mt-1 max-w-[70ch] text-sm text-muted-foreground">
-              {canManage ? t("subtitle") : t("subtitle_readonly")}
-            </p>
-          </div>
-          <span className="flex-1" />
-          <Link
-            href="/settings/team"
-            className="text-sm font-medium text-accent hover:underline"
-          >
-            {t("title")}
-          </Link>
-        </header>
+      <div className="min-w-0">
+        <p className="max-w-[70ch] text-sm text-muted-foreground">
+          {canManage ? t("subtitle") : t("subtitle_readonly")}
+        </p>
 
-        <div className="mt-5 overflow-hidden rounded-xl border border-border/60 bg-card">
+        <div className="mt-4 overflow-hidden rounded-xl border border-border/60 bg-card">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse text-sm">
               <thead>

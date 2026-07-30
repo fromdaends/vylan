@@ -576,7 +576,7 @@ function MobileAccountMenu({
           />
           {teamEnabled && (
             <MobileMenuItem
-              href="/firm/preview"
+              href="/settings/team"
               icon={Users2}
               label={tTeam("title")}
               onClick={onItemClick}
@@ -846,19 +846,13 @@ function SidebarBody({
 
       {/* Firm button — a deliberately QUIET, secondary affordance: a small firm
           logo + muted, single-line firm name + a small team icon. Visible to all
-          members; opens the firm workspace. Kept subtler than the profile card
-          below it (smaller avatar, muted xs text, lighter hover) so the profile
-          stays the primary identity and this recedes.
-
-          PREVIEW BRANCH: this points at /firm/preview, the rebuilt firm
-          workspace. The old page is still there and still works — it just isn't
-          what this button opens any more. This one line is the ONLY change to
-          any pre-existing file on this branch, and it exists because a new page
-          nothing links to is a page nobody finds. */}
+          members; opens the team page. Kept subtler than the profile card below
+          it (smaller avatar, muted xs text, lighter hover) so the profile stays
+          the primary identity and this recedes. */}
       {teamEnabled && (
         <div className={cn(collapsed ? "px-2 pb-1" : "px-3 pb-1")}>
         <Link
-          href="/firm/preview"
+          href="/settings/team"
           title={firmName}
           aria-label={firmName}
           className={cn(
