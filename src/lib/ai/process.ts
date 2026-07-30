@@ -19,6 +19,7 @@ import {
 } from "./classify";
 import { shouldActOnUsability } from "./usability";
 import { expectedYearFromTitle } from "./matching";
+import { syncBrowseAxesForUpload } from "@/lib/files/browse-axes-sync";
 import {
   extractPayout,
   shouldExtractPayout,
@@ -301,6 +302,26 @@ export async function processClassifyJob(
   // below: a missing column (0990 not applied) leaves the feature off and the
   // classification above still lands.
   await flagNearDuplicate(sb, file.id, file.engagement_id, transaction);
+
+  // FILES BROWSER (1070): store where this document now sits in the
+  // Clients/{client}/{year}/{category} drill-down. Derived from the same year
+  // chain and doc-type group the FILING engine uses, so what Browse shows and
+  // where the file actually lands in the firm's cloud storage can never
+  // disagree. Skips any axis an accountant set by hand.
+  //
+  // Best-effort and self-contained, like the display_name write below: a
+  // missing column (1070 not applied) leaves Files dormant and the
+  // classification above still lands.
+  const axes = await syncBrowseAxesForUpload(sb, {
+    fileId: file.id,
+    engagementId: file.engagement_id,
+    aiDocType: result.document_type,
+    aiConfidence: result.confidence,
+    extractedYear: result.extracted_year,
+  });
+  if (!axes.ok) {
+    console.warn("[classify] browse axes not written (migration 1070?):", axes.reason);
+  }
 
   // Auto-name (migration 0280): give the file a clean, human name (e.g.
   // "T4 - 2024 - Hydro-Quebec.pdf") so the accountant isn't staring at
