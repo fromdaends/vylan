@@ -140,7 +140,8 @@ const TRANSACTION_TOOL = {
       document_date: {
         type: ["string", "null"],
         description:
-          "The transaction date printed on the document (invoice date / purchase date) as an ISO date YYYY-MM-DD when you can, else as printed. Null if none is visible.",
+          "The transaction date printed on the document (invoice date / purchase date) as an ISO date YYYY-MM-DD when you can, else as printed. Null if none is visible. " +
+          "A NUMERIC date like 08/06/2026 is ambiguous, so resolve it in this order: (1) a spelled-out month decides it ('June 8, 2026'); (2) any component greater than 12 decides it (13/06 can only be 13 June); (3) otherwise use the document's OWN country — Canadian markers (GST, HST, QST, PST, RST, a province code like MB/ON/QC, a postal code like R3G 0G4, or French text) mean DAY first, so 08/06/2026 is 8 June; United States markers (a state code with a 5-digit ZIP, 'Sales tax', USD) mean MONTH first, so 08/06/2026 is 6 August; (4) with nothing at all to go on, prefer DAY first. Getting this backwards books the transaction in the wrong month.",
       },
       due_date: {
         type: ["string", "null"],
@@ -274,7 +275,12 @@ Decide the DIRECTION from the business's point of view:
 Then capture:
 - vendor_name — the supplier/merchant for an expense (null for income).
 - customer_name — the customer billed for income (null for an expense).
-- document_date — the transaction date (ISO YYYY-MM-DD when possible).
+- document_date — the transaction date (ISO YYYY-MM-DD when possible). For an
+  all-numeric date, a spelled-out month or a component over 12 settles the order;
+  failing that, read the document's country — GST/HST/QST/RST, a province code,
+  a postal code or French text mean DAY first (08/06/2026 = 8 June), a US state
+  with a ZIP or "Sales tax" means MONTH first (08/06/2026 = 6 August). Reading it
+  the wrong way round puts the expense in the wrong month.
 - document_number — the document's own number if printed (receipt/invoice/order
   number, e.g. "CC-20418"), copied exactly. Null if there's none. Never use a
   date, total, phone, or tax-registration number.
