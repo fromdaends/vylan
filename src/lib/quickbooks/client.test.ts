@@ -22,6 +22,7 @@ import {
   quickbooksFindNameEntityByName,
   isDuplicateNameError,
   retryAfterMs,
+  fetchCurrencyPrefs,
 } from "./client";
 
 // Isolate OAuth-endpoint resolution: the discovery document is exercised on its
@@ -927,5 +928,94 @@ describe("write + query transient retry", () => {
     await vi.runAllTimersAsync();
     await assertion;
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe("fetchCurrencyPrefs — can this company express a foreign currency?", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const prefs = (CurrencyPrefs: unknown) => ({ Preferences: { CurrencyPrefs } });
+
+  it("reads the home currency and the multicurrency flag from Preferences", async () => {
+    const fetchMock = vi.fn(async () =>
+      mockResponse({
+        ok: true,
+        json: prefs({
+          MultiCurrencyEnabled: true,
+          HomeCurrency: { value: "usd" },
+        }),
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const p = await fetchCurrencyPrefs("AT", "realm1", "sandbox");
+    expect(p).toEqual({ homeCurrency: "USD", multicurrencyEnabled: true });
+    // Preferences, not CompanyInfo — CompanyInfo carries no home currency.
+    const firstCall = fetchMock.mock.calls[0] as unknown as [string];
+    expect(String(firstCall[0])).toContain("/preferences");
+  });
+
+  it("records multicurrency OFF as false — that is real information", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        mockResponse({
+          ok: true,
+          json: prefs({
+            MultiCurrencyEnabled: false,
+            HomeCurrency: { value: "CAD" },
+          }),
+        }),
+      ),
+    );
+    const p = await fetchCurrencyPrefs("AT", "realm1");
+    expect(p).toEqual({ homeCurrency: "CAD", multicurrencyEnabled: false });
+  });
+
+  it("leaves the flag UNKNOWN when QuickBooks did not say", async () => {
+    // null must not collapse into false: "we never looked" and "this company
+    // cannot take a CurrencyRef" lead to different decisions.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        mockResponse({ ok: true, json: prefs({ HomeCurrency: { value: "GBP" } }) }),
+      ),
+    );
+    const p = await fetchCurrencyPrefs("AT", "realm1");
+    expect(p).toEqual({ homeCurrency: "GBP", multicurrencyEnabled: null });
+  });
+
+  it("fails soft to all-unknown on a non-ok response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => mockResponse({ ok: false, status: 403 })),
+    );
+    expect(await fetchCurrencyPrefs("AT", "realm1")).toEqual({
+      homeCurrency: null,
+      multicurrencyEnabled: null,
+    });
+  });
+
+  it("fails soft when the request throws", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("network");
+      }),
+    );
+    expect(await fetchCurrencyPrefs("AT", "realm1")).toEqual({
+      homeCurrency: null,
+      multicurrencyEnabled: null,
+    });
+  });
+
+  it("fails soft on an unrecognised body rather than guessing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => mockResponse({ ok: true, json: { Nope: 1 } })),
+    );
+    expect(await fetchCurrencyPrefs("AT", "realm1")).toEqual({
+      homeCurrency: null,
+      multicurrencyEnabled: null,
+    });
   });
 });

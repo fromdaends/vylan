@@ -14,9 +14,13 @@ import {
 import {
   isMissingSchema,
   updateFirmQuickbooksCompanyCountry,
+  updateQuickbooksCurrencyPrefs,
 } from "@/lib/db/quickbooks";
 import { getQuickbooksReadContext } from "@/lib/quickbooks/connection";
-import { fetchCompanyProfile } from "@/lib/quickbooks/client";
+import {
+  fetchCompanyProfile,
+  fetchCurrencyPrefs,
+} from "@/lib/quickbooks/client";
 import { enqueueJob, cancelPendingJobs } from "@/lib/db/jobs";
 import { rebuildMissingDraftsForClient } from "@/lib/quickbooks/draft-backfill";
 
@@ -39,6 +43,32 @@ async function backfillCompanyCountry(
     await updateFirmQuickbooksCompanyCountry(firmId, profile.country, clientId);
   } catch (e) {
     console.warn("[quickbooks] backfillCompanyCountry failed:", e);
+  }
+}
+
+// Self-heal the connected company's CURRENCY SETTINGS (1060), so a connection
+// made before that migration gets them without the founder reconnecting every
+// client. Mirrors backfillCompanyCountry above: best-effort, and a failure is
+// invisible to the sync's own result.
+//
+// Re-read every time rather than skipping when a value is already stored:
+// multicurrency can be switched ON in QuickBooks at any point, and a stale
+// `false` would keep foreign-currency documents blocked long after the company
+// could handle them.
+export async function backfillCurrencyPrefs(
+  firmId: string,
+  clientId?: string | null,
+): Promise<void> {
+  try {
+    const ctx = await getQuickbooksReadContext(firmId, clientId);
+    if (!ctx) return; // not connected
+    await updateQuickbooksCurrencyPrefs(
+      firmId,
+      await fetchCurrencyPrefs(ctx.accessToken, ctx.realmId, ctx.environment),
+      clientId,
+    );
+  } catch (e) {
+    console.warn("[quickbooks] backfillCurrencyPrefs failed:", e);
   }
 }
 
@@ -185,6 +215,9 @@ export async function syncQuickbooksLists(
   // Self-heal the company country (best-effort, no-op once known) so tax-line
   // posting can branch US vs non-US. Off the critical path — failures are ignored.
   await backfillCompanyCountry(firmId, clientId);
+  // Also refresh the currency settings (1060), so an existing connection picks
+  // them up without the founder reconnecting every client.
+  await backfillCurrencyPrefs(firmId, clientId);
   return { ok: true, detail: "ok" };
 }
 

@@ -387,6 +387,81 @@ export async function updateFirmQuickbooksCompanyCountry(
   }
 }
 
+// Record the connected company's currency settings (service role, 1060).
+//
+// A SEPARATE best-effort update rather than part of upsertFirmQuickbooksConnection
+// on purpose: that upsert has a tiered fallback which returns "migration_pending"
+// when a column is missing and a token-encryption key is configured, so folding
+// these in would have made connecting to QuickBooks fail outright until 1060 was
+// applied. Here a missing column is simply a no-op and posting keeps behaving
+// exactly as it does today.
+//
+// Writes whatever we know, including a `false` multicurrency flag — that is real
+// information ("this company cannot take a CurrencyRef"), unlike null.
+export async function updateQuickbooksCurrencyPrefs(
+  firmId: string,
+  prefs: { homeCurrency: string | null; multicurrencyEnabled: boolean | null },
+  clientId?: QuickbooksClientScope,
+): Promise<void> {
+  if (prefs.homeCurrency == null && prefs.multicurrencyEnabled == null) return;
+  const sb = getServiceRoleSupabase();
+  const patch: Record<string, unknown> = {};
+  if (prefs.homeCurrency != null) patch.home_currency = prefs.homeCurrency;
+  if (prefs.multicurrencyEnabled != null) {
+    patch.multicurrency_enabled = prefs.multicurrencyEnabled;
+  }
+  const base = () =>
+    sb.from("quickbooks_connections").update(patch).eq("firm_id", firmId);
+  const { error } = await runWithClientFallback(
+    clientId,
+    () => withClientScope(base(), clientId),
+    () => base(),
+  );
+  if (error && !isMissingSchema(error)) {
+    console.error("[quickbooks] updateQuickbooksCurrencyPrefs failed:", error);
+  }
+}
+
+// The connected company's currency settings, or all-nulls when unknown (1060 not
+// applied, or the company never re-read). Null must be treated as "we cannot state
+// a currency" — see TransactionSuggestion.booksCurrency for why that distinction
+// carries the whole safety of the feature.
+export async function readQuickbooksCurrencyPrefs(
+  firmId: string,
+  clientId?: QuickbooksClientScope,
+): Promise<{ homeCurrency: string | null; multicurrencyEnabled: boolean | null }> {
+  const unknown = { homeCurrency: null, multicurrencyEnabled: null };
+  const sb = getServiceRoleSupabase();
+  const base = () =>
+    sb
+      .from("quickbooks_connections")
+      .select("home_currency, multicurrency_enabled")
+      .eq("firm_id", firmId);
+  const { data, error } = await runWithClientFallback(
+    clientId,
+    () => withClientScope(base(), clientId).maybeSingle(),
+    () => base().maybeSingle(),
+  );
+  if (error) {
+    if (!isMissingSchema(error)) {
+      console.error("[quickbooks] readQuickbooksCurrencyPrefs failed:", error);
+    }
+    return unknown;
+  }
+  const row = data as {
+    home_currency?: string | null;
+    multicurrency_enabled?: boolean | null;
+  } | null;
+  const code = row?.home_currency?.trim().toUpperCase();
+  return {
+    homeCurrency: code && code.length > 0 ? code : null,
+    multicurrencyEnabled:
+      typeof row?.multicurrency_enabled === "boolean"
+        ? row.multicurrency_enabled
+        : null,
+  };
+}
+
 // Cheap service-role "is this firm connected to QuickBooks?" check, for the
 // classify worker to decide whether to spend tokens on the (extra) transaction
 // extraction pass. Selects only realm_id (never the tokens). Degrades to false

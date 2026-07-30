@@ -513,6 +513,88 @@ export async function fetchCompanyProfile(
   }
 }
 
+// The connected company's CURRENCY SETTINGS.
+//
+// Read from Preferences, NOT CompanyInfo — CompanyInfo carries a Country but not
+// the home currency, and it says nothing about whether multicurrency is on.
+//
+// Both matter, and that is what makes QuickBooks different from Xero: Xero always
+// accepts a CurrencyCode, while QuickBooks REFUSES one unless multicurrency is
+// switched on for the company. So the home currency alone is not enough to decide
+// whether a foreign-currency document can be expressed.
+//
+// Fails soft to all-nulls, and null means "we could not read it" — never a guess.
+// The caller must treat unknown as "cannot state a currency", exactly as the
+// shared draft gate does.
+export type QuickbooksCurrencyPrefs = {
+  homeCurrency: string | null;
+  // true / false / null-for-unknown. false is a positive statement that this
+  // company cannot take a CurrencyRef, which is different information from
+  // "we never looked".
+  multicurrencyEnabled: boolean | null;
+};
+
+export async function fetchCurrencyPrefs(
+  accessToken: string,
+  realmId: string,
+  environment?: QuickbooksEnvironment,
+): Promise<QuickbooksCurrencyPrefs> {
+  const empty: QuickbooksCurrencyPrefs = {
+    homeCurrency: null,
+    multicurrencyEnabled: null,
+  };
+  const url =
+    `${quickbooksApiBaseUrl(environment)}/v3/company/${encodeURIComponent(realmId)}` +
+    `/preferences?minorversion=${QBO_MINORVERSION}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(QBO_FETCH_TIMEOUT_MS),
+    });
+  } catch {
+    return empty;
+  }
+  if (!res.ok) {
+    // Fail soft: the connection is still valid and posting still works exactly as
+    // before. Record the trace id so a recurring failure is diagnosable.
+    console.warn(
+      withTid(
+        `[quickbooks] currency preferences read failed (${res.status})`,
+        tidOf(res),
+      ),
+    );
+    return empty;
+  }
+  try {
+    const json = (await res.json()) as {
+      Preferences?: {
+        CurrencyPrefs?: {
+          MultiCurrencyEnabled?: boolean;
+          HomeCurrency?: { value?: string };
+        };
+      };
+    };
+    const prefs = json.Preferences?.CurrencyPrefs;
+    const code = prefs?.HomeCurrency?.value?.trim().toUpperCase();
+    return {
+      homeCurrency: code && code.length > 0 ? code : null,
+      // Only a real boolean counts; anything else stays unknown.
+      multicurrencyEnabled:
+        typeof prefs?.MultiCurrencyEnabled === "boolean"
+          ? prefs.MultiCurrencyEnabled
+          : null,
+    };
+  } catch {
+    return empty;
+  }
+}
+
 // Back-compat: the company's display name only (Stage 1 callers). Thin wrapper
 // over fetchCompanyProfile.
 export async function fetchCompanyName(
