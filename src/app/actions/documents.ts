@@ -203,6 +203,83 @@ export async function restoreDocumentAction(input: {
   return { ok: true };
 }
 
+// How many documents one bulk call may touch. Generous enough for a page of
+// results plus room, bounded so a crafted request cannot ask the server to walk
+// a firm's entire history inside one action.
+const BULK_LIMIT = 200;
+
+export type BulkResult = {
+  ok: boolean;
+  succeeded: number;
+  failed: number;
+};
+
+export type BulkTarget = { source: string; id: string };
+
+function validTargets(targets: BulkTarget[] | undefined): BulkTarget[] {
+  if (!Array.isArray(targets)) return [];
+  return targets
+    .filter((t) => t && isDocumentSource(t.source) && typeof t.id === "string" && t.id)
+    .slice(0, BULK_LIMIT);
+}
+
+/**
+ * Move several documents at once.
+ *
+ * This is the action that makes importing history bearable: a firm bringing in
+ * ten years of files sorts them in batches, not one at a time. Founder's words:
+ * nobody is going to sort 800 files individually.
+ *
+ * PARTIAL SUCCESS IS REPORTED, NOT HIDDEN. Each document is moved on its own —
+ * one failing (it was deleted a moment ago, or it belongs to a client this user
+ * cannot see) must not abandon the other 199, and the caller is told the counts
+ * so the UI can say "184 moved, 2 couldn't be" instead of a green tick that
+ * covers a silent gap.
+ */
+export async function bulkMoveDocumentsAction(input: {
+  targets: BulkTarget[];
+  docType?: string | null;
+  year?: string | null;
+  category?: string | null;
+}): Promise<BulkResult> {
+  const targets = validTargets(input.targets);
+  if (targets.length === 0) return { ok: false, succeeded: 0, failed: 0 };
+
+  let succeeded = 0;
+  let failed = 0;
+  for (const t of targets) {
+    const res = await moveDocumentAction({
+      source: t.source,
+      id: t.id,
+      docType: input.docType,
+      year: input.year,
+      category: input.category,
+    });
+    if (res.ok) succeeded++;
+    else failed++;
+  }
+  revalidatePath("/files");
+  return { ok: succeeded > 0, succeeded, failed };
+}
+
+/** Move several documents to the recycle bin. Same partial-success contract. */
+export async function bulkDeleteDocumentsAction(input: {
+  targets: BulkTarget[];
+}): Promise<BulkResult> {
+  const targets = validTargets(input.targets);
+  if (targets.length === 0) return { ok: false, succeeded: 0, failed: 0 };
+
+  let succeeded = 0;
+  let failed = 0;
+  for (const t of targets) {
+    const res = await deleteDocumentAction({ source: t.source, id: t.id });
+    if (res.ok) succeeded++;
+    else failed++;
+  }
+  revalidatePath("/files");
+  return { ok: succeeded > 0, succeeded, failed };
+}
+
 /**
  * Record that someone downloaded a document.
  *
