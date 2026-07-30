@@ -160,6 +160,34 @@ export const SET_ASSESSMENT_DEBOUNCE_MS = 2 * 60 * 1000;
 export const MAX_SET_FILES = 16;
 export const MAX_SET_BYTES = 32 * 1024 * 1024;
 
+// PURE: would the whole-item read learn anything the per-file read didn't?
+//
+// The item read is a SECOND paid pass over the same documents. Its whole job is
+// what one document can't answer alone: are pages missing across the set, do the
+// statement balances chain, is a month uncovered. With exactly ONE single-page
+// file there is nothing to compare it against — the per-file classify read that
+// page a minute earlier, so the second call re-reads it to compare it with
+// itself. On a founder's own numbers that was roughly half the AI bill.
+//
+// A MULTI-PAGE PDF IS STILL A SET. Its pages are exactly what chaining and
+// coverage run across, so a 12-page year of statements arriving as one file is
+// never skipped. That distinction is the whole rule.
+//
+// Fails toward DOING the read:
+//   * pageCount null = a PDF we couldn't parse. Unknown length is not "one
+//     page"; skipping there would silently drop the check on a file we know
+//     least about.
+//   * truncated = the byte/file budget left files out, so what we hold isn't
+//     the set.
+export function setReadWouldAddNothing(
+  files: { pageCount: number | null }[],
+  truncated: boolean,
+): boolean {
+  if (truncated) return false;
+  if (files.length !== 1) return false;
+  return files[0].pageCount === 1;
+}
+
 // ---------------------------------------------------------------------------
 // Scheduling (debounced, one pending job per item)
 // ---------------------------------------------------------------------------
@@ -870,6 +898,23 @@ export async function processSetAssessmentJob(
       base64: prep.bytes.toString("base64"),
       mediaType: prep.mimeType,
     });
+  }
+
+  // Nothing to cross-check → don't pay for a second read. See
+  // setReadWouldAddNothing: this is ONE single-page file, which the per-file
+  // classify already read a minute ago. A multi-page PDF is still a set (its
+  // pages are what balance chaining and period coverage run across) and is
+  // never skipped.
+  //
+  // The stale-summary clear matters as much as the saving: an item that HAD
+  // three files and now has one must not keep a summary describing the three.
+  // Same reason the no_files path above clears it.
+  if (setReadWouldAddNothing(prepared, skippedFiles > 0)) {
+    await sb
+      .from("request_items")
+      .update({ ai_set_assessment: null })
+      .eq("id", itemId);
+    return { skipped: "single_page_nothing_to_cross_check" };
   }
 
   const requestContext: SetRequestContext = {
