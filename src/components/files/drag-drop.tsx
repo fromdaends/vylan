@@ -12,6 +12,7 @@ import {
   setDocumentsFolderAction,
 } from "@/app/actions/folders";
 import { parseSelectionKey, selectionKey, useFileSelection } from "./file-selection";
+import { hideDragGhost, showDragGhost } from "./drag-ghost";
 
 // DRAG AND DROP — moving things by dragging them, the way every file manager
 // works. Files AND folders: grabbing any row and dropping it on a folder moves
@@ -44,7 +45,16 @@ import { parseSelectionKey, selectionKey, useFileSelection } from "./file-select
 // "Bookkeeping" sets its category. That uniformity is the whole point — "like
 // Google Drive" means the gesture works wherever a folder appears.
 
-const MIME = "application/x-vylan-drag";
+// TWO mime types, not one, and the difference matters.
+//
+// During a drag the browser refuses to let you READ the payload — only its list
+// of types — so the type is the only thing a row can use to decide whether it
+// should light up. Documents can be dropped on any folder; a folder or a whole
+// year can only be dropped on a real folder. Encoding that in the type is what
+// lets an invalid target stay dark and show a "no drop" cursor instead of
+// inviting the drop and then rejecting it with an error toast.
+const MIME_DOCS = "application/x-vylan-documents";
+const MIME_MOVE = "application/x-vylan-foldermove";
 
 /** What a folder row does when something is dropped ON it. */
 export type DropTarget =
@@ -66,7 +76,8 @@ export type DragPayload =
     };
 
 function startDrag(e: React.DragEvent, payload: DragPayload, label: string) {
-  e.dataTransfer.setData(MIME, JSON.stringify(payload));
+  const mime = payload.kind === "documents" ? MIME_DOCS : MIME_MOVE;
+  e.dataTransfer.setData(mime, JSON.stringify(payload));
   // Plain text too, so dropping outside the app degrades to something harmless
   // and legible instead of nothing.
   e.dataTransfer.setData("text/plain", label);
@@ -101,10 +112,14 @@ export function DraggableFile({
             ? [...selected].map(parseSelectionKey)
             : [{ source, id }];
         startDrag(e, { kind: "documents", items }, name);
+        showDragGhost({ event: e, label: name, kind: "file", count: items.length });
         setDragging(true);
       }}
-      onDragEnd={() => setDragging(false)}
-      className={cn(dragging && "opacity-40")}
+      onDragEnd={() => {
+        hideDragGhost();
+        setDragging(false);
+      }}
+      className={cn("transition-opacity", dragging && "opacity-40")}
     >
       {children}
     </div>
@@ -139,10 +154,14 @@ export function DraggableFolder({
         // otherwise win and drag a URL instead of the folder.
         e.stopPropagation();
         startDrag(e, moves, name);
+        showDragGhost({ event: e, label: name, kind: "folder", count: 1 });
         setDragging(true);
       }}
-      onDragEnd={() => setDragging(false)}
-      className={cn(dragging && "opacity-40")}
+      onDragEnd={() => {
+        hideDragGhost();
+        setDragging(false);
+      }}
+      className={cn("transition-opacity", dragging && "opacity-40")}
     >
       {children}
     </div>
@@ -165,12 +184,28 @@ export function FolderDropTarget({
   const [over, setOver] = useState(false);
   const [, startTransition] = useTransition();
 
+  /** Whether this row can take what is currently being carried. */
+  function accepts(e: React.DragEvent): boolean {
+    const types = e.dataTransfer.types;
+    if (types.includes(MIME_DOCS)) return true;
+    // A folder, or a whole year's worth of documents — needs a real folder to
+    // land in. Years and categories are computed, so nothing can move "into"
+    // one.
+    if (types.includes(MIME_MOVE)) return target.kind === "folder";
+    return false;
+  }
+
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
     setOver(false);
+    // Also here, not only on dragend: a successful drop refreshes the list, and
+    // if the row you dragged is re-rendered away its dragend never arrives —
+    // leaving the chip stuck to the cursor.
+    hideDragGhost();
 
-    const raw = e.dataTransfer.getData(MIME);
+    const raw =
+      e.dataTransfer.getData(MIME_DOCS) || e.dataTransfer.getData(MIME_MOVE);
     if (!raw) return;
     let payload: DragPayload;
     try {
@@ -275,13 +310,13 @@ export function FolderDropTarget({
         // an element a drop target in the HTML drag-and-drop API. Omit it and
         // the drop silently never fires — the single most common way this API
         // is got wrong.
-        if (!e.dataTransfer.types.includes(MIME)) return;
+        if (!accepts(e)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         setOver(true);
       }}
       onDragEnter={(e) => {
-        if (e.dataTransfer.types.includes(MIME)) e.preventDefault();
+        if (accepts(e)) e.preventDefault();
       }}
       onDragLeave={() => setOver(false)}
       onDrop={onDrop}
