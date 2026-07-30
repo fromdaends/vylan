@@ -14,7 +14,9 @@ import { formatBytes, formatDate, type AppLocale } from "@/lib/format";
 import { RowCheckbox } from "./row-checkbox";
 import {
   DraggableFile,
+  DraggableFolder,
   FolderDropTarget,
+  type DragPayload,
   type DropTarget,
 } from "./drag-drop";
 
@@ -52,6 +54,13 @@ export type BrowserEntry =
        * target: a custom one re-files, a year sets the year, a category sets
        * the category. */
       dropTarget?: DropTarget;
+      /**
+       * What dragging this folder AWAY does. Folders are draggable too — a
+       * custom folder re-parents itself, a year or category folder moves its
+       * contents. Omitted for rows that cannot move (a client), and those rows
+       * are then simply not draggable.
+       */
+      dragPayload?: DragPayload | null;
     }
   | {
       kind: "file";
@@ -139,9 +148,14 @@ export async function FileBrowser({
                 target={entry.dropTarget ?? { kind: "folder", folderId: null }}
                 label={entry.name}
               >
+              <DraggableFolder moves={entry.dragPayload ?? null} name={entry.name}>
               <div className={cn(ROW_CLASS, "gap-0 p-0")}>
               <Link
                 href={entry.href}
+                /* The row's own drag handler owns this gesture. Without this
+                   the browser drags the LINK — you get a URL chip and the
+                   folder never moves, which reads as "dragging is broken". */
+                draggable={false}
                 className={cn(ROW_CLASS, "min-w-0 flex-1 cursor-pointer")}
               >
                 <span className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -170,6 +184,7 @@ export async function FileBrowser({
                   {entry.actions}
                 </span>
               </div>
+              </DraggableFolder>
               </FolderDropTarget>
             ) : (
               // A FILE row is NOT wrapped in a link, even once preview exists:
