@@ -31,6 +31,7 @@ import {
 import { PortalFooter } from "./portal-footer";
 import { PortalMessages } from "./portal-messages";
 import { PortalSplit } from "./portal-split";
+import { PortalEngagementSwitcher } from "./portal-engagement-switcher";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import {
   logPortalActivity,
@@ -315,9 +316,21 @@ export function PortalShell({
               <div className="truncate text-[15px] font-semibold tracking-tight text-white">
                 {ctx.firm.name}
               </div>
-              <div className="truncate text-xs text-white/[0.62]">
-                {ctx.engagement.title}
-              </div>
+              {/* A client with more than one engagement at this firm gets a
+                  dead-simple switcher on the title; everyone else sees the
+                  plain title exactly as before. */}
+              {ctx.sibling_engagements.length >= 2 ? (
+                <PortalEngagementSwitcher
+                  token={ctx.engagement.magic_token ?? ""}
+                  currentId={ctx.engagement.id}
+                  engagements={ctx.sibling_engagements}
+                  locale={locale}
+                />
+              ) : (
+                <div className="truncate text-xs text-white/[0.62]">
+                  {ctx.engagement.title}
+                </div>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
