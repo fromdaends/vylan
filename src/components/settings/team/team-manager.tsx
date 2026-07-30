@@ -132,6 +132,7 @@ export function TeamManager({
   unassignedWorkload,
   firmSettings,
   tabs,
+  view = "people",
 }: {
   // The firm's name — shown as the page heading (this is the firm's team).
   firmName: string;
@@ -153,8 +154,13 @@ export function TeamManager({
     readyToReview: number;
     needsAttention: number;
   };
-  // Firm-wide settings, rendered inside the ⋯ (top-right) dialog — not inline.
+  // Firm-wide settings. Rendered INLINE on the Firm tab (and still available
+  // from the ⋯ dialog, so the old muscle memory keeps working).
   firmSettings?: ReactNode;
+  // Which tab is showing. "people" = the roster, invitations and former members.
+  // "firm" = the firm itself: seats, its settings, ownership, leaving.
+  // Defaults to "people" so any caller that does not pass it behaves as before.
+  view?: "people" | "firm";
   // Firm navigation, rendered directly under the header. Optional so every
   // other caller of this component is unaffected.
   tabs?: ReactNode;
@@ -262,9 +268,10 @@ export function TeamManager({
 
       {tabs}
 
-      {/* Seat usage (owner-only). On an active free trial we swap the seat
-          meter for a "locked — book a call to unlock your team" panel. */}
-      {canManage &&
+      {/* Seat usage — a fact about the FIRM (what you are paying for), not about
+          any one person, so it lives on the Firm tab. */}
+      {view === "firm" &&
+        canManage &&
         (onTrial ? (
           <TrialTeamLock />
         ) : (
@@ -298,6 +305,8 @@ export function TeamManager({
           </div>
         ))}
 
+      {view === "people" && (
+      <>
       {/* Active members — MERGED with the workload roll-up: one row per member
           showing who they are + their live workload (Active / To review / Needs
           attention / Clients), so there's no separate duplicate table. Stats show
@@ -417,9 +426,23 @@ export function TeamManager({
         <DeactivatedSection members={deactivatedMembers} locale={locale} />
       )}
 
+      </>
+      )}
+
+      {/* ── FIRM TAB ── the firm's own settings, brought out of the ⋯ dialog and
+          onto the page, because a switch nobody can find is a switch nobody
+          uses. Still reachable from the ⋯ menu too. */}
+      {view === "firm" && canManage && firmSettings && (
+        <div className="rounded-xl border border-border/60 bg-card p-5">
+          {firmSettings}
+        </div>
+      )}
+
       {/* Transfer ownership — owner-only, and only when there's an active
           staff member to hand to. */}
-      {canManage && activeMembers.some((m) => m.role === "staff") && (
+      {view === "firm" &&
+        canManage &&
+        activeMembers.some((m) => m.role === "staff") && (
         <TransferOwnership
           staff={activeMembers
             .filter((m) => m.role === "staff")
@@ -427,7 +450,7 @@ export function TeamManager({
         />
       )}
 
-      {canManage && <LeaveTeamSection />}
+      {view === "firm" && canManage && <LeaveTeamSection />}
 
       {canManage && (
         <InviteModal
