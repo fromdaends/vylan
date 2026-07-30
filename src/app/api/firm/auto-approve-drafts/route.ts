@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { updateCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 
 // Firm-level "approve drafts automatically" toggle (migration 1000). Mirrors
 // the auto-reject-duplicates route exactly: a plain POST rather than a Server
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "firm.settings")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
 

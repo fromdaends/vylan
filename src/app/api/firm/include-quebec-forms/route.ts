@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { updateCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 
 // Firm-level "include Quebec tax forms" toggle (migration 0350). When OFF, the
 // Quebec-only RL slips are hidden from every client checklist regardless of the
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
   }
   // Owner-only: which tax forms a firm uses is a firm-wide policy.
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "firm.settings")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
 

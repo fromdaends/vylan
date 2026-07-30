@@ -4,6 +4,7 @@ import {
   getServiceRoleSupabase,
 } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 
 // Firm-level "send confirmation cards" toggle for the engagement assistant
 // (migration 0570). When TRUE (default), the assistant proposes actions and
@@ -34,7 +35,10 @@ export async function POST(request: NextRequest) {
   // Owner-only: whether the AI may act without a human confirming is a
   // firm-wide safety policy.
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  // `!me ||` is not redundant: can() takes a nullable subject and returns a
+  // plain boolean, so it does not NARROW `me` the way `me?.role !== "owner"`
+  // used to. me.firm_id is read below, so the null has to be ruled out here.
+  if (!me || !can(me, "firm.settings")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
 

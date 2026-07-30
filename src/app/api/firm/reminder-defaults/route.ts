@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm, updateCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { normalizeReminderSettings } from "@/lib/reminder-settings";
 import { withReminderDefaultFallback } from "@/lib/reminder-defaults";
 
@@ -13,7 +14,7 @@ async function authorizeOwner() {
   if (!auth.user) return { error: "unauthorized", status: 401 } as const;
 
   const me = await getCurrentUser();
-  if (me?.role !== "owner") return { error: "owner_only", status: 403 } as const;
+  if (!can(me, "firm.settings")) return { error: "owner_only", status: 403 } as const;
   return null;
 }
 

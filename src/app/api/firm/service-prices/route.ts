@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { updateCurrentFirm } from "@/lib/db/firms";
 
 export const runtime = "nodejs";
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "billing.manage")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
 
