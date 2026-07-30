@@ -128,17 +128,21 @@ export function AppShell({
   // single link, because its own page already carries the sub-navigation the
   // old expandable section duplicated.
   const railNav: RailItem[] = [
-    { href: "/dashboard", label: labels.dashboard, icon: LayoutDashboard },
+    // NOTE: no Overview entry. The brand logo at the top of the rail already
+    // links to /dashboard, so a second Overview row was two rows pointing at one
+    // destination (founder). The logo IS the way home; the Vylan hub inherits
+    // the first slot.
+    //
+    // The Vylan hub — the firm's own automation surface (Automated jobs +
+    // Document filing). Sparkles is the app's established AI mark (the chat
+    // popup's "Vylan" tab uses it), so the nav and the assistant agree.
+    // This replaced the standalone Filing tab: filing is one job inside the hub
+    // now, and /integrations/filing redirects to ?tab=filing.
+    { href: "/vylan", label: labels.vylanHub, icon: Sparkles },
     // "Performance" is the same word in EN and FR, so it's safe to hardcode.
     { href: "/performance", label: "Performance", icon: Gauge },
     { href: "/clients", label: labels.clients, icon: Users },
     { href: "/templates", label: labels.templates, icon: FileText },
-    // The Vylan hub — the firm's own automation surface (Automated jobs +
-    // Document filing). Sparkles is the app's established AI mark (the chat
-     // popup's "Vylan" tab uses it), so the nav and the assistant agree.
-    // This replaced the standalone Filing tab: filing is one job inside the hub
-    // now, and /integrations/filing redirects to ?tab=filing.
-    { href: "/vylan", label: labels.vylanHub, icon: Sparkles },
     { href: "/engagements", label: labels.engagements, icon: Folder },
     // Bookkeeping (the shared QuickBooks + Xero drafts queue) keeps its
     // conditional tab: the design didn't include one, but the feature exists and
