@@ -61,6 +61,7 @@ export function EngagementsView({
   badges,
   teamEnabled,
   assignMembers,
+  firmId,
 }: {
   view: EngagementView;
   rows: WorklistRow[];
@@ -69,8 +70,11 @@ export function EngagementsView({
   currentUserId: string | null;
   badges: { ready: number; deleted: number };
   teamEnabled: boolean;
-  // Active teammates, so a row can be handed to somebody from its menu.
+  // Active teammates, so a row can be handed to somebody from its menu. Doubles
+  // as the presence roster — the only source of names for a live face on a row.
   assignMembers?: { id: string; name: string }[];
+  // Enables live presence on the rows. Absent → no subscription, no faces.
+  firmId?: string | null;
 }) {
   const t = useTranslations("Engagements");
   const tDash = useTranslations("Dashboard");
@@ -306,6 +310,8 @@ export function EngagementsView({
         // Feeds "Assign to…" in each row's "..." menu. Menu only — no ⇄ column.
         assignMembers={assignMembers}
         viewerId={currentUserId}
+        firmId={firmId}
+        presenceRoster={assignMembers}
         // Opt in to the sortable Status header. Only this view passes these, so
         // every other table (the Overview included) keeps its plain header.
         statusSort={stageFilteringOn ? stageSort : null}

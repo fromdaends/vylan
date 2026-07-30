@@ -25,11 +25,38 @@
 
 export type PresenceRoster = readonly { id: string; name: string }[];
 
+// ── ONE CHANNEL FOR THE WHOLE FIRM ───────────────────────────────────────────
+//
+// Presence started per-engagement: one channel per open job. That works for the
+// detail page and falls apart on the LIST, where showing "who's in this one" on
+// forty rows would mean forty channel joins, re-joined on every navigation and
+// every auto-refresh.
+//
+// So the unit moved up: ONE channel per firm, and each person's payload says
+// which engagement they are currently looking at (null = somewhere else in the
+// app). The detail page filters that down to its own id; the list groups it by
+// id and draws a face on the matching row. Same data, one socket, and any
+// future surface — the dashboard, a client page — gets presence for free.
+//
+// THE COST, stated rather than buried: the channel is public (see the note on
+// the roster filter below), so anyone holding the publishable key AND the
+// firm's uuid can now watch a live feed of which-user-is-on-which-engagement,
+// where before they needed each engagement's uuid separately. It is still only
+// opaque uuid pairs — no name, no title, no client — and the roster filter
+// still means an injected id renders as nobody. Worth revisiting when Supabase
+// private channels become reachable (they need a real JWT; this app
+// authenticates the browser with a publishable key).
+
 // The shape Supabase's presenceState() returns: key -> one meta per open tab.
 // Typed loosely on purpose; we only ever read the keys.
 export type RawPresenceState = Record<string, unknown>;
 
 export type PresentPerson = { id: string; name: string };
+
+// What one person broadcasts. Deliberately two short keys: `id` is who, `e` is
+// which engagement they have open (null anywhere else). Nothing else may go in
+// here — see the roster-filter note above.
+export type PresenceMeta = { id?: unknown; e?: unknown };
 
 // Everyone present EXCEPT the viewer, resolved to real people, in roster order.
 //
@@ -105,4 +132,47 @@ export function presenceColor(userId: string): PresenceColor {
   let sum = 0;
   for (let i = 0; i < userId.length; i++) sum += userId.charCodeAt(i);
   return PRESENCE_COLORS[sum % PRESENCE_COLORS.length];
+}
+
+// Everyone present, grouped by the engagement they are looking at.
+//
+// Powers the LIST: one pass over the channel state produces every row's faces,
+// so a forty-row page costs one subscription and one reduce instead of forty
+// of each. Rows with nobody on them are simply absent from the map.
+//
+// Same three rules as presentOthers, for the same reasons: the viewer is
+// excluded, ids are resolved against the server-rendered roster (a presence
+// entry is a claim, never a fact), and each person appears once no matter how
+// many tabs they have open.
+export function groupPresenceByEngagement(
+  state: RawPresenceState | null | undefined,
+  viewerId: string,
+  roster: PresenceRoster,
+): Map<string, PresentPerson[]> {
+  const out = new Map<string, PresentPerson[]>();
+  if (!state) return out;
+
+  const nameById = new Map(roster.map((m) => [m.id, m.name]));
+  // key -> the engagement they are on. Later metas win, which is what you want
+  // when someone has two tabs: the most recently tracked one is current.
+  const engagementByUser = new Map<string, string>();
+
+  for (const [key, metas] of Object.entries(state)) {
+    if (key === viewerId || !nameById.has(key)) continue;
+    for (const meta of (Array.isArray(metas) ? metas : []) as PresenceMeta[]) {
+      const e = meta?.e;
+      if (typeof e === "string" && e) engagementByUser.set(key, e);
+    }
+  }
+
+  // Build in ROSTER order so a row's faces do not reshuffle as people move
+  // around the app.
+  for (const m of roster) {
+    const engagementId = engagementByUser.get(m.id);
+    if (!engagementId) continue;
+    const list = out.get(engagementId) ?? [];
+    list.push({ id: m.id, name: m.name });
+    out.set(engagementId, list);
+  }
+  return out;
 }

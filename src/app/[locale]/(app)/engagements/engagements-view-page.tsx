@@ -74,6 +74,7 @@ export async function renderEngagementsView({
           teamEnabled: firm?.team_enabled === true,
           activeMemberCount: activeMembers.length,
         })}
+        firmId={firm?.id ?? null}
         assignMembers={activeMembers.map((m) => ({
           id: m.id,
           name: userDisplayLabel(m),
