@@ -123,13 +123,21 @@ export async function loadFirmRecipients(
   sb: SupabaseClient,
   opts: { firmId: string; eventKey: string; firmTimezone?: string | null },
 ): Promise<RecipientCandidate[] | NotificationsSchemaMissing> {
+  // select("*") rather than a named column list, deliberately. Naming columns
+  // here is a live grenade: the moment someone adds a users column and mentions
+  // it before the migration is applied, PostgREST answers 42703, the catch
+  // below returns [], and EVERY notification in the firm silently stops — no
+  // error surfaces because the caller is told there were simply no recipients.
+  // A wildcard cannot go stale that way.
   const { data: users, error: usersErr } = await sb
     .from("users")
-    .select("id, role, locale, email, deactivated_at")
+    .select("*")
     .eq("firm_id", opts.firmId);
   if (usersErr) {
     // The users table always exists — a failure here is a real error, but it
-    // must not blow up the caller's business action.
+    // must not blow up the caller's business action. Note what this costs: the
+    // firm gets no notifications for this event and nobody is told. Widening
+    // the select above removes the likeliest way to trip it.
     console.error("[notifications] loadFirmRecipients users:", usersErr);
     return [];
   }

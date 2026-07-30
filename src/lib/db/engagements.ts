@@ -286,7 +286,7 @@ export async function createEngagementWithItems(
   if (!user.user) throw new Error("Not authenticated");
   const { data: u } = await supabase
     .from("users")
-    .select("firm_id, role")
+    .select("*")
     .eq("id", user.user.id)
     .single();
   if (!u?.firm_id) throw new Error("No firm for user");
