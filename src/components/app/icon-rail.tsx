@@ -82,6 +82,10 @@ export function IconRail({
     help: string;
     helpCenter: string;
     logout: string;
+    // The logo is now the ONLY route to Overview (its nav row was removed as a
+    // duplicate destination), so the accessible name has to say where it goes —
+    // the brand mark alone tells a screen-reader user nothing about the target.
+    dashboard: string;
   };
   userDisplayName: string;
   userEmail: string;
@@ -102,13 +106,18 @@ export function IconRail({
       style={{ background: RAIL_BG }}
       className="hidden sm:flex sm:fixed sm:inset-y-0 sm:left-0 sm:z-30 sm:w-[var(--rail-width)] sm:flex-col sm:items-center sm:px-2.5 sm:pb-4 sm:pt-4"
     >
-      {/* Brand. Given deliberate breathing room below (founder): the gap that
-          follows is what isolates the logo from the action buttons, so the mark
-          reads as the product rather than as the first item in a toolbar. */}
+      {/* Brand — and the way to Overview. Given deliberate breathing room below
+          (founder): the gap that follows is what isolates the logo from the
+          action buttons, so the mark reads as the product rather than as the
+          first item in a toolbar. It carries the Overview label because the
+          separate Overview row was removed as a duplicate destination. */}
       <Link
         href="/dashboard"
-        aria-label="Vylan"
-        title="Vylan"
+        aria-label={labels.dashboard}
+        title={labels.dashboard}
+        aria-current={
+          isNavItemActive(pathname, "/dashboard") ? "page" : undefined
+        }
         className="group inline-flex size-[60px] shrink-0 items-center justify-center rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
       >
         <Image
