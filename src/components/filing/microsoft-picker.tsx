@@ -64,7 +64,7 @@ export function MicrosoftDestinationPicker() {
       autoOpened.current = true;
       setOpen(true);
       void load();
-      router.replace("/vylan?tab=filing", { scroll: false });
+      router.replace("/files?tab=settings", { scroll: false });
     }
   }, [params, router, load]);
 

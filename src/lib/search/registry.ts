@@ -3,6 +3,7 @@ import {
   Users,
   Briefcase,
   Sparkles,
+  FolderOpen,
   FolderUp,
   Repeat,
   BookOpen,
@@ -129,12 +130,25 @@ export function buildSearchRegistry(
         "vylan automation automations automated jobs tasks rules taches automatisations automatise",
     },
     {
+      // The document browser itself. Filing settings keeps its own entry below
+      // — a firm looking for "where do my files go in Drive" and a firm looking
+      // for "find me that T4" are asking different questions.
+      id: "files",
+      label: t.app("nav_files"),
+      group: "go",
+      icon: FolderOpen,
+      color: "text-icon-cyan",
+      href: "/files",
+      keywords:
+        "files documents browse client folders year category fichiers documents dossiers parcourir annee categorie",
+    },
+    {
       id: "vylan-filing",
       label: t.app("nav_integrations_filing"),
       group: "go",
       icon: FolderUp,
       color: "text-icon-cyan",
-      href: "/vylan?tab=filing",
+      href: "/files?tab=settings",
       keywords:
         "filing file documents storage drive sharepoint onedrive dropbox smartvault folders naming classement rangement stockage dossiers",
     },
