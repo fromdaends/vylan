@@ -9,6 +9,7 @@ export function ThemeToggle({
   className = "",
   lightLabel,
   darkLabel,
+  onDark = false,
 }: {
   className?: string;
   // Optional localized aria-labels. When omitted they fall back to the shared
@@ -16,6 +17,13 @@ export function ThemeToggle({
   // client portal still passes its own FR/EN strings explicitly.
   lightLabel?: string;
   darkLabel?: string;
+  // Sitting on a permanently near-black surface (the client portal's firm
+  // header) rather than a themed one. The default token colours — bg-card,
+  // border-border, text-muted-foreground — resolve to LIGHT values in light
+  // mode, which is invisible on black; this swaps them for fixed white alphas.
+  // A prop rather than `!important` overrides from the caller, since Tailwind
+  // utility conflicts resolve by stylesheet order, not by string order.
+  onDark?: boolean;
 }) {
   const tc = useTranslations("Common");
   const light = lightLabel ?? tc("switch_to_light");
@@ -45,8 +53,10 @@ export function ThemeToggle({
       aria-label={isDark ? light : dark}
       className={
         "relative inline-flex h-8 w-8 items-center justify-center rounded-md " +
-        "border border-border bg-card text-muted-foreground " +
-        "transition-all duration-200 hover:text-foreground hover:bg-secondary " +
+        (onDark
+          ? "border border-white/20 bg-transparent text-white/70 hover:bg-white/10 hover:text-white "
+          : "border border-border bg-card text-muted-foreground hover:text-foreground hover:bg-secondary ") +
+        "transition-all duration-200 " +
         "active:scale-95 " +
         className
       }

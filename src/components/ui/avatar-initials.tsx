@@ -69,7 +69,10 @@ export function AvatarInitials({
   );
 }
 
-function computeInitials(raw: string): string {
+// Exported so surfaces that need the initials WITHOUT this component's chrome
+// (the portal's near-black message header renders its own translucent disc) use
+// the same derivation rather than a second, drifting copy.
+export function computeInitials(raw: string): string {
   const trimmed = (raw ?? "").trim();
   if (!trimmed) return "?";
   // If it looks like an email, take the local part before `@`.
