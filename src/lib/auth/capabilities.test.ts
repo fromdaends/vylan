@@ -199,3 +199,59 @@ describe("the vocabulary itself", () => {
     for (const c of CAPABILITIES) expect(c).toMatch(/^[a-z]+\.[a-z]+$/);
   });
 });
+
+// ── THE MIGRATION SAFETY NET ─────────────────────────────────────────────────
+//
+// Converting ~98 inline `role === "owner"` checks to can() is only safe while
+// those two things mean EXACTLY the same for every capability an owner-only
+// check is being replaced by. These tests pin that equivalence, so a future
+// change to a preset that would quietly widen an already-converted call site
+// fails here instead of in production.
+//
+// Delete a line from OWNER_ONLY_TODAY only when the corresponding call sites
+// are deliberately being opened up — never to make a red test go green.
+describe("owner-only equivalence (guards the call-site migration)", () => {
+  // Every capability that, TODAY, is granted to the owner and to nobody else.
+  // A call site currently written `role === "owner"` may be converted to one of
+  // these and behave identically.
+  const OWNER_ONLY_TODAY: Capability[] = [
+    "billing.manage",
+    "firm.settings",
+    "team.manage",
+    "clients.private",
+    "integrations.manage",
+  ];
+
+  it("each behaves exactly like role === 'owner' for both real ranks", () => {
+    for (const c of OWNER_ONLY_TODAY) {
+      // The only two values users.role can hold. A staff row reads as `member`
+      // until the preset column exists, which is what makes the conversion a
+      // no-op on today's data.
+      expect(can({ role: "owner" }, c)).toBe(true);
+      expect(can({ role: "staff" }, c)).toBe(false);
+      // ...and for every preset a staff row could resolve to, once it does.
+      expect(can({ role: "staff", preset: "member" }, c)).toBe(false);
+      expect(can({ role: "staff", preset: "junior" }, c)).toBe(false);
+    }
+  });
+
+  it("does NOT include capabilities that have no gate today", () => {
+    // money.view and clients.manage are ungated in the app right now, so a
+    // `role === "owner"` check must NEVER be converted to one of them — that
+    // would ADD a restriction inside a release that claims to change nothing.
+    // audit.view is owner-only in the app but deliberately open here, so it is
+    // out too.
+    for (const c of ["money.view", "clients.manage", "audit.view"] as const) {
+      expect(OWNER_ONLY_TODAY).not.toContain(c);
+    }
+  });
+
+  it("payments maps to billing.manage, never money.view", () => {
+    // The specific trap: the /settings payments section spans the firm's own
+    // subscription AND client payment collection. Mapping it to money.view
+    // (which every member has) would open the payments tab to all staff inside
+    // a release that claims to change nothing.
+    expect(can({ role: "staff" }, "billing.manage")).toBe(false);
+    expect(can({ role: "staff" }, "money.view")).toBe(true);
+  });
+});

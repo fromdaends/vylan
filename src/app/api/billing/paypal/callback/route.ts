@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { isPayPalConfigured, paypalPartnerMerchantId } from "@/lib/paypal/config";
 import {
   findSellerMerchantIdByTrackingId,
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.nextUrl.origin));
   }
   const me = await getCurrentUser();
-  if (me?.role !== "owner") return toSettings("error");
+  if (!can(me, "billing.manage")) return toSettings("error");
   const firm = await getCurrentFirm();
   if (!firm) return toSettings("error");
 

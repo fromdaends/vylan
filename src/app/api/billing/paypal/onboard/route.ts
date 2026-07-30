@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { isPayPalConfigured } from "@/lib/paypal/config";
 import { createPartnerReferral } from "@/lib/paypal/onboarding";
 
@@ -24,9 +25,10 @@ export async function POST(request: NextRequest) {
   if (!auth.user) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
-  // Owner-only: connecting the firm's payout account is firm-admin.
+  // billing.manage — see the Stripe onboard route; same capability so the two
+  // providers cannot drift apart.
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "billing.manage")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
   const firm = await getCurrentFirm();

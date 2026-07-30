@@ -2,6 +2,7 @@ import { getTranslations, setRequestLocale } from "next-intl/server";
 import { redirect } from "next/navigation";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { getFirmLimits } from "@/lib/plan-limits";
 import { PLANS, PAID_PLANS, priceIdFor, type PlanId } from "@/lib/plans";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,9 +32,14 @@ export default async function BillingPage({
   setRequestLocale(locale);
   const sp = await searchParams;
 
-  // Owner-only: billing is firm-admin. Staff are bounced to their settings.
+  // Requires billing.manage — owner-only today, and the FIRST call site
+  // converted from an inline `role === "owner"` check to the shared one
+  // (Phase 2). Identical behaviour: a staff row resolves to the member preset,
+  // which does not carry billing.manage. Staff are bounced to their settings.
+  // `can` answers false for a signed-out user too, so the null check the old
+  // condition carried is still covered.
   const me = await getCurrentUser();
-  if (!me || me.role !== "owner") {
+  if (!can(me, "billing.manage")) {
     redirect(`/${locale}/settings`);
   }
 

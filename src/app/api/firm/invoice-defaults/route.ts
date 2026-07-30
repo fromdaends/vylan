@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { updateCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 
 // Firm-wide DEFAULT invoice automation (migration 0590). Pre-selects the
 // invoice choice on every new engagement (still editable per engagement).
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "billing.manage")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
 
