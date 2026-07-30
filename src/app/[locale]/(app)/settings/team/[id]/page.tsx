@@ -133,7 +133,8 @@ export default async function TeamMemberProfilePage({
         ]}
       />
 
-      <header className="flex flex-wrap items-start gap-4">
+      <header className="overflow-hidden rounded-xl border border-border/60 bg-card">
+      <div className="flex flex-wrap items-start gap-4 p-4">
         <AvatarInitials src={avatarUrl} name={name} size={56} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -146,6 +147,30 @@ export default async function TeamMemberProfilePage({
             )}
           </div>
         </div>
+      </div>
+
+      {/* The lifecycle tabs move OUT of the engagements section and onto the
+          header card's bottom edge — Canopy's treatment, and the reason the
+          founder pointed at that screenshot: "how you can view, like, active
+          engagements". They were a cluster of small pills floating beside a
+          section heading; here they read as what they are, the page's own
+          sections. */}
+      <nav className="flex gap-1 overflow-x-auto border-t border-border/60 px-2">
+        {PROFILE_VIEWS.map((v) => (
+          <Link
+            key={v}
+            href={v === "active" ? `/settings/team/${id}` : `/settings/team/${id}?view=${v}`}
+            aria-current={v === view ? "page" : undefined}
+            className={
+              v === view
+                ? "-mb-px whitespace-nowrap border-b-2 border-foreground px-3 py-2.5 text-sm font-medium text-foreground"
+                : "-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            }
+          >
+            {tEngagements(viewLabelKey(v) as Parameters<typeof tEngagements>[0])}
+          </Link>
+        ))}
+      </nav>
       </header>
 
       {/* Two columns, same shape as a client's page and following Canopy's
@@ -155,10 +180,7 @@ export default async function TeamMemberProfilePage({
 
       {/* ── Left rail ────────────────────────────────────────────────────── */}
       <div className="space-y-4">
-        <section className="rounded-xl border border-border/60 bg-card p-4">
-          <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
-            {t("profile_about_title")}
-          </h2>
+        <Panel title={t("profile_about_title")}>
           {/* The three big number tiles that used to sit here are gone. A row
               of oversized figures across the top is the "AI-generated dashboard"
               look the founder has rejected before; the same numbers read fine as
@@ -180,7 +202,7 @@ export default async function TeamMemberProfilePage({
               />
             )}
           </dl>
-        </section>
+        </Panel>
 
         {/* Bulk assign. Owner-only, and it renders itself away when there is
             nothing to move or nobody to move it to. */}
@@ -196,34 +218,7 @@ export default async function TeamMemberProfilePage({
 
       {/* ── Main column: their work ──────────────────────────────────────── */}
       <div className="space-y-6">
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-semibold tracking-tight">
-            {t("profile_engagements_title")}
-          </h2>
-          {/* The tabs the shared list used to be the only way to reach. Same
-              view vocabulary as /engagements, same labels — so "what did she
-              finish last month?" is answerable here instead of being the one
-              honest reason to send someone somewhere else. */}
-          <nav className="flex flex-wrap gap-1">
-            {PROFILE_VIEWS.map((v) => (
-              <Link
-                key={v}
-                href={v === "active" ? `/settings/team/${id}` : `/settings/team/${id}?view=${v}`}
-                aria-current={v === view ? "page" : undefined}
-                className={
-                  v === view
-                    ? "rounded-md bg-secondary px-2.5 py-1 text-xs font-medium text-foreground"
-                    : "rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
-                }
-              >
-                {tEngagements(
-                  viewLabelKey(v) as Parameters<typeof tEngagements>[0],
-                )}
-              </Link>
-            ))}
-          </nav>
-        </div>
+      <Panel title={t("profile_engagements_title")} flush>
         <WorklistTable
           rows={engagements}
           locale={locale}
@@ -233,18 +228,15 @@ export default async function TeamMemberProfilePage({
           reassignMembers={reassignTargets}
           viewerId={user.id}
         />
-      </section>
+      </Panel>
 
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight">
-          {t("profile_clients_title")}
-        </h2>
+      <Panel title={t("profile_clients_title")}>
         {clients.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("profile_no_clients", { name })}
           </p>
         ) : (
-          <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/50">
+          <ul className="-mx-4 -my-1 divide-y divide-border/40">
             {clients.slice(0, 8).map((c) => (
               <li key={c.id}>
                 <Link
@@ -264,19 +256,16 @@ export default async function TeamMemberProfilePage({
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
 
       {isOwner && (
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight">
-          {t("profile_activity_title")}
-        </h2>
+      <Panel title={t("profile_activity_title")}>
         {activity.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("profile_no_activity", { name })}
           </p>
         ) : (
-          <ol className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/50">
+          <ol className="-mx-4 -my-1 divide-y divide-border/40">
             {activity.map((e) => {
               const context = e.engagement_title ?? e.client_display_name ?? null;
               const href = e.engagement_id
@@ -316,11 +305,34 @@ export default async function TeamMemberProfilePage({
             })}
           </ol>
         )}
-      </section>
+      </Panel>
       )}
       </div>
       </div>
     </div>
+  );
+}
+
+// Same titled box as the client page — every section its own bordered card
+// with a header band, which is the shape of Canopy's whole profile.
+function Panel({
+  title,
+  flush = false,
+  children,
+}: {
+  title: string;
+  flush?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
+      <div className="border-b border-border/60 px-4 py-2.5">
+        <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
+          {title}
+        </h2>
+      </div>
+      <div className={flush ? "" : "p-4"}>{children}</div>
+    </section>
   );
 }
 

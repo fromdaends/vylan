@@ -1688,7 +1688,8 @@
     "xero_disconnect_cancel": "Annuler",
     "xero_disconnect_error": "Impossible de déconnecter. Réessayez.",
     "xero_encryption_required": "Xero n'est pas encore prêt pour les connexions réelles.",
-    "view_files": "Voir les fichiers"
+    "view_files": "Voir les fichiers",
+    "tab_overview": "Aperçu"
   },
   "Engagements": {
     "add_comment": "Ajouter un commentaire",
