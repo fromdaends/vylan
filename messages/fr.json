@@ -1106,6 +1106,18 @@
     "auto_approve_drafts_label": "Approuver automatiquement les brouillons comptables",
     "auto_approve_drafts_help": "Quand chaque champ correspond à quelque chose qui existe déjà dans votre logiciel comptable — le client, le compte, le taux de taxe — Vylan approuve le brouillon au lieu de vous demander de confirmer ce qu'il sait déjà. Tout ce dont il n'est pas certain vous revient, et un doublon possible aussi, toujours. Rien n'est envoyé à votre logiciel comptable; c'est toujours vous qui publiez."
   },
+  "Health": {
+    "title": "Vérification du système",
+    "subtitle": "Vylan est conçu pour continuer de fonctionner discrètement en cas de problème, ce qui veut dire qu'une panne peut passer inaperçue. Cette page pose les questions gênantes.",
+    "headline_ok": "Tout est en ordre.",
+    "headline_ok_detail": "Les documents sont lus, votre base de données est à jour et vos connexions fonctionnent.",
+    "headline_warn": "{count, plural, =1 {Un élément mérite votre attention.} other {# éléments méritent votre attention.}}",
+    "headline_fail": "{count, plural, =1 {Un élément ne fonctionne pas.} other {# éléments ne fonctionnent pas.}}",
+    "needs_attention": "À vérifier",
+    "working": "Fonctionne",
+    "what_to_do": "Quoi faire :",
+    "footnote": "Cette page vérifie Vylan lui-même — elle n'envoie rien à vos clients et ne modifie aucune donnée."
+  },
   "Audit": {
     "title": "Journal d'audit",
     "subtitle": "Toutes les actions effectuées sur les données de votre cabinet, à travers tous les clients et engagements. Filtrez par client, par personne ou par type d'événement pour vous concentrer.",

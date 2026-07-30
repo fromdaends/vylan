@@ -1106,6 +1106,18 @@
     "auto_approve_drafts_label": "Approve bookkeeping drafts automatically",
     "auto_approve_drafts_help": "When every field matches something already in your accounting software — the customer, the account, the tax rate — Vylan approves the draft instead of asking you to confirm what it already knows. Anything it's unsure about still comes to you, and a possible duplicate always does. Nothing is sent to your accounting software; you still post."
   },
+  "Health": {
+    "title": "System check",
+    "subtitle": "Vylan is built to keep working quietly when something goes wrong, which means a problem can sit there without saying anything. This page asks the awkward questions.",
+    "headline_ok": "Everything checks out.",
+    "headline_ok_detail": "Documents are being read, your database is up to date, and your connections are working.",
+    "headline_warn": "{count, plural, =1 {One thing is worth a look.} other {# things are worth a look.}}",
+    "headline_fail": "{count, plural, =1 {One thing is broken.} other {# things are broken.}}",
+    "needs_attention": "Needs attention",
+    "working": "Working",
+    "what_to_do": "What to do:",
+    "footnote": "This page checks Vylan itself — it does not send anything to your clients or change any of your data."
+  },
   "Audit": {
     "title": "Security audit log",
     "subtitle": "Every action taken on your firm's data, across all clients and engagements. Filter by client, person, or event type to focus on what you need.",
