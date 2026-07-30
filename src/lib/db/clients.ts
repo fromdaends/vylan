@@ -14,7 +14,7 @@ async function newClientDefaultsPrivate(
   if (!auth.user) return false;
   const { data: u } = await supabase
     .from("users")
-    .select("firm_id, role")
+    .select("*")
     .eq("id", auth.user.id)
     .maybeSingle();
   if (!u || u.role !== "owner") return false;
