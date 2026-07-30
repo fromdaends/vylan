@@ -86,6 +86,10 @@
     }
   },
   "Team": {
+    "comment_placeholder_short": "Add a comment…",
+    "comment_count_label": "{count, plural, =1 {1 comment} other {# comments}}",
+    "mention_section_people": "People",
+    "mention_insert": "Mention a teammate",
     "invite_email_placeholder": "colleague@example.com",
     "title": "Team",
     "subtitle": "Invite teammates and manage who has access to your firm.",
