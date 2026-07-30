@@ -2166,7 +2166,15 @@
     "assigned_toast_me": "You've taken this on",
     "assign_add_note": "Add a note",
     "assign_note_saved": "Note added",
-    "assign_note_send": "Send"
+    "assign_note_send": "Send",
+    "bulk_selected": "{count, plural, one {# selected} other {# selected}}",
+    "bulk_assign_to": "Assign to",
+    "bulk_clear": "Clear",
+    "bulk_select_row": "Select this engagement",
+    "bulk_select_all": "Select all",
+    "bulk_moved": "{count, plural, one {# engagement moved} other {# engagements moved}}",
+    "bulk_too_many": "You can move up to {max} at a time.",
+    "bulk_failed": "Couldn't move those. Please try again."
   },
   "Attention": {
     "metric_active": "Active",

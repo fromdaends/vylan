@@ -2166,7 +2166,15 @@
     "assigned_toast_me": "Vous vous en chargez",
     "assign_add_note": "Ajouter une note",
     "assign_note_saved": "Note ajoutée",
-    "assign_note_send": "Envoyer"
+    "assign_note_send": "Envoyer",
+    "bulk_selected": "{count, plural, one {# sélectionné} other {# sélectionnés}}",
+    "bulk_assign_to": "Assigner à",
+    "bulk_clear": "Effacer",
+    "bulk_select_row": "Sélectionner cet engagement",
+    "bulk_select_all": "Tout sélectionner",
+    "bulk_moved": "{count, plural, one {# engagement déplacé} other {# engagements déplacés}}",
+    "bulk_too_many": "Vous pouvez en déplacer {max} à la fois au maximum.",
+    "bulk_failed": "Impossible de les déplacer. Veuillez réessayer."
   },
   "Attention": {
     "metric_active": "Actifs",
