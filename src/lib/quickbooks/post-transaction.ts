@@ -186,6 +186,11 @@ export type BillInput = {
   accountId: string;
   amount: number; // gross total — the fallback line amount when no tax is applied
   date: string | null; // ISO YYYY-MM-DD; omitted -> QBO uses today
+  // When payment is DUE. Without it QuickBooks defaults the due date to the
+  // transaction date, i.e. every bill lands immediately overdue — which distorts
+  // aged payables and any reminder built on it. Extraction has supplied this for
+  // both providers since the Xero work; only the passthrough was missing.
+  dueDate?: string | null;
   memo?: string | null;
   // The line description shown in QuickBooks (vendor + item summary). Falls back
   // to nothing when absent.
@@ -218,6 +223,7 @@ export function buildBillPayload(input: BillInput): Record<string, unknown> {
   };
   applyExpenseTax(bill, tax);
   if (input.date) bill.TxnDate = input.date;
+  if (input.dueDate) bill.DueDate = input.dueDate;
   if (input.memo) bill.PrivateNote = input.memo;
   if (input.reference) bill.DocNumber = input.reference;
   return bill;
@@ -228,6 +234,9 @@ export type InvoiceInput = {
   itemId: string;
   amount: number; // gross total — the fallback line amount when no tax is applied
   date: string | null; // ISO YYYY-MM-DD; omitted -> QBO uses today
+  // See BillInput.dueDate. An invoice with no due date is immediately overdue,
+  // which is worse on the income side: it drives customer-facing reminders.
+  dueDate?: string | null;
   memo?: string | null;
   description?: string | null; // line description (customer + item summary)
   reference?: string | null; // → QuickBooks DocNumber
@@ -268,6 +277,9 @@ function buildIncomeTxnBody(input: InvoiceInput): Record<string, unknown> {
     }
   }
   if (input.date) body.TxnDate = input.date;
+  // A SalesReceipt is already settled, so a due date is meaningless there; the
+  // caller passes it only for an Invoice.
+  if (input.dueDate) body.DueDate = input.dueDate;
   if (input.memo) body.PrivateNote = input.memo;
   return body;
 }

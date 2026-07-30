@@ -640,3 +640,58 @@ describe("checkPurchasePostable", () => {
     expect(checkPurchasePostable({ ...ok, lists: null })).toEqual([]);
   });
 });
+
+describe("due date — a bill must not land immediately overdue", () => {
+  it("sends DueDate on a Bill when one is known", () => {
+    const b = buildBillPayload({
+      vendorId: "v1",
+      accountId: "a1",
+      amount: 100,
+      date: "2026-06-01",
+      dueDate: "2026-07-01",
+      reference: null,
+      tax: null,
+    }) as Record<string, unknown>;
+    expect(b.TxnDate).toBe("2026-06-01");
+    expect(b.DueDate).toBe("2026-07-01");
+  });
+
+  it("omits DueDate when there is none, rather than sending the txn date", () => {
+    const b = buildBillPayload({
+      vendorId: "v1",
+      accountId: "a1",
+      amount: 100,
+      date: "2026-06-01",
+      reference: null,
+      tax: null,
+    }) as Record<string, unknown>;
+    expect("DueDate" in b).toBe(false);
+  });
+
+  it("sends DueDate on an Invoice", () => {
+    const i = buildInvoicePayload({
+      customerId: "c1",
+      itemId: "i1",
+      amount: 100,
+      date: "2026-06-01",
+      dueDate: "2026-07-01",
+      reference: null,
+      tax: null,
+    }) as Record<string, unknown>;
+    expect(i.DueDate).toBe("2026-07-01");
+  });
+
+  it("a SalesReceipt carries no due date — it is already settled", () => {
+    const r = buildSalesReceiptPayload({
+      customerId: "c1",
+      itemId: "i1",
+      amount: 100,
+      date: "2026-06-01",
+      reference: null,
+      tax: null,
+    }) as Record<string, unknown>;
+    expect("DueDate" in r).toBe(false);
+    // And still no deposit account, which is what makes it approvable without one.
+    expect("DepositToAccountRef" in r).toBe(false);
+  });
+});

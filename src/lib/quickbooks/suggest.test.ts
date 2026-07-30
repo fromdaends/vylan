@@ -14,6 +14,7 @@ import {
   learnKeyForName,
   learnKeyForTaxes,
   MATCH_THRESHOLD,
+  quickbooksPostingReference,
 } from "./suggest";
 import type { LearnedMappings } from "./suggest";
 import type { QbNamed, QbAccount, QbItem, QuickbooksLists } from "./read";
@@ -1162,5 +1163,45 @@ describe("the foreign-currency note names the books' currency", () => {
     const s = buildTransactionSuggestion(extraction({ currency: "USD" }), lists);
     expect(s.notes.some((n) => n.includes("in USD, not CAD"))).toBe(true);
     expect(s.booksCurrency).toBeNull();
+  });
+});
+
+describe("quickbooksPostingReference — traceable, without inventing a customer's invoice number", () => {
+  const FILE = "ac5776aa-3aa0-4ae9-805b-7bb40659ff27";
+
+  it("uses the document's own number when it has one", () => {
+    expect(quickbooksPostingReference("INV-0042", FILE, "bill")).toBe("INV-0042");
+  });
+
+  it("falls back to a VYL- number on a bill, so the paper is traceable", () => {
+    const r = quickbooksPostingReference(null, FILE, "bill");
+    expect(r).toBe("VYL-ac5776aa3aa04ae98");
+    // QuickBooks caps DocNumber at 21 characters — the Xero form (VYL- plus the
+    // whole uuid) would be sliced into something meaningless.
+    expect(r!.length).toBeLessThanOrEqual(21);
+  });
+
+  it("falls back on a purchase too", () => {
+    expect(quickbooksPostingReference(null, FILE, "purchase")).toMatch(/^VYL-/);
+  });
+
+  it("NEVER invents a number for an invoice or a sales receipt", () => {
+    // QuickBooks' DocNumber on an invoice is what the CUSTOMER sees, and
+    // QuickBooks assigns its own when the field is omitted. Xero's Reference is a
+    // separate internal field, which is why the Xero fallback is safe on income
+    // and this one is not.
+    expect(quickbooksPostingReference(null, FILE, "invoice")).toBeNull();
+    expect(quickbooksPostingReference(null, FILE, "salesreceipt")).toBeNull();
+  });
+
+  it("still honours a real number on income", () => {
+    expect(quickbooksPostingReference("2026-118", FILE, "invoice")).toBe(
+      "2026-118",
+    );
+  });
+
+  it("truncates an over-long real number to QuickBooks' limit", () => {
+    const long = "REF-012345678901234567890123456789";
+    expect(quickbooksPostingReference(long, FILE, "bill")).toHaveLength(21);
   });
 });
