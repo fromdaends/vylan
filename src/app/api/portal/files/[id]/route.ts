@@ -71,6 +71,10 @@ export async function GET(
     .from("uploaded_files")
     .select("storage_path, original_filename, mime_type, engagement_id")
     .eq("id", id)
+    // Deleted documents stop being downloadable by the client immediately.
+    // This route runs with the service role (the client holds a magic-link
+    // token, not a session), so migration 1090's RLS exclusion cannot reach it.
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (

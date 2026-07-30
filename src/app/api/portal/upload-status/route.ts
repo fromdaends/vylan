@@ -177,6 +177,9 @@ export async function POST(request: NextRequest) {
     )
     .eq("id", fileId)
     .eq("engagement_id", engagement.id)
+    // Service role — the client polls this with a magic-link token, so 1090's
+    // RLS exclusion does not apply and the filter has to be here.
+    .is("deleted_at", null)
     .eq("request_item_id", itemId)
     .maybeSingle();
   if (!file) {

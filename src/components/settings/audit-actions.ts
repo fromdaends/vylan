@@ -83,6 +83,8 @@ export const AUDIT_ACTIONS = [
   "file_renamed",
   "file_moved",
   "file_downloaded",
+  "file_deleted",
+  "file_restored",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

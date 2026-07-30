@@ -32,6 +32,7 @@ import { logUserActivity } from "@/lib/db/activity";
 import { isDocumentSource } from "@/lib/files/serve-document";
 import { sanitizeDisplayName } from "@/lib/files/display-name";
 import { buildMovePatch } from "@/lib/files/move";
+import { restoreDocument, softDeleteDocument } from "@/lib/db/document-delete";
 import type { DocumentSource } from "@/lib/db/documents";
 
 export type DocumentActionResult =
@@ -142,6 +143,61 @@ export async function moveDocumentAction(
     year: data.browse_year ?? null,
     category: data.browse_category ?? null,
     doc_type: (patch.manual_doc_type as string | null) ?? undefined,
+  });
+  revalidatePath("/files");
+  return { ok: true };
+}
+
+/**
+ * Move a document to the recycle bin. Recoverable for 30 days.
+ *
+ * Never a permanent delete: that only ever happens from the purge cron, once
+ * the window has expired. The accountant's "delete" is always undoable.
+ */
+export async function deleteDocumentAction(input: {
+  source: string;
+  id: string;
+}): Promise<DocumentActionResult> {
+  if (!isDocumentSource(input.source) || !input.id) {
+    return { ok: false, error: "invalid" };
+  }
+  const firm = await getCurrentFirm();
+  if (!firm) return { ok: false, error: "error" };
+  const sb = await getServerSupabase();
+  const { data: auth } = await sb.auth.getUser();
+
+  const res = await softDeleteDocument(
+    input.source,
+    input.id,
+    auth.user?.id ?? null,
+  );
+  if (!res.ok) return res;
+
+  await logUserActivity(firm.id, null, "file_deleted", {
+    source: input.source,
+    file_id: input.id,
+  });
+  revalidatePath("/files");
+  return { ok: true };
+}
+
+/** Bring a document back out of the recycle bin. */
+export async function restoreDocumentAction(input: {
+  source: string;
+  id: string;
+}): Promise<DocumentActionResult> {
+  if (!isDocumentSource(input.source) || !input.id) {
+    return { ok: false, error: "invalid" };
+  }
+  const firm = await getCurrentFirm();
+  if (!firm) return { ok: false, error: "error" };
+
+  const res = await restoreDocument(input.source, input.id);
+  if (!res.ok) return res;
+
+  await logUserActivity(firm.id, null, "file_restored", {
+    source: input.source,
+    file_id: input.id,
   });
   revalidatePath("/files");
   return { ok: true };

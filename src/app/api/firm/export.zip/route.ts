@@ -83,7 +83,8 @@ export async function GET(_request: NextRequest) {
     sb
       .from("request_items")
       .select("id, engagement_id, label, description, doc_type, required, status, approved_at, rejection_reason, engagements!inner(firm_id)")
-      .eq("engagements.firm_id", firm.id),
+      .eq("engagements.firm_id", firm.id)
+      .is("deleted_at", null),
     sb
       .from("uploaded_files")
       .select("id, request_item_id, engagement_id, storage_path, original_filename, mime_type, size_bytes, ai_classification, ai_confidence, uploaded_at, engagements!inner(firm_id)")

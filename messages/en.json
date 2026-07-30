@@ -1179,7 +1179,9 @@
     "action_team_work_handed_over": "Work handed over",
     "action_file_renamed": "Renamed a document",
     "action_file_moved": "Moved a document to a different folder",
-    "action_file_downloaded": "Downloaded a document"
+    "action_file_downloaded": "Downloaded a document",
+    "action_file_deleted": "Moved a document to Recently deleted",
+    "action_file_restored": "Restored a deleted document"
   },
   "Notifications": {
     "title": "What's new",
@@ -3498,6 +3500,16 @@
     "move_year": "Year",
     "move_category": "Folder",
     "move_note": "This moves the document inside Vylan only. A copy already filed to your cloud storage stays where it is.",
-    "move_done": "Moved."
+    "move_done": "Moved.",
+    "action_delete": "Delete",
+    "action_restore": "Restore",
+    "delete_title": "Move to Recently deleted?",
+    "delete_help": "“{name}” moves to Recently deleted. It disappears from Vylan and from your client's portal straight away, and you can put it back for 30 days.",
+    "delete_done": "Moved to Recently deleted.",
+    "restore_done": "“{name}” is back.",
+    "bin_title": "Recently deleted",
+    "bin_intro": "Documents you deleted in the last {days} days. Restore one and it goes straight back where it was. After {days} days they're erased for good.",
+    "bin_empty": "Nothing has been deleted.",
+    "col_deleted": "Deleted"
   }
 }
