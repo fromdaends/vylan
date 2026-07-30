@@ -158,10 +158,21 @@ export function AppShell({
         ]
       : []),
     { href: "/integrations", label: labels.integrations, icon: Plug },
+    // THE FIRM. This was missing entirely on desktop: the old sidebar carried a
+    // quiet firm button at its foot, the icon rail that replaced it does not, and
+    // the comment here used to claim Firm "lives in the account dropdown" — it
+    // does not. That dropdown holds Profile / Settings / Help / Help centre /
+    // Log out and nothing else. Mobile kept its own /settings/team entry, which
+    // is why the regression was desktop-only and easy to miss.
+    // Team-gated: with collaboration off the page 404s, so the entry would be a
+    // dead end rather than a destination.
+    ...(teamEnabled
+      ? [{ href: "/settings/team", label: labels.firm, icon: Building2 }]
+      : []),
   ];
 
-  // Firm + Settings live in the account dropdown (and the mobile sheet's profile
-  // menu), so the rail carries primary destinations only.
+  // Settings lives in the account dropdown. Firm is in the rail above, because
+  // it is somewhere you GO, not a preference you set.
 
   return (
     <ActiveNavProvider>
@@ -424,14 +435,14 @@ function MobileAccountMenu({
           <MobileMenuItem
             href="/settings?tab=account"
             icon={Building2}
-            label={labels.firm}
+            label={tTeam("edit_firm")}
             onClick={onItemClick}
           />
           {teamEnabled && (
             <MobileMenuItem
               href="/settings/team"
               icon={Users2}
-              label={tTeam("title")}
+              label={labels.firm}
               onClick={onItemClick}
             />
           )}
