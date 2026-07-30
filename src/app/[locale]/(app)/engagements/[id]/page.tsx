@@ -704,15 +704,6 @@ export default async function EngagementDetailPage({
     parseStageHistory(engagement.stage_history),
   );
 
-  // Client portal URL — used by the "Copy payment link" button when a payment is
-  // requested. (The client-link copy in the header 3-dots menu builds its own
-  // origin-aware URL from the magic token.)
-  const baseUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const portalUrl =
-    engagement.magic_token != null
-      ? `${baseUrl}/r/${engagement.magic_token}`
-      : null;
-
   const isLive =
     engagement.status === "sent" || engagement.status === "in_progress";
   const isDraft = engagement.status === "draft";
@@ -1051,11 +1042,6 @@ export default async function EngagementDetailPage({
               canDelete={canDelete}
               clientLinkToken={
                 isLive ? (engagement.magic_token ?? undefined) : undefined
-              }
-              paymentLinkUrl={
-                latestPayment?.status === "requested"
-                  ? (portalUrl ?? undefined)
-                  : undefined
               }
               connectReady={connectReady}
               invoice={

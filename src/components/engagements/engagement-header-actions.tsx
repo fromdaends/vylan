@@ -17,7 +17,6 @@ import {
   Receipt,
   Repeat,
   Trash2,
-  Wallet,
 } from "lucide-react";
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -71,7 +70,6 @@ export function EngagementMoreMenu({
   hasUploads,
   canDelete,
   clientLinkToken,
-  paymentLinkUrl,
   connectReady,
   invoice,
   engagementLocksDeliverables,
@@ -98,8 +96,6 @@ export function EngagementMoreMenu({
   canDelete: boolean;
   // Live engagements only: enables "Copy client link" (origin-aware portal URL).
   clientLinkToken?: string;
-  // Present when a payment has been requested: enables "Copy payment link".
-  paymentLinkUrl?: string;
   // Invoice management (create / edit / lock-unlock / waive) lives in the "..."
   // menu now instead of the header row.
   connectReady?: boolean;
@@ -128,7 +124,7 @@ export function EngagementMoreMenu({
   const t = useTranslations("Engagements");
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [copied, setCopied] = useState<null | "client" | "payment">(null);
+  const [copied, setCopied] = useState<null | "client">(null);
   const [pendingPrivacy, startPrivacy] = useTransition();
   const [isPrivate, setIsPrivate] = useState(privacy?.isPrivate ?? false);
 
@@ -156,7 +152,7 @@ export function EngagementMoreMenu({
     });
   };
 
-  const copy = async (which: "client" | "payment", url: string) => {
+  const copy = async (which: "client", url: string) => {
     try {
       await navigator.clipboard.writeText(url);
       setCopied(which);
@@ -286,17 +282,10 @@ export function EngagementMoreMenu({
               </div>
             </>
           )}
-          {paymentLinkUrl && (
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault();
-                void copy("payment", paymentLinkUrl);
-              }}
-            >
-              {copied === "payment" ? <Check /> : <Wallet />}
-              {copied === "payment" ? t("copied") : t("copy_payment_link")}
-            </DropdownMenuItem>
-          )}
+          {/* REMOVED (founder): "Copy payment link". It copied the SAME portal
+              URL "Copy client link" already gives you — a payment is paid on
+              the portal, so there was never a separate payment address. Two
+              menu entries producing one identical string is noise. */}
 
           {/* File to storage — the on-demand filing run (Document filing).
               Shown whenever the engagement is live-ish; the dialog itself
