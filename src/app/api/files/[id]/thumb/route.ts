@@ -6,14 +6,13 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import {
-  getServerSupabase,
-  getServiceRoleSupabase,
-} from "@/lib/supabase/server";
-import { getCurrentFirm } from "@/lib/db/firms";
-import {
   renderImageThumbnail,
   clampThumbWidth,
 } from "@/lib/files/image-thumbnail";
+import {
+  resolveServableDocument,
+  sourceFromParam,
+} from "@/lib/files/serve-document";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -24,39 +23,16 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  const supabase = await getServerSupabase();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) {
-    return NextResponse.json({ error: "unauth" }, { status: 401 });
-  }
-  const firm = await getCurrentFirm();
-  if (!firm) {
-    return NextResponse.json({ error: "no_firm" }, { status: 403 });
-  }
-
-  const sb = getServiceRoleSupabase();
-  const { data: file } = await sb
-    .from("uploaded_files")
-    .select("storage_path, mime_type, engagement_id")
-    .eq("id", id)
-    .maybeSingle();
-  if (!file) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-  // Authorize the parent engagement via the AUTHED (RLS) client so a private
-  // client's thumbnail 404s for STAFF (0810); owners still pass. (See the bytes
-  // route.) firm_id eq kept as defense-in-depth on top of RLS.
-  const { data: engagement } = await supabase
-    .from("engagements")
-    .select("id")
-    .eq("id", file.engagement_id)
-    .eq("firm_id", firm.id)
-    .maybeSingle();
-  if (!engagement) {
+  // ?source= — see the bytes route. Absent = 'checklist', which is every
+  // existing caller. Lookup + authorization live in one shared place because
+  // the three document tables genuinely have three different RLS rules.
+  const source = sourceFromParam(request.nextUrl.searchParams.get("source"));
+  const file = await resolveServableDocument(source, id);
+  if (!file || file.deletedAt) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const mime = file.mime_type || "";
+  const mime = file.mimeType || "";
   if (!mime.startsWith("image/")) {
     return NextResponse.json({ error: "not_an_image" }, { status: 415 });
   }
@@ -64,7 +40,7 @@ export async function GET(
   let out: Buffer;
   try {
     out = await renderImageThumbnail(
-      file.storage_path,
+      file.storagePath,
       mime,
       clampThumbWidth(request.nextUrl.searchParams.get("w")),
     );

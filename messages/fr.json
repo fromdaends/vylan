@@ -1176,7 +1176,10 @@
     "action_series_reassigned": "A changé l'attribution d'un horaire récurrent",
     "action_engagement_unassigned": "A retiré un engagement à quelqu'un",
     "action_team_offboard_reassigned": "Travail transféré (membre retiré)",
-    "action_team_work_handed_over": "Travail transféré"
+    "action_team_work_handed_over": "Travail transféré",
+    "action_file_renamed": "A renommé un document",
+    "action_file_moved": "A déplacé un document vers un autre dossier",
+    "action_file_downloaded": "A téléchargé un document"
   },
   "Notifications": {
     "title": "Nouveautés",
@@ -3474,6 +3477,27 @@
     "path_root": "Fichiers",
     "path_search": "Recherche : {query}",
     "col_source": "Provenance",
-    "engagement_untitled": "Mandat sans titre"
+    "engagement_untitled": "Mandat sans titre",
+    "row_actions": "Actions pour {name}",
+    "action_preview": "Aperçu",
+    "action_download": "Télécharger",
+    "action_rename": "Renommer",
+    "action_move": "Déplacer",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "action_failed": "Ça n'a pas fonctionné. Réessayez.",
+    "rename_title": "Renommer le document",
+    "rename_help": "Change le nom affiché dans Vylan. Le fichier original envoyé par votre client n'est pas modifié et rien n'est reclassé dans votre stockage infonuagique.",
+    "rename_label": "Nom",
+    "rename_done": "Renommé.",
+    "rename_invalid": "Donnez un nom au document.",
+    "move_title": "Déplacer le document",
+    "move_help": "Choisissez où ce document appartient. Choisir un type remplit le dossier habituel — vous pouvez le changer.",
+    "move_type": "Type de document",
+    "move_type_none": "Non défini",
+    "move_year": "Année",
+    "move_category": "Dossier",
+    "move_note": "Le document est déplacé dans Vylan seulement. Une copie déjà classée dans votre stockage infonuagique reste où elle est.",
+    "move_done": "Déplacé."
   }
 }

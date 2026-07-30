@@ -1176,7 +1176,10 @@
     "action_series_reassigned": "Changed who a repeating schedule goes to",
     "action_engagement_unassigned": "Took an engagement off someone",
     "action_team_offboard_reassigned": "Work handed over (member removed)",
-    "action_team_work_handed_over": "Work handed over"
+    "action_team_work_handed_over": "Work handed over",
+    "action_file_renamed": "Renamed a document",
+    "action_file_moved": "Moved a document to a different folder",
+    "action_file_downloaded": "Downloaded a document"
   },
   "Notifications": {
     "title": "What's new",
@@ -3474,6 +3477,27 @@
     "path_root": "Files",
     "path_search": "Search: {query}",
     "col_source": "From",
-    "engagement_untitled": "Untitled engagement"
+    "engagement_untitled": "Untitled engagement",
+    "row_actions": "Actions for {name}",
+    "action_preview": "Preview",
+    "action_download": "Download",
+    "action_rename": "Rename",
+    "action_move": "Move",
+    "cancel": "Cancel",
+    "save": "Save",
+    "action_failed": "That didn't work. Try again.",
+    "rename_title": "Rename document",
+    "rename_help": "Changes the name shown in Vylan. The original file your client sent is untouched, and nothing is re-filed to your cloud storage.",
+    "rename_label": "Name",
+    "rename_done": "Renamed.",
+    "rename_invalid": "Give the document a name.",
+    "move_title": "Move document",
+    "move_help": "Choose where this document belongs. Picking a type fills in the folder it usually goes in — you can change it.",
+    "move_type": "Document type",
+    "move_type_none": "Not set",
+    "move_year": "Year",
+    "move_category": "Folder",
+    "move_note": "This moves the document inside Vylan only. A copy already filed to your cloud storage stays where it is.",
+    "move_done": "Moved."
   }
 }

@@ -60,6 +60,8 @@ export type BrowserEntry =
       from?: { label: string; href?: string; muted?: boolean } | null;
       /** Small trailing badges: status, Imported, Duplicate… */
       badges?: { label: string; tone: "default" | "outline" | "destructive" | "secondary" }[];
+      /** The per-file actions menu, built by the page (it is a client island). */
+      actions?: React.ReactNode;
     };
 
 // File-type icon, the way a file manager picks one: by what the file IS, not by
@@ -131,6 +133,9 @@ export async function FileBrowser({
                 <Cell width="w-24" align="right" alwaysVisible>
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
+                {/* Keeps folder rows aligned with file rows, which carry an
+                    actions menu in this column. */}
+                <span className="w-8 shrink-0" aria-hidden />
               </Link>
             ) : (
               // A FILE row is NOT wrapped in a link, even once preview exists:
@@ -189,6 +194,7 @@ export async function FileBrowser({
                 <Cell width="w-24" align="right" alwaysVisible>
                   {entry.modified ? formatDate(entry.modified, locale, "short") : ""}
                 </Cell>
+                <span className="w-8 shrink-0 text-right">{entry.actions}</span>
               </div>
             )}
           </li>
@@ -240,6 +246,7 @@ function BrowserHeader({ t }: { t: (key: string) => string }) {
         {t("col_size")}
       </span>
       <span className="w-24 shrink-0 text-right">{t("col_modified")}</span>
+      <span className="w-8 shrink-0" aria-hidden />
     </div>
   );
 }

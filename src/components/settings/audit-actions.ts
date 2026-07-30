@@ -75,6 +75,14 @@ export const AUDIT_ACTIONS = [
   "recurrence_resumed",
   "recurrence_ended",
   "series_reassigned",
+  // Files section. Registered in the SAME change that starts logging them —
+  // the comments above record what happens otherwise: recurrence_* and
+  // team_offboard_reassigned were emitted for months without being listed
+  // here, so /settings/audit printed the raw action code at the operator.
+  // Each one also needs an `action_<key>` string in messages/{en,fr}.json.
+  "file_renamed",
+  "file_moved",
+  "file_downloaded",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
