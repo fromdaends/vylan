@@ -55,10 +55,8 @@ import {
   deleteEngagementAction,
   setEngagementPrivacyAction,
 } from "@/app/actions/engagements";
-import {
-  commentKeyForEngagement,
-  openCommentComposer,
-} from "@/components/engagements/comment-thread";
+import { commentKeyForEngagement } from "@/components/engagements/comment-thread";
+import { useCommentFromMenu } from "@/components/engagements/use-comment-from-menu";
 
 // The "..." overflow menu for an engagement's occasional actions: copying
 // links, reminder controls, downloads, and deletion. Activity remains
@@ -134,9 +132,10 @@ export function EngagementMoreMenu({
   const [pendingPrivacy, startPrivacy] = useTransition();
   const [isPrivate, setIsPrivate] = useState(privacy?.isPrivate ?? false);
 
-  const addComment = () => {
-    openCommentComposer(commentKeyForEngagement(engagementId));
-  };
+  // "Add a comment" opens the engagement's comment card, but only once this
+  // menu has finished closing — see useCommentFromMenu for why doing it in
+  // onSelect made the card flash open and disappear.
+  const comment = useCommentFromMenu();
 
   const togglePrivacy = () => {
     if (pendingPrivacy) return;
@@ -186,7 +185,11 @@ export function EngagementMoreMenu({
             <MoreHorizontal className="size-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuContent
+          align="end"
+          className="w-64"
+          onCloseAutoFocus={comment.onCloseAutoFocus}
+        >
           {privacy?.isOwner && (
             <>
               <DropdownMenuItem
@@ -203,7 +206,11 @@ export function EngagementMoreMenu({
             </>
           )}
           {commentable && (
-            <DropdownMenuItem onSelect={addComment}>
+            <DropdownMenuItem
+              onSelect={() =>
+                comment.request(commentKeyForEngagement(engagementId))
+              }
+            >
               <MessageSquare />
               {t("add_comment")}
             </DropdownMenuItem>

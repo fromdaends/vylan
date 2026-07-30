@@ -22,10 +22,8 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import {
-  commentKeyForFile,
-  openCommentComposer,
-} from "@/components/engagements/comment-thread";
+import { commentKeyForFile } from "@/components/engagements/comment-thread";
+import { useCommentFromMenu } from "@/components/engagements/use-comment-from-menu";
 import { toast } from "sonner";
 import {
   deleteFileAction,
@@ -206,6 +204,10 @@ export function FilePreviewRow({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reopening, setReopening] = useState(false);
   const [, startTransition] = useTransition();
+  // Both this row's menus open the comment card only once the menu has closed
+  // (see useCommentFromMenu — opening from onSelect lets the menu's focus
+  // restore dismiss the card the moment it appears).
+  const comment = useCommentFromMenu();
 
   const isImage = file.mime_type.startsWith("image/");
   const isPdf = file.mime_type === "application/pdf";
@@ -455,7 +457,11 @@ export function FilePreviewRow({
               <MoreVertical className="size-4" aria-hidden />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-44 !animate-none">
+          <DropdownMenuContent
+            align="end"
+            className="w-44 !animate-none"
+            onCloseAutoFocus={comment.onCloseAutoFocus}
+          >
             <DropdownMenuItem asChild>
               <a href={source.openHref} target="_blank" rel="noopener noreferrer">
                 <ExternalLink />
@@ -482,7 +488,7 @@ export function FilePreviewRow({
             )}
             {commentable && (
               <DropdownMenuItem
-                onSelect={() => openCommentComposer(commentKeyForFile(file.id))}
+                onSelect={() => comment.request(commentKeyForFile(file.id))}
               >
                 <MessageSquare />
                 {t("add_comment")}
@@ -637,7 +643,10 @@ export function FilePreviewRow({
       )}
         </li>
       </ContextMenuTrigger>
-      <ContextMenuContent className="w-44 !animate-none">
+      <ContextMenuContent
+        className="w-44 !animate-none"
+        onCloseAutoFocus={comment.onCloseAutoFocus}
+      >
         <ContextMenuItem asChild>
           <a href={source.openHref} target="_blank" rel="noopener noreferrer">
             <ExternalLink />
@@ -664,7 +673,7 @@ export function FilePreviewRow({
         )}
         {commentable && (
           <ContextMenuItem
-            onSelect={() => openCommentComposer(commentKeyForFile(file.id))}
+            onSelect={() => comment.request(commentKeyForFile(file.id))}
           >
             <MessageSquare />
             {t("add_comment")}
