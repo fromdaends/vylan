@@ -390,6 +390,7 @@ export async function processClassifyJob(
             learned,
             provider === "xero" ? "Xero" : "QuickBooks",
             booksCurrency,
+            provider === "xero",
           );
           await upsertTransactionSuggestion({
             firmId: limitFirmId,

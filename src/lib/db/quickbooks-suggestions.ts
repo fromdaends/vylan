@@ -990,6 +990,7 @@ export async function backfillMissingSuggestions(input: {
         input.learned ?? {},
         providerLabel,
         input.booksCurrency ?? null,
+        provider === "xero",
       );
       await upsertTransactionSuggestion({
         firmId: input.firmId,

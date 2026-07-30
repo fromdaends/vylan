@@ -193,8 +193,15 @@ export function draftNeedsInput(
     // rather than surfacing as a post-time failure.
     const isSalesReceipt =
       effectiveIncomeMode(suggestion, resolved) === "salesreceipt";
+    // A paid sale needs the account the money landed in only where the post
+    // cannot be made without one. On QuickBooks it can: the SalesReceipt builder
+    // deliberately omits DepositToAccountRef and QuickBooks books the money to
+    // Undeposited Funds. Demanding it there made every QuickBooks paid-sale draft
+    // wait on a mandatory pick that the builder then threw away.
+    const needsDeposit = suggestion.depositAccountRequired !== false;
     mappingMissing =
-      eff.item == null || (isSalesReceipt && eff.paymentAccount == null);
+      eff.item == null ||
+      (isSalesReceipt && needsDeposit && eff.paymentAccount == null);
   } else {
     const isPurchase =
       effectiveExpenseMode(suggestion, resolved) === "purchase";
