@@ -270,6 +270,58 @@ export async function deleteFolderAction(input: {
 }
 
 /**
+ * Move every document in a derived bucket into a folder.
+ *
+ * Dragging the "Bookkeeping & business" folder onto "Payroll" cannot move the
+ * folder — a year or category folder is COMPUTED from the documents inside it,
+ * there is no row to re-parent. But the gesture obviously means something, and
+ * what it means is "put this lot in there". So it moves the contents.
+ *
+ * Without this, dragging one of those folders would have to do nothing, and a
+ * gesture that silently does nothing is indistinguishable from a broken app.
+ */
+export async function moveBucketToFolderAction(input: {
+  clientId: string;
+  /** undefined = not filtering on year; null = the Unsorted year. */
+  year?: number | null;
+  yearSet?: boolean;
+  category?: string | null;
+  categorySet?: boolean;
+  folderId: string | null;
+}): Promise<{ ok: boolean; succeeded: number; failed: number }> {
+  const firm = await getCurrentFirm();
+  if (!firm || !input.clientId) return { ok: false, succeeded: 0, failed: 0 };
+  const sb = await getServerSupabase();
+
+  // Read the bucket through the view, so RLS decides which documents this user
+  // may touch — the same gate every other document read uses.
+  let q = sb
+    .from("firm_documents")
+    .select("source, id")
+    .eq("client_id", input.clientId)
+    .is("deleted_at", null);
+  if (input.yearSet) {
+    q = input.year == null ? q.is("browse_year", null) : q.eq("browse_year", input.year);
+  }
+  if (input.categorySet) {
+    q =
+      input.category == null
+        ? q.is("browse_category", null)
+        : q.eq("browse_category", input.category);
+  }
+  const { data, error } = await q.limit(500);
+  if (error || !data) return { ok: false, succeeded: 0, failed: 0 };
+
+  return setDocumentsFolderAction({
+    targets: (data as Array<{ source: string; id: string }>).map((d) => ({
+      source: d.source,
+      id: d.id,
+    })),
+    folderId: input.folderId,
+  });
+}
+
+/**
  * File documents into a folder, or back out of one.
  *
  * A null folderId returns them to the derived year/category view rather than

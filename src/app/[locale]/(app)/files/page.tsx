@@ -499,6 +499,9 @@ async function SubfolderList({
     modified: null,
     actions: <FolderRowMenu clientId={clientId} folderId={f.id} name={f.name} />,
     dropTarget: { kind: "folder" as const, folderId: f.id },
+    // Draggable: drop it on another folder to nest it, or on the client in the
+    // path bar to bring it back to the top level.
+    dragPayload: { kind: "folder" as const, clientId, folderId: f.id },
   }));
 
   return (
@@ -554,6 +557,17 @@ async function FolderLevel({
       // gesture as dropping on a custom folder, because to the person dragging
       // there is no difference between the two.
       dropTarget: { kind: "category" as const, category: c.category },
+      // Dragging a category folder AWAY moves everything in it. There is no
+      // row to re-parent — the folder is computed from the documents — so the
+      // only honest meaning for the gesture is "put this lot over there".
+      dragPayload: {
+        kind: "bucket" as const,
+        clientId,
+        year,
+        yearSet: true,
+        category: c.category,
+        categorySet: true,
+      },
     }));
     return (
       <FileBrowser
@@ -574,6 +588,7 @@ async function FolderLevel({
     modified: null,
     hint: t("folder_item_count", { count: counts.get(f.id) ?? 0 }),
     dropTarget: { kind: "folder" as const, folderId: f.id },
+    dragPayload: { kind: "folder" as const, clientId, folderId: f.id },
     actions: (
       <FolderRowMenu clientId={clientId} folderId={f.id} name={f.name} />
     ),
@@ -593,6 +608,14 @@ async function FolderLevel({
     // destination too — y.year is null there, which the drop handler sends as
     // the Unsorted bucket rather than as "leave it alone".
     dropTarget: { kind: "year" as const, year: y.year },
+    // Dragging a whole year onto a custom folder files that year's documents
+    // there — "put 2024 in the archive folder" in one gesture.
+    dragPayload: {
+      kind: "bucket" as const,
+      clientId,
+      year: y.year,
+      yearSet: true,
+    },
   }));
   void yearParam;
 
