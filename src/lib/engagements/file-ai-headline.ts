@@ -36,7 +36,13 @@ import type { DocType } from "@/lib/db/templates";
 import { AUTO_REJECT_STRIKE_LIMIT } from "@/lib/ai/usability";
 
 // 15 min: past this an un-run analysis is treated as "never ran", not in-flight.
-const ANALYSIS_FRESH_MS = 15 * 60 * 1000;
+//
+// EXPORTED because the Files browser has to answer the same question — is this
+// document still being read, or did the AI simply never run on it? Getting that
+// wrong there is worse than a wrong label: Move is disabled while a document is
+// "analyzing", so a file that shows a permanent spinner is a file nobody can
+// ever sort. One constant, one answer.
+export const ANALYSIS_FRESH_MS = 15 * 60 * 1000;
 
 export type FileAiInput = {
   ai_classification: string | null;
