@@ -569,17 +569,12 @@ export async function cancelEngagementAction(formData: FormData) {
 export async function completeEngagementAction(formData: FormData) {
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
-  // Owner sign-off gate (Team settings): when the firm requires it, only an
-  // OWNER can mark an engagement complete — staff hand it off and an owner signs
-  // off. Defense-in-depth; the UI already hides the button for staff when on.
-  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
-  if (
-    firm?.require_review_signoff === true &&
-    hasActiveTeam({ teamEnabled: firm.team_enabled === true, activeMemberCount: 0 }) &&
-    me?.role !== "owner"
-  ) {
-    return;
-  }
+  // EVERYONE can mark work complete. There used to be an owner-sign-off gate
+  // here, behind a firm switch, that silently RETURNED without completing and
+  // without telling anyone — founder's call is that finishing work is not a
+  // permission at all. `me` is still read below: it is the actor on the
+  // notification, so the person who clicked is not notified about their click.
+  const me = await getCurrentUser();
   await completeEngagement(id);
   await cancelEngagementReminders(id);
   const engagement = await getEngagement(id);

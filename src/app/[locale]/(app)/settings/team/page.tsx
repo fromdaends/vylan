@@ -241,7 +241,6 @@ export default async function TeamPage({
             <TeamSettings
               clientsPrivateByDefault={firm.clients_private_by_default === true}
               notifyOnAssignment={firm.notify_on_assignment !== false}
-              requireReviewSignoff={firm.require_review_signoff === true}
             />
           ) : null
         }
