@@ -359,7 +359,17 @@ async function BrowseTab({
               yearSet,
               category,
               categorySet,
-              folderId: folderId ?? undefined,
+              // Three states, and the difference is the whole bug that made a
+              // move look like it did nothing:
+              //   a folder      → that folder's contents
+              //   null          → the top level only, so a document filed into
+              //                   a folder leaves the year/category list it
+              //                   came from instead of sitting in both
+              //   undefined     → everywhere, for SEARCH and for the type and
+              //                   status filters. Those are "find me this",
+              //                   and a find that cannot see inside folders is
+              //                   worse than no find at all.
+              folderId: folderId ?? (search || hasDocumentFilter ? undefined : null),
               docTypes: docType ? [docType] : undefined,
               statuses: status ? [status] : undefined,
               search,
