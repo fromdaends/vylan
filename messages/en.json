@@ -221,7 +221,18 @@
     "handover_confirm": "Hand it over",
     "handover_done": "Moved {engagements, plural, one {1 engagement} other {# engagements}} and {clients, plural, one {1 client} other {# clients}} to {name}",
     "tab_people": "People",
-    "profile_about_title": "About"
+    "profile_about_title": "About",
+    "permissions_title": "Permissions",
+    "permissions_role_label": "Role",
+    "role_member": "Member",
+    "role_junior": "Junior",
+    "permissions_member_help": "Sees dollar figures and can add or edit clients. Can't touch billing, firm settings, or the activity log.",
+    "permissions_junior_help": "Does the work, but no dollar figures anywhere and can't add or edit clients.",
+    "permissions_extras_label": "Also allowed",
+    "permissions_cap_billing": "Manage billing and payment setup",
+    "permissions_cap_integrations": "Connect bookkeeping (QuickBooks, Xero)",
+    "permissions_unavailable": "This will be available in a moment.",
+    "permissions_failed": "Couldn't change that. Please try again."
   },
   "Preview": {
     "button": "Preview",

@@ -221,7 +221,18 @@
     "handover_confirm": "Transférer",
     "handover_done": "{engagements, plural, one {1 mandat} other {# mandats}} et {clients, plural, one {1 client} other {# clients}} transférés à {name}",
     "tab_people": "Personnes",
-    "profile_about_title": "À propos"
+    "profile_about_title": "À propos",
+    "permissions_title": "Permissions",
+    "permissions_role_label": "Rôle",
+    "role_member": "Membre",
+    "role_junior": "Junior",
+    "permissions_member_help": "Voit les montants et peut ajouter ou modifier des clients. Ne touche ni à la facturation, ni aux paramètres du cabinet, ni au journal d'activité.",
+    "permissions_junior_help": "Fait le travail, mais ne voit aucun montant et ne peut ni ajouter ni modifier de clients.",
+    "permissions_extras_label": "Également autorisé",
+    "permissions_cap_billing": "Gérer la facturation et les paiements",
+    "permissions_cap_integrations": "Connecter la comptabilité (QuickBooks, Xero)",
+    "permissions_unavailable": "Ce sera disponible dans un instant.",
+    "permissions_failed": "Impossible de modifier. Veuillez réessayer."
   },
   "Preview": {
     "button": "Aperçu",

@@ -16,6 +16,13 @@ export type AppUser = {
   deactivated_at: string | null;
   deactivated_by_user_id: string | null;
   created_at: string;
+  // Phase 2 per-person permissions (migration 1120). OPTIONAL on purpose: they
+  // are undefined until that migration is applied, and src/lib/auth/
+  // capabilities.ts treats undefined exactly like null — which resolves to the
+  // member preset. So a row read before the migration lands behaves as it
+  // always has, rather than failing or silently restricting anyone.
+  permission_preset?: string | null;
+  extra_capabilities?: string[] | null;
 };
 
 /** Active firm members only (not deactivated) — the valid targets for

@@ -13,8 +13,8 @@ import {
 } from "./capabilities";
 
 const owner: CapabilitySubject = { role: "owner" };
-const member: CapabilitySubject = { role: "staff", preset: "member" };
-const junior: CapabilitySubject = { role: "staff", preset: "junior" };
+const member: CapabilitySubject = { role: "staff", permission_preset: "member" };
+const junior: CapabilitySubject = { role: "staff", permission_preset: "junior" };
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -83,8 +83,8 @@ describe("resolvePreset", () => {
     // Every existing row reads this way before the backfill runs, so this is
     // what makes converting call sites a no-op.
     expect(resolvePreset({ role: "staff" })).toBe("member");
-    expect(resolvePreset({ role: "staff", preset: null })).toBe("member");
-    expect(resolvePreset({ role: "staff", preset: "" })).toBe("member");
+    expect(resolvePreset({ role: "staff", permission_preset: null })).toBe("member");
+    expect(resolvePreset({ role: "staff", permission_preset: "" })).toBe("member");
   });
 
   it("FAILS CLOSED on an unrecognised preset instead of promoting", () => {
@@ -93,19 +93,19 @@ describe("resolvePreset", () => {
     // money. Anything unknown lands on the most restrictive preset.
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     for (const bogus of ["Member", "MEMBER", "limited", "admin", "  ", "1"]) {
-      expect(resolvePreset({ role: "staff", preset: bogus })).toBe(
+      expect(resolvePreset({ role: "staff", permission_preset: bogus })).toBe(
         FALLBACK_PRESET,
       );
     }
     expect(log).toHaveBeenCalled();
-    expect(can({ role: "staff", preset: "membre" }, "money.view")).toBe(false);
+    expect(can({ role: "staff", permission_preset: "membre" }, "money.view")).toBe(false);
   });
 
   it("refuses to promote a staff row whose preset column says owner", () => {
     // The rank is what RLS reads. A staff row calling itself an owner preset
     // would render owner controls that every database policy then rejects.
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(resolvePreset({ role: "staff", preset: "owner" })).toBe(
+    expect(resolvePreset({ role: "staff", permission_preset: "owner" })).toBe(
       FALLBACK_PRESET,
     );
     expect(log).not.toHaveBeenCalled(); // a known value, just not an allowed one
@@ -114,9 +114,9 @@ describe("resolvePreset", () => {
   it("never lets a preset value demote the actual owner", () => {
     // Locking an owner out of their own firm has no recovery path in the UI.
     for (const stored of ["junior", "member", "nonsense", null, ""]) {
-      expect(resolvePreset({ role: "owner", preset: stored })).toBe("owner");
+      expect(resolvePreset({ role: "owner", permission_preset: stored })).toBe("owner");
     }
-    expect(can({ role: "owner", preset: "junior" }, "team.manage")).toBe(true);
+    expect(can({ role: "owner", permission_preset: "junior" }, "team.manage")).toBe(true);
   });
 });
 
@@ -124,8 +124,8 @@ describe("named grants", () => {
   it("adds one capability without changing the rest of the preset", () => {
     const approver: CapabilitySubject = {
       role: "staff",
-      preset: "junior",
-      grants: ["time.approve"],
+      permission_preset: "junior",
+      extra_capabilities: ["time.approve"],
     };
     expect(can(approver, "time.approve")).toBe(true);
     // Still a junior in every other respect — this is the point of a grant.
@@ -138,7 +138,7 @@ describe("named grants", () => {
     // the person opens.
     const subject: CapabilitySubject = {
       role: "staff",
-      grants: ["not.a.capability", "", "money.view"],
+      extra_capabilities: ["not.a.capability", "", "money.view"],
     };
     expect(can(subject, "money.view")).toBe(true);
     expect(capabilitiesFor(subject).has("not.a.capability" as Capability)).toBe(
@@ -150,12 +150,12 @@ describe("named grants", () => {
     // capabilitiesFor returns the preset's own Set when there are no grants;
     // a grant must copy it, or one granted user rewrites the preset for the
     // whole process.
-    can({ role: "staff", preset: "junior", grants: ["money.view"] }, "money.view");
+    can({ role: "staff", permission_preset: "junior", extra_capabilities: ["money.view"] }, "money.view");
     expect(can(junior, "money.view")).toBe(false);
   });
 
   it("treats an empty grant list as no grants", () => {
-    expect(capabilitiesFor({ role: "staff", grants: [] })).toBe(
+    expect(capabilitiesFor({ role: "staff", extra_capabilities: [] })).toBe(
       capabilitiesFor({ role: "staff" }),
     );
   });
@@ -173,7 +173,7 @@ describe("can", () => {
     // Not reachable through the schema, but a bad cast or a future enum value
     // must not fall through to something permissive.
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(can({ role: "superuser", preset: "root" }, "team.manage")).toBe(
+    expect(can({ role: "superuser", permission_preset: "root" }, "team.manage")).toBe(
       false,
     );
     expect(log).toHaveBeenCalled();
@@ -233,8 +233,8 @@ describe("owner-only equivalence (guards the call-site migration)", () => {
       expect(can({ role: "owner" }, c)).toBe(true);
       expect(can({ role: "staff" }, c)).toBe(false);
       // ...and for every preset a staff row could resolve to, once it does.
-      expect(can({ role: "staff", preset: "member" }, c)).toBe(false);
-      expect(can({ role: "staff", preset: "junior" }, c)).toBe(false);
+      expect(can({ role: "staff", permission_preset: "member" }, c)).toBe(false);
+      expect(can({ role: "staff", permission_preset: "junior" }, c)).toBe(false);
     }
   });
 
@@ -254,5 +254,58 @@ describe("owner-only equivalence (guards the call-site migration)", () => {
     // a release that claims to change nothing.
     expect(can({ role: "staff" }, "billing.manage")).toBe(false);
     expect(can({ role: "staff" }, "money.view")).toBe(true);
+  });
+});
+
+// ── THE WIRING TEST ──────────────────────────────────────────────────────────
+//
+// The bug this exists to prevent, caught during Phase 2 and worth a permanent
+// guard: CapabilitySubject's fields were named `preset` and `grants` while the
+// database columns are `permission_preset` and `extra_capabilities`. Passing a
+// real user row into can() therefore read BOTH as undefined — every stored
+// preset silently ignored, and the per-person switches would have written to
+// the database and changed nothing at all. Nothing failed; it just quietly did
+// not work.
+describe("a real users row is a valid subject", () => {
+  // Shaped like AppUser, with the fields that matter spelled exactly as the
+  // columns are. If someone renames either side, this stops compiling or fails.
+  const row = (over: Record<string, unknown> = {}) => ({
+    id: "u-1",
+    firm_id: "f-1",
+    email: "a@b.c",
+    name: "Ash",
+    role: "staff" as const,
+    locale: "en" as const,
+    display_name: null,
+    avatar_path: null,
+    deactivated_at: null,
+    deactivated_by_user_id: null,
+    created_at: "2026-01-01T00:00:00Z",
+    ...over,
+  });
+
+  it("honours a stored preset straight off the row", () => {
+    expect(can(row({ permission_preset: "junior" }), "money.view")).toBe(false);
+    expect(can(row({ permission_preset: "member" }), "money.view")).toBe(true);
+  });
+
+  it("honours a stored grant straight off the row", () => {
+    // The office-manager case: a Junior who may also manage billing.
+    const approver = row({
+      permission_preset: "junior",
+      extra_capabilities: ["billing.manage"],
+    });
+    expect(can(approver, "billing.manage")).toBe(true);
+    expect(can(approver, "money.view")).toBe(false);
+  });
+
+  it("behaves as today when migration 1120 has not been applied", () => {
+    // Both columns come back undefined. That must read as "member", not as
+    // "restricted" — otherwise deploying the code before the migration would
+    // quietly take access away from every staff member in every firm.
+    const before = row();
+    expect(can(before, "money.view")).toBe(true);
+    expect(can(before, "clients.manage")).toBe(true);
+    expect(can(before, "billing.manage")).toBe(false);
   });
 });

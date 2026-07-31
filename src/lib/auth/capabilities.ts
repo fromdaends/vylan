@@ -156,11 +156,18 @@ export function isPreset(value: unknown): value is Preset {
 export type CapabilitySubject = {
   // users.role — the database rank. Two values, forever.
   role: "owner" | "staff" | (string & {});
-  // users.permission_preset, once migration 1040 adds it. Null/absent today,
-  // which is why resolvePreset falls back to the rank.
-  preset?: string | null;
+  // ⚠️ THESE NAMES MATCH THE users COLUMNS EXACTLY, and that is the point. They
+  // were `preset` and `grants` until an AppUser was first passed straight into
+  // can() — at which case both read as undefined, every stored preset was
+  // silently ignored, and the switches would have written to the database while
+  // changing nothing. Naming the fields after the row means an AppUser IS a
+  // valid subject with no mapping step to forget.
+  //
+  // Optional because migration 1120 may not be applied: undefined behaves
+  // exactly like null, which resolves to the member preset.
+  permission_preset?: string | null;
   // users.extra_capabilities — per-person grants on top of the preset.
-  grants?: readonly string[] | null;
+  extra_capabilities?: readonly string[] | null;
 };
 
 // Which preset applies to this person.
@@ -179,7 +186,7 @@ export type CapabilitySubject = {
 // cell hands someone the money.
 export function resolvePreset(subject: CapabilitySubject): Preset {
   if (subject.role === "owner") return "owner";
-  const stored = subject.preset;
+  const stored = subject.permission_preset;
   if (stored == null || stored === "") return "member";
   if (isPreset(stored)) {
     // "owner" in the preset column on a staff row is not a promotion — the rank
@@ -199,7 +206,7 @@ export function capabilitiesFor(
 ): ReadonlySet<Capability> {
   const preset = resolvePreset(subject);
   const base = PRESET_SETS[preset];
-  const grants = subject.grants;
+  const grants = subject.extra_capabilities;
   if (!grants || grants.length === 0) return base;
   const merged = new Set(base);
   for (const g of grants) {
