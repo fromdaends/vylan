@@ -54,6 +54,8 @@ export type MoveResult = {
   succeeded: number;
   failed: number;
   skipped: number;
+  /** Set by bucket moves: the real folder the bucket became. */
+  folderId?: string;
 };
 
 function isSchemaMissing(err: { code?: string | null } | null): boolean {
@@ -369,55 +371,128 @@ export async function moveBucketToFolderAction(input: {
     source: d.source,
     id: d.id,
   }));
-  if (targets.length === 0) return { ok: true, succeeded: 0, failed: 0, skipped: 0 };
 
-  // Find-or-create the real folder. Reusing an existing sibling by name is
-  // deliberate: dropping "2026" where a 2026 already sits should fill THAT
-  // folder, not conjure a duplicate — the sibling-name unique index enforces
-  // the same rule at the database.
+  // The folder is created BEFORE the absorb, and even for an empty bucket:
+  // a caller materializing this bucket as a drop TARGET needs the folder to
+  // exist regardless of how many documents were still unfiled inside it.
+  const destId = await findOrCreateFolder(sb, firm.id, input.clientId, input.folderId, name);
+  if (!destId) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+  if (targets.length === 0) {
+    return { ok: true, succeeded: 0, failed: 0, skipped: 0, folderId: destId };
+  }
+
+  const res = await setDocumentsFolderAction({ targets, folderId: destId });
+  return { ...res, folderId: destId };
+}
+
+/**
+ * Find-or-create a folder by name under a parent. Reusing an existing sibling
+ * by name is deliberate: dropping "2026" where a 2026 already sits should fill
+ * THAT folder, not conjure a duplicate — the sibling-name unique index
+ * enforces the same rule at the database, and a 23505 from a racing drag is
+ * resolved by looking the winner up.
+ */
+async function findOrCreateFolder(
+  sb: Awaited<ReturnType<typeof getServerSupabase>>,
+  firmId: string,
+  clientId: string,
+  parentId: string | null,
+  rawName: string,
+): Promise<string | null> {
+  const name = normalizeFolderName(rawName ?? "");
+  if (!name) return null;
+
   const findExisting = async (): Promise<string | null> => {
     let lookup = sb
       .from("document_folders")
       .select("id")
-      .eq("client_id", input.clientId)
+      .eq("client_id", clientId)
       .eq("name", name)
       .is("deleted_at", null);
-    lookup =
-      input.folderId === null
-        ? lookup.is("parent_id", null)
-        : lookup.eq("parent_id", input.folderId);
+    lookup = parentId === null ? lookup.is("parent_id", null) : lookup.eq("parent_id", parentId);
     const { data: hit } = await lookup.maybeSingle();
     return hit?.id ?? null;
   };
 
-  let destId = await findExisting();
-  if (!destId) {
-    const { data: created, error: cErr } = await sb
-      .from("document_folders")
-      .insert({
-        firm_id: firm.id,
-        client_id: input.clientId,
-        parent_id: input.folderId,
-        name,
-      })
-      .select("id")
-      .single();
-    if (cErr) {
-      // 23505 = two drags raced on the same name; the folder exists now.
-      destId = cErr.code === "23505" ? await findExisting() : null;
-    } else {
-      destId = created.id;
-      await logUserActivity(firm.id, null, "folder_created", {
-        client_id: input.clientId,
-        folder_id: destId,
-        parent_id: input.folderId,
-        via: "bucket_drop",
-      });
-    }
-  }
-  if (!destId) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+  const existing = await findExisting();
+  if (existing) return existing;
 
-  return setDocumentsFolderAction({ targets, folderId: destId });
+  const { data: created, error: cErr } = await sb
+    .from("document_folders")
+    .insert({ firm_id: firmId, client_id: clientId, parent_id: parentId, name })
+    .select("id")
+    .single();
+  if (cErr) {
+    return cErr.code === "23505" ? findExisting() : null;
+  }
+  await logUserActivity(firmId, null, "folder_created", {
+    client_id: clientId,
+    folder_id: created.id,
+    parent_id: parentId,
+    via: "bucket_drop",
+  });
+  return created.id;
+}
+
+/**
+ * Make a DERIVED drop target real, so anything a folder can hold can land on
+ * it.
+ *
+ * The founder's review of the old refusal, verbatim: "I could drop 2026 in
+ * Bookkeeping & business, but I can't drop Bookkeeping & business into 2026.
+ * Now how does that even make sense?" It doesn't. A derived year is an
+ * implementation detail; on screen it is a folder, and a folder takes drops.
+ *
+ * Same rule as dragging a derived folder: touching it makes it real. Dropping
+ * onto the year row "2026" finds-or-creates a real folder named 2026 at the
+ * top level and files that year's unfiled documents into it — the automatic
+ * row disappears, the real folder stands in its place, and the dragged thing
+ * then lands INSIDE it. A category target does the same nested inside its
+ * year ("2025/Bookkeeping & business"), with the year folder as scaffolding.
+ */
+export async function materializeBucketTargetAction(input: {
+  clientId: string;
+  year?: number | null;
+  yearSet?: boolean;
+  /** Display name for the year folder — "2026", or the localized Unsorted. */
+  yearName?: string;
+  category?: string | null;
+  categorySet?: boolean;
+  /** Localized display name for the category folder. */
+  categoryName?: string;
+}): Promise<{ ok: boolean; folderId: string | null }> {
+  const firm = await getCurrentFirm();
+  if (!firm || !input.clientId) return { ok: false, folderId: null };
+
+  if (input.categorySet) {
+    // Year folder as scaffolding only — it absorbs nothing itself; the
+    // category's documents go into the category folder inside it.
+    let parent: string | null = null;
+    if (input.yearSet) {
+      const sb = await getServerSupabase();
+      parent = await findOrCreateFolder(sb, firm.id, input.clientId, null, input.yearName ?? "");
+      if (!parent) return { ok: false, folderId: null };
+    }
+    const r = await moveBucketToFolderAction({
+      clientId: input.clientId,
+      year: input.year,
+      yearSet: input.yearSet,
+      category: input.category,
+      categorySet: true,
+      folderId: parent,
+      bucketName: input.categoryName ?? "",
+    });
+    return { ok: r.ok, folderId: r.folderId ?? null };
+  }
+
+  const r = await moveBucketToFolderAction({
+    clientId: input.clientId,
+    year: input.year,
+    yearSet: input.yearSet,
+    folderId: null,
+    bucketName: input.yearName ?? "",
+  });
+  return { ok: r.ok, folderId: r.folderId ?? null };
 }
 
 /**

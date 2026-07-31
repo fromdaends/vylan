@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/cn";
 import { bulkMoveDocumentsAction } from "@/app/actions/documents";
 import {
+  materializeBucketTargetAction,
   moveBucketToFolderAction,
   moveFolderAction,
   setDocumentsFolderAction,
@@ -56,11 +57,22 @@ import { hideDragGhost, showDragGhost } from "./drag-ghost";
 const MIME_DOCS = "application/x-vylan-documents";
 const MIME_MOVE = "application/x-vylan-foldermove";
 
-/** What a folder row does when something is dropped ON it. */
+/** What a folder row does when something is dropped ON it. Derived targets
+ * carry their DISPLAY NAMES because dropping a folder on one materializes it
+ * — the server needs to know what to call the real folder it creates. */
 export type DropTarget =
   | { kind: "folder"; folderId: string | null }
-  | { kind: "year"; year: number | null }
-  | { kind: "category"; category: string | null };
+  | { kind: "year"; year: number | null; label: string }
+  | {
+      kind: "category";
+      category: string | null;
+      label: string;
+      /** The year view this category row sits inside, so materializing it can
+       * scaffold the real year folder around it ("2025/Bookkeeping"). */
+      year?: number | null;
+      yearSet?: boolean;
+      yearLabel?: string;
+    };
 
 /** What is being dragged. */
 export type DragPayload =
@@ -271,12 +283,12 @@ export function FolderDropTarget({
   /** Whether this row can take what is currently being carried. */
   function accepts(e: React.DragEvent): boolean {
     const types = e.dataTransfer.types;
-    if (types.includes(MIME_DOCS)) return true;
-    // A folder, or a whole year's worth of documents — needs a real folder to
-    // land in. Years and categories are computed, so nothing can move "into"
-    // one.
-    if (types.includes(MIME_MOVE)) return target.kind === "folder";
-    return false;
+    // Documents AND folders land on anything folder-shaped. Derived targets
+    // (a year, a category) MATERIALIZE on drop — see onDrop — so there is no
+    // longer a folder-shaped row that refuses a folder-shaped thing. "I can
+    // drop 2026 into Bookkeeping & business but not Bookkeeping & business
+    // into 2026" was the review of the old asymmetry, and it was correct.
+    return types.includes(MIME_DOCS) || types.includes(MIME_MOVE);
   }
 
   function onDrop(e: React.DragEvent) {
@@ -311,23 +323,110 @@ export function FolderDropTarget({
       return;
     }
 
+    // The truthful ending shared by every document-moving path: the row
+    // vanishes the moment the database confirms a real change, undims when
+    // nothing changed, and the toast reports exactly which of those happened.
+    function settle(
+      res: { ok: boolean; succeeded: number; failed: number; skipped: number },
+      success: string,
+    ) {
+      selection?.clear();
+      if (res.succeeded > 0) drag?.hide();
+      else drag?.release();
+      router.refresh();
+      if (res.failed > 0 && res.succeeded > 0) {
+        toast.warning(t("bulk_partial", { done: res.succeeded, failed: res.failed }));
+      } else if (res.failed > 0) {
+        toast.error(t("action_failed"));
+      } else if (res.succeeded > 0) {
+        toast.success(success);
+      } else if (res.skipped > 0) {
+        toast.info(t("drop_already_there", { folder: label }));
+      } else {
+        toast.info(t("drop_nothing"));
+      }
+    }
+
     startTransition(async () => {
-      // ── a folder dropped on a folder: re-parent it ──────────────────────
-      if (payload.kind === "folder") {
-        if (target.kind !== "folder") {
-          // A real folder has no meaning inside a computed year or category.
+      // ── documents: file into a real folder, or set the axis on a derived
+      //    one. No materialization needed — a file dropped on "2026" IS
+      //    inside 2026 when you open it; the derived view answers by
+      //    attribute ─────────────────────────────────────────────────────
+      if (payload.kind === "documents") {
+        if (payload.items.length === 0) {
           drag?.release();
-          toast.error(t("drop_folder_not_allowed"));
           return;
         }
-        if (target.folderId === payload.folderId) {
+        const res =
+          target.kind === "folder"
+            ? await setDocumentsFolderAction({
+                targets: payload.items,
+                folderId: target.folderId,
+              })
+            : await bulkMoveDocumentsAction({
+                targets: payload.items,
+                // "unsorted" is a real destination, not the absence of one —
+                // the Unsorted folder has to be droppable like any other.
+                year:
+                  target.kind === "year"
+                    ? target.year == null
+                      ? "unsorted"
+                      : String(target.year)
+                    : undefined,
+                category:
+                  target.kind === "category"
+                    ? (target.category ?? "unsorted")
+                    : undefined,
+              });
+        settle(res, t("drop_done", { count: res.succeeded, folder: label }));
+        return;
+      }
+
+      // ── a folder, or a whole derived folder: the destination must be a
+      //    REAL folder, so a derived target MATERIALIZES first — the same
+      //    rule as dragging one: touching it makes it real. Dropping onto
+      //    "2026" turns 2026 into a real folder (absorbing its unfiled
+      //    documents) and the dragged thing lands INSIDE it ───────────────
+      let destId: string | null;
+      if (target.kind === "folder") {
+        destId = target.folderId;
+      } else {
+        const made = await materializeBucketTargetAction(
+          target.kind === "year"
+            ? {
+                clientId: payload.clientId,
+                year: target.year,
+                yearSet: true,
+                yearName: target.label,
+              }
+            : {
+                clientId: payload.clientId,
+                year: target.year,
+                yearSet: target.yearSet,
+                yearName: target.yearLabel,
+                category: target.category,
+                categorySet: true,
+                categoryName: target.label,
+              },
+        );
+        if (!made.ok || !made.folderId) {
+          drag?.release();
+          toast.error(t("action_failed"));
+          return;
+        }
+        destId = made.folderId;
+      }
+
+      // ── a folder: re-parent it into the destination ─────────────────────
+      if (payload.kind === "folder") {
+        if (destId === payload.folderId) {
           drag?.release();
           return; // onto itself
         }
         const moved = await moveFolderAction({
           clientId: payload.clientId,
           folderId: payload.folderId,
-          newParentId: target.folderId,
+          newParentId: destId,
         });
         if (!moved.ok) {
           // "cycle" gets its own message: "a folder can't go inside itself"
@@ -355,80 +454,19 @@ export function FolderDropTarget({
         return;
       }
 
-      // ── everything else moves documents ─────────────────────────────────
-      let res: { ok: boolean; succeeded: number; failed: number; skipped: number };
-
-      if (payload.kind === "bucket") {
-        if (target.kind !== "folder") {
-          drag?.release();
-          toast.error(t("drop_folder_not_allowed"));
-          return;
-        }
-        res = await moveBucketToFolderAction({
-          clientId: payload.clientId,
-          year: payload.year,
-          yearSet: payload.yearSet,
-          category: payload.category,
-          categorySet: payload.categorySet,
-          folderId: target.folderId,
-          bucketName: payload.label,
-        });
-      } else {
-        if (payload.items.length === 0) {
-          drag?.release();
-          return;
-        }
-        res =
-          target.kind === "folder"
-            ? await setDocumentsFolderAction({
-                targets: payload.items,
-                folderId: target.folderId,
-              })
-            : await bulkMoveDocumentsAction({
-                targets: payload.items,
-                // "unsorted" is a real destination, not the absence of one —
-                // the Unsorted folder has to be droppable like any other.
-                year:
-                  target.kind === "year"
-                    ? target.year == null
-                      ? "unsorted"
-                      : String(target.year)
-                    : undefined,
-                category:
-                  target.kind === "category"
-                    ? (target.category ?? "unsorted")
-                    : undefined,
-              });
-      }
-
-      selection?.clear();
-      // The row disappears the moment the database confirms — not when the
-      // refresh eventually redraws the page. "Make things move and disappear
-      // in their column": this is the disappear.
-      if (res.succeeded > 0) drag?.hide();
-      else drag?.release();
-      router.refresh();
-      // Report what actually happened. Anything that claims a move over a
-      // screen that did not change reads as the app being broken — which is
-      // exactly how "14 files moved" landed when all 14 were already there.
-      if (res.failed > 0 && res.succeeded > 0) {
-        toast.warning(t("bulk_partial", { done: res.succeeded, failed: res.failed }));
-      } else if (res.failed > 0) {
-        toast.error(t("action_failed"));
-      } else if (res.succeeded > 0) {
-        // A nested bucket reads as a folder move ("2026 moved into Taxes"),
-        // not as a file count — the person dragged a FOLDER, and the answer
-        // should name the thing they dragged.
-        toast.success(
-          payload.kind === "bucket"
-            ? t("drop_nested", { name: payload.label, folder: label })
-            : t("drop_done", { count: res.succeeded, folder: label }),
-        );
-      } else if (res.skipped > 0) {
-        toast.info(t("drop_already_there", { folder: label }));
-      } else {
-        toast.info(t("drop_nothing"));
-      }
+      // ── a derived folder: nest it inside the destination. The toast names
+      //    the thing that was dragged ("Moved 2026 into Taxes"), not a file
+      //    count — the person dragged a FOLDER ──────────────────────────────
+      const res = await moveBucketToFolderAction({
+        clientId: payload.clientId,
+        year: payload.year,
+        yearSet: payload.yearSet,
+        category: payload.category,
+        categorySet: payload.categorySet,
+        folderId: destId,
+        bucketName: payload.label,
+      });
+      settle(res, t("drop_nested", { name: payload.label, folder: label }));
     });
   }
 
