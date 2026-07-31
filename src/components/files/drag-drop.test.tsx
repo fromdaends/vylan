@@ -70,7 +70,7 @@ describe("dead-drop feedback", () => {
   it("a year folder released over nothing explains that years are automatic", () => {
     wrap(
       <DraggableFolder
-        moves={{ kind: "bucket", clientId: "c1", year: 2026, yearSet: true }}
+        moves={{ kind: "bucket", clientId: "c1", year: 2026, yearSet: true, label: "2026" }}
         name="2026"
       >
         <span>2026</span>
@@ -112,7 +112,7 @@ describe("dead-drop feedback", () => {
   it("an ACCEPTED drop stays silent here — the drop handler owns that toast", () => {
     wrap(
       <DraggableFolder
-        moves={{ kind: "bucket", clientId: "c1", year: 2026, yearSet: true }}
+        moves={{ kind: "bucket", clientId: "c1", year: 2026, yearSet: true, label: "2026" }}
         name="2026"
       >
         <span>2026</span>

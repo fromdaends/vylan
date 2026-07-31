@@ -230,6 +230,14 @@ async function BrowseTab({
     { label: t("path_root"), href: "/files" },
   ];
   if (clientHeader) {
+    // Inside a client, the root crumb is a legal destination too — it means
+    // the top level of this client's files, same as the client's own crumb.
+    // "They should be free to put folders wherever they like": with the no-op
+    // guard in the move actions, a drop that changes nothing says so instead
+    // of inventing a success, so there is no reason left to refuse the drop.
+    segments[0].drop = { kind: "folder" as const, folderId: null };
+  }
+  if (clientHeader) {
     segments.push({
       label: clientHeader.name,
       href: buildQuery({ client: clientHeader.id, folder: null, year: null, category: null, page: null }),
@@ -567,9 +575,8 @@ async function FolderLevel({
       // gesture as dropping on a custom folder, because to the person dragging
       // there is no difference between the two.
       dropTarget: { kind: "category" as const, category: c.category },
-      // Dragging a category folder AWAY moves everything in it. There is no
-      // row to re-parent — the folder is computed from the documents — so the
-      // only honest meaning for the gesture is "put this lot over there".
+      // Dragging a category folder away NESTS it at the destination: a real
+      // folder with this name is created there and the documents go inside.
       dragPayload: {
         kind: "bucket" as const,
         clientId,
@@ -577,6 +584,7 @@ async function FolderLevel({
         yearSet: true,
         category: c.category,
         categorySet: true,
+        label: c.category ? docTypeGroupLabel(c.category, locale) : t("unsorted"),
       },
     }));
     return (
@@ -618,13 +626,15 @@ async function FolderLevel({
     // destination too — y.year is null there, which the drop handler sends as
     // the Unsorted bucket rather than as "leave it alone".
     dropTarget: { kind: "year" as const, year: y.year },
-    // Dragging a whole year onto a custom folder files that year's documents
-    // there — "put 2024 in the archive folder" in one gesture.
+    // Dragging a whole year onto a folder nests it: the destination gains a
+    // real "2024" folder with that year's documents inside — "put 2024 in
+    // the archive" in one gesture, keeping its name.
     dragPayload: {
       kind: "bucket" as const,
       clientId,
       year: y.year,
       yearSet: true,
+      label: y.year != null ? String(y.year) : t("unsorted"),
     },
   }));
   void yearParam;
