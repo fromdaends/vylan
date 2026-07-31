@@ -277,6 +277,12 @@ export async function getClientDocumentTree(clientId: string): Promise<{
     .from("firm_documents")
     .select("browse_year, browse_category, created_at")
     .eq("client_id", clientId)
+    // Only UNFILED documents build the year and category folders. Once a
+    // document is filed into a folder the firm made, that folder is where it
+    // lives — leaving it in the derived view too would mean the same document
+    // appearing in two places, which is exactly what made a move look like it
+    // had not happened.
+    .is("folder_id", null)
     .is("deleted_at", null);
   if (error) {
     if (!isFilesSchemaMissing(error)) {
@@ -381,11 +387,23 @@ export type DocumentFilters = {
   /** True = the Recently deleted view. */
   deleted?: boolean;
   /**
-   * A custom folder's contents. undefined = don't filter on folder at all;
-   * a string = that folder. The two are NOT the same and conflating them
-   * would make every folder show the whole client's documents.
+   * Which folder's contents to show. THREE distinct states:
+   *
+   *   a string  — that folder.
+   *   null      — the top level: documents not filed into any folder.
+   *   undefined — no folder filter at all, i.e. everywhere.
+   *
+   * Conflating the last two is what made moving a file look like it did
+   * nothing. Filing a document into a folder wrote folder_id correctly, but
+   * the year and category views never excluded filed documents — so the file
+   * you just moved was still sitting in the list you moved it out of. It had
+   * moved; the screen simply never stopped showing it.
+   *
+   * A document lives in exactly ONE place, the way it does in Finder or Drive.
+   * `undefined` stays available for SEARCH, where the opposite is true: a
+   * search that can't see inside folders is worse than useless.
    */
-  folderId?: string;
+  folderId?: string | null;
 };
 
 export type DocumentPage = {
@@ -451,7 +469,13 @@ export async function listDocuments(
     : q.is("deleted_at", null);
 
   if (filters.clientId) q = q.eq("client_id", filters.clientId);
-  if (filters.folderId) q = q.eq("folder_id", filters.folderId);
+  // See the folderId doc comment: `null` is the top level, not "no filter".
+  if (filters.folderId !== undefined) {
+    q =
+      filters.folderId === null
+        ? q.is("folder_id", null)
+        : q.eq("folder_id", filters.folderId);
+  }
   // yearSet distinguishes "any year" from "the Unsorted bucket". Without it,
   // a null year is indistinguishable from no filter at all and the Unsorted
   // folder would silently show everything.
