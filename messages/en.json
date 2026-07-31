@@ -1689,7 +1689,9 @@
     "xero_disconnect_error": "Couldn't disconnect. Try again.",
     "xero_encryption_required": "Xero isn't ready for live connections yet.",
     "view_files": "View files",
-    "tab_overview": "Overview"
+    "tab_overview": "Overview",
+    "about_title": "About",
+    "client_since": "Client since"
   },
   "Engagements": {
     "add_comment": "Add a comment",

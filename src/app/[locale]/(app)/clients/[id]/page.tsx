@@ -321,6 +321,46 @@ export default async function ClientDetailPage({
             value={client.external_ref}
             mono
           />
+        </dl>
+      </Panel>
+
+      {/* About — the reference card Canopy carries and Vylan didn't. Every
+          field here already existed on the client and had a label; they were
+          just scattered (type and language sat as badges in the header,
+          industry and province had nowhere to show at all, and Notes was
+          filed under "Contact info", which it is not).
+          Nothing invented: no Spouse, no Dependents, no date of birth. Those
+          are the reference's US-1040 fields and Vylan has no column for any of
+          them — see the PR body.
+          province / industry / timezone come from migration 0220 and may be
+          undefined at runtime until it is applied, so each is read with ?? null
+          and DetailRow renders "Not specified" rather than a blank row. */}
+      <Panel title={t("about_title")}>
+        <dl className="space-y-3 text-sm">
+          <DetailRow
+            label={t("field_type")}
+            value={
+              client.type === "individual"
+                ? t("type_individual")
+                : t("type_business")
+            }
+          />
+          <DetailRow
+            label={t("field_industry")}
+            value={client.industry ?? null}
+          />
+          <DetailRow
+            label={t("field_province")}
+            value={client.province ?? null}
+          />
+          <DetailRow
+            label={t("field_locale")}
+            value={client.locale === "fr" ? "Français" : "English"}
+          />
+          <DetailRow
+            label={t("client_since")}
+            value={formatDate(client.created_at, locale, "medium")}
+          />
           <DetailRow label={t("field_notes")} value={client.notes} wide />
         </dl>
       </Panel>
