@@ -25,7 +25,13 @@ import {
 } from "@/lib/files/folder-tree";
 
 export type FolderActionResult =
-  | { ok: true; id?: string }
+  | {
+      ok: true;
+      id?: string;
+      /** The folder was already exactly where it was being moved — nothing
+       * changed, and the caller must say THAT, not "Moved". */
+      noop?: boolean;
+    }
   | {
       ok: false;
       error: "invalid" | "name_taken" | "cycle" | "not_found" | "unavailable" | "error";
@@ -167,6 +173,15 @@ export async function moveFolderAction(input: {
   const { folders } = await listClientFolders(input.clientId);
   const self = folders.find((f) => f.id === input.folderId);
   if (!self) return { ok: false, error: "not_found" };
+
+  // Moving a folder to the place it already is is NOT a move. Documents got
+  // this guard in the "stop reporting moves that did not happen" fix; folders
+  // never did — so dropping a folder onto the crumb of the folder it was
+  // already in answered "Moved to hello." over an unchanged screen. Nothing
+  // is written, nothing is logged, and the caller says "already there".
+  if ((input.newParentId ?? null) === (self.parentId ?? null)) {
+    return { ok: true, noop: true };
+  }
 
   // THE guard. Dropping a folder into its own descendant detaches that whole
   // branch from the root: it becomes invisible in the UI and every ancestor
