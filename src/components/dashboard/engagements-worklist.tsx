@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { EngagementReassignMenu } from "@/components/engagements/engagement-reassign-menu";
 import { PresenceFaces } from "@/components/engagements/presence-faces";
@@ -45,6 +45,7 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuSub,
   ContextMenuSubContent,
   ContextMenuSubTrigger,
@@ -54,6 +55,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -958,7 +960,7 @@ function WorklistRowView({
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44">
-                  {items.map((it) => {
+                  {items.map((it, i) => {
                     const Icon = it.icon;
                     // A submenu item (the Stage picker) opens a child list
                     // instead of acting on click.
@@ -994,14 +996,21 @@ function WorklistRowView({
                       );
                     }
                     return (
-                      <DropdownMenuItem
-                        key={it.key}
-                        variant={it.variant}
-                        onSelect={it.onSelect}
-                      >
-                        <Icon />
-                        {it.label}
-                      </DropdownMenuItem>
+                      <Fragment key={it.key}>
+                        {/* Destructive actions get their own group, the way Drive
+                            fences off "Move to trash" — a stray click on Delete is
+                            the one that actually costs something. */}
+                        {it.variant === "destructive" && i > 0 && (
+                          <DropdownMenuSeparator />
+                        )}
+                        <DropdownMenuItem
+                          variant={it.variant}
+                          onSelect={it.onSelect}
+                        >
+                          <Icon />
+                          {it.label}
+                        </DropdownMenuItem>
+                      </Fragment>
                     );
                   })}
                 </DropdownMenuContent>
@@ -1010,7 +1019,7 @@ function WorklistRowView({
           </TableRow>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-44">
-          {items.map((it) => {
+          {items.map((it, i) => {
             const Icon = it.icon;
             if (it.submenu) {
               return (
@@ -1044,14 +1053,18 @@ function WorklistRowView({
               );
             }
             return (
-              <ContextMenuItem
-                key={it.key}
-                variant={it.variant}
-                onSelect={it.onSelect}
-              >
-                <Icon />
-                {it.label}
-              </ContextMenuItem>
+              <Fragment key={it.key}>
+                {it.variant === "destructive" && i > 0 && (
+                  <ContextMenuSeparator />
+                )}
+                <ContextMenuItem
+                  variant={it.variant}
+                  onSelect={it.onSelect}
+                >
+                  <Icon />
+                  {it.label}
+                </ContextMenuItem>
+              </Fragment>
             );
           })}
         </ContextMenuContent>

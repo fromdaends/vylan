@@ -1,4 +1,5 @@
 "use client";
+import { Fragment } from "react";
 
 import { Link } from "@/i18n/navigation";
 import {
@@ -16,12 +17,14 @@ import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -155,17 +158,21 @@ export function NeedsAttentionRow({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44">
-                {items.map((it) => {
+                {items.map((it, i) => {
                   const Icon = it.icon;
                   return (
-                    <DropdownMenuItem
-                      key={it.key}
-                      variant={it.variant}
-                      onSelect={it.onSelect}
-                    >
-                      <Icon />
-                      {it.label}
-                    </DropdownMenuItem>
+                    <Fragment key={it.key}>
+                      {it.variant === "destructive" && i > 0 && (
+                        <DropdownMenuSeparator />
+                      )}
+                      <DropdownMenuItem
+                        variant={it.variant}
+                        onSelect={it.onSelect}
+                      >
+                        <Icon />
+                        {it.label}
+                      </DropdownMenuItem>
+                    </Fragment>
                   );
                 })}
               </DropdownMenuContent>
@@ -173,17 +180,21 @@ export function NeedsAttentionRow({
           </li>
         </ContextMenuTrigger>
         <ContextMenuContent className="w-44">
-          {items.map((it) => {
+          {items.map((it, i) => {
             const Icon = it.icon;
             return (
-              <ContextMenuItem
-                key={it.key}
-                variant={it.variant}
-                onSelect={it.onSelect}
-              >
-                <Icon />
-                {it.label}
-              </ContextMenuItem>
+              <Fragment key={it.key}>
+                {it.variant === "destructive" && i > 0 && (
+                  <ContextMenuSeparator />
+                )}
+                <ContextMenuItem
+                  variant={it.variant}
+                  onSelect={it.onSelect}
+                >
+                  <Icon />
+                  {it.label}
+                </ContextMenuItem>
+              </Fragment>
             );
           })}
         </ContextMenuContent>
