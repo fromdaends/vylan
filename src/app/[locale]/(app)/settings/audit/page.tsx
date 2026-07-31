@@ -7,6 +7,7 @@ import {
   listFirmUsers,
   userDisplayLabel,
 } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { listClients } from "@/lib/db/clients";
 import {
   listActivityForFirm,
@@ -40,11 +41,15 @@ export default async function AuditLogPage({
   const locale = assertLocale(rawLocale);
   setRequestLocale(locale);
 
-  // Owner-only — matches the gating on the existing Data & Privacy
-  // section in /settings. Staff members get a 404 rather than a 403 so
-  // the page's existence isn't leaked to non-owners.
+  // Owner-only, via the shared capability rather than an inline role check.
+  // Staff get a 404 rather than a 403 so the page's existence is not leaked.
+  //
+  // audit.view was OPEN to Member and Junior in the capability model until this
+  // change — a stale belief left there after #1044 reversed it in the app.
+  // Converting this line without fixing that would have silently re-opened the
+  // log to every member inside a release claiming to change nothing.
   const user = await getCurrentUser();
-  if (!user || user.role !== "owner") {
+  if (!can(user, "audit.view")) {
     notFound();
   }
 

@@ -67,9 +67,21 @@ export const CAPABILITIES = [
   // engagement_is_private() in 0810 is the real gate. This exists so the UI can
   // stop rendering controls the database will refuse anyway.
   "clients.private",
-  // The activity log at /settings/audit. Open to Member AND Junior: the log
-  // answers "what happened to this file", which is the question staff ask, and
-  // activity_log_select already drops private-client rows per viewer.
+  // The activity log at /settings/audit. OWNER-ONLY.
+  //
+  // This carried the opposite comment until now, and it was wrong — a stale
+  // belief left in the model after the app reversed it. It read "open to Member
+  // and Junior: the log answers what happened to this file, which is the
+  // question staff ask". The founder rejected that (PR #1044) and the objection
+  // was never client privacy, which is what that reasoning answered. It is that
+  // a feed of everything one teammate did should not be readable by their
+  // colleagues. That is surveillance of the firm's own staff, and per-viewer
+  // row filtering does nothing about it.
+  //
+  // Left uncorrected, this was a live trap: converting the audit page's inline
+  // check to can(user, "audit.view") would have silently RE-OPENED the log to
+  // every member inside a release claiming to change nothing. The owner-only
+  // equivalence test is what caught it.
   "audit.view",
 
   // ── Bookkeeping ───────────────────────────────────────────────────────────
@@ -105,15 +117,17 @@ export const FALLBACK_PRESET: Preset = "junior";
 // gates that did not exist. Junior is where they start to bite.)
 const PRESET_CAPABILITIES: Record<Preset, readonly Capability[]> = {
   owner: CAPABILITIES,
-  member: [
-    "money.view",
-    "clients.manage",
-    "audit.view",
-  ],
-  // Junior: does the work, sees the record of it, stays out of the money.
-  // Deliberately NOT a third database rank — a preset, so a firm can move
-  // someone between Junior and Member without touching users.role.
-  junior: ["audit.view"],
+  member: ["money.view", "clients.manage"],
+  // Junior: does the work and stays out of the money. Deliberately NOT a third
+  // database rank — a preset, so a firm can move someone between Junior and
+  // Member without touching users.role.
+  //
+  // EMPTY, and that is correct rather than an oversight: everything a Junior
+  // does today — opening work, uploading, completing — is ungated in the app,
+  // so there is no capability to name for it. A Junior is defined by what they
+  // CANNOT do. The first entry here will be Phase 8's time.approve, as a named
+  // grant rather than a preset member.
+  junior: [],
 };
 
 // Pre-built sets so `can()` is a hash lookup rather than a scan of an array.

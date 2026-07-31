@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { assertLocale } from "@/lib/locale";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { gatherHealthFacts } from "@/lib/health/probe";
 import { assessHealth, overallLevel, type Level } from "@/lib/health/verdict";
@@ -34,7 +35,7 @@ export default async function SystemCheckPage({
   // leaked to staff — the same gating the audit log uses. The probe runs with
   // the service role, so this check is the only thing standing in front of it.
   const user = await getCurrentUser();
-  if (!user || user.role !== "owner") notFound();
+  if (!can(user, "firm.settings")) notFound();
   const firm = await getCurrentFirm();
   if (!firm) notFound();
 
