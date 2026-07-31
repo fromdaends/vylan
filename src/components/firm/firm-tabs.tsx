@@ -49,10 +49,14 @@ export function FirmTabs({
 
   return (
     // The row scrolls rather than wrapping: a tab strip that wraps onto a second
-    // line stops reading as a strip. -mx/px pairs let it bleed to the content
-    // edge on a phone while keeping the first tab aligned with the heading.
-    <div className="-mx-4 overflow-x-auto border-b border-border/60 px-4 sm:mx-0 sm:px-0">
-      <nav className="flex min-w-max gap-1" aria-label="Firm">
+    // line stops reading as a strip.
+    //
+    // It lives INSIDE the header card now (see TeamManager), on its bottom
+    // edge, so the border here is a top border joining it to the identity above
+    // rather than a bottom border floating over the content below. Same
+    // treatment as the client and teammate pages.
+    <div className="overflow-x-auto border-t border-border/60 px-2">
+      <nav className="flex min-w-max" aria-label="Firm">
         {tabs.map((tab) => {
           const active = tab.key === current;
           return (

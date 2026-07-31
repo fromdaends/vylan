@@ -179,9 +179,13 @@ export function TeamManager({
       : Math.min(100, Math.round((seat.used / seat.cap) * 100));
 
   return (
-    <section className="space-y-10">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+    <section className="space-y-6">
+      {/* Identity and the section tabs are one bordered object, the same shape
+          the client and teammate pages now use. The three profile-ish screens
+          in the app had three different header treatments; now they read as
+          the same kind of page. */}
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+      <div className="flex flex-wrap items-start justify-between gap-3 p-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {firmName}
@@ -260,6 +264,10 @@ export function TeamManager({
           )}
         </div>
       </div>
+      {/* The tab row sits on the card's bottom edge with the active tab
+          underlined — FirmTabs draws it. */}
+      {tabs}
+      </div>
 
       {/* Firm settings dialog (opened from the ⋯ menu). */}
       {firmSettings && (
@@ -274,7 +282,6 @@ export function TeamManager({
         </Dialog>
       )}
 
-      {tabs}
 
       {/* Seat usage — a fact about the FIRM (what you are paying for), not about
           any one person, so it lives on the Firm tab. */}
@@ -319,9 +326,12 @@ export function TeamManager({
           showing who they are + their live workload (Active / To review / Needs
           attention / Clients), so there's no separate duplicate table. Stats show
           for owners only; unowned work rolls into a trailing "Unassigned" row. */}
-      <div>
-        <h2 className="text-sm font-semibold">{t("section_active")}</h2>
-        <div className="mt-3 overflow-hidden rounded-xl border border-border/60 bg-card">
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+        <div className="border-b border-border/60 px-4 py-2.5">
+          <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
+            {t("section_active")}
+          </h2>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -412,15 +422,18 @@ export function TeamManager({
             </tbody>
           </table>
         </div>
-        </div>
       </div>
 
       {/* Pending invitations — only rendered when there ACTUALLY are some
           (owner-only; hidden on trial — none can exist). No empty-state box. */}
       {canManage && !onTrial && pendingInvites.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold">{t("section_pending")}</h2>
-          <div className="mt-3 border-t border-border/60">
+        <div className="overflow-hidden rounded-xl border border-border/60 bg-card">
+          <div className="border-b border-border/60 px-4 py-2.5">
+            <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
+              {t("section_pending")}
+            </h2>
+          </div>
+          <div>
             {pendingInvites.map((inv) => (
               <InviteRow key={inv.id} invite={inv} locale={locale} />
             ))}
