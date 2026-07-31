@@ -109,6 +109,24 @@ function iconForMime(mime: string | null): LucideIcon {
   return File;
 }
 
+/** Wraps a row in a drop target only when it declares one. */
+function MaybeDropTarget({
+  drop,
+  label,
+  children,
+}: {
+  drop?: DropTarget;
+  label: string;
+  children: React.ReactNode;
+}) {
+  if (!drop) return <>{children}</>;
+  return (
+    <FolderDropTarget target={drop} label={label}>
+      {children}
+    </FolderDropTarget>
+  );
+}
+
 export async function FileBrowser({
   entries,
   locale,
@@ -143,11 +161,13 @@ export async function FileBrowser({
                  Nesting a button inside an anchor means every click on it also
                  navigates: the menu opens and is then torn down by the
                  navigation before the dialog can render. Same reason file rows
-                 are not wrapped in a link at all. */
-              <FolderDropTarget
-                target={entry.dropTarget ?? { kind: "folder", folderId: null }}
-                label={entry.name}
-              >
+                 are not wrapped in a link at all.
+
+                 A row is a drop target ONLY if it declares one. The old
+                 fallback to "move to the top level" meant a CLIENT row on the
+                 root list accepted documents and answered "moved" while
+                 changing nothing — they were already at the top level. */
+              <MaybeDropTarget drop={entry.dropTarget} label={entry.name}>
               <DraggableFolder moves={entry.dragPayload ?? null} name={entry.name}>
               <div className={cn(ROW_CLASS, "gap-0 p-0")}>
               <Link
@@ -185,7 +205,7 @@ export async function FileBrowser({
                 </span>
               </div>
               </DraggableFolder>
-              </FolderDropTarget>
+              </MaybeDropTarget>
             ) : (
               // A FILE row is NOT wrapped in a link, even once preview exists:
               // the "From" cell holds its own link to the source engagement, and

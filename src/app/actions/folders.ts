@@ -33,6 +33,23 @@ export type FolderActionResult =
 
 const DOC_TABLES = ["uploaded_files", "final_documents", "imported_documents"] as const;
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The outcome of moving documents.
+ *
+ * `skipped` is the one that matters: documents that were ALREADY where they
+ * were being dropped. Counting those as moved is what let the UI report
+ * "14 files moved" over a screen where nothing changed.
+ */
+export type MoveResult = {
+  ok: boolean;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+};
+
 function isSchemaMissing(err: { code?: string | null } | null): boolean {
   return (
     err?.code === "PGRST204" ||
@@ -288,16 +305,18 @@ export async function moveBucketToFolderAction(input: {
   category?: string | null;
   categorySet?: boolean;
   folderId: string | null;
-}): Promise<{ ok: boolean; succeeded: number; failed: number }> {
+}): Promise<MoveResult> {
   const firm = await getCurrentFirm();
-  if (!firm || !input.clientId) return { ok: false, succeeded: 0, failed: 0 };
+  if (!firm || !input.clientId) {
+    return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+  }
   const sb = await getServerSupabase();
 
   // Read the bucket through the view, so RLS decides which documents this user
   // may touch — the same gate every other document read uses.
   let q = sb
     .from("firm_documents")
-    .select("source, id")
+    .select("source, id, folder_id")
     .eq("client_id", input.clientId)
     .is("deleted_at", null);
   if (input.yearSet) {
@@ -310,15 +329,23 @@ export async function moveBucketToFolderAction(input: {
         : q.eq("browse_category", input.category);
   }
   const { data, error } = await q.limit(500);
-  if (error || !data) return { ok: false, succeeded: 0, failed: 0 };
+  if (error || !data) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
 
-  return setDocumentsFolderAction({
-    targets: (data as Array<{ source: string; id: string }>).map((d) => ({
-      source: d.source,
-      id: d.id,
-    })),
+  const rows = data as Array<{ source: string; id: string; folder_id: string | null }>;
+  // Documents already in the destination are not moved and are not counted as
+  // moved. Dropping a year onto the folder it already lives in should say so,
+  // not report a number that makes the unchanged screen look like a bug.
+  const targets = rows.filter((d) => d.folder_id !== input.folderId);
+  const alreadyThere = rows.length - targets.length;
+
+  if (targets.length === 0) {
+    return { ok: true, succeeded: 0, failed: 0, skipped: alreadyThere };
+  }
+  const res = await setDocumentsFolderAction({
+    targets: targets.map((d) => ({ source: d.source, id: d.id })),
     folderId: input.folderId,
   });
+  return { ...res, skipped: res.skipped + alreadyThere };
 }
 
 /**
@@ -330,9 +357,14 @@ export async function moveBucketToFolderAction(input: {
 export async function setDocumentsFolderAction(input: {
   targets: { source: string; id: string }[];
   folderId: string | null;
-}): Promise<{ ok: boolean; succeeded: number; failed: number }> {
+}): Promise<MoveResult> {
   const firm = await getCurrentFirm();
-  if (!firm) return { ok: false, succeeded: 0, failed: 0 };
+  if (!firm) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+  // Interpolated into a PostgREST `or=` filter below, so it must be proven to
+  // be a uuid and nothing else.
+  if (input.folderId !== null && !UUID_RE.test(input.folderId)) {
+    return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+  }
   const sb = await getServerSupabase();
 
   const TABLE: Record<string, string> = {
@@ -343,20 +375,30 @@ export async function setDocumentsFolderAction(input: {
 
   let succeeded = 0;
   let failed = 0;
+  let skipped = 0;
   for (const t of (input.targets ?? []).slice(0, 200)) {
     const table = TABLE[t.source];
     if (!table || !t.id) {
       failed++;
       continue;
     }
-    const { data, error } = await sb
-      .from(table)
-      .update({ folder_id: input.folderId })
-      .eq("id", t.id)
-      .select("id")
-      .maybeSingle();
-    if (error || !data) failed++;
-    else succeeded++;
+    // The update is CONSTRAINED to rows that would actually change. Postgres
+    // happily "updates" a row to the value it already holds and returns it, so
+    // an unconstrained write reports success for a document that never moved —
+    // which is how dropping a year on the root crumb answered "14 files moved"
+    // while nothing on screen changed. Here a no-op matches nothing, comes back
+    // empty, and is counted as skipped rather than moved.
+    let q = sb.from(table).update({ folder_id: input.folderId }).eq("id", t.id);
+    q =
+      input.folderId === null
+        ? q.not("folder_id", "is", null)
+        : q.or(`folder_id.is.null,folder_id.neq.${input.folderId}`);
+    const { data, error } = await q.select("id").maybeSingle();
+    if (error) failed++;
+    else if (data) succeeded++;
+    // No row came back: already in that folder, or not visible to this user.
+    // Both mean nothing moved, which is what the caller needs to say.
+    else skipped++;
   }
 
   if (succeeded > 0) {
@@ -367,5 +409,5 @@ export async function setDocumentsFolderAction(input: {
     });
   }
   revalidatePath("/files");
-  return { ok: succeeded > 0, succeeded, failed };
+  return { ok: failed === 0, succeeded, failed, skipped };
 }
