@@ -50,12 +50,13 @@ describe("the preset ladder", () => {
     expect(can(junior, "clients.manage")).toBe(false);
   });
 
-  it("gives the activity log to everyone, junior included", () => {
-    // The ladder used to run backwards here: the log was owner-only while the
-    // work it records was not. Both staff presets read it now.
-    for (const who of [owner, member, junior]) {
-      expect(can(who, "audit.view")).toBe(true);
-    }
+  it("keeps the activity log to the owner", () => {
+    // Reversed after PR #1044. The model said Member and Junior could read it,
+    // which contradicted the shipped app — and would have silently re-opened
+    // the log the moment the audit page's inline check was converted.
+    expect(can(owner, "audit.view")).toBe(true);
+    expect(can(member, "audit.view")).toBe(false);
+    expect(can(junior, "audit.view")).toBe(false);
   });
 
   it("hands private clients to nobody but the owner", () => {
@@ -220,6 +221,8 @@ describe("owner-only equivalence (guards the call-site migration)", () => {
     "team.manage",
     "clients.private",
     "integrations.manage",
+    // Owner-only since #1044 reversed the decision to open it.
+    "audit.view",
   ];
 
   it("each behaves exactly like role === 'owner' for both real ranks", () => {
@@ -239,9 +242,7 @@ describe("owner-only equivalence (guards the call-site migration)", () => {
     // money.view and clients.manage are ungated in the app right now, so a
     // `role === "owner"` check must NEVER be converted to one of them — that
     // would ADD a restriction inside a release that claims to change nothing.
-    // audit.view is owner-only in the app but deliberately open here, so it is
-    // out too.
-    for (const c of ["money.view", "clients.manage", "audit.view"] as const) {
+    for (const c of ["money.view", "clients.manage"] as const) {
       expect(OWNER_ONLY_TODAY).not.toContain(c);
     }
   });
