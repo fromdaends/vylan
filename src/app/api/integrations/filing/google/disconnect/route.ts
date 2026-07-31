@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { disconnectFirmStorageConnection } from "@/lib/db/filing";
 import { revokeGoogleToken } from "@/lib/filing/google/oauth";
 
@@ -21,7 +22,7 @@ export async function POST() {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "integrations.manage")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
   const firm = await getCurrentFirm();

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { getClient } from "@/lib/db/clients";
 import { getClientXeroStatus } from "@/lib/db/xero";
 import {
@@ -41,7 +42,7 @@ export async function POST(request: Request) {
   // Owner-only: connecting the firm's QuickBooks is firm-admin (same bar as
   // connecting the Stripe payout account).
   const me = await getCurrentUser();
-  if (me?.role !== "owner") {
+  if (!can(me, "integrations.manage")) {
     return NextResponse.json({ error: "owner_only" }, { status: 403 });
   }
   const firm = await getCurrentFirm();
