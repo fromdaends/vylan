@@ -14,6 +14,7 @@ import {
   getServerSupabase,
 } from "@/lib/supabase/server";
 import { getCurrentUser, userDisplayLabel } from "@/lib/db/users";
+import { isCapability, isPreset } from "@/lib/auth/capabilities";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { isOnTrial } from "@/lib/trial";
 import { logUserActivity } from "@/lib/db/activity";
@@ -600,6 +601,11 @@ export type MemberActionResult =
         | "cannot_deactivate_only_owner"
         | "seat_limit"
         | "team_disabled"
+        // Migration 1120 not applied yet — the permission columns do not exist.
+        // Its own code so the UI can say "this will be available in a moment"
+        // rather than "something went wrong", which is what the firm-settings
+        // switches already do for the same situation.
+        | "unavailable"
         | "update_failed";
     };
 
@@ -1133,5 +1139,84 @@ export async function leaveTeam(): Promise<TeamModeResult> {
 
   await logUserActivity(firm.id, null, "team_left", {});
   revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+// Set a teammate's permission preset and per-person grants — the write half of
+// Phase 2's "per-person switches". The UI that calls this is a separate change;
+// this can ship and sit inert.
+//
+// OWNER-ONLY, and staying inline rather than using can(me, "team.manage"). Every
+// write in this file goes through the SERVICE-ROLE client, which bypasses RLS
+// entirely, so this check is the only gate that exists. Until team.manage is
+// actually RLS-backed, converting it here would move a real boundary into a
+// layer that cannot enforce it — see the note on team.manage in capabilities.ts.
+//
+// THE ONE THAT MATTERS: an OWNER never gets a preset. The rank is what RLS
+// reads, so a preset on an owner row is at best ignored and at worst renders
+// controls the database then refuses. Refused outright rather than silently
+// dropped, so a UI bug surfaces as an error instead of as a setting that does
+// not stick.
+export async function setMemberPermissions(
+  userId: string,
+  // `string`, NOT "member" | "junior". This is a SERVER ACTION: its arguments
+  // arrive over the wire and a caller can send anything, so the narrow type
+  // would be a lie that makes the runtime check below look redundant to both
+  // the compiler and the next reader. Validate, then narrow.
+  preset: string,
+  grants: string[] = [],
+): Promise<MemberActionResult> {
+  const [me, firm] = await Promise.all([getCurrentUser(), getCurrentFirm()]);
+  if (!me || !firm) return { ok: false, error: "no_session" };
+  if (me.role !== "owner") return { ok: false, error: "owner_only" };
+  if (!firm.team_enabled) return { ok: false, error: "team_disabled" };
+  if (!isPreset(preset) || preset === "owner") {
+    return { ok: false, error: "update_failed" };
+  }
+
+  const admin = getServiceRoleSupabase();
+  const { data: target } = await admin
+    .from("users")
+    .select("id, role, firm_id")
+    .eq("id", userId)
+    .maybeSingle();
+  const row = target as { id: string; role: string; firm_id: string } | null;
+  // Same firm, and not the owner. users.id has no firm-scoped FK, so a
+  // well-formed uuid from another tenant would otherwise be writable by an
+  // owner here — the service-role client would happily do it.
+  if (!row || row.firm_id !== firm.id) {
+    return { ok: false, error: "not_found" };
+  }
+  if (row.role === "owner") return { ok: false, error: "owner_only" };
+
+  // Drop anything that is not a real capability BEFORE storing it. Unknown
+  // grants are already ignored at read time, but storing junk means the next
+  // person to read this column has to guess whether it meant something.
+  const clean = Array.from(new Set(grants.filter(isCapability)));
+
+  const { error } = await admin
+    .from("users")
+    .update({ permission_preset: preset, extra_capabilities: clean })
+    .eq("id", userId)
+    .eq("firm_id", firm.id);
+  if (error) {
+    // Migration 1120 not applied yet: the columns do not exist. Say so plainly
+    // rather than returning a generic failure — this is the single most likely
+    // reason this action fails in practice, and "unavailable" is the code the
+    // rest of this file already uses for a not-yet-applied migration.
+    if (error.code === "PGRST204" || error.code === "42703") {
+      return { ok: false, error: "unavailable" };
+    }
+    console.error("[team] setMemberPermissions failed:", error.message);
+    return { ok: false, error: "update_failed" };
+  }
+
+  await logUserActivity(firm.id, null, "team_permissions_changed", {
+    target_user_id: userId,
+    preset,
+    grants: clean,
+  });
+  revalidatePath("/settings/team");
+  revalidatePath(`/settings/team/${userId}`);
   return { ok: true };
 }

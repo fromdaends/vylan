@@ -1197,7 +1197,8 @@
     "action_folder_renamed": "A renommé un dossier",
     "action_folder_moved": "A déplacé un dossier",
     "action_folder_deleted": "A supprimé un dossier",
-    "action_engagement_handoff_note": "Note de transfert ajoutée"
+    "action_engagement_handoff_note": "Note de transfert ajoutée",
+    "action_team_permissions_changed": "Permissions d'un membre modifiées"
   },
   "Notifications": {
     "title": "Nouveautés",

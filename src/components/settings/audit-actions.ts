@@ -59,6 +59,8 @@ export const AUDIT_ACTIONS = [
   // action rather than editing the reassignment row: an audit log is
   // append-only, and "Tyler added a handoff note" is a truthful second event.
   "engagement_handoff_note",
+  // Phase 2: an owner changed what a teammate is allowed to do.
+  "team_permissions_changed",
   "client_reassigned",
   "client_privacy_changed",
   "engagement_privacy_changed",

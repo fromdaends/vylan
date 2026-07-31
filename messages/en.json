@@ -1197,7 +1197,8 @@
     "action_folder_renamed": "Renamed a folder",
     "action_folder_moved": "Moved a folder",
     "action_folder_deleted": "Removed a folder",
-    "action_engagement_handoff_note": "Handoff note added"
+    "action_engagement_handoff_note": "Handoff note added",
+    "action_team_permissions_changed": "Teammate permissions changed"
   },
   "Notifications": {
     "title": "What's new",
