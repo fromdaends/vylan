@@ -80,6 +80,10 @@ import {
   type PostOutcome,
   type PostMatchOverride,
 } from "@/lib/quickbooks/post";
+import {
+  chasedTransactionForFile,
+  chaseOverride,
+} from "@/lib/quickbooks/chase-override";
 import type { RegisterCandidate } from "@/lib/quickbooks/register-match";
 import type { QboTxnEntity } from "@/lib/quickbooks/client";
 import {
@@ -109,23 +113,29 @@ export async function postApprovedDraftForFile(
 ): Promise<PostOutcome> {
   const draft = await getDraftForFile(fileId);
   if (!draft) return { kind: "not_found", engagementId: null, firmId: null };
+
+  // Was this document ASKED FOR because a transaction in the client's books had
+  // no receipt? Then we already know where it belongs, and it must attach rather
+  // than create — otherwise the expense is counted twice. Resolved here, at the
+  // single dispatch point, so the single post, the bulk post and auto-approve
+  // all inherit it instead of three call sites having to remember.
+  const chased = await chasedTransactionForFile(fileId);
+  const supplied = (opts as { match?: PostMatchOverride } | undefined)?.match;
+
   if (
     draft.clientId &&
     draft.firmId &&
     (await isClientXeroConnected(draft.firmId, draft.clientId))
   ) {
-    return postApprovedXeroDraft(
-      fileId,
-      posterId,
-      opts as { match?: PostMatchOverride } | undefined,
-    );
+    return postApprovedXeroDraft(fileId, posterId, {
+      match: chaseOverride({ supplied, chased, postingTo: "xero" }),
+    });
   }
   // QuickBooks (unchanged) — forward the register-match override.
-  return postApprovedDraft(
-    fileId,
-    posterId,
-    opts as Parameters<typeof postApprovedDraft>[2],
-  );
+  return postApprovedDraft(fileId, posterId, {
+    ...(opts as Parameters<typeof postApprovedDraft>[2]),
+    match: chaseOverride({ supplied, chased, postingTo: "quickbooks" }),
+  });
 }
 
 // Post one APPROVED EXPENSE draft to Xero. Income returns not_postable (the card
