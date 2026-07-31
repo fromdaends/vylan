@@ -73,6 +73,11 @@ export type DragPayload =
       yearSet?: boolean;
       category?: string | null;
       categorySet?: boolean;
+      /** The derived folder's display name ("2026", "Bookkeeping & business").
+       * Dropping the bucket NESTS it: a real folder with this name is created
+       * at the destination and the files go inside that — so the name must
+       * travel with the drag. */
+      label: string;
     };
 
 function startDrag(e: React.DragEvent, payload: DragPayload, label: string) {
@@ -291,6 +296,7 @@ export function FolderDropTarget({
           category: payload.category,
           categorySet: payload.categorySet,
           folderId: target.folderId,
+          bucketName: payload.label,
         });
       } else {
         if (payload.items.length === 0) return;
@@ -327,7 +333,14 @@ export function FolderDropTarget({
       } else if (res.failed > 0) {
         toast.error(t("action_failed"));
       } else if (res.succeeded > 0) {
-        toast.success(t("drop_done", { count: res.succeeded, folder: label }));
+        // A nested bucket reads as a folder move ("2026 moved into Taxes"),
+        // not as a file count — the person dragged a FOLDER, and the answer
+        // should name the thing they dragged.
+        toast.success(
+          payload.kind === "bucket"
+            ? t("drop_nested", { name: payload.label, folder: label })
+            : t("drop_done", { count: res.succeeded, folder: label }),
+        );
       } else if (res.skipped > 0) {
         toast.info(t("drop_already_there", { folder: label }));
       } else {

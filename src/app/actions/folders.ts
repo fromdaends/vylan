@@ -287,15 +287,27 @@ export async function deleteFolderAction(input: {
 }
 
 /**
- * Move every document in a derived bucket into a folder.
+ * Drop a DERIVED folder — a year, a category — somewhere real, by NESTING it.
  *
- * Dragging the "Bookkeeping & business" folder onto "Payroll" cannot move the
- * folder — a year or category folder is COMPUTED from the documents inside it,
- * there is no row to re-parent. But the gesture obviously means something, and
- * what it means is "put this lot in there". So it moves the contents.
+ * The first version of this merged: dragging "2026" onto "Taxes" dumped the
+ * 14 files loose into Taxes and the name 2026 simply vanished. The founder's
+ * correction, near-verbatim: a genuine filing system moves the folder INTO
+ * the other folder — the files don't get switched to it.
  *
- * Without this, dragging one of those folders would have to do nothing, and a
- * gesture that silently does nothing is indistinguishable from a broken app.
+ * A derived folder has no row to re-parent, so the drag MATERIALIZES it: a
+ * real folder carrying the bucket's name is found-or-created inside the
+ * destination, and the bucket's documents are filed into that. Dragging
+ * "2026" onto "Taxes" yields Taxes/2026 with the files inside. The automatic
+ * 2026 row disappears — the derived view only shows unfiled documents — and
+ * in its place the firm owns a real 2026 folder it can rename, move, and
+ * nest like any other. Dropping on the client or the root crumb does the
+ * same at the top level: the derived folder becomes a real one, in place.
+ *
+ * Only UNFILED documents ride along (`folder_id is null`). The row the user
+ * grabbed IS the unfiled set — the browse tree draws it from exactly that
+ * filter. Without the same filter here, dragging a year would also yank
+ * documents back OUT of folders the firm had already sorted them into,
+ * because filing a document never clears its browse_year.
  */
 export async function moveBucketToFolderAction(input: {
   clientId: string;
@@ -304,10 +316,17 @@ export async function moveBucketToFolderAction(input: {
   yearSet?: boolean;
   category?: string | null;
   categorySet?: boolean;
+  /** Destination PARENT: a real folder's id, or null for the top level. */
   folderId: string | null;
+  /** The derived folder's display name — becomes the real folder's name. */
+  bucketName: string;
 }): Promise<MoveResult> {
   const firm = await getCurrentFirm();
-  if (!firm || !input.clientId) {
+  const name = normalizeFolderName(input.bucketName ?? "");
+  if (!firm || !input.clientId || !name) {
+    return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+  }
+  if (input.folderId !== null && !UUID_RE.test(input.folderId)) {
     return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
   }
   const sb = await getServerSupabase();
@@ -316,9 +335,10 @@ export async function moveBucketToFolderAction(input: {
   // may touch — the same gate every other document read uses.
   let q = sb
     .from("firm_documents")
-    .select("source, id, folder_id")
+    .select("source, id")
     .eq("client_id", input.clientId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .is("folder_id", null);
   if (input.yearSet) {
     q = input.year == null ? q.is("browse_year", null) : q.eq("browse_year", input.year);
   }
@@ -330,22 +350,59 @@ export async function moveBucketToFolderAction(input: {
   }
   const { data, error } = await q.limit(500);
   if (error || !data) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+  const targets = (data as Array<{ source: string; id: string }>).map((d) => ({
+    source: d.source,
+    id: d.id,
+  }));
+  if (targets.length === 0) return { ok: true, succeeded: 0, failed: 0, skipped: 0 };
 
-  const rows = data as Array<{ source: string; id: string; folder_id: string | null }>;
-  // Documents already in the destination are not moved and are not counted as
-  // moved. Dropping a year onto the folder it already lives in should say so,
-  // not report a number that makes the unchanged screen look like a bug.
-  const targets = rows.filter((d) => d.folder_id !== input.folderId);
-  const alreadyThere = rows.length - targets.length;
+  // Find-or-create the real folder. Reusing an existing sibling by name is
+  // deliberate: dropping "2026" where a 2026 already sits should fill THAT
+  // folder, not conjure a duplicate — the sibling-name unique index enforces
+  // the same rule at the database.
+  const findExisting = async (): Promise<string | null> => {
+    let lookup = sb
+      .from("document_folders")
+      .select("id")
+      .eq("client_id", input.clientId)
+      .eq("name", name)
+      .is("deleted_at", null);
+    lookup =
+      input.folderId === null
+        ? lookup.is("parent_id", null)
+        : lookup.eq("parent_id", input.folderId);
+    const { data: hit } = await lookup.maybeSingle();
+    return hit?.id ?? null;
+  };
 
-  if (targets.length === 0) {
-    return { ok: true, succeeded: 0, failed: 0, skipped: alreadyThere };
+  let destId = await findExisting();
+  if (!destId) {
+    const { data: created, error: cErr } = await sb
+      .from("document_folders")
+      .insert({
+        firm_id: firm.id,
+        client_id: input.clientId,
+        parent_id: input.folderId,
+        name,
+      })
+      .select("id")
+      .single();
+    if (cErr) {
+      // 23505 = two drags raced on the same name; the folder exists now.
+      destId = cErr.code === "23505" ? await findExisting() : null;
+    } else {
+      destId = created.id;
+      await logUserActivity(firm.id, null, "folder_created", {
+        client_id: input.clientId,
+        folder_id: destId,
+        parent_id: input.folderId,
+        via: "bucket_drop",
+      });
+    }
   }
-  const res = await setDocumentsFolderAction({
-    targets: targets.map((d) => ({ source: d.source, id: d.id })),
-    folderId: input.folderId,
-  });
-  return { ...res, skipped: res.skipped + alreadyThere };
+  if (!destId) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+
+  return setDocumentsFolderAction({ targets, folderId: destId });
 }
 
 /**
