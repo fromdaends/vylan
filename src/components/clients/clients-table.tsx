@@ -13,6 +13,12 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -188,63 +194,77 @@ function ClientRowWithDrawer({
 
   return (
     <>
-      <TableRow
-        onClick={onToggle}
-        className="cursor-pointer"
-        aria-expanded={isOpen}
-        data-state={isOpen ? "open" : undefined}
-      >
-        <TableCell className="py-4 pl-4 pr-0 text-muted-foreground">
-          {isOpen ? (
-            <ChevronDown className="size-4" aria-hidden />
-          ) : (
-            <ChevronRight className="size-4" aria-hidden />
-          )}
-        </TableCell>
-        <TableCell className="py-4 font-medium">
-          <Link
-            href={`/clients/${client.id}`}
-            onClick={stop}
-            className="hover:underline"
+      {/* Right-click anywhere on the row opens the same actions as the "..."
+          button. Only the main row is a trigger — the expanded drawer below has
+          its own content and links. */}
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <TableRow
+            onClick={onToggle}
+            className="cursor-pointer"
+            aria-expanded={isOpen}
+            data-state={isOpen ? "open" : undefined}
           >
-            {client.display_name}
-          </Link>
-          {client.external_ref && (
-            <span className="ml-2 text-xs font-mono text-muted-foreground">
-              {client.external_ref}
-            </span>
-          )}
-          {client.archived_at && (
-            <Badge variant="outline" className="ml-2 text-xs">
-              {t("archived")}
-            </Badge>
-          )}
-        </TableCell>
-        <TableCell className="py-4">
-          <Badge variant="secondary">
-            {client.type === "individual"
-              ? t("type_individual")
-              : t("type_business")}
-          </Badge>
-        </TableCell>
-        <TableCell className="py-4 text-muted-foreground">
-          {client.email ?? "—"}
-        </TableCell>
-        <TableCell className="py-4 text-muted-foreground font-mono text-xs">
-          {client.phone ?? "—"}
-        </TableCell>
-        <TableCell className="py-4">
-          <EngagementSummaryCell summary={summary} />
-        </TableCell>
-        {teamEnabled && (
-          <TableCell className="py-4">
-            <OwnerCell owner={owner} isYou={isYou} />
-          </TableCell>
-        )}
-        <TableCell className="py-4 pr-4 text-right" onClick={stop}>
-          <RowActions client={client} locale={locale} />
-        </TableCell>
-      </TableRow>
+            <TableCell className="py-4 pl-4 pr-0 text-muted-foreground">
+              {isOpen ? (
+                <ChevronDown className="size-4" aria-hidden />
+              ) : (
+                <ChevronRight className="size-4" aria-hidden />
+              )}
+            </TableCell>
+            <TableCell className="py-4 font-medium">
+              <Link
+                href={`/clients/${client.id}`}
+                onClick={stop}
+                className="hover:underline"
+              >
+                {client.display_name}
+              </Link>
+              {client.external_ref && (
+                <span className="ml-2 text-xs font-mono text-muted-foreground">
+                  {client.external_ref}
+                </span>
+              )}
+              {client.archived_at && (
+                <Badge variant="outline" className="ml-2 text-xs">
+                  {t("archived")}
+                </Badge>
+              )}
+            </TableCell>
+            <TableCell className="py-4">
+              <Badge variant="secondary">
+                {client.type === "individual"
+                  ? t("type_individual")
+                  : t("type_business")}
+              </Badge>
+            </TableCell>
+            <TableCell className="py-4 text-muted-foreground">
+              {client.email ?? "—"}
+            </TableCell>
+            <TableCell className="py-4 text-muted-foreground font-mono text-xs">
+              {client.phone ?? "—"}
+            </TableCell>
+            <TableCell className="py-4">
+              <EngagementSummaryCell summary={summary} />
+            </TableCell>
+            {teamEnabled && (
+              <TableCell className="py-4">
+                <OwnerCell owner={owner} isYou={isYou} />
+              </TableCell>
+            )}
+            <TableCell className="py-4 pr-4 text-right" onClick={stop}>
+              <RowActions client={client} locale={locale} />
+            </TableCell>
+          </TableRow>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ClientMenuItems
+            client={client}
+            locale={locale}
+            Item={ContextMenuItem}
+          />
+        </ContextMenuContent>
+      </ContextMenu>
       {isOpen && (
         <TableRow className="hover:bg-transparent">
           <TableCell colSpan={teamEnabled ? 8 : 7} className="px-6 py-4">
@@ -389,9 +409,7 @@ function EngagementSummaryCell({
     );
   }
   if (summary.complete > 0) {
-    return (
-      <Badge>{t("summary_complete", { count: summary.complete })}</Badge>
-    );
+    return <Badge>{t("summary_complete", { count: summary.complete })}</Badge>;
   }
   return <span className="text-muted-foreground text-sm">—</span>;
 }
@@ -430,6 +448,70 @@ function OwnerCell({
   );
 }
 
+// One menu definition, rendered by BOTH surfaces: the row's "..." button and its
+// right-click menu. `Item` is the only difference between them — DropdownMenuItem
+// and ContextMenuItem take the same props — so the two can never drift into
+// showing different actions, which is exactly what a second copy would invite.
+type MenuItemComponent = React.ComponentType<{
+  asChild?: boolean;
+  onSelect?: (event: Event) => void;
+  className?: string;
+  children?: React.ReactNode;
+}>;
+
+function ClientMenuItems({
+  client,
+  locale,
+  Item,
+}: {
+  client: Client;
+  locale: "fr" | "en";
+  Item: MenuItemComponent;
+}) {
+  const t = useTranslations("Clients");
+  return (
+    <>
+      <ClientFormDialog
+        mode="edit"
+        locale={locale}
+        client={client}
+        trigger={<Item onSelect={(e) => e.preventDefault()}>{t("edit")}</Item>}
+      />
+      {/* One of exactly two cross-links between Clients and Files (the other
+            is "View client profile" in the Files client view). Deliberately not
+            more: the two surfaces answer different questions and the spec is
+            explicit that Files must not grow into a second Clients page. */}
+      <Item asChild>
+        <Link href={`/files?client=${client.id}`}>{t("view_files")}</Link>
+      </Item>
+      <Item asChild>
+        <Link href={`/clients/${client.id}/archive`}>
+          {t("document_archive")}
+        </Link>
+      </Item>
+      {client.archived_at ? (
+        <form action={restoreClientAction}>
+          <input type="hidden" name="id" value={client.id} />
+          <Item asChild>
+            <button type="submit" className="w-full text-left">
+              {t("restore")}
+            </button>
+          </Item>
+        </form>
+      ) : (
+        <form action={archiveClientAction}>
+          <input type="hidden" name="id" value={client.id} />
+          <Item asChild>
+            <button type="submit" className="w-full text-left">
+              {t("archive")}
+            </button>
+          </Item>
+        </form>
+      )}
+    </>
+  );
+}
+
 function RowActions({
   client,
   locale,
@@ -446,47 +528,11 @@ function RowActions({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <ClientFormDialog
-          mode="edit"
-          locale={locale}
+        <ClientMenuItems
           client={client}
-          trigger={
-            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-              {t("edit")}
-            </DropdownMenuItem>
-          }
+          locale={locale}
+          Item={DropdownMenuItem}
         />
-        {/* One of exactly two cross-links between Clients and Files (the other
-            is "View client profile" in the Files client view). Deliberately not
-            more: the two surfaces answer different questions and the spec is
-            explicit that Files must not grow into a second Clients page. */}
-        <DropdownMenuItem asChild>
-          <Link href={`/files?client=${client.id}`}>{t("view_files")}</Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href={`/clients/${client.id}/archive`}>
-            {t("document_archive")}
-          </Link>
-        </DropdownMenuItem>
-        {client.archived_at ? (
-          <form action={restoreClientAction}>
-            <input type="hidden" name="id" value={client.id} />
-            <DropdownMenuItem asChild>
-              <button type="submit" className="w-full text-left">
-                {t("restore")}
-              </button>
-            </DropdownMenuItem>
-          </form>
-        ) : (
-          <form action={archiveClientAction}>
-            <input type="hidden" name="id" value={client.id} />
-            <DropdownMenuItem asChild>
-              <button type="submit" className="w-full text-left">
-                {t("archive")}
-              </button>
-            </DropdownMenuItem>
-          </form>
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
