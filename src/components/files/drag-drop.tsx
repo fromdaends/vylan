@@ -247,7 +247,7 @@ export function FolderDropTarget({
       }
 
       // ── everything else moves documents ─────────────────────────────────
-      let res: { ok: boolean; succeeded: number; failed: number };
+      let res: { ok: boolean; succeeded: number; failed: number; skipped: number };
 
       if (payload.kind === "bucket") {
         if (target.kind !== "folder") {
@@ -289,16 +289,19 @@ export function FolderDropTarget({
 
       selection?.clear();
       router.refresh();
-      if (res.failed > 0) {
+      // Report what actually happened. Anything that claims a move over a
+      // screen that did not change reads as the app being broken — which is
+      // exactly how "14 files moved" landed when all 14 were already there.
+      if (res.failed > 0 && res.succeeded > 0) {
         toast.warning(t("bulk_partial", { done: res.succeeded, failed: res.failed }));
-      } else if (res.ok && res.succeeded === 0) {
-        // A category folder that turned out to be empty. Saying "moved 0
-        // files" as a success is worse than saying nothing happened.
-        toast.info(t("drop_nothing"));
-      } else if (res.ok) {
-        toast.success(t("drop_done", { count: res.succeeded, folder: label }));
-      } else {
+      } else if (res.failed > 0) {
         toast.error(t("action_failed"));
+      } else if (res.succeeded > 0) {
+        toast.success(t("drop_done", { count: res.succeeded, folder: label }));
+      } else if (res.skipped > 0) {
+        toast.info(t("drop_already_there", { folder: label }));
+      } else {
+        toast.info(t("drop_nothing"));
       }
     });
   }

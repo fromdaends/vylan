@@ -94,6 +94,9 @@ export function BulkBar({
     });
   }
 
+  const folderLabel = (id: string) =>
+    folders?.find((f) => f.id === id)?.name ?? "";
+
   function fileIntoFolder(value: string) {
     startTransition(async () => {
       const res = await setDocumentsFolderAction({
@@ -104,12 +107,22 @@ export function BulkBar({
       });
       selection?.clear();
       router.refresh();
-      if (res.failed > 0) {
+      // Same honesty rule as the drag path: documents already in the chosen
+      // folder are skipped, not counted as moved.
+      if (res.failed > 0 && res.succeeded > 0) {
         toast.warning(t("bulk_partial", { done: res.succeeded, failed: res.failed }));
-      } else if (res.ok) {
-        toast.success(t("bulk_moved", { count: res.succeeded }));
-      } else {
+      } else if (res.failed > 0) {
         toast.error(t("action_failed"));
+      } else if (res.succeeded > 0) {
+        toast.success(t("bulk_moved", { count: res.succeeded }));
+      } else if (res.skipped > 0) {
+        toast.info(
+          t("drop_already_there", {
+            folder: value === "__none__" ? t("path_root") : folderLabel(value),
+          }),
+        );
+      } else {
+        toast.info(t("drop_nothing"));
       }
     });
   }

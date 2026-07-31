@@ -212,6 +212,8 @@ export type BulkResult = {
   ok: boolean;
   succeeded: number;
   failed: number;
+  /** Items that were already in the requested state, so nothing moved. */
+  skipped: number;
 };
 
 export type BulkTarget = { source: string; id: string };
@@ -243,7 +245,7 @@ export async function bulkMoveDocumentsAction(input: {
   category?: string | null;
 }): Promise<BulkResult> {
   const targets = validTargets(input.targets);
-  if (targets.length === 0) return { ok: false, succeeded: 0, failed: 0 };
+  if (targets.length === 0) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
 
   let succeeded = 0;
   let failed = 0;
@@ -259,7 +261,11 @@ export async function bulkMoveDocumentsAction(input: {
     else failed++;
   }
   revalidatePath("/files");
-  return { ok: succeeded > 0, succeeded, failed };
+  // No `skipped` here: moveDocumentAction stamps the manual-override flags even
+  // when the value is unchanged, which is a real change — it pins the axis so
+  // the AI cannot move it back. Reporting that as "nothing happened" would be
+  // its own lie.
+  return { ok: failed === 0, succeeded, failed, skipped: 0 };
 }
 
 /** Move several documents to the recycle bin. Same partial-success contract. */
@@ -267,7 +273,7 @@ export async function bulkDeleteDocumentsAction(input: {
   targets: BulkTarget[];
 }): Promise<BulkResult> {
   const targets = validTargets(input.targets);
-  if (targets.length === 0) return { ok: false, succeeded: 0, failed: 0 };
+  if (targets.length === 0) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
 
   let succeeded = 0;
   let failed = 0;
@@ -277,7 +283,7 @@ export async function bulkDeleteDocumentsAction(input: {
     else failed++;
   }
   revalidatePath("/files");
-  return { ok: succeeded > 0, succeeded, failed };
+  return { ok: succeeded > 0, succeeded, failed, skipped: 0 };
 }
 
 /**

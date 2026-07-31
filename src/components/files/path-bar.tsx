@@ -12,6 +12,24 @@ import { FolderDropTarget, type DropTarget } from "./drag-drop";
 // otherwise assume this is that pattern sneaking back. It isn't: a file browser
 // with no path is unusable — you cannot tell which folder you are in, and you
 // cannot get back out one level. Explorer, Finder and Drive all have one.
+/** Wraps children in a drop target only when there is somewhere to drop. */
+function MaybeDropTarget({
+  drop,
+  label,
+  children,
+}: {
+  drop?: DropTarget;
+  label: string;
+  children: React.ReactNode;
+}) {
+  if (!drop) return <>{children}</>;
+  return (
+    <FolderDropTarget target={drop} label={label}>
+      {children}
+    </FolderDropTarget>
+  );
+}
+
 export async function PathBar({
   segments,
   clientProfileId,
@@ -44,17 +62,21 @@ export async function PathBar({
                   />
                 )}
                 {seg.href && !last ? (
-                  <FolderDropTarget
-                    target={seg.drop ?? { kind: "folder", folderId: null }}
-                    label={seg.label}
-                  >
+                  /* ONLY a segment that declares a `drop` is a drop target.
+                     This used to fall back to "move to the top level" for any
+                     segment without one — which quietly made the root "Files"
+                     crumb, the list of CLIENTS, accept documents. Dropping a
+                     year on it moved 14 files to where they already were and
+                     reported "14 files moved to Files." A drop that cannot do
+                     anything must not invite the drop. */
+                  <MaybeDropTarget drop={seg.drop} label={seg.label}>
                     <Link
                       href={seg.href}
                       className="truncate rounded px-1.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {seg.label}
                     </Link>
-                  </FolderDropTarget>
+                  </MaybeDropTarget>
                 ) : (
                   <span
                     aria-current={last ? "page" : undefined}
