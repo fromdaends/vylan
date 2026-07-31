@@ -265,7 +265,11 @@ async function BrowseTab({
     segments.push({
       label: yearParam === "unsorted" ? t("unsorted") : String(year),
       href: buildQuery({ category: null, page: null }),
-      drop: { kind: "year" as const, year },
+      drop: {
+        kind: "year" as const,
+        year,
+        label: yearParam === "unsorted" ? t("unsorted") : String(year),
+      },
     });
   }
   if (categorySet) {
@@ -532,7 +536,16 @@ async function FolderLevel({
       // Dropping documents on a category folder sets their category — the same
       // gesture as dropping on a custom folder, because to the person dragging
       // there is no difference between the two.
-      dropTarget: { kind: "category" as const, category: c.category },
+      dropTarget: {
+        kind: "category" as const,
+        category: c.category,
+        label: c.category ? docTypeGroupLabel(c.category, locale) : t("unsorted"),
+        // The year view this row sits inside — dropping a folder here
+        // materializes "2025/Bookkeeping & business", not a bare category.
+        year,
+        yearSet: true,
+        yearLabel: year != null ? String(year) : t("unsorted"),
+      },
       // Dragging a category folder away NESTS it at the destination: a real
       // folder with this name is created there and the documents go inside.
       dragPayload: {
@@ -583,7 +596,11 @@ async function FolderLevel({
     // Dropping on a year folder sets the year. "Unsorted" is a real
     // destination too — y.year is null there, which the drop handler sends as
     // the Unsorted bucket rather than as "leave it alone".
-    dropTarget: { kind: "year" as const, year: y.year },
+    dropTarget: {
+      kind: "year" as const,
+      year: y.year,
+      label: y.year != null ? String(y.year) : t("unsorted"),
+    },
     // Dragging a whole year onto a folder nests it: the destination gains a
     // real "2024" folder with that year's documents inside — "put 2024 in
     // the archive" in one gesture, keeping its name.

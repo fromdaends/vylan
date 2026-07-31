@@ -37,12 +37,16 @@ vi.mock("@/app/actions/documents", () => ({
   bulkMoveDocumentsAction: vi.fn(),
 }));
 vi.mock("@/app/actions/folders", () => ({
+  materializeBucketTargetAction: vi.fn(),
   moveBucketToFolderAction: vi.fn(),
   moveFolderAction: vi.fn(),
   setDocumentsFolderAction: vi.fn(),
 }));
 
-import { moveFolderAction } from "@/app/actions/folders";
+import {
+  materializeBucketTargetAction,
+  moveFolderAction,
+} from "@/app/actions/folders";
 import { DraggableFile, DraggableFolder, FolderDropTarget } from "./drag-drop";
 
 afterEach(() => {
@@ -50,6 +54,7 @@ afterEach(() => {
   toastInfo.mockReset();
   toastSuccess.mockReset();
   vi.mocked(moveFolderAction).mockReset();
+  vi.mocked(materializeBucketTargetAction).mockReset();
 });
 
 /**
@@ -210,6 +215,58 @@ describe("a completed drop answers the source row", () => {
       expect(source.className).toContain("hidden");
     });
     expect(toastInfo).not.toHaveBeenCalled();
+  });
+
+  it("a folder dropped on a YEAR works: the year materializes, the folder goes inside", async () => {
+    // The founder's exact case: "I could drop 2026 in Bookkeeping & business,
+    // but I can't drop Bookkeeping & business into 2026. How does that even
+    // make sense?" — it didn't. A derived target now becomes a real folder
+    // and receives the drop like any other.
+    vi.mocked(materializeBucketTargetAction).mockResolvedValue({
+      ok: true,
+      folderId: "year-folder-1",
+    });
+    vi.mocked(moveFolderAction).mockResolvedValue({ ok: true });
+    wrap(
+      <>
+        <DraggableFolder
+          moves={{ kind: "folder", clientId: "c1", folderId: "src1" }}
+          name="Bookkeeping & business"
+        >
+          <span>Bookkeeping &amp; business</span>
+        </DraggableFolder>
+        <FolderDropTarget
+          target={{ kind: "year", year: 2026, label: "2026" }}
+          label="2026"
+        >
+          <span>2026</span>
+        </FolderDropTarget>
+      </>,
+    );
+    const source = screen.getByText("Bookkeeping & business").parentElement!;
+    const target = screen.getByText("2026").parentElement!;
+    const dt = dataTransfer("none");
+    fireDrag(source, "dragstart", dt);
+    fireDrag(target, "dragover", dt);
+    expect(dt.dropEffect).toBe("move"); // the year row ACCEPTS a folder now
+    fireDrag(target, "drop", dt);
+    fireDrag(source, "dragend", dt);
+
+    await waitFor(() => {
+      expect(materializeBucketTargetAction).toHaveBeenCalledWith({
+        clientId: "c1",
+        year: 2026,
+        yearSet: true,
+        yearName: "2026",
+      });
+      expect(moveFolderAction).toHaveBeenCalledWith({
+        clientId: "c1",
+        folderId: "src1",
+        newParentId: "year-folder-1",
+      });
+      expect(toastSuccess).toHaveBeenCalledWith("Moved to 2026.");
+      expect(source.className).toContain("hidden");
+    });
   });
 
   it("a move to where it already is says Already — and the row STAYS", async () => {
