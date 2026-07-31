@@ -12,6 +12,7 @@ import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { selectAssignedTo } from "@/lib/dashboard/worklist-select";
 import { scopeForView, selectView, viewLabelKey } from "@/lib/engagements/views";
 import { listClients } from "@/lib/db/clients";
+import { countLiveSeriesByAssignee } from "@/lib/db/recurring";
 import { filterClientsByOwner } from "@/components/clients/owner";
 import { listActivityForFirm } from "@/lib/db/activity";
 import {
@@ -20,6 +21,7 @@ import {
 import { getBrandingImageUrl } from "@/lib/storage";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
 import { HandOverWork } from "@/components/settings/team/hand-over-work";
+import { DeactivateMember } from "@/components/settings/team/deactivate-member";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -83,11 +85,24 @@ export default async function TeamMemberProfilePage({
   // Only the Archived tab costs a second one. The stat tile stays pinned to the
   // ACTIVE count on purpose — a headline number that changes meaning when you
   // switch tabs isn't a headline, it's a second copy of the table's length.
-  const [activeWorklist, viewWorklist, clientsRaw, activity, avatarUrl] =
-    await Promise.all([
+  const [
+    activeWorklist,
+    viewWorklist,
+    clientsRaw,
+    seriesByAssignee,
+    activity,
+    avatarUrl,
+  ] = await Promise.all([
       loadEngagementWorklist("active"),
       loadEngagementWorklist(scopeForView(view)),
       listClients(),
+      // Recurring schedules this person holds (0940). Needed by the removal
+      // dialog: a schedule keeps minting NEW work every cycle, so someone whose
+      // whole footprint is repeating work would otherwise be reported as
+      // holding NOTHING and be removed with no handover offered. That exact bug
+      // is why the count exists on the roster; passing 0 here would have
+      // reintroduced it the moment removal moved to this page.
+      countLiveSeriesByAssignee(),
       isOwner
         ? listActivityForFirm({ actorId: id, limit: 20 })
         : Promise.resolve([]),
@@ -204,15 +219,37 @@ export default async function TeamMemberProfilePage({
           </dl>
         </Panel>
 
-        {/* Bulk assign. Owner-only, and it renders itself away when there is
-            nothing to move or nobody to move it to. */}
+        {/* Owner actions on this person, together, at the bottom of the rail —
+            the two heaviest things you can do to a teammate, kept away from the
+            first thing you meet. Removing them used to be a "..." menu item on
+            the firm roster; it lives here now because the roster row became a
+            button and a menu inside a button is a mis-click waiting to happen
+            (and because Karbon puts every colleague action on the colleague's
+            own page). */}
         {isOwner && (
-          <HandOverWork
-            fromUserId={id}
-            fromName={name}
-            members={reassignTargets}
-            counts={{ engagements: activeCount, clients: clients.length }}
-          />
+          <div className="space-y-2">
+            <HandOverWork
+              fromUserId={id}
+              fromName={name}
+              members={reassignTargets}
+              counts={{ engagements: activeCount, clients: clients.length }}
+            />
+            {/* Never on your own profile, and never on the owner's: the server
+                refuses both, and offering a button that always errors is worse
+                than not offering it. */}
+            {!member.deactivated_at &&
+              member.id !== user.id &&
+              member.role !== "owner" && (
+                <DeactivateMember
+                  memberId={id}
+                  memberName={name}
+                  activeEngagements={activeCount}
+                  clientCount={clients.length}
+                  scheduleCount={seriesByAssignee.get(id) ?? 0}
+                  reassignTargets={reassignTargets}
+                />
+              )}
+          </div>
         )}
       </div>
 

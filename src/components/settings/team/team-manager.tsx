@@ -40,7 +40,6 @@ import {
   createInvite,
   revokeInvite,
   resendInvite,
-  deactivateUser,
   reactivateUser,
   transferOwnership,
   createTeam,
@@ -84,8 +83,11 @@ type PendingInvite = {
   expired: boolean;
 };
 
-// Maps a server action's error code to a friendly, localized message.
-function useErrorMessage() {
+// Maps a server action's error code to a friendly, localized message. Exported
+// because DeactivateMember lives on the teammate's own page now and needs the
+// same mapping — duplicating a switch over server error codes is how two
+// screens start disagreeing about what "seat_limit" means.
+export function useErrorMessage() {
   const t = useTranslations("Team");
   return (error: string | undefined, cap?: number) => {
     switch (error) {
@@ -366,12 +368,6 @@ export function TeamManager({
                   key={m.id}
                   member={m}
                   showStats={showStats}
-                  canManage={canManage && !m.isSelf && m.role !== "owner"}
-                  // Who this person's work can be handed to on removal: any OTHER
-                  // active member (owner included). Empty → no reassign option.
-                  reassignTargets={activeMembers
-                    .filter((x) => x.id !== m.id)
-                    .map((x) => ({ id: x.id, name: x.name }))}
                 />
               ))}
               {showStats &&
@@ -627,55 +623,17 @@ function TrialTeamLock() {
 function MemberRow({
   member,
   showStats,
-  canManage,
-  reassignTargets,
 }: {
   member: ActiveMember;
   // Render the workload stat cells (owner view). Must match the table header.
   showStats: boolean;
-  canManage: boolean;
-  // Owners can open a teammate's profile (their engagements/clients/activity).
-  // Other active members this person's work can be reassigned to on removal.
-  reassignTargets: { id: string; name: string }[];
 }) {
   const t = useTranslations("Team");
-  const errorMessage = useErrorMessage();
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [confirmOpen, setConfirmOpen] = useState(false);
-
-  // Does this member hold live work worth reassigning? Drives the "guarded"
-  // remove dialog (counts + reassignee picker) vs. the plain confirm.
   const activeEngagements = member.activeEngagements ?? 0;
   const readyToReview = member.readyToReview ?? 0;
   const needsAttention = member.needsAttention ?? 0;
   const clientCount = member.clients ?? 0;
-  // Recurring schedules (0940). Counted here because a schedule keeps minting
-  // NEW work every cycle — leaving one behind is worse than leaving a finished
-  // engagement behind, yet it used to make this dialog say "holds nothing".
-  const scheduleCount = member.schedules ?? 0;
-  const holdsWork =
-    activeEngagements > 0 || clientCount > 0 || scheduleCount > 0;
-  const canReassign = holdsWork && reassignTargets.length > 0;
-  // Default the reassignee to the first available teammate (owner sorts first).
-  const [reassignTo, setReassignTo] = useState<string>(
-    reassignTargets[0]?.id ?? "",
-  );
-
-  // reassignToId null = "remove anyway" (leave their work as-is).
-  function doDeactivate(reassignToId: string | null) {
-    startTransition(async () => {
-      const res = await deactivateUser(member.id, reassignToId);
-      if (res.ok) {
-        toast.success(t("member_deactivated"));
-        router.refresh();
-      } else {
-        toast.error(errorMessage(res.error));
-      }
-      setConfirmOpen(false);
-    });
-  }
-
   return (
     // The entire row opens the person. Deliberately an onClick and NOT the
     // usual stretched-link trick (an absolutely-positioned ::after over the
@@ -764,127 +722,11 @@ function MemberRow({
         </>
       )}
 
-      <td className="py-3 pl-3">
-        <div className="flex items-center justify-end gap-1">
-          {/* The little "view their work" icon that used to live here is gone:
-              the row itself now goes there, so it was a second button for the
-              thing the whole row already does. */}
-          {canManage && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={t("member_actions")}
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <MoreHorizontal className="size-4" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem
-                  variant="destructive"
-                  onSelect={(e) => {
-                    e.preventDefault();
-                    setConfirmOpen(true);
-                  }}
-                >
-                  {t("menu_deactivate")}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-
-        <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("deactivate_confirm_title")}</DialogTitle>
-            <DialogDescription>
-              {t("deactivate_confirm_body", { name: member.name })}
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Guarded offboarding: if this person holds live work, show it and
-              offer to hand it to a teammate so nothing is orphaned. */}
-          {holdsWork && (
-            <div className="space-y-3 rounded-lg border border-border/50 bg-muted/30 p-3">
-              <p className="text-sm">
-                {scheduleCount > 0
-                  ? t("offboard_holds_with_schedules", {
-                      name: member.name,
-                      engagements: activeEngagements,
-                      clients: clientCount,
-                      schedules: scheduleCount,
-                    })
-                  : t("offboard_holds", {
-                      name: member.name,
-                      engagements: activeEngagements,
-                      clients: clientCount,
-                    })}
-              </p>
-              {canReassign && (
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                    {t("offboard_reassign_label")}
-                  </span>
-                  <select
-                    value={reassignTo}
-                    onChange={(e) => setReassignTo(e.target.value)}
-                    disabled={pending}
-                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {reassignTargets.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-            </div>
-          )}
-
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmOpen(false)}
-              disabled={pending}
-            >
-              {t("cancel")}
-            </Button>
-            {canReassign ? (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => doDeactivate(null)}
-                  disabled={pending}
-                >
-                  {t("offboard_remove_anyway")}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => doDeactivate(reassignTo)}
-                  disabled={pending || !reassignTo}
-                >
-                  {t("offboard_reassign_remove")}
-                </Button>
-              </>
-            ) : (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => doDeactivate(null)}
-                disabled={pending}
-              >
-                {t("menu_deactivate")}
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      </td>
+      {/* No actions column. Removing a teammate moved onto that teammate's own
+          page (see DeactivateMember): Karbon's roster row is purely a link with
+          no controls at all, and — the deciding reason — this row is now a
+          button, so a "..." trigger inside it was a click target inside a click
+          target. The menu held exactly one item, so it was mostly ceremony. */}
     </tr>
   );
 }
