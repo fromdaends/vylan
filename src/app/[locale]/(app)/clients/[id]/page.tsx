@@ -34,6 +34,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { cn } from "@/lib/cn";
 import { STAGE_BG_CLASS } from "@/lib/engagements/stage";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
+import { can } from "@/lib/auth/capabilities";
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import {
@@ -175,6 +176,12 @@ export default async function ClientDetailPage({
     callbackStatus: xeroCallbackStatus,
   };
   const isOwner = me?.role === "owner";
+  // Phase 2: the first two capabilities that actually withhold something. Both
+  // are carried by the member preset, so every existing staff member keeps
+  // exactly what they have — these only bite once an owner makes someone a
+  // Junior.
+  const canManageClients = can(me, "clients.manage");
+  const canSeeMoney = can(me, "money.view");
 
   return (
     // Two columns, following Canopy's client profile: a narrow rail of quiet
@@ -250,7 +257,9 @@ export default async function ClientDetailPage({
               {t("document_archive")}
             </Button>
           </Link>
-          <ClientFormDialog mode="edit" locale={locale} client={client} />
+          {canManageClients && (
+            <ClientFormDialog mode="edit" locale={locale} client={client} />
+          )}
           {client.archived_at ? (
             <form action={restoreClientAction}>
               <input type="hidden" name="id" value={client.id} />
@@ -511,7 +520,10 @@ export default async function ClientDetailPage({
         )}
       </Panel>
 
-      {clientPayments.length > 0 && (
+      {/* Money. A Junior sees the WORK on a client and not what it was billed
+          for — the payments history is amounts, dates and status, which is
+          exactly the thing money.view withholds. */}
+      {canSeeMoney && clientPayments.length > 0 && (
         <Panel title={tEng("payments_history")} flush>
           <PaymentsList
             rows={clientPayments}
