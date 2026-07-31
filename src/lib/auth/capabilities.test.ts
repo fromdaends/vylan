@@ -309,3 +309,40 @@ describe("a real users row is a valid subject", () => {
     expect(can(before, "billing.manage")).toBe(false);
   });
 });
+
+// ── THE ONES THAT ACTUALLY WITHHOLD SOMETHING ────────────────────────────────
+//
+// Everything in Phase 2 until now was invisible by design. money.view and
+// clients.manage are the first two that TAKE something away — and only from a
+// Junior. These pin the exact shape of that, because the failure mode is
+// silent in both directions: gate too much and every existing staff member
+// loses access on deploy; gate too little and the Junior role is decoration.
+describe("what a Junior actually loses", () => {
+  it("loses the money and the client list; a Member keeps both", () => {
+    expect(can(junior, "money.view")).toBe(false);
+    expect(can(junior, "clients.manage")).toBe(false);
+    expect(can(member, "money.view")).toBe(true);
+    expect(can(member, "clients.manage")).toBe(true);
+  });
+
+  it("keeps everything an untouched staff member has today", () => {
+    // The deploy-safety assertion. A staff row with no preset stored — which is
+    // every row in every firm until an owner changes one — must still carry
+    // both, or shipping this takes access away from people nobody demoted.
+    const untouched = { role: "staff" as const };
+    expect(can(untouched, "money.view")).toBe(true);
+    expect(can(untouched, "clients.manage")).toBe(true);
+  });
+
+  it("still lets a Junior be handed one of them back", () => {
+    // The escape hatch has to work on exactly these, since they are the two an
+    // owner is most likely to want to make an exception for.
+    const withMoney = {
+      role: "staff" as const,
+      permission_preset: "junior",
+      extra_capabilities: ["money.view"],
+    };
+    expect(can(withMoney, "money.view")).toBe(true);
+    expect(can(withMoney, "clients.manage")).toBe(false);
+  });
+});

@@ -19,6 +19,7 @@ import { DemoBlockButton } from "@/components/app/demo-block-modal";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { isTrialExpired } from "@/lib/trial";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { getBrandingImageUrl } from "@/lib/storage";
 import type {
   ClientEngagementSummary,
@@ -81,6 +82,10 @@ export default async function ClientsPage({
   // Write actions are locked only once the free trial has expired; an active
   // trial has full access.
   const trialLocked = firm ? isTrialExpired(firm) : false;
+  // clients.manage — carried by the member preset, so this hides nothing for
+  // anyone today. It only bites once an owner makes someone a Junior, which is
+  // the point: a Junior works ON clients without adding or importing them.
+  const canManageClients = can(currentUser, "clients.manage");
   const currentUserId = currentUser?.id ?? "";
   const teamEnabled = hasActiveTeam({
     teamEnabled: firm?.team_enabled === true,
@@ -211,7 +216,7 @@ export default async function ClientsPage({
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {trialLocked ? (
+          {!canManageClients ? null : trialLocked ? (
             <>
               <DemoBlockButton
                 label={t("import_csv")}

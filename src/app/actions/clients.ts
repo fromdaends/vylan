@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/clients";
 import { getCurrentUser, listActiveFirmUsers } from "@/lib/db/users";
 import { getCurrentFirm } from "@/lib/db/firms";
+import { can } from "@/lib/auth/capabilities";
 import { hasActiveTeam } from "@/lib/team/mode";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { logUserActivity } from "@/lib/db/activity";
@@ -98,6 +99,14 @@ export async function createClientAction(
   _prev: ClientFormState,
   formData: FormData,
 ): Promise<ClientFormState> {
+  // clients.manage — a Junior does the WORK on a client but does not add,
+  // rename or archive one. This is the first capability that actually takes
+  // something away: it had NO gate at all before Phase 2, and every existing
+  // staff member resolves to the member preset, which carries it. So nothing
+  // changes for anybody until an owner deliberately makes someone a Junior.
+  if (!can(await getCurrentUser(), "clients.manage")) {
+    return { error: "forbidden" };
+  }
   const parsed = ClientSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return { fieldErrors: fieldErrorsFromZod(parsed.error) };
@@ -115,6 +124,14 @@ export async function updateClientAction(
   _prev: ClientFormState,
   formData: FormData,
 ): Promise<ClientFormState> {
+  // clients.manage — a Junior does the WORK on a client but does not add,
+  // rename or archive one. This is the first capability that actually takes
+  // something away: it had NO gate at all before Phase 2, and every existing
+  // staff member resolves to the member preset, which carries it. So nothing
+  // changes for anybody until an owner deliberately makes someone a Junior.
+  if (!can(await getCurrentUser(), "clients.manage")) {
+    return { error: "forbidden" };
+  }
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return { error: "missing_id" };
 
@@ -217,6 +234,11 @@ export async function setClientPrivacyAction(
 }
 
 export async function archiveClientAction(formData: FormData) {
+  // clients.manage — see createClientAction. Returns silently rather than
+  // throwing: these are plain form actions with no error surface, and a Junior
+  // never reaches them anyway because the buttons are hidden.
+  if (!can(await getCurrentUser(), "clients.manage")) return;
+
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
   await archiveClient(id);
@@ -224,6 +246,11 @@ export async function archiveClientAction(formData: FormData) {
 }
 
 export async function restoreClientAction(formData: FormData) {
+  // clients.manage — see createClientAction. Returns silently rather than
+  // throwing: these are plain form actions with no error surface, and a Junior
+  // never reaches them anyway because the buttons are hidden.
+  if (!can(await getCurrentUser(), "clients.manage")) return;
+
   const id = formData.get("id");
   if (typeof id !== "string" || !id) return;
   await restoreClient(id);
