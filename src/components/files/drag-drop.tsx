@@ -80,6 +80,30 @@ export type DragPayload =
       label: string;
     };
 
+// ── THE DRAG IN FLIGHT ──────────────────────────────────────────────────────
+// The drop target and the drag source are different components, but a finished
+// move needs both: the target runs the server action, and the SOURCE ROW is
+// the thing that must disappear. Waiting for the page refresh to remove it
+// leaves a second or two where the screen still shows the old world — which,
+// after a toast has already said "Moved", reads as the move not working. This
+// is same-window drag and drop, so a module-level handshake is enough:
+//
+//   dragstart   the source registers itself here and dims
+//   drop        the target grabs it, runs the action, then answers:
+//                 hide()    → the move really happened; the row vanishes NOW
+//                 release() → nothing changed (no-op, error); the row undims
+//   dragend     if no target accepted the drop, the source cleans itself up
+//
+// The refresh still runs and remains the source of truth — hide() just closes
+// the gap between the database changing and the screen admitting it.
+type ActiveDrag = { hide: () => void; release: () => void };
+let activeDrag: ActiveDrag | null = null;
+function grabDrag(): ActiveDrag | null {
+  const d = activeDrag;
+  activeDrag = null;
+  return d;
+}
+
 function startDrag(e: React.DragEvent, payload: DragPayload, label: string) {
   const mime = payload.kind === "documents" ? MIME_DOCS : MIME_MOVE;
   e.dataTransfer.setData(mime, JSON.stringify(payload));
@@ -125,6 +149,7 @@ export function DraggableFile({
   const t = useTranslations("Files");
   const selection = useFileSelection();
   const [dragging, setDragging] = useState(false);
+  const [hidden, setHidden] = useState(false);
 
   return (
     <div
@@ -141,14 +166,27 @@ export function DraggableFile({
             : [{ source, id }];
         startDrag(e, { kind: "documents", items }, name);
         showDragGhost({ event: e, label: name, kind: "file", count: items.length });
+        activeDrag = {
+          hide: () => setHidden(true),
+          release: () => setDragging(false),
+        };
         setDragging(true);
       }}
       onDragEnd={(e) => {
         hideDragGhost();
+        if (e.dataTransfer && e.dataTransfer.dropEffect !== "none") {
+          // A target accepted the drop. STAY dimmed until its action reports
+          // back — hide on success, undim on no-op or error. Flashing back to
+          // full opacity for a beat and then vanishing reads as a glitch. The
+          // timeout is the escape hatch if the drop handler dies unanswered.
+          window.setTimeout(() => setDragging(false), 10_000);
+          return;
+        }
+        activeDrag = null;
         setDragging(false);
         explainDeadDrop(e, "drag_dead_file", t);
       }}
-      className={cn("transition-opacity", dragging && "opacity-40")}
+      className={cn("transition-opacity", dragging && "opacity-40", hidden && "hidden")}
     >
       {children}
     </div>
@@ -174,6 +212,7 @@ export function DraggableFolder({
 }) {
   const t = useTranslations("Files");
   const [dragging, setDragging] = useState(false);
+  const [hidden, setHidden] = useState(false);
   if (!moves) return <>{children}</>;
   // A derived year needs different guidance than a folder the firm made:
   // "put it in another folder" is useless advice when the row you grabbed is
@@ -189,14 +228,24 @@ export function DraggableFolder({
         e.stopPropagation();
         startDrag(e, moves, name);
         showDragGhost({ event: e, label: name, kind: "folder", count: 1 });
+        activeDrag = {
+          hide: () => setHidden(true),
+          release: () => setDragging(false),
+        };
         setDragging(true);
       }}
       onDragEnd={(e) => {
         hideDragGhost();
+        if (e.dataTransfer && e.dataTransfer.dropEffect !== "none") {
+          // Accepted somewhere — stay dimmed until the drop's action answers.
+          window.setTimeout(() => setDragging(false), 10_000);
+          return;
+        }
+        activeDrag = null;
         setDragging(false);
         explainDeadDrop(e, deadKey, t);
       }}
-      className={cn("transition-opacity", dragging && "opacity-40")}
+      className={cn("transition-opacity", dragging && "opacity-40", hidden && "hidden")}
     >
       {children}
     </div>
@@ -238,27 +287,43 @@ export function FolderDropTarget({
     // if the row you dragged is re-rendered away its dragend never arrives —
     // leaving the chip stuck to the cursor.
     hideDragGhost();
+    // The source row, waiting to be told whether it still lives here. EVERY
+    // exit below must answer it: hide() when the move really happened,
+    // release() when nothing changed — a path that forgets leaves the row
+    // dimmed for ten seconds.
+    const drag = grabDrag();
 
     const raw =
       e.dataTransfer.getData(MIME_DOCS) || e.dataTransfer.getData(MIME_MOVE);
-    if (!raw) return;
+    if (!raw) {
+      drag?.release();
+      return;
+    }
     let payload: DragPayload;
     try {
       payload = JSON.parse(raw) as DragPayload;
     } catch {
+      drag?.release();
       return;
     }
-    if (!payload || typeof payload !== "object" || !("kind" in payload)) return;
+    if (!payload || typeof payload !== "object" || !("kind" in payload)) {
+      drag?.release();
+      return;
+    }
 
     startTransition(async () => {
       // ── a folder dropped on a folder: re-parent it ──────────────────────
       if (payload.kind === "folder") {
         if (target.kind !== "folder") {
           // A real folder has no meaning inside a computed year or category.
+          drag?.release();
           toast.error(t("drop_folder_not_allowed"));
           return;
         }
-        if (target.folderId === payload.folderId) return; // onto itself
+        if (target.folderId === payload.folderId) {
+          drag?.release();
+          return; // onto itself
+        }
         const moved = await moveFolderAction({
           clientId: payload.clientId,
           folderId: payload.folderId,
@@ -267,6 +332,7 @@ export function FolderDropTarget({
         if (!moved.ok) {
           // "cycle" gets its own message: "a folder can't go inside itself"
           // tells you what to do, "that didn't work" does not.
+          drag?.release();
           toast.error(
             moved.error === "cycle"
               ? t("folder_cycle")
@@ -276,6 +342,14 @@ export function FolderDropTarget({
           );
           return;
         }
+        if (moved.noop) {
+          // It was already exactly there. Saying "Moved" over an unchanged
+          // screen is the lie this feature kept relapsing into.
+          drag?.release();
+          toast.info(t("drop_already_there", { folder: label }));
+          return;
+        }
+        drag?.hide();
         router.refresh();
         toast.success(t("folder_moved_to", { name: label }));
         return;
@@ -286,6 +360,7 @@ export function FolderDropTarget({
 
       if (payload.kind === "bucket") {
         if (target.kind !== "folder") {
+          drag?.release();
           toast.error(t("drop_folder_not_allowed"));
           return;
         }
@@ -299,7 +374,10 @@ export function FolderDropTarget({
           bucketName: payload.label,
         });
       } else {
-        if (payload.items.length === 0) return;
+        if (payload.items.length === 0) {
+          drag?.release();
+          return;
+        }
         res =
           target.kind === "folder"
             ? await setDocumentsFolderAction({
@@ -324,6 +402,11 @@ export function FolderDropTarget({
       }
 
       selection?.clear();
+      // The row disappears the moment the database confirms — not when the
+      // refresh eventually redraws the page. "Make things move and disappear
+      // in their column": this is the disappear.
+      if (res.succeeded > 0) drag?.hide();
+      else drag?.release();
       router.refresh();
       // Report what actually happened. Anything that claims a move over a
       // screen that did not change reads as the app being broken — which is

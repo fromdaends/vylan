@@ -1,5 +1,11 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, fireEvent, cleanup, screen } from "@testing-library/react";
+import {
+  render,
+  fireEvent,
+  cleanup,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import en from "../../../messages/en.json";
 import fr from "../../../messages/fr.json";
@@ -13,10 +19,11 @@ import fr from "../../../messages/fr.json";
 // is indistinguishable from the feature being broken.
 
 const toastInfo = vi.fn();
+const toastSuccess = vi.fn();
 vi.mock("sonner", () => ({
   toast: {
     info: (...a: unknown[]) => toastInfo(...a),
-    success: vi.fn(),
+    success: (...a: unknown[]) => toastSuccess(...a),
     warning: vi.fn(),
     error: vi.fn(),
   },
@@ -35,27 +42,53 @@ vi.mock("@/app/actions/folders", () => ({
   setDocumentsFolderAction: vi.fn(),
 }));
 
-import { DraggableFile, DraggableFolder } from "./drag-drop";
+import { moveFolderAction } from "@/app/actions/folders";
+import { DraggableFile, DraggableFolder, FolderDropTarget } from "./drag-drop";
 
 afterEach(() => {
   cleanup();
   toastInfo.mockReset();
+  toastSuccess.mockReset();
+  vi.mocked(moveFolderAction).mockReset();
 });
 
 /**
- * jsdom has no DataTransfer, so drags carry this stand-in. `dropEffect` is
- * the field under test: the browser sets it to "none" when no target accepted
- * the drop, "move" when one did.
+ * jsdom has no DataTransfer, so drags carry this stand-in. Unlike a bare
+ * object, it actually STORES what dragstart writes — which is what lets a
+ * whole drag→over→drop cycle run through the real components. `dropEffect`
+ * is the outcome field: the browser sets "none" when no target accepted the
+ * drop, "move" when one did (our dragover handler does exactly that).
  */
 function dataTransfer(dropEffect: string) {
+  const store = new Map<string, string>();
   return {
     dropEffect,
     effectAllowed: "move",
-    types: [] as string[],
-    setData: () => {},
-    getData: () => "",
-    setDragImage: () => {},
+    get types() {
+      return [...store.keys()];
+    },
+    setData(type: string, value: string) {
+      store.set(type, String(value));
+    },
+    getData(type: string) {
+      return store.get(type) ?? "";
+    },
+    setDragImage() {},
   };
+}
+
+/**
+ * Dispatch a drag event carrying OUR dataTransfer object, un-copied.
+ *
+ * fireEvent.dragOver(node, { dataTransfer }) shallow-copies the dataTransfer
+ * into each event — so when the dragover handler sets dropEffect = "move" it
+ * writes to a copy, and the dragend event never sees the outcome. A real
+ * browser threads ONE DataTransfer through the whole drag; this does the same.
+ */
+function fireDrag(node: Element, type: string, dt: unknown) {
+  const ev = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(ev, "dataTransfer", { value: dt });
+  return fireEvent(node, ev);
 }
 
 function wrap(ui: React.ReactNode) {
@@ -77,8 +110,8 @@ describe("dead-drop feedback", () => {
       </DraggableFolder>,
     );
     const row = screen.getByText("2026").parentElement!;
-    fireEvent.dragStart(row, { dataTransfer: dataTransfer("none") });
-    fireEvent.dragEnd(row, { dataTransfer: dataTransfer("none") });
+    fireDrag(row, "dragstart", dataTransfer("none"));
+    fireDrag(row, "dragend", dataTransfer("none"));
     expect(toastInfo).toHaveBeenCalledWith(en.Files.drag_dead_bucket);
   });
 
@@ -92,8 +125,8 @@ describe("dead-drop feedback", () => {
       </DraggableFolder>,
     );
     const row = screen.getByText("Taxes").parentElement!;
-    fireEvent.dragStart(row, { dataTransfer: dataTransfer("none") });
-    fireEvent.dragEnd(row, { dataTransfer: dataTransfer("none") });
+    fireDrag(row, "dragstart", dataTransfer("none"));
+    fireDrag(row, "dragend", dataTransfer("none"));
     expect(toastInfo).toHaveBeenCalledWith(en.Files.drag_dead_folder);
   });
 
@@ -104,8 +137,8 @@ describe("dead-drop feedback", () => {
       </DraggableFile>,
     );
     const row = screen.getByText("T4.pdf").parentElement!;
-    fireEvent.dragStart(row, { dataTransfer: dataTransfer("none") });
-    fireEvent.dragEnd(row, { dataTransfer: dataTransfer("none") });
+    fireDrag(row, "dragstart", dataTransfer("none"));
+    fireDrag(row, "dragend", dataTransfer("none"));
     expect(toastInfo).toHaveBeenCalledWith(en.Files.drag_dead_file);
   });
 
@@ -119,8 +152,8 @@ describe("dead-drop feedback", () => {
       </DraggableFolder>,
     );
     const row = screen.getByText("2026").parentElement!;
-    fireEvent.dragStart(row, { dataTransfer: dataTransfer("move") });
-    fireEvent.dragEnd(row, { dataTransfer: dataTransfer("move") });
+    fireDrag(row, "dragstart", dataTransfer("move"));
+    fireDrag(row, "dragend", dataTransfer("move"));
     expect(toastInfo).not.toHaveBeenCalled();
   });
 
@@ -129,5 +162,67 @@ describe("dead-drop feedback", () => {
       expect(en.Files[key], `en ${key}`).toBeTruthy();
       expect(fr.Files[key], `fr ${key}`).toBeTruthy();
     }
+  });
+});
+
+// The full cycle, through the REAL components: dragstart on a source row,
+// dragover + drop on a target, then what the founder actually judges by —
+// does the row leave the screen, and does the message tell the truth?
+describe("a completed drop answers the source row", () => {
+  function renderPair() {
+    wrap(
+      <>
+        <DraggableFolder
+          moves={{ kind: "folder", clientId: "c1", folderId: "src1" }}
+          name="Payroll"
+        >
+          <span>Payroll</span>
+        </DraggableFolder>
+        <FolderDropTarget target={{ kind: "folder", folderId: "t1" }} label="Taxes">
+          <span>Taxes</span>
+        </FolderDropTarget>
+      </>,
+    );
+    const source = screen.getByText("Payroll").parentElement!;
+    const target = screen.getByText("Taxes").parentElement!;
+    return { source, target };
+  }
+
+  function runDrop(source: HTMLElement, target: HTMLElement) {
+    const dt = dataTransfer("none");
+    fireDrag(source, "dragstart", dt);
+    fireDrag(target, "dragover", dt); // sets dropEffect "move"
+    fireDrag(target, "drop", dt);
+    fireDrag(source, "dragend", dt);
+    return dt;
+  }
+
+  it("a REAL move hides the source row instantly and says Moved", async () => {
+    vi.mocked(moveFolderAction).mockResolvedValue({ ok: true });
+    const { source, target } = renderPair();
+    const dt = runDrop(source, target);
+
+    expect(dt.dropEffect).toBe("move"); // the target accepted it
+    await waitFor(() => {
+      expect(toastSuccess).toHaveBeenCalledWith("Moved to Taxes.");
+      // The row is GONE the moment the move is confirmed — not whenever the
+      // page refresh gets around to redrawing the list.
+      expect(source.className).toContain("hidden");
+    });
+    expect(toastInfo).not.toHaveBeenCalled();
+  });
+
+  it("a move to where it already is says Already — and the row STAYS", async () => {
+    vi.mocked(moveFolderAction).mockResolvedValue({ ok: true, noop: true });
+    const { source, target } = renderPair();
+    runDrop(source, target);
+
+    await waitFor(() => {
+      expect(toastInfo).toHaveBeenCalledWith("Already in Taxes.");
+    });
+    // No lie, no vanish: nothing moved, so nothing disappears or dims.
+    expect(toastSuccess).not.toHaveBeenCalled();
+    expect(source.className).not.toContain("hidden");
+    expect(source.className).not.toContain("opacity-40");
   });
 });

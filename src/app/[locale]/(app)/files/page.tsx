@@ -337,29 +337,52 @@ async function BrowseTab({
               there was nothing on screen to drag a file onto, which is why
               drag-and-drop appeared not to work at all: the gesture was fine,
               there was simply never a drop target in view. */}
-          {/* FOLDERS ARE ALWAYS ON SCREEN BESIDE THE FILES.
+          {/* FOLDERS AND FILES ARE ONE LIST — one header, folders first, the
+              way Finder and Drive draw a directory. They used to be two
+              stacked tables, each with its own copy of the document columns
+              and its own empty-state text; the founder's review of that was
+              "why is the name of the folder saying the name of the
+              documents?", which is the correct review of two headers.
 
-              This is what makes dragging usable. The mechanism worked before
-              this — verified end to end on production — but at the deepest
-              level (inside a category) the ONLY drop targets were the small
-              path-bar links at the top of the page. A gesture whose target is
-              a 100px text link you have to know about is a gesture nobody
-              discovers. Drive shows folders and files in one list; so does
-              this now.
-
-              Inside a custom folder these are its sub-folders; anywhere else
-              they are the client's own folders, which is where you would want
-              to drag something anyway. */}
+              Folders stay on screen beside the files because that is what
+              makes dragging usable: you cannot drop a file on a folder that
+              is off screen. Inside a custom folder these are its sub-folders;
+              anywhere else, the client's top-level folders. */}
           {clientId && bulkFolders && (
-            <SubfolderList
-              locale={locale}
-              clientId={clientId}
-              folders={bulkFolders}
-              parentId={folderId}
-              buildQuery={buildQuery}
-            />
+            <div className="flex justify-end">
+              <NewFolderButton clientId={clientId} parentId={folderId} />
+            </div>
           )}
           <FileList
+            folderEntries={
+              clientId && bulkFolders
+                ? childrenOf(bulkFolders, folderId).map((f) => ({
+                    kind: "folder" as const,
+                    id: f.id,
+                    name: f.name,
+                    href: buildQuery({
+                      folder: f.id,
+                      year: null,
+                      category: null,
+                      page: null,
+                    }),
+                    modified: null,
+                    actions: (
+                      <FolderRowMenu
+                        clientId={clientId}
+                        folderId={f.id}
+                        name={f.name}
+                      />
+                    ),
+                    dropTarget: { kind: "folder" as const, folderId: f.id },
+                    dragPayload: {
+                      kind: "folder" as const,
+                      clientId,
+                      folderId: f.id,
+                    },
+                  }))
+                : []
+            }
             locale={locale}
             filters={{
               clientId,
@@ -470,71 +493,6 @@ async function ClientLevel({
 }
 
 // ── Levels 2 and 3: years, then categories ──────────────────────────────────
-
-/**
- * The sub-folders of the folder you are currently inside.
- *
- * Rendered ABOVE that folder's files, so a folder can hold both — which is what
- * every file manager does, and what makes dragging possible: you cannot drop a
- * file on a folder that is one level up and off screen.
- *
- * Nothing renders when the folder has no children, so a plain folder of
- * documents does not grow an empty header.
- */
-async function SubfolderList({
-  locale,
-  clientId,
-  folders,
-  parentId,
-  buildQuery,
-}: {
-  locale: AppLocaleish;
-  clientId: string;
-  folders: { id: string; name: string; parentId: string | null }[];
-  /** Inside a folder: its children. Null (anywhere else in the client): the
-   * client's top-level folders, so there is always a drop target on screen. */
-  parentId: string | null;
-  buildQuery: (o?: Record<string, string | null>) => string;
-}) {
-  const t = await getTranslations("Files");
-  const children = childrenOf(folders, parentId);
-  // No folders yet — but the New folder button still shows, because "there is
-  // nowhere to put this file" is exactly when someone wants to make one.
-  if (children.length === 0 && !parentId) {
-    return (
-      <div className="flex justify-end">
-        <NewFolderButton clientId={clientId} parentId={null} />
-      </div>
-    );
-  }
-  if (children.length === 0) return null;
-
-  const entries: BrowserEntry[] = children.map((f) => ({
-    kind: "folder" as const,
-    id: f.id,
-    name: f.name,
-    href: buildQuery({ folder: f.id, year: null, category: null, page: null }),
-    modified: null,
-    actions: <FolderRowMenu clientId={clientId} folderId={f.id} name={f.name} />,
-    dropTarget: { kind: "folder" as const, folderId: f.id },
-    // Draggable: drop it on another folder to nest it, or on the client in the
-    // path bar to bring it back to the top level.
-    dragPayload: { kind: "folder" as const, clientId, folderId: f.id },
-  }));
-
-  return (
-    <div className="space-y-3">
-      <div className="flex justify-end">
-        <NewFolderButton clientId={clientId} parentId={parentId} />
-      </div>
-      <FileBrowser
-        entries={entries}
-        locale={locale}
-        emptyMessage={t("folder_empty")}
-      />
-    </div>
-  );
-}
 
 async function FolderLevel({
   locale,
@@ -662,11 +620,15 @@ async function FileList({
   filters,
   showClient,
   buildHref,
+  folderEntries = [],
 }: {
   locale: AppLocaleish;
   filters: Parameters<typeof listDocuments>[0];
   showClient: boolean;
   buildHref: (page: number) => string;
+  /** Folder rows drawn ABOVE the documents, inside the SAME list — one
+   * header, folders first, like a real directory listing. */
+  folderEntries?: BrowserEntry[];
 }) {
   const t = await getTranslations("Files");
   const result = await listDocuments(filters);
@@ -721,13 +683,22 @@ async function FileList({
 
   return (
     <>
-      <FileBrowser entries={entries} locale={locale} emptyMessage={t("no_documents")} />
-      <FilesPagination
-        page={result.page}
-        pageCount={result.pageCount}
-        total={result.total}
-        buildHref={buildHref}
+      <FileBrowser
+        entries={[...folderEntries, ...entries]}
+        locale={locale}
+        emptyMessage={t("no_documents")}
       />
+      {/* "No results" under a list that plainly shows folders reads as the
+          app contradicting itself — the count line only appears when there
+          are documents to count, or when the list is truly empty. */}
+      {(result.total > 0 || folderEntries.length === 0) && (
+        <FilesPagination
+          page={result.page}
+          pageCount={result.pageCount}
+          total={result.total}
+          buildHref={buildHref}
+        />
+      )}
     </>
   );
 }
