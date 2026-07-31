@@ -20,7 +20,8 @@
     "qbo:post": "vitest run --config vitest.check.config.ts src/lib/quickbooks/post-e2e.check.ts",
     "qbo:inspect": "vitest run --config vitest.check.config.ts src/lib/quickbooks/inspect.check.ts",
     "qbo:refresh": "vitest run --config vitest.check.config.ts src/lib/quickbooks/refresh.check.ts",
-    "qbo:gaps": "vitest run --config vitest.check.config.ts src/lib/quickbooks/receipt-gap.check.ts"
+    "qbo:gaps": "vitest run --config vitest.check.config.ts src/lib/quickbooks/receipt-gap.check.ts",
+    "qbo:chase-check": "vitest run --config vitest.check.config.ts src/lib/db/receipt-chase.check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.95.2",

@@ -402,6 +402,7 @@ export default async function QuickbooksDraftsPage({
     <div className="space-y-6">
       <Header
         title={t("queue_title")}
+        missingReceiptsLabel={t("gaps_title")}
         subtitle={t("summary_drafts", { count: counts.total })}
       />
       {health === "reconnect_required" && (
@@ -476,7 +477,15 @@ export default async function QuickbooksDraftsPage({
   );
 }
 
-function Header({ title, subtitle }: { title: string; subtitle: string }) {
+function Header({
+  title,
+  subtitle,
+  missingReceiptsLabel,
+}: {
+  title: string;
+  subtitle: string;
+  missingReceiptsLabel: string;
+}) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-4 animate-in-up">
       <div>
@@ -486,6 +495,15 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
         </div>
         <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
       </div>
+      {/* The other direction. This page is documents becoming entries; that one
+          is entries with no document behind them. A quiet link rather than a
+          nav item or a button — it belongs beside its sibling, not shouted. */}
+      <Link
+        href="/quickbooks/receipts"
+        className="text-sm font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+      >
+        {missingReceiptsLabel}
+      </Link>
     </header>
   );
 }

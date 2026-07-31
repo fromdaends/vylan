@@ -931,3 +931,87 @@ holds, prefer asking the deployment to do that step over copying the credential.
 All are `.check.ts`, which `npm test` deliberately does not match: they need a
 live database or a live connection, and they are things you RUN when you want to
 know, not things that gate a change.
+
+## 22. The missing-receipt chase — Vylan's first move in the OTHER direction
+
+Every bookkeeping feature in this repo until now runs one way: a document
+arrives, and it becomes a transaction. This runs backwards. It reads what is
+already recorded in a client's ledger, finds the entries with nothing behind
+them, asks the client for those receipts in their portal, and attaches what
+comes back to the transaction it was asked for.
+
+That reversal is the whole point, and it is why the feature was cheap. The four
+pieces it needs were already built and already proven:
+
+| needs | already existed |
+| --- | --- |
+| read the client's ledger | `register-match.ts`'s date-window query |
+| ask the client, without email | request items + the portal |
+| read the returned document | the classify worker |
+| attach to an EXISTING transaction | `matched_existing`, proven live in §21 |
+
+The genuinely new code is a scan, a screen, and one override.
+
+### What the scan found, which is the number the feature rests on
+
+Against the connected sandbox: **85 of 90 posted expenses had no receipt
+attached.** The five it did not flag are exactly the ones §21 attached receipts
+to — so the scan is correct, not merely plausible. Seed data inflates the ratio,
+but the mechanism reads amounts, suppliers, dates and accounts correctly off a
+real company.
+
+It also surfaced twelve identical $1,412.50 rent payments to one landlord.
+Nobody wants to be asked for twelve rent receipts, which is the argument for
+supplier rules ("recurring, no receipt needed") as the natural follow-up.
+
+### Three QuickBooks facts this is built around
+
+1. **A transaction does not echo its attachments.** `GET /bill/{id}` returns no
+   `AttachableRef` however many documents are on it — so asking the transaction
+   reports "no receipt" for every transaction ever. Attachments must be read
+   from `Attachable` and joined back by id. (§21 learned this the expensive way.)
+2. **Attachable rows carry no date**, so the join cannot be filtered
+   server-side; the scan reads the company's attachments and matches in memory.
+3. **Ids are unique per ENTITY TYPE, not globally.** Bill 42 and Purchase 42 are
+   different transactions, so every key is `type:id`. A bare-id set would mark a
+   Purchase as supported because a Bill happened to share its number — a gap
+   silently suppressed, which is the direction that loses a firm money.
+
+### The one place this repo's usual pattern is WRONG
+
+Everywhere else, a missing column degrades silently: the feature does less,
+nothing breaks. **Here that would be actively harmful.** A chase item created
+without its `ledger_txn` reference still reaches the client, the client still
+uploads, and the receipt still posts — as a SECOND transaction for an expense
+already in the books. Silently doing less would mean silently overstating a
+client's expenses.
+
+So `createReceiptChaseItems` **fails closed**: no column, no items, and a
+message naming the migration. Verified against the real database rather than
+asserted (`npm run qbo:chase-check` → "refused cleanly, and wrote nothing").
+
+### Guards on the return path
+
+`chaseOverride` resolves the stored reference into the same `{action:"attach"}`
+override the accountant's own confirm dialog produces — no second way to write to
+a ledger. Three rules:
+
+* **An explicit human decision always wins.** "Create it anyway" is a decision.
+* **The stored provider must match the provider being posted to.** Vylan keeps a
+  QuickBooks realm id and a Xero tenant id in one column with no discriminator,
+  so a client who switched providers would otherwise send a QuickBooks id to
+  Xero — which could name a real and unrelated transaction.
+* **A malformed reference resolves to nothing**, which routes the document down
+  the ordinary review path. Failing to attach costs one click. Attaching to the
+  wrong entry costs a client.
+
+Resolved at `postApprovedDraftForFile`, the single dispatch point, so the single
+post, the bulk post and auto-approve all inherit it rather than three call sites
+having to remember.
+
+### Not built, deliberately
+
+Xero. The scan, the attach and the Attachable join are all QuickBooks-shaped and
+Xero's attachment model differs; the reference carries a `provider` field and the
+override refuses to cross providers, so the Xero half is additive when it comes.
+Saying "Xero works too" without testing it is the claim §21 exists to stop.
