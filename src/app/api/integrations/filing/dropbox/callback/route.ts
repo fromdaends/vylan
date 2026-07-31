@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import { saveStorageConnection } from "@/lib/db/filing";
 import {
   exchangeDropboxCode,
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
   }
 
   if (!auth.user || !me) return back("session");
-  if (me.role !== "owner") return back("owner_only");
+  if (!can(me, "integrations.manage")) return back("owner_only");
   const firm = await getCurrentFirm();
   if (!firm) return back("session");
 

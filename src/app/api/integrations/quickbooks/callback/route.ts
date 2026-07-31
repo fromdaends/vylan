@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser } from "@/lib/db/users";
+import { can } from "@/lib/auth/capabilities";
 import {
   isQuickbooksConfigured,
   exchangeCodeForTokens,
@@ -97,7 +98,7 @@ export async function GET(request: Request) {
   if (!isQuickbooksConfigured()) return back("error");
 
   // Must be an authenticated owner of a firm to store the connection.
-  if (!auth.user || me?.role !== "owner") return back("error");
+  if (!auth.user || !can(me, "integrations.manage")) return back("error");
   const firm = await getCurrentFirm();
   if (!firm) return back("error");
 
