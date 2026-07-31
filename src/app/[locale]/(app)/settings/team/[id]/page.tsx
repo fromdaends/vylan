@@ -22,6 +22,7 @@ import { getBrandingImageUrl } from "@/lib/storage";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
 import { HandOverWork } from "@/components/settings/team/hand-over-work";
 import { DeactivateMember } from "@/components/settings/team/deactivate-member";
+import { MemberPermissions } from "@/components/settings/team/member-permissions";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -218,6 +219,31 @@ export default async function TeamMemberProfilePage({
             )}
           </dl>
         </Panel>
+
+        {/* What this person is allowed to do. Owner-only, and never on the
+            owner's own row or a deactivated one — the server refuses both, and
+            a control that always errors is worse than no control.
+            Tucked in the rail rather than given a section of its own: the
+            founder's standing rule is that a control lives quietly on the
+            object it acts on. */}
+        {isOwner &&
+          !member.deactivated_at &&
+          member.role !== "owner" &&
+          member.id !== user.id && (
+            <Panel title={t("permissions_title")}>
+              <MemberPermissions
+                userId={id}
+                preset={member.permission_preset}
+                grants={member.extra_capabilities}
+                // Migration 1120 not applied yet → the columns come back
+                // undefined. The switches still render (so the feature is
+                // discoverable) but writing would fail, so they are disabled
+                // with the "available in a moment" message the firm settings
+                // already use for exactly this situation.
+                disabled={member.permission_preset === undefined}
+              />
+            </Panel>
+          )}
 
         {/* Owner actions on this person, together, at the bottom of the rail —
             the two heaviest things you can do to a teammate, kept away from the
