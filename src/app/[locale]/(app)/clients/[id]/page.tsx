@@ -5,8 +5,6 @@ import { listEngagements } from "@/lib/db/engagements";
 import { loadEngagementSignals } from "@/lib/dashboard/worklist";
 import { deriveEngagementStatus } from "@/lib/attention";
 import {
-  engagementStatusPillClass,
-  engagementStatusVariant,
 } from "@/lib/engagements/status-pill";
 import { getCurrentFirm } from "@/lib/db/firms";
 import { getCurrentUser, listFirmUsers, userDisplayLabel } from "@/lib/db/users";
@@ -33,6 +31,9 @@ import { assertLocale } from "@/lib/locale";
 import { formatDate } from "@/lib/format";
 import { Plus, FileText, Lock } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { cn } from "@/lib/cn";
+import { STAGE_BG_CLASS } from "@/lib/engagements/stage";
+import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { getClientQuickbooksStatus } from "@/lib/db/quickbooks";
 import { getQuickbooksConnectionHealth } from "@/lib/quickbooks/connection";
 import {
@@ -108,6 +109,9 @@ export default async function ClientDetailPage({
   const t = await getTranslations("Clients");
   const tEng = await getTranslations("Engagements");
   const tStatus = await getTranslations("Status");
+  // The worklist column labels already exist in Dashboard and read identically
+  // here — reusing them keeps one wording for "Assigned to" across the app.
+  const tWl = await getTranslations("Dashboard");
   const tApp = await getTranslations("App");
   const tCommon = await getTranslations("Common");
 
@@ -173,7 +177,16 @@ export default async function ClientDetailPage({
   const isOwner = me?.role === "owner";
 
   return (
-    <div className="space-y-6 max-w-3xl mx-auto">
+    // Two columns, following Canopy's client profile: a narrow rail of quiet
+    // reference cards on the left, and the WORK on the right where the eye
+    // lands. The old single 3xl column stacked contact details ABOVE the
+    // engagements, so the first thing you saw on a client was their phone
+    // number and the actual job list was below the fold.
+    //
+    // Deliberately not copied from the reference: its ten-tab row, and its
+    // Spouse / Dependents / Linked contacts / Tags cards. Vylan has no data
+    // behind any of those, and an empty card is worse than no card.
+    <div className="space-y-6 max-w-6xl">
       <Breadcrumb
         label={tCommon("breadcrumb")}
         items={[
@@ -182,8 +195,14 @@ export default async function ClientDetailPage({
         ]}
       />
 
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      {/* Canopy puts the identity AND the section tabs in one bordered card at
+          the top, so "who am I looking at" and "which part of them" are one
+          object. Vylan had a bare header floating above loose sections. */}
+      <header className="overflow-hidden rounded-xl border border-border/60 bg-card">
+      <div className="flex flex-wrap items-start justify-between gap-4 p-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <AvatarInitials name={client.display_name} size={44} />
+          <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">
             {client.display_name}
           </h1>
@@ -222,6 +241,7 @@ export default async function ClientDetailPage({
               />
             </div>
           )}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Link href={`/clients/${client.id}/archive`}>
@@ -253,18 +273,47 @@ export default async function ClientDetailPage({
             />
           )}
         </div>
+      </div>
+
+      {/* The tab row, sitting on the card's bottom edge with the active tab
+          underlined — Canopy's exact treatment. TWO tabs, not their ten: these
+          are the only two places a client's own content actually lives in
+          Vylan, and a tab that opens an empty section is the bloat the founder
+          asked to leave out. They NAVIGATE (Documents is its own route) rather
+          than toggling a client-side panel, so a link still opens in a new tab
+          and the back button still works. */}
+      <nav className="flex gap-1 border-t border-border/60 px-2">
+        {[
+          { key: "overview", href: `/clients/${client.id}`, label: t("tab_overview"), active: true },
+          { key: "documents", href: `/clients/${client.id}/archive`, label: t("document_archive"), active: false },
+        ].map((tab) => (
+          <Link
+            key={tab.key}
+            href={tab.href}
+            className={
+              tab.active
+                ? "-mb-px border-b-2 border-foreground px-3 py-2.5 text-sm font-medium text-foreground"
+                : "-mb-px border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            }
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
       </header>
 
-      <div className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight text-foreground">
-          {t("contact_info")}
-        </h2>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
+      {/* ── Left rail: reference, not action ─────────────────────────────── */}
+      <div className="space-y-4">
+      <Panel title={t("contact_info")}>
         {/* Read-only by default. Every field renders as a labeled value,
             never an open input box — editing happens deliberately through
             the "Edit client" dialog in the header. This protects the email
             in particular, since it's where document-request links and
             reminders get sent. */}
-        <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5 text-sm">
+        {/* One column in the rail — the old two-column grid put a phone
+            number beside an email in a space too narrow for either. */}
+        <dl className="space-y-3 text-sm">
           <DetailRow label={t("col_email")} value={client.email} />
           <DetailRow label={t("col_phone")} value={client.phone} mono />
           <DetailRow
@@ -272,9 +321,49 @@ export default async function ClientDetailPage({
             value={client.external_ref}
             mono
           />
+        </dl>
+      </Panel>
+
+      {/* About — the reference card Canopy carries and Vylan didn't. Every
+          field here already existed on the client and had a label; they were
+          just scattered (type and language sat as badges in the header,
+          industry and province had nowhere to show at all, and Notes was
+          filed under "Contact info", which it is not).
+          Nothing invented: no Spouse, no Dependents, no date of birth. Those
+          are the reference's US-1040 fields and Vylan has no column for any of
+          them — see the PR body.
+          province / industry / timezone come from migration 0220 and may be
+          undefined at runtime until it is applied, so each is read with ?? null
+          and DetailRow renders "Not specified" rather than a blank row. */}
+      <Panel title={t("about_title")}>
+        <dl className="space-y-3 text-sm">
+          <DetailRow
+            label={t("field_type")}
+            value={
+              client.type === "individual"
+                ? t("type_individual")
+                : t("type_business")
+            }
+          />
+          <DetailRow
+            label={t("field_industry")}
+            value={client.industry ?? null}
+          />
+          <DetailRow
+            label={t("field_province")}
+            value={client.province ?? null}
+          />
+          <DetailRow
+            label={t("field_locale")}
+            value={client.locale === "fr" ? "Français" : "English"}
+          />
+          <DetailRow
+            label={t("client_since")}
+            value={formatDate(client.created_at, locale, "medium")}
+          />
           <DetailRow label={t("field_notes")} value={client.notes} wide />
         </dl>
-      </div>
+      </Panel>
 
       {/* Bookkeeping lives on the client's own page: an OWNER can connect this
           client here (the client is known from context — no name-matching), and
@@ -285,10 +374,7 @@ export default async function ClientDetailPage({
       {(clientQuickbooks.connected ||
         clientXero.connected ||
         (isOwner && (clientQuickbooks.configured || clientXero.configured))) && (
-        <div className="space-y-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            {t("bk_section_title")}
-          </h2>
+        <Panel title={t("bk_section_title")}>
           {(clientQuickbooks.connected ||
             (isOwner &&
               clientQuickbooks.configured &&
@@ -311,89 +397,160 @@ export default async function ClientDetailPage({
                 isOwner={isOwner}
               />
             )}
-        </div>
+        </Panel>
       )}
 
-      <div className="space-y-3">
-        <div className="flex flex-row items-center justify-between gap-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            {t("engagements")}{" "}
-            <span className="text-muted-foreground font-normal">
-              ({engagements.length})
-            </span>
-          </h2>
-          {!client.archived_at && (
+      </div>
+
+      {/* ── Main column: the work ────────────────────────────────────────── */}
+      <div className="space-y-6">
+      {/* Canopy's "Active Tasks (4)" panel: a titled box whose body is a real
+          TABLE with column headers, not a bare list of links. The columns are
+          the questions you actually ask of a client's work — where is it, what
+          is it, who has it, when is it due — and the status reads as a coloured
+          dot plus a word, which is Canopy's treatment and quieter than a row of
+          filled pills. */}
+      <Panel
+        title={`${t("engagements")} (${engagements.length})`}
+        action={
+          !client.archived_at ? (
             <Link href={`/engagements/new?client=${client.id}`}>
               <Button size="sm">
                 <Plus className="size-4" />
                 {tEng("new")}
               </Button>
             </Link>
-          )}
-        </div>
-          {engagements.length === 0 ? (
-            <div className="text-sm text-muted-foreground py-4">
-              {t("engagements_empty")}
-            </div>
-          ) : (
-            <ul className="divide-y divide-border border-t border-border">
-              {engagements.map((e) => (
-                <li key={e.id} className="py-3">
-                  <Link
-                    href={`/engagements/${e.id}`}
-                    className="flex items-center justify-between gap-3 hover:text-foreground"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium truncate">{e.title}</span>
-                        {e.series_id && (
-                          <RecurringBadge
-                            label={tEng("repeat_badge")}
-                            compact
+          ) : null
+        }
+        flush
+      >
+        {engagements.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted-foreground">
+            {t("engagements_empty")}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/60 text-left text-[11px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                  <th className="px-4 py-2 font-medium">{tWl("wl_col_status")}</th>
+                  <th className="px-4 py-2 font-medium">{t("engagements")}</th>
+                  {teamEnabled && (
+                    <th className="hidden px-4 py-2 font-medium lg:table-cell">
+                      {tWl("wl_col_assigned")}
+                    </th>
+                  )}
+                  <th className="hidden px-4 py-2 font-medium sm:table-cell">
+                    {tWl("wl_col_due")}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {engagements.map((e) => {
+                  const derived = derivedStatusById.get(e.id) ?? e.status;
+                  const pay = paymentByEng.get(e.id);
+                  const holder = firmUsers.find(
+                    (u) => u.id === e.assigned_user_id,
+                  );
+                  return (
+                    <tr
+                      key={e.id}
+                      className="border-b border-border/40 transition-colors last:border-0 hover:bg-muted/40"
+                    >
+                      <td className="px-4 py-3 align-middle">
+                        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "size-1.5 shrink-0 rounded-full",
+                              e.stage
+                                ? STAGE_BG_CLASS[e.stage]
+                                : "bg-muted-foreground",
+                            )}
                           />
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {e.type.toUpperCase()}
-                        {e.due_date && ` · ${formatDate(e.due_date, locale, "medium")}`}
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {paymentByEng.get(e.id) &&
-                        paymentByEng.get(e.id)!.status !== "canceled" && (
-                          <PaymentBadge status={paymentByEng.get(e.id)!.status} />
-                        )}
-                      <Badge
-                        variant={engagementStatusVariant(
-                          derivedStatusById.get(e.id) ?? e.status,
-                        )}
-                        className={engagementStatusPillClass(
-                          derivedStatusById.get(e.id) ?? e.status,
-                        )}
-                      >
-                        {tStatus(derivedStatusById.get(e.id) ?? e.status)}
-                      </Badge>
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-      </div>
+                          <span className="text-muted-foreground">
+                            {tStatus(derived)}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 align-middle">
+                        <Link
+                          href={`/engagements/${e.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {e.title}
+                        </Link>
+                        <span className="ml-1.5 inline-flex items-center gap-1.5 align-middle">
+                          {e.series_id && (
+                            <RecurringBadge label={tEng("repeat_badge")} compact />
+                          )}
+                          {pay && pay.status !== "canceled" && (
+                            <PaymentBadge status={pay.status} />
+                          )}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {e.type.toUpperCase()}
+                        </span>
+                      </td>
+                      {teamEnabled && (
+                        <td className="hidden px-4 py-3 align-middle text-muted-foreground lg:table-cell">
+                          {holder ? userDisplayLabel(holder) : "—"}
+                        </td>
+                      )}
+                      <td className="hidden whitespace-nowrap px-4 py-3 align-middle text-muted-foreground sm:table-cell">
+                        {e.due_date
+                          ? formatDate(e.due_date, locale, "medium")
+                          : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
 
       {clientPayments.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            {tEng("payments_history")}
-          </h2>
+        <Panel title={tEng("payments_history")} flush>
           <PaymentsList
             rows={clientPayments}
             showClient={false}
             currentUserId={me?.id}
           />
-        </div>
+        </Panel>
       )}
+      </div>
+      </div>
     </div>
+  );
+}
+
+// A titled box. Canopy's whole page is these — every section, however small,
+// is its own bordered card with a header band, which is what makes a dense
+// profile scannable instead of a wall. `flush` drops the body padding for
+// panels whose content is a table that should meet the edges.
+function Panel({
+  title,
+  action,
+  flush = false,
+  children,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  flush?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
+      <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
+        <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
+          {title}
+        </h2>
+        {action}
+      </div>
+      <div className={flush ? "" : "p-4"}>{children}</div>
+    </section>
   );
 }
 

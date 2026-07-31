@@ -12,6 +12,7 @@ import { loadEngagementWorklist } from "@/lib/dashboard/worklist";
 import { selectAssignedTo } from "@/lib/dashboard/worklist-select";
 import { scopeForView, selectView, viewLabelKey } from "@/lib/engagements/views";
 import { listClients } from "@/lib/db/clients";
+import { countLiveSeriesByAssignee } from "@/lib/db/recurring";
 import { filterClientsByOwner } from "@/components/clients/owner";
 import { listActivityForFirm } from "@/lib/db/activity";
 import {
@@ -20,6 +21,7 @@ import {
 import { getBrandingImageUrl } from "@/lib/storage";
 import { WorklistTable } from "@/components/dashboard/engagements-worklist";
 import { HandOverWork } from "@/components/settings/team/hand-over-work";
+import { DeactivateMember } from "@/components/settings/team/deactivate-member";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
@@ -83,11 +85,24 @@ export default async function TeamMemberProfilePage({
   // Only the Archived tab costs a second one. The stat tile stays pinned to the
   // ACTIVE count on purpose — a headline number that changes meaning when you
   // switch tabs isn't a headline, it's a second copy of the table's length.
-  const [activeWorklist, viewWorklist, clientsRaw, activity, avatarUrl] =
-    await Promise.all([
+  const [
+    activeWorklist,
+    viewWorklist,
+    clientsRaw,
+    seriesByAssignee,
+    activity,
+    avatarUrl,
+  ] = await Promise.all([
       loadEngagementWorklist("active"),
       loadEngagementWorklist(scopeForView(view)),
       listClients(),
+      // Recurring schedules this person holds (0940). Needed by the removal
+      // dialog: a schedule keeps minting NEW work every cycle, so someone whose
+      // whole footprint is repeating work would otherwise be reported as
+      // holding NOTHING and be removed with no handover offered. That exact bug
+      // is why the count exists on the roster; passing 0 here would have
+      // reintroduced it the moment removal moved to this page.
+      countLiveSeriesByAssignee(),
       isOwner
         ? listActivityForFirm({ actorId: id, limit: 20 })
         : Promise.resolve([]),
@@ -123,7 +138,7 @@ export default async function TeamMemberProfilePage({
   const name = userDisplayLabel(member);
 
   return (
-    <div className="max-w-4xl space-y-8">
+    <div className="max-w-6xl space-y-6">
       <Breadcrumb
         label={tCommon("breadcrumb")}
         items={[
@@ -133,7 +148,8 @@ export default async function TeamMemberProfilePage({
         ]}
       />
 
-      <header className="flex flex-wrap items-start gap-4">
+      <header className="overflow-hidden rounded-xl border border-border/60 bg-card">
+      <div className="flex flex-wrap items-start gap-4 p-4">
         <AvatarInitials src={avatarUrl} name={name} size={56} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -145,60 +161,101 @@ export default async function TeamMemberProfilePage({
               <Badge variant="outline">{t("profile_deactivated")}</Badge>
             )}
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">{member.email}</p>
         </div>
+      </div>
+
+      {/* The lifecycle tabs move OUT of the engagements section and onto the
+          header card's bottom edge — Canopy's treatment, and the reason the
+          founder pointed at that screenshot: "how you can view, like, active
+          engagements". They were a cluster of small pills floating beside a
+          section heading; here they read as what they are, the page's own
+          sections. */}
+      <nav className="flex gap-1 overflow-x-auto border-t border-border/60 px-2">
+        {PROFILE_VIEWS.map((v) => (
+          <Link
+            key={v}
+            href={v === "active" ? `/settings/team/${id}` : `/settings/team/${id}?view=${v}`}
+            aria-current={v === view ? "page" : undefined}
+            className={
+              v === view
+                ? "-mb-px whitespace-nowrap border-b-2 border-foreground px-3 py-2.5 text-sm font-medium text-foreground"
+                : "-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            }
+          >
+            {tEngagements(viewLabelKey(v) as Parameters<typeof tEngagements>[0])}
+          </Link>
+        ))}
+      </nav>
       </header>
 
-      <div className={isOwner ? "grid grid-cols-3 gap-3" : "grid grid-cols-2 gap-3"}>
-        <StatTile label={t("profile_stat_engagements")} value={activeCount} />
-        <StatTile label={t("profile_stat_clients")} value={clients.length} />
+      {/* Two columns, same shape as a client's page and following Canopy's
+          profile layout: a narrow rail of quiet reference on the left, the
+          person's actual WORK on the right. */}
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)] lg:items-start">
+
+      {/* ── Left rail ────────────────────────────────────────────────────── */}
+      <div className="space-y-4">
+        <Panel title={t("profile_about_title")}>
+          {/* The three big number tiles that used to sit here are gone. A row
+              of oversized figures across the top is the "AI-generated dashboard"
+              look the founder has rejected before; the same numbers read fine as
+              quiet label/value rows, and they are reference, not the point. */}
+          <dl className="mt-3 space-y-3 text-sm">
+            <ProfileRow label={tClients("col_email")} value={member.email} />
+            <ProfileRow
+              label={t("profile_stat_engagements")}
+              value={String(activeCount)}
+            />
+            <ProfileRow
+              label={t("profile_stat_clients")}
+              value={String(clients.length)}
+            />
+            {isOwner && (
+              <ProfileRow
+                label={t("profile_stat_activity")}
+                value={String(activity.length)}
+              />
+            )}
+          </dl>
+        </Panel>
+
+        {/* Owner actions on this person, together, at the bottom of the rail —
+            the two heaviest things you can do to a teammate, kept away from the
+            first thing you meet. Removing them used to be a "..." menu item on
+            the firm roster; it lives here now because the roster row became a
+            button and a menu inside a button is a mis-click waiting to happen
+            (and because Karbon puts every colleague action on the colleague's
+            own page). */}
         {isOwner && (
-          <StatTile
-            label={t("profile_stat_activity")}
-            value={activity.length}
-          />
+          <div className="space-y-2">
+            <HandOverWork
+              fromUserId={id}
+              fromName={name}
+              members={reassignTargets}
+              counts={{ engagements: activeCount, clients: clients.length }}
+            />
+            {/* Never on your own profile, and never on the owner's: the server
+                refuses both, and offering a button that always errors is worse
+                than not offering it. */}
+            {!member.deactivated_at &&
+              member.id !== user.id &&
+              member.role !== "owner" && (
+                <DeactivateMember
+                  memberId={id}
+                  memberName={name}
+                  activeEngagements={activeCount}
+                  clientCount={clients.length}
+                  scheduleCount={seriesByAssignee.get(id) ?? 0}
+                  reassignTargets={reassignTargets}
+                />
+              )}
+          </div>
         )}
       </div>
 
-      {/* Bulk assign. Owner-only, and it renders itself away when there is
-          nothing to move or nobody to move it to. */}
-      {isOwner && (
-        <HandOverWork
-          fromUserId={id}
-          fromName={name}
-          members={reassignTargets}
-          counts={{ engagements: activeCount, clients: clients.length }}
-        />
-      )}
-
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-semibold tracking-tight">
-            {t("profile_engagements_title")}
-          </h2>
-          {/* The tabs the shared list used to be the only way to reach. Same
-              view vocabulary as /engagements, same labels — so "what did she
-              finish last month?" is answerable here instead of being the one
-              honest reason to send someone somewhere else. */}
-          <nav className="flex flex-wrap gap-1">
-            {PROFILE_VIEWS.map((v) => (
-              <Link
-                key={v}
-                href={v === "active" ? `/settings/team/${id}` : `/settings/team/${id}?view=${v}`}
-                aria-current={v === view ? "page" : undefined}
-                className={
-                  v === view
-                    ? "rounded-md bg-secondary px-2.5 py-1 text-xs font-medium text-foreground"
-                    : "rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground"
-                }
-              >
-                {tEngagements(
-                  viewLabelKey(v) as Parameters<typeof tEngagements>[0],
-                )}
-              </Link>
-            ))}
-          </nav>
-        </div>
+      {/* ── Main column: their work ──────────────────────────────────────── */}
+      <div className="space-y-6">
+      <Panel title={t("profile_engagements_title")} flush>
         <WorklistTable
           rows={engagements}
           locale={locale}
@@ -208,18 +265,15 @@ export default async function TeamMemberProfilePage({
           reassignMembers={reassignTargets}
           viewerId={user.id}
         />
-      </section>
+      </Panel>
 
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight">
-          {t("profile_clients_title")}
-        </h2>
+      <Panel title={t("profile_clients_title")}>
         {clients.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("profile_no_clients", { name })}
           </p>
         ) : (
-          <ul className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/50">
+          <ul className="-mx-4 -my-1 divide-y divide-border/40">
             {clients.slice(0, 8).map((c) => (
               <li key={c.id}>
                 <Link
@@ -239,19 +293,16 @@ export default async function TeamMemberProfilePage({
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
 
       {isOwner && (
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight">
-          {t("profile_activity_title")}
-        </h2>
+      <Panel title={t("profile_activity_title")}>
         {activity.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {t("profile_no_activity", { name })}
           </p>
         ) : (
-          <ol className="divide-y divide-border/60 overflow-hidden rounded-lg border border-border/50">
+          <ol className="-mx-4 -my-1 divide-y divide-border/40">
             {activity.map((e) => {
               const context = e.engagement_title ?? e.client_display_name ?? null;
               const href = e.engagement_id
@@ -291,18 +342,44 @@ export default async function TeamMemberProfilePage({
             })}
           </ol>
         )}
-      </section>
+      </Panel>
       )}
+      </div>
+      </div>
     </div>
   );
 }
 
-function StatTile({ label, value }: { label: string; value: number }) {
+// Same titled box as the client page — every section its own bordered card
+// with a header band, which is the shape of Canopy's whole profile.
+function Panel({
+  title,
+  flush = false,
+  children,
+}: {
+  title: string;
+  flush?: boolean;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card p-4">
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
-    </div>
+    <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
+      <div className="border-b border-border/60 px-4 py-2.5">
+        <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
+          {title}
+        </h2>
+      </div>
+      <div className={flush ? "" : "p-4"}>{children}</div>
+    </section>
   );
 }
 
+function ProfileRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 truncate text-right font-medium tabular-nums">
+        {value}
+      </dd>
+    </div>
+  );
+}
