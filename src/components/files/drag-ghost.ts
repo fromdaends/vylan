@@ -144,13 +144,20 @@ export function showDragGhost(opts: {
   // cursor — so it reads as the row gathering itself into your hand rather
   // than as a tooltip popping up next to it. Short and eased-out: any longer
   // and it feels like the app is thinking rather than responding.
-  inner.animate(
-    [
-      { transform: "scale(1.14)", opacity: 0 },
-      { transform: "scale(1)", opacity: 1 },
-    ],
-    { duration: 160, easing: "cubic-bezier(0.2, 0.8, 0.25, 1)", fill: "both" },
-  );
+  //
+  // Guarded, same reason as setDragImage above: the chip is decoration, and a
+  // decoration that can throw takes down everything queued behind it in the
+  // same event handler — which by dragend includes the "nothing moved"
+  // explanation, the one part of this feature that must never be lost.
+  if (typeof inner.animate === "function") {
+    inner.animate(
+      [
+        { transform: "scale(1.14)", opacity: 0 },
+        { transform: "scale(1)", opacity: 1 },
+      ],
+      { duration: 160, easing: "cubic-bezier(0.2, 0.8, 0.25, 1)", fill: "both" },
+    );
+  }
 
   document.addEventListener("dragover", onDragOver, true);
 }
@@ -173,6 +180,11 @@ export function hideDragGhost(immediate = false) {
   }
   // Shrink away rather than vanish. A chip that disappears between frames
   // makes a successful drop look like the app dropped the item on the floor.
+  // Same guard as the entrance: no animation support → plain removal.
+  if (typeof g.inner.animate !== "function") {
+    g.root.remove();
+    return;
+  }
   const anim = g.inner.animate(
     [
       { transform: "scale(1)", opacity: 1 },

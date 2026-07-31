@@ -84,6 +84,28 @@ function startDrag(e: React.DragEvent, payload: DragPayload, label: string) {
   e.dataTransfer.effectAllowed = "move";
 }
 
+/**
+ * A drop that lands NOWHERE must still answer.
+ *
+ * The invalid targets deliberately stay dark and refuse the drop — but from
+ * the person dragging, a gesture that ends in silence is indistinguishable
+ * from the feature being broken. This is not hypothetical: on a client with
+ * no custom folders, every row on screen is a derived year, so there is
+ * nothing valid to drop on at all, and the founder's report of that screen
+ * was "nothing actually moves when you drop things in places."
+ *
+ * `dropEffect` is how the browser tells the SOURCE how its drag ended:
+ * "move" when a target accepted it, "none" when nothing did (invalid target,
+ * empty space, Escape). On "none" we say what happened and what to do
+ * instead — which for a year folder is the one thing the UI cannot show:
+ * that years are automatic, and organizing by hand needs a folder of yours.
+ */
+function explainDeadDrop(e: React.DragEvent, key: string, t: (k: string) => string) {
+  if (e.dataTransfer && e.dataTransfer.dropEffect === "none") {
+    toast.info(t(key));
+  }
+}
+
 export function DraggableFile({
   source,
   id,
@@ -95,6 +117,7 @@ export function DraggableFile({
   name: string;
   children: ReactNode;
 }) {
+  const t = useTranslations("Files");
   const selection = useFileSelection();
   const [dragging, setDragging] = useState(false);
 
@@ -115,9 +138,10 @@ export function DraggableFile({
         showDragGhost({ event: e, label: name, kind: "file", count: items.length });
         setDragging(true);
       }}
-      onDragEnd={() => {
+      onDragEnd={(e) => {
         hideDragGhost();
         setDragging(false);
+        explainDeadDrop(e, "drag_dead_file", t);
       }}
       className={cn("transition-opacity", dragging && "opacity-40")}
     >
@@ -143,8 +167,13 @@ export function DraggableFolder({
   name: string;
   children: ReactNode;
 }) {
+  const t = useTranslations("Files");
   const [dragging, setDragging] = useState(false);
   if (!moves) return <>{children}</>;
+  // A derived year needs different guidance than a folder the firm made:
+  // "put it in another folder" is useless advice when the row you grabbed is
+  // automatic and the screen has no folders yet.
+  const deadKey = moves.kind === "bucket" ? "drag_dead_bucket" : "drag_dead_folder";
 
   return (
     <div
@@ -157,9 +186,10 @@ export function DraggableFolder({
         showDragGhost({ event: e, label: name, kind: "folder", count: 1 });
         setDragging(true);
       }}
-      onDragEnd={() => {
+      onDragEnd={(e) => {
         hideDragGhost();
         setDragging(false);
+        explainDeadDrop(e, deadKey, t);
       }}
       className={cn("transition-opacity", dragging && "opacity-40")}
     >
