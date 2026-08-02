@@ -1077,6 +1077,36 @@
   }
 }
 
+/* Portal PIN gate: a short lateral shake on a wrong code. Small amplitude on
+   purpose — it should read as "not that one, try again", not as an alarm.
+   Respects reduced-motion by collapsing to no movement. */
+@keyframes pin-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+.animate-pin-shake {
+  animation: pin-shake 0.4s ease-in-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-pin-shake {
+    animation: none;
+  }
+}
+
 @keyframes reveal-in {
   from {
     opacity: 0;

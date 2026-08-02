@@ -18,6 +18,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isValidTokenShape } from "@/lib/db/portal";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import { isPortalFileAccessAllowed } from "@/lib/portal/file-access";
 import { signedUrl } from "@/lib/storage";
 import { buildContentDisposition } from "@/lib/files/content-disposition";
@@ -60,6 +61,10 @@ export async function GET(
     ...PORTAL_FILE_VIEW_PER_IP,
   });
   if (!rlIp.ok) return tooMany(rlIp.retryAfter);
+
+  // PIN gate — this is the raw document bytes, the single most important door
+  // to keep shut when a firm has switched the PIN on.
+  if (!(await isPortalUnlocked(token))) return notFound();
 
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb

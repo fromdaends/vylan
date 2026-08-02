@@ -23,6 +23,7 @@ import {
   listFinalDocumentsForEngagementSR,
 } from "@/lib/db/final-documents";
 import { computeDeliverablesLocked } from "@/lib/portal/deliverable-access";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import { firmPaymentRails } from "@/lib/payments/rails";
 import { reconcilePayPalOrder } from "@/lib/payments/paypal-reconcile";
 import { firmPayPalMerchantId } from "@/lib/db/paypal-connect";
@@ -183,6 +184,10 @@ export async function loadPortalContext(
   token: string,
 ): Promise<PortalContext | null> {
   if (!isValidTokenShape(token)) return null;
+  // PIN gate. The /r/[token] page already checks this BEFORE calling here, so
+  // that it can render the gate screen instead of a 404 — this second check is
+  // defence in depth for any future caller that forgets.
+  if (!(await isPortalUnlocked(token))) return null;
   const sb = getServiceRoleSupabase();
 
   const { data: engagement, error: e1 } = await sb
@@ -495,9 +500,21 @@ export async function loadPortalContext(
     engagement.firm_id as string,
   );
 
+  // Strip the PIN ciphertext before this row travels any further. `client` is
+  // a select("*") and PortalContext is handed to PortalShell, a CLIENT
+  // component — so every column here gets serialised into the page the visitor
+  // can read. The value is encrypted and useless without the server key, but
+  // there is no reason to hand an attacker the ciphertext of a live
+  // credential, and no reason for the browser to have it at all.
+  const {
+    portal_pin_encrypted: _pin,
+    portal_pin_salt: _salt,
+    ...clientSafe
+  } = client as Record<string, unknown>;
+
   return {
     engagement: engagement as Engagement,
-    client: client as Client,
+    client: clientSafe as Client,
     firm: firm as Firm,
     items: items as RequestItem[],
     uploaded_count_by_item: counts,
@@ -531,6 +548,9 @@ export async function findEngagementForToken(token: string): Promise<{
   status: string;
 } | null> {
   if (!isValidTokenShape(token)) return null;
+  // PIN gate. Covers the messages + activity routes without each having to
+  // remember. See lib/portal/gate.ts for why enforcement lives at this level.
+  if (!(await isPortalUnlocked(token))) return null;
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb
     .from("engagements")
@@ -685,6 +705,8 @@ export async function findItemForToken(
   itemId: string,
 ): Promise<RequestItem | null> {
   if (!isValidTokenShape(token)) return null;
+  // PIN gate — covers every upload and item-status route in one place.
+  if (!(await isPortalUnlocked(token))) return null;
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb
     .from("engagements")

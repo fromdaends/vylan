@@ -4,6 +4,8 @@ import { NextIntlClientProvider } from "next-intl";
 import { getMessages } from "next-intl/server";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import { loadPortalContext } from "@/lib/db/portal";
+import { checkPortalGate, loadGateBranding } from "@/lib/portal/gate";
+import { PortalGate } from "@/components/portal/portal-gate";
 import { reconcilePaymentRequest } from "@/lib/payments/reconcile";
 import { brand } from "@/lib/brand";
 import { PortalShell } from "@/components/portal/portal-shell";
@@ -64,6 +66,61 @@ export default async function PortalPage({
 }) {
   const { token } = await params;
   const sp = await searchParams;
+
+  // THE GATE COMES FIRST — before any portal data is fetched.
+  //
+  // This ordering IS the feature. Loading the portal and then covering it with
+  // a lock screen would put the client's documents, invoice and messages into
+  // the HTML of a page nobody has unlocked, readable by anyone who opens dev
+  // tools or curls the response. So when a code is required, the only thing
+  // this route reads is the firm's name and logo, and the only thing it
+  // renders is the gate.
+  const gate = await checkPortalGate(token);
+  if (gate.state !== "open") {
+    const branding = await loadGateBranding(token);
+    if (!branding) notFound();
+    const gateLocale: "fr" | "en" = sp.lang === "fr" ? "fr" : "en";
+    const [gateMessages, gateLogoUrl] = await Promise.all([
+      getMessages({ locale: gateLocale }),
+      getBrandingImageUrl(branding.firmLogoPath),
+    ]);
+    const initials = branding.firmName
+      .split(/\s+/)
+      .map((w) => w[0])
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("")
+      .toUpperCase();
+    return (
+      <html
+        lang={gateLocale}
+        className={`${inter.variable} ${mono.variable} h-full antialiased`}
+        suppressHydrationWarning
+      >
+        <head>
+          <title>{`${brand.name}: ${branding.firmName}`}</title>
+          <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, viewport-fit=cover"
+          />
+        </head>
+        <body className="min-h-full bg-background text-foreground">
+          <ThemeProvider>
+            <NextIntlClientProvider locale={gateLocale} messages={gateMessages}>
+              <PortalGate
+                token={token}
+                firmName={branding.firmName}
+                firmLogoUrl={gateLogoUrl}
+                initials={initials}
+                brandColor={branding.brandColor}
+                lockedUntil={gate.state === "locked" ? gate.until : null}
+              />
+            </NextIntlClientProvider>
+          </ThemeProvider>
+        </body>
+      </html>
+    );
+  }
 
   const ctx = await loadPortalContext(token);
   if (!ctx) notFound();

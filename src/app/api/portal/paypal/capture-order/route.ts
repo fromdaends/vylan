@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isValidTokenShape } from "@/lib/db/portal";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import { getLatestPaymentRequestForEngagementSR } from "@/lib/db/payment-requests";
 import { isPayPalConfigured } from "@/lib/paypal/config";
 import { captureOrder } from "@/lib/paypal/orders";
@@ -53,6 +54,9 @@ export async function POST(request: NextRequest) {
   if (typeof orderId !== "string" || orderId.trim() === "") {
     return blocked("bad_request", 400);
   }
+
+  // PIN gate.
+  if (!(await isPortalUnlocked(token))) return blocked("invalid_token", 400);
 
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb

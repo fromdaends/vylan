@@ -13,6 +13,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isValidTokenShape } from "@/lib/db/portal";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import {
   checkRateLimit,
   PORTAL_STATUS_PER_TOKEN,
@@ -125,6 +126,11 @@ export async function POST(request: NextRequest) {
     const res = NextResponse.json({ error: "rate_limited" }, { status: 429 });
     if (rl.retryAfter) res.headers.set("Retry-After", String(rl.retryAfter));
     return res;
+  }
+
+  // PIN gate.
+  if (!(await isPortalUnlocked(token))) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
   const sb = getServiceRoleSupabase();

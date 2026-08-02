@@ -46,6 +46,7 @@ import { getClientXeroStatus } from "@/lib/db/xero";
 import { getXeroConnectionHealth } from "@/lib/xero/connection";
 import { isXeroConfigured } from "@/lib/xero/client";
 import { ClientXeroCard } from "@/components/clients/client-xero-card";
+import { ClientPortalPinCard } from "@/components/clients/client-portal-pin-card";
 
 export default async function ClientDetailPage({
   params,
@@ -372,6 +373,20 @@ export default async function ClientDetailPage({
           />
           <DetailRow label={t("field_notes")} value={client.notes} wide />
         </dl>
+      </Panel>
+
+      {/* Portal access — the optional 6-digit code that gates this client's
+          portal link. Off for everyone by default; the frictionless link stays
+          the product's default story. Owners and staff both manage it, in line
+          with the rest of this profile.
+          The code itself is deliberately NOT passed in: the card fetches it
+          through an audit-logged action, so it never sits in this page's
+          HTML. */}
+      <Panel title={t("portal_access_title")}>
+        <ClientPortalPinCard
+          clientId={client.id}
+          initialEnabled={client.portal_pin_enabled === true}
+        />
       </Panel>
 
       {/* Bookkeeping lives on the client's own page: an OWNER can connect this

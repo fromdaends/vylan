@@ -14,6 +14,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isValidTokenShape } from "@/lib/db/portal";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import { isPortalFileAccessAllowed } from "@/lib/portal/file-access";
 import {
   renderImageThumbnail,
@@ -63,6 +64,9 @@ export async function GET(
     if (rlIp.retryAfter) res.headers.set("Retry-After", String(rlIp.retryAfter));
     return res;
   }
+
+  // PIN gate — a thumbnail is still the document's contents.
+  if (!(await isPortalUnlocked(token))) return notFound();
 
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb
