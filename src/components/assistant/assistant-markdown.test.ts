@@ -109,3 +109,35 @@ describe("parseAssistantMarkdown", () => {
     expect(parseAssistantMarkdown("   \n\n  ")).toEqual([]);
   });
 });
+
+describe("internal links (Files v2 §4 citations)", () => {
+  it("renders an internal path as a link span", () => {
+    const spans = parseInlineSpans("see [T4 2025](/files?client=c1&year=2025) here");
+    expect(spans).toEqual([
+      { type: "text", value: "see " },
+      { type: "link", value: "T4 2025", href: "/files?client=c1&year=2025" },
+      { type: "text", value: " here" },
+    ]);
+  });
+
+  it("an EXTERNAL link keeps its words and drops the link", () => {
+    const spans = parseInlineSpans("go to [evil](https://evil.example) now");
+    expect(spans).toEqual([
+      { type: "text", value: "go to " },
+      { type: "text", value: "evil" },
+      { type: "text", value: " now" },
+    ]);
+  });
+
+  it("javascript:, protocol-relative, and bare-word targets never become links", () => {
+    for (const bad of ["javascript:alert(1)", "//evil.example/x", "files"]) {
+      const spans = parseInlineSpans(`[click](${bad})`);
+      expect(spans.some((s) => s.type === "link"), bad).toBe(false);
+    }
+  });
+
+  it("links coexist with bold and code on one line", () => {
+    const spans = parseInlineSpans("**Found** [it](/files/organize) in `t4`");
+    expect(spans.map((s) => s.type)).toEqual(["bold", "text", "link", "text", "code"]);
+  });
+});

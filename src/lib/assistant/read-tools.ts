@@ -11,6 +11,7 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { findFiles, readFile } from "@/lib/assistant/file-tools";
 import {
   createChatToolContext,
   runChatTool,
@@ -23,6 +24,48 @@ const UUID_RE =
 // The tools the general assistant may call. find_engagements discovers the
 // firm's work; the rest read ONE engagement identified by engagement_id.
 export const ASSISTANT_READ_TOOLS: Anthropic.Tool[] = [
+  {
+    name: "find_files",
+    description:
+      "Search the FIRM'S ENTIRE file library — every client — by file name, details, or words INSIDE documents the AI has read. Use for questions like \"do we have Zachary's 2025 T4\" or \"which document mentions Hydro-Québec\". Each result carries a `link`; when your answer draws on a document, cite it as a markdown link: [name](link). Content matches only exist for files the AI has read (new portal uploads).",
+    input_schema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description:
+            "What to look for — a file name fragment, a document type, or words that would appear inside the document.",
+        },
+        client_name: {
+          type: "string",
+          description: "Optional: narrow to one client by (partial) name.",
+        },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "read_file",
+    description:
+      "Read ONE document's stored text plus its metadata, for summarizing or answering what a document says. Use after find_files. Text exists only for files the AI has read at portal intake; for others you still get the metadata. Cite the document via its `link` when you use it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        source: {
+          type: "string",
+          enum: ["checklist", "final", "imported"],
+          description: "The source from a find_files result.",
+        },
+        file_id: {
+          type: "string",
+          description: "The file_id from a find_files result.",
+        },
+      },
+      required: ["source", "file_id"],
+      additionalProperties: false,
+    },
+  },
   {
     name: "find_engagements",
     description:
@@ -252,6 +295,10 @@ export async function runAssistantReadTool(
   ctx: AssistantReadContext,
 ): Promise<unknown> {
   if (name === "find_engagements") return findEngagements(ctx.sb, input);
+  // Firm-wide file tools (Files v2 §4) — no engagement scope, session RLS
+  // does the authorization exactly as it does in Browse.
+  if (name === "find_files") return findFiles(ctx.sb, input);
+  if (name === "read_file") return readFile(ctx.sb, input);
   // Defensive: the general assistant is read-only and is never given
   // propose_* tools, but never execute one even if a name slips through.
   if (name.startsWith("propose_")) {
