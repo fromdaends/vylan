@@ -10,6 +10,7 @@ import {
   note,
   warn,
 } from "../types";
+import { HOW_IT_WORKS_PUBLIC } from "@/lib/marketing-nav";
 
 export const meta: HelpCategoryMeta = {
   title: "Pour commencer",
@@ -74,9 +75,13 @@ const whatIsVylan: HelpArticle = {
     h("Où vos données sont hébergées"),
     p("Vos données sont hébergées au Canada."),
     note(
-      "Envie d'essayer ? ",
-      link("/how-it-works", "Voyez comment ça marche"),
-      " pour la visite guidée, ou lisez ",
+      ...(HOW_IT_WORKS_PUBLIC
+        ? [
+            "Envie d'essayer ? ",
+            link("/how-it-works", "Voyez comment ça marche"),
+            " pour la visite guidée, ou lisez ",
+          ]
+        : ["Envie d'essayer ? Lisez "]),
       link("/help/getting-started/your-first-engagement", "votre premier engagement"),
       " pour vous lancer.",
     ),

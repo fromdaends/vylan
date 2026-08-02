@@ -139,6 +139,10 @@ export type FirmActivityEntry = ActivityEntry & {
 export async function listActivityForFirm(filters: {
   clientId?: string | null;
   action?: string | null;
+  // Any-of action filter — the Files Home "Team activity" feed wants every
+  // file/folder action in one query rather than N queries or client-side
+  // filtering of the firm's whole log.
+  actions?: string[];
   // Only this user's actions (actor_type 'user'). Powers the teammate profile's
   // "recent activity" feed.
   actorId?: string | null;
@@ -172,6 +176,7 @@ export async function listActivityForFirm(filters: {
     .order("created_at", { ascending: false })
     .limit(limit);
   if (filters.action) query = query.eq("action", filters.action);
+  if (filters.actions?.length) query = query.in("action", filters.actions);
   if (filters.actorId) {
     query = query.eq("actor_type", "user").eq("actor_id", filters.actorId);
   }

@@ -93,6 +93,10 @@ export type MoveInput = {
   year?: string | null;
   /** "" = leave alone; "unsorted" = Unsorted; else a category code. */
   category?: string | null;
+  /** Set when the move fires from an approved AI Organize suggestion. Same
+   * code path, same audit event — plus this marker in the metadata, so the
+   * log reads "approved an AI suggestion", attributed to the approver. */
+  aiSuggested?: boolean;
 };
 
 /**
@@ -143,6 +147,7 @@ export async function moveDocumentAction(
     year: data.browse_year ?? null,
     category: data.browse_category ?? null,
     doc_type: (patch.manual_doc_type as string | null) ?? undefined,
+    ai_suggested: input.aiSuggested || undefined,
   });
   revalidatePath("/files");
   return { ok: true };
@@ -157,6 +162,8 @@ export async function moveDocumentAction(
 export async function deleteDocumentAction(input: {
   source: string;
   id: string;
+  /** Approved AI Organize duplicate suggestion — see MoveInput.aiSuggested. */
+  aiSuggested?: boolean;
 }): Promise<DocumentActionResult> {
   if (!isDocumentSource(input.source) || !input.id) {
     return { ok: false, error: "invalid" };
@@ -176,6 +183,7 @@ export async function deleteDocumentAction(input: {
   await logUserActivity(firm.id, null, "file_deleted", {
     source: input.source,
     file_id: input.id,
+    ai_suggested: input.aiSuggested || undefined,
   });
   revalidatePath("/files");
   return { ok: true };

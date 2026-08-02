@@ -17,6 +17,7 @@
 import { getLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { brand } from "@/lib/brand";
+import { HOW_IT_WORKS_PUBLIC } from "@/lib/marketing-nav";
 import { getCategory } from "@/content/help/registry";
 import type { AppLocale } from "@/i18n/routing";
 import { FooterLangSwitch, FooterDemoLink } from "./vylan-footer-client";
@@ -79,9 +80,11 @@ export async function VylanFooter({
           <nav className="vyf-col" aria-label={t("footer_col_product")}>
             <h3 className="vyf-col-title">{t("footer_col_product")}</h3>
             <ul>
-              <li>
-                <Link href="/how-it-works">{t("footer_how_it_works")}</Link>
-              </li>
+              {HOW_IT_WORKS_PUBLIC ? (
+                <li>
+                  <Link href="/how-it-works">{t("footer_how_it_works")}</Link>
+                </li>
+              ) : null}
               <li>
                 <FooterDemoLink label={t("footer_book_demo")} />
               </li>

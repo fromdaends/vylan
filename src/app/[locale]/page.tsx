@@ -13,6 +13,7 @@ import {
 import { LeadForm } from "@/components/vylan-landing/lead-form";
 import { VylanFooter } from "@/components/vylan-landing/vylan-footer";
 import "@/styles/vylan-landing.css";
+import { HOW_IT_WORKS_PUBLIC } from "@/lib/marketing-nav";
 
 export async function generateMetadata({
   params,
@@ -89,14 +90,17 @@ export default async function Home({
         <LeadForm />
       </section>
 
-      {/* CALL TO ACTION — invites visitors to the full "How it works" page
-          (replaced the old 3-up feature grid). */}
-      <section className="vy-home-cta">
-        <h2 className="vy-home-cta-title">{t("home_cta_title")}</h2>
-        <Link className="vy-btn" href="/how-it-works">
-          {t("cta_how_it_works")}
-        </Link>
-      </section>
+      {/* CALL TO ACTION — exists only to send visitors to the full "How it
+          works" page, so it goes with it. Hiding just the button would leave
+          its heading standing over nothing. */}
+      {HOW_IT_WORKS_PUBLIC ? (
+        <section className="vy-home-cta">
+          <h2 className="vy-home-cta-title">{t("home_cta_title")}</h2>
+          <Link className="vy-btn" href="/how-it-works">
+            {t("cta_how_it_works")}
+          </Link>
+        </section>
+      ) : null}
 
       {/* FOOTER — carries the contact details (email, both phone lines,
           location) on every page; there is no separate contact page. */}

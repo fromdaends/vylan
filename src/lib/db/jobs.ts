@@ -7,6 +7,10 @@ import { getServiceRoleSupabase } from "@/lib/supabase/server";
 export type JobKind =
   | "send_reminder"
   | "classify_document"
+  // The Files AI Organize scanner (nightly + on-demand from the Home card).
+  // READS ONLY — writes suggestion rows for a human to approve; re-enqueues
+  // itself for the next 03:00 UTC on completion.
+  | "organize_scan"
   // Queued by the Phase 3 router when an upload should be auto-rejected.
   // Handler ships in Phase 4 (UnusableDocRetry email + SMS); until then
   // the cron route will absorb these as `unknown_kind` (non-fatal).

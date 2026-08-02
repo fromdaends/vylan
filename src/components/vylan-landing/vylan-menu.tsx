@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Link, usePathname } from "@/i18n/navigation";
+import { HOW_IT_WORKS_PUBLIC } from "@/lib/marketing-nav";
 import { SocialLinks } from "./social-links";
 
 export type VylanMenuStrings = {
@@ -185,9 +186,11 @@ export function VylanMenu({
             >
               {s.navHome} <span className="vy-arr">→</span>
             </Link>
-            <Link href="/how-it-works" onClick={closeNow}>
-              {s.navHowItWorks} <span className="vy-arr">→</span>
-            </Link>
+            {HOW_IT_WORKS_PUBLIC ? (
+              <Link href="/how-it-works" onClick={closeNow}>
+                {s.navHowItWorks} <span className="vy-arr">→</span>
+              </Link>
+            ) : null}
             {bookDemoHref ? (
               <a href={bookDemoHref} onClick={closeNow}>
                 {s.navBookDemo} <span className="vy-arr">→</span>

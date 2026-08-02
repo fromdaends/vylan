@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { VylanMenu, type VylanMenuStrings } from "./vylan-menu";
+import { HOW_IT_WORKS_PUBLIC } from "@/lib/marketing-nav";
 
 // next-intl's navigation reads routing config + the router at import time;
 // none of that is what these tests are about.
@@ -163,5 +164,19 @@ describe("no contact item", () => {
       a.getAttribute("href"),
     );
     expect(hrefs).not.toContain("/contact");
+  });
+});
+
+describe("how-it-works visibility", () => {
+  it("follows HOW_IT_WORKS_PUBLIC rather than linking unconditionally", () => {
+    // The page is hidden from the public (founder, 2026-08-02) but NOT deleted,
+    // so this is a flag check, not an absence check: whichever way the constant
+    // is set, the menu has to agree with it. With the flag off the route 404s,
+    // and a menu item would be a link to a dead page.
+    const { container } = render(<VylanMenu s={S} helpHref="/help" />);
+    const hrefs = Array.from(container.querySelectorAll("a")).map((a) =>
+      a.getAttribute("href"),
+    );
+    expect(hrefs.includes("/how-it-works")).toBe(HOW_IT_WORKS_PUBLIC);
   });
 });
