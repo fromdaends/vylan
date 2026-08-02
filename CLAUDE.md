@@ -64,12 +64,54 @@ its own branch). Same repo, same history, zero shared files.
 
 - **Any file outside your locked list** → STOP. Ask the user first.
 - **A new database migration in `supabase/migrations/`:**
+
+  **YOU APPLY IT. Do not hand the founder SQL to paste.** The Supabase CLI on
+  the founder's Mac is logged in and the project is linked, and the founder has
+  granted permission for this (2 Aug 2026, in as many words: *"option b, run it
+  yourself"*). Applying a migration is part of shipping it, exactly like running
+  the tests. They find out in the summary.
+
   1. Pull from main.
-  2. Find the highest-numbered migration file.
-  3. Use that number + 10 for your new file (e.g., if highest is `0022`,
-     use `0032`). This buffers against the other session adding a
-     migration at the same time.
-  4. Tell the user what migration number you chose and why.
+  2. **Pick a number that is genuinely free.** Highest + 10 is the starting
+     point, but it is NOT sufficient on its own — every parallel session
+     computes the same "highest + 10" at the same moment, which is how eight
+     pairs of files ended up sharing a version and why the Supabase check failed
+     on every migration PR for months (fixed in #1137). Before you commit to a
+     number, run:
+
+     ```
+     ls supabase/migrations | sed 's/_.*//' | sort | uniq -d
+     ```
+
+     That must print nothing. If your number collides, take the next free one.
+     Also check `.active-sessions.md` for numbers another live session claimed.
+  3. Write the SQL idempotently (`if not exists` throughout) and make the code
+     that reads it degrade or refuse cleanly while it is unapplied — a migration
+     can be live in the code before it is live in the database.
+  4. **Apply it:**
+
+     ```
+     npx supabase@2.98.2 db push
+     ```
+
+     Pin that version; a bare `npx supabase` pulls a newer one. If you are in a
+     git worktree it will not be linked — copy the link state in first:
+     `cp -R /Users/tylerjette/relai/supabase/.temp supabase/.temp` (gitignored,
+     so it never lands in a commit).
+  5. **Verify it landed against the live database, not the CLI's success line.**
+     Read the new table or column back through PostgREST with the service-role
+     key from `.env.local`. "Success. No rows returned" is not proof; a row
+     coming back is.
+  6. Say in the summary what you applied. Do not make the founder run anything.
+
+  **The one exception — stop and show them first:** anything that NARROWS
+  access, drops or renames a column or table, or backfills over existing data.
+  If it is wrong, people lose sight of their own data until it is fixed, and
+  that is worth thirty seconds of the founder's attention. Everything additive
+  you just run.
+
+  **If the permission classifier blocks `db push`,** say so plainly and let the
+  founder decide — do not work around it.
 - **`messages/en.json` or `messages/fr.json`:**
   - Always pull from main immediately before editing.
   - Only ADD new keys. Never reorder, rename, or remove existing ones.
@@ -124,7 +166,7 @@ Do these autonomously. Mention them in your summary so the user knows, but don't
 - Install npm dependencies that the task obviously needs (`sharp`, `archiver`, `zod`, etc.). Pin versions in `package.json`.
 - Create new files (components, routes, lib modules, migrations, tests).
 - Add new translation keys to `messages/en.json` and `messages/fr.json`.
-- Add new database columns, indexes, or tables via migration (following the multi-session migration-numbering rule).
+- Add new database columns, indexes, or tables via migration — including APPLYING it with `npx supabase@2.98.2 db push` and verifying it landed. Follow the migration rules above (free number, idempotent SQL, verify against the live database). Anything that narrows access or drops data still gets shown to the founder first.
 - Add new RLS policies that follow existing patterns.
 - Add new shadcn/ui components via the standard install command.
 - Write tests and run them.
