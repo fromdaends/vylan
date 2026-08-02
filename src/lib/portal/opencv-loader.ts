@@ -1,4 +1,4 @@
-// Lazily brings up the OpenCV.js + jscanify scan engine for the portal
+// Lazily brings up the OpenCV.js scan engine for the portal
 // scanner, and never lets its weight or its failure touch anyone else.
 //
 // OpenCV.js is a ~13 MB WASM build. It must NEVER ride along with the portal
@@ -14,15 +14,13 @@
 // (detect-quad.ts) exactly as it shipped before OpenCV existed here. Scanning
 // is never less capable than it was.
 
-import type { JscanifyCornerPoints } from "jscanify/client";
-
 /** The one cv.Mat behaviour we manage ourselves: freeing WASM-heap memory. */
 export type CvMat = { delete(): void };
 
 /**
- * The slice of OpenCV.js this codebase is allowed to touch. jscanify reaches
- * the global `cv` itself for everything else, so keeping this narrow keeps
- * accidental OpenCV coupling out of the rest of the scanner.
+ * The OpenCV runtime. Deliberately untyped beyond the two members every call
+ * site needs — cv-detect.ts reaches the rest through a checked accessor, which
+ * keeps OpenCV's enormous surface out of the rest of the codebase.
  */
 export type CvRuntime = {
   Mat: unknown;
@@ -33,19 +31,7 @@ export type CvRuntime = {
   }): CvMat;
 };
 
-/** jscanify's surface, matching src/types/jscanify-client.d.ts. */
-export type PaperScanner = {
-  findPaperContour(mat: unknown): CvMat | null;
-  getCornerPoints(contour: unknown, mat?: unknown): JscanifyCornerPoints;
-  extractPaper(
-    image: unknown,
-    resultWidth: number,
-    resultHeight: number,
-    cornerPoints?: JscanifyCornerPoints,
-  ): HTMLCanvasElement | null;
-};
-
-export type ScanEngine = { cv: CvRuntime; scanner: PaperScanner };
+export type ScanEngine = { cv: CvRuntime };
 
 export type ScanEngineStatus = "idle" | "loading" | "ready" | "failed";
 
@@ -155,20 +141,11 @@ async function loadEngine(): Promise<ScanEngine> {
   // NB: opencv is reached through ./opencv-module, never imported directly —
   // a direct dynamic import of the package throws before our code runs. See
   // the comment at the top of that file; it is not a style choice.
-  const [cvMod, jsMod] = await Promise.all([
-    import("./opencv-module"),
-    import("jscanify/client"),
-  ]);
+  const cvMod = await import("./opencv-module");
   const cv = await resolveCvModule(cvMod.getCvModule());
   if (!isUsableCv(cv)) throw new Error("opencv_unusable");
 
-  // jscanify reads the bare global `cv` inside its methods — publish the
-  // initialised module before the first call ever happens.
-  (globalThis as { cv?: unknown }).cv = cv;
-
-  const Ctor = ((jsMod as { default?: unknown }).default ??
-    jsMod) as new () => PaperScanner;
-  return { cv, scanner: new Ctor() };
+  return { cv };
 }
 
 /**
