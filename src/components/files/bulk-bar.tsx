@@ -114,6 +114,12 @@ export function BulkBar({
             ? t("bulk_visibility_firm", { count: res.succeeded })
             : t("bulk_visibility_client", { count: res.succeeded }),
         );
+        if (res.skipped > 0) {
+          toast.info(t("bulk_visibility_skipped", { count: res.skipped }));
+        }
+        if (value === "client" && targets.some((x) => x.source === "imported")) {
+          toast.info(t("visibility_import_note"));
+        }
       }
     });
   }
@@ -226,6 +232,7 @@ export function BulkBar({
           {/* Client-visible vs firm-only, in bulk. A Select rather than one
               toggle button because a mixed selection has no single "current"
               state to flip. */}
+          {targets.some((x) => x.source !== "checklist") && (
           <Select value="" onValueChange={setVisibility}>
             <SelectTrigger size="sm" className="w-[9.5rem]" aria-label={t("bulk_visibility")}>
               <SelectValue placeholder={t("bulk_visibility")} />
@@ -235,6 +242,7 @@ export function BulkBar({
               <SelectItem value="client">{t("visibility_client")}</SelectItem>
             </SelectContent>
           </Select>
+          )}
           {/* Filing into a folder the firm made is a different act from setting
               a document's year and category, so it gets its own control rather
               than a fourth dropdown buried in the Move dialog. */}
