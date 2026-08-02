@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import {
   Download,
   Eye,
+  EyeOff,
   FolderInput,
   MoreHorizontal,
   Pencil,
@@ -41,6 +42,7 @@ import {
   logDocumentDownloadAction,
   moveDocumentAction,
   renameDocumentAction,
+  setDocumentVisibilityAction,
 } from "@/app/actions/documents";
 import { BROWSE_CATEGORIES, categoryForDocType } from "@/lib/files/axes";
 import { DOC_TYPE_LABELS, docTypeGroupLabel } from "@/lib/doc-types";
@@ -63,6 +65,7 @@ export function DocumentActionsMenu({
   category,
   docType,
   canMove,
+  visibility,
   locale,
 }: {
   source: Source;
@@ -73,6 +76,8 @@ export function DocumentActionsMenu({
   docType: DocType | null;
   /** False while the AI is still reading it — its answer would land on top. */
   canMove: boolean;
+  /** 'firm' = hidden from the client everywhere. */
+  visibility: "client" | "firm";
   locale: "en" | "fr";
 }) {
   const t = useTranslations("Files");
@@ -95,6 +100,22 @@ export function DocumentActionsMenu({
     // — a slow audit write must never sit between a click and a file.
     window.location.href = `${bytesUrl}&download=1`;
     void logDocumentDownloadAction({ source, id });
+  }
+
+  function toggleVisibility() {
+    // No dialog, no focus dance — a plain fire-and-refresh menu action.
+    const next = visibility === "firm" ? "client" : "firm";
+    startTransition(async () => {
+      const res = await setDocumentVisibilityAction({ source, id, visibility: next });
+      if (res.ok) {
+        router.refresh();
+        toast.success(
+          next === "firm" ? t("visibility_done_firm") : t("visibility_done_client"),
+        );
+      } else {
+        toast.error(t("action_failed"));
+      }
+    });
   }
 
   function submitRename() {
@@ -204,6 +225,19 @@ export function DocumentActionsMenu({
           >
             <Download className="size-4" />
             {t("action_download")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="gap-2"
+            onSelect={() => toggleVisibility()}
+          >
+            {visibility === "firm" ? (
+              <Eye className="size-4" />
+            ) : (
+              <EyeOff className="size-4" />
+            )}
+            {visibility === "firm"
+              ? t("action_make_client_visible")
+              : t("action_make_firm_only")}
           </DropdownMenuItem>
           <DropdownMenuItem
             className="gap-2"
