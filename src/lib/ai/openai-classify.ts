@@ -103,8 +103,9 @@ export async function classifyWithOpenAI(opts: {
   const resp = await c.chat.completions.create({
     model: opts.model,
     // Cap generously so reasoning + JSON output is never truncated; only tokens
-    // actually used are billed.
-    max_completion_tokens: 5000,
+    // actually used are billed. Raised for the §5 transcript, which rides this
+    // same call: reasoning + JSON + up to ~8k chars of transcription.
+    max_completion_tokens: 8000,
     reasoning_effort: REASONING_EFFORT,
     response_format: {
       type: "json_schema",

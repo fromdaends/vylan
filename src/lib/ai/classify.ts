@@ -141,6 +141,10 @@ export type ClassificationResult = {
   // weighed together) — what the accountant sees, not the raw type confidence.
   overall_confidence: number;
   usability: UsabilityVerdict;
+  // Files v2 §5: the document's text, transcribed in the SAME call — never a
+  // second model pass (founder ruling: text capture rides the one intake
+  // read; no bulk jobs). Null when nothing legible. Capped at 20k chars.
+  transcript: string | null;
 };
 
 let _client: Anthropic | null = null;
@@ -194,6 +198,11 @@ const CLASSIFY_TOOL = {
         items: { type: "string" },
         description:
           "The exact distinguishing text you READ on the document that pins the type down — e.g. [\"Relevé 1\", \"Revenus d'emploi\"] or [\"T4\", \"Statement of Remuneration Paid\", \"Box 14\"]. Empty array if no identifying text is legible.",
+      },
+      transcript: {
+        type: ["string", "null"],
+        description:
+          "A plain-text transcription of the document's legible text, in reading order — headers, labels, values, footers. Keep the document's own language(s). Maximum 8000 characters; truncate the tail if longer. null only when nothing at all is legible.",
       },
       second_guess_type: {
         type: ["string", "null"],
@@ -747,6 +756,7 @@ export async function classifyDocument(opts: {
       confidence: 0,
       reasoning: "",
       key_identifiers: [],
+      transcript: null,
       second_guess: null,
       extracted_year: null,
       extracted_amount_or_total: null,
@@ -839,7 +849,10 @@ export async function classifyDocument(opts: {
     const resp = await c.messages.create(
       {
         model: MODEL,
-        max_tokens: 1200,
+        // 4000, not 1200: the §5 transcript rides this same call and a dense
+        // page transcribes to ~2000+ tokens. Truncated JSON here loses the
+        // whole classification, not just the transcript.
+        max_tokens: 4000,
         system: systemPrompt,
         tools: [CLASSIFY_TOOL],
         tool_choice: { type: "tool", name: "classify_document" },
@@ -928,6 +941,12 @@ export function parseClassification(
           .filter((x): x is string => typeof x === "string" && x.trim() !== "")
           .map((x) => x.trim())
       : [],
+    // Tolerant like every other field: absent on older responses, capped so a
+    // runaway transcription can never balloon a row or the search index.
+    transcript:
+      typeof raw.transcript === "string" && raw.transcript.trim() !== ""
+        ? raw.transcript.trim().slice(0, 20000)
+        : null,
     second_guess: parseSecondGuess(raw),
     extracted_year:
       typeof raw.extracted_year === "number" ? raw.extracted_year : null,
