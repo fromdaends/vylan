@@ -176,6 +176,7 @@ export function CameraCapture({
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const shutterBoxRef = useRef<HTMLDivElement>(null);
   const detectCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const prevGrayRef = useRef<Gray | null>(null);
   const quadRef = useRef<Quad | null>(null);
@@ -207,6 +208,12 @@ export function CameraCapture({
   const [view, setView] = useState({ width: 0, height: 0 });
   // How far down the stage the top controls reach, measured on mount/resize.
   const [controlsBottom, setControlsBottom] = useState(0);
+  // How much of the stage BOTTOM the floating shutter occupies. Measured for
+  // the same reason `controlsBottom` is: it sits above
+  // env(safe-area-inset-bottom), which differs per device and cannot be
+  // computed here. Without it the guide window would run underneath the
+  // shutter on a tall phone.
+  const [shutterTop, setShutterTop] = useState(0);
   const [quad, setQuad] = useState<Quad | null>(null);
   // What the client is actually being told right now — null most of the time.
   const [hint, setHint] = useState<Guidance | null>(null);
@@ -290,19 +297,30 @@ export function CameraCapture({
       // They sit below env(safe-area-inset-top), which differs per device and
       // cannot be computed here — and on a notched iPhone the frame's top
       // corners ended up underneath them.
-      const stageTop = el.getBoundingClientRect().top;
+      const stageBox = el.getBoundingClientRect();
+      const stageTop = stageBox.top;
       const bottom = closeRef.current?.getBoundingClientRect().bottom;
       if (typeof bottom === "number") {
         const next = Math.max(0, Math.round(bottom - stageTop));
         setControlsBottom((prev) => (prev === next ? prev : next));
       }
+      // Reserved room UNDER the guide window: everything from the shutter's
+      // top edge to the bottom of the stage.
+      const shutter = shutterBoxRef.current?.getBoundingClientRect().top;
+      const reserved =
+        typeof shutter === "number"
+          ? Math.max(0, Math.round(stageBox.bottom - shutter))
+          : 0;
+      setShutterTop((prev) => (prev === reserved ? prev : reserved));
     };
     measure();
     if (typeof ResizeObserver === "undefined") return;
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+    // `shot` and `failed` swap the controls out, so the reserved space below
+    // the guide changes with them.
+  }, [shot, status]);
 
   useEffect(() => {
     // Lock background scroll and restore focus, matching the lightbox.
@@ -662,14 +680,14 @@ export function CameraCapture({
       role="dialog"
       aria-modal="true"
       aria-label={t("scan_title")}
-      className="fixed inset-0 z-[70] flex flex-col bg-white"
+      className="fixed inset-0 z-[70] flex flex-col bg-black"
     >
       {/* Stage — camera preview, or the captured shot on white. */}
       <div
         ref={stageRef}
         className={cn(
           "relative min-h-0 flex-1 overflow-hidden",
-          shot || failed ? "bg-white" : "bg-neutral-900",
+          shot || failed ? "bg-white" : "bg-black",
         )}
       >
         {!shot && (
@@ -702,6 +720,7 @@ export function CameraCapture({
             quad={quad}
             locked={progress >= LOCK_PROGRESS}
             topInset={controlsBottom}
+            bottomInset={shutterTop}
           />
         )}
 
@@ -718,7 +737,12 @@ export function CameraCapture({
             noise. Kept mounted so the fade-out can play; aria-live still
             announces it once, and only when it appears. */}
         {!shot && !failed && status === "ready" && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-6 flex justify-center px-8">
+          <div
+            className="pointer-events-none absolute inset-x-0 flex justify-center px-8"
+            style={{
+              bottom: "calc(env(safe-area-inset-bottom, 0px) + 7.25rem)",
+            }}
+          >
             <p
               aria-live="polite"
               className={cn(
@@ -778,7 +802,12 @@ export function CameraCapture({
         )}
 
         {captureError && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center px-6">
+          <div
+            className="pointer-events-none absolute inset-x-0 flex justify-center px-6"
+            style={{
+              bottom: "calc(env(safe-area-inset-bottom, 0px) + 7.25rem)",
+            }}
+          >
             <p className="rounded-full bg-red-600 px-3.5 py-1.5 text-[13px] font-medium text-white shadow-sm">
               {t("errors.capture_failed")}
             </p>
@@ -792,11 +821,43 @@ export function CameraCapture({
           type="button"
           onClick={onClose}
           aria-label={t("scan_close")}
-          className="absolute right-4 inline-flex size-11 cursor-pointer items-center justify-center rounded-full bg-white/95 text-neutral-800 shadow-sm ring-1 ring-black/5 transition-colors hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2"
+          className="absolute right-4 inline-flex size-11 cursor-pointer items-center justify-center rounded-full bg-black/40 text-white ring-1 ring-white/25 backdrop-blur-sm transition-colors hover:bg-black/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-0"
           style={{ top: "calc(env(safe-area-inset-top, 0px) + 1rem)" }}
         >
           <X className="size-[18px]" aria-hidden />
         </button>
+
+        {/* The shutter, floating over the preview. Sits above the safe-area
+            inset so iOS Safari's own bottom bar cannot land on top of it, and
+            the guide window measures this element to keep clear of it. */}
+        {!shot && !failed && (
+          <div
+            ref={shutterBoxRef}
+            className="absolute inset-x-0 flex justify-center"
+            style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)" }}
+          >
+            <div className="relative inline-flex size-[76px] items-center justify-center">
+              {/* The ring. Fills as the scanner works toward taking the photo,
+                  so the client is never looking at a screen that gives no sign
+                  anything is happening — and, when it stalls, WHERE it stalled
+                  is visible without a debug flag. */}
+              <ShutterRing progress={status === "ready" && !busy ? progress : 0} />
+              <button
+                type="button"
+                onClick={() => void capture()}
+                disabled={status !== "ready" || busy}
+                aria-label={t("scan_capture")}
+                className="inline-flex size-[62px] cursor-pointer items-center justify-center rounded-full bg-[#1050ed] text-white shadow-[0_2px_12px_rgba(0,0,0,0.45)] ring-[3px] ring-white/90 transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-white disabled:cursor-default disabled:bg-white/25 disabled:text-white/60 disabled:ring-white/40 motion-safe:active:scale-95"
+              >
+                {busy ? (
+                  <Loader2 className="size-6 animate-spin" aria-hidden />
+                ) : (
+                  <Camera className="size-6" aria-hidden />
+                )}
+              </button>
+            </div>
+          </div>
+        )}
 
         {camera.torchSupported && !shot && !failed && (
           <button
@@ -805,10 +866,10 @@ export function CameraCapture({
             aria-label={t("scan_torch")}
             aria-pressed={camera.torchOn}
             className={cn(
-              "absolute left-4 inline-flex size-11 cursor-pointer items-center justify-center rounded-full shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2",
+              "absolute left-4 inline-flex size-11 cursor-pointer items-center justify-center rounded-full backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-0",
               camera.torchOn
-                ? "bg-[#1050ed] text-white"
-                : "bg-white/95 text-neutral-800 hover:bg-white",
+                ? "bg-white text-neutral-900 ring-1 ring-white"
+                : "bg-black/40 text-white ring-1 ring-white/25 hover:bg-black/55",
             )}
             style={{ top: "calc(env(safe-area-inset-top, 0px) + 1rem)" }}
           >
@@ -817,9 +878,17 @@ export function CameraCapture({
         )}
       </div>
 
-      {/* Controls — a plain white bar, one focal point. */}
+      {/* Review and error only. The LIVE camera has no bar at all — its shutter
+          floats over the picture (see the stage above), because a white slab
+          under a camera view is the thing that read as "off": it boxed the
+          preview into the top two thirds and left a big empty tray beneath a
+          small button. Every scanning app worth copying runs the camera to all
+          four edges. */}
       <div
-        className="flex shrink-0 items-center justify-center gap-3 border-t border-neutral-200/80 bg-white px-6 pt-5"
+        className={cn(
+          "shrink-0 items-center justify-center gap-3 border-t border-neutral-200/80 bg-white px-6 pt-5",
+          shot || failed ? "flex" : "hidden",
+        )}
         style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.25rem)" }}
       >
         {shot ? (
@@ -866,28 +935,7 @@ export function CameraCapture({
             <ImageUp className="size-4" aria-hidden />
             {t("scan_choose_file")}
           </button>
-        ) : (
-          <div className="relative inline-flex size-[76px] items-center justify-center">
-            {/* The ring. Fills as the scanner works toward taking the photo, so
-                the client is never looking at a screen that gives no sign
-                anything is happening — and, when it stalls, WHERE it stalled
-                is visible without a debug flag. */}
-            <ShutterRing progress={status === "ready" && !busy ? progress : 0} />
-            <button
-              type="button"
-              onClick={() => void capture()}
-              disabled={status !== "ready" || busy}
-              aria-label={t("scan_capture")}
-              className="inline-flex size-16 cursor-pointer items-center justify-center rounded-full bg-[#1050ed] text-white shadow-sm transition-colors hover:bg-[#0d43c8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1050ed] focus-visible:ring-offset-2 disabled:cursor-default disabled:bg-neutral-200 disabled:text-neutral-400 disabled:shadow-none motion-safe:active:scale-95"
-            >
-              {busy ? (
-                <Loader2 className="size-6 animate-spin" aria-hidden />
-              ) : (
-                <Camera className="size-6" aria-hidden />
-              )}
-            </button>
-          </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -909,7 +957,7 @@ export function CameraCapture({
  * second the scanner produces.
  */
 function ShutterRing({ progress }: { progress: number }) {
-  const R = 34;
+  const R = 35.5;
   const C = 2 * Math.PI * R;
   const p = Math.max(0, Math.min(1, Number.isFinite(progress) ? progress : 0));
   return (
@@ -918,21 +966,26 @@ function ShutterRing({ progress }: { progress: number }) {
       viewBox="0 0 76 76"
       aria-hidden
     >
+      {/* Track. Barely-there white rather than pale blue: over a live camera
+          the old tint read as a glow bleeding off the button, not as a ring
+          waiting to be filled. */}
       <circle
         cx="38"
         cy="38"
         r={R}
         fill="none"
-        stroke="rgba(16,80,237,0.18)"
-        strokeWidth={4}
+        stroke="rgba(255,255,255,0.28)"
+        strokeWidth={3}
       />
+      {/* Fill. Green, matching the outline's locked state, so one colour means
+          one thing across the whole screen: the shot is being taken. */}
       <circle
         cx="38"
         cy="38"
         r={R}
         fill="none"
-        stroke="#1050ed"
-        strokeWidth={4}
+        stroke="#22c55e"
+        strokeWidth={3}
         strokeLinecap="round"
         strokeDasharray={C}
         strokeDashoffset={C * (1 - p)}
@@ -948,15 +1001,17 @@ function ScanOverlay({
   quad,
   locked,
   topInset,
+  bottomInset,
 }: {
   view: { width: number; height: number };
   quad: Quad | null;
   /** The shutter has charged past LOCK_PROGRESS — the outline commits. */
   locked: boolean;
   topInset: number;
+  bottomInset: number;
 }) {
   if (view.width <= 0 || view.height <= 0) return null;
-  const a = apertureFor(view, { top: topInset });
+  const a = apertureFor(view, { top: topInset, bottom: bottomInset });
   const arm = Math.round(Math.min(a.width, a.height) * 0.11);
 
   // Outer rect + inner rounded rect as one evenodd path: the inner subpath is
@@ -1088,7 +1143,11 @@ type Aperture = {
  * RL-1 and friends) are portrait — sized to the viewport so it stays a guide
  * rather than a hard boundary, since detection works anywhere in frame.
  */
-/** Room kept clear under the window for the coaching line. */
+/**
+ * Room kept clear under the window for the coaching line. A FLOOR, not the
+ * whole story — the caller also passes what the floating shutter occupies,
+ * and the larger of the two wins (see apertureFor).
+ */
 const HINT_CLEARANCE = 64;
 /** Gap between the top controls and the window's top edge. */
 const CONTROL_GAP = 12;
@@ -1102,12 +1161,15 @@ const APERTURE_RATIO = 1.4;
 export function apertureFor(
   view: { width: number; height: number },
   /**
-   * `top` is how far down the stage the close/torch buttons reach, measured by
-   * the caller. It varies with the device's safe-area inset, so it cannot be a
-   * constant — on a notched iPhone the window's top corners rendered
-   * underneath the buttons.
+   * `top` is how far down the stage the close/torch buttons reach, and
+   * `bottom` is how much of the stage the floating shutter occupies. Both are
+   * measured by the caller: they sit against the device's safe-area insets,
+   * which differ per device and cannot be computed here. On a notched iPhone
+   * the window's top corners rendered underneath the buttons before `top`
+   * existed; `bottom` is the same bug waiting at the other end, now that the
+   * camera runs full-bleed and the shutter floats over it.
    */
-  insets: { top?: number } = {},
+  insets: { top?: number; bottom?: number } = {},
 ): Aperture {
   const margin = Math.round(view.width * 0.05);
   const maxWidth = Math.max(1, view.width - margin * 2);
@@ -1115,6 +1177,13 @@ export function apertureFor(
   const topClearance =
     Math.max(0, Number.isFinite(insets.top) ? (insets.top as number) : 0) +
     CONTROL_GAP;
+
+  // Never less than the coaching line needs, whatever the controls report.
+  const bottomClearance = Math.max(
+    HINT_CLEARANCE,
+    (Number.isFinite(insets.bottom) ? (insets.bottom as number) : 0) +
+      CONTROL_GAP,
+  );
 
   // Documents are tall rectangles, so the window is too — but its SIZE is not
   // a taste decision, it is set by what the detector can actually see.
@@ -1155,14 +1224,14 @@ export function apertureFor(
     // Never wider than the margins allow, whatever the share works out to.
     maxWidth * APERTURE_RATIO,
   );
-  const room = Math.max(1, view.height - topClearance - HINT_CLEARANCE);
+  const room = Math.max(1, view.height - topClearance - bottomClearance);
   const height = Math.max(1, Math.round(Math.min(wanted, room)));
   const width = Math.max(1, Math.round(Math.min(height / APERTURE_RATIO, maxWidth)));
 
   // Nudged above centre: the eye reads the frame as balanced when the gap
   // below it (which carries the hint) is a little larger than the gap above.
   const centred = Math.round((view.height - height) / 2 - view.height * 0.03);
-  const lowest = view.height - height - HINT_CLEARANCE;
+  const lowest = view.height - height - bottomClearance;
   const y = Math.max(topClearance, Math.min(centred, Math.max(topClearance, lowest)));
 
   return {

@@ -385,4 +385,56 @@ describe("apertureFor — clearing the top controls", () => {
   it("behaves as before when nothing is reserved", () => {
     expect(apertureFor(notched)).toEqual(apertureFor(notched, { top: 0 }));
   });
+
+  // The camera now runs full-bleed with the shutter floating over it, so the
+  // bottom is the same trap the top already sprang once: without a measured
+  // reserve, the guide window renders UNDERNEATH the shutter button.
+  describe("with the floating shutter reserving the bottom", () => {
+    // A 76px shutter above a 34px home-indicator inset, plus its own padding.
+    const SHUTTER = 134;
+
+    it("keeps the window clear of the shutter", () => {
+      const a = apertureFor(notched, { top: CONTROLS, bottom: SHUTTER });
+      expect(a.y + a.height).toBeLessThanOrEqual(notched.height - SHUTTER);
+    });
+
+    it("still clears the top controls at the same time", () => {
+      const a = apertureFor(notched, { top: CONTROLS, bottom: SHUTTER });
+      expect(a.y).toBeGreaterThanOrEqual(CONTROLS);
+    });
+
+    it("shrinks the window rather than overflowing when both ends are reserved", () => {
+      const a = apertureFor(notched, { top: CONTROLS, bottom: SHUTTER });
+      expect(a.height).toBeGreaterThan(0);
+      expect(a.y).toBeGreaterThanOrEqual(0);
+      expect(a.y + a.height).toBeLessThanOrEqual(notched.height);
+    });
+
+    it("never reserves less than the coaching line needs", () => {
+      // A tiny reported inset must not claw back the hint's room.
+      const a = apertureFor(notched, { top: CONTROLS, bottom: 1 });
+      expect(notched.height - (a.y + a.height)).toBeGreaterThanOrEqual(60);
+    });
+
+    it("survives an absurd shutter inset without producing a negative window", () => {
+      const a = apertureFor(notched, { top: CONTROLS, bottom: 10_000 });
+      expect(a.height).toBeGreaterThanOrEqual(1);
+      expect(a.y).toBeGreaterThanOrEqual(0);
+      expect(Number.isNaN(a.y + a.height)).toBe(false);
+    });
+
+    it("ignores a non-finite shutter inset rather than producing NaN geometry", () => {
+      for (const bottom of [NaN, Infinity, -50]) {
+        const a = apertureFor(notched, { top: CONTROLS, bottom });
+        expect(Number.isNaN(a.x + a.y + a.width + a.height)).toBe(false);
+        expect(a.height).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it("is unchanged from before when the shutter reports nothing", () => {
+      expect(apertureFor(notched, { top: CONTROLS, bottom: 0 })).toEqual(
+        apertureFor(notched, { top: CONTROLS }),
+      );
+    });
+  });
 });
