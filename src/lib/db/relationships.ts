@@ -22,6 +22,16 @@ export type ClientRelationship = {
   deleted_via: "manual" | "client_archived" | null;
 };
 
+// Migration-gated (1150), same convention as clients.ts' PGRST204 handling:
+// until the table exists on the remote DB, reads act as "no relationships"
+// instead of 500ing every client/engagement page — this is what keeps Vercel
+// previews (which point at the prod DB) rendering before the migration is
+// applied. PGRST205 = PostgREST "table not in schema cache"; 42P01 = raw
+// Postgres undefined_table.
+function isMissingTable(error: { code?: string | null } | null): boolean {
+  return error?.code === "PGRST205" || error?.code === "42P01";
+}
+
 // Every LIVE link touching one client, from either end. created_at order so
 // the profile card's within-type ordering is stable ("first linked, first").
 export async function listRelationshipsForClient(
@@ -34,7 +44,10 @@ export async function listRelationshipsForClient(
     .or(`from_client_id.eq.${clientId},to_client_id.eq.${clientId}`)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
-  if (error) throw error;
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
   return (data ?? []) as ClientRelationship[];
 }
 
@@ -47,7 +60,10 @@ export async function getRelationship(
     .select("*")
     .eq("id", id)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    if (isMissingTable(error)) return null;
+    throw error;
+  }
   return (data as ClientRelationship) ?? null;
 }
 
@@ -65,7 +81,10 @@ export async function listLiveRelationshipsForFirm(): Promise<
     .select("*")
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
-  if (error) throw error;
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
   return (data ?? []) as ClientRelationship[];
 }
 
