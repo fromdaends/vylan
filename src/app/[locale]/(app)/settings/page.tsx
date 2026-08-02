@@ -301,7 +301,8 @@ export default async function SettingsPage({
   const invoiceSettings = isOwner ? await getFirmInvoiceSettings() : null;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-8 animate-in-up">
+    // 814px = 190px sub-nav + 64px gutter + 560px content column.
+    <div className="max-w-[814px] mx-auto space-y-12 animate-in-up">
       <header>
         <h1 className="text-3xl font-semibold tracking-tight">{t("title")}</h1>
         <p className="text-sm text-muted-foreground mt-1.5">{t("subtitle")}</p>
