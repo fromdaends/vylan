@@ -5,7 +5,7 @@
 // the statement figure is stored, because only a human has it.
 //
 // READS DEGRADE, WRITES REFUSE — the same contract as month-close (1201).
-// Before migration 1220 is applied there is no table: a read truthfully
+// Before migration 1230 is applied there is no table: a read truthfully
 // returns "no statement balances entered", which is exactly what the board
 // should show, and a write says so in a sentence naming the file to run
 // instead of failing with a Postgres error nobody can act on.
@@ -17,7 +17,7 @@ import { periodStart, type PeriodKey } from "@/lib/close/period";
 export class StatementBalanceUnsupportedError extends Error {
   constructor() {
     super(
-      "Recording a statement balance needs database update 1220. Run supabase/migrations/1220_bank_statement_balances.sql, then try again.",
+      "Recording a statement balance needs database update 1230. Run supabase/migrations/1230_bank_statement_balances.sql, then try again.",
     );
     this.name = "StatementBalanceUnsupportedError";
   }

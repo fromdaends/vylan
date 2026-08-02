@@ -23,7 +23,8 @@
 -- neither gets a uuid column or a foreign key. account_id is only ever
 -- meaningful together with the client whose ledger it came from.
 --
--- Migration number: 1210 was the highest on main; +10.
+-- Migration number: 1220 was taken by another session mid-build (the duplicate
+-- check in CLAUDE.md caught it); 1230 is the next genuinely free one.
 
 create table if not exists bank_statement_balances (
   id uuid primary key default gen_random_uuid(),
