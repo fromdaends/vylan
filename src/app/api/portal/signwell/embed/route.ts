@@ -14,6 +14,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isValidTokenShape } from "@/lib/db/portal";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import {
   isPortalFileAccessAllowed,
   type PortalEngagementRow,
@@ -56,6 +57,9 @@ export async function GET(request: NextRequest) {
     ...PORTAL_FILE_VIEW_PER_IP,
   });
   if (!rlIp.ok) return tooMany(rlIp.retryAfter);
+
+  // PIN gate — an embedded signing session is full access to the document.
+  if (!(await isPortalUnlocked(token))) return notFound();
 
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb

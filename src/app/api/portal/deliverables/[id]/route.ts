@@ -14,6 +14,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { isValidTokenShape } from "@/lib/db/portal";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import {
   isDeliverableDownloadAllowed,
   computeDeliverablesLocked,
@@ -63,6 +64,11 @@ export async function GET(
     ...PORTAL_FILE_VIEW_PER_IP,
   });
   if (!rlIp.ok) return tooMany(rlIp.retryAfter);
+
+  // PIN gate. This route resolves the token itself instead of going through
+  // findEngagementForToken, so it has to ask. Placed AFTER the rate limit so a
+  // flood of well-formed guesses is still bounded before it reaches the DB.
+  if (!(await isPortalUnlocked(token))) return notFound();
 
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb

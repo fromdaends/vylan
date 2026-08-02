@@ -71,6 +71,7 @@ const CLIENT: Client = {
   timezone: null,
   industry: null,
   is_private: false,
+  portal_pin_enabled: false,
 };
 
 function openEditor(client: Client = CLIENT) {
