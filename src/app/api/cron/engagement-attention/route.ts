@@ -7,15 +7,16 @@
 // firing more often cannot produce more than one notification per engagement
 // per day).
 //
-// ⚠️ NOT YET SCHEDULED. vercel.json is a shared config file, so per the repo
-// rules this needs the founder's go-ahead before the entry is added:
+// SCHEDULED and live: vercel.json runs this at "0 5 * * *" (added in #954).
+// 05:00 UTC is deliberately an hour after the existing purge-deleted-engagements
+// cron so the two never contend.
 //
-//   { "path": "/api/cron/engagement-attention", "schedule": "0 5 * * *" }
-//
-// Until that line exists this route is inert and those three events never
-// fire — which is exactly the state they are in today, so nothing regresses in
-// the meantime. 05:00 UTC is deliberately an hour after the existing
-// purge-deleted-engagements cron so the two never contend.
+// This block used to read "⚠️ NOT YET SCHEDULED — needs the founder's go-ahead
+// before the vercel.json entry is added". That go-ahead was given and the entry
+// landed, but the comment was never updated, so for a while the file claimed the
+// route was inert while it was in fact firing daily. Left recorded because the
+// stale version was believed over the config more than once: for cron state,
+// vercel.json is the source of truth, not the handler's own header.
 //
 // Auth model: identical to the other crons — Vercel injects
 // `Authorization: Bearer <CRON_SECRET>` in production (header-only; query
