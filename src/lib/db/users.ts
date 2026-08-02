@@ -98,6 +98,12 @@ export type UserProfilePatch = {
   display_name?: string | null;
   locale?: "fr" | "en";
   avatar_path?: string | null;
+  // Migration 1190. These are the PERSON's to set, not the firm's — which is
+  // why they go through this self-scoped update (RLS users_update_self) rather
+  // than the service-role roster writes in app/actions/team.ts. An owner reads
+  // them on the teammate page; only Clarence changes Clarence's hours.
+  job_title?: string | null;
+  weekly_hours?: number | null;
 };
 
 /**
@@ -118,6 +124,8 @@ export async function updateUserProfile(
   if (patch.display_name !== undefined) update.display_name = patch.display_name;
   if (patch.locale !== undefined) update.locale = patch.locale;
   if (patch.avatar_path !== undefined) update.avatar_path = patch.avatar_path;
+  if (patch.job_title !== undefined) update.job_title = patch.job_title;
+  if (patch.weekly_hours !== undefined) update.weekly_hours = patch.weekly_hours;
 
   if (Object.keys(update).length === 0) {
     // Nothing to update — return the current row.

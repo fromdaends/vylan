@@ -67,6 +67,8 @@ export default async function ProfilePage({
           email: user.email,
           name: user.name,
           display_name: user.display_name,
+          job_title: user.job_title ?? null,
+          weekly_hours: user.weekly_hours ?? null,
         }}
         displayLabel={userDisplayLabel(user)}
         brandColor={firm.brand_color}
