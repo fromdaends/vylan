@@ -9,19 +9,11 @@ import {
   Sun,
   Monitor,
   Check,
-  Palette,
-  SlidersHorizontal,
-  FileText,
   ShieldCheck,
-  Wallet,
-  Plug,
   Download,
   Trash2,
   ChevronRight,
-  UserCog,
   Users,
-  Zap,
-  Bell,
 } from "lucide-react";
 import { updateLocaleAction } from "@/app/actions/profile";
 import { cn } from "@/lib/cn";
@@ -231,55 +223,76 @@ export function SettingsShell({
     !isOwner && isOwnerOnlySettingsSection(requested) ? "account" : requested,
   );
 
-  const allNav: { id: SectionId; label: string; icon: typeof Palette }[] = [
-    { id: "account", label: t("nav_account"), icon: UserCog },
-    { id: "security", label: t("nav_security"), icon: ShieldCheck },
-    { id: "general", label: t("nav_general"), icon: SlidersHorizontal },
-    { id: "notifications", label: t("nav_notifications"), icon: Bell },
-    { id: "team", label: t("nav_team"), icon: Users },
-    { id: "payments", label: t("nav_payments"), icon: Wallet },
-    { id: "automation", label: t("nav_automation"), icon: Zap },
-    { id: "integrations", label: t("nav_integrations"), icon: Plug },
-    { id: "documents", label: t("nav_documents"), icon: FileText },
+  // Grouped sub-nav: who the setting is about (You), the business (Firm), then
+  // what the product does on its own (Product). Order inside a group is stable
+  // so a staff member with fewer rows still reads the same shape.
+  const allGroups: { label: string; ids: SectionId[] }[] = [
+    { label: t("nav_group_you"), ids: ["account", "security", "notifications"] },
+    { label: t("nav_group_firm"), ids: ["general", "team", "payments"] },
+    { label: t("nav_group_product"), ids: ["automation", "integrations", "documents"] },
   ];
+  const sectionLabel: Record<SectionId, string> = {
+    account: t("nav_account"),
+    security: t("nav_security"),
+    general: t("nav_general"),
+    notifications: t("nav_notifications"),
+    team: t("nav_team"),
+    payments: t("nav_payments"),
+    automation: t("nav_automation"),
+    integrations: t("nav_integrations"),
+    documents: t("nav_documents"),
+  };
   // Owner-only tabs (Billing, Documents, Team) are hidden from staff; the Team
-  // tab also only appears in team mode (teamSettings is null otherwise).
-  const nav = allNav.filter(
-    (n) =>
-      (isOwner || !isOwnerOnlySettingsSection(n.id)) &&
-      (n.id !== "team" || teamSettings != null),
-  );
+  // tab also only appears in team mode (teamSettings is null otherwise). A group
+  // that empties out drops its eyebrow header too.
+  const groups = allGroups
+    .map((g) => ({
+      ...g,
+      ids: g.ids.filter(
+        (id) =>
+          (isOwner || !isOwnerOnlySettingsSection(id)) &&
+          (id !== "team" || teamSettings != null),
+      ),
+    }))
+    .filter((g) => g.ids.length > 0);
 
   return (
-    <div className="flex flex-col gap-8 md:flex-row md:gap-10">
+    <div className="flex flex-col gap-8 md:flex-row md:gap-16">
       <nav
         aria-label={t("title")}
-        className="flex shrink-0 gap-1 overflow-x-auto -mx-1 px-1 md:mx-0 md:w-48 md:flex-col md:overflow-visible md:px-0"
+        className="flex shrink-0 gap-4 overflow-x-auto -mx-1 px-1 md:mx-0 md:w-[190px] md:flex-col md:gap-6 md:overflow-visible md:px-0"
       >
-        {nav.map((n) => {
-          const active = section === n.id;
-          const Icon = n.icon;
-          return (
-            <button
-              key={n.id}
-              type="button"
-              onClick={() => setSection(n.id)}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "flex items-center gap-2.5 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors",
-                active
-                  ? "bg-secondary text-foreground font-medium"
-                  : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {n.label}
-            </button>
-          );
-        })}
+        {groups.map((g) => (
+          <div key={g.label} className="flex gap-0.5 md:flex-col">
+            {/* Eyebrow headers only earn their space in the vertical column —
+                on mobile the row scrolls sideways and they'd break the rhythm. */}
+            <p className="hidden px-3 pb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground md:block">
+              {g.label}
+            </p>
+            {g.ids.map((id) => {
+              const active = section === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setSection(id)}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "whitespace-nowrap rounded-lg px-3 py-[7px] text-left text-sm transition-colors duration-150 ease-out",
+                    active
+                      ? "bg-accent-subtle font-medium text-accent"
+                      : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                  )}
+                >
+                  {sectionLabel[id]}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 md:max-w-[560px]">
         {section === "account" && (
           <AccountSection
             firm={firm}

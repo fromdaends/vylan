@@ -487,7 +487,7 @@ function ScheduleRow({
       {/* What's next — status and next run are the same question, so they
           share one cell. A paused row spends its space explaining itself
           rather than showing a stored date that is usually in the past. */}
-      <div className="shrink-0 sm:w-44">
+      <div className="min-w-0 shrink sm:w-44">
         <p
           className={cn(
             "flex items-center gap-1.5 text-sm tabular-nums",
@@ -525,7 +525,7 @@ function ScheduleRow({
       </div>
 
       {teamEnabled && (
-        <div className="shrink-0 sm:w-40">
+        <div className="min-w-0 shrink sm:w-40">
           {row.assigneeName ? (
             <span className="flex items-center gap-2">
               <AvatarInitials name={row.assigneeName} size={22} />

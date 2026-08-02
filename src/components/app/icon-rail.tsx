@@ -274,10 +274,10 @@ function RailLink({ item, active }: { item: RailItem; active: boolean }) {
       href={item.href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
-        active
-          ? "bg-white/[0.14] text-white"
-          : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white",
+        "relative flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[10px] px-1 py-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
+        // The selected item is marked by the underline bar below, never by a
+        // filled pill — hover keeps its wash so the rail still feels clickable.
+        active ? "text-white" : "text-white/[0.68] hover:bg-white/[0.08] hover:text-white",
       )}
     >
       <Icon className="size-[22px]" aria-hidden />
@@ -289,6 +289,12 @@ function RailLink({ item, active }: { item: RailItem; active: boolean }) {
       >
         {item.label}
       </span>
+      {active ? (
+        <span
+          aria-hidden
+          className="absolute bottom-0 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-sm bg-white"
+        />
+      ) : null}
     </Link>
   );
 }
