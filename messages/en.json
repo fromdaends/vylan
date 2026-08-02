@@ -1762,7 +1762,22 @@
     "rel_submit_save": "Save",
     "rel_err_duplicate": "These clients are already linked this way.",
     "rel_err_spouse_taken": "One of these clients already has a spouse on file.",
-    "rel_err_generic": "Couldn't save the relationship. Please try again."
+    "rel_err_generic": "Couldn't save the relationship. Please try again.",
+    "portal_access_title": "Portal access",
+    "portal_pin_toggle": "Require an access code to open the portal",
+    "portal_pin_hint": "Give the code to your client yourself \u2014 by phone or in person. Vylan never sends it, because a code emailed beside the link would protect nothing.",
+    "portal_pin_show": "Show code",
+    "portal_pin_hide": "Hide code",
+    "portal_pin_copy": "Copy code",
+    "portal_pin_copied": "Copied",
+    "portal_pin_regenerate": "Regenerate",
+    "portal_pin_regen_title": "Regenerate this access code?",
+    "portal_pin_regen_body": "This invalidates the current code on all devices. Anyone already through the gate will have to enter the new one.",
+    "portal_pin_regen_confirm": "Regenerate",
+    "portal_pin_cancel": "Cancel",
+    "portal_pin_unavailable": "Access codes aren't switched on for this environment yet.",
+    "portal_pin_error": "That didn't work. Try again.",
+    "portal_pin_off": "Off \u2014 anyone with the link can open the portal."
   },
   "Engagements": {
     "add_comment": "Add a comment",
@@ -2940,7 +2955,16 @@
     "scan_hint_hold_steady": "Hold steady",
     "scan_hint_blurry": "Hold steady — it's blurry",
     "scan_hint_ready": "Looks good",
-    "choose_file": "Choose file"
+    "choose_file": "Choose file",
+    "gate_title": "Enter the access code from {firm}",
+    "gate_help": "No code? Contact {firm}.",
+    "gate_submit": "Continue",
+    "gate_checking": "Checking\u2026",
+    "gate_digit_label": "Digit {n} of 6",
+    "gate_error_wrong": "That code isn't right.",
+    "gate_attempts_remaining": "{count, plural, one {# attempt left} other {# attempts left}}",
+    "gate_locked": "Too many attempts \u2014 try again later.",
+    "gate_unavailable": "Something went wrong. Try again."
   },
   "Integrations": {
     "index_title": "Integrations",

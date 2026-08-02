@@ -67,6 +67,15 @@ export type Client = {
   // private" = visible, matching today's behavior — do NOT invert this to hide
   // clients on a transient read blip). Only owners can set it (RLS WITH CHECK).
   is_private: boolean;
+  // Optional portal access code (migration 1180). When true, this client's
+  // portal link asks for a 6-digit code before it shows anything. Default false
+  // for every client, and possibly undefined at runtime until 1180 is applied —
+  // ALWAYS read it as `client.portal_pin_enabled === true`, so a missing column
+  // means "no gate" rather than locking a client out of their own portal.
+  // The code itself is deliberately NOT on this type: portal_pin_encrypted and
+  // portal_pin_salt are server-only and must never reach a browser. See
+  // src/lib/portal/gate.ts.
+  portal_pin_enabled: boolean;
 };
 
 // PostgREST raises PGRST204 ("column not found in schema cache") when asked to

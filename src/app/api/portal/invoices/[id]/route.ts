@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isValidTokenShape } from "@/lib/db/portal";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import { getInvoiceAttachmentForDownloadSR } from "@/lib/db/final-documents";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { signedUrl } from "@/lib/storage";
@@ -50,6 +51,10 @@ export async function GET(
   ]);
   if (!tokenLimit.ok) return tooMany(tokenLimit.retryAfter);
   if (!ipLimit.ok) return tooMany(ipLimit.retryAfter);
+
+  // PIN gate — the invoice is the client's own bill, but it still sits behind
+  // the gate when the firm has switched one on.
+  if (!(await isPortalUnlocked(token))) return notFound();
 
   const sb = getServiceRoleSupabase();
   const [{ data: engagement }, attachment] = await Promise.all([

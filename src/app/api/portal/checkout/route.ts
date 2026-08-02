@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { stripe, isStripeConfigured, stripeKeyMode } from "@/lib/stripe";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { isValidTokenShape } from "@/lib/db/portal";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import {
   getLatestPaymentRequestForEngagementSR,
   attachCheckoutSessionSR,
@@ -98,6 +99,10 @@ export async function POST(request: NextRequest) {
       return res;
     }
   }
+
+  // PIN gate — reads as an invalid token, exactly like every other refusal
+  // this route makes, so a locked portal reveals nothing extra.
+  if (!(await isPortalUnlocked(token))) return blocked("invalid_token", 400);
 
   const sb = getServiceRoleSupabase();
   const { data: engagement } = await sb

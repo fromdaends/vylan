@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isValidTokenShape } from "@/lib/db/portal";
+import { isPortalUnlocked } from "@/lib/portal/gate";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
 import { getPaymentRequestByIdSR } from "@/lib/db/payment-requests";
 import { getInvoicePdfSR } from "@/lib/invoices/pdf-data";
@@ -54,6 +55,9 @@ export async function GET(
   ]);
   if (!tokenLimit.ok) return tooMany(tokenLimit.retryAfter);
   if (!ipLimit.ok) return tooMany(ipLimit.retryAfter);
+
+  // PIN gate.
+  if (!(await isPortalUnlocked(token))) return notFound();
 
   const sb = getServiceRoleSupabase();
   const [{ data: engagement }, pr] = await Promise.all([
