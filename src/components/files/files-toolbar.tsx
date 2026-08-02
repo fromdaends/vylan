@@ -4,8 +4,14 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { usePathname } from "@/i18n/navigation";
 import { useTranslations } from "next-intl";
-import { ArrowUpDown, FileType2, Search, ShieldCheck } from "lucide-react";
+import { ArrowUpDown, FileType2, Info, Search, ShieldCheck } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Select,
   SelectContent,
@@ -125,6 +131,29 @@ export function FilesToolbar({
           </span>
         )}
       </div>
+      {/* What the search can and cannot see. Content search only covers
+          documents the AI has read (new portal uploads — capture is
+          forward-only by the founder's ruling), and without saying so the
+          honest gap reads as "search is broken" the first time a word inside
+          an old file comes up empty. */}
+      {scope === "documents" && (
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={t("search_scope_hint")}
+                className="-ml-2 inline-flex size-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Info className="size-4" aria-hidden />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="max-w-72">
+              {t("search_scope_hint")}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
 
       {scope === "documents" && (
         <>
