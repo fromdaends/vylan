@@ -3563,6 +3563,8 @@
     "organize_dismissed": "Dismissed — you won't be asked about this again.",
     "organize_expired": "That file changed since the suggestion was made, so it was retired.",
     "organize_proposed_delete": "Delete this copy (recoverable for 30 days)",
+    "organize_bucket_filing": "Filing suggestions",
+    "organize_into_folder": "into “{name}”",
     "organize_bucket_misfile": "Suspected misfiles",
     "organize_bucket_duplicate": "Duplicates",
     "organize_bucket_low_confidence": "Uncertain types",

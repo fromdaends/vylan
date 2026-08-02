@@ -19,6 +19,7 @@ import {
   deleteDocumentAction,
   moveDocumentAction,
 } from "@/app/actions/documents";
+import { setDocumentsFolderAction } from "@/app/actions/folders";
 import { stateMatches, type OrganizeBucket, type ScanRow } from "@/lib/files/organize";
 import { revalidatePath } from "next/cache";
 
@@ -136,6 +137,7 @@ export async function reviewSuggestionAction(input: {
     doc_type?: string | null;
     year?: number | null;
     category?: string | null;
+    folder_id?: string | null;
     action?: string;
   };
 
@@ -146,6 +148,15 @@ export async function reviewSuggestionAction(input: {
       id: s.document_id,
       aiSuggested: true,
     });
+  } else if (bucket === "filing") {
+    // Move into a folder the firm created — the same action a manual drag
+    // onto that folder runs.
+    const res = await setDocumentsFolderAction({
+      targets: [{ source: s.source, id: s.document_id }],
+      folderId: proposed.folder_id ?? null,
+      aiSuggested: true,
+    });
+    applied = { ok: res.ok && res.succeeded > 0 };
   } else {
     applied = await moveDocumentAction({
       source: s.source,
@@ -156,6 +167,16 @@ export async function reviewSuggestionAction(input: {
       category: proposed.category ?? "",
       aiSuggested: true,
     });
+    // A folder matched alongside the type/year rides the same approval:
+    // one click, both effects, both logged. Best-effort — the axis move is
+    // the suggestion's core and already succeeded.
+    if (applied.ok && proposed.folder_id) {
+      await setDocumentsFolderAction({
+        targets: [{ source: s.source, id: s.document_id }],
+        folderId: proposed.folder_id,
+        aiSuggested: true,
+      });
+    }
   }
   if (!applied.ok) return { ok: false, error: "error" };
 
