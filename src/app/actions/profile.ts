@@ -28,6 +28,21 @@ const DisplayNameSchema = z.object({
   display_name: z.string().max(80).optional().nullable(),
 });
 
+// Your role at the firm: what you do, and how much of a week you have.
+//
+// BOTH ARE YOURS TO SET. The firm owner reads them on your teammate page and
+// plans capacity with them, but the founder's call is that nobody else edits
+// them — a job title somebody assigned you without asking is a strange thing
+// for a product to enable, and hours you did not agree to are worse.
+//
+// 168 is the number of hours in a week. A capacity figure outside that is a
+// typo, and it is the denominator every future workload number divides by, so
+// it is refused rather than stored. Matches the database's check constraint.
+const WorkDetailsSchema = z.object({
+  job_title: z.string().max(120).optional().nullable(),
+  weekly_hours: z.number().positive().max(168).optional().nullable(),
+});
+
 const LocaleSchema = z.object({
   locale: z.enum(["fr", "en"]),
 });
@@ -69,6 +84,58 @@ export async function updateDisplayNameAction(
   // activity), so invalidate the ROOT layout — not just /profile — so every
   // surface re-resolves it. The client also router.refresh()es for an instant
   // update on the page you're on.
+  revalidatePath("/", "layout");
+  return { ok: true };
+}
+
+export async function updateWorkDetailsAction(
+  formData: FormData,
+): Promise<ProfileActionResult> {
+  const user = await requireAuth();
+  if (!user) return { ok: false, error: "unauth" };
+
+  const rawTitle = formData.get("job_title");
+  const rawHours = formData.get("weekly_hours");
+
+  const title =
+    typeof rawTitle === "string" && rawTitle.trim() !== ""
+      ? rawTitle.trim()
+      : null;
+
+  // An empty field means "not recorded", which is a real answer and the one
+  // everybody starts on. Only a non-empty value has to parse as a number.
+  let hours: number | null = null;
+  if (typeof rawHours === "string" && rawHours.trim() !== "") {
+    // A comma decimal is what a French keyboard produces, and rejecting "22,5"
+    // as invalid would be a bug half this app's users would hit first.
+    const n = Number(rawHours.trim().replace(",", "."));
+    if (!Number.isFinite(n)) return { ok: false, error: "invalid" };
+    // Two decimals: a 22.5-hour contract is as common as a 20-hour one, and
+    // rounding somebody's week is how a capacity figure stops being trusted.
+    hours = Math.round(n * 100) / 100;
+  }
+
+  const parsed = WorkDetailsSchema.safeParse({
+    job_title: title,
+    weekly_hours: hours,
+  });
+  if (!parsed.success) return { ok: false, error: "invalid" };
+
+  try {
+    await updateUserProfile({
+      job_title: parsed.data.job_title ?? null,
+      weekly_hours: parsed.data.weekly_hours ?? null,
+    });
+  } catch {
+    // Before migration 1190 the columns do not exist and the update throws.
+    // Reported as a save failure rather than crashing the page — the rest of
+    // the profile keeps working.
+    return { ok: false, error: "save_failed" };
+  }
+
+  // Your job title shows on your teammate page and beside your name; the
+  // roster reads the same row. Invalidate the root layout so every surface
+  // re-resolves it rather than showing two different answers.
   revalidatePath("/", "layout");
   return { ok: true };
 }

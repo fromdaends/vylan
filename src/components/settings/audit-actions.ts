@@ -106,7 +106,6 @@ export const AUDIT_ACTIONS = [
   "close_month",
   "reopen_month",
   "client_answered_question",
-  "update_teammate_profile",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

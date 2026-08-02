@@ -24,7 +24,6 @@ import { HandOverWork } from "@/components/settings/team/hand-over-work";
 import { DeactivateMember } from "@/components/settings/team/deactivate-member";
 import { MemberPermissions } from "@/components/settings/team/member-permissions";
 import { AvatarInitials } from "@/components/ui/avatar-initials";
-import { ProfileDetails } from "@/components/settings/team/profile-details";
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { formatDate } from "@/lib/format";
@@ -171,28 +170,6 @@ export default async function TeamMemberProfilePage({
         </div>
       </div>
 
-      {/* The lifecycle tabs move OUT of the engagements section and onto the
-          header card's bottom edge — Canopy's treatment, and the reason the
-          founder pointed at that screenshot: "how you can view, like, active
-          engagements". They were a cluster of small pills floating beside a
-          section heading; here they read as what they are, the page's own
-          sections. */}
-      <nav className="flex gap-1 overflow-x-auto border-t border-border/60 px-2">
-        {PROFILE_VIEWS.map((v) => (
-          <Link
-            key={v}
-            href={v === "active" ? `/settings/team/${id}` : `/settings/team/${id}?view=${v}`}
-            aria-current={v === view ? "page" : undefined}
-            className={
-              v === view
-                ? "-mb-px whitespace-nowrap border-b-2 border-foreground px-3 py-2.5 text-sm font-medium text-foreground"
-                : "-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-            }
-          >
-            {tEngagements(viewLabelKey(v) as Parameters<typeof tEngagements>[0])}
-          </Link>
-        ))}
-      </nav>
       </header>
 
       {/* Two columns, same shape as a client's page and following Canopy's
@@ -209,14 +186,23 @@ export default async function TeamMemberProfilePage({
               quiet label/value rows, and they are reference, not the point. */}
           <dl className="mt-3 space-y-3 text-sm">
             <ProfileRow label={tClients("col_email")} value={member.email} />
-            {/* What they do and how much of a week they have. The second one is
-                the denominator "9 engagements" has never had — nine simple
-                returns is not nine corporate year-ends. */}
-            <ProfileDetails
-              userId={member.id}
-              jobTitle={member.job_title ?? null}
-              weeklyHours={member.weekly_hours ?? null}
-              canEdit={isOwner && !member.deactivated_at}
+            {/* Read-only, deliberately. Founder: "wouldn't that be Clarence
+                that does that?" — a job title somebody assigned you without
+                asking is a strange thing for a product to enable, and hours you
+                did not agree to are worse. Both are set by the person on their
+                own /profile and read here from the same row, so the two pages
+                cannot disagree. */}
+            <ProfileRow
+              label={t("profile_job_title")}
+              value={member.job_title?.trim() || t("profile_not_recorded")}
+            />
+            <ProfileRow
+              label={t("profile_weekly_hours")}
+              value={
+                member.weekly_hours == null
+                  ? t("profile_not_recorded")
+                  : t("profile_hours_value", { hours: member.weekly_hours })
+              }
             />
             <ProfileRow
               label={t("profile_stat_engagements")}
@@ -296,7 +282,40 @@ export default async function TeamMemberProfilePage({
 
       {/* ── Main column: their work ──────────────────────────────────────── */}
       <div className="space-y-6">
-      <Panel title={t("profile_engagements_title")} flush>
+      {/* The lifecycle filter belongs HERE, on the list it filters — not in the
+          header card. Founder, seeing it at the top: "the main headers should
+          be main headers", and a filter for one section is not one. The header
+          card's tab row is now empty and stays that way until something
+          page-level earns it. */}
+      <Panel
+        title={t("profile_engagements_title")}
+        flush
+        aside={
+          <nav
+            aria-label={t("profile_engagements_title")}
+            className="flex flex-wrap items-center gap-1"
+          >
+            {PROFILE_VIEWS.map((v) => (
+              <Link
+                key={v}
+                href={
+                  v === "active"
+                    ? `/settings/team/${id}`
+                    : `/settings/team/${id}?view=${v}`
+                }
+                aria-current={v === view ? "page" : undefined}
+                className={
+                  v === view
+                    ? "rounded-full bg-secondary px-2.5 py-1 text-xs font-medium text-foreground"
+                    : "rounded-full px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                }
+              >
+                {tEngagements(viewLabelKey(v) as Parameters<typeof tEngagements>[0])}
+              </Link>
+            ))}
+          </nav>
+        }
+      >
         <WorklistTable
           rows={engagements}
           locale={locale}
@@ -396,18 +415,22 @@ export default async function TeamMemberProfilePage({
 function Panel({
   title,
   flush = false,
+  aside,
   children,
 }: {
   title: string;
   flush?: boolean;
+  /** Controls that belong to THIS section, in its own title band. */
+  aside?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="overflow-hidden rounded-xl border border-border/60 bg-card">
-      <div className="border-b border-border/60 px-4 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border/60 px-4 py-2.5">
         <h2 className="text-xs font-medium uppercase tracking-[0.1em] text-muted-foreground">
           {title}
         </h2>
+        {aside}
       </div>
       <div className={flush ? "" : "p-4"}>{children}</div>
     </section>
