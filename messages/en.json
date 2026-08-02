@@ -3135,6 +3135,8 @@
     "uncat_already_done": "Already categorised",
     "uncat_done": "{count, plural, one {# transaction} other {# transactions}} categorised in QuickBooks.",
     "uncat_refresh": "Refresh the list",
+    "sel_selected": "{count, plural, one {# selected} other {# selected}}",
+    "sel_clear": "Clear selection",
     "uncat_ask_button": "Ask the client about {count, plural, one {# transaction} other {# transactions}}",
     "uncat_asked": "Asked the client about {count, plural, one {# transaction} other {# transactions}}.",
     "uncat_ask_failed": "We couldn't send that question. Try again.",
