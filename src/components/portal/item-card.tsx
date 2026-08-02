@@ -759,7 +759,9 @@ export function ItemCard({
           {cameraOpen && (
             <CameraCapture
               onClose={() => setCameraOpen(false)}
-              onCapture={(file) => uploadFiles([file])}
+              // The scanner hands over every page it banked in one call; the
+              // uploader has always looped a File[] onto this item.
+              onCapture={(files) => uploadFiles(files)}
               // Whenever the camera can't be used, the client lands back on the
               // ordinary file picker rather than on a dead end.
               onChooseFile={() => inputRef.current?.click()}

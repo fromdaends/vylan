@@ -293,3 +293,33 @@ export function shouldAutoCapture(readyStreak: number, requiredFrames: number): 
   if (!(requiredFrames > 0)) return false;
   return readyStreak >= requiredFrames;
 }
+
+// --- review-screen blur advisory ---------------------------------------------
+
+/**
+ * The long edge the extracted scan is downscaled to before its sharpness is
+ * judged for the review screen. Variance of the Laplacian has no absolute
+ * scale across resolutions — the SAME photo scores wildly higher at 2048px
+ * than at 400px — so the measurement is pinned to one size to make the
+ * threshold below mean anything.
+ */
+export const REVIEW_SHARPNESS_WIDTH = 400;
+
+/**
+ * Below this (at REVIEW_SHARPNESS_WIDTH) the review screen shows the
+ * non-blocking "Looks blurry — retake?" hint. Deliberately conservative: a
+ * document with any legible text at 400px scores in the hundreds, while
+ * genuine motion blur lands under ~20. Advice only — the client always
+ * decides, and the server-side AI check remains the real gate.
+ */
+export const REVIEW_BLUR_THRESHOLD = 40;
+
+/** Advisory verdict for the review screen. null (measurement failed) = quiet. */
+export function isReviewBlurry(sharpness: number | null): boolean {
+  return (
+    sharpness !== null &&
+    Number.isFinite(sharpness) &&
+    sharpness >= 0 &&
+    sharpness < REVIEW_BLUR_THRESHOLD
+  );
+}
