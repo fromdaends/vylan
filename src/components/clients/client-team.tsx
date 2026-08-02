@@ -2,11 +2,10 @@
 
 // Who works on this client — the cast, in the client page's rail.
 //
-// ⚠️ IT DOES NOT CONTROL ACCESS YET, and the panel says so out loud rather than
-// leaving a firm to assume it does. Phase 3 slice 1 exists so the list is
-// filled in and correct BEFORE the row-level rules start reading it; a firm
-// that thought it was already restricting access would be storing up exactly
-// the wrong kind of surprise.
+// ⚠️ ADDING SOMEBODY NOW GRANTS THEM SIGHT of this client and its engagements,
+// even when it is private (slice 2, migration 1220). Removing somebody does NOT
+// yet take sight away, because a non-private client is still visible to the
+// whole firm — slice 3 is what closes that, and the panel's footnote says so.
 //
 // Quiet by construction: names with a position beside them, a "+" that opens a
 // picker of the teammates not already on, and an ✕ on hover. No section header

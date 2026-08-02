@@ -1744,7 +1744,7 @@
     "team_remove": "Take {name} off this client",
     "team_failed": "We couldn't change that. Try again.",
     "team_needs_migration": "This needs database update 1210 before it can save.",
-    "team_not_access_yet": "This list doesn't control who can see this client yet — that comes next. For now it's a record of who's on it.",
+    "team_not_access_yet": "Anyone on this list can see this client, even if it's private. People not on it can still see it too, unless it's private — that changes in a later step.",
     "client_since": "Client since",
     "rel_title": "Relationships",
     "rel_add": "Add relationship",

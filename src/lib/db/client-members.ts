@@ -1,10 +1,10 @@
 // Who works on a client — reading and writing the cast.
 //
-// ⚠️ NOTHING HERE DECIDES ACCESS. Phase 3 slice 1 ships the table and the
-// screen that fills it in; the row-level rules on `clients` and `engagements`
-// are untouched and still decide visibility exactly as they did before. A
-// reader arriving at this file later must not assume otherwise — see
-// supabase/migrations/1210_client_members.sql for the four-slice sequence.
+// ⚠️ THIS LIST NOW GRANTS SIGHT (slice 2, migration 1220). Being on a client
+// lets you see it and its engagements even when it is private. What it does NOT
+// yet do is take sight away — everyone who could see a non-private client still
+// can, whether or not they are on it. Slice 3 is what narrows that, and it is
+// the one the founder reviews before it runs.
 //
 // READS DEGRADE, WRITES REFUSE, same as month-close.ts. Before 1210 is applied
 // there is no table: a read returns "no cast recorded", which is exactly what
