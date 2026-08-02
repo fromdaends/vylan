@@ -10,6 +10,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import {
   claimDueJobs,
+  enqueueJob,
   markJobDone,
   markJobFailed,
   MAX_ATTEMPTS,
@@ -43,6 +44,7 @@ import {
   type PurgeResult as DocumentPurgeResult,
 } from "@/lib/files/purge";
 import { getServiceRoleSupabase } from "@/lib/supabase/server";
+import { runOrganizeScan } from "@/lib/files/organize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -283,6 +285,33 @@ async function runJob(
       }
       await markJobDone(job.id);
       return { id: job.id, kind: job.kind, ok: result.ok, detail: result };
+    }
+    if (job.kind === "organize_scan") {
+      // The Files AI Organize scanner. Propose-only: it writes suggestion
+      // rows and never touches a document. A payload firm_id means an
+      // on-demand run for that one firm (the Home card's Review button);
+      // no firm_id is the nightly all-firms sweep, which re-enqueues itself
+      // for the next 03:00 UTC — but only the nightly does, so on-demand
+      // runs never multiply the chain.
+      const firmId = typeof job.payload.firm_id === "string" ? job.payload.firm_id : undefined;
+      const result = await runOrganizeScan(firmId ? { firmId } : {});
+      await markJobDone(job.id);
+      if (!firmId) {
+        const sb = getServiceRoleSupabase();
+        const { data: pending } = await sb
+          .from("jobs")
+          .select("id")
+          .eq("kind", "organize_scan")
+          .eq("status", "pending")
+          .limit(1);
+        if (!pending || pending.length === 0) {
+          const next = new Date();
+          next.setUTCDate(next.getUTCDate() + 1);
+          next.setUTCHours(3, 0, 0, 0);
+          await enqueueJob({ kind: "organize_scan", payload: {}, runAfter: next });
+        }
+      }
+      return { id: job.id, kind: job.kind, ok: true, detail: result };
     }
     if (job.kind === "send_notification_email") {
       // Notification email delivery (migration 0920). The worker re-checks

@@ -8,6 +8,7 @@ import {
   Cloud,
   FileText,
   Files,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, type AppLocale } from "@/lib/format";
@@ -19,6 +20,8 @@ import {
   type BrowseDocument,
 } from "@/lib/db/documents";
 import { listActivityForFirm, type FirmActivityEntry } from "@/lib/db/activity";
+import { openSuggestionCounts } from "@/lib/files/organize";
+import { ScanNowButton } from "@/components/files/organize-review";
 import { getFirmStorageConnection } from "@/lib/db/filing";
 import { getServerSupabase } from "@/lib/supabase/server";
 import { isAuditAction } from "@/components/settings/audit-actions";
@@ -59,13 +62,14 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const [docsPage, activity, storage, monthCount, pendingCount] =
+  const [docsPage, activity, storage, monthCount, pendingCount, organize] =
     await Promise.all([
       listDocuments({ sort: "date", page: 1 }),
       listActivityForFirm({ actions: FILE_ACTIVITY_ACTIONS, limit: 15 }),
       getFirmStorageConnection(),
       countDocumentsSince(monthStart.toISOString()),
       countPendingAnalysis(),
+      openSuggestionCounts(),
     ]);
 
   const recent = docsPage.documents.slice(0, 10);
@@ -94,6 +98,7 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
         pending={pendingCount}
         storage={storage}
       />
+      {organize.available && <OrganizeCard t={t} total={organize.total} />}
       <RecentFiles t={t} locale={locale} recent={recent} clientNames={clientNames} />
       <TeamActivity t={t} tAudit={tAudit} locale={locale} entries={activity} />
     </div>
@@ -101,6 +106,41 @@ export async function HomeTab({ locale }: { locale: AppLocale }) {
 }
 
 type T = Awaited<ReturnType<typeof getTranslations<"Files">>>;
+
+// ── AI Organize ─────────────────────────────────────────────────────────────
+// The card only appears once the Organize schema exists (available), and it
+// is honest both ways: a count with a Review button when files need
+// attention, a quiet all-clear when they don't. The scanner can be run on
+// demand from here; the nightly run keeps it fresh otherwise.
+
+function OrganizeCard({ t, total }: { t: T; total: number }) {
+  return (
+    <section className="flex items-center justify-between gap-4 rounded-lg border border-border/70 bg-card px-4 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <Sparkles className="size-5 shrink-0 text-accent" aria-hidden />
+        <div className="min-w-0">
+          <h2 className="text-sm font-medium">{t("organize_title")}</h2>
+          <p className="truncate text-xs text-muted-foreground">
+            {total > 0
+              ? t("organize_card_count", { count: total })
+              : t("organize_all_clear")}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <ScanNowButton />
+        {total > 0 && (
+          <Link
+            href="/files/organize"
+            className="inline-flex h-8 items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          >
+            {t("organize_review")}
+          </Link>
+        )}
+      </div>
+    </section>
+  );
+}
 type TAudit = Awaited<ReturnType<typeof getTranslations<"Audit">>>;
 
 // ── At a glance ─────────────────────────────────────────────────────────────

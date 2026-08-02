@@ -235,3 +235,105 @@ export async function assessSetWithOpenAI(opts: {
     return { raw: null, usage };
   }
 }
+
+// ── GPT-5.6 Luna: the file ORGANIZER ────────────────────────────────────────
+//
+// Founder ruling (2026-08-02): Terra analyzes documents — reads their actual
+// content at intake — and that is the ONLY thing Terra does. Luna handles all
+// organizing, and it only ever sees file NAMES plus the metadata Vylan
+// already holds. Text-only calls at a fraction of Terra's price, no document
+// bytes, no rate-limit exposure from bulk scans.
+
+/** One file for Luna to look at — names and existing labels, nothing else. */
+export type LunaFile = {
+  id: string;
+  name: string;
+  currentDocType: string | null;
+  currentYear: number | null;
+};
+
+export type LunaProposal = {
+  id: string;
+  doc_type: string | null;
+  year: number | null;
+  reason: string;
+};
+
+export function organizeModel(): string {
+  return process.env.OPENAI_ORGANIZE_MODEL?.trim() || "gpt-5.6-luna";
+}
+
+const LUNA_SCHEMA = {
+  type: "object",
+  properties: {
+    proposals: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          doc_type: { type: ["string", "null"] },
+          year: { type: ["integer", "null"] },
+          reason: { type: "string" },
+        },
+        required: ["id", "doc_type", "year", "reason"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["proposals"],
+  additionalProperties: false,
+};
+
+/**
+ * Ask Luna to categorize a batch of files by NAME. Returns one proposal per
+ * input file; `doc_type: null` means the name is not clear enough to say —
+ * which the caller treats as "make no suggestion", never as a guess.
+ */
+export async function organizeWithLuna(opts: {
+  files: LunaFile[];
+  validDocTypes: string[];
+}): Promise<{ proposals: LunaProposal[]; usage: { input: number; output: number } | null }> {
+  const c = client();
+  if (!c || opts.files.length === 0) return { proposals: [], usage: null };
+
+  const system = [
+    "You organize documents for Canadian accounting firms using ONLY their file names.",
+    "For each file, propose the most likely document type code and, when the name contains one, the 4-digit tax/statement year.",
+    `Valid document type codes: ${opts.validDocTypes.join(", ")}.`,
+    "If the name is not clear enough to be confident, return doc_type: null — a wrong label is worse than no label.",
+    "reason: one short sentence (max 15 words) explaining the proposal, written in the same language as the file name (French or English).",
+    "Never invent codes outside the list. Never infer from anything except the provided name and current labels.",
+  ].join("\n");
+
+  const resp = await c.chat.completions.create({
+    model: organizeModel(),
+    max_completion_tokens: 4000,
+    reasoning_effort: "low",
+    response_format: {
+      type: "json_schema",
+      json_schema: {
+        name: "organize_files",
+        strict: true,
+        schema: LUNA_SCHEMA as Record<string, unknown>,
+      },
+    },
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: JSON.stringify({ files: opts.files }) },
+    ],
+  });
+
+  const text = resp.choices[0]?.message?.content ?? "";
+  let proposals: LunaProposal[] = [];
+  try {
+    const parsed = JSON.parse(text) as { proposals?: LunaProposal[] };
+    proposals = Array.isArray(parsed.proposals) ? parsed.proposals : [];
+  } catch {
+    proposals = [];
+  }
+  const usage = resp.usage
+    ? { input: resp.usage.prompt_tokens ?? 0, output: resp.usage.completion_tokens ?? 0 }
+    : null;
+  return { proposals, usage };
+}
