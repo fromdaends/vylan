@@ -303,6 +303,30 @@ export async function processClassifyJob(
   // checklist. Fully best-effort and its own write, exactly like auto-naming
   // below: a missing column (0990 not applied) leaves the feature off and the
   // classification above still lands.
+  // Files v2 §5: store the transcript the reader produced in this same call,
+  // so Browse search can look INSIDE documents. Forward-only by the founder's
+  // ruling — text exists only for portal uploads read from here on; no
+  // backfill, and imports never reach any model. Gated like every
+  // post-launch table (0650 rule): before migration 1170 the insert fails
+  // quietly and search simply has no content index yet.
+  if (result.transcript && limitFirmId && limitClientId) {
+    try {
+      await sb.from("document_texts").upsert(
+        {
+          source: "checklist",
+          document_id: file.id,
+          firm_id: limitFirmId,
+          client_id: limitClientId,
+          extracted_text: result.transcript.slice(0, 20000),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "source,document_id" },
+      );
+    } catch (err) {
+      console.warn("[classify] transcript store failed:", err);
+    }
+  }
+
   await flagNearDuplicate(sb, file.id, file.engagement_id, transaction);
 
   // FILES BROWSER (1070): store where this document now sits in the

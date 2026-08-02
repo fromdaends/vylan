@@ -112,6 +112,7 @@ describe("parseClassification", () => {
       issue_summary_en: "",
     });
     expect(out).toEqual({
+      transcript: null,
       document_type: "t4",
       confidence: 0.92,
       reasoning: "",
@@ -716,5 +717,24 @@ describe("parseClassification — belongs_to_client + overall_confidence", () =>
     });
     expect(out?.usability.usable).toBe(false);
     expect(out?.usability.primary_issue).toBe("key_fields_obscured");
+  });
+});
+
+describe("parseClassification — transcript (Files v2 §5)", () => {
+  const base = { document_type: "t4", confidence: 0.9 };
+
+  it("passes a transcript through, trimmed", () => {
+    const out = parseClassification({ ...base, transcript: "  T4 2024 Box 14: 52,140  " });
+    expect(out?.transcript).toBe("T4 2024 Box 14: 52,140");
+  });
+
+  it("caps a runaway transcription at 20k characters", () => {
+    const out = parseClassification({ ...base, transcript: "x".repeat(50_000) });
+    expect(out?.transcript?.length).toBe(20_000);
+  });
+
+  it("empty or missing transcript is null, never an empty string", () => {
+    expect(parseClassification({ ...base, transcript: "   " })?.transcript).toBeNull();
+    expect(parseClassification({ ...base })?.transcript).toBeNull();
   });
 });
