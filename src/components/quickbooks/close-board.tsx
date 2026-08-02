@@ -280,7 +280,7 @@ export function CloseBoard(props: {
                         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                           {state.uncategorized > 0 && (
                             <Link
-                              href={`/quickbooks/uncategorized?client=${row.clientId}&from=${from}&to=${to}`}
+                              href={`/quickbooks/drafts?tab=uncategorized&client=${row.clientId}&from=${from}&to=${to}`}
                               className="underline-offset-4 hover:underline"
                             >
                               {t("close_uncategorized", {
@@ -290,7 +290,7 @@ export function CloseBoard(props: {
                           )}
                           {state.missingReceipts > 0 && (
                             <Link
-                              href={`/quickbooks/receipts?client=${row.clientId}&from=${from}&to=${to}`}
+                              href={`/quickbooks/drafts?tab=receipts&client=${row.clientId}&from=${from}&to=${to}`}
                               className="underline-offset-4 hover:underline"
                             >
                               {t("close_missing_receipts", {
