@@ -445,6 +445,19 @@ export async function DocumentsTab({
         searchIndex={visibleRows.map((r) => ({
           id: r.fileId,
           text: `${r.clientName ?? ""} ${r.engagementTitle ?? ""} ${r.documentName ?? ""}`.toLowerCase(),
+          // What the sortable columns compare on. Built here because the
+          // bucket needs the same suggestion/resolved/status the row renders
+          // from — recomputing it in the client shell could disagree.
+          sort: {
+            client: r.clientName ?? "",
+            document: r.documentName ?? "",
+            amount: r.suggestion.amount ?? null,
+            bucket: draftQueueBucket({
+              suggestion: r.suggestion,
+              resolved: r.resolved,
+              status: r.status,
+            }),
+          },
         }))}
         emptyAll={rows.length === 0}
       >

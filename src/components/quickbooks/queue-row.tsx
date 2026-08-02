@@ -77,74 +77,87 @@ export async function QueueRow({
   };
   const pill = bucketPill[bucket];
 
+  // The row's cells. One <td> per column of the queue table — the column
+  // order here MUST match the header in drafts-queue.tsx, and the count must
+  // match QUEUE_COLUMN_COUNT (which the expanded row's colSpan uses).
   const summary = (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      {/* Source: which product this draft posts to. A small brand logo so the
-          mixed QuickBooks/Xero queue is scannable at a glance. */}
-      <span
-        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-secondary/60 ring-1 ring-inset ring-border/40"
-        title={providerName}
-        aria-label={providerName}
-      >
-        <ProviderLogo className="h-3.5 w-3.5" />
-      </span>
-      {/* Identity: client + engagement link, then the document. */}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
-          <span className="font-semibold text-foreground truncate max-w-[14rem]">
-            {row.clientName ?? t("queue_unknown_client")}
-          </span>
-          <span aria-hidden className="text-muted-foreground/50">
-            ·
-          </span>
-          <Link
-            href={`/engagements/${row.engagementId}`}
-            className="text-muted-foreground hover:text-foreground hover:underline truncate max-w-[14rem]"
-          >
-            {row.engagementTitle ?? t("queue_unknown_engagement")}
-          </Link>
+    <>
+      {/* 1. Source: which product this draft posts to. A small brand logo so
+             the mixed QuickBooks/Xero queue is scannable at a glance. */}
+      <td className="py-2 pl-3 pr-2 align-middle">
+        <span
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-secondary/60 ring-1 ring-inset ring-border/40"
+          title={providerName}
+          aria-label={providerName}
+        >
+          <ProviderLogo className="h-3.5 w-3.5" />
+        </span>
+      </td>
+
+      {/* 2. Client, with the engagement as its second line (Canopy's
+             two-line identity cell) — one column instead of two. */}
+      <td className="max-w-[16rem] py-2 pr-3 align-middle">
+        <div className="truncate text-sm font-medium text-foreground">
+          {row.clientName ?? t("queue_unknown_client")}
         </div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-          <DirectionIcon className="h-3 w-3 shrink-0" aria-hidden="true" />
+        <Link
+          href={`/engagements/${row.engagementId}`}
+          className="block truncate text-xs text-muted-foreground hover:text-foreground hover:underline"
+        >
+          {row.engagementTitle ?? t("queue_unknown_engagement")}
+        </Link>
+      </td>
+
+      {/* 3. Document. Hidden on narrow screens — the identity + amount +
+             status are what you triage on. */}
+      <td className="hidden max-w-[18rem] py-2 pr-3 align-middle md:table-cell">
+        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <DirectionIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span className="truncate">
             {row.documentName ?? t("queue_unknown_document")}
           </span>
         </div>
-      </div>
+      </td>
 
-      {/* Amount. (Who/when is shown in the card when the row is expanded, so
-          it isn't duplicated here.) */}
-      <div className="text-right tabular-nums">
-        <div className="text-sm font-semibold text-foreground">
-          {amountLabel}
+      {/* 4. Amount, right-aligned and tabular so the column reads as money. */}
+      <td className="py-2 pr-3 text-right align-middle text-sm font-medium tabular-nums text-foreground">
+        {amountLabel}
+      </td>
+
+      {/* 5. Status pill. */}
+      <td className="py-2 pr-3 align-middle">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-medium",
+            pill.cls,
+          )}
+        >
+          {bucket === "needs_input" && (
+            <TriangleAlert className="h-3 w-3" aria-hidden="true" />
+          )}
+          {pill.label}
+        </span>
+      </td>
+
+      {/* 6. Triage controls. They used to sit on every row permanently, which
+             is a lot of shouting on a long queue; now they surface on hover
+             (and on keyboard focus). Always visible on touch, where there is
+             no hover to reveal them. */}
+      <td className="py-2 pr-2 align-middle">
+        <div className="flex items-center justify-end gap-1 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+          <DraftStatusControls
+            fileId={row.fileId}
+            status={row.status}
+            canApprove={canApprove}
+          />
+          <DeleteDraftControl
+            fileId={row.fileId}
+            status={row.status}
+            isMatched={row.matchedQboType != null}
+          />
         </div>
-      </div>
-
-      {/* Bucket pill. */}
-      <span
-        className={cn(
-          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
-          pill.cls,
-        )}
-      >
-        {bucket === "needs_input" && (
-          <TriangleAlert className="h-3 w-3" aria-hidden="true" />
-        )}
-        {pill.label}
-      </span>
-
-      {/* Inline status controls (fast triage) + delete-from-queue. */}
-      <DraftStatusControls
-        fileId={row.fileId}
-        status={row.status}
-        canApprove={canApprove}
-      />
-      <DeleteDraftControl
-        fileId={row.fileId}
-        status={row.status}
-        isMatched={row.matchedQboType != null}
-      />
-    </div>
+      </td>
+    </>
   );
 
   return (

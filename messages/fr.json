@@ -3046,6 +3046,10 @@
     "filing_desc": "Classez les documents approuvés vers Google Drive, SharePoint, Dropbox ou SmartVault."
   },
   "Quickbooks": {
+    "queue_col_client": "Client",
+    "queue_col_document": "Document",
+    "queue_col_amount": "Montant",
+    "queue_col_status": "Statut",
     "draft_title": "Brouillon QuickBooks",
     "draft_title_xero": "Brouillon Xero",
     "draft_kicker": "QuickBooks",

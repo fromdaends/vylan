@@ -8,7 +8,9 @@ import {
   countQueueBuckets,
   bucketRank,
   queueHealthScopes,
+  sortedQueueIndexes,
   type QueueItem,
+  type QueueSortMeta,
 } from "./draft-queue";
 import type {
   TransactionSuggestion,
@@ -278,5 +280,86 @@ describe("queueHealthScopes", () => {
     expect(queueHealthScopes([row("c1", null), row("c2", "whatever")])).toEqual(
       ["c1", "c2"],
     );
+  });
+});
+
+// --- Queue table sorting -----------------------------------------------------
+
+describe("compareQueueSort / sortedQueueIndexes", () => {
+  const meta = (over: Partial<QueueSortMeta>): QueueSortMeta => ({
+    client: "Acme",
+    document: "receipt.pdf",
+    amount: 100,
+    bucket: "ready",
+    ...over,
+  });
+
+  it("sorts clients alphabetically, and accents land where a reader expects", () => {
+    const rows = [
+      meta({ client: "Zenith" }),
+      meta({ client: "Sébastien" }),
+      meta({ client: "acme" }),
+    ];
+    const order = sortedQueueIndexes(rows, { key: "client", dir: "asc" });
+    expect(order.map((i) => rows[i]!.client)).toEqual([
+      "acme",
+      "Sébastien",
+      "Zenith",
+    ]);
+  });
+
+  it("flips direction on the same column", () => {
+    const rows = [meta({ amount: 5 }), meta({ amount: 500 }), meta({ amount: 50 })];
+    expect(
+      sortedQueueIndexes(rows, { key: "amount", dir: "asc" }).map(
+        (i) => rows[i]!.amount,
+      ),
+    ).toEqual([5, 50, 500]);
+    expect(
+      sortedQueueIndexes(rows, { key: "amount", dir: "desc" }).map(
+        (i) => rows[i]!.amount,
+      ),
+    ).toEqual([500, 50, 5]);
+  });
+
+  it("sinks rows with no amount to the bottom in BOTH directions", () => {
+    const rows = [meta({ amount: null }), meta({ amount: 10 }), meta({ amount: 20 })];
+    for (const dir of ["asc", "desc"] as const) {
+      const order = sortedQueueIndexes(rows, { key: "amount", dir });
+      expect(rows[order[order.length - 1]!]!.amount).toBeNull();
+    }
+  });
+
+  it("status sorts by the queue's own priority, not the label", () => {
+    const rows = [
+      meta({ bucket: "posted" }),
+      meta({ bucket: "needs_input" }),
+      meta({ bucket: "approved" }),
+    ];
+    const order = sortedQueueIndexes(rows, { key: "status", dir: "asc" });
+    expect(order.map((i) => rows[i]!.bucket)).toEqual([
+      "needs_input",
+      "approved",
+      "posted",
+    ]);
+  });
+
+  it("leaves the server's order alone when no column is chosen", () => {
+    const rows = [meta({ client: "Zenith" }), meta({ client: "Acme" })];
+    expect(sortedQueueIndexes(rows, null)).toEqual([0, 1]);
+  });
+
+  it("is stable — ties keep the order they arrived in", () => {
+    const rows = [
+      meta({ client: "Same", document: "first.pdf" }),
+      meta({ client: "Same", document: "second.pdf" }),
+      meta({ client: "Same", document: "third.pdf" }),
+    ];
+    const order = sortedQueueIndexes(rows, { key: "client", dir: "asc" });
+    expect(order.map((i) => rows[i]!.document)).toEqual([
+      "first.pdf",
+      "second.pdf",
+      "third.pdf",
+    ]);
   });
 });
