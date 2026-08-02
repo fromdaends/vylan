@@ -1744,7 +1744,7 @@
     "team_remove": "Retirer {name} de ce client",
     "team_failed": "Nous n'avons pas pu effectuer ce changement. Réessayez.",
     "team_needs_migration": "Cela nécessite la mise à jour 1210 de la base de données avant de pouvoir enregistrer.",
-    "team_not_access_yet": "Cette liste ne détermine pas encore qui peut voir ce client — cela viendra ensuite. Pour l'instant, c'est un relevé de qui y travaille.",
+    "team_not_access_yet": "Toute personne sur cette liste peut voir ce client, même s'il est privé. Les autres peuvent aussi le voir, sauf s'il est privé — cela changera à une étape ultérieure.",
     "client_since": "Client depuis",
     "rel_title": "Relations",
     "rel_add": "Ajouter une relation",
