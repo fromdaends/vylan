@@ -80,6 +80,8 @@ export async function GET(
     .eq("id", id)
     // Same as the bytes route: service role, so the exclusion must be explicit.
     .is("deleted_at", null)
+    // Firm-only documents (1160) are not downloadable by clients, full stop.
+    .eq("visibility", "client")
     .maybeSingle();
 
   if (

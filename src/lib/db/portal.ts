@@ -233,6 +233,9 @@ export async function loadPortalContext(
     // migration 1090's RLS exclusion does not apply to it. Without this line a
     // document the firm deleted keeps showing to the client indefinitely.
     .is("deleted_at", null)
+    // Same stakes for visibility (1160): 'firm' documents must never appear
+    // in ANY client-facing surface — enforced here at the query, not the UI.
+    .eq("visibility", "client")
     .order("uploaded_at", { ascending: true });
 
   // Sign direct storage URLs for image files so the portal loads them straight

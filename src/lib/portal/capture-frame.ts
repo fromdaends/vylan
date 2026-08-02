@@ -11,6 +11,7 @@
 // deliberately thin, because canvas is unavailable under the test DOM.
 
 import { outputSizeFor, warpToRect, type Quad } from "./rectify";
+import { computeMetrics, toGrayscale } from "./frame-metrics";
 
 export type Size = { width: number; height: number };
 export type Rect = { x: number; y: number; width: number; height: number };
@@ -343,4 +344,50 @@ export async function captureVideoFrameRectified(
   return new File([blob], captureFilename(now ?? Date.now()), {
     type: "image/jpeg",
   });
+}
+
+/**
+ * Focus score for a finished capture, for the review screen's blur advisory.
+ *
+ * Measured on a downscale to REVIEW_SHARPNESS_WIDTH, not on the full capture:
+ * variance of the Laplacian has no absolute scale, so a threshold only means
+ * something at a fixed size.
+ *
+ * Deliberately NOT OpenCV, even though OpenCV is loaded by then: this must
+ * also work on the devices where the engine failed to load, and the identical
+ * measurement already exists as a pure function with its own tests. Returns
+ * null on any failure (no bitmap decoder, no 2D context, a tainted read) —
+ * callers treat null as "say nothing", never as "blurry".
+ */
+export async function measureCaptureSharpness(
+  blob: Blob,
+  longEdge: number,
+): Promise<number | null> {
+  try {
+    if (typeof createImageBitmap !== "function") return null;
+    const bitmap = await createImageBitmap(blob);
+    try {
+      const size = fitWithin(
+        { width: bitmap.width, height: bitmap.height },
+        longEdge,
+      );
+      const canvas = document.createElement("canvas");
+      canvas.width = size.width;
+      canvas.height = size.height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return null;
+      ctx.drawImage(bitmap, 0, 0, size.width, size.height);
+      const rgba = ctx.getImageData(0, 0, size.width, size.height);
+      const gray = toGrayscale({
+        data: rgba.data,
+        width: rgba.width,
+        height: rgba.height,
+      });
+      return computeMetrics(gray, null, null).sharpness;
+    } finally {
+      bitmap.close?.();
+    }
+  } catch {
+    return null;
+  }
 }

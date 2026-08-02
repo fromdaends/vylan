@@ -80,6 +80,8 @@ export async function GET(
     // This route runs with the service role (the client holds a magic-link
     // token, not a session), so migration 1090's RLS exclusion cannot reach it.
     .is("deleted_at", null)
+    // Firm-only documents (1160) are not downloadable by clients, full stop.
+    .eq("visibility", "client")
     .maybeSingle();
 
   if (

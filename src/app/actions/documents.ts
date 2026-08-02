@@ -339,3 +339,70 @@ function isSchemaMissing(err: { code?: string | null } | null): boolean {
     err?.code === "42P01"
   );
 }
+
+// ── Visibility: client-visible vs firm-only (Files v2 §6) ───────────────────
+
+export type DocumentVisibility = "client" | "firm";
+
+/**
+ * Flip whether the client may ever see this document. 'firm' removes it from
+ * every client-facing surface — enforced in the portal QUERIES, not the UI.
+ * RLS is the permission check here, same as rename: no visible row, no update.
+ */
+export async function setDocumentVisibilityAction(input: {
+  source: string;
+  id: string;
+  visibility: DocumentVisibility;
+}): Promise<DocumentActionResult> {
+  if (
+    !isDocumentSource(input.source) ||
+    !input.id ||
+    (input.visibility !== "client" && input.visibility !== "firm")
+  ) {
+    return { ok: false, error: "invalid" };
+  }
+  const firm = await getCurrentFirm();
+  if (!firm) return { ok: false, error: "error" };
+  const sb = await getServerSupabase();
+
+  const { data, error } = await sb
+    .from(TABLE[input.source])
+    .update({ visibility: input.visibility })
+    .eq("id", input.id)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    return { ok: false, error: isSchemaMissing(error) ? "unavailable" : "error" };
+  }
+  if (!data) return { ok: false, error: "not_found" };
+
+  await logUserActivity(firm.id, null, "file_visibility_changed", {
+    source: input.source,
+    file_id: input.id,
+    visibility: input.visibility,
+  });
+  revalidatePath("/files");
+  return { ok: true };
+}
+
+/** Bulk visibility flip. Same per-row path, honest partial reporting. */
+export async function bulkSetVisibilityAction(input: {
+  targets: BulkTarget[];
+  visibility: DocumentVisibility;
+}): Promise<BulkResult> {
+  const targets = validTargets(input.targets);
+  if (targets.length === 0) return { ok: false, succeeded: 0, failed: 0, skipped: 0 };
+  let succeeded = 0;
+  let failed = 0;
+  for (const t of targets) {
+    const res = await setDocumentVisibilityAction({
+      source: t.source,
+      id: t.id,
+      visibility: input.visibility,
+    });
+    if (res.ok) succeeded++;
+    else failed++;
+  }
+  revalidatePath("/files");
+  return { ok: failed === 0, succeeded, failed, skipped: 0 };
+}
