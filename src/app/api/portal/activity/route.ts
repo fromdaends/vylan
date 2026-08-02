@@ -34,6 +34,7 @@ const ALLOWED_ACTIONS = new Set([
   "client_opened_signatures",
   "client_opened_messages",
   "client_opened_signature",
+  "client_answered_question",
   "client_downloaded_deliverable",
 ]);
 

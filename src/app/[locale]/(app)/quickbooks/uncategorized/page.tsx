@@ -24,6 +24,8 @@ import {
   scanUncategorized,
   type LedgerAccount,
 } from "@/lib/quickbooks/uncategorized";
+import { listEngagements } from "@/lib/db/engagements";
+import { ledgerAnswersForClient } from "@/lib/db/ledger-question";
 import { UncategorizedList } from "@/components/quickbooks/uncategorized-list";
 import { ReceiptIcon } from "@/components/quickbooks/receipt-icon";
 
@@ -104,6 +106,16 @@ export default async function UncategorizedPage({
 
   const parkingIds = new Set((scan?.parkingAccounts ?? []).map((a) => a.id));
 
+  // Engagements the client can actually answer on. A complete or cancelled one
+  // refuses portal activity, so offering it would produce a question the client
+  // physically cannot answer.
+  const engagements = (
+    await listEngagements({ client_id: selected.clientId })
+  ).filter((e) => e.status !== "complete" && e.status !== "cancelled");
+
+  // What has already been asked, and anything the client has since said.
+  const answers = await ledgerAnswersForClient(selected.clientId);
+
   return (
     <div className="animate-in-up">
       <header className="mb-6">
@@ -133,6 +145,14 @@ export default async function UncategorizedPage({
         accounts={accounts
           .filter((a) => a.active && !parkingIds.has(a.id))
           .map((a) => ({ id: a.id, name: a.name, type: a.accountType }))}
+        engagements={engagements.map((e) => ({
+          id: e.id,
+          title: e.title ?? e.id,
+        }))}
+        asked={[...answers.entries()].map(([key, a]) => ({
+          key,
+          answer: a.answer,
+        }))}
       />
     </div>
   );

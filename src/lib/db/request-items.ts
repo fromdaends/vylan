@@ -32,7 +32,20 @@ export type RequestItem = {
   // Prompt B: 'signature' flips the direction — the accountant supplies a
   // document and the client returns a signed copy. 'collection' (the default)
   // is the existing document-collection item.
-  kind: "collection" | "signature";
+  //
+  // 1170: 'question' is satisfied by WORDS rather than a file — "what was this
+  // $340 for?". No document answers that, and only the client knows.
+  kind: "collection" | "signature" | "question";
+  // Question items only (1170): the client's answer, and when it arrived. Null
+  // for every other kind, and null for a question nobody has answered yet.
+  //
+  // OPTIONAL, not just nullable. Every read is a select("*"), so before the
+  // migration is applied these keys are ABSENT rather than null — and a type
+  // that promised they were always present would be lying about the one state
+  // this repo actually ships in (see docs: migrations are applied by hand,
+  // after the code that reads them).
+  answer_text?: string | null;
+  answered_at?: string | null;
   // Signature items only: the blank document the accountant uploaded to be
   // signed (storage path + original filename + mime). Null for collection items.
   signing_doc_path: string | null;

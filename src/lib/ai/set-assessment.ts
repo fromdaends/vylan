@@ -820,6 +820,10 @@ export async function processSetAssessmentJob(
   const item = itemData as unknown as ItemRow;
   // Signature items never get AI (the upload is a signed copy, not a tax doc).
   if (item.kind === "signature") return { skipped: "signature_item" };
+  // Nor do questions (1170): they are satisfied by a sentence from the client,
+  // and there is no document set for the assessor to judge. Reaching here at
+  // all would mean a file was attached to one, which the portal does not offer.
+  if (item.kind === "question") return { skipped: "question_item" };
   const engRaw = item.engagements;
   const eng = Array.isArray(engRaw) ? engRaw[0] : engRaw;
   const firmId = eng?.firm_id ?? null;
