@@ -1,6 +1,12 @@
 import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
-import { getClient } from "@/lib/db/clients";
+import { getClient, listClients } from "@/lib/db/clients";
+import { listRelationshipsForClient } from "@/lib/db/relationships";
+import { resolveRelationshipRows } from "@/lib/relationships/validate";
+import {
+  RelationshipsCard,
+  type RelationshipCardRow,
+} from "@/components/clients/relationships-card";
 import { listEngagements } from "@/lib/db/engagements";
 import { loadEngagementSignals } from "@/lib/dashboard/worklist";
 import { deriveEngagementStatus } from "@/lib/attention";
@@ -61,6 +67,48 @@ export default async function ClientDetailPage({
 
   const client = await getClient(id);
   if (!client) notFound();
+
+  // Relationships card data: this client's live links, plus the firm roster of
+  // clients — archived included so a link's NAME still resolves even when its
+  // other end is archived (the picker below re-filters to live clients only).
+  const [relationships, allClients] = await Promise.all([
+    listRelationshipsForClient(client.id),
+    listClients({ includeArchived: true }),
+  ]);
+  const clientNameById = new Map(
+    allClients.map((c) => [c.id, c.display_name]),
+  );
+  const relationshipRows: RelationshipCardRow[] = resolveRelationshipRows(
+    client.id,
+    relationships,
+  )
+    // A missing name means RLS hid the other end from this viewer (private
+    // client edge); the link row itself is normally hidden with it, so this
+    // is belt-and-suspenders rather than an expected path.
+    .filter((r) => clientNameById.has(r.otherClientId))
+    .map((r) => ({ ...r, otherName: clientNameById.get(r.otherClientId)! }));
+  const pickerCandidates = {
+    individuals: allClients
+      .filter(
+        (c) => !c.archived_at && c.type === "individual" && c.id !== client.id,
+      )
+      .map((c) => ({
+        id: c.id,
+        display_name: c.display_name,
+        type: c.type,
+        email: c.email,
+      })),
+    businesses: allClients
+      .filter(
+        (c) => !c.archived_at && c.type === "business" && c.id !== client.id,
+      )
+      .map((c) => ({
+        id: c.id,
+        display_name: c.display_name,
+        type: c.type,
+        email: c.email,
+      })),
+  };
 
   const engagements = await listEngagements({ client_id: id });
   // Unified status for the pills below — same derivation every other surface
@@ -373,6 +421,18 @@ export default async function ClientDetailPage({
           <DetailRow label={t("field_notes")} value={client.notes} wide />
         </dl>
       </Panel>
+
+      {/* Relationships — the entity tree (spec §2). Between About and
+          Bookkeeping, always rendered (the empty state keeps the feature
+          discoverable). Renders its own Panel-identical section because the
+          [+], kebabs and View-all need client state. */}
+      <RelationshipsCard
+        clientId={client.id}
+        clientType={client.type}
+        rows={relationshipRows}
+        candidates={pickerCandidates}
+        canManage={canManageClients && !client.archived_at}
+      />
 
       {/* Bookkeeping lives on the client's own page: an OWNER can connect this
           client here (the client is known from context — no name-matching), and

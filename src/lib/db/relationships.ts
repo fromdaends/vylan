@@ -69,6 +69,32 @@ export async function listLiveRelationshipsForFirm(): Promise<
   return (data ?? []) as ClientRelationship[];
 }
 
+// Name/email/type for a set of related clients — the engagement header line
+// ("Owned by …") and the scope warning need the OTHER end of each link
+// without dragging in the whole clients list. RLS-scoped like every read here.
+export async function listRelatedClientsBrief(ids: string[]): Promise<
+  Array<{
+    id: string;
+    display_name: string;
+    email: string | null;
+    type: "individual" | "business";
+  }>
+> {
+  if (ids.length === 0) return [];
+  const supabase = await getServerSupabase();
+  const { data, error } = await supabase
+    .from("clients")
+    .select("id, display_name, email, type")
+    .in("id", ids);
+  if (error) throw error;
+  return (data ?? []) as Array<{
+    id: string;
+    display_name: string;
+    email: string | null;
+    type: "individual" | "business";
+  }>;
+}
+
 export type RelationshipInsert = {
   firm_id: string;
   from_client_id: string;

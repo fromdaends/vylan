@@ -29,7 +29,12 @@ import {
   Repeat,
   Upload,
   UserPlus,
+  AlertTriangle,
 } from "lucide-react";
+import {
+  findScopeWarning,
+  type ScopeWarningContact,
+} from "@/lib/relationships/validate";
 import { addDays } from "date-fns";
 import {
   ClientCombobox,
@@ -109,9 +114,16 @@ export function EngagementBuilder({
   invoiceDefaultDelayDays = null,
   reminderDefaultSettings = null,
   canManageReminderDefaults = false,
+  authorizedContacts = {},
 }: {
   clients: ComboboxClient[];
   templates: Template[];
+  // Recipient safety (relationships spec §3): each BUSINESS client's linked
+  // authorized contacts, keyed by business client id. Everything sent on the
+  // engagement goes to the client record's email — when that address belongs
+  // to one of these contacts and their scopes don't cover the chosen
+  // engagement type, a non-blocking warning renders under the client picker.
+  authorizedContacts?: Record<string, ScopeWarningContact[]>;
   initialClientId?: string;
   // The template the user clicked "Use" on, carried via ?template=. When it
   // matches a template the form opens on it; otherwise (direct open, or a
@@ -137,6 +149,8 @@ export function EngagementBuilder({
 }) {
   const t = useTranslations("Engagements");
   const tc = useTranslations("Common");
+  // Scope names live in the Clients namespace, shared with the profile card.
+  const tClients = useTranslations("Clients");
 
   // The blank "Empty" template leads the list and is the default when the user
   // didn't arrive via a specific template ("Use" on a card). Everything else
@@ -226,6 +240,17 @@ export function EngagementBuilder({
 
   const selectedTemplate = templates.find((tt) => tt.id === templateId);
   const selectedClient = clients.find((client) => client.id === clientId);
+  // Non-blocking recipient-scope warning for the picked client + engagement
+  // type. Pure email match against the passed contacts — null for individuals,
+  // for types with no scope domain (t1/custom), and when scopes cover it.
+  const scopeWarning =
+    selectedClient && selectedTemplate
+      ? findScopeWarning(
+          selectedClient.email,
+          selectedTemplate.type,
+          authorizedContacts[selectedClient.id] ?? [],
+        )
+      : null;
   // The chosen client's province drives which document types apply. Quebec
   // clients get the RL slips; everyone else (or province not set) doesn't.
   const selectedProvince =
@@ -547,6 +572,17 @@ export function EngagementBuilder({
               value={clientId}
               onChange={chooseClient}
             />
+          )}
+          {scopeWarning && (
+            <p className="mt-2 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="size-3.5 shrink-0" aria-hidden />
+              {t("rel_scope_warning", {
+                name: scopeWarning.name,
+                scopes: scopeWarning.scopes
+                  .map((s) => tClients(`rel_scope_${s}`))
+                  .join(", "),
+              })}
+            </p>
           )}
         </CardContent>
       </Card>
