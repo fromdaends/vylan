@@ -106,6 +106,9 @@ export const AUDIT_ACTIONS = [
   "close_month",
   "reopen_month",
   "client_answered_question",
+  // Phase 3 slice 1 — the client cast (#1210).
+  "client_member_added",
+  "client_member_removed",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
