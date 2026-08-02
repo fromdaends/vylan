@@ -27,6 +27,41 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const MAX_RESULTS = 12;
 const MAX_TEXT_CHARS = 6000;
 
+// A chat query is a SENTENCE ("do we have Zachary's 2025 T4"), but the name
+// search is a phrase match — and real file names fight phrases ("T4_2025.pdf"
+// never contains "T4 2025"). So the phrase runs first, then each meaningful
+// token runs on its own, and the merged pool is ranked by how many tokens a
+// name actually contains. Found the hard way: the assistant answered "no
+// 2025 T4 for Tremblay" while T4_2025.pdf sat in his files.
+const STOPWORDS = new Set([
+  "the", "a", "an", "for", "of", "do", "we", "have", "any", "his", "her",
+  "les", "le", "la", "de", "des", "du", "un", "une", "pour", "avons", "nous",
+]);
+
+export function tokenizeQuery(q: string): string[] {
+  return [
+    ...new Set(
+      q
+        .toLowerCase()
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((t) => t.length >= 2 && !STOPWORDS.has(t)),
+    ),
+  ].slice(0, 4);
+}
+
+export function scoreDocName(
+  nameLower: string,
+  phraseLower: string,
+  tokens: string[],
+  hasSnippet: boolean,
+): number {
+  let score = 0;
+  if (phraseLower && nameLower.includes(phraseLower)) score += 3;
+  for (const t of tokens) if (nameLower.includes(t)) score += 1;
+  if (hasSnippet) score += 2;
+  return score;
+}
+
 /** The document's spot in Browse — the link the model cites. A filed document
  * links to its folder (its derived view no longer lists it). */
 function docLink(d: BrowseDocument): string {
@@ -80,22 +115,47 @@ export async function findFiles(
   const clientName =
     typeof i.client_name === "string" ? i.client_name.trim() : "";
 
-  // Same merge Browse search performs: name/metadata hits, plus hits found
-  // INSIDE documents the AI has read, fetched when the name search missed them.
-  const page = await listDocuments({ search: query, page: 1 });
-  if (!page.available) return { error: "Files is not available." };
+  // Phrase first, then each meaningful token on its own (see tokenizeQuery),
+  // plus hits found INSIDE documents the AI has read. Merged, deduped, and
+  // ranked by how much of the query a name actually contains.
+  const tokens = tokenizeQuery(query);
+  const pages = await Promise.all([
+    listDocuments({ search: query, page: 1 }),
+    ...tokens.map((t) => listDocuments({ search: t, page: 1 })),
+  ]);
+  if (!pages[0].available) return { error: "Files is not available." };
+  const pool = new Map<string, BrowseDocument>();
+  for (const p of pages) {
+    for (const d of p.documents) pool.set(`${d.source}|${d.id}`, d);
+    if (pool.size >= 120) break;
+  }
   const { hits } = await searchDocumentContent(query, 20);
   const snippetByKey = new Map(
     hits.map((h) => [`${h.source}|${h.documentId}`, h.snippet]),
   );
-  const have = new Set(page.documents.map((d) => `${d.source}|${d.id}`));
   const extras = await listDocumentsByIds(
     hits
-      .filter((h) => !have.has(`${h.source}|${h.documentId}`))
+      .filter((h) => !pool.has(`${h.source}|${h.documentId}`))
       .map((h) => ({ source: h.source, id: h.documentId })),
   );
+  for (const d of extras) pool.set(`${d.source}|${d.id}`, d);
 
-  let docs = [...page.documents, ...extras];
+  const phraseLower = query.toLowerCase();
+  let docs = [...pool.values()].sort(
+    (a, b) =>
+      scoreDocName(
+        b.name.toLowerCase(),
+        phraseLower,
+        tokens,
+        snippetByKey.has(`${b.source}|${b.id}`),
+      ) -
+      scoreDocName(
+        a.name.toLowerCase(),
+        phraseLower,
+        tokens,
+        snippetByKey.has(`${a.source}|${a.id}`),
+      ),
+  );
 
   // Optional client narrowing, by display name, accent-insensitive enough for
   // a chat ("tremblay" finds "TEST — Jean Tremblay").
